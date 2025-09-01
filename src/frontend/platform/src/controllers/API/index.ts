@@ -62,6 +62,7 @@ export async function getComponents(): Promise<any[]> {
 export async function saveComponent(data): Promise<any[]> {
   return await axios.post(`/api/v1/component`, data);
 }
+
 /**
  * 覆盖 组件
  */
@@ -801,6 +802,11 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
     console.error(error);
     throw error;
   }
+}
+
+
+export async function updateKnowledge(data): Promise<any[]> {
+  return await axios.post(`/api/v1/knowledge/update_knowledge`, data);
 }
 
 

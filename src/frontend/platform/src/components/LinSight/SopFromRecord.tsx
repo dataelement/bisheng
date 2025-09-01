@@ -11,6 +11,7 @@ import { LoadIcon } from '../bs-icons/loading';
 import AutoPagination from '../bs-ui/pagination/autoPagination';
 import SopMarkdown from './SopMarkdown';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../bs-ui/tooltip';
+import { useTranslation } from 'react-i18next';
 
 interface SopRecord {
   id: number;
@@ -27,6 +28,7 @@ interface SopRecord {
 
 export default function ImportFromRecordsDialog({ open, tools, onOpenChange, onSuccess, setDuplicateNames, duplicateNames, duplicateDialogOpen, setDuplicateDialogOpen, importFormData }) {
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
   const [records, setRecords] = useState<SopRecord[]>([]);
   const [currentRecord, setCurrentRecord] = useState<SopRecord | null>(null);
@@ -224,7 +226,7 @@ const fetchRecords = async (isSearch = false) => {
         return;
       }
 
-      toast({ variant: 'success', description: '导入成功' });
+      toast({ variant: 'success', description: t('ImportFromRecordsDialog.success') });
       onOpenChange(false);
 
       // 导入成功后清空所有选择状态
@@ -247,14 +249,14 @@ const fetchRecords = async (isSearch = false) => {
           {/* 左侧记录列表 */}
           <div className="p-6 w-[50%] min-w-160">
             <SheetHeader>
-              <SheetTitle>从运行记录中导入指导手册</SheetTitle>
+              <SheetTitle>{t('ImportFromRecordsDialog.title')}</SheetTitle>
             </SheetHeader>
 
             <div className="relative mt-6 mb-6 w-[80%]">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="搜索指导手册"
+                placeholder={t('ImportFromRecordsDialog.searchPlaceholder')}
                 className="w-full pl-10 pr-4 py-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-primary"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -266,11 +268,12 @@ const fetchRecords = async (isSearch = false) => {
                 <div className="flex justify-center items-center h-full bg-gray-50 rounded-lg">
                   <div className="flex flex-col items-center gap-2">
                     <LoadIcon className="animate-spin w-10 h-10 text-primary" />
+                    <span>{t('ImportFromRecordsDialog.loading')}</span>
                   </div>
                 </div>
               ) : records.length === 0 ? (
                 <div className="text-center text-muted-foreground py-4">
-                  {searchTerm ? '没有找到匹配的记录' : '暂无运行记录'}
+                  {searchTerm ? t('ImportFromRecordsDialog.noMatchingRecords') : t('ImportFromRecordsDialog.noRecords')}
                 </div>
               ) : (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
@@ -296,11 +299,11 @@ const fetchRecords = async (isSearch = false) => {
                             </button>
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            名称
+                            {t('ImportFromRecordsDialog.columns.name')}
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <div className="flex items-center">
-                              创建时间
+                              {t('ImportFromRecordsDialog.columns.createTime')}
                               <div className="flex flex-col ml-1">
                                 <button onClick={() => setSortConfig({
                                   key: 'create_time',
@@ -318,10 +321,10 @@ const fetchRecords = async (isSearch = false) => {
                             </div>
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            创建用户
+                            {t('ImportFromRecordsDialog.columns.createUser')}
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            评分
+                            {t('ImportFromRecordsDialog.columns.rating')}
                           </th>
                         </tr>
                       </thead>
@@ -387,7 +390,9 @@ const fetchRecords = async (isSearch = false) => {
                           total={total}
                           onChange={setPage}
                         />
-                        <span className="text-sm text-gray-700 mr-2 whitespace-nowrap">跳至</span>
+                        <span className="text-sm text-gray-700 mr-2 whitespace-nowrap">
+                          {t('ImportFromRecordsDialog.pagination.goToPage')}
+                        </span>
                         <input
                           type="number"
                           min="1"
@@ -400,7 +405,7 @@ const fetchRecords = async (isSearch = false) => {
                           disabled={loading}
                         />
                         <span className="text-sm text-gray-700 ml-2 whitespace-nowrap">
-                          页
+                          {t('ImportFromRecordsDialog.pagination.page')}
                         </span>
                         {loading && <LoadIcon className="animate-spin w-4 h-4 ml-2" />}
                       </div>
@@ -419,7 +424,7 @@ const fetchRecords = async (isSearch = false) => {
                 disabled={selectedRecordIds.length === 0 || loading}
                 className="ml-4"
               >
-                {loading ? '导入中...' : `批量导入`}
+                {loading ? t('ImportFromRecordsDialog.loading') : t('ImportFromRecordsDialog.batchImport')}
               </Button>
             </div>
           </div>
@@ -466,13 +471,13 @@ const fetchRecords = async (isSearch = false) => {
                     }}
                     disabled={!currentRecord || loading}
                   >
-                    {loading ? '导入中...' : '导入当前指导手册'}
+                    {loading ? t('ImportFromRecordsDialog.loading') : t('ImportFromRecordsDialog.importCurrent')}
                   </Button>
                 </div>
               </>
             ) : (
               <div className="flex justify-center items-center h-full text-muted-foreground">
-                请从左侧选择一条记录进行预览
+                {t('ImportFromRecordsDialog.preview.noSelection')}
               </div>
             )}
           </div>
@@ -481,9 +486,9 @@ const fetchRecords = async (isSearch = false) => {
       <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>SOP重复提示</DialogTitle>
+            <DialogTitle>{t('ImportFromRecordsDialog.duplicateDialog.title')}</DialogTitle>
             <DialogDescription>
-              以下SOP在库中已存在，确认是否在导入时覆盖？
+              {t('ImportFromRecordsDialog.duplicateDialog.description')}
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-[300px] overflow-y-auto border rounded-md p-4">
@@ -495,7 +500,7 @@ const fetchRecords = async (isSearch = false) => {
               ))
             ) : (
               <div className="text-center py-2 text-muted-foreground">
-                未获取到重复SOP名称
+                {t('ImportFromRecordsDialog.duplicateDialog.noDuplicateNames')}
               </div>
             )}
           </div>
@@ -503,7 +508,7 @@ const fetchRecords = async (isSearch = false) => {
             <Button
               variant="outline"
               onClick={async () => {
-                   setIsSavingAsNew(true);
+                setIsSavingAsNew(true);
                 if (importFormData) {
                   const newFormData = new FormData();
                   for (const [key, value] of importFormData.entries()) {
@@ -514,16 +519,15 @@ const fetchRecords = async (isSearch = false) => {
                   newFormData.append('override', 'false');
                   newFormData.append('save_new', 'true');
 
-
                   try {
                     setLoading(true); // 添加加载状态
                     await captureAndAlertRequestErrorHoc(sopApi.UploadSopRecord(newFormData)) // 等待请求完成
-                    toast({ variant: 'success', description: '导入成功' });
+                    toast({ variant: 'success', description: t('ImportFromRecordsDialog.success') });
                     setDuplicateDialogOpen(false);
                     onOpenChange(false); // 关闭主弹窗
                   } finally {
                     setLoading(false);
-                      setIsSavingAsNew(false);
+                    setIsSavingAsNew(false);
                   }
                 } else {
                   const recordsToUse = selectedRecords.length > 0
@@ -534,19 +538,18 @@ const fetchRecords = async (isSearch = false) => {
                   importSops(recordsToUse, false, true);
                   setDuplicateDialogOpen(false);
                 }
-
               }}
             >
-              {isSavingAsNew  ? (
+              {isSavingAsNew ? (
                 <div className="flex items-center gap-2">
                   <LoadIcon className="animate-spin w-4 h-4" />
-                  正在另存为新SOP...
+                  {t('ImportFromRecordsDialog.duplicateDialog.savingAsNew')}
                 </div>
-              ) : '不覆盖，另存为新SOP'}
+              ) : t('ImportFromRecordsDialog.duplicateDialog.saveAsNew')}
             </Button>
             <Button
               onClick={async () => {
-                  setIsOverwriting(true);
+                setIsOverwriting(true);
                 if (importFormData) {
                   const newFormData = new FormData();
                   for (const [key, value] of importFormData.entries()) {
@@ -559,14 +562,14 @@ const fetchRecords = async (isSearch = false) => {
                   try {
                     setLoading(true);
                     await sopApi.UploadSopRecord(newFormData);
-                    toast({ variant: 'success', description: '导入成功' });
+                    toast({ variant: 'success', description: t('ImportFromRecordsDialog.success') });
                     setDuplicateDialogOpen(false);
                     onOpenChange(false);
                   } catch (error) {
-                    toast({ variant: 'error', description: '导入失败' });
+                    toast({ variant: 'error', description: t('ImportFromRecordsDialog.error') });
                   } finally {
                     setLoading(false);
-                     setIsOverwriting(false);
+                    setIsOverwriting(false);
                   }
                 } else {
                   const recordsToUse = selectedRecordIds.length > 0
@@ -580,12 +583,12 @@ const fetchRecords = async (isSearch = false) => {
 
               }}
             >
-              {isOverwriting  ? (
+              {isOverwriting ? (
                 <div className="flex items-center gap-2">
                   <LoadIcon className="animate-spin w-4 h-4" />
-                  正在覆盖SOP...
+                  {t('ImportFromRecordsDialog.duplicateDialog.overwriting')}
                 </div>
-              ) : '覆盖'}
+              ) : t('ImportFromRecordsDialog.duplicateDialog.overwrite')}
             </Button>
           </div>
         </DialogContent>

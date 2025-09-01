@@ -161,6 +161,7 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
 
     return (
         <div className="max-w-[520px] mx-auto gap-y-4 flex flex-col mt-16 relative">
+            {console.log(form.sourceModelId,33)}
             <ModelSelect
                 close
                 label={t('model.workVectorModel')}

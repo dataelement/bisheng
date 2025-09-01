@@ -27,7 +27,7 @@ import { useNavigate } from "react-router-dom";
 import { FormInput } from "./FormInput";
 import { Model } from "./ModelManagement";
 import Preview from "./Preview";
-
+import { t } from "i18next";
 
 export interface FormErrors {
     sidebarSlogan: string;
@@ -88,6 +88,7 @@ export interface ChatConfigForm {
 }
 
 export default function index({ formData: parentFormData, setFormData: parentSetFormData }) {
+
 
     const [keywords, setKeywords] = useState('');
     const [datalist, setDatalist] = useState([]);
@@ -826,7 +827,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                 <CardContent className="pt-4 relative  ">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
                         <FormInput
-                            label="输入框提示语"
+                               label={t('chatConfig.inputPlaceholder')}
                             value={formData.linsightConfig?.input_placeholder}
                             placeholder="灵思是一位擅长完成复杂任务的Agent助理，除了描述任务目标外，您还可以用通俗的语言描述希望如何实现，这将有助于得到符合您预期的结果~"
                             maxLength={100}
@@ -841,7 +842,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 }));
                             }} error={""} />
                         <div className="mb-6">
-                            <p className="text-lg font-bold mb-2">灵思可选工具</p>
+                             <p className="text-lg font-bold mb-2">{t('chatConfig.linsightTools')}</p>
                             <ToolSelectorContainer
                                 toolsData={toolsData}
                                 selectedTools={selectedTools}
@@ -860,13 +861,13 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                         </div>
 
                         <div className="mb-6">
-                            <p className="text-lg font-bold mb-2">灵思指导手册库</p>
+                            <p className="text-lg font-bold mb-2">{t('chatConfig.linsightManual')}</p>
                             <div className="flex items-center gap-2 mb-2">
                                 <div className="relative flex-1 max-w-xs">
                                     <div className="relative">
                                         <input
                                             type="text"
-                                            placeholder="搜索指导手册"
+                                             placeholder={t('chatConfig.searchManual')}
                                             className="w-full pl-10 pr-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                             value={keywords}
                                             onChange={(e) => {
@@ -890,14 +891,14 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                         size="sm"
                                         onClick={() => { setImportDialogOpen(true); setImportFilesData(null) }}
                                     >
-                                        从运行记录导入
+                                        {t('chatConfig.importFromRecord')}
                                     </Button>
                                     <Button
                                         variant="outline"
                                         size="sm"
                                         onClick={() => setLocalFileDialogOpen(true)}
                                     >
-                                        从本地文件导入
+                                        {t('chatConfig.importFromLocal')}
                                     </Button>
 
                                     <Button
@@ -916,7 +917,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                             setIsDrawerOpen(true);
                                         }}
                                     >
-                                        新建指导手册
+                                        {t('chatConfig.createManual')}
                                     </Button>
                                     <Button
                                         variant="outline"
@@ -924,11 +925,11 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                         disabled={selectedItems.length === 0 || batchDeleting}
                                         onClick={() => {
                                             bsConfirm({
-                                                title: '批量删除确认',
-                                                desc: `确认批量删除所选SOP吗？`,
-                                                showClose: true,
-                                                okTxt: '确认删除',
-                                                canelTxt: '取消',
+                                               title: t('chatConfig.batchDeleteConfirm'),
+                                            desc: t('chatConfig.batchDeleteDesc'),
+                                            showClose: true,
+                                            okTxt: t('chatConfig.confirmDelete'),
+                                            canelTxt: t('cancel'),
                                                 onOk(next) {
                                                     handleBatchDelete();
                                                     next();
@@ -939,7 +940,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                         }}
                                     >
                                         {batchDeleting && <LoadIcon className=" mr-2 text-gray-600" />}
-                                        {'批量删除'}
+                                       {t('chatConfig.batchDelete')}
 
                                     </Button>
                                 </div>
@@ -972,7 +973,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                                 variant="ghost"
                                                 onClick={() => setDeleteConfirmModal(prev => ({ ...prev, open: false }))}
                                             >
-                                                取消
+                                            { t('cancel')}
                                             </Button>
                                             <Button
                                                 type="button"
@@ -981,7 +982,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                                     setDeleteConfirmModal(prev => ({ ...prev, open: false }));
                                                 }}
                                             >
-                                                确认删除
+                                               { t('chatConfig.confirmDelete')}
                                             </Button>
                                         </div>
                                     </div>
@@ -1002,28 +1003,28 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     </div>
                     <div className="flex justify-end gap-4 absolute bottom-1 right-4">
                         <Preview onBeforView={() => handleSave(formData)} />
-                        <Button onClick={() => handleSave(formData)}>保存</Button>
+                        <Button onClick={() => handleSave(formData)}>{t('save')}</Button>
                     </div>
                 </CardContent>
             </Card>
             <Dialog open={localFileDialogOpen} onOpenChange={setLocalFileDialogOpen}>
                 <DialogContent className="sm:max-w-[1200px]">
                     <DialogHeader>
-                        <DialogTitle>导入指导手册</DialogTitle>
+                        <DialogTitle>{t('chatConfig.importManual')}</DialogTitle>
                     </DialogHeader>
 
                     <div className="grid gap-4 py-4">
                         <div className="flex justify-between items-center w-full">
                             <div className="flex items-center gap-2">
                                 <span className="text-red-500">*</span>
-                                <span>请上传文件</span>
+                                 <span>{t('chatConfig.uploadFile')}</span>
                             </div>
                             <button
                                 className="flex items-center gap-1"
                                 onClick={() => downloadFile(__APP_ENV__.BASE_URL + "/sopexample.xlsx", '用户指导手册格式示例.xlsx')}
                             >
-                                <span className="text-black">示例文件：</span>
-                                <span className="text-blue-600 hover:underline">用户指导手册格式示例.xlsx</span>
+                                <span className="text-black">{t('chatConfig.exampleFile')}:</span>
+                                <span className="text-blue-600 hover:underline">{t('chatConfig.exampleFileName')}</span>
                             </button>
                         </div>
 
@@ -1076,7 +1077,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             }}
                             disabled={isImporting || importFiles.length === 0}
                         >
-                            {isImporting ? "导入中..." : "提交"}
+                              {isImporting ? t('chatConfig.importing') : t('submit')}
                         </Button>
                     </div>
                 </DialogContent>
@@ -1114,7 +1115,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
                                     <span className="text-white font-bold text-lg">i</span>
                                 </div>
-                                <DialogTitle>文件格式不符合要求</DialogTitle>
+                                <DialogTitle>{t('chatConfig.fileFormatError')}</DialogTitle>
                             </div>
                         </DialogHeader>
 
@@ -1137,7 +1138,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
 
                         <div className="flex justify-end">
                             <Button onClick={handleValidationDialogConfirm}>
-                                知道了
+                                 {t('chatConfig.gotIt')}
                             </Button>
                         </div>
                     </div>

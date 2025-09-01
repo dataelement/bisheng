@@ -74,7 +74,16 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
                 >
                     {category.label}
                 </Button>
+                
             ))}
+            <Button
+                variant={activeCategory === 'uncategorized' ? "default" : "outline"}
+                onClick={() => {
+                    onCategoryChange('uncategorized')
+                    setActiveCategory('uncategorized')
+                }}
+                className="text-xs h-8 font-normal"
+            >未分类</Button>
             {/* edit label  */}
             {user?.role === 'admin' && (
                 <Button size={'icon'} variant={"outline"} className="h-8" onClick={() => setIsLabelModalOpen(true)}>

@@ -14,7 +14,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Textarea } from "../../components/bs-ui/input";
 import { userContext } from "../../contexts/userContext";
-import { copyLibDatabase, createFileLib, deleteFileLib, readFileLibDatabase } from "../../controllers/API";
+import { copyLibDatabase, createFileLib, deleteFileLib, readFileLibDatabase, uploadLibFile, updateKnowledge } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 // import PaginationComponent from "../../components/PaginationComponent";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
@@ -22,11 +22,12 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import Cascader from "@/components/bs-ui/select/cascader";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { getKnowledgeModelConfig, getModelListApi } from "@/controllers/API/finetune";
+import { getKnowledgeModelConfig, getLLmServerDetail, getModelListApi } from "@/controllers/API/finetune";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import { useTable } from "../../util/hook";
 import { CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Trash2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
+import { ModelSelect } from "../ModelPage/manage/tabs/WorkbenchModel";
 
 function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', currentLib = null }) {
     const { t } = useTranslation()
@@ -36,49 +37,91 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
     const descRef = useRef(null)
     const [modal, setModal] = useState(null)
     const [options, setOptions] = useState([])
-    const [isSubmitting, setIsSubmitting] = useState(false) // 新增loading状态
-    const [isModelChanged, setIsModelChanged] = useState(false) // 新增：跟踪模型是否被修改
+    const [isSubmitting, setIsSubmitting] = useState(false)
+    const [isModelChanged, setIsModelChanged] = useState(false)
+    const [originalModel, setOriginalModel] = useState(null)
+    const [modelsMap, setModelsMap] = useState({}) // 存储模型映射
 
+    // 统一处理模型数据获取
     useEffect(() => {
-        if (mode === 'edit' && currentLib) {
-            if (nameRef.current) nameRef.current.value = currentLib.name;
-            if (descRef.current) descRef.current.value = currentLib.description;
-            setIsModelChanged(false) // 初始化时不显示警告
-            // const currentModel = 
-            //   setModal(currentModel);
-        }
-    }, [mode, currentLib]);
-    // Fetch model data
-    useEffect(() => {
-        Promise.all([getKnowledgeModelConfig(), getModelListApi()]).then(([config, data]) => {
-            const { embedding_model_id } = config
-            let embeddings = []
-            let models = {}
-            let _model = []
-            data.forEach(server => {
-                const serverItem = { value: server.id, label: server.name, children: [] }
-                serverItem.children = server.models.reduce((res, model) => {
-                    if (model.model_type !== 'embedding' || !model.online) return res
-                    const modelItem = { value: model.id, label: model.model_name }
-                    models[model.id] = server.name + '/' + model.model_name
-                    // 找到默认值
-                    if (model.id === embedding_model_id) {
-                        _model = [serverItem, modelItem]
+        if (!open) return; // 只在打开时执行
+
+        const fetchModelData = async () => {
+            try {
+                const [config, data] = await Promise.all([getKnowledgeModelConfig(), getModelListApi()]);
+                const { embedding_model_id } = config;
+                let embeddings = [];
+                let models = {};
+                let _model = null;
+
+                data.forEach(server => {
+                    const serverItem = { value: server.id, label: server.name, children: [] };
+                    serverItem.children = server.models.reduce((res, model) => {
+                        if (model.model_type !== 'embedding' || !model.online) return res;
+                        const modelItem = { value: model.id, label: model.model_name };
+                        models[model.id] = server.name + '/' + model.model_name;
+
+                        // 编辑模式：找到当前知识库使用的模型
+                        if (mode === 'edit' && currentLib && model.id === currentLib.model) {
+                            _model = [serverItem, modelItem];
+                        }
+                        // 创建模式：找到默认模型
+                        else if (mode === 'create' && model.id === embedding_model_id && !_model) {
+                            _model = [serverItem, modelItem];
+                        }
+                        return [...res, modelItem];
+                    }, []);
+
+                    if (serverItem.children.length) embeddings.push(serverItem);
+                });
+
+                setOptions(embeddings);
+                setModelsMap(models);
+                onLoadEnd(models);
+
+                // 设置默认模型选择
+                if (mode === 'edit' && currentLib) {
+                    // 编辑模式：设置表单值
+                    if (nameRef.current) nameRef.current.value = currentLib.name;
+                    if (descRef.current) descRef.current.value = currentLib.description;
+                    setIsModelChanged(false);
+                    setOriginalModel(currentLib.model);
+
+                    if (_model) {
+                        console.log(_model, 33);
+
+                        setModal(_model);
+                    } else {
+                        console.log(currentLib.model, 44);
+
+                        try {
+                            const res = await getLLmServerDetail(currentLib.model);
+                            if (res.data) {
+                                setModal(res.data);
+                            }
+                        } catch (error) {
+                            console.warn('Failed to get server detail, using fallback');
+                            // 使用默认的第一个模型作为备选
+                            if (embeddings.length > 0 && embeddings[0].children.length > 0) {
+                                setModal([embeddings[0], embeddings[0].children[0]]);
+                            }
+                        }
                     }
-                    return [...res, modelItem]
-                }, [])
-                if (serverItem.children.length) embeddings.push(serverItem)
-            });
-            setOptions(embeddings)
-            setModal(_model)
-            onLoadEnd(models)
-        }).catch(error => {  // 添加错误处理
-            toast({
-                variant: "error",
-                description: '加载模型出错'
-            })
-        })
-    }, [])
+                } else if (mode === 'create' && _model) {
+                    // 创建模式：使用默认模型
+                    setModal(_model);
+                }
+            } catch (error) {
+                console.error('Failed to load model data:', error);
+                toast({
+                    variant: "error",
+                    description: '加载模型出错'
+                });
+            }
+        };
+
+        fetchModelData();
+    }, [open, mode, currentLib]); // 添加依赖项
 
     const { toast } = useToast()
     const [error, setError] = useState({ name: false, desc: false })
@@ -89,45 +132,76 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
         if (!desc) {
             desc = `当回答与${name}相关的问题时，参考此知识库`;
         }
-        const errorlist = []
 
-        if (!name) errorlist.push(t('lib.enterLibraryName'))
-        if (name.length > 200) errorlist.push('知识库名称不能超过200字')
-        if (!modal) errorlist.push(t('lib.selectModel'))
-        if (datalist.find(data => data.name === name)) errorlist.push(t('lib.nameExists'))
+        if (!name) {
+            handleError(t('lib.enterLibraryName'))
+            return
+        }
 
-        if (desc.length > 200) errorlist.push(t('lib.descriptionLimit'))
+        if (name.length > 200) {
+            handleError('知识库名称不能超过200字')
+            return
+        }
 
+        if (!modal) {
+            handleError(t('lib.selectModel'))
+            return
+        }
 
+        // 检查名称是否重复
+        if (datalist.find(data => data.name === name && (!currentLib || data.id !== currentLib.id))) {
+            handleError(t('lib.nameExists'))
+            return
+        }
 
-        setIsSubmitting(true)  // 开始提交
-        //     try {
-        //   if (mode === 'create') {
-        //     // 创建逻辑...
-        //   } else {}
-        // }
-        await captureAndAlertRequestErrorHoc(createFileLib({
-            name,
-            description: desc || `当回答与${name}相关的问题时，参考此知识库`,
-            model: modal[1].value,
-            type: 0
-        }).then(res => {
-            // @ts-ignore
-            window.libname = [name, desc]
-            navigate(isImport
-                ? `/filelib/upload/${res.id}`  // 导入模式
-                : `/filelib/${res.id}`         // 普通模式
-            );
-            setOpen(false)
-            setIsSubmitting(false)
-        }))
-        setIsSubmitting(false)
+        if (desc.length > 200) {
+            handleError(t('lib.descriptionLimit'))
+            return
+        }
+
+        setIsSubmitting(true)
+
+        if (mode === 'create') {
+            await captureAndAlertRequestErrorHoc(createFileLib({
+                name,
+                description: desc,
+                model: modal[1].value,
+                type: 0
+            }).then(res => {
+                window.libname = [name, desc]
+                navigate(isImport
+                    ? `/filelib/upload/${res.id}`
+                    : `/filelib/${res.id}`
+                );
+                setOpen(false)
+            })).finally(() => {
+                setIsSubmitting(false)
+            })
+        } else {
+            const data = {
+                "model_id": currentLib.model,
+                "model_type": "embedding",
+                "knowledge_id": currentLib.id,
+                "knowledge_name": currentLib.name,
+                "description": currentLib.description
+            }
+            await captureAndAlertRequestErrorHoc(updateKnowledge(data).then(res => {
+                toast({
+                    variant: "success",
+                    description: '更新成功'
+                })
+                setOpen(false)
+                onLoadEnd()
+            })).finally(() => {
+                setIsSubmitting(false)
+            })
+        }
     }
 
-    const handleError = (list) => {
+    const handleError = (message) => {
         toast({
             variant: 'error',
-            description: list
+            description: message
         });
     }
 
@@ -137,16 +211,16 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
                 <DialogTitle>{mode === 'create' ? t('lib.createLibrary') : '知识库设置'}</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-4 py-2">
-                {mode === 'edit' && (
-                    <div className="space-y-4"> {/* 上下排列 */}
-                        <div className="flex items-center gap-48"> {/* 左右排列 */}
+                {mode === 'edit' && currentLib && (
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-48">
                             <label className="bisheng-label text-sm text-gray-500">{t('lib.knowledgeBaseId')}</label>
-                            <div className="text-sm">{currentLib?.id || ''}</div>
+                            <div className="text-sm">{currentLib.id}</div>
                         </div>
-                        <div className="flex items-center gap-48"> {/* 左右排列 */}
+                        <div className="flex items-center gap-48">
                             <label className="bisheng-label text-sm text-gray-500">{t('createTime')}</label>
                             <div className="text-sm">
-                                {currentLib?.create_time ? currentLib.create_time.replace('T', ' ') : ''}
+                                {currentLib.create_time.replace('T', ' ')}
                             </div>
                         </div>
                     </div>
@@ -154,31 +228,61 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
                 <div className="">
                     <label htmlFor="name" className="bisheng-label">{t('lib.libraryName')}</label>
                     <span className="text-red-500">*</span>
-                    <Input name="name" ref={nameRef} placeholder={t('lib.enterLibraryName')} className={`col-span-3 ${error.name && 'border-red-400'}`} />
+                    <Input
+                        name="name"
+                        ref={nameRef}
+                        defaultValue={mode === 'edit' && currentLib ? currentLib.name : ''}
+                        placeholder={t('lib.enterLibraryName')}
+                        className={`col-span-3 ${error.name && 'border-red-400'}`}
+                    />
                 </div>
                 <div className="">
-                    <label htmlFor="name" className="bisheng-label">知识库描述</label>
+                    <label htmlFor="desc" className="bisheng-label">知识库描述</label>
                     <Textarea
                         id="desc"
                         ref={descRef}
+                        defaultValue={mode === 'edit' && currentLib ? currentLib.description : ''}
                         placeholder="请输入知识库描述"
                         rows={8}
                         className={`col-span-3 ${error.desc && 'border-red-400'}`}
                     />
                 </div>
                 <div className="">
-                    <label htmlFor="roleAndTasks" className="bisheng-label">知识库embedding模型选择</label>
-                    {
-                        modal && <Cascader
-                            defaultValue={modal}
-                            placholder="请在模型管理中配置 embedding 模型"
+                    <label htmlFor="model" className="bisheng-label">知识库embedding模型选择</label>
+                    {options.length > 0 && (
+                        // <Cascader
+                        //       defaultValue={mode === 'edit' && currentLib ? currentLib.model : ''}
+                        //     placeholder="请在模型管理中配置 embedding 模型"
+                        //     options={options}
+                        //     onChange={(a, val) => {
+                        //         setModal(val);
+                        //         if (mode === 'edit') setIsModelChanged(true);
+                        //     }}
+                        // />
+                        <ModelSelect
+                            close
+                            value={modal ? modal[1]?.value : (mode === 'edit' && currentLib ? currentLib.model : null)}
                             options={options}
-                            onChange={(a, val) => {
-                                setModal(val);
-                                if (mode === 'edit') setIsModelChanged(true); // 仅在编辑模式下标记变更
+                            onChange={(modelId) => {
+                                // 根据选中的模型ID找到对应的服务器和模型对象
+                                let serverItem = null;
+                                let modelItem = null;
+                                console.log(options);
+                                options.forEach(server => {
+                                    const foundModel = server.children?.find(child => child.value == modelId);
+                                    if (foundModel) {
+                                        serverItem = { value: server.value, label: server.label };
+                                        modelItem = foundModel;
+                                    }
+                                });
+
+                                if (serverItem && modelItem) {
+                                    setModal([serverItem, modelItem]);
+                                    if (mode === 'edit') setIsModelChanged(true);
+                                }
                             }}
                         />
-                    }
+                    )}
                     {mode === 'edit' && isModelChanged && (
                         <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
                             <CircleAlert className="w-4 h-4" color="#ef4444" />
@@ -191,24 +295,38 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
                 <DialogClose>
                     <Button variant="outline" className="px-8 h-8">{t('cancel')}</Button>
                 </DialogClose>
-                <Button
-                    variant="outline"
-                    className="px-8 h-8 flex"
-                    onClick={(e) => handleCreate(e, false)}
-                    disabled={isSubmitting}
-                >
-                    {isSubmitting && <LoadIcon className="mr-1" />}
-                    完成创建
-                </Button>
-                <Button
-                    type="submit"
-                    className="px-8 h-8 flex"
-                    onClick={(e) => handleCreate(e, true)}
-                    disabled={isSubmitting}
-                >
-                    {isSubmitting && <LoadIcon className="mr-1" />}
-                    {t('createImport')}
-                </Button>
+                {mode === 'create' ? (
+                    <>
+                        <Button
+                            variant="outline"
+                            className="px-8 h-8 flex"
+                            onClick={(e) => handleCreate(e, false)}
+                            disabled={isSubmitting}
+                        >
+                            {isSubmitting && <LoadIcon className="mr-1" />}
+                            完成创建
+                        </Button>
+                        <Button
+                            type="submit"
+                            className="px-8 h-8 flex"
+                            onClick={(e) => handleCreate(e, true)}
+                            disabled={isSubmitting}
+                        >
+                            {isSubmitting && <LoadIcon className="mr-1" />}
+                            {t('createImport')}
+                        </Button>
+                    </>
+                ) : (
+                    <Button
+                        type="submit"
+                        className="px-8 h-8 flex"
+                        onClick={(e) => handleCreate(e, false)}
+                        disabled={isSubmitting}
+                    >
+                        {isSubmitting && <LoadIcon className="mr-1" />}
+                        {t('confirm')}
+                    </Button>
+                )}
             </DialogFooter>
         </DialogContent>
     </Dialog>
@@ -260,25 +378,28 @@ export default function KnowledgeFile() {
         const todos = datalist.reduce((prev, curr) => {
             if (curr.state === 1) {
                 prev.push({ id: curr.id, name: curr.name })
-            } else {
-                doing[curr.id] = true
             }
             return prev
         }, [])
 
         todos.map(todo => {
             if (doing[todo.id]) {
-                message({
-                    variant: 'success',
-                    description: `${todo.name} 复制完成`
-                })
-                delete doing[todo.id]
+                const lib = datalist.find(item => item.id === todo.id);
+                if (lib && lib.state !== 1) {
+                    message({
+                        variant: 'success',
+                        description: `${todo.name} 复制完成`
+                    })
+                    delete doing[todo.id]
+                }
             }
         })
 
-        todos.length && setTimeout(() => {
-            reload()
-        }, 5000);
+        if (todos.length > 0) {
+            setTimeout(() => {
+                reload()
+            }, 5000);
+        }
     }, [datalist])
 
     const handleDelete = (id) => {
@@ -307,7 +428,6 @@ export default function KnowledgeFile() {
             setPage(1);
         }
     }, [])
-
 
     const { t, i18n } = useTranslation();
     useEffect(() => {
@@ -375,20 +495,24 @@ export default function KnowledgeFile() {
                                 <TableCell className="font-medium max-w-[200px]">
                                     <div className="flex items-start gap-2">
                                         <img
-                                            src={__APP_ENV__.BASE_URL + "/assets/file-logo.svg"}
+                                            src="/file-logo.svg"
                                             alt=""
-                                            className="w-8 h-8 mt-1 rounded object-cover"
+                                            className="w-[50px] h-[50px] mt-1 rounded object-cover"
                                         />
 
                                         <div>
-                                            <div className="line-clamp-2">{el.name}</div>
+                                            <div className="truncate max-w-[500px] w-[264px] text-[18px] font-medium leading-6 mt-2">
+                                                {el.name}
+                                            </div>
                                             <div
-                                                className="line-clamp-2 relative group"
-                                                title={el.description.length > 20 ? el.description : undefined}
+                                                className="relative group"
+                                                title={el.description}
                                             >
-                                                {el.description.length > 20 ? `${el.description.substring(0, 20)}...` : el.description}
-                                                {el.description.length > 20 && (
-                                                    <div className="absolute hidden group-hover:block bottom-full left-0 bg-blue-500 text-white p-2 rounded whitespace-normal w-48 z-10">
+                                                <div className="truncate max-w-[500px] text-[14px] text-[#5A5A5A] font-semibold leading-5">
+                                                    {el.description}
+                                                </div>
+                                                {el.description && (
+                                                    <div className="absolute hidden group-hover:block bottom-full left-0 bg-blue-500 text-white p-2 rounded whitespace-normal w-48 z-10 text-sm font-normal">
                                                         {el.description}
                                                     </div>
                                                 )}
@@ -407,9 +531,9 @@ export default function KnowledgeFile() {
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
                                                 <button
-                                                    className="w-10 h-10 bg-gray-200 rounded flex items-center justify-center
-                    hover:bg-gray-300 transition-colors duration-200
-                    focus:outline-none focus:ring-2 focus:ring-gray-400 relative"
+                                                    className="w-10 h-10 hover:bg-gray-200   rounded flex items-center justify-center
+                                                                 transition-colors duration-200
+                                                                 relative"
                                                     disabled={copyLoadingId === el.id}
                                                     onClick={(e) => e.stopPropagation()}
                                                 >
@@ -428,7 +552,7 @@ export default function KnowledgeFile() {
 
                                             <DropdownMenuContent
                                                 align="end"
-                                                className=" rounded-md shadow-lg py-1 border border-gray-200 z-[100]"
+                                                className=" rounded-md shadow-lg py-1  z-[100] border border-transparent"
                                                 style={{
                                                     backgroundColor: 'white',
                                                     opacity: 1,

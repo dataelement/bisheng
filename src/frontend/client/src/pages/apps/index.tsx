@@ -26,6 +26,7 @@ export default function AgentCenter() {
     const refreshAgentData = () => {
         setRefreshTrigger(prev => prev + 1);
     }
+    
     // 从本地存储加载收藏列表
     useEffect(() => {
         const savedFavorites = localStorage.getItem('agent-favorites')
@@ -39,24 +40,43 @@ export default function AgentCenter() {
         localStorage.setItem('agent-favorites', JSON.stringify(favorites))
     }, [favorites])
 
-    const handleCategoryChange = (categoryId: string) => {
-        if (searchQuery) {
-            setSearchQuery("")
-            setIsSearching(false)
-        }
+const handleCategoryChange = (categoryId: string) => {
+    if (searchQuery) {
+        setSearchQuery("")
+        setIsSearching(false)
+    }
+console.log(categoryId,22);
 
-        const targetSection = sectionRefs.current[categoryId]
-        if (targetSection && scrollContainerRef.current) {
-            const containerTop = scrollContainerRef.current.offsetTop
-            const sectionTop = targetSection.offsetTop
-            const scrollTop = sectionTop - containerTop - 20
+    // 如果是常用标签，直接滚动到顶部
+    if (categoryId === "favorites") {
+        // console.log(Object.keys(sectionRefs.current));
+        //    const frequentlyUsedKey = Object.keys(sectionRefs.current).find(key => key === "frequently_used");
+        //    console.log(frequentlyUsedKey);
+           
+        if (scrollContainerRef.current) {
 
             scrollContainerRef.current.scrollTo({
-                top: scrollTop,
+                top: 0,
                 behavior: "smooth",
             })
         }
+        return;
     }
+
+    // 其他标签的正常滚动逻辑
+    const targetSection = sectionRefs.current[categoryId]
+    if (targetSection && scrollContainerRef.current) {
+        const containerRect = scrollContainerRef.current.getBoundingClientRect();
+        const sectionRect = targetSection.getBoundingClientRect();
+        
+        const relativeTop = sectionRect.top - containerRect.top + scrollContainerRef.current.scrollTop;
+        
+        scrollContainerRef.current.scrollTo({
+            top: relativeTop - 20,
+            behavior: "smooth",
+        })
+    }
+}
 
     const handleSearchChange = async (query: string) => {
         setSearchQuery(query)
@@ -154,11 +174,11 @@ export default function AgentCenter() {
     return (
         <div className="min-h-screen bg-background">
             {/* Fixed Header */}
-            <div className="sticky top-0 z-40 bg-background border-b">
+            <div className="sticky top-0 z-40 bg-background">
                 <div className="container mx-auto px-6 py-6">
                     <div className="mt-2">
-                        <h1 className="text-blue-600 text-[32px] font-medium mb-2">{bsConfig?.applicationCenterWelcomeMessage || '探索BISHENG的智能体'}</h1>
-                        <p className="text-muted-foreground text-base">{bsConfig?.applicationCenterDescription || '您可以在这里选择需要的智能体来进行生产与工作～'}</p>
+                        <h1 className="text-blue-600 text-[32px] truncate max-w-[600px] font-medium mb-2">{bsConfig?.applicationCenterWelcomeMessage || '探索BISHENG的智能体'}</h1>
+                        <p className="text-muted-foreground text-base truncate max-w-[600px]">{bsConfig?.applicationCenterDescription || '您可以在这里选择需要的智能体来进行生产与工作～'}</p>
                     </div>
                     <div className="mt-12 flex items-center justify-between">
                         <AgentNavigation onCategoryChange={handleCategoryChange} onRefresh={refreshAgentData} />
@@ -199,7 +219,7 @@ export default function AgentCenter() {
                     ) : (
                         <SearchOverlay
                             query={searchQuery}
-                            results={searchResults} // 传递实际搜索结果
+                            results={searchResults}
                             loading={searchLoading}
                             favorites={favorites}
                             onAddToFavorites={addToFavorites}

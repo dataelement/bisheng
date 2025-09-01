@@ -21,6 +21,8 @@ import { useWebSearchStore } from "../tools/webSearchStore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
 import { getAssistantToolsApi, updateAssistantToolApi } from "@/controllers/API/assistant";
+import { useTranslation } from "react-i18next";
+import { t } from "i18next";
 
 
 export interface FormErrors {
@@ -54,6 +56,9 @@ export interface ChatConfigForm {
     welcomeMessage: string;
     functionDescription: string;
     inputPlaceholder: string;
+    // 添加这两个属性
+    applicationCenterWelcomeMessage: string;
+    applicationCenterDescription: string;
     models: Model[];
     maxTokens: number;
     voiceInput: {
@@ -106,7 +111,6 @@ export interface ChatConfigForm {
         prompt: string;
     };
 }
-
 export default function index({ formData: parentFormData, setFormData: parentSetFormData }) {
     const sidebarSloganRef = useRef<HTMLDivElement>(null);
     const welcomeMessageRef = useRef<HTMLDivElement>(null);
@@ -118,6 +122,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const systemPromptRef = useRef<HTMLDivElement>(null);
     const appCenterWelcomeRef = useRef<HTMLDivElement>(null);
 const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
+    const { t } = useTranslation()
     const { config: webSearchData, setConfig: setWebSearchData } = useWebSearchStore()
     const {
         formData,
@@ -230,22 +235,22 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
                 <CardContent className="pt-4 relative  ">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
                         <ToggleSection
-                            title="工作台入口"
+                            title={t('chatConfig.workstationEntry')}
                             enabled={formData.menuShow}
                             onToggle={(enabled) => setFormData(prev => ({ ...prev, menuShow: enabled }))}
                         >{null}</ToggleSection>
                         {/* Icon Uploads */}
-                        <p className="text-lg font-bold mb-2">图标上传</p>
+                        <p className="text-lg font-bold mb-2">{t('chatConfig.iconUpload')}</p>
                         <div className="flex gap-8 mb-6">
                             <IconUploadSection
-                                label="左侧边栏图标"
+                                label={t('chatConfig.sidebarIcon')}
                                 enabled={formData.sidebarIcon.enabled}
                                 image={formData.sidebarIcon.image}
                                 onToggle={(enabled) => toggleFeature('sidebarIcon', enabled)}
                                 onUpload={(fileUrl, relativePath) => uploadAvator(fileUrl, 'sidebar', relativePath)}
                             />
                             <IconUploadSection
-                                label="欢迎页面图标&对话头像"
+                                label={t('chatConfig.assistantIcon')}
                                 enabled={formData.assistantIcon.enabled}
                                 image={formData.assistantIcon.image}
                                 onToggle={(enabled) => toggleFeature('assistantIcon', enabled)}
@@ -254,7 +259,7 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
                         </div>
                         <div ref={sidebarSloganRef}>
                             <FormInput
-                                label={<Label className="bisheng-label">左侧边栏slogan</Label>}
+                                label={<Label className="bisheng-label">{t('chatConfig.sidebarSlogan')}</Label>}
                                 value={formData.sidebarSlogan}
                                 error={errors.sidebarSlogan}
                                 placeholder=""
@@ -265,20 +270,20 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
 
                         <div ref={welcomeMessageRef}>
                             <FormInput
-                                label="欢迎语设置"
+                                label={t('chatConfig.welcomeMessage')}
                                 value={formData.welcomeMessage}
                                 error={errors.welcomeMessage}
-                                placeholder="我是 xx，很高兴见到你！"
+                                placeholder={t('chatConfig.welcomeMessagePlaceholder')}
                                 maxLength={1000}
                                 onChange={(v) => handleInputChange('welcomeMessage', v, 1000)}
                             />
                         </div>
                         <div ref={functionDescriptionRef}>
                             <FormInput
-                                label="功能说明"
+                                label={t('chatConfig.functionDescription')}
                                 value={formData.functionDescription}
                                 error={errors.functionDescription}
-                                placeholder="我可以帮你写代码、读文件、写作各种创意内容，请把你的任务交给我吧～"
+                                placeholder={t('chatConfig.functionDescriptionPlaceholder')}
                                 maxLength={1000}
                                 onChange={(v) => handleInputChange('functionDescription', v, 1000)}
                             />
@@ -286,20 +291,20 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
 
                         <div ref={inputPlaceholderRef}>
                             <FormInput
-                                label="输入框提示语"
+                                label={t('chatConfig.inputPlaceholder')}
                                 value={formData.inputPlaceholder}
                                 error={errors.inputPlaceholder}
-                                placeholder="给xx发送消息"
+                                placeholder={t('chatConfig.inputPlaceholderPlaceholder')}
                                 maxLength={1000}
                                 onChange={(v) => handleInputChange('inputPlaceholder', v, 100)}
                             />
                         </div>
   <div ref={appCenterWelcomeRef}>
                             <FormInput
-                                label="应用中心欢迎语"
+                                label={t('chatConfig.appCenterWelcome')}
                                 value={formData.applicationCenterWelcomeMessage}
                                 error={errors.applicationCenterWelcomeMessage}
-                                placeholder="探索BISHENG的智能体"
+                                placeholder={t('chatConfig.appCenterWelcomePlaceholder')}
                                 maxLength={1000}
                                 onChange={(v) => handleInputChange('applicationCenterWelcomeMessage', v, 1000)}
                             />
@@ -308,10 +313,10 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
                         {/* 新增的应用中心描述输入框 */}
                         <div ref={appCenterDescriptionRef}>
                             <FormInput
-                                label="应用中心描述"
+                                label={t('chatConfig.appCenterDescription')}
                                 value={formData.applicationCenterDescription}
                                 error={errors.applicationCenterDescription}
-                                placeholder="您可以在这里选择需要的智能体来进行生产与工作"
+                                placeholder={t('chatConfig.appCenterDescriptionPlaceholder')}
                                 maxLength={1000}
                                 onChange={(v) => handleInputChange('applicationCenterDescription', v, 1000)}
                             />
@@ -319,7 +324,7 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
 
                         {/* Model Management */}
                         <div className="mb-6">
-                            <p className="text-lg font-bold mb-2">对话模型管理</p>
+                            <p className="text-lg font-bold mb-2">{t('chatConfig.modelManagement')}</p>
                             <div className="mb-6">
                                 <ModelManagement
                                     ref={modelRefs}
@@ -337,25 +342,21 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
                                 />
                             </div>
                             <FormInput
-                                label={<Label className="bisheng-label block pt-2">知识库/联网检索结果最大字符数</Label>}
+                                label={<Label className="bisheng-label block pt-2">{t('chatConfig.maxTokens')}</Label>}
                                 type="number"
                                 value={formData.maxTokens}
                                 error={''}
-                                placeholder="模型支持的最大字符数"
+                                placeholder={t('chatConfig.maxTokensPlaceholder')}
                                 maxLength={1000}
                                 onChange={(v) => handleInputChange('maxTokens', v, 100)}
                             />
                             <div ref={systemPromptRef}>
                                 <FormInput
-                                    label={<Label className="bisheng-label">系统提示词</Label>}
+                                    label={<Label className="bisheng-label">{t('chatConfig.systemPrompt')}</Label>}
                                     isTextarea
                                     value={formData.systemPrompt}
                                     error={errors.systemPrompt}
-                                    placeholder={`你是BISHENG智能问答助手，你的任务是根据用户问题进行回答。
-在回答时，请注意以下几点：
-- 当前时间是{cur_date}。
-- 不要泄露任何敏感信息，回答应基于一般性知识和逻辑。
-- 确保回答不违反法律法规、道德准则和公序良俗。`}
+                                    placeholder={`${t('chatConfig.systemPromptPlaceholder')}`}
                                     maxLength={30000}
                                  onChange={(val) => handleInputChange('systemPrompt', val, 30000)}
                                 />
@@ -384,7 +385,7 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
                             </div>
                         </ToggleSection> */}
                         <ToggleSection
-                            title="联网搜索"
+                            title={t('chatConfig.webSearch')}
                             enabled={formData.webSearch.enabled}
                             onToggle={(enabled) => toggleFeature('webSearch', enabled)}
                             extra={
@@ -404,12 +405,12 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
                             />
                         </ToggleSection>
                         <ToggleSection
-                            title="个人知识"
+                            title={t('chatConfig.knowledgeBase')}
                             enabled={formData.knowledgeBase.enabled}
                             onToggle={(enabled) => toggleFeature('knowledgeBase', enabled)}
                         >
                             <FormInput
-                                label={<Label className="bisheng-label">个人知识库搜索提示词</Label>}
+                                label={<Label className="bisheng-label">{t('chatConfig.knowledgeBasePrompt')}</Label>}
                                 isTextarea
                                 value={formData.knowledgeBase.prompt}
                                 error={errors.kownledgeBase}
@@ -423,12 +424,12 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
                         </ToggleSection>
 
                         <ToggleSection
-                            title="文件上传"
+                            title={t('chatConfig.fileUpload')}
                             enabled={formData.fileUpload.enabled}
                             onToggle={(enabled) => toggleFeature('fileUpload', enabled)}
                         >
                             <FormInput
-                                label={<Label className="bisheng-label">文件上传提示词</Label>}
+                                label={<Label className="bisheng-label">{t('chatConfig.fileUploadPrompt')}</Label>}
                                 isTextarea
                                 value={formData.fileUpload.prompt}
                                 error={''}
@@ -444,14 +445,14 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
                     {/* Action Buttons */}
                     <div className="flex justify-end gap-4 absolute bottom-4 right-4">
                         <Preview onBeforView={handleSave} />
-                        <Button onClick={handleSave}>保存</Button>
+                        <Button onClick={handleSave}>{t('save')}</Button>
                     </div>
                 </CardContent>
             </div>
             <Dialog open={webSearchDialogOpen} onOpenChange={setWebSearchDialogOpen}>
                 <DialogContent className="sm:max-w-[625px] bg-background-login">
                     <DialogHeader>
-                        <DialogTitle>联网搜索配置</DialogTitle>
+                        <DialogTitle>{t('chatConfig.webSearchConfig')}</DialogTitle>
                     </DialogHeader>
                     <WebSearchForm
                         prompt={formData.webSearch.prompt}
@@ -504,12 +505,12 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
             },
             prompt: `# 以下内容是基于用户发送的消息的搜索结果:
 {search_results}
-在我给你的搜索结果中，每个结果都是[webpage X begin]...[webpage X end]格式的，X代表每篇文章的数字索引。请在适当的情况下在句子末尾引用上下文。请按照引用编号[citation:X]的格式在答案中对应部分引用上下文。如果一句话源自多个上下文，请列出所有相关的引用编号，例如[citation:3][citation:5]，切记不要将引用集中在最后返回引用编号，而是在答案对应部分列出。
+在我给你的搜索结果中，每个结果都是[webpage X begin]...[webpage X end]格式的，X代表每篇文章的数字索引。请在适当的情况下在句子末尾引用上下文。请按照引用编号[citation:X]的格式在答案中对应部分引用上下文。如果一句话源自多个上下文，请列出所有相关的引用编号，例如:cite[3]:cite[5]，切记不要将引用集中在最后返回引用编号，而是在答案对应部分列出。
 在回答时，请注意以下几点：
 - 今天是{cur_date}。
 - 并非搜索结果的所有内容都与用户的问题密切相关，你需要结合问题，对搜索结果进行甄别、筛选。
 - 对于列举类的问题（如列举所有航班信息），尽量将答案控制在10个要点以内，并告诉用户可以查看搜索来源、获得完整信息。优先提供信息完整、最相关的列举项；如非必要，不要主动告诉用户搜索结果未提供的内容。
-- 对于创作类的问题（如写论文），请务必在正文的段落中引用对应的参考编号，例如[citation:3][citation:5]，不能只在文章末尾引用。你需要解读并概括用户的题目要求，选择合适的格式，充分利用搜索结果并抽取重要信息，生成符合用户要求、极具思想深度、富有创造力与专业性的答案。你的创作篇幅需要尽可能延长，对于每一个要点的论述要推测用户的意图，给出尽可能多角度的回答要点，且务必信息量大、论述详尽。
+- 对于创作类的问题（如写论文），请务必在正文的段落中引用对应的参考编号，例如:cite[3]:cite[5]，不能只在文章末尾引用。你需要解读并概括用户的题目要求，选择合适的格式，充分利用搜索结果并抽取重要信息，生成符合用户要求、极具思想深度、富有创造力与专业性的答案。你的创作篇幅需要尽可能延长，对于每一个要点的论述要推测用户的意图，给出尽可能多角度的回答要点，且务必信息量大、论述详尽。
 - 如果回答很长，请尽量结构化、分段落总结。如果需要分点作答，尽量控制在5个点以内，并合并相关的内容。
 - 对于客观类的问答，如果问题的答案非常简短，可以适当补充一到两句相关信息，以丰富内容。
 - 你需要根据用户要求和回答内容选择合适、美观的回答格式，确保可读性强。
@@ -608,61 +609,63 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
             kownledgeBase: '',
             model: '',
             modelNames: [],
+                applicationCenterWelcomeMessage: '',
+    applicationCenterDescription: '',
         };
 
         if (formData.sidebarSlogan.length > 15) {
-            newErrors.sidebarSlogan = '最多15个字符';
+            newErrors.sidebarSlogan = t('chatConfig.errors.maxCharacters', { count: 15 });
             if (!firstErrorRef) firstErrorRef = refs.sidebarSloganRef;
             isValid = false;
         }
 
         // Validate welcome message
         if (formData.welcomeMessage.length > 1000) {
-            newErrors.welcomeMessage = '最多1000个字符';
+            newErrors.welcomeMessage = t('chatConfig.errors.maxCharacters', { count: 1000 });
             if (!firstErrorRef) firstErrorRef = refs.welcomeMessageRef;
             isValid = false;
         }
 
         // Validate function description
         if (formData.functionDescription.length > 1000) {
-            newErrors.functionDescription = '最多1000个字符';
+            newErrors.functionDescription = t('chatConfig.errors.maxCharacters', { count: 1000 });
             if (!firstErrorRef) firstErrorRef = refs.functionDescriptionRef;
             isValid = false;
         }
 
         // Validate input placeholder
         if (formData.inputPlaceholder.length > 1000) {
-            newErrors.inputPlaceholder = '最多1000个字符';
+            newErrors.inputPlaceholder = t('chatConfig.errors.maxCharacters', { count: 1000 });
             if (!firstErrorRef) firstErrorRef = refs.inputPlaceholderRef;
             isValid = false;
         }
 
         if (formData.knowledgeBase.prompt.length > 30000) {
-            newErrors.kownledgeBase = '最多30000个字符';
+            newErrors.kownledgeBase = t('chatConfig.errors.maxCharacters', { count: 30000 });
             if (!firstErrorRef) firstErrorRef = refs.knowledgeBaseRef;
             isValid = false;
         }
 
         if (formData.systemPrompt?.length > 30000) {
-            newErrors.systemPrompt = '最多30000个字符';
+            newErrors.systemPrompt = t('chatConfig.errors.maxCharacters', { count: 30000 });
             if (!firstErrorRef) firstErrorRef = refs.systemPromptRef;
             isValid = false;
         }
         if (formData.applicationCenterWelcomeMessage.length > 1000) {
-                newErrors.applicationCenterWelcomeMessage = '最多1000个字符';
+                newErrors.applicationCenterWelcomeMessage = t('chatConfig.errors.maxCharacters', { count: 1000 });
                 if (!firstErrorRef) firstErrorRef = refs.appCenterWelcomeRef;
                 isValid = false;
             }
             
             // 验证应用中心描述
             if (formData.applicationCenterDescription.length > 1000) {
-                newErrors.applicationCenterDescription = '最多1000个字符';
+                newErrors.applicationCenterDescription = t('chatConfig.errors.maxCharacters', { count: 1000 });
                 if (!firstErrorRef) firstErrorRef = refs.appCenterDescriptionRef;
                 isValid = false;
             }
         // Validate models
         if (formData.models.length === 0) {
-            newErrors.model = '至少添加一个模型';
+            newErrors.model = t('chatConfig.errors.atLeastOneModel');
             if (!firstErrorRef) {
                 firstErrorRef = refs.modelRefs.current[0] ?
                     { current: refs.modelRefs.current[0] } :
@@ -677,17 +680,17 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
             let error = [];
 
             if (!displayName) {
-                error = ['', '模型显示名称不能为空'];
+                error = ['', t('chatConfig.errors.modelNameRequired')];
                 if (!firstErrorRef && refs.modelRefs.current[index]) {
                     firstErrorRef = { current: refs.modelRefs.current[index] };
                 }
             } else if (!model.id) {
-                error = ['模型不能为空', ''];
+                error = [t('chatConfig.errors.modelRequired'), ''];
                 if (!firstErrorRef && refs.modelRefs.current[index]) {
                     firstErrorRef = { current: refs.modelRefs.current[index] };
                 }
             } else if (displayName.length > 30) {
-                error = ['', '最多30个字符'];
+                error = ['', t('chatConfig.errors.maxCharacters', { count: 30 })];
                 if (!firstErrorRef && refs.modelRefs.current[index]) {
                     firstErrorRef = { current: refs.modelRefs.current[index] };
                 }
@@ -696,10 +699,10 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
                     if (i !== index) {
                         error = ['', ''];
                         if (m.id === model.id) {
-                            error[0] = '模型不能重复'
+                            error[0] = t('chatConfig.errors.modelDuplicate')
                         }
                         if (m.displayName.trim().toLowerCase() === displayName.toLowerCase()) {
-                            error[1] = '显示名称不能重复'
+                            error[1] = t('chatConfig.errors.modelNameDuplicate')
                         }
                         if (error[0] || error[1]) {
                             if (!firstErrorRef && refs.modelRefs.current[index]) {
@@ -725,11 +728,11 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
             switch (formData.webSearch.tool) {
                 case 'bing':
                     if (!formData.webSearch.params.api_key?.trim()) {
-                        webSearchErrors.params = { ...webSearchErrors.params, api_key: '不能为空' };
+                        webSearchErrors.params = { ...webSearchErrors.params, api_key: t('chatConfig.errors.required') };
                         hasWebSearchError = true;
                     }
                     if (!formData.webSearch.params.base_url?.trim()) {
-                        webSearchErrors.params = { ...webSearchErrors.params, base_url: '不能为空' };
+                        webSearchErrors.params = { ...webSearchErrors.params, base_url: t('chatConfig.errors.required') };
                         hasWebSearchError = true;
                     }
                     break;
@@ -737,17 +740,17 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
                 case 'jina':
                 case 'tavily':
                     if (!formData.webSearch.params.api_key?.trim()) {
-                        webSearchErrors.params = { ...webSearchErrors.params, api_key: '不能为空' };
+                        webSearchErrors.params = { ...webSearchErrors.params, api_key: t('chatConfig.errors.required') };
                         hasWebSearchError = true;
                     }
                     break;
                 case 'serp':
                     if (!formData.webSearch.params.api_key?.trim()) {
-                        webSearchErrors.params = { ...webSearchErrors.params, api_key: '不能为空' };
+                        webSearchErrors.params = { ...webSearchErrors.params, api_key: t('chatConfig.errors.required') };
                         hasWebSearchError = true;
                     }
                     if (!formData.webSearch.params.engine?.trim()) {
-                        webSearchErrors.params = { ...webSearchErrors.params, engine: '不能为空' };
+                        webSearchErrors.params = { ...webSearchErrors.params, engine: t('chatConfig.errors.required') };
                         hasWebSearchError = true;
                     }
                     break;
@@ -792,8 +795,9 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
             welcomeMessage: formData.welcomeMessage.trim(),
             functionDescription: formData.functionDescription.trim(),
             inputPlaceholder: formData.inputPlaceholder.trim(),
-            applicationCenterWelcomeMessage: formData.applicationCenterWelcomeMessage.trim(), 
-            applicationCenterDescription: formData.applicationCenterDescription.trim(), 
+            applicationCenterWelcomeMessage: formData.applicationCenterWelcomeMessage.trim()||'探索BISHENG的智能体', 
+            applicationCenterDescription: formData.applicationCenterDescription.trim()||'您可以在这里选择需要的智能体来进行生产与工作~', 
+            maxTokens: formData.maxTokens || 15000,
         };
 
         console.log('Saving data:', dataToSave);
@@ -802,7 +806,7 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
             if (res) {
                 toast({
                     variant: 'success',
-                    description: '配置保存成功',
+                    description: t('chatConfig.saveSuccess'),
                 })
                 reloadConfig()
             }

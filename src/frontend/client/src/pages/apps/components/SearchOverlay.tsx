@@ -137,7 +137,7 @@ export function SearchOverlay({
                                             icon: "🤖",
                                             category: "search"
                                         }}
-                                        isFavorite={favorites.includes(agent.id.toString())}
+                                        isFavorite={favorites ? favorites.includes(agent.id.toString()) : false}
                                         showRemove={false}
                                         onAddToFavorites={() => onAddToFavorites(agent.id.toString())}
                                         onRemoveFromFavorites={() => onRemoveFromFavorites(agent.id.toString())}

@@ -34,6 +34,7 @@ import { TabsContext } from "@/contexts/tabsContext";
 import PromptAreaComponent from "./PromptCom";
 import defaultPrompt from "./defaultPrompt";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 
 export default function EvaluatingCreate() {
   const { t } = useTranslation();
@@ -100,14 +101,17 @@ export default function EvaluatingCreate() {
     if (errorlist.length) return handleError(errorlist);
     setLoading(true);
     try {
-      await createEvaluationApi({
+      await captureAndAlertRequestErrorHoc(
+              createEvaluationApi({
         // exec_type: selectedType === "flow" ? "workflow" : selectedType,
         exec_type: selectedType,
         unique_id: selectedKeyId,
         version: selectedVersion,
         prompt,
         file: fileRef.current,
-      });
+      })
+      ) 
+
       navigate(-1);
     } finally {
       setLoading(false);

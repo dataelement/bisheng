@@ -133,7 +133,7 @@ export default function Files({ onPreview }) {
     const handleBatchDelete = () => {
         bsConfirm({
             title: t('prompt'),
-            desc: t('confirmDeleteSelectedFiles', { count: selectedFiles.size }),
+            desc: t('确认删除选中文件', { count: selectedFiles.size }),
             onOk(next) {
                 captureAndAlertRequestErrorHoc(Promise.all(
                     Array.from(selectedFiles).map(id => deleteFile(id))

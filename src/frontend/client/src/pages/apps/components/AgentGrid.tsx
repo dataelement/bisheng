@@ -42,49 +42,48 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
   const [uncategorizedPagination, setUncategorizedPagination] = useState({ page: 1, total: 0, hasMore: true })
   const [categoriesLoading, setCategoriesLoading] = useState(true)
   const [allAgents, setAllAgents] = useState<Agent[]>([])
-  const [frequentlyUsedPagination, setFrequentlyUsedPagination] = useState({ page: 1, total: 0, hasMore: true }) // 新增：常用助手分页
-  const [frequentlyUsedLoading, setFrequentlyUsedLoading] = useState(false) // 新增：常用助手加载状态
+  const [frequentlyUsedPagination, setFrequentlyUsedPagination] = useState({ page: 1, total: 0, hasMore: true })
+  const [frequentlyUsedLoading, setFrequentlyUsedLoading] = useState(false)
 
   const isFavorite = (agentId: string): boolean => {
     return favorites ? favorites.includes(agentId) : false
   }
 
-  const fetchFrequentlyUsed = async (pageNum: number = 1) => {
-    setFrequentlyUsedLoading(true)
-    try {
-      const result = await getFrequently(pageNum, 8) // 添加分页参数
-      console.log("常用助手数据:", result.data)
+const fetchFrequentlyUsed = async (pageNum: number = 1) => {
+  setFrequentlyUsedLoading(true)
+  try {
+    const result = await getFrequently(pageNum, 8)
+    console.log("常用助手数据:", result.data)
 
-      const agents: Agent[] = result.data.map((item: any) => ({
-        id: item.id.toString(),
-        type: item.flow_type,
-        name: item.name,
-        description: item.description || "暂无描述",
-        icon: "🤖",
-        userId: item.user_id.toString(),
-        category: "frequently_used"
-      }))
+    const agents: Agent[] = result.data.map((item: any) => ({
+      id: item.id.toString(),
+      type: item.flow_type,
+      name: item.name,
+      description: item.description || "",
+      icon: "🤖",
+      userId: item.user_id.toString(),
+      category: "frequently_used"
+    }))
 
-      setAllAgents(prev =>
-        pageNum === 1 ? agents : [...prev, ...agents]
-      )
+    setAllAgents(prev =>
+      pageNum === 1 ? agents : [...prev, ...agents]
+    )
 
-      // 设置分页信息
-      const hasMore = agents.length === 8
-      setFrequentlyUsedPagination({
-        page: pageNum,
-        total: result.total,
-        hasMore
-      })
-    } catch (error) {
-      console.error("获取常用助手失败:", error)
-    } finally {
-      setFrequentlyUsedLoading(false)
-    }
+    const hasMore = agents.length === 8
+    setFrequentlyUsedPagination({
+      page: pageNum,
+      total: result.total,
+      hasMore
+    })
+  } catch (error) {
+    console.error("获取常用助手失败:", error)
+  } finally {
+    setFrequentlyUsedLoading(false)
   }
+}
 
   useEffect(() => {
-    fetchFrequentlyUsed(1) // 初始加载第一页
+    fetchFrequentlyUsed(1)
   }, [refreshTrigger])
 
   const fetchCategoryTags = async () => {
@@ -124,91 +123,93 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
     }
   }
 
-  const fetchAgentsForCategory = async (categoryId: string, pageNum: number) => {
-    setLoading(prev => ({ ...prev, [categoryId]: true }))
+const fetchAgentsForCategory = async (categoryId: string, pageNum: number) => {
+  setLoading(prev => ({ ...prev, [categoryId]: true }))
 
-    try {
-      console.log(`获取分类 ${categoryId} 的数据，页码: ${pageNum}`)
+  try {
+    console.log(`获取分类 ${categoryId} 的数据，页码: ${pageNum}`)
 
-      const result = await getChatOnlineApi(
-        pageNum,
-        "",
-        parseInt(categoryId),
-      )
+    const result = await getChatOnlineApi(
+      pageNum,
+      "",
+      parseInt(categoryId),
+    )
 
-      console.log(`分类 ${categoryId} 获取到的数据:`, result)
+    console.log(`分类 ${categoryId} 获取到的数据:`, result)
 
-      const agents: Agent[] = result.data.map((item: any) => ({
-        id: item.id.toString(),
-        type: item.flow_type,
-        name: item.name,
-        description: item.description || "暂无描述",
-        icon: "🤖",
-        userId: item.user_id.toString(),
-        category: categoryId
-      }))
+    const agents: Agent[] = result.data.map((item: any) => ({
+      id: item.id.toString(),
+      type: item.flow_type,
+      name: item.name,
+      description: item.description || "",
+      icon: "🤖",
+      userId: item.user_id.toString(),
+      category: categoryId
+    }))
 
-      setAgentsByCategory(prev => ({
-        ...prev,
-        [categoryId]: pageNum === 1
-          ? agents
-          : [...(prev[categoryId] || []), ...agents]
-      }))
+    setAgentsByCategory(prev => ({
+      ...prev,
+      [categoryId]: pageNum === 1
+        ? agents
+        : [...(prev[categoryId] || []), ...agents]
+    }))
 
-      const hasMore = agents.length === 8
+    // 只有当获取到的数据数量等于8时才可能有更多数据
+    const hasMore = agents.length === 8
 
-      setPagination(prev => ({
-        ...prev,
-        [categoryId]: {
-          page: pageNum,
-          total: result.total,
-          hasMore
-        }
-      }))
-    } catch (error) {
-      console.error(`获取分类 ${categoryId} 的助手失败:`, error)
-    } finally {
-      setLoading(prev => ({ ...prev, [categoryId]: false }))
-    }
-  }
-
-  const fetchUncategorizedAgents = async (pageNum: number) => {
-    setUncategorizedLoading(true)
-
-    try {
-      console.log(`获取未分类数据，页码: ${pageNum}`)
-
-      const result = await getUncategorized(pageNum, 8)
-
-      console.log(`未分类获取到的数据:`, result)
-
-      const agents: Agent[] = result.data.map((item: any) => ({
-        id: item.id.toString(),
-        type: item.flow_type,
-        name: item.name,
-        description: item.description || "暂无描述",
-        icon: "🤖",
-        userId: item.user_id.toString(),
-        category: "uncategorized"
-      }))
-
-      setUncategorizedAgents(prev =>
-        pageNum === 1 ? agents : [...prev, ...agents]
-      )
-
-      const hasMore = agents.length === 8
-
-      setUncategorizedPagination({
+    setPagination(prev => ({
+      ...prev,
+      [categoryId]: {
         page: pageNum,
         total: result.total,
         hasMore
-      })
-    } catch (error) {
-      console.error("获取未分类助手失败:", error)
-    } finally {
-      setUncategorizedLoading(false)
-    }
+      }
+    }))
+  } catch (error) {
+    console.error(`获取分类 ${categoryId} 的助手失败:`, error)
+  } finally {
+    setLoading(prev => ({ ...prev, [categoryId]: false }))
   }
+}
+
+const fetchUncategorizedAgents = async (pageNum: number) => {
+  setUncategorizedLoading(true)
+
+  try {
+    console.log(`获取未分类数据，页码: ${pageNum}`)
+
+    const result = await getUncategorized(pageNum, 8)
+
+    console.log(`未分类获取到的数据:`, result)
+
+    const agents: Agent[] = result.data.map((item: any) => ({
+      id: item.id.toString(),
+      type: item.flow_type,
+      name: item.name,
+      description: item.description || "",
+      icon: "🤖",
+      userId: item.user_id.toString(),
+      category: "uncategorized"
+    }))
+
+    setUncategorizedAgents(prev =>
+      pageNum === 1 ? agents : [...prev, ...agents]
+    )
+
+    // 只有当获取到的数据数量等于8时才可能有更多数据
+    const hasMore = agents.length === 8
+
+    setUncategorizedPagination({
+      page: pageNum,
+      total: result.total,
+      hasMore
+    })
+  } catch (error) {
+    console.error("获取未分类助手失败:", error)
+  } finally {
+    setUncategorizedLoading(false)
+  }
+}
 
   const loadMore = (categoryId: string) => {
     if (categoryId === "frequently_used") {
@@ -224,11 +225,13 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
   }
 
   const handleRemoveFromFavorites = async (userId: string, type: number, id: string) => {
-    try {
-      await removeFromFrequentlyUsed(userId, type, id)
-      onRemoveFromFavorites(userId, type, id)
-      // 重新加载第一页常用助手
-      fetchFrequentlyUsed(1)
+   try {
+    onRemoveFromFavorites(userId, type, id) // 先删除
+    
+    // 添加短暂延迟确保删除操作完成
+    await new Promise(resolve => setTimeout(resolve, 100))
+    
+    await fetchFrequentlyUsed(1)
     } catch (error) {
       console.error("移除常用助手失败:", error)
     }
@@ -237,7 +240,6 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
   const handleAddToFavorites = async (type: number, id: string) => {
     try {
       await onAddToFavorites(type, id)
-      // 重新加载第一页常用助手
       fetchFrequentlyUsed(1)
     } catch (error) {
       console.error("添加常用助手失败:", error)
@@ -252,7 +254,7 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
   const sections = [
     {
       id: "frequently_used",
-      name: "常用",
+      name: "",
       agents: allAgents,
       isFavoriteSection: true,
       pagination: frequentlyUsedPagination,
