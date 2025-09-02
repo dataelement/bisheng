@@ -1,5 +1,4 @@
-import { TitleLogo } from "@/components/bs-comp/cardComponent";
-import { AssistantIcon } from "@/components/bs-icons";
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { LoadIcon } from "@/components/bs-icons/loading";
 import { Accordion } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
@@ -16,7 +15,7 @@ import { copyReportTemplate, createWorkflowApi } from "@/controllers/API/workflo
 // import { createWorkflowApi, getWorkflowApi, updateWorkflowApi } from "@/controllers/API/workflow"; // 假设有对应的接口
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
-import { AppType } from "@/types/app";
+import { AppType, AppTypeToNum } from "@/types/app";
 import { forwardRef, useContext, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -247,13 +246,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                                 {appType === AppType.ASSISTANT ? t('assistantAvatar') : t('workflowAvatar')}
                             </label>
                             <Avator value={formData.url} className="mt-3" onChange={uploadAvator}>
-                                {/* <AssistantIcon className="bg-primary w-8 h-8 rounded-sm" /> */}
-                                <TitleLogo
-                                    className=" w-6 h-6 rounded-sm"
-                                    url={loca?.logo}
-                                    id={loca?.id}
-                                    type={loca?.flow_type}
-                                ></TitleLogo>
+                                <AppAvator id={formData.name} url={loca?.logo} flowType={AppTypeToNum[appType]} className="size-8"></AppAvator>
                             </Avator>
                         </div>
                         <div className="mb-6">

@@ -143,7 +143,7 @@ export default function HomePage({ onSelect }) {
                 key={index}
                 id={index + 1}
                 data={chat}
-                logo={chat.logo}
+                logo={null}
                 title={chat.name}
                 description={chat.description}
                 type={chat.flow_type}

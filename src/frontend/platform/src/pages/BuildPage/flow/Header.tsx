@@ -1,6 +1,6 @@
 import TipPng from "@/assets/tip.jpg";
-import { TitleLogo } from "@/components/bs-comp/cardComponent";
-import { AssistantIcon, DelIcon, LoadIcon } from "@/components/bs-icons";
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
+import { DelIcon, LoadIcon } from "@/components/bs-icons";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
@@ -267,12 +267,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                     onClick={returnPage}
                 ><ChevronLeft /></Button>
                 <div className="flex items-center ml-5">
-                    <TitleLogo
-                        url={loca?.logo}
-                        id={loca?.id}
-                        type={loca?.flow_type}
-                        className=""
-                    ><AssistantIcon /></TitleLogo>
+                    <AppAvator id={flow.name} url={loca?.logo} flowType={10} className=""></AppAvator>
                     <div className="pl-3">
                         <h1 className="font-medium text-sm flex gap-2">
                             <span className="truncate max-w-48 font-bold">{flow.name}</span>

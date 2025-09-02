@@ -1,5 +1,4 @@
 import { ToastIcon } from "@/components/bs-icons";
-import { AvatarIcon } from "@/components/bs-icons/avatar";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { cname } from "@/components/bs-ui/utils";
 import MessageMarkDown from "@/pages/BuildPage/flow/FlowChat/MessageMarkDown";
@@ -11,7 +10,6 @@ import { useMemo, useRef, useState } from "react";
 import MessageButtons from "./MessageButtons";
 import SourceEntry from "./SourceEntry";
 import { useMessageStore } from "./messageStore";
-import { TitleLogo } from "../cardComponent";
 
 // 颜色列表
 const colorList = [
@@ -86,12 +84,6 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                 </div>
                 <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                     <div className="flex gap-2">
-                        {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
-                            <img className="w-6 h-6" src={logo} />
-                        </div>
-                            : <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full"  >
-                                <TitleLogo url={chat?.logo} className="" id={chat?.flow_id}  type={chat?.flow_type}></TitleLogo>
-                            </div>}
                         {data.message.toString() ?
                             <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
                                 {<MessageMarkDown message={message} />}

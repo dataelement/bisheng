@@ -1,11 +1,12 @@
 import { AbilitiesIcon, FlowIcon, HelperIcon } from "@/components/bs-icons/app";
 import { readTempsDatabase } from "@/controllers/API";
-import { AppType } from "@/types/app";
+import { AppType, AppTypeToNum } from "@/types/app";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../bs-ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "../../bs-ui/sheet";
 import CardComponent from "../cardComponent";
+import AppAvator from "../cardComponent/avatar";
 
 /** 应用模板选择 */
 export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
@@ -98,7 +99,7 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
                             <CardComponent key={i}
                                 id={i + 1}
                                 data={flow}
-                                logo={flow.logo}
+                                logo={<AppAvator id={flow.name} flowType={AppTypeToNum[type]} url={flow.logo} />}
                                 title={flow.name}
                                 description={flow.description}
                                 type="sheet"

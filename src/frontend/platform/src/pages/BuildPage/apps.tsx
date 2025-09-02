@@ -28,6 +28,7 @@ import { useQueryLabels } from "./assistant";
 import CreateApp from "./CreateApp";
 import CardSelectVersion from "./skills/CardSelectVersion";
 import CreateTemp from "./skills/CreateTemp";
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 
 export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
     const [value, setValue] = useState<string>(defaultValue)
@@ -224,7 +225,7 @@ export default function apps() {
                                     key={item.id}
                                     data={item}
                                     id={item.id}
-                                    logo={item.logo}
+                                    logo={<AppAvator id={item.name} flowType={item.flow_type} url={item.logo} />}
                                     type={TypeNames[item.flow_type]}
                                     edit
                                     // edit={item.write}

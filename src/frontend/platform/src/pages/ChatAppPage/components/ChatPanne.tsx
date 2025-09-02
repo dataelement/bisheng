@@ -1,8 +1,7 @@
 
-import { TitleLogo } from "@/components/bs-comp/cardComponent";
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import ChatComponent from "@/components/bs-comp/chatComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
-import { AssistantIcon } from "@/components/bs-icons";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
 import ChatPane from "@/pages/BuildPage/flow/FlowChat/ChatPane";
@@ -19,7 +18,7 @@ import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
 import ForcePrompt from "./ForcePrompt";
 
-export default function ChatPanne({ customWsHost = '',chatList,chat, appendHistory = false, data, version = 'v1' }) {
+export default function ChatPanne({ customWsHost = '', chatList, chat, appendHistory = false, data, version = 'v1' }) {
     const { id, chatId, type } = data
     const { t } = useTranslation()
 
@@ -235,7 +234,7 @@ export default function ChatPanne({ customWsHost = '',chatList,chat, appendHisto
             flow && <div className={`w-full chat-box h-full relative px-6 ${type === AppNumType.SKILL ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
-                    <TitleLogo url={chat.logo} className="" id={chat.flow_id}  type={chat.flow_type}></TitleLogo>
+                    <AppAvator id={chat.flow_name} url={chat.logo} flowType={1} ></AppAvator>
                     <span className="text-sm">{chat.flow_name}</span>
                 </div>
                 <ChatComponent
@@ -259,7 +258,7 @@ export default function ChatPanne({ customWsHost = '',chatList,chat, appendHisto
             assistant && <div className={`w-full chat-box h-full relative px-6 ${type === AppNumType.ASSISTANT ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
-                    <TitleLogo url={chat.logo} className="" id={chat.flow_id}  type={chat.flow_type}></TitleLogo>
+                    <AppAvator id={chat.flow_name} url={chat.logo} flowType={5} ></AppAvator>
                     <span className="text-sm">{chat.flow_name}</span>
                 </div>
                 <ChatComponent
@@ -282,8 +281,8 @@ export default function ChatPanne({ customWsHost = '',chatList,chat, appendHisto
         {
             workflow && <div className={`w-full chat-box h-full relative ${type === AppNumType.FLOW ? 'block' : 'hidden'}`}>
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-6 py-1 dark:bg-[#1B1B1B]">
-                    <TitleLogo url={chat.logo} className="" id={chat.flow_id}  type={chat.flow_type}></TitleLogo>
-                     <span className="text-sm">{chat.flow_name}</span>
+                    <AppAvator id={chat.flow_name} url={chat.logo} flowType={10} ></AppAvator>
+                    <span className="text-sm">{chat.flow_name}</span>
                 </div>
                 <ChatPane autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl} />
             </div>
