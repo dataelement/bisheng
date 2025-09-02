@@ -22,7 +22,7 @@ class McpTool(BaseModel):
         """convert the kwargs field value"""
         if not kwargs:
             return None
-        for k, v in kwargs:
+        for k, v in kwargs.items():
             k_type = self.arg_schema.get("properties", {}).get(k, {}).get("type")
             kwargs[k] = convert_openapi_field_value(v, k_type)
         return kwargs
