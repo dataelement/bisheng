@@ -121,7 +121,7 @@ def get_config(
         ret = ret.model_dump()
     else:
         ret = {}
-    ret['enable_etl4lm'] = etl_for_lm_url is not None
+    ret['enable_etl4lm'] = bool(etl_for_lm_url)
 
     linsight_invitation_code = bisheng_settings.get_all_config().get('linsight_invitation_code', None)
     ret['linsight_invitation_code'] = linsight_invitation_code if linsight_invitation_code else False
