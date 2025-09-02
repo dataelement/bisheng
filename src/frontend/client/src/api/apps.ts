@@ -110,7 +110,7 @@ export async function getChatHistoryApi(flowId: string, chatId: string, flowType
             return {
                 ...other,
                 category: _category,
-                chatKey: typeof message === 'string' ? undefined : Object.keys(message)[0],
+                chatKey: Number(flowType) === 5 ? 'input' : (typeof message === 'string' ? undefined : Object.keys(message)[0]),
                 end: true,
                 files: _files,
                 isSend: _isSend,

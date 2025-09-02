@@ -144,7 +144,7 @@ export const SkillMethod = {
                 }
             } else {
                 if ((prevMessage
-                    && prevMessage.message === newCurrentMessage.message
+                    && prevMessage.message === newCurrentMessage.message && newCurrentMessage.end
                     && prevMessage.thought === newCurrentMessage.thought)
                     || cover) {
                     const removedMsg = messages.pop()

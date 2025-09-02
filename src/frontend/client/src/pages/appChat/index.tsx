@@ -36,8 +36,10 @@ export default function index() {
         const currentData = chats[cid]
         let error = ''
 
+        setChatId(cid!) // 切换会话
+
         // 无缓存，从新加载
-        if (currentData) return setChatId(cid!);
+        if (currentData) return;
 
         const numericType = Number(type);
 
@@ -111,7 +113,6 @@ export default function index() {
             }
         })
 
-        setChatId(cid!)
     }
 
     useEffect(() => {
