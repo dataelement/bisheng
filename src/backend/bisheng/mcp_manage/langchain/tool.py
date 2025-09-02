@@ -17,6 +17,7 @@ class McpTool(BaseModel):
     description: str
     mcp_client: BaseMcpClient
     mcp_tool_name: str
+    arg_schema: dict = {}
 
     def parse_kwargs_schema(self, kwargs: dict) -> None | dict:
         """convert the kwargs field value"""
