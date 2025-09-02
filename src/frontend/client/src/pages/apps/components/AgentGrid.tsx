@@ -298,7 +298,7 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
                   ))}
                 </div>
 
-                {categoryPagination.hasMore && (
+                {categoryPagination.hasMore && section.agents.length >= 8 &&(
                   <div className="flex justify-end mt-6">
                     <Button
                       variant="default"

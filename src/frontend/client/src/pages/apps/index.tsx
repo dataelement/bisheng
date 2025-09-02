@@ -207,7 +207,7 @@ console.log(categoryId,22);
 
             {/* Scrollable Content */}
             <div className="relative" style={{ height: "calc(100vh - 200px)" }}>
-                <div ref={scrollContainerRef} className="container mx-auto px-6 py-6 pb-96 h-full overflow-y-auto">
+                <div ref={scrollContainerRef} className="container mx-auto px-6 py-6 pb-96 h-full overflow-y-auto scrollbar-hide">
                     {!isSearching ? (
                         <AgentGrid
                             favorites={favorites}
