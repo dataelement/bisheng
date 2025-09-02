@@ -179,11 +179,11 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
             })
         } else {
             const data = {
-                "model_id": currentLib.model,
+                "model_id": modal[1].value,
                 "model_type": "embedding",
                 "knowledge_id": currentLib.id,
-                "knowledge_name": currentLib.name,
-                "description": currentLib.description
+               "knowledge_name": name, 
+            "description": desc
             }
             await captureAndAlertRequestErrorHoc(updateKnowledge(data).then(res => {
                 toast({

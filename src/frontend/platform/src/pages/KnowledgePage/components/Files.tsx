@@ -71,21 +71,30 @@ export default function Files({ onPreview }) {
         );
     };
 
-    const applyFilters = () => {
-        setSelectedFilters([...tempFilters]);
-        // 确保传递正确的筛选参数格式
-        filterData({ status: tempFilters.length > 0 ? tempFilters.join(',') : undefined });
-        setIsFilterOpen(false);
-        // 筛选时清除选择状态
-        setSelectedFiles(new Set());
-        setIsAllSelected(false);
-    };
+const applyFilters = () => {
+    setSelectedFilters([...tempFilters]);
+    const params: any = {};
+    if (tempFilters.length > 0) {
+        // 创建多个 status 参数
+        tempFilters.forEach((status, index) => {
+            params[`status`] = status; // 这会覆盖前一个，需要特殊处理
+        });
+        
+        // 或者使用另一种方式：修改 useTable 支持数组
+        params.status = tempFilters; // 传递数组，让 useTable 处理
+    }
+    
+    filterData(params);
+    setIsFilterOpen(false);
+    setSelectedFiles(new Set());
+    setIsAllSelected(false);
+};
 
     const resetFilters = () => {
         const emptyFilters: number[] = [];
         setTempFilters(emptyFilters);
         setSelectedFilters(emptyFilters);
-        filterData({ status: undefined });
+        filterData({}); // 传递空对象
         setIsFilterOpen(false);
         // 重置筛选时清除选择状态
         setSelectedFiles(new Set());
@@ -404,7 +413,7 @@ export default function Files({ onPreview }) {
                             <TableRow
                                 key={el.id}
                                 onClick={() => {
-                                    if (!selectedFiles.size) {
+                                    if (!selectedFiles.size && el.status !== 3) {
                                         onPreview(el.id);
                                     }
                                 }}
@@ -447,7 +456,7 @@ export default function Files({ onPreview }) {
                                             <TooltipProvider delayDuration={100}>
                                                 <Tooltip>
                                                     <TooltipTrigger className="flex items-center gap-2">
-                                                        <img src="/failed.svg" className="w-16 h-8" alt="解析失败" />
+                                                        <img src="/assets/failed.svg" className="w-16 h-8" alt="解析失败" />
                                                     </TooltipTrigger>
                                                     <TooltipContent>
                                                         <div className="max-w-96 text-left break-all whitespace-normal">{el.remark}</div>
