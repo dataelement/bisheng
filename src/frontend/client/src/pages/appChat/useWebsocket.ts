@@ -56,6 +56,22 @@ export const useWebSocket = (helpers) => {
                         data: { ...flow, ...data },
                     }
                     ws?.send(JSON.stringify(msg))
+                } else {
+                    const msg = {
+                        chatHistory: [],
+                        chat_id: helpers.chatId,
+                        flow_id: helpers.flow.id,
+                        inputs: {
+                            data: {
+                                id: helpers.flow.id,
+                                chatId: helpers.chatId,
+                                type: helpers.flow.flow_type,
+                            }
+                        },
+                        name: helpers.flow.name,
+                        description: helpers.flow.description
+                    }
+                    ws?.send(JSON.stringify(msg))
                 }
             }
 
