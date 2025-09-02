@@ -495,7 +495,7 @@ export default function KnowledgeFile() {
                                 <TableCell className="font-medium max-w-[200px]">
                                     <div className="flex items-start gap-2">
                                         <img
-                                            src="/file-logo.svg"
+                                            src="/assets/file-logo.svg"
                                             alt=""
                                             className="w-[50px] h-[50px] mt-1 rounded object-cover"
                                         />

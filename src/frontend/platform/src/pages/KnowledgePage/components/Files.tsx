@@ -48,6 +48,8 @@ export default function Files({ onPreview }) {
     const [currentFile, setCurrentFile] = useState(null);
     const [newFileName, setNewFileName] = useState('');
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+    // 新增状态：跟踪全选状态
+    const [isAllSelected, setIsAllSelected] = useState(false);
 
     // 解析中 轮巡
     const timerRef = useRef(null)
@@ -74,6 +76,9 @@ export default function Files({ onPreview }) {
         // 确保传递正确的筛选参数格式
         filterData({ status: tempFilters.length > 0 ? tempFilters.join(',') : undefined });
         setIsFilterOpen(false);
+        // 筛选时清除选择状态
+        setSelectedFiles(new Set());
+        setIsAllSelected(false);
     };
 
     const resetFilters = () => {
@@ -82,6 +87,9 @@ export default function Files({ onPreview }) {
         setSelectedFilters(emptyFilters);
         filterData({ status: undefined });
         setIsFilterOpen(false);
+        // 重置筛选时清除选择状态
+        setSelectedFiles(new Set());
+        setIsAllSelected(false);
     };
 
     const handleDelete = (id) => {
@@ -91,6 +99,12 @@ export default function Files({ onPreview }) {
             onOk(next) {
                 captureAndAlertRequestErrorHoc(deleteFile(id).then(res => {
                     reload()
+                    // 删除文件后，从选中集合中移除
+                    setSelectedFiles(prev => {
+                        const newSet = new Set(prev);
+                        newSet.delete(id);
+                        return newSet;
+                    });
                 }))
                 next()
             },
@@ -107,9 +121,19 @@ export default function Files({ onPreview }) {
     // 全选/取消全选
     const toggleSelectAll = (checked: boolean) => {
         if (checked) {
-            setSelectedFiles(new Set(datalist.map(file => file.id)));
+            // 全选当前页
+            const currentPageIds = datalist.map(file => file.id);
+            const newSelectedFiles = new Set(selectedFiles);
+            currentPageIds.forEach(id => newSelectedFiles.add(id));
+            setSelectedFiles(newSelectedFiles);
+            setIsAllSelected(true);
         } else {
-            setSelectedFiles(new Set());
+            // 取消全选当前页
+            const currentPageIds = datalist.map(file => file.id);
+            const newSelectedFiles = new Set(selectedFiles);
+            currentPageIds.forEach(id => newSelectedFiles.delete(id));
+            setSelectedFiles(newSelectedFiles);
+            setIsAllSelected(false);
         }
     };
 
@@ -120,6 +144,8 @@ export default function Files({ onPreview }) {
             newSelectedFiles.add(fileId);
         } else {
             newSelectedFiles.delete(fileId);
+            // 如果有文件被取消选择，则取消全选状态
+            setIsAllSelected(false);
         }
         setSelectedFiles(newSelectedFiles);
     };
@@ -128,6 +154,12 @@ export default function Files({ onPreview }) {
     const getSelectedFiles = () => {
         return datalist.filter(file => selectedFiles.has(file.id));
     };
+
+    // 检查当前页是否全部选中
+    const isCurrentPageAllSelected = useMemo(() => {
+        if (datalist.length === 0) return false;
+        return datalist.every(file => selectedFiles.has(file.id));
+    }, [datalist, selectedFiles]);
 
     // 批量删除
     const handleBatchDelete = () => {
@@ -140,6 +172,7 @@ export default function Files({ onPreview }) {
                 ).then(() => {
                     reload();
                     setSelectedFiles(new Set());
+                    setIsAllSelected(false);
                 }))
                 next();
             },
@@ -152,6 +185,7 @@ export default function Files({ onPreview }) {
         if (failedFiles.length > 0) {
             handleRetry(failedFiles.map(file => file.id));
             setSelectedFiles(new Set());
+            setIsAllSelected(false);
         }
     }
 
@@ -189,6 +223,21 @@ export default function Files({ onPreview }) {
             setTempFilters([...selectedFilters]);
         }
     }, [isFilterOpen, selectedFilters]);
+
+    // 当页面数据变化时，更新全选状态
+    useEffect(() => {
+        setIsAllSelected(datalist.length > 0 && datalist.every(file => selectedFiles.has(file.id)));
+    }, [datalist, selectedFiles]);
+
+    // 处理下拉菜单关闭事件
+    const handleOpenChange = (open: boolean) => {
+        if (!open && isFilterOpen) {
+            // 当下拉菜单关闭且之前是打开状态时，应用筛选
+            applyFilters();
+        }
+        setIsFilterOpen(open);
+    };
+
     return (
         <div className="relative">
             {loading && (
@@ -229,7 +278,12 @@ export default function Files({ onPreview }) {
             )}
 
             <div className="absolute right-0 top-[-62px] flex gap-4 items-center">
-                <SearchInput placeholder={t('searchFileName')} onChange={(e) => search(e.target.value)} />
+                <SearchInput placeholder={t('searchFileName')} onChange={(e) => {
+                    search(e.target.value);
+                    // 搜索时清除选择状态
+                    setSelectedFiles(new Set());
+                    setIsAllSelected(false);
+                }} />
                 {isEditable && (
                     <Link to={`/filelib/upload/${id}`}>
                         <Button className="px-8">{t('uploadFile')}</Button>
@@ -243,7 +297,7 @@ export default function Files({ onPreview }) {
                         <TableRow>
                             <TableHead className="min-w-[50px]">
                                 <Checkbox
-                                    checked={selectedFiles.size === datalist.length && datalist.length > 0}
+                                    checked={isCurrentPageAllSelected}
                                     onCheckedChange={toggleSelectAll}
                                 />
                             </TableHead>
@@ -253,7 +307,7 @@ export default function Files({ onPreview }) {
                             <TableHead className="flex items-center gap-4 min-w-[130px]">
                                 {t('status')}
                                 <div className="relative">
-                                    <DropdownMenu open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+                                    <DropdownMenu open={isFilterOpen} onOpenChange={handleOpenChange}>
                                         <DropdownMenuTrigger asChild>
                                             <Button
                                                 variant="ghost"
