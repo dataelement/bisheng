@@ -234,8 +234,8 @@ export default function QasPage() {
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, refreshData } = useTable({}, (param) =>
         getQaList(id, param).then(res => {
             setHasPermission(res.writeable)
-            setSelectedItems([]);
-            setSelectAll(false);
+            // setSelectedItems([]);
+            // setSelectAll(false);
             return res
         })
     )
@@ -263,11 +263,25 @@ const handleEnableSelected = async () => {
     if (!selectedItems.length) return;
 
     try {
+        // 筛选出当前未启用的项目
+        const itemsToEnable = selectedItems.filter(id => {
+            const item = datalist.find(el => el.id === id);
+            return item && item.status !== 1; // 只启用状态不是1的项目
+        });
+
+        if (itemsToEnable.length === 0) {
+            toast({
+                variant: 'info',
+                description: '所选项目已经是启用状态'
+            });
+            return;
+        }
+
         // 先更新本地 UI 状态为"处理中"
-        refreshData(item => selectedItems.includes(item.id), { status: 2 });
+        refreshData(item => itemsToEnable.includes(item.id), { status: 2 });
         
         // 调用批量启用 API
-        await Promise.all(selectedItems.map(id => 
+        await Promise.all(itemsToEnable.map(id => 
             updateQaStatus(id, 1) // 1 表示启用
         ));
         
@@ -286,7 +300,21 @@ const handleDisableSelected = async () => {
     if (!selectedItems.length) return;
 
     try {
-        await Promise.all(selectedItems.map(id => 
+        // 筛选出当前未禁用的项目
+        const itemsToDisable = selectedItems.filter(id => {
+            const item = datalist.find(el => el.id === id);
+            return item && item.status !== 0; // 只禁用的状态不是0的项目
+        });
+
+        if (itemsToDisable.length === 0) {
+            toast({
+                variant: 'info',
+                description: '所选项目已经是禁用状态'
+            });
+            return;
+        }
+
+        await Promise.all(itemsToDisable.map(id => 
             updateQaStatus(id, 0) 
         ));
         
@@ -308,20 +336,31 @@ const handleDisableSelected = async () => {
             }
         });
     };
-
-    const handleSelectAll = () => {
+  useEffect(() => {
+        // 检查当前页的所有项目是否都被选中
+        const currentPageIds = datalist.map(item => item.id);
+        const isAllSelected = currentPageIds.length > 0 && 
+                             currentPageIds.every(id => selectedItems.includes(id));
+        setSelectAll(isAllSelected);
+    }, [datalist, selectedItems]);
+const handleSelectAll = () => {
+        const currentPageIds = datalist.map(item => item.id);
+        
         if (selectAll) {
-            setSelectedItems([]);
+            // 取消全选：从选中项中移除当前页的所有项目
+            setSelectedItems(prev => prev.filter(id => !currentPageIds.includes(id)));
         } else {
-            setSelectedItems(datalist.map(item => item.id));
+            // 全选：添加当前页的所有项目到选中项中（去重）
+            setSelectedItems(prev => [...new Set([...prev, ...currentPageIds])]);
         }
         setSelectAll(!selectAll);
     };
 
-    useEffect(() => {
-        setSelectedItems([]);
-        setSelectAll(false);
-    }, [page]);
+
+    // useEffect(() => {
+    //     setSelectedItems([]);
+    //     setSelectAll(false);
+    // }, [page]);
 
     const handleDelete = (id) => {
         bsConfirm({
@@ -346,26 +385,32 @@ const handleDisableSelected = async () => {
             },
         });
     };
+const handleStatusClick = async (id: number, checked: boolean) => {
+    const targetStatus = checked ? 1 : 0;
+    const item = datalist.find(el => el.id === id);
+    
+    // 如果状态已经是目标状态，则不执行操作
+    if (item && item.status === targetStatus) {
+        return;
+    }
 
-    const handleStatusClick = async (id: number, checked: boolean) => {
-        const targetStatus = checked ? 1 : 0;
-        const isOpening = checked;
-        try {
-            if (isOpening) {
-                refreshData(item => item.id === id, { status: 2 });
-            }
-            await updateQaStatus(id, targetStatus);
-            refreshData(item => item.id === id, { status: targetStatus });
-        } catch (error) {
-            toast({
-                variant: 'error',
-                description: error
-            })
-            refreshData(item => item.id === id, {
-                status: 3
-            });
+    const isOpening = checked;
+    try {
+        if (isOpening) {
+            refreshData(item => item.id === id, { status: 2 });
         }
-    };
+        await updateQaStatus(id, targetStatus);
+        refreshData(item => item.id === id, { status: targetStatus });
+    } catch (error) {
+        toast({
+            variant: 'error',
+            description: error
+        });
+        refreshData(item => item.id === id, {
+            status: 3
+        });
+    }
+};
 
     return (
         <div className="relative px-2 pt-4 size-full">

@@ -18,13 +18,28 @@ export default function FilesPage() {
         console.log(fileTitle,212);
         
     }
-
+  const handleBackFromChunk = () => {
+        if (value === 'chunk') {
+            setValue('file');
+            setFileId('');
+            setFileTitle(true)
+        }
+    };
     return <div className="size-full px-2 py-4 relative bg-background-login">
         {/* tab */}
-        <Tabs value={value} onValueChange={(v) => { setValue(v); setFileId('') }}>
+        <Tabs value={value} onValueChange={(v) => { 
+                setValue(v); 
+                setFileId('');
+                if (v === 'file') {
+                    setFileTitle(true);
+                } else {
+                    setFileTitle(false);
+                }
+            }}>
             <div className="flex justify-between w-1/2">
                 {/* title */}
-                <Header fileTitle={fileTitle}/>
+                <Header fileTitle={fileTitle} onBack={value === 'chunk' ? handleBackFromChunk : undefined}
+                        showBackButton={true}/>
                 {/* <TabsList>
                     <TabsTrigger value="file">
                         {t('fileManagement')}

@@ -82,6 +82,9 @@ const applyFilters = () => {
         
         // 或者使用另一种方式：修改 useTable 支持数组
         params.status = tempFilters; // 传递数组，让 useTable 处理
+    }else {
+        // 如果没有选中任何筛选条件，传递空对象来重置筛选
+        params.status = [];
     }
     
     filterData(params);
@@ -94,7 +97,7 @@ const applyFilters = () => {
         const emptyFilters: number[] = [];
         setTempFilters(emptyFilters);
         setSelectedFilters(emptyFilters);
-        filterData({}); // 传递空对象
+        filterData({ status: [] }); 
         setIsFilterOpen(false);
         // 重置筛选时清除选择状态
         setSelectedFiles(new Set());
@@ -121,8 +124,8 @@ const applyFilters = () => {
     }
 
     // 重试解析
-    const handleRetry = (objs) => {
-        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi({ file_objs: objs }).then(res => {
+    const handleRetry = (files) => {
+        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi({ file_objs: files }).then(res => {
             reload()
         }))
     }
@@ -192,7 +195,7 @@ const applyFilters = () => {
     const handleBatchRetry = () => {
         const failedFiles = getSelectedFiles().filter(file => file.status === 3);
         if (failedFiles.length > 0) {
-            handleRetry(failedFiles.map(file => file.id));
+            handleRetry(failedFiles);
             setSelectedFiles(new Set());
             setIsAllSelected(false);
         }
@@ -351,7 +354,7 @@ const applyFilters = () => {
                                                         value: 3,
                                                         label: '解析失败',
                                                         color: 'text-red-500',
-                                                        icon: <img src={__APP_ENV__.BASE_URL + "/assets/failed.svg"} className="w-16 h-8" alt="解析失败" />
+                                                        icon: <img src={__APP_ENV__.BASE_URL + "/assets/failed.svg"} className="w-[78px] h-8" alt="解析失败" />
                                                     }
                                                 ].map(({ value, label, color, icon }) => (
                                                     <div
@@ -413,7 +416,7 @@ const applyFilters = () => {
                             <TableRow
                                 key={el.id}
                                 onClick={() => {
-                                    if (!selectedFiles.size && el.status !== 3) {
+                                    if (!selectedFiles.size && el.status !== 3 && el.status !== 1) {
                                         onPreview(el.id);
                                     }
                                 }}
@@ -471,7 +474,7 @@ const applyFilters = () => {
                                             ) : el.status === 1 ? (
                                                 <img src={__APP_ENV__.BASE_URL + "/assets/analysis.svg"} className="w-16 h-8" alt="解析中" />
                                             ) : (
-                                                <img src={__APP_ENV__.BASE_URL + "/assets/failed.svg"} className="w-16 h-8" alt="解析失败" />
+                                                <img src={__APP_ENV__.BASE_URL + "/assets/failed.svg"} className="w-20 h-12" alt="解析失败" />
                                             )}
                                         </div>
                                     )}
@@ -484,7 +487,7 @@ const applyFilters = () => {
                                                 size="icon"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    handleRetry([el.id]);
+                                                    handleRetry([el]);
                                                 }}
                                                 title={t('重试')}
                                             >

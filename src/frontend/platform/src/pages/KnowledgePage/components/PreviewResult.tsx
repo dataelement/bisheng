@@ -6,7 +6,7 @@ import {
     SelectTrigger,
     SelectValue
 } from "@/components/bs-ui/select";
-import { delChunkInPreviewApi, previewFileSplitApi, updatePreviewChunkApi } from "@/controllers/API";
+import { delChunkInPreviewApi, getFilePathApi, previewFileSplitApi, updatePreviewChunkApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { cn } from "@/util/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -59,71 +59,86 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
 
     const [loading, setLoading] = useState(false)
     const prevPreviewCountMapRef = useRef({})
-    useEffect(() => {
-        if (!selectId) return
+  useEffect(() => {
+    if (!selectId) return
+    
+    const fetchPreviewData = async () => {
         setTimeout(() => {
             setLoading(true)
         }, 0);
         setFileViewUrl({ load: true, url: '' })
         setChunks([])
+        
         // 合并配置
-        const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, knowledgeId
-            , retainImages, separator, separatorRule } = rules
+        const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, knowledgeId, retainImages, separator, separatorRule } = rules
         const currentFile = fileList.find(file => file.id === selectId)
-        captureAndAlertRequestErrorHoc(previewFileSplitApi({
-            // 缓存(修改规则后需要清空缓存, 切换文件使用缓存)
-            // previewCount变更时为重新预览分段操作,不使用缓存
-            cache: prevPreviewCountMapRef.current[currentFile.id] === previewCount,
-            knowledge_id: id,
-            file_list: [{
-                file_path: currentFile?.filePath,
-                excel_rule: applyEachCell
-                    ? currentFile.excelRule
-                    : { ...cellGeneralConfig }
-            }],
-            separator,
-            separator_rule: separatorRule,
-            chunk_size: chunkSize,
-            chunk_overlap: chunkOverlap,
-            retain_images: retainImages,
-            enable_formula: enableFormula,
-            force_ocr: forceOcr,
-            fileter_page_header_footer: pageHeaderFooter
-
-        }), err => {
-            // 解析失败时,使用支持的原文件预览
-            ["pdf", "txt", "md", "html", "docx", "png", "jpg", "jpeg", "bmp"].includes(currentFile.suffix)
-                && setFileViewUrl({ load: false, url: currentFile.filePath })
-                  setPreviewSuccess(false);
-            onPreviewResult && onPreviewResult(false);
-        }).then(res => {
-            if (!res) {
-                setFileViewUrl({ load: false, url: '' })
+        
+        try {
+            // 先获取文件路径
+            const filePathRes = await getFilePathApi(selectId);
+            
+            captureAndAlertRequestErrorHoc(previewFileSplitApi({
+                // 缓存(修改规则后需要清空缓存, 切换文件使用缓存)
+                // previewCount变更时为重新预览分段操作,不使用缓存
+                cache: prevPreviewCountMapRef.current[currentFile.id] === previewCount,
+                knowledge_id: id,
+                file_list: [{
+                    file_path: filePathRes, // 使用异步获取的文件路径
+                    excel_rule: applyEachCell
+                        ? currentFile.excelRule
+                        : { ...cellGeneralConfig }
+                }],
+                separator,
+                separator_rule: separatorRule,
+                chunk_size: chunkSize,
+                chunk_overlap: chunkOverlap,
+                retain_images: retainImages,
+                enable_formula: enableFormula,
+                force_ocr: forceOcr,
+                fileter_page_header_footer: pageHeaderFooter
+            }), err => {
+                // 解析失败时,使用支持的原文件预览
+                ["pdf", "txt", "md", "html", "docx", "png", "jpg", "jpeg", "bmp"].includes(currentFile.suffix)
+                    && setFileViewUrl({ load: false, url: currentFile.filePath })
                 setPreviewSuccess(false);
                 onPreviewResult && onPreviewResult(false);
-                return setLoading(false)
-            }
-            if (res === 'canceled') return
-            console.log("previewFileSplitApi:", res)
-            res && setChunks(res.chunks.map(chunk => ({
-                bbox: chunk.metadata.bbox,
-                activeLabels: {},
-                chunkIndex: chunk.metadata.chunk_index,
-                page: chunk.metadata.page,
-                text: chunk.text
-            })))
-            setSelectIdSyncChunks(selectId)
+            }).then(res => {
+                if (!res) {
+                    setFileViewUrl({ load: false, url: '' })
+                    setPreviewSuccess(false);
+                    onPreviewResult && onPreviewResult(false);
+                    return setLoading(false)
+                }
+                if (res === 'canceled') return
+                console.log("previewFileSplitApi:", res)
+                res && setChunks(res.chunks.map(chunk => ({
+                    bbox: chunk.metadata.bbox,
+                    activeLabels: {},
+                    chunkIndex: chunk.metadata.chunk_index,
+                    page: chunk.metadata.page,
+                    text: chunk.text
+                })))
+                setSelectIdSyncChunks(selectId)
 
-            setFileViewUrl({ load: false, url: res.file_url })
-            setPartitions(res.partitions)
-              const success = res.chunks && res.chunks.length > 0;
-            setPreviewSuccess(success);
-            onPreviewResult && onPreviewResult(success);
-            setLoading(false)
-        })
+                setFileViewUrl({ load: false, url: res.file_url })
+                setPartitions(res.partitions)
+                const success = res.chunks && res.chunks.length > 0;
+                setPreviewSuccess(success);
+                onPreviewResult && onPreviewResult(success);
+                setLoading(false)
+            })
+        } catch (error) {
+            console.error('Failed to get file path:', error);
+            setLoading(false);
+            setPreviewSuccess(false);
+            onPreviewResult && onPreviewResult(false);
+        }
 
         prevPreviewCountMapRef.current[currentFile.id] = previewCount
-    }, [selectId, previewCount])
+    }
+
+    fetchPreviewData();
+}, [selectId, previewCount])
 
     const handleDelete = async (chunkIndex: number, text: string) => {
         await captureAndAlertRequestErrorHoc(delChunkInPreviewApi({
@@ -154,7 +169,7 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
             setChunks={setChunks}
             partitions={partitions}
         />}
-        <div className={cn('relative', step === 2 ? 'w-full' : 'w-1/2')}>
+        <div className={cn('relative', step === 2 ? 'w-full' : 'w-[100%]')}>
             {/* 下拉框 - 右上角 */}
             <div className="flex justify-end">
                 <Select value={selectId} onValueChange={setSelectId}>

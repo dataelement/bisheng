@@ -153,7 +153,7 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
         <div className="flex flex-row justify-center gap-4">
             {/* 左侧区域 */}
             {
-                displayStep === 2 && (<div className={cn(" h-full flex flex-col max-w-[760px]", showPreview ? 'w-1/2' : 'w-2/3')}>
+                displayStep === 2 && (<div className={cn(" h-full flex flex-col max-w-[760px]", showPreview ? 'w-[100%]' : 'w-2/3')}>
                     <Tabs
                         defaultValue={displayMode === DisplayModeType.Mixed ? 'file' : displayMode}
                         className="flex flex-col h-full"

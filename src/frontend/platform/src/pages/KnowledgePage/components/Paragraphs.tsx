@@ -10,7 +10,7 @@ import { SearchInput } from '@/components/bs-ui/input';
 import AutoPagination from '@/components/bs-ui/pagination/autoPagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/bs-ui/select';
 import { LoadingIcon } from '@/components/bs-icons/loading';
-import { delChunkApi, getFilePathApi, getKnowledgeChunkApi, previewFileSplitApi, readFileByLibDatabase } from '@/controllers/API';
+import { delChunkApi, getFilePathApi, getKnowledgeChunkApi, previewFileSplitApi, readFileByLibDatabase, updateChunkApi, updatePreviewChunkApi } from '@/controllers/API';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useTable } from '@/util/hook';
 import useKnowledgeStore from '../useKnowledgeStore';
@@ -23,10 +23,12 @@ import { FileIcon } from "@/components/bs-icons/file";
 
 
 export default function Paragraphs({ fileId }) {
+    console.log(fileId, 222);
+
     const { t } = useTranslation('knowledge');
     const { id } = useParams();
     const navigate = useNavigate();
-    const { isEditable } = useKnowledgeStore();
+    const { isEditable, selectedBbox } = useKnowledgeStore();
 
     // State management
     const [selectedFileId, setSelectedFileId] = useState('');
@@ -63,42 +65,60 @@ export default function Paragraphs({ fileId }) {
     const fetchFileUrl = useCallback(async (fileId) => {
         console.log('获取文件URL:', fileId);
 
-        if (!fileId) return;
+        if (!fileId) return '';
 
         try {
             setIsFetchingUrl(true);
+            console.log('调用 getFilePathApi 前:', fileId);
+
             const res = await getFilePathApi(fileId);
-            console.log(res);
+            console.log('getFilePathApi 响应:', res);
 
             if (isMountedRef.current) {
                 console.log('获取文件URL成功:', res);
-
-                setFileUrl(res || '');
-                setCurrentFile(prev => ({ ...prev, url: res }));
+                const url = res.data || res.url || res.filePath || res;
+                setFileUrl(url || '');
+                setCurrentFile(prev => prev ? { ...prev, url } : null);
+                return url; // 返回获取到的 URL
             }
+            return '';
         } catch (err) {
             console.error('获取文件URL失败:', err);
             if (isMountedRef.current) {
                 setFileUrl('');
             }
+            return '';
         } finally {
             setIsFetchingUrl(false);
         }
     }, []);
 
+
     // 加载文件预览数据
-    const loadFilePreview = useCallback(async (file) => {
+    const loadFilePreview = useCallback(async (file, currentFileUrl) => {
         if (!file || !isMountedRef.current) return null;
+        console.log(currentFileUrl, file.split_rule, 78); // 使用传入的 fileUrl
 
         try {
+            let excelRule = {};
+            try {
+                if (file.split_rule) {
+                    excelRule = typeof file.split_rule === 'string'
+                        ? JSON.parse(file.split_rule)
+                        : file.split_rule;
+                }
+            } catch (parseError) {
+                console.error('解析 split_rule 失败:', parseError);
+                excelRule = {};
+            }
+
             const res = await previewFileSplitApi({
                 knowledge_id: id,
                 file_list: [{
-                    file_path: file?.filePath || '',
-                    excel_rule: {}
+                    file_path: currentFileUrl || '',
+                    excel_rule: excelRule // 使用处理后的 excelRule
                 }]
             });
-
             if (res && res !== 'canceled') {
                 return {
                     chunks: (res.chunks || []).map(chunk => ({
@@ -116,7 +136,7 @@ export default function Paragraphs({ fileId }) {
             console.error('File preview failed:', err);
             return null;
         }
-    }, [id]);
+    }, [id, chunks]);
     // 表格配置
     const tableConfig = useMemo(() => ({
         file_ids: selectedFileId ? [selectedFileId] : []
@@ -161,16 +181,19 @@ export default function Paragraphs({ fileId }) {
             };
             setCurrentFile(fileData);
 
-            // 并行获取数据
-            await Promise.all([
-                fetchFileUrl(selectedFile.id),
-                loadFilePreview(selectedFile).then(data => {
-                    if (data) {
-                        setChunks(data.chunks || []);
-                        setPartitions(data.partitions || {});
-                    }
-                })
-            ]);
+            // 重置文件URL状态
+            setFileUrl('');
+
+            // 先获取文件URL
+            const fileUrlResult = await fetchFileUrl(selectedFile.id);
+            console.log('获取到的文件URL:', fileUrlResult);
+
+            // 使用获取到的 fileUrl 调用 loadFilePreview
+            const data = await loadFilePreview(selectedFile, fileUrlResult);
+            if (data) {
+                setChunks(data.chunks || []);
+                setPartitions(data.partitions || {});
+            }
 
             // 强制刷新表格数据
             filterData && filterData({ file_ids: [newFileId] });
@@ -185,6 +208,12 @@ export default function Paragraphs({ fileId }) {
 
 
 
+
+    useEffect(() => {
+        console.log('selectedFileId 变化:', selectedFileId);
+        console.log('currentFile 状态:', currentFile);
+        console.log('fileUrl 状态:', fileUrl);
+    }, [selectedFileId, currentFile, fileUrl]);
     // 加载文件列表
     useEffect(() => {
         const loadFiles = async () => {
@@ -205,7 +234,6 @@ export default function Paragraphs({ fileId }) {
                     const defaultFileId = fileId ? String(fileId) : String(filesData[0]?.id || '');
                     setSelectedFileId(defaultFileId);
 
-                    // 立即设置currentFile而不等待handleFileChange
                     const selectedFile = filesData.find(f => String(f.id) === defaultFileId);
                     if (selectedFile) {
                         const fileData = {
@@ -220,23 +248,22 @@ export default function Paragraphs({ fileId }) {
                             fileType: selectedFile.parse_type || 'unknown',
                             fullData: selectedFile || {}
                         };
-                        setCurrentFile(fileData); // 立即设置当前文件
+                        setCurrentFile(fileData);
 
-                        // 立即触发文件URL获取
-                        fetchFileUrl(selectedFile.id);
+                        // 获取文件URL并等待完成
+                        const fileUrlResult = await fetchFileUrl(selectedFile.id);
 
-                        // 立即触发文件预览加载
-                        loadFilePreview(selectedFile).then(data => {
-                            if (data) {
-                                setChunks(data.chunks || []);
-                                setPartitions(data.partitions || {});
-                            }
-                        });
+                        // 使用获取到的 fileUrl 加载预览
+                        const previewData = await loadFilePreview(selectedFile, fileUrlResult);
+                        if (previewData) {
+                            setChunks(previewData.chunks || []);
+                            setPartitions(previewData.partitions || {});
+                        }
                     }
 
                     // 强制刷新表格数据
                     filterData && filterData({ file_ids: [defaultFileId] });
-                    reload(); // 确保数据刷新
+                    reload();
                 }
                 setFilesLoaded(true);
             } catch (err) {
@@ -253,6 +280,29 @@ export default function Paragraphs({ fileId }) {
             isMountedRef.current = false;
         };
     }, [id, fileId]);
+
+    const handleChunkChange = useCallback((chunkIndex, text) => {
+        const bbox = { chunk_bboxes: selectedBbox }; // 直接使用 selectedBbox
+
+        captureAndAlertRequestErrorHoc(updateChunkApi({
+            knowledge_id: Number(id),
+            file_id: selectedFileId || currentFile?.id || '',
+            chunk_index: chunkIndex,
+            text,
+            bbox: JSON.stringify(bbox)
+        }));
+
+        // 更新本地 chunks 状态
+        setChunks(chunks => chunks.map(chunk =>
+            chunk.chunkIndex === chunkIndex ? { ...chunk, text } : chunk
+        ));
+
+        // 同时更新表格数据
+        refreshData(
+            (item) => item?.metadata?.chunk_index === chunkIndex,
+            { text }
+        );
+    }, [id, currentFile, refreshData, selectedBbox]);
 
     const files = useMemo(() => {
         return (rawFiles || []).map(el => ({
@@ -306,12 +356,34 @@ export default function Paragraphs({ fileId }) {
             }
         });
     }, [id, selectedFileId, currentFile, navigate]);
-
+const splitRuleDesc = useCallback((file) => {
+  if (!file.split_rule) return '';
+  const suffix = file.file_name?.split('.').pop()?.toUpperCase() || '';
+  try {
+    const rule = JSON.parse(file.split_rule);
+    const { excel_rule } = rule;
+    if (excel_rule && ['XLSX', 'XLS', 'CSV'].includes(suffix)) {
+      return `每 ${excel_rule.slice_length} 行作为一个分段`;
+    }
+    const { separator, separator_rule } = rule;
+    if (separator && separator_rule) {
+      const data = separator.map((el, i) => 
+        `${separator_rule[i] === 'before' ? '✂️' : ''}${el}${separator_rule[i] === 'after' ? '✂️' : ''}`
+      );
+      return data.join(', ');
+    }
+  } catch (e) {
+    console.error('解析切分策略失败:', e);
+  }
+  return file.split_rule.replace(/\n/g, '\\n');
+}, []);
     const handleDeleteChunk = useCallback((data) => {
+        console.log(data, 89);
+
         captureAndAlertRequestErrorHoc(delChunkApi({
-            knowledge_id: id,
-            file_id: data?.metadata?.file_id || '',
-            chunk_index: data?.metadata?.chunk_index || 0
+            knowledge_id: Number(id),
+            file_id: selectedFileId || currentFile?.id || '',
+            chunk_index: data || 0
         }));
         reload();
     }, [id, reload]);
@@ -326,6 +398,25 @@ export default function Paragraphs({ fileId }) {
     const filteredFiles = files.filter(file =>
         file.label.toLowerCase().includes(searchTerm.toLowerCase())
     );
+    const previewRules = useMemo(() => ({
+        fileList: currentFile ? [{
+            id: currentFile.id,
+            filePath: fileUrl,
+            fileName: currentFile.name,
+            suffix: currentFile.suffix,
+            fileType: currentFile.fileType,
+            excelRule: {} // 根据实际需要添加 excel 规则
+        }] : [],
+        pageHeaderFooter: false, // 页面页眉页脚处理
+        chunkOverlap: 200, // 块重叠大小
+        chunkSize: 1000, // 块大小
+        enableFormula: false, // 是否启用公式
+        forceOcr: false, // 是否强制 OCR
+        knowledgeId: id, // 知识库ID
+        retainImages: false, // 是否保留图片
+        separator: [], // 分隔符
+        separatorRule: [] // 分隔规则
+    }), [currentFile, id]);
     return (
         <div className="relative">
             {loading && (
@@ -340,9 +431,9 @@ export default function Paragraphs({ fileId }) {
                         <DropdownMenu onOpenChange={setIsDropdownOpen}>
                             <DropdownMenuTrigger asChild>
                                 <div className={`
-            flex items-center gap-2 max-w-[430px] px-3 py-2 rounded-md cursor-pointer
-            hover:bg-gray-100 ${isDropdownOpen ? 'ring-1 ring-gray-300' : ''}
-          `}>
+                    flex items-center gap-2 max-w-[430px] px-3 py-2 rounded-md cursor-pointer
+                    hover:bg-gray-100 ${isDropdownOpen ? 'ring-1 ring-gray-300' : ''}
+                `}>
                                     {selectedFileId ? (
                                         <>
                                             <FileIcon
@@ -366,6 +457,7 @@ export default function Paragraphs({ fileId }) {
                                 align="start"
                                 sideOffset={5}
                                 style={{ zIndex: 9999 }}
+                                onCloseAutoFocus={(e) => e.preventDefault()} // 阻止自动失焦
                             >
                                 <div className="p-2 border-b border-gray-200">
                                     <div className="relative">
@@ -376,7 +468,20 @@ export default function Paragraphs({ fileId }) {
                                             placeholder={t('搜索文件')}
                                             className="w-full pl-9 pr-3 py-2 text-sm bg-white rounded-md outline-none ring-1 ring-gray-200"
                                             value={searchTerm}
-                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            onChange={(e) => {
+                                                e.stopPropagation();
+                                                setSearchTerm(e.target.value);
+                                            }}
+                                            onKeyDown={(e) => {
+                                                e.stopPropagation();
+                                                if (e.key === 'Escape') {
+                                                    setIsDropdownOpen(false);
+                                                }
+                                            }}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                e.preventDefault(); // 添加这行
+                                            }}
                                         />
                                     </div>
                                 </div>
@@ -384,21 +489,29 @@ export default function Paragraphs({ fileId }) {
                                     {filteredFiles.map((file) => (
                                         <DropdownMenuItem
                                             key={file.value}
-                                            onSelect={() => {
+                                            onSelect={(e) => {
+                                                e.preventDefault();
+                                                console.log('选择文件:', file.value, file.label);
                                                 handleFileChange(file.value);
                                                 setSearchTerm("");
+                                                setIsDropdownOpen(false); // 添加这行来关闭下拉菜单
                                             }}
                                             disabled={!file.value}
-                                            className="cursor-pointer hover:bg-gray-50 px-3 py-2"
+                                            className="cursor-pointer hover:bg-gray-50 px-3 py-2 relative"
                                         >
                                             <div className="flex items-center gap-3 w-full h-full">
                                                 <FileIcon
                                                     type={file.label.split('.').pop().toLowerCase() || 'txt'}
-                                                    className="size-[30px] min-w-[30px]  text-current"
+                                                    className="size-[30px] min-w-[30px] text-current"
                                                 />
                                                 <span className="flex-1 min-w-0 truncate">
                                                     {truncateString(file.label, 35)}
                                                 </span>
+                                                {file.value === selectedFileId && (
+                                                    <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                                                        <div className="w-2 h-2 bg-white rounded-full"></div>
+                                                    </div>
+                                                )}
                                             </div>
                                         </DropdownMenuItem>
                                     ))}
@@ -429,9 +542,10 @@ export default function Paragraphs({ fileId }) {
             </div>
 
             <div className="flex bg-background-main">
+                {console.log(previewRules, 77)}
+                {console.log(fileUrl, 7)}
 
                 {selectedFileId && currentFile && fileUrl ? (
-
                     <PreviewFile
                         key={`preview-${currentFile.id}`}
                         urlState={{ load: !isFetchingUrl, url: fileUrl }}
@@ -439,17 +553,16 @@ export default function Paragraphs({ fileId }) {
                         chunks={safeChunks}
                         setChunks={setChunks}
                         partitions={partitions}
+                        rules={previewRules}
                         h={false}
                     />
 
                 ) : (
                     <div className="flex justify-center items-center h-full text-gray-400">
-                        <FileText width={160} height={160} className="text-border" />
-                        {selectError || t('noFileSelected')}
+                        {/* <FileText width={160} height={160} className="text-border" /> */}
+                        {selectError}
                     </div>
                 )}
-
-
                 <div className="w-1/2 overflow-y-auto pb-20">
                     <div className="flex flex-wrap gap-2 p-2 items-start">
                         {datalist.length ? (
@@ -461,12 +574,7 @@ export default function Paragraphs({ fileId }) {
                                 loading={loading}
                                 chunks={safeChunks}
                                 onDel={handleDeleteChunk}
-                                onChange={(index, newText) => {
-                                    refreshData(
-                                        (item) => item?.metadata?.chunk_index === datalist[index]?.metadata?.chunk_index,
-                                        { text: newText }
-                                    );
-                                }}
+                                onChange={handleChunkChange}
                             />
                         ) : (
                             <div className="flex justify-center items-center flex-col size-full text-gray-400">
@@ -492,25 +600,41 @@ export default function Paragraphs({ fileId }) {
                     <DialogHeader>
                         <h3 className="text-lg font-semibold">{t('文档元数据')}</h3>
                     </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="space-y-2">
-                            {[
-                                { label: t('文件名称'), value: metadataDialog.file?.file_name },
-                                { label: t('原始文件大小'), value: metadataDialog.file?.size ? formatFileSize(metadataDialog.file.size) : null },
-                                { label: t('创建时间'), value: metadataDialog.file?.create_time },
-                                { label: t('更新时间'), value: metadataDialog.file?.update_time },
-                                { label: t('切分策略'), value: metadataDialog.file?.split_rule },
-                                { label: t('全文摘要'), value: metadataDialog.file?.tilte }
-                            ].map((item, index) => (
-                                item.value && (
-                                    <div key={index} className="grid grid-cols-4 gap-4 items-center">
-                                        <span className="text-sm text-muted-foreground col-span-1">{item.label}</span>
-                                        <span className="col-span-3 text-sm">{item.value || t('none')}</span>
-                                    </div>
-                                )
-                            ))}
-                        </div>
-                    </div>
+              <div className="grid gap-4 py-4">
+    <div className="space-y-2">
+        {[
+            { 
+                label: t('文件名称'), 
+                value: metadataDialog.file?.file_name,
+                isFileName: true
+            },
+            { label: t('原始文件大小'), value: metadataDialog.file?.size ? formatFileSize(metadataDialog.file.size) : null },
+             { 
+                label: t('创建时间'), 
+                value: metadataDialog.file?.create_time ? metadataDialog.file.create_time.replace('T', ' ') : null 
+            },
+            { 
+                label: t('更新时间'), 
+                value: metadataDialog.file?.update_time ? metadataDialog.file.update_time.replace('T', ' ') : null 
+            },
+           { 
+  label: t('切分策略'), 
+  value: metadataDialog.file ? splitRuleDesc(metadataDialog.file) : null 
+},
+            { label: t('全文摘要'), value: metadataDialog.file?.tilte }
+        ].map((item, index) => (
+            item.value && (
+                <div key={index} className="grid grid-cols-4 gap-4 items-center">
+                    <span className="text-sm text-muted-foreground col-span-1">{item.label}</span>
+                    {/* 对文件名应用文本截断 */}
+                    <span className={`col-span-3 text-sm ${item.isFileName ? 'truncate max-w-full' : ''}`}>
+                        {item.value || t('none')}
+                    </span>
+                </div>
+            )
+        ))}
+    </div>
+</div>
                 </DialogContent>
             </Dialog>
 

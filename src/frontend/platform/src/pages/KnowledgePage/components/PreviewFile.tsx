@@ -18,6 +18,8 @@ import TxtFileViewer from "./TxtFileViewer";
 export default function PreviewFile({ urlState, file, partitions, chunks, setChunks,h=true }
     : { urlState: { load: false, url: '' }, file: any, partitions: Partition, chunks: any, setChunks: any }) {
     const { t } = useTranslation('knowledge')
+    console.log(urlState,file,222);
+    
     const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
     const selectedChunkDistanceFactor = useKnowledgeStore((state) => state.selectedChunkDistanceFactor);
     const setNeedCoverData = useKnowledgeStore((state) => state.setNeedCoverData);
