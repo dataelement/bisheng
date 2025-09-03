@@ -1,29 +1,26 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronDown, ChevronUp, FileText, Search } from 'lucide-react';
-import { bsConfirm } from '@/components/bs-ui/alertDialog/useConfirm';
+import { FileIcon } from "@/components/bs-icons/file";
+import { LoadingIcon } from '@/components/bs-icons/loading';
 import { Button } from '@/components/bs-ui/button';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/bs-ui/card';
 import { Dialog, DialogContent, DialogHeader } from '@/components/bs-ui/dialog';
 import { SearchInput } from '@/components/bs-ui/input';
 import AutoPagination from '@/components/bs-ui/pagination/autoPagination';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/bs-ui/select';
-import { LoadingIcon } from '@/components/bs-icons/loading';
-import { delChunkApi, getFilePathApi, getKnowledgeChunkApi, previewFileSplitApi, readFileByLibDatabase, updateChunkApi, updatePreviewChunkApi } from '@/controllers/API';
+import { delChunkApi, getFilePathApi, getKnowledgeChunkApi, previewFileSplitApi, readFileByLibDatabase, updateChunkApi } from '@/controllers/API';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useTable } from '@/util/hook';
-import useKnowledgeStore from '../useKnowledgeStore';
-import ParagraphEdit from './ParagraphEdit';
-import PreviewParagraph from './PreviewParagraph';
-import PreviewFile from './PreviewFile';
 import { truncateString } from "@/util/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu';
-import { FileIcon } from "@/components/bs-icons/file";
+import { ArrowLeft, ChevronDown, ChevronUp, FileText, Search } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate, useParams } from 'react-router-dom';
+import useKnowledgeStore from '../useKnowledgeStore';
+import ParagraphEdit from './ParagraphEdit';
+import PreviewFile from './PreviewFile';
+import PreviewParagraph from './PreviewParagraph';
+import ShadTooltip from "@/components/ShadTooltipComponent";
 
 
-export default function Paragraphs({ fileId }) {
-    console.log(fileId, 222);
+export default function Paragraphs({ fileId, onBack }) {
 
     const { t } = useTranslation('knowledge');
     const { id } = useParams();
@@ -48,10 +45,8 @@ export default function Paragraphs({ fileId }) {
         isUns: false,
         show: false
     });
-    const [isInitializing, setIsInitializing] = useState(true);
     const [selectError, setSelectError] = useState(null);
     const [isFetchingUrl, setIsFetchingUrl] = useState(false);
-    const [filesLoaded, setFilesLoaded] = useState(false);
 
     // Refs
     const isMountedRef = useRef(true);
@@ -115,7 +110,7 @@ export default function Paragraphs({ fileId }) {
             const res = await previewFileSplitApi({
                 knowledge_id: id,
                 file_list: [{
-                    file_path: file?.filePath ||currentFileUrl || '',
+                    file_path: file?.filePath || currentFileUrl || '',
                     excel_rule: excelRule || {} // 使用处理后的 excelRule
                 }]
             });
@@ -218,7 +213,6 @@ export default function Paragraphs({ fileId }) {
     useEffect(() => {
         const loadFiles = async () => {
             try {
-                setIsInitializing(true);
                 const res = await readFileByLibDatabase({
                     id,
                     page: 1,
@@ -265,12 +259,9 @@ export default function Paragraphs({ fileId }) {
                     filterData && filterData({ file_ids: [defaultFileId] });
                     reload();
                 }
-                setFilesLoaded(true);
             } catch (err) {
                 console.error('Failed to load files:', err);
                 setSelectError('加载文件列表失败');
-            } finally {
-                setIsInitializing(false);
             }
         };
 
@@ -356,27 +347,27 @@ export default function Paragraphs({ fileId }) {
             }
         });
     }, [id, selectedFileId, currentFile, navigate]);
-const splitRuleDesc = useCallback((file) => {
-  if (!file.split_rule) return '';
-  const suffix = file.file_name?.split('.').pop()?.toUpperCase() || '';
-  try {
-    const rule = JSON.parse(file.split_rule);
-    const { excel_rule } = rule;
-    if (excel_rule && ['XLSX', 'XLS', 'CSV'].includes(suffix)) {
-      return `每 ${excel_rule.slice_length} 行作为一个分段`;
-    }
-    const { separator, separator_rule } = rule;
-    if (separator && separator_rule) {
-      const data = separator.map((el, i) => 
-        `${separator_rule[i] === 'before' ? '✂️' : ''}${el}${separator_rule[i] === 'after' ? '✂️' : ''}`
-      );
-      return data.join(', ');
-    }
-  } catch (e) {
-    console.error('解析切分策略失败:', e);
-  }
-  return file.split_rule.replace(/\n/g, '\\n');
-}, []);
+    const splitRuleDesc = useCallback((file) => {
+        if (!file.split_rule) return '';
+        const suffix = file.file_name?.split('.').pop()?.toUpperCase() || '';
+        try {
+            const rule = JSON.parse(file.split_rule);
+            const { excel_rule } = rule;
+            if (excel_rule && ['XLSX', 'XLS', 'CSV'].includes(suffix)) {
+                return `每 ${excel_rule.slice_length} 行作为一个分段`;
+            }
+            const { separator, separator_rule } = rule;
+            if (separator && separator_rule) {
+                const data = separator.map((el, i) =>
+                    `${separator_rule[i] === 'before' ? '✂️' : ''}${el}${separator_rule[i] === 'after' ? '✂️' : ''}`
+                );
+                return data.join(', ');
+            }
+        } catch (e) {
+            console.error('解析切分策略失败:', e);
+        }
+        return file.split_rule.replace(/\n/g, '\\n');
+    }, []);
     const handleDeleteChunk = useCallback((data) => {
         console.log(data, 89);
 
@@ -418,15 +409,15 @@ const splitRuleDesc = useCallback((file) => {
         separatorRule: [] // 分隔规则
     }), [currentFile, id]);
     const isPreviewVisible = selectedFileId && currentFile && fileUrl && !isFetchingUrl;
-const isParagraphVisible = datalist.length > 0;
-const contentLayoutClass = useMemo(() => {
-  if (isPreviewVisible && isParagraphVisible) {
-    return "flex bg-background-main"; // 双区域显示：默认Flex
-  } else if (isPreviewVisible || isParagraphVisible) {
-    return "flex justify-center bg-background-main"; // 单区域显示：居中
-  }
-  return "flex bg-background-main"; // 都不显示：默认布局
-}, [isPreviewVisible, isParagraphVisible]);
+    const isParagraphVisible = datalist.length > 0;
+    const contentLayoutClass = useMemo(() => {
+        if (isPreviewVisible && isParagraphVisible) {
+            return "flex bg-background-main"; // 双区域显示：默认Flex
+        } else if (isPreviewVisible || isParagraphVisible) {
+            return "flex justify-center bg-background-main"; // 单区域显示：居中
+        }
+        return "flex bg-background-main"; // 都不显示：默认布局
+    }, [isPreviewVisible, isParagraphVisible]);
     return (
         <div className="relative">
             {loading && (
@@ -435,8 +426,16 @@ const contentLayoutClass = useMemo(() => {
                 </div>
             )}
 
-            <div className="absolute left-10 right-0 top-[-62px] flex justify-between items-center px-4">
-                <div className="min-w-72 max-w-[400px]">
+            <div className="flex justify-between items-center px-4 pt-4 pb-4">
+                <div className="min-w-72 max-w-[440px] flex items-center gap-2">
+                    <ShadTooltip content={t('back')} side="top">
+                        <button
+                            className="extra-side-bar-buttons w-[36px] max-h-[36px]"
+                            onClick={onBack}
+                        >
+                            <ArrowLeft className="side-bar-button-size" />
+                        </button>
+                    </ShadTooltip>
                     <div className="relative">
                         <DropdownMenu onOpenChange={setIsDropdownOpen}>
                             <DropdownMenuTrigger asChild>
@@ -551,48 +550,49 @@ const contentLayoutClass = useMemo(() => {
                 </div>
             </div>
 
-     <div className={contentLayoutClass}>
+            <div className={contentLayoutClass}>
                 {isPreviewVisible ? ( // 优化显示条件判断
                     <PreviewFile
-                    key={`preview-${currentFile.id}`}
-                    urlState={{ load: !isFetchingUrl, url: fileUrl }}
-                    file={currentFile}
-                    chunks={safeChunks}
-                    setChunks={setChunks}
-                    partitions={partitions}
-                    rules={previewRules}
-                    h={false}
-                    className={isParagraphVisible ? "w-1/2" : "w-full max-w-3xl"} // 单区域时占满宽度+限制最大宽度
+                        key={`preview-${currentFile.id}`}
+                        urlState={{ load: !isFetchingUrl, url: fileUrl }}
+                        file={currentFile}
+                        chunks={safeChunks}
+                        setChunks={setChunks}
+                        partitions={partitions}
+                        rules={previewRules}
+                        h={false}
+                        className={isParagraphVisible ? "w-1/2" : "w-full max-w-3xl"} // 单区域时占满宽度+限制最大宽度
                     />
                 ) : (
                     <div className="flex justify-center items-center h-full text-gray-400">
-                    {selectError}
+                        {selectError}
                     </div>
                 )}
-  {isParagraphVisible ? ( // 优化显示条件判断
-    <div className={isPreviewVisible ? "w-1/2" : "w-full max-w-3xl"}>
-      <div className="flex flex-wrap gap-2 p-2 items-start">
-        <PreviewParagraph
-          fileId={selectedFileId}
-          previewCount={datalist.length}
-          edit={isEditable}
-          fileSuffix={currentFile?.suffix || ''}
-          loading={loading}
-          chunks={safeChunks}
-          onDel={handleDeleteChunk}
-          onChange={handleChunkChange}
-        />
-      </div>
-    </div>
-  ) : (
-    <div className="flex justify-center items-center flex-col h-full text-gray-400">
-      <FileText width={160} height={160} className="text-border" />
-    </div>
-  )}
-</div>
+                {isParagraphVisible ? ( // 优化显示条件判断
+                    <div className={isPreviewVisible ? "w-1/2" : "w-full max-w-3xl"}>
+                        <div className="flex flex-wrap gap-2 p-2 pt-0 items-start">
+                            <PreviewParagraph
+                                fileId={selectedFileId}
+                                previewCount={datalist.length}
+                                edit={isEditable}
+                                fileSuffix={currentFile?.suffix || ''}
+                                loading={loading}
+                                chunks={safeChunks}
+                                onDel={handleDeleteChunk}
+                                onChange={handleChunkChange}
+                            />
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex justify-center items-center flex-col h-full text-gray-400">
+                        <FileText width={160} height={160} className="text-border" />
+                    </div>
+                )}
+            </div>
 
             <div className="bisheng-table-footer px-6">
                 <AutoPagination
+                    className="justify-end"
                     page={page}
                     pageSize={pageSize}
                     total={total}
@@ -606,41 +606,41 @@ const contentLayoutClass = useMemo(() => {
                     <DialogHeader>
                         <h3 className="text-lg font-semibold">{t('文档元数据')}</h3>
                     </DialogHeader>
-              <div className="grid gap-4 py-4">
-    <div className="space-y-2">
-        {[
-            { 
-                label: t('文件名称'), 
-                value: metadataDialog.file?.file_name,
-                isFileName: true
-            },
-            { label: t('原始文件大小'), value: metadataDialog.file?.size ? formatFileSize(metadataDialog.file.size) : null },
-             { 
-                label: t('创建时间'), 
-                value: metadataDialog.file?.create_time ? metadataDialog.file.create_time.replace('T', ' ') : null 
-            },
-            { 
-                label: t('更新时间'), 
-                value: metadataDialog.file?.update_time ? metadataDialog.file.update_time.replace('T', ' ') : null 
-            },
-           { 
-  label: t('切分策略'), 
-  value: metadataDialog.file ? splitRuleDesc(metadataDialog.file) : null 
-},
-            { label: t('全文摘要'), value: metadataDialog.file?.tilte }
-        ].map((item, index) => (
-            item.value && (
-                <div key={index} className="grid grid-cols-4 gap-4 items-center">
-                    <span className="text-sm text-muted-foreground col-span-1">{item.label}</span>
-                    {/* 对文件名应用文本截断 */}
-                    <span className={`col-span-3 text-sm ${item.isFileName ? 'truncate max-w-full' : ''}`}>
-                        {item.value || t('none')}
-                    </span>
-                </div>
-            )
-        ))}
-    </div>
-</div>
+                    <div className="grid gap-4 py-4">
+                        <div className="space-y-2">
+                            {[
+                                {
+                                    label: t('文件名称'),
+                                    value: metadataDialog.file?.file_name,
+                                    isFileName: true
+                                },
+                                { label: t('原始文件大小'), value: metadataDialog.file?.size ? formatFileSize(metadataDialog.file.size) : null },
+                                {
+                                    label: t('创建时间'),
+                                    value: metadataDialog.file?.create_time ? metadataDialog.file.create_time.replace('T', ' ') : null
+                                },
+                                {
+                                    label: t('更新时间'),
+                                    value: metadataDialog.file?.update_time ? metadataDialog.file.update_time.replace('T', ' ') : null
+                                },
+                                {
+                                    label: t('切分策略'),
+                                    value: metadataDialog.file ? splitRuleDesc(metadataDialog.file) : null
+                                },
+                                { label: t('全文摘要'), value: metadataDialog.file?.tilte }
+                            ].map((item, index) => (
+                                item.value && (
+                                    <div key={index} className="grid grid-cols-4 gap-4 items-center">
+                                        <span className="text-sm text-muted-foreground col-span-1">{item.label}</span>
+                                        {/* 对文件名应用文本截断 */}
+                                        <span className={`col-span-3 text-sm ${item.isFileName ? 'truncate max-w-full' : ''}`}>
+                                            {item.value || t('none')}
+                                        </span>
+                                    </div>
+                                )
+                            ))}
+                        </div>
+                    </div>
                 </DialogContent>
             </Dialog>
 

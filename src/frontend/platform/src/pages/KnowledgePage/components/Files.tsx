@@ -1,4 +1,4 @@
-import { Link, useParams, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "../../../components/bs-ui/button";
 import {
     Table,
@@ -9,23 +9,22 @@ import {
     TableRow
 } from "../../../components/bs-ui/table";
 
+import { FileIcon } from "@/components/bs-icons/file";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
-import { Check, Dot, Filter, RotateCw, Trash2 } from "lucide-react";
+import { truncateString } from "@/util/utils";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
+import { Filter, RotateCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Input, SearchInput } from "../../../components/bs-ui/input";
+import { SearchInput } from "../../../components/bs-ui/input";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
 import { deleteFile, readFileByLibDatabase, retryKnowledgeFileApi } from "../../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
-import { LoadingIcon } from "@/components/bs-icons/loading";
 import useKnowledgeStore from "../useKnowledgeStore";
-import { truncateString } from "@/util/utils";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Checkbox } from "@/components/bs-ui/checkBox";
-import { FileIcon } from "@/components/bs-icons/file";
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
 
 export default function Files({ onPreview }) {
     const { t } = useTranslation('knowledge')
@@ -44,9 +43,6 @@ export default function Files({ onPreview }) {
     const [selectedFilters, setSelectedFilters] = useState<number[]>([]);
     const [tempFilters, setTempFilters] = useState<number[]>([]);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
-    const [renameModalOpen, setRenameModalOpen] = useState(false);
-    const [currentFile, setCurrentFile] = useState(null);
-    const [newFileName, setNewFileName] = useState('');
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
     // 新增状态：跟踪全选状态
     const [isAllSelected, setIsAllSelected] = useState(false);
@@ -62,42 +58,33 @@ export default function Files({ onPreview }) {
         }
     }, [datalist])
 
-    // 筛选处理函数
-    const handleFilterChange = (value: number) => {
-        setTempFilters(prev =>
-            prev.includes(value)
-                ? prev.filter(v => v !== value)
-                : [...prev, value]
-        );
-    };
+    const applyFilters = () => {
+        setSelectedFilters([...tempFilters]);
+        const params: any = {};
+        if (tempFilters.length > 0) {
+            // 创建多个 status 参数
+            tempFilters.forEach((status, index) => {
+                params[`status`] = status; // 这会覆盖前一个，需要特殊处理
+            });
 
-const applyFilters = () => {
-    setSelectedFilters([...tempFilters]);
-    const params: any = {};
-    if (tempFilters.length > 0) {
-        // 创建多个 status 参数
-        tempFilters.forEach((status, index) => {
-            params[`status`] = status; // 这会覆盖前一个，需要特殊处理
-        });
-        
-        // 或者使用另一种方式：修改 useTable 支持数组
-        params.status = tempFilters; // 传递数组，让 useTable 处理
-    }else {
-        // 如果没有选中任何筛选条件，传递空对象来重置筛选
-        params.status = [];
-    }
-    
-    filterData(params);
-    setIsFilterOpen(false);
-    setSelectedFiles(new Set());
-    setIsAllSelected(false);
-};
+            // 或者使用另一种方式：修改 useTable 支持数组
+            params.status = tempFilters; // 传递数组，让 useTable 处理
+        } else {
+            // 如果没有选中任何筛选条件，传递空对象来重置筛选
+            params.status = [];
+        }
+
+        filterData(params);
+        setIsFilterOpen(false);
+        setSelectedFiles(new Set());
+        setIsAllSelected(false);
+    };
 
     const resetFilters = () => {
         const emptyFilters: number[] = [];
         setTempFilters(emptyFilters);
         setSelectedFilters(emptyFilters);
-        filterData({ status: [] }); 
+        filterData({ status: [] });
         setIsFilterOpen(false);
         // 重置筛选时清除选择状态
         setSelectedFiles(new Set());

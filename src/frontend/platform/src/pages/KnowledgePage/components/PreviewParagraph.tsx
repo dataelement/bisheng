@@ -264,7 +264,7 @@ export default function PreviewParagraph({ fileId, previewCount, edit, fileSuffi
                 <LoadingIcon />
             </div>
         )}
-        <div ref={containerRef} className="h-[calc(100vh-284px)] overflow-y-auto"
+        <div ref={containerRef} className={`${edit ? 'h-[calc(100vh-206px)]' : 'h-[calc(100vh-284px)]'} overflow-y-auto`}
             style={{ scrollbarWidth: 'thin' }}
         >
             <div className="space-y-6">

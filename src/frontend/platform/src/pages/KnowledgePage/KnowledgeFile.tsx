@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/bs-ui/button";
 import { Input, SearchInput } from "../../components/bs-ui/input";
 import {
@@ -14,19 +14,18 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Textarea } from "../../components/bs-ui/input";
 import { userContext } from "../../contexts/userContext";
-import { copyLibDatabase, createFileLib, deleteFileLib, readFileLibDatabase, uploadLibFile, updateKnowledge } from "../../controllers/API";
+import { copyLibDatabase, createFileLib, deleteFileLib, readFileLibDatabase, updateKnowledge } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 // import PaginationComponent from "../../components/PaginationComponent";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import Cascader from "@/components/bs-ui/select/cascader";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { getKnowledgeModelConfig, getLLmServerDetail, getModelListApi } from "@/controllers/API/finetune";
+import { BookCopyIcon, CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Trash2 } from "lucide-react";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import { useTable } from "../../util/hook";
-import { CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Trash2 } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
 import { ModelSelect } from "../ModelPage/manage/tabs/WorkbenchModel";
 
 function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', currentLib = null }) {
@@ -39,8 +38,6 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
     const [options, setOptions] = useState([])
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isModelChanged, setIsModelChanged] = useState(false)
-    const [originalModel, setOriginalModel] = useState(null)
-    const [modelsMap, setModelsMap] = useState({}) // 存储模型映射
 
     // 统一处理模型数据获取
     useEffect(() => {
@@ -76,7 +73,6 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
                 });
 
                 setOptions(embeddings);
-                setModelsMap(models);
                 onLoadEnd(models);
 
                 // 设置默认模型选择
@@ -85,7 +81,6 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
                     if (nameRef.current) nameRef.current.value = currentLib.name;
                     if (descRef.current) descRef.current.value = currentLib.description;
                     setIsModelChanged(false);
-                    setOriginalModel(currentLib.model);
 
                     if (_model) {
                         console.log(_model, 33);
@@ -182,8 +177,8 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
                 "model_id": modal[1].value,
                 "model_type": "embedding",
                 "knowledge_id": currentLib.id,
-               "knowledge_name": name, 
-            "description": desc
+                "knowledge_name": name,
+                "description": desc
             }
             await captureAndAlertRequestErrorHoc(updateKnowledge(data).then(res => {
                 toast({
@@ -336,38 +331,11 @@ const doing = {} // 记录copy中的知识库
 export default function KnowledgeFile() {
     const [open, setOpen] = useState(false);
     const { user } = useContext(userContext);
-    const [modelNameMap, setModelNameMap] = useState({})
     const { message } = useToast()
     const navigate = useNavigate()
-    const [menuOpen, setMenuOpen] = useState(false);
-    const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [currentSettingLib, setCurrentSettingLib] = useState(null);
     const [copyLoadingId, setCopyLoadingId] = useState<string | null>(null);
-
-    const toggleMenu = (id: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        setOpenMenus(prev => ({
-            ...Object.keys(prev).reduce((acc, key) => {
-                acc[key] = false; // 关闭其他所有菜单
-                return acc;
-            }, {} as Record<string, boolean>),
-            [id]: !prev[id] // 切换当前菜单
-        }));
-        // @ts-ignore
-        window.libname = [el.name, el.description];
-    };
-
-    // 点击外部关闭菜单
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (!(event.target as Element).closest('.menu-container')) {
-                setOpenMenus({});
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({ cancelLoadingWhenReload: true }, (param) =>
         readFileLibDatabase({ ...param, name: param.keyword })
@@ -493,26 +461,23 @@ export default function KnowledgeFile() {
                             >
                                 {/* <TableCell>{el.id}</TableCell> */}
                                 <TableCell className="font-medium max-w-[200px]">
-                                    <div className="flex items-start gap-2">
-                                        <img
-                                            src="/assets/file-logo.svg"
-                                            alt=""
-                                            className="w-[50px] h-[50px] mt-1 rounded object-cover"
-                                        />
-
+                                    <div className="flex items-center gap-2 py-2">
+                                        <div className="bg-primary p-2 rounded-sm text-white">
+                                            <BookCopyIcon size={18} />
+                                        </div>
                                         <div>
-                                            <div className="truncate max-w-[500px] w-[264px] text-[18px] font-medium leading-6 mt-2">
+                                            <div className="truncate max-w-[500px] w-[264px] text-[18px] font-medium leading-6 flex items-center gap-2">
                                                 {el.name}
                                             </div>
                                             <div
                                                 className="relative group"
                                                 title={el.description}
                                             >
-                                                <div className="truncate max-w-[500px] text-[14px] text-[#5A5A5A] font-semibold leading-5">
+                                                <div className="truncate max-w-[500px] text-[14px] text-gray-500 leading-6">
                                                     {el.description}
                                                 </div>
                                                 {el.description && (
-                                                    <div className="absolute hidden group-hover:block bottom-full left-0 bg-blue-500 text-white p-2 rounded whitespace-normal w-48 z-10 text-sm font-normal">
+                                                    <div className="absolute hidden  group-hover:block bottom-full left-0 bg-blue-500 text-white p-2 rounded whitespace-normal w-48 z-10 text-sm font-normal">
                                                         {el.description}
                                                     </div>
                                                 )}
@@ -528,85 +493,68 @@ export default function KnowledgeFile() {
                                 </TableCell>
                                 <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-2">
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <button
-                                                    className="w-10 h-10 hover:bg-gray-200   rounded flex items-center justify-center
-                                                                 transition-colors duration-200
-                                                                 relative"
-                                                    disabled={copyLoadingId === el.id}
-                                                    onClick={(e) => e.stopPropagation()}
-                                                >
-                                                    {copyLoadingId === el.id ? (
-                                                        <>
-                                                            <LoaderCircle className="animate-spin" />
-                                                            <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white text-gray-800 text-xs px-2 py-1 rounded whitespace-nowrap border border-gray-300 shadow-sm">
-                                                                复制中
-                                                            </div>
-                                                        </>
-                                                    ) : (
-                                                        <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
-                                                    )}
-                                                </button>
-                                            </DropdownMenuTrigger>
-
-                                            <DropdownMenuContent
-                                                align="end"
-                                                className=" rounded-md shadow-lg py-1  z-[100] border border-transparent"
-                                                style={{
-                                                    backgroundColor: 'white',
-                                                    opacity: 1,
-                                                }}
-                                                onInteractOutside={() => setOpenMenus({})}
-                                            >
-                                                {/* 复制按钮 */}
-                                                {(el.copiable || user.role === 'admin') && (
-                                                    <DropdownMenuItem
-                                                        className={`flex items-center gap-2 px-4 py-2 ${el.state === 1 ? 'hover:bg-gray-100 cursor-pointer' : 'text-gray-400 cursor-not-allowed'
-                                                            }`}
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            if (el.state === 1) {
-                                                                handleCopy(el);
-                                                            }
-                                                        }}
-                                                        disabled={el.state !== 1}
-                                                    >
-                                                        <Copy className="w-4 h-4" />
-                                                        {el.state === 1 ? t('lib.copy') : t('lib.copying')}
-                                                    </DropdownMenuItem>
+                                        <Select onValueChange={(e) => {
+                                            switch (e) {
+                                                case 'copy':
+                                                    el.state === 1 && handleCopy(el);
+                                                    break;
+                                                case 'set':
+                                                    setCurrentSettingLib(el);
+                                                    setSettingsOpen(true);
+                                                    break;
+                                                case 'delete':
+                                                    el.copiable && handleDelete(el.id);
+                                                    break;
+                                            }
+                                        }}>
+                                            <SelectTrigger
+                                                showIcon={false}
+                                                disabled={copyLoadingId === el.id}
+                                                className="size-10 px-2 bg-transparent border-none shadow-none hover:bg-gray-300 flex items-center justify-center duration-200 relative">
+                                                {copyLoadingId === el.id ? (
+                                                    <>
+                                                        <LoaderCircle className="animate-spin" />
+                                                        <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white text-gray-800 text-xs px-2 py-1 rounded whitespace-nowrap border border-gray-300 shadow-sm">
+                                                            复制中
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
                                                 )}
-
-                                                {/* 设置按钮 */}
-                                                <DropdownMenuItem
-                                                    className="flex items-center gap-2 px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setCurrentSettingLib(el);
-                                                        setSettingsOpen(true);
-                                                    }}
-                                                >
-                                                    <Settings className="w-4 h-4" />
-                                                    {t('设置')}
-                                                </DropdownMenuItem>
-
-                                                {/* 删除按钮 */}
-                                                <DropdownMenuItem
-                                                    className={`flex items-center gap-2 px-4 py-2 ${el.copiable ? ' hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
-                                                        }`}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        if (el.copiable) {
-                                                            handleDelete(el.id);
-                                                        }
-                                                    }}
+                                            </SelectTrigger>
+                                            <SelectContent onClick={(e) => {
+                                                e.stopPropagation()
+                                                document.body.click()
+                                            }}>
+                                                {
+                                                    (el.copiable || user.role === 'admin') && <SelectItem
+                                                        showIcon={false}
+                                                        value="copy"
+                                                        disabled={el.state !== 1}>
+                                                        <div className="flex gap-2 items-center">
+                                                            <Copy className="w-4 h-4" />
+                                                            {el.state === 1 ? t('lib.copy') : t('lib.copying')}
+                                                        </div>
+                                                    </SelectItem>
+                                                }
+                                                <SelectItem value="set" showIcon={false}>
+                                                    <div className="flex gap-2 items-center">
+                                                        <Settings className="w-4 h-4" />
+                                                        {t('设置')}
+                                                    </div>
+                                                </SelectItem>
+                                                <SelectItem
+                                                    value="delete"
+                                                    showIcon={false}
                                                     disabled={!el.copiable}
                                                 >
-                                                    <Trash2 className="w-4 h-4" />
-                                                    {t('delete')}
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
+                                                    <div className="flex gap-2 items-center">
+                                                        <Trash2 className="w-4 h-4" />
+                                                        {t('delete')}
+                                                    </div>
+                                                </SelectItem>
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                 </TableCell>
                             </TableRow>
@@ -625,7 +573,7 @@ export default function KnowledgeFile() {
                     />
                 </div>
             </div>
-            <CreateModal datalist={datalist} open={open} setOpen={setOpen} onLoadEnd={setModelNameMap} mode="create"></CreateModal>
+            <CreateModal datalist={datalist} open={open} setOpen={setOpen} onLoadEnd={() => { }} mode="create"></CreateModal>
             <CreateModal
                 datalist={datalist}
                 open={settingsOpen}
