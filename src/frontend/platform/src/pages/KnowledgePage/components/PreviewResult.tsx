@@ -22,20 +22,25 @@ interface IProps {
     previewCount: number;
     applyEachCell: boolean;
     cellGeneralConfig: any;
+    showPreview:boolean;
      onPreviewResult?: (isSuccess: boolean) => void; 
 }
 export type Partition = {
     [key in string]: { text: string, type: string, part_id: string }
 }
-export default function PreviewResult({ previewCount, rules, step, applyEachCell, cellGeneralConfig, onPreviewResult }: IProps) {
+export default function PreviewResult({ previewCount, rules, step, applyEachCell, cellGeneralConfig,showPreview, onPreviewResult,kId }: IProps) {
+    console.log(kId,rules,33);
+    
     const { id } = useParams()
    const [previewSuccess, setPreviewSuccess] = useState(true);
     const [chunks, setChunks] = useState([]) // 当前文件分块
     const [partitions, setPartitions] = useState<Partition>({}) // 当前文件分区
-    const [selectId, setSelectId] = useState(''); // 当前选择文件id
+    const [selectId, setSelectId] = useState(); // 当前选择文件id
     const [syncChunksSelectId, setSelectIdSyncChunks] = useState(''); // 当前选择文件id(与chunk更新保持同步)
     useEffect(() => {
         const file = rules.fileList[0]
+        console.log(file.id,22);
+         const numId = parseInt(file.id, 10);
         setSelectId(file.id)
     }, [])
     const currentFile = useMemo(() => {  // 当前选择文件
@@ -77,16 +82,19 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
             console.log(step,333);
             let filePathRes
             // 先获取文件路径
-            if(step === 2){
+            if(step === 1||(step === 2 &&!showPreview)){
+                console.log(selectId,'分段');
+                
                  filePathRes = await getFilePathApi(selectId);
             }
+            console.log('excel_rule类型：',applyEachCell, currentFile.excelRule.constructor.name)
             captureAndAlertRequestErrorHoc(previewFileSplitApi({
                 // 缓存(修改规则后需要清空缓存, 切换文件使用缓存)
                 // previewCount变更时为重新预览分段操作,不使用缓存
                 cache: prevPreviewCountMapRef.current[currentFile.id] === previewCount,
-                knowledge_id: id,
+                knowledge_id: id ||kId,
                 file_list: [{
-                    file_path: filePathRes || currentFile?.filePath, // 使用异步获取的文件路径
+                    file_path: filePathRes || currentFile?.filePath,
                     excel_rule: applyEachCell
                         ? currentFile.excelRule
                         : { ...cellGeneralConfig }
@@ -164,15 +172,16 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
         setChunks(chunks => chunks.map(chunk => chunk.chunkIndex === chunkIndex ? { ...chunk, text } : chunk))
     }
 
-    return (<div className={cn("h-full flex gap-2 justify-center", step === 2 ? 'w-1/2' : 'w-full')}>
-        {step === 3 && currentFile && <PreviewFile
+    return (<div className={cn("h-full flex gap-2 justify-center", step === 2 ? 'w-[100%]' : 'w-full')}>
+        {console.log(chunks,partitions,212,fileViewUrl)}
+        {(step === 3 || step === 2) && currentFile && <PreviewFile
             urlState={fileViewUrl}
             file={currentFile}
             chunks={chunks}
             setChunks={setChunks}
             partitions={partitions}
         />}
-        <div className={cn('relative', step === 2 ? 'w-full' : 'w-[100%]')}>
+        <div className={cn('relative', step === 2 ? 'w-1/2' : 'w-[100%]')}>
             {/* 下拉框 - 右上角 */}
             <div className="flex justify-end">
                 <Select value={selectId} onValueChange={setSelectId}>
@@ -197,7 +206,7 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
                 fileId={syncChunksSelectId}
                 fileSuffix={currentFile?.suffix}
                 previewCount={previewCount}
-                edit={step === 3}
+                edit={step === 3||step===2}
                 loading={loading}
                 chunks={chunks}
                 onDel={handleDelete}

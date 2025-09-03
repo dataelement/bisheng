@@ -6,9 +6,7 @@ import * as React from "react"
 import { cname } from "../utils"
 
 const TooltipProvider = TooltipPrimitive.Provider
-
 const Tooltip = TooltipPrimitive.Root
-
 const TooltipTrigger = TooltipPrimitive.Trigger
 
 const TooltipContent = React.forwardRef<
@@ -30,15 +28,25 @@ TooltipContent.displayName = TooltipPrimitive.Content.displayName
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger }
 
 
-export const QuestionTooltip = ({ error = false, className = '', content }) => (
+export const QuestionTooltip = ({ 
+    error = false, 
+    className = '', 
+    content,
+    // 新增：支持自定义触发元素，默认保留问号图标
+    children 
+}) => (
     <TooltipProvider delayDuration={100}>
         <Tooltip defaultOpen={false}>
             <TooltipTrigger className={className} tabIndex={-1}>
-                <CircleHelp className={`w-3.5 h-3.5 ${error && 'text-red-500'}`} />
+                {/* 保留原有问号图标作为默认值，同时支持传入自定义内容 */}
+                {children || (
+                    <CircleHelp className={`w-3.5 h-3.5 ${error && 'text-red-500'}`} />
+                )}
             </TooltipTrigger>
             <TooltipContent className={error && 'bg-red-500/80'}>
-                <div className=" max-w-96 text-left break-all whitespace-normal">{content}</div>
+                <div className="max-w-96 text-left break-all whitespace-normal">{content}</div>
             </TooltipContent>
         </Tooltip>
     </TooltipProvider>
 );
+    

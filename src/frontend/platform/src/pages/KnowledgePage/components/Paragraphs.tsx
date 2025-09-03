@@ -175,8 +175,6 @@ export default function Paragraphs({ fileId, onBack }) {
                 fullData: selectedFile || {}
             };
             setCurrentFile(fileData);
-
-            // 重置文件URL状态
             setFileUrl('');
 
             // 先获取文件URL
@@ -220,8 +218,6 @@ export default function Paragraphs({ fileId, onBack }) {
                     status: 2
                 });
                 const filesData = res?.data || [];
-                console.log('filesData', filesData);
-
                 setRawFiles(filesData);
 
                 if (filesData.length) {
@@ -332,7 +328,7 @@ export default function Paragraphs({ fileId, onBack }) {
     const handleAdjustSegmentation = useCallback(() => {
         console.log(selectedFileId, currentFile, '098');
 
-        navigate(`/filelib/upload/${id}`, {
+        navigate(`/filelib/adjust/${id}`, {
             state: {
                 skipToStep: 2,
                 fileId: selectedFileId,
@@ -420,11 +416,6 @@ export default function Paragraphs({ fileId, onBack }) {
     }, [isPreviewVisible, isParagraphVisible]);
     return (
         <div className="relative">
-            {loading && (
-                <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                    <LoadingIcon />
-                </div>
-            )}
 
             <div className="flex justify-between items-center px-4 pt-4 pb-4">
                 <div className="min-w-72 max-w-[440px] flex items-center gap-2">
@@ -568,7 +559,7 @@ export default function Paragraphs({ fileId, onBack }) {
                         {selectError}
                     </div>
                 )}
-                {isParagraphVisible ? ( // 优化显示条件判断
+                {isParagraphVisible ? (
                     <div className={isPreviewVisible ? "w-1/2" : "w-full max-w-3xl"}>
                         <div className="flex flex-wrap gap-2 p-2 pt-0 items-start">
                             <PreviewParagraph
@@ -614,7 +605,7 @@ export default function Paragraphs({ fileId, onBack }) {
                                     value: metadataDialog.file?.file_name,
                                     isFileName: true
                                 },
-                                { label: t('原始文件大小'), value: metadataDialog.file?.size ? formatFileSize(metadataDialog.file.size) : null },
+                                { label: t('原始文件大小'), value: metadataDialog.file?.file_size ? formatFileSize(metadataDialog.file.file_size) : null },
                                 {
                                     label: t('创建时间'),
                                     value: metadataDialog.file?.create_time ? metadataDialog.file.create_time.replace('T', ' ') : null
@@ -627,7 +618,7 @@ export default function Paragraphs({ fileId, onBack }) {
                                     label: t('切分策略'),
                                     value: metadataDialog.file ? splitRuleDesc(metadataDialog.file) : null
                                 },
-                                { label: t('全文摘要'), value: metadataDialog.file?.tilte }
+                                { label: t('全文摘要'), value: metadataDialog.file?.title }
                             ].map((item, index) => (
                                 item.value && (
                                     <div key={index} className="grid grid-cols-4 gap-4 items-center">

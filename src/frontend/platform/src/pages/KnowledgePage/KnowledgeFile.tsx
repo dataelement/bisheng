@@ -27,6 +27,7 @@ import { BookCopyIcon, CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Tras
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import { useTable } from "../../util/hook";
 import { ModelSelect } from "../ModelPage/manage/tabs/WorkbenchModel";
+import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 
 function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', currentLib = null }) {
     const { t } = useTranslation()
@@ -460,31 +461,29 @@ export default function KnowledgeFile() {
                                 }}
                             >
                                 {/* <TableCell>{el.id}</TableCell> */}
-                                <TableCell className="font-medium max-w-[200px]">
-                                    <div className="flex items-center gap-2 py-2">
-                                        <div className="bg-primary p-2 rounded-sm text-white">
-                                            <BookCopyIcon size={18} />
-                                        </div>
-                                        <div>
-                                            <div className="truncate max-w-[500px] w-[264px] text-[18px] font-medium leading-6 flex items-center gap-2">
-                                                {el.name}
-                                            </div>
-                                            <div
-                                                className="relative group"
-                                                title={el.description}
-                                            >
-                                                <div className="truncate max-w-[500px] text-[14px] text-gray-500 leading-6">
-                                                    {el.description}
-                                                </div>
-                                                {el.description && (
-                                                    <div className="absolute hidden  group-hover:block bottom-full left-0 bg-blue-500 text-white p-2 rounded whitespace-normal w-48 z-10 text-sm font-normal">
-                                                        {el.description}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </TableCell>
+                              <TableCell className="font-medium max-w-[200px]">
+  <div className="flex items-center gap-2 py-2">
+    <div className="bg-primary p-2 rounded-sm text-white">
+      <BookCopyIcon size={18} />
+    </div>
+    <div>
+      {/* 知识库名称（不变） */}
+      <div className="truncate max-w-[500px] w-[264px] text-[18px] font-medium leading-6 flex items-center gap-2">
+        {el.name}
+      </div>
+
+      <QuestionTooltip
+        content={el.description || ''} 
+        error={false} // 蓝色气泡（非错误态）
+        className="w-full text-start" // 触发区域铺满，hover描述文字即触发
+      >
+        <div className="truncate max-w-[300px] text-[14px] text-gray-500 leading-6">
+          {el.description || ''} 
+        </div>
+      </QuestionTooltip>
+    </div>
+  </div>
+</TableCell>
                                 {/* <TableCell>{modelNameMap[el.model] || '--'}</TableCell> */}
                                 {/* <TableCell>{el.create_time.replace('T', ' ')}</TableCell> */}
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
