@@ -74,16 +74,19 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
         const currentFile = fileList.find(file => file.id === selectId)
         
         try {
+            console.log(step,333);
+            let filePathRes
             // 先获取文件路径
-            const filePathRes = await getFilePathApi(selectId);
-            
+            if(step === 2){
+                 filePathRes = await getFilePathApi(selectId);
+            }
             captureAndAlertRequestErrorHoc(previewFileSplitApi({
                 // 缓存(修改规则后需要清空缓存, 切换文件使用缓存)
                 // previewCount变更时为重新预览分段操作,不使用缓存
                 cache: prevPreviewCountMapRef.current[currentFile.id] === previewCount,
                 knowledge_id: id,
                 file_list: [{
-                    file_path: filePathRes, // 使用异步获取的文件路径
+                    file_path: filePathRes || currentFile?.filePath, // 使用异步获取的文件路径
                     excel_rule: applyEachCell
                         ? currentFile.excelRule
                         : { ...cellGeneralConfig }

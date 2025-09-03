@@ -177,7 +177,8 @@ export default function FilesUpload() {
             setSegmentRules(config);
             setUploadConfig(config);
         }
-        setCurrentStep(step);
+         const targetStep = isAdjustMode ? 2 : step;
+        setCurrentStep(targetStep);
     };
 
     return (
@@ -199,7 +200,7 @@ export default function FilesUpload() {
                 {/* 上方步进条 */}
                 <StepProgress
                     align="center"
-                    currentStep={isAdjustMode ? currentStep - 1 : currentStep}
+                      currentStep={isAdjustMode ? currentStep : currentStep}
                     labels={adjustedStepLabels}
                 />
             </div>

@@ -296,7 +296,7 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
                                 error={errors.inputPlaceholder}
                                 placeholder={t('chatConfig.inputPlaceholderPlaceholder')}
                                 maxLength={1000}
-                                onChange={(v) => handleInputChange('inputPlaceholder', v, 100)}
+                                onChange={(v) => handleInputChange('inputPlaceholder', v, 1000)}
                             />
                         </div>
   <div ref={appCenterWelcomeRef}>
@@ -569,26 +569,29 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
     }
 }, [parentFormData]);
 
-    const [errors, setErrors] = useState<FormErrors>({
-        sidebarSlogan: '',
-        systemPrompt: '',
-        welcomeMessage: '',
-        functionDescription: '',
-        inputPlaceholder: '',
-        kownledgeBase: '',
-        model: '',
-        modelNames: [],
-    });
+const [errors, setErrors] = useState<FormErrors>({
+    sidebarSlogan: '',
+    welcomeMessage: '',
+    functionDescription: '',
+    inputPlaceholder: '',
+    kownledgeBase: '',
+    model: '',
+    modelNames: [],
+    webSearch: undefined,
+    systemPrompt: '', 
+    applicationCenterWelcomeMessage: '', 
+    applicationCenterDescription: '', 
+});
     console.log('errors :>> ', errors);
 
-    const handleInputChange = (field: keyof ChatConfigForm, value: string, maxLength: number) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
+const handleInputChange = (field: keyof ChatConfigForm, value: string, maxLength: number) => {
+  setFormData(prev => ({ ...prev, [field]: value }));
 
-        // if (value.length > maxLength) {
-        //     setErrors(prev => ({ ...prev, [field]: `最多${maxLength}个字符` }));
-        // } else {
-        //     setErrors(prev => ({ ...prev, [field]: '' }));
-        // }
+        if (value.length >= maxLength) {
+            setErrors(prev => ({ ...prev, [field]: `最多${maxLength}个字符` }));
+        } else {
+            setErrors(prev => ({ ...prev, [field]: '' }));
+        }
     };
 
     const toggleFeature = (feature: keyof ChatConfigForm, enabled: boolean) => {
@@ -609,8 +612,9 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
             kownledgeBase: '',
             model: '',
             modelNames: [],
-                applicationCenterWelcomeMessage: '',
-    applicationCenterDescription: '',
+            applicationCenterWelcomeMessage: '',
+            applicationCenterDescription: '',
+             systemPrompt: '',
         };
 
         if (formData.sidebarSlogan.length > 15) {

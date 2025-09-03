@@ -115,8 +115,8 @@ export default function Paragraphs({ fileId }) {
             const res = await previewFileSplitApi({
                 knowledge_id: id,
                 file_list: [{
-                    file_path: currentFileUrl || '',
-                    excel_rule: excelRule // 使用处理后的 excelRule
+                    file_path: file?.filePath ||currentFileUrl || '',
+                    excel_rule: excelRule || {} // 使用处理后的 excelRule
                 }]
             });
             if (res && res !== 'canceled') {
@@ -417,6 +417,16 @@ const splitRuleDesc = useCallback((file) => {
         separator: [], // 分隔符
         separatorRule: [] // 分隔规则
     }), [currentFile, id]);
+    const isPreviewVisible = selectedFileId && currentFile && fileUrl && !isFetchingUrl;
+const isParagraphVisible = datalist.length > 0;
+const contentLayoutClass = useMemo(() => {
+  if (isPreviewVisible && isParagraphVisible) {
+    return "flex bg-background-main"; // 双区域显示：默认Flex
+  } else if (isPreviewVisible || isParagraphVisible) {
+    return "flex justify-center bg-background-main"; // 单区域显示：居中
+  }
+  return "flex bg-background-main"; // 都不显示：默认布局
+}, [isPreviewVisible, isParagraphVisible]);
     return (
         <div className="relative">
             {loading && (
@@ -541,49 +551,45 @@ const splitRuleDesc = useCallback((file) => {
                 </div>
             </div>
 
-            <div className="flex bg-background-main">
-                {console.log(previewRules, 77)}
-                {console.log(fileUrl, 7)}
-
-                {selectedFileId && currentFile && fileUrl ? (
+     <div className={contentLayoutClass}>
+                {isPreviewVisible ? ( // 优化显示条件判断
                     <PreviewFile
-                        key={`preview-${currentFile.id}`}
-                        urlState={{ load: !isFetchingUrl, url: fileUrl }}
-                        file={currentFile}
-                        chunks={safeChunks}
-                        setChunks={setChunks}
-                        partitions={partitions}
-                        rules={previewRules}
-                        h={false}
+                    key={`preview-${currentFile.id}`}
+                    urlState={{ load: !isFetchingUrl, url: fileUrl }}
+                    file={currentFile}
+                    chunks={safeChunks}
+                    setChunks={setChunks}
+                    partitions={partitions}
+                    rules={previewRules}
+                    h={false}
+                    className={isParagraphVisible ? "w-1/2" : "w-full max-w-3xl"} // 单区域时占满宽度+限制最大宽度
                     />
-
                 ) : (
                     <div className="flex justify-center items-center h-full text-gray-400">
-                        {/* <FileText width={160} height={160} className="text-border" /> */}
-                        {selectError}
+                    {selectError}
                     </div>
                 )}
-                <div className="w-1/2 overflow-y-auto pb-20">
-                    <div className="flex flex-wrap gap-2 p-2 items-start">
-                        {datalist.length ? (
-                            <PreviewParagraph
-                                fileId={selectedFileId}
-                                previewCount={datalist.length}
-                                edit={isEditable}
-                                fileSuffix={currentFile?.suffix || ''}
-                                loading={loading}
-                                chunks={safeChunks}
-                                onDel={handleDeleteChunk}
-                                onChange={handleChunkChange}
-                            />
-                        ) : (
-                            <div className="flex justify-center items-center flex-col size-full text-gray-400">
-                                <FileText width={160} height={160} className="text-border" />
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
+  {isParagraphVisible ? ( // 优化显示条件判断
+    <div className={isPreviewVisible ? "w-1/2" : "w-full max-w-3xl"}>
+      <div className="flex flex-wrap gap-2 p-2 items-start">
+        <PreviewParagraph
+          fileId={selectedFileId}
+          previewCount={datalist.length}
+          edit={isEditable}
+          fileSuffix={currentFile?.suffix || ''}
+          loading={loading}
+          chunks={safeChunks}
+          onDel={handleDeleteChunk}
+          onChange={handleChunkChange}
+        />
+      </div>
+    </div>
+  ) : (
+    <div className="flex justify-center items-center flex-col h-full text-gray-400">
+      <FileText width={160} height={160} className="text-border" />
+    </div>
+  )}
+</div>
 
             <div className="bisheng-table-footer px-6">
                 <AutoPagination
