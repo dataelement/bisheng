@@ -9,7 +9,7 @@ WORKDIR /app
 # 安装依赖（合并指令、清理缓存、禁用推荐包）
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    gcc g++ curl build-essential postgresql-server-dev-all libreoffice \
+    gcc g++ curl build-essential libreoffice \
     wget procps vim fonts-wqy-zenhei \
     libglib2.0-0 libsm6 libxrender1 libxext6 libgl1 \
     && rm -rf /var/lib/apt/lists/*
