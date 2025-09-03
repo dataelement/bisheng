@@ -16,16 +16,16 @@ from bisheng.database.models.user_role import UserRoleDao
 
 class KnowledgeTypeEnum(Enum):
     QA = 1  # QA知识库
-    NORMAL = 0   # 文档知识库
+    NORMAL = 0  # 文档知识库
     PRIVATE = 2  # 工作台的个人知识库
 
 
 class KnowledgeState(Enum):
-    UNPUBLISHED = 0 
-    PUBLISHED = 1 #文档知识库成功的状态
+    UNPUBLISHED = 0
+    PUBLISHED = 1  # 文档知识库成功的状态
     COPYING = 2
-    REBUILDING = 3 #文档知识库重建中的状态
-    FAILED = 4 #文档知识库重建失败的状态
+    REBUILDING = 3  # 文档知识库重建中的状态
+    FAILED = 4  # 文档知识库重建失败的状态
 
 
 class KnowledgeBase(SQLModelSerializable):
@@ -101,6 +101,12 @@ class KnowledgeDao(KnowledgeBase):
     def query_by_id(cls, knowledge_id: int) -> Knowledge:
         with session_getter() as session:
             return session.get(Knowledge, knowledge_id)
+
+    @classmethod
+    async def async_query_by_id(cls, knowledge_id: int) -> Knowledge:
+        async with async_session_getter() as session:
+            result = await session.execute(select(Knowledge).where(Knowledge.id == knowledge_id))
+            return result.scalars().first()
 
     @classmethod
     def get_list_by_ids(cls, ids: List[int]) -> List[Knowledge]:
@@ -214,7 +220,7 @@ class KnowledgeDao(KnowledgeBase):
 
     @classmethod
     def judge_knowledge_permission(cls, user_name: str,
-                                   knowledge_ids: List[int], 
+                                   knowledge_ids: List[int],
                                    include_private: bool = False) -> List[Knowledge]:
         """
         根据用户名和知识库ID列表，获取用户有权限查看的知识库列表

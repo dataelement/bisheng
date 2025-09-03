@@ -80,8 +80,9 @@ class KnowledgeUtils:
     chunk_split = "\n----------\n"
 
     @classmethod
-    def get_preview_cache_key(cls, knowledge_id: int, file_path: str) -> str:
-        md5_value = md5_hash(file_path)
+    def get_preview_cache_key(cls, knowledge_id: int, file_path: str, md5_value=None) -> str:
+        if not md5_value:
+            md5_value = md5_hash(file_path)
         return f"preview_file_chunk:{knowledge_id}:{md5_value}"
 
     @classmethod

@@ -16,7 +16,7 @@ from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
-                                    resp_200, resp_500, resp_501, resp_502, UpdateKnowledgeReq)
+                                    resp_200, resp_500, resp_501, resp_502, UpdateKnowledgeReq, KnowledgeFileReProcess)
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate)
 from bisheng.database.models.knowledge import KnowledgeState
@@ -100,7 +100,20 @@ async def process_knowledge_file(*,
                                  background_tasks: BackgroundTasks,
                                  req_data: KnowledgeFileProcess):
     """ 上传文件到知识库内 """
+
     res = KnowledgeService.process_knowledge_file(request, login_user, background_tasks, req_data)
+    return resp_200(res)
+
+
+# 修改分段重新处理
+@router.post("/process/rebuild")
+async def rebuild_knowledge_file(*,
+                                 request: Request,
+                                 login_user: UserPayload = Depends(get_login_user),
+                                 req_data: KnowledgeFileReProcess):
+    """ 重新处理知识库文件 """
+
+    res = await KnowledgeService.rebuild_knowledge_file(request, login_user, req_data)
     return resp_200(res)
 
 

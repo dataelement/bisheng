@@ -34,7 +34,7 @@ from bisheng.api.v1.schemas import (
     FileProcessBase,
     KnowledgeFileOne,
     KnowledgeFileProcess,
-    UpdatePreviewFileChunk, ExcelRule,
+    UpdatePreviewFileChunk, ExcelRule, KnowledgeFileReProcess,
 )
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download
@@ -579,6 +579,43 @@ class KnowledgeService(KnowledgeUtils):
 
         cls.upload_knowledge_file_hook(request, login_user, knowledge, process_files)
         return failed_files + process_files
+
+    @classmethod
+    async def rebuild_knowledge_file(cls, request: Request,
+                                     login_user: UserPayload,
+                                     req_data: KnowledgeFileReProcess):
+        """
+        重建知识库文件
+        :param request:
+        :param login_user:
+        :param req_data:
+        :return:
+        """
+
+        knowledge = await KnowledgeDao.async_query_by_id(req_data.knowledge_id)
+        if not knowledge:
+            raise NotFoundError.http_exception()
+        if not login_user.access_check(
+                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
+        ):
+            raise UnAuthorizedError.http_exception()
+
+        db_file = await KnowledgeFileDao.query_by_id(req_data.kb_file_id)
+
+        if not db_file:
+            raise NotFoundError.http_exception()
+
+        split_rule_dict = req_data.model_dump(include=set(list(FileProcessBase.model_fields.keys())))
+        if req_data.excel_rule is not None:
+            split_rule_dict["excel_rule"] = req_data.excel_rule.model_dump()
+        db_file.split_rule = json.dumps(split_rule_dict)
+        db_file.status = KnowledgeFileStatus.PROCESSING.value  # 解析中
+        db_file = await KnowledgeFileDao.async_update(db_file)
+
+        preview_cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path="", md5_value=db_file.md5)
+        file_worker.retry_knowledge_file_celery.delay(db_file.id, preview_cache_key, req_data.callback_url)
+
+        return db_file.model_dump()
 
     @classmethod
     def retry_files(

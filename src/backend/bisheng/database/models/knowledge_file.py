@@ -8,7 +8,7 @@ from pydantic import field_validator
 from sqlalchemy import JSON, Column, DateTime, String, or_, text, Text
 from sqlmodel import Field, delete, func, select, update
 
-from bisheng.database.base import session_getter
+from bisheng.database.base import session_getter, async_session_getter
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -123,6 +123,12 @@ class QAKnowledgeUpsert(QAKnowledgeBase):
 class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
+    async def query_by_id(cls, file_id: int) -> Optional[KnowledgeFile]:
+        async with async_session_getter() as session:
+            result = await session.execute(select(KnowledgeFile).where(KnowledgeFile.id == file_id))
+            return result.scalars().first()
+
+    @classmethod
     def get_file_simple_by_knowledge_id(cls, knowledge_id: int, page: int, page_size: int):
         offset = (page - 1) * page_size
         with session_getter() as session:
@@ -157,6 +163,14 @@ class KnowledgeFileDao(KnowledgeFileBase):
             session.add(knowledge_file)
             session.commit()
             session.refresh(knowledge_file)
+        return knowledge_file
+
+    @classmethod
+    async def async_update(cls, knowledge_file):
+        async with async_session_getter() as session:
+            session.add(knowledge_file)
+            await session.commit()
+            await session.refresh(knowledge_file)
         return knowledge_file
 
     @classmethod
