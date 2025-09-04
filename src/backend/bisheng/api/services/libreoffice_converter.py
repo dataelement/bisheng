@@ -88,7 +88,6 @@ def convert_doc_to_docx(input_doc_path, output_dir=None):
     command = [
         soffice_path,
         "--headless",  # Run in headless mode (no GUI)
-        f"-env:UserInstallation=\"file://{output_dir}\"",  # 防止并发时的报错
         "--convert-to",
         "docx",  # Specify the output format
         "--outdir",
