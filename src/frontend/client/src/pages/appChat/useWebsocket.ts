@@ -86,7 +86,8 @@ export const useWebSocket = (helpers) => {
             }
 
             ws.onclose = (event) => {
-                console.log('close :>> ', helpers.chatId);
+                console.log('close chatId:>> ', helpers.chatId);
+                console.error('ws close :>> ', event);
                 helpers.handleMsgError(event.reason)
                 // todo 错误消息写入消息下面
             }

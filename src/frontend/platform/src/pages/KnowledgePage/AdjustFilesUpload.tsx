@@ -8,30 +8,45 @@ import { ChevronLeft } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import FileUploadStep1 from "./components/FileUploadStep1";
 import FileUploadStep2 from "./components/FileUploadStep2";
 import FileUploadStep4 from "./components/FileUploadStep4";
 import PreviewResult from "./components/PreviewResult";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
-// 正常模式固定步骤标签（4步）
-const NormalStepLabels = [
-  '上传文件',
+// 调整模式固定步骤标签（3步）
+const AdjustStepLabels = [
   '分段策略',
   '原文对比',
   '数据处理'
 ];
 
-export default function FilesUpload() {
+export default function AdjustFilesUpload() {
   const { t } = useTranslation('knowledge');
   const navigate = useNavigate();
   const location = useLocation();
-  const { id: knowledgeId } = useParams(); // 从路由获取知识库ID
   const { message } = useToast();
+ const { fileId: knowledgeId } = useParams(); 
+ console.log(knowledgeId,21);
+ 
+  // 从路由状态获取调整模式的初始数据（必须传文件数据）
+  const initFileData = location.state?.fileData;
+  if (!initFileData) {
+    navigate(-1); // 无数据时回退
+    return null;
+  }
 
-  // 正常模式专属状态（无调整模式相关判断）
-  const [currentStep, setCurrentStep] = useState(1); // 初始步骤：1（上传文件）
-  const [resultFiles, setResultFiles] = useState([]); // 上传的文件列表
+  // 调整模式专属状态（无正常模式判断）
+  const [currentStep, setCurrentStep] = useState(1); // 初始步骤：1（分段策略）
+  const [resultFiles, setResultFiles] = useState([
+    // 固定从路由状态生成文件列表（跳过上传）
+    {
+      id: initFileData.id,
+      fileName: initFileData.name,
+      file_path: initFileData.filePath,
+      suffix: initFileData.suffix,
+      fileType: initFileData.fileType === 'table' ? 'table' : 'file'
+    }
+  ]);
   const [segmentRules, setSegmentRules] = useState(null); // 分段策略配置
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isNextDisabled, setIsNextDisabled] = useState(true);
@@ -42,37 +57,31 @@ export default function FilesUpload() {
   const fileUploadStep2Ref = useRef(null); // Step2（分段策略）组件引用
   const _tempConfigRef = useRef({}); // 临时存储API配置
   const submittingRef = useRef(false); // 防止重复提交
-  const repeatCallBackRef = useRef(() => setCurrentStep(4)); // 重复文件处理后跳转步骤（4：数据处理）
-
-  // 步骤1：文件上传完成，跳转步骤2
-  const handleStep1Next = (files) => {
-    setResultFiles(files);
-    setCurrentStep(2);
-  };
+  const repeatCallBackRef = useRef(() => setCurrentStep(3)); // 重复文件处理后跳转步骤（3：数据处理）
 
   // 步骤2：分段策略完成，接收配置并跳转步骤3
   const handleStep2Next = (step, config) => {
     if (config) {
       setSegmentRules(config);
     }
-    setCurrentStep(3); // 固定跳步骤3（原文对比）
+    setCurrentStep(2); // 固定跳步骤2（原文对比）
   };
 
-  // 步骤3：原文对比回调，控制下一步按钮禁用状态
+  // 步骤2：原文对比回调，控制下一步按钮禁用状态
   const handlePreviewResult = (isSuccess) => {
     setIsNextDisabled(!isSuccess);
   };
 
-  // 下一步：按当前步骤跳转
+  // 下一步：按当前步骤跳转（调整模式3步逻辑）
   const handleNext = () => {
     switch (currentStep) {
-      case 2: // 步骤2→步骤3（分段→对比）
+      case 1: // 步骤1→步骤2（分段→对比）
         if (fileUploadStep2Ref.current) {
           fileUploadStep2Ref.current.handleNext();
         }
         break;
-      case 3: // 步骤3→步骤4（对比→处理）
-        setCurrentStep(4);
+      case 2: // 步骤2→步骤3（对比→处理）
+        setCurrentStep(3);
         if (segmentRules) {
           handleSave(segmentRules); // 保存配置
         }
@@ -82,11 +91,11 @@ export default function FilesUpload() {
     }
   };
 
-  // 上一步：按当前步骤回退
+  // 上一步：按当前步骤回退（调整模式3步逻辑）
   const handleBack = () => {
     switch (currentStep) {
       case 1:
-        navigate(-1); // 步骤1回退：返回知识库列表
+        navigate(-1); // 步骤1回退：返回知识库详情
         break;
       case 2:
         setCurrentStep(1); // 步骤2→步骤1
@@ -94,23 +103,21 @@ export default function FilesUpload() {
       case 3:
         setCurrentStep(2); // 步骤3→步骤2
         break;
-      case 4:
-        setCurrentStep(3); // 步骤4→步骤3
-        break;
       default:
         break;
     }
   };
 
-  // API：保存分段策略配置（正常模式专属）
+  // API：保存分段策略配置（调整模式专属）
   const handleSave = (_config) => {
     if (submittingRef.current) return;
     submittingRef.current = true;
     setIsSubmitting(true);
+console.log(resultFiles.id,_config.rules.knowledgeId , initFileData.knowledgeId,2222);
 
-    // 正常模式API参数格式
+    // 调整模式API参数格式（复用文件数据）
     const apiConfig = {
-      knowledge_id: Number(_config.rules.knowledgeId || knowledgeId),
+      knowledge_id: Number(_config.rules.knowledgeId || initFileData.knowledgeId), // 从文件数据取知识库ID
       separator: _config.rules.separator,
       separator_rule: _config.rules.separatorRule,
       chunk_size: _config.rules.chunkSize,
@@ -130,8 +137,8 @@ export default function FilesUpload() {
       if (_repeatFiles.length) {
         setRepeatFiles(_repeatFiles);
       } else {
-        message({ variant: 'success', description: t('addSuccess') });
-        setCurrentStep(4);
+        message({ variant: 'success', description: t('adjustSuccess') }); // 调整成功文案
+        setCurrentStep(3);
       }
 
       // 更新文件ID
@@ -147,21 +154,6 @@ export default function FilesUpload() {
     _tempConfigRef.current = apiConfig;
   };
 
-  // API：步骤1直接用默认配置保存（正常模式专属）
-  const handleSaveByDefaultConfig = async (_config) => {
-    await captureAndAlertRequestErrorHoc(subUploadLibFile(_config).then(res => {
-      const _repeatFiles = res.filter(e => e.status === 3);
-      if (_repeatFiles.length) {
-        setRepeatFiles(_repeatFiles);
-        repeatCallBackRef.current = () => navigate(-1);
-      } else {
-        message({ variant: 'success', description: "添加成功" });
-        navigate(-1);
-      }
-    }));
-  };
-
-  // API：重试重复文件（覆盖上传）
   const handleRetry = (objs) => {
     setRetryLoad(true);
     const params = {
@@ -176,7 +168,7 @@ export default function FilesUpload() {
     captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(params).then(res => {
       setRepeatFiles([]);
       setRetryLoad(false);
-      message({ variant: 'success', description: t('addSuccess') });
+      message({ variant: 'success', description: t('adjustSuccess') });
       repeatCallBackRef.current();
     }));
   };
@@ -194,31 +186,22 @@ export default function FilesUpload() {
           >
             <ChevronLeft />
           </Button>
-          <span className="text-foreground text-sm font-black pl-4">返回知识库</span>
+          <span className="text-foreground text-sm font-black pl-4">返回知识库详情</span>
         </div>
 
-        {/* 正常模式步骤条（4步） */}
+        {/* 调整模式步骤条（3步） */}
         <StepProgress
           align="center"
           currentStep={currentStep}
-          labels={NormalStepLabels.map(label => t(label))}
+          labels={AdjustStepLabels.map(label => t(label))}
         />
       </div>
 
-      {/* 步骤内容区域（正常模式专属步骤） */}
+      {/* 步骤内容区域（调整模式专属步骤） */}
       <div className="flex flex-1 overflow-hidden px-4">
         <div className="w-full overflow-y-auto">
           <div className="h-full py-4">
-            {/* 步骤1：文件上传（正常模式独有） */}
             {currentStep === 1 && (
-              <FileUploadStep1
-                onNext={handleStep1Next}
-                onSave={handleSaveByDefaultConfig}
-                kId={knowledgeId} // 传递知识库ID
-              />
-            )}
-            {/* 步骤2：分段策略 */}
-            {currentStep === 2 && (
               <FileUploadStep2
                 ref={fileUploadStep2Ref}
                 step={currentStep}
@@ -226,19 +209,20 @@ export default function FilesUpload() {
                 isSubmitting={isSubmitting}
                 onNext={handleStep2Next}
                 onPrev={handleBack}
-                kId={knowledgeId}
+                kId={knowledgeId} // 从文件数据传知识库ID
+                isAdjustMode // 给子组件标记调整模式（可选，子组件如需差异化处理）
               />
             )}
 
-            {/* 步骤3：原文对比 */}
-            {currentStep === 3 && segmentRules && (
+            {/* 步骤2：原文对比 */}
+            {currentStep === 2 && segmentRules && (
               <>
                 <PreviewResult
                   rules={segmentRules.rules}
                   resultFiles={resultFiles}
                   onPrev={handleBack}
                   onNext={() => {
-                    setCurrentStep(4);
+                    setCurrentStep(3);
                     handleSave(segmentRules);
                   }}
                   onPreviewResult={handlePreviewResult}
@@ -246,9 +230,11 @@ export default function FilesUpload() {
                   previewCount={0}
                   applyEachCell={segmentRules.applyEachCell}
                   cellGeneralConfig={segmentRules.cellGeneralConfig}
+                   kId={knowledgeId} 
+                  isAdjustMode // 子组件差异化标记
                 />
 
-                {/* 步骤3底部按钮（固定） */}
+                {/* 步骤2底部按钮（固定） */}
                 <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
                   <Button
                     className="h-8"
@@ -269,20 +255,20 @@ export default function FilesUpload() {
               </>
             )}
 
-            {/* 步骤4：数据处理 */}
-            {currentStep === 4 && (
-              <FileUploadStep4 data={resultFiles} />
+            {/* 步骤3：数据处理 */}
+            {currentStep === 3 && (
+              <FileUploadStep4 data={resultFiles} isAdjustMode />
             )}
           </div>
         </div>
       </div>
 
-      {/* 重复文件提醒弹窗（正常模式共用） */}
+      {/* 重复文件提醒弹窗（调整模式共用） */}
       <Dialog open={!!repeatFiles.length} onOpenChange={b => !b && setRepeatFiles([])}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>{t('modalTitle')}</DialogTitle>
-            <DialogDescription>{t('modalMessage')}</DialogDescription>
+            <DialogDescription>{t('adjustModalMessage')}</DialogDescription> {/* 调整模式专属提示文案 */}
           </DialogHeader>
           <ul className="overflow-y-auto max-h-[400px] py-2">
             {repeatFiles.map(el => (

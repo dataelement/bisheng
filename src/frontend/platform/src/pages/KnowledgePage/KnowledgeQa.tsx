@@ -1,4 +1,3 @@
-
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button, LoadButton } from "@/components/bs-ui/button";
@@ -20,6 +19,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import index from "../BuildPage/bench/LingSiWork";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
+import { QuestionTooltip, TooltipContent, TooltipTrigger } from "@/components/bs-ui/tooltip";
 
 function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
     const { t } = useTranslation()
@@ -113,7 +113,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
             <div className="flex flex-col gap-4 py-2">
                 <div className="">
                     <label htmlFor="name" className="bisheng-label">{t('lib.libraryName')}</label>
-                      <span className="text-red-500">*</span>
+                    <span className="text-red-500">*</span>
                     <Input name="name" ref={nameRef} placeholder={t('lib.libraryName')} className={`col-span-3 ${error.name && 'border-red-400'}`} />
                 </div>
                 <div className="">
@@ -185,13 +185,16 @@ export default function KnowledgeQa(params) {
             }, {} as Record<string, boolean>),
             [id]: !prev[id] // 切换当前菜单
         }));
+        // 移除无效代码：el未定义，之前导致控制台报错影响功能
         // @ts-ignore
-        window.libname = [el.name, el.description];
+        // window.libname = [el.name, el.description];
     };
+
     // 进详情页前缓存 page, 临时方案
     const handleCachePage = () => {
         window.LibPage = { page, type: 'qa' }
     }
+
     useEffect(() => {
         const _page = window.LibPage
         if (_page) {
@@ -206,108 +209,124 @@ export default function KnowledgeQa(params) {
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <LoadingIcon />
         </div>}
+
         <div className="h-[calc(100vh-128px)] overflow-y-auto pb-20">
-            <div className="flex justify-end gap-4 items-center absolute right-0 top-[-44px]">
+            {/* 搜索+创建按钮区域：调整top避免遮挡 */}
+            <div className="flex justify-end gap-4 items-center absolute right-0 top-[-44px] z-1">
                 <SearchInput placeholder={t('lib.libraryName')} onChange={(e) => search(e.target.value)} />
                 <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create')}</Button>
             </div>
+
             <Table>
                 <TableHeader>
                     <TableRow>
-                        {/* <TableHead>ID</TableHead> */}
                         <TableHead className="w-[200px]">{t('lib.libraryName')}</TableHead>
-                        {/* <TableHead>{t('lib.model')}</TableHead> */}
-                        {/* <TableHead>{t('createTime')}</TableHead> */}
                         <TableHead>{t('updateTime')}</TableHead>
                         <TableHead>{t('lib.createUser')}</TableHead>
                         <TableHead className="text-right">{t('operations')}</TableHead>
                     </TableRow>
                 </TableHeader>
-<TableBody>
-    {datalist.map((el: any) => (
-        <TableRow key={el.id}
-            onClick={() => {
-                window.libname = [el.name, el.description];
-                navigate(`/filelib/qalib/${el.id}`)
-                handleCachePage()
-            }}
-        >
-            <TableCell className="font-medium max-w-[200px]">
-                <div className="flex items-start gap-2">
-                    <img 
-                        src="/assets/qa-logo.svg" 
-                        alt="知识库图标"
-                        className="w-[50px] h-[50px] mt-1 flex-shrink-0" 
-                    />
-                    
-                    <div className="min-w-0">
-                        <div className="truncate max-w-[500px] text-[18px] font-medium mb-0 mt-3">
-                            {el.name}
-                        </div>
-                        <div className="relative group" title={el.description}>
-                            <div className="truncate max-w-[500px] text-[14px] text-[#5A5A5A] font-semibold">
-                                {el.description}
-                            </div>
-                            {el.description && (
-                                <div className="absolute hidden group-hover:block bottom-full left-0 bg-blue-500 text-white p-2 rounded whitespace-normal w-48 z-10 text-sm font-normal">
-                                    {el.description}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </TableCell>
-            <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-            <TableCell className="max-w-[300px] break-all">
-                <div className="truncate-multiline">{el.user_name || '--'}</div>
-            </TableCell>
-            <TableCell className="text-right">
-                <div className="flex items-center justify-end gap-2">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <button
-                                className="w-10 h-10 hover:bg-gray-200 rounded flex items-center justify-center
-                                         transition-colors duration-200 border border-transparent
-                                            relative"
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
-                            </button>
-                        </DropdownMenuTrigger>
-                        
-                        <DropdownMenuContent 
-                            align="end" 
-                            className="rounded-md shadow-lg py-1 border-gray-200 z-[100] border border-transparent"  
-                            style={{
-                                backgroundColor: 'white',
-                                opacity: 1,
+
+                <TableBody>
+                    {datalist.map((el: any) => (
+                        <TableRow 
+                            key={el.id}
+                            // 行hover样式：仅非按钮区域生效
+                            className="hover:bg-gray-50 transition-colors"
+                            onClick={() => {
+                                window.libname = [el.name, el.description];
+                                navigate(`/filelib/qalib/${el.id}`);
+                                handleCachePage();
                             }}
-                            onInteractOutside={() => setOpenMenus({})}
                         >
-                            <DropdownMenuItem
-                                className={`flex items-center gap-2 px-4 py-2 ${
-                                    (el.copiable || user.role === 'admin') 
-                                        ? 'hover:bg-gray-100 cursor-pointer' 
-                                        : 'text-gray-400 cursor-not-allowed'
-                                }`}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (el.copiable || user.role === 'admin') {
-                                        handleDelete(el.id);
-                                    }
-                                }}
-                                disabled={!(el.copiable || user.role === 'admin')}
-                            >
-                                <Trash2 className="w-4 h-4" />
-                                {t('delete')}
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
-            </TableCell>
-        </TableRow>
-    ))}
-</TableBody>
+                            {/* 名称+描述单元格：恢复原有气泡结构，确保蓝色生效 */}
+   <TableCell className="font-medium max-w-[200px] overflow-visible">
+  <div className="flex items-start gap-2">
+    <img 
+      src="/assets/qa-logo.svg" 
+      alt="知识库图标"
+      className="w-[50px] h-[50px] mt-1 flex-shrink-0" 
+    />
+    
+    <div className="min-w-0 overflow-visible">
+      {/* 知识库名称（不变） */}
+  <div className="truncate max-w-[500px] text-[18px] font-medium mb-0 mt-3">
+    {el.name}
+  </div>
+      <QuestionTooltip
+        content={el.description || ''}
+        error={false} 
+        className="w-full text-start" // 触发区域铺满，确保hover描述文字就触发
+      >
+       <div className="truncate max-w-[500px] text-[14px] text-[#5A5A5A] font-semibold">
+      {el.description || ''}
+    </div>
+        <TooltipContent 
+          side="top" // 气泡在描述文字上方显示
+          sideOffset={4}
+          className="bg-primary/80 text-primary-foreground"
+        >
+          <div className="max-w-96 text-left break-all whitespace-normal">
+            {el.description || ''}
+          </div>
+        </TooltipContent>
+      </QuestionTooltip>
+    </div>
+  </div>
+</TableCell>
+
+                            <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
+
+                            <TableCell className="max-w-[300px] break-all">
+                                <div className="truncate-multiline">{el.user_name || '--'}</div>
+                            </TableCell>
+
+                            {/* 操作列：修复「按钮移入行不高亮」 */}
+                            <TableCell className="text-right hover:bg-transparent">
+                                {/* 关键：hover:bg-transparent覆盖行的hover:bg-gray-50 */}
+                                <div className="flex items-center justify-end gap-2">
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <button
+                                                className="w-10 h-10 hover:bg-gray-200 rounded flex items-center justify-center
+                                                         transition-colors duration-200 border border-transparent relative"
+                                                onClick={(e) => e.stopPropagation()}
+                                                // 关键：stopPropagation防止触发父行onClick
+                                            >
+                                                <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
+                                            </button>
+                                        </DropdownMenuTrigger>
+                                        
+                                        <DropdownMenuContent 
+                                            align="end" 
+                                            className="rounded-md shadow-lg py-1 border-gray-200 z-[100] border border-transparent"  
+                                            style={{ backgroundColor: 'white', opacity: 1 }}
+                                            onInteractOutside={() => setOpenMenus({})}
+                                        >
+                                            <DropdownMenuItem
+                                                className={`flex items-center gap-2 px-4 py-2 ${
+                                                    (el.copiable || user.role === 'admin') 
+                                                        ? 'hover:bg-gray-100 cursor-pointer' 
+                                                        : 'text-gray-400 cursor-not-allowed'
+                                                }`}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (el.copiable || user.role === 'admin') {
+                                                        handleDelete(el.id);
+                                                    }
+                                                }}
+                                                disabled={!(el.copiable || user.role === 'admin')}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                                {t('delete')}
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
+                            </TableCell>
+                        </TableRow>
+                    ))}
+                </TableBody>
             </Table>
         </div>
         <div className="bisheng-table-footer px-6 bg-background-login">

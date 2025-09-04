@@ -88,11 +88,13 @@ def resp_500(code: int = 500,
     """错误的逻辑回复"""
     return UnifiedResponseModel(status_code=code, status_message=message, data=data)
 
+
 def resp_501(code: int = 501,
              data: Union[list, dict, str, Any] = None,
              message: str = 'BAD REQUEST') -> UnifiedResponseModel:
     """错误的逻辑回复"""
     return UnifiedResponseModel(status_code=code, status_message=message, data=data)
+
 
 def resp_502(code: int = 502,
              data: Union[list, dict, str, Any] = None,
@@ -499,10 +501,12 @@ class WorkstationConfig(BaseModel):
     knowledgeBase: Optional[WSPrompt] = None
     fileUpload: Optional[WSPrompt] = None
     systemPrompt: Optional[str] = None
-    applicationCenterWelcomeMessage: Optional[str] = Field(default='', max_length=1000, pattern=r'^[\u4e00-\u9fff\w\s\.,;:!@#$%^&*()\-_=+\[\]{}|\\\'"<>/?`~·！￥（）【】、《》，。；：“”‘’？]+$',
-                                                         description='应用中心欢迎消息')
-    applicationCenterDescription: Optional[str] = Field(default='', max_length=1000, pattern=r'^[\u4e00-\u9fff\w\s\.,;:!@#$%^&*()\-_=+\[\]{}|\\\'"<>/?`~·！￥（）【】、《》，。；：“”‘’？]+$',
-                                                         description='应用中心描述')
+    applicationCenterWelcomeMessage: Optional[str] = Field(default='', max_length=1000,
+                                                           pattern=r'^[\u4e00-\u9fff\w\s\.,;:!@#$%^&*()\-_=+\[\]{}|\\\'"<>/?`~·！￥（）【】、《》，。；：“”‘’？]+$',
+                                                           description='应用中心欢迎消息')
+    applicationCenterDescription: Optional[str] = Field(default='', max_length=1000,
+                                                        pattern=r'^[\u4e00-\u9fff\w\s\.,;:!@#$%^&*()\-_=+\[\]{}|\\\'"<>/?`~·！￥（）【】、《》，。；：“”‘’？]+$',
+                                                        description='应用中心描述')
     linsightConfig: Optional[LinsightConfig] = Field(default=None, description='灵思配置')
 
 
@@ -547,8 +551,10 @@ class FileProcessBase(BaseModel):
             values['enable_formula'] = 1
         if values.get("retain_images") is None:
             values['retain_images'] = 1
-        if values.get("excel_rules") is None:
-            values['excel_rules'] = ExcelRule()
+        if values.get("excel_rule") is None:
+            values['excel_rule'] = ExcelRule()
+        if values.get("knowledge_id") is None:
+            raise ValueError('knowledge_id is required')
 
         return values
 
@@ -596,12 +602,14 @@ class KnowledgeFileProcess(FileProcessBase):
     callback_url: Optional[str] = Field(default=None, description='异步任务回调地址')
     extra: Optional[str] = Field(default=None, description='附加信息')
 
+
 # 知识库重新分段调整
 class KnowledgeFileReProcess(FileProcessBase):
     kb_file_id: int = Field(..., description='知识库文件ID')
     excel_rule: Optional[ExcelRule] = Field(default=None, description="Excel rules")
     callback_url: Optional[str] = Field(default=None, description='异步任务回调地址')
     extra: Optional[str] = Field(default=None, description='附加信息')
+
 
 class FrequentlyUsedChat(BaseModel):
     user_link_type: str = Field(..., description='用户相关联的type')

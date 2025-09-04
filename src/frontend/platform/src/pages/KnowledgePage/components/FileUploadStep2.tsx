@@ -39,9 +39,10 @@ const initialStrategies = [
     { id: '2', regex: '\\n', position: 'after', rule: '单换行后切分，用于分隔普通换行' }
 ];
 
-const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode }: IProps, ref) => {
-    console.log('FileUploadStep2 props:', { step, resultFiles, isAdjustMode });
+const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode,kId }: IProps, ref) => {
+    
     const { id: kid } = useParams()
+    console.log('FileUploadStep2 props:', { step, resultFiles, isAdjustMode,kId });
     const { t } = useTranslation('knowledge')
     const setSelectedChunkIndex = useKnowledgeStore((state) => state.setSelectedChunkIndex);
   const [previewFailed, setPreviewFailed] = useState(false);
@@ -110,7 +111,7 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
         const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, retainImages, separator, separatorRule } = rules;
 
         const params = {
-            knowledge_id: kid,
+            knowledge_id: kid || kId,
             file_list: fileList.map(item => ({
                 file_path: item.filePath,
                 excel_rule: applyEachCell ? item.excelRule : cellGeneralConfig
@@ -207,8 +208,10 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
                 (showPreview || step === 3) && (
 
                     <PreviewResult
+                        showPreview={showPreview}
                         step={step}
                         previewCount={previewCount}
+                        kId={kId}
                         rules={applyRule.rules}
                         applyEachCell={applyRule.applyEachCell}
                         cellGeneralConfig={applyRule.cellGeneralConfig}
