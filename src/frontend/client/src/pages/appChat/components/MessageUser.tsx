@@ -6,7 +6,7 @@ export default function MessageUser({ useName, data }) {
         return <div className="w-6 h-6 min-w-6 text-white bg-primary rounded-full flex justify-center items-center text-xs">{useName.substring(0, 2).toUpperCase()}</div>
     }, [useName])
 
-    return <div className="flex justify-end w-full">
+    return <div className="flex w-full">
         <div className="w-fit group min-h-8 max-w-[90%]">
             <div className="flex justify-end items-center mb-2 gap-2">
                 <div className={`text-right group-hover:opacity-100 opacity-0`}>
@@ -16,8 +16,8 @@ export default function MessageUser({ useName, data }) {
             </div>
             <div className="rounded-2xl px-6 py-4 bg-[#EEF2FF] dark:bg-[#333A48]">
                 <div className="flex gap-2 ">
-                    <div className="text-[#0D1638] dark:text-[#CFD5E8] text-sm break-all whitespace-break-spaces">{typeof data.message === 'string' ? data.message : data.message[data.chatKey]}</div>
                     {avatar}
+                    <div className="text-[#0D1638] dark:text-[#CFD5E8] text-sm break-all whitespace-break-spaces">{typeof data.message === 'string' ? data.message : data.message[data.chatKey]}</div>
                 </div>
             </div>
         </div>

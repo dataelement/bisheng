@@ -1,6 +1,6 @@
 import React from 'react'
 import { cn } from '~/utils';
-type BtnType = 'copy' | 'like' | 'unLike';
+type BtnType = 'copy' | 'like' | 'unLike' | 'create';
 
 interface MessageIconProps {
     className?: string;
@@ -61,6 +61,9 @@ const MessageIcon: React.FC<MessageIconProps> = ({ className = '', type, onClick
                     </g>
                 </g>
             </svg>
+        ),
+        create: (
+            <svg className={cn('transition text-gray-400 hover:text-gray-500', className)} viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="23591" width="32" height="32"><path d="M512 64c244.906667 0 443.946667 196.544 447.936 440.533333L960 512a42.666667 42.666667 0 0 1-85.226667 3.2L874.666667 512c0-200.298667-162.368-362.666667-362.666667-362.666667S149.333333 311.701333 149.333333 512c0 65.066667 17.088 127.488 49.109334 182.378667l17.024 29.184-31.872 116.842666 116.842666-31.872 29.184 17.024a360.256 360.256 0 0 0 172.117334 48.96L512 874.666667a42.666667 42.666667 0 0 1 3.2 85.226666L512 960c-82.154667 0-159.146667-22.122667-225.365333-60.714667L132.757333 941.226667a40.746667 40.746667 0 0 1-50.005333-50.005334l41.962667-153.877333A445.930667 445.930667 0 0 1 64 512C64 264.576 264.576 64 512 64z m256 512a42.666667 42.666667 0 0 1 42.666667 42.666667v106.666666h106.666666a42.666667 42.666667 0 1 1 0 85.333334h-106.688L810.666667 917.333333a42.666667 42.666667 0 1 1-85.333334 0l-0.021333-106.666666H618.666667a42.666667 42.666667 0 1 1 0-85.333334h106.666666v-106.666666a42.666667 42.666667 0 0 1 42.666667-42.666667z" fill="currentColor" fill-opacity=".85" p-id="23592"></path></svg>
         )
     };
 
@@ -72,6 +75,8 @@ const MessageIcon: React.FC<MessageIconProps> = ({ className = '', type, onClick
                 return icons.like;
             case 'unLike':
                 return icons.unLike;
+            case 'create':
+                return icons.create;
             default:
                 return null;
         }

@@ -87,7 +87,7 @@ const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any })
 
     const [multiVal, setMultiVal] = useState([])
     return <MessageWarper flow={flow} logo={logo}>
-        <div className="max-h-[520px] overflow-y-auto space-y-2">
+        <div className="max-h-[520px] overflow-y-auto space-y-2 px-1">
             {
                 data.value.map((item, i) => (
                     <div key={item.id} className="w-full text-sm bisheng-label">
@@ -132,7 +132,7 @@ const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any })
                                                     <SelectTrigger>
                                                         <SelectValue placeholder="" />
                                                     </SelectTrigger>
-                                                    <SelectContent>
+                                                    <SelectContent className="bg-white">
                                                         <SelectGroup>
                                                             {item.options.map(el => (
                                                                 <SelectItem key={el.text} value={el.text}>
@@ -165,7 +165,9 @@ const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any })
                     </div>
                 ))
             }
-            <Button size="sm" className="w-full" onClick={submit}>开始</Button>
+            <div className="flex justify-end">
+                <Button size="sm" className="h-8 px-4" onClick={submit}>开始</Button>
+            </div>
         </div>
     </MessageWarper>
 };

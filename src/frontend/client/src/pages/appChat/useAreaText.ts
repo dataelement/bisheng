@@ -151,6 +151,7 @@ export const useAreaText = () => {
                 ...prev[chatId],
                 running: true,
                 showStop: true,
+                showUpload: false,
                 inputForm: false,
             },
         }))

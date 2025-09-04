@@ -2,6 +2,7 @@
 import { FileIcon, Loader2, PaperclipIcon, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { uploadChatFile } from "~/api/apps";
+import { AttachmentIcon } from "~/components/svg";
 import { useToastContext } from "~/Providers";
 import { generateUUID, getFileExtension } from "~/utils";
 
@@ -145,17 +146,17 @@ export default function InputFiles({ v, accepts, size, onChange }) {
     };
 
     return (
-        <div className="relative z-10">
+        <div className="">
             {/* Displaying files */}
-            {!!files.length && <div className="absolute bottom-2 left-2 flex flex-wrap gap-2  bg-gray-50 p-2 rounded-xl max-h-96 overflow-y-auto">
+            {!!files.length && <div className="flex flex-wrap gap-2 p-2 rounded-xl max-h-96 overflow-y-auto">
                 {files.map((file, index) => (
-                    <div key={index} className="group relative flex items-center space-x-3 bg-gray-100 p-2 rounded-xl cursor-default">
+                    <div key={index} className="group relative flex items-center space-x-3 border bg-white p-2 rounded-xl cursor-default">
                         {/* Remove button */}
                         <span
                             onClick={() => handleFileRemove(file.name)}
-                            className="hidden group-hover:block absolute -right-1 -top-1 bg-gray-50 border-2 border-gray-300 text-gray-600 rounded-full cursor-pointer"
+                            className="hidden group-hover:block p-0.5 absolute -right-1 -top-1 bg-gray-300 text-white rounded-full cursor-pointer"
                         >
-                            <X size={14} />
+                            <X size={12} />
                         </span>
 
                         {/* File Icon */}
@@ -165,7 +166,7 @@ export default function InputFiles({ v, accepts, size, onChange }) {
 
                         {/* File details */}
                         <div className="flex-1">
-                            <div className="text-sm font-medium text-gray-700 truncate" title={file.name}>
+                            <div className="max-w-48 text-sm font-medium text-gray-700 truncate" title={file.name}>
                                 {file.name}
                             </div>
                             {file.isUploading ? file.progress === 100
@@ -178,8 +179,8 @@ export default function InputFiles({ v, accepts, size, onChange }) {
             </div>}
 
             {/* File Upload Button */}
-            <div className="absolute right-12 top-5 cursor-pointer" onClick={() => fileInputRef.current.click()}>
-                <PaperclipIcon size={18} />
+            <div className="absolute right-14 bottom-3 cursor-pointer p-1 hover:bg-gray-200 rounded-full" onClick={() => fileInputRef.current.click()}>
+                <AttachmentIcon />
             </div>
 
             {/* File Input */}

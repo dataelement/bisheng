@@ -84,7 +84,7 @@ const InputFormSkill = forwardRef(({ flow, logo }, ref) => {
 
     return <MessageWarper flow={flow} logo={logo}>
         <div className="">
-            <div className="max-h-[520px] overflow-y-auto space-y-2">
+            <div className="max-h-[520px] overflow-y-auto space-y-2 px-1">
                 {items.map((item, i) => <div key={item.id} className="w-full text-sm">
                     {item.name}
                     <span className="text-red-500">{item.required ? " *" : ""}</span>
@@ -126,7 +126,9 @@ const InputFormSkill = forwardRef(({ flow, logo }, ref) => {
                 </div>
                 )}
             </div>
-            {type === 'chat' && <Button className="mt-4 w-full" size="sm" onClick={handleStart}>开始</Button>}
+            {type === 'chat' && <div className="flex justify-end">
+                <Button size="sm" className="mt-4 h-8 px-4" onClick={handleStart}>开始</Button>
+            </div>}
         </div>
     </MessageWarper>
 });

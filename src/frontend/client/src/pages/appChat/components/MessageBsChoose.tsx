@@ -119,11 +119,11 @@ export const MessageWarper = ({ flow, logo, children }) => {
             <span className="text-sm">{flow.name}</span>
         </div>
 
-        <p className="text-sm text-gray-500 mt-2 ml-[calc(24px+0.75rem)]">
+        {/* <p className="text-sm text-gray-500 mt-2 ml-[calc(24px+0.75rem)]">
             {flow.description || '无描述信息'}
-        </p>
+        </p> */}
 
-        <div className="border border-gray-200 rounded-md p-4 mt-3 ml-[calc(24px+0.75rem)] bg-white shadow-sm">
+        <div className="border border-gray-100 rounded-md p-4 mt-3 ml-[calc(24px+0.75rem)] bg-white shadow-sm">
             {children}
         </div>
     </div>

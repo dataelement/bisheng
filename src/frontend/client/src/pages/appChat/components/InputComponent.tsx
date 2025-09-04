@@ -54,7 +54,7 @@ export default function InputComponent({
                     password && editNode ? "pr-8" : "",
                     password && !editNode ? "pr-10" : ""
                 )}
-                placeholder={password && editNode ? "Key" : "input..."}
+                placeholder={password && editNode ? "Key" : ""}
                 onChange={(e) => {
                     setMyValue(e.target.value);
                     onChange(e.target.value);
@@ -72,7 +72,7 @@ export default function InputComponent({
                             password && editNode ? "pr-8" : "",
                             password && !editNode ? "pr-10" : ""
                         )}
-                    placeholder={password && editNode ? "Key" : "input..."}
+                    placeholder={password && editNode ? "Key" : ""}
                     onChange={(e) => {
                         setMyValue(e.target.value);
                         onChange(e.target.value);

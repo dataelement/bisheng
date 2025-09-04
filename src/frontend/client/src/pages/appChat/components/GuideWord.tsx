@@ -3,7 +3,7 @@ import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText"
 export default function GuideWord({ data }) {
 
 
-    return <div className="space-y-2 mt-2">
+    return <div className="space-y-2 mt-2 pl-12">
         {
             data.map(word =>
                 <p

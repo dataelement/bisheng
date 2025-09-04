@@ -74,7 +74,7 @@ export default function useChatHelpers() {
             emitAreaTextEvent({ action: EVENT_TYPE.FILE_ACCEPTS, chatId, fileAccept })
         }
 
-        const runstate = tab === "form_input" ? { inputDisabled: true, inputForm: inputSchema } : { inputDisabled: false }
+        const runstate = tab === "form_input" ? { inputDisabled: true, inputForm: inputSchema } : { showUpload: true, inputDisabled: false }
 
         setRunningState((prev) => ({
             ...prev,
