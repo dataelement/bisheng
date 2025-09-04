@@ -88,6 +88,7 @@ def convert_doc_to_docx(input_doc_path, output_dir=None):
     command = [
         soffice_path,
         "--headless",  # Run in headless mode (no GUI)
+        f"-env:UserInstallation=\"file://{output_dir}\""  # 防止并发时的报错
         "--convert-to",
         "docx",  # Specify the output format
         "--outdir",
@@ -103,7 +104,7 @@ def convert_doc_to_docx(input_doc_path, output_dir=None):
         )  # 120 seconds timeout
         logger.debug(f"LibreOffice STDOUT: {process.stdout}")
         if (
-            process.stderr
+                process.stderr
         ):  # LibreOffice sometimes logger.debugs info to stderr even on success
             logger.debug(f"LibreOffice STDERR: {process.stderr}")
 
@@ -164,7 +165,7 @@ def convert_ppt_to_pdf(input_path, output_dir=None):
                                     Defaults to the same directory as the input file.
     """
     if not (
-        input_path.lower().endswith(".ppt") or input_path.lower().endswith(".pptx")
+            input_path.lower().endswith(".ppt") or input_path.lower().endswith(".pptx")
     ):
         logger.debug(f"Error: {input_path} is not a .ppt or .pptx file.")
         return False
@@ -230,7 +231,7 @@ def convert_ppt_to_pdf(input_path, output_dir=None):
             return False
 
     except (
-        FileNotFoundError
+            FileNotFoundError
     ):  # Should be caught by get_libreoffice_path, but as a fallback
         logger.debug(
             f"Error: {soffice_path} command not found. Please install LibreOffice and ensure it's in your PATH."
