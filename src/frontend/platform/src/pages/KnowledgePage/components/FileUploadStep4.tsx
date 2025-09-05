@@ -44,9 +44,11 @@ console.log(data,kId,44);
 
         // 轮询函数
         const pollFilesStatus = async () => {
+            console.log(kid,fileIdsRef.current,22);
+            
             try {
                 const res = await readFileByLibDatabase({
-                    id: kId,
+                    id: kid || kId,
                     page: 0,
                     pageSize: 0,
                     file_ids: fileIdsRef.current

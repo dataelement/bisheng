@@ -239,7 +239,6 @@ export async function subUploadLibFile(data: UploadFileFc | DefaultUploadFileFc)
 export async function rebUploadFile(data) {
   return await axios.post(`/api/v1/knowledge/process/rebuild`, data);
 }
-
 /**
  * 查看文件切片
  */

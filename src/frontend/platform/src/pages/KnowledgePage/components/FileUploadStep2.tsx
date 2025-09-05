@@ -14,6 +14,7 @@ import { LoadingIcon } from "@/components/bs-icons/loading";
 import { forwardRef, useImperativeHandle } from 'react';
 
 export interface FileItem {
+    split_rule: any;
     id: string;
     fileName: string;
     file_path: string;
@@ -39,17 +40,20 @@ const initialStrategies = [
     { id: '2', regex: '\\n', position: 'after', rule: '单换行后切分，用于分隔普通换行' }
 ];
 
-const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode,kId ,originalSplitRule,setOriginalSplitRule,fileStatus}: IProps, ref) => {
+const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode,kId }: IProps, ref) => {
+    console.log(resultFiles,778);
     
     const { id: kid } = useParams()
-    console.log('FileUploadStep2 props:', { step, resultFiles, isAdjustMode,kId,originalSplitRule,fileStatus });
-    // if(step === 1){
-    //      originalSplitRule = JSON.parse(originalSplitRule) 
-    // }
+    console.log('FileUploadStep2 props:', { step, resultFiles, isAdjustMode,kId });
     const { t } = useTranslation('knowledge')
     const setSelectedChunkIndex = useKnowledgeStore((state) => state.setSelectedChunkIndex);
   const [previewFailed, setPreviewFailed] = useState(false);
     const displayStep = isAdjustMode ? step + 1 : step;
+      const splitRule = resultFiles[0]?.split_rule;
+      console.log("子组件接收的布尔值：", {
+    retain_images: splitRule?.retain_images,
+    force_ocr: splitRule?.force_ocr
+  });
     const displayMode: DisplayModeType | null = useMemo(() => {
         if (!resultFiles || resultFiles.length === 0) return null;
 
@@ -73,7 +77,9 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
         setCellGeneralConfig,
         strategies,
         setStrategies
-    } = useFileProcessingRules(initialStrategies, resultFiles, kid);
+    } = useFileProcessingRules(initialStrategies, resultFiles, kid,splitRule);
+    console.log(rules,strategies,887);
+    
     const [applyRule, setApplyRule] = useState<any>({}) // 应用规则
     const applyRuleRef = useRef(applyRule);
     useEffect(() => {
@@ -144,11 +150,11 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
         setPreviewCount(c => c + 1) // 刷新分段
 
 
-         setApplyRule({
-        applyEachCell,
-        cellGeneralConfig,
-        rules: isAdjustMode ? originalSplitRule : rules
-    })
+        setApplyRule({
+            applyEachCell,
+            cellGeneralConfig,
+            rules
+        })
         console.log(applyRule, 'previewCount');
     }
 
@@ -175,26 +181,20 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
                         <TabsContent value="file">
                             <RuleFile
                                 rules={rules}
-                                originalSplitRule={typeof originalSplitRule === 'string' ? JSON.parse(originalSplitRule) : originalSplitRule}
-                                setOriginalSplitRule={setOriginalSplitRule}
                                 setRules={setRules}
                                 strategies={strategies}
                                 setStrategies={setStrategies}
-                                isAdjustMode={isAdjustMode}
                             />
                         </TabsContent>
                         {/* 表格文档设置 */}
                         <TabsContent value="table">
                             <RuleTable
                                 rules={rules}
-                                  originalSplitRule={typeof originalSplitRule === 'string' ? JSON.parse(originalSplitRule) : originalSplitRule}
-                                setOriginalSplitRule={setOriginalSplitRule}
                                 setRules={setRules}
                                 applyEachCell={applyEachCell}
                                 setApplyEachCell={setApplyEachCell}
                                 cellGeneralConfig={cellGeneralConfig}
                                 setCellGeneralConfig={setCellGeneralConfig}
-                                isAdjustMode={isAdjustMode}
                             />
                         </TabsContent>
                         {/* 预览分段按钮 */}
@@ -214,14 +214,12 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
             }
             {/* 原文预览 & 分段预览 */}
             {
-                ((showPreview) || step === 3) && (
+                (showPreview || step === 3) && (
 
                     <PreviewResult
                         showPreview={showPreview}
                         step={step}
                         previewCount={previewCount}
-                        resultFiles={resultFiles}
-                        originalSplitRule={originalSplitRule}
                         kId={kId}
                         rules={applyRule.rules}
                         applyEachCell={applyRule.applyEachCell}
@@ -262,28 +260,54 @@ FileUploadStep2.displayName = 'FileUploadStep2';
 export default FileUploadStep2;
 
 
-const useFileProcessingRules = (initialStrategies, resultFiles, kid) => {
+const useFileProcessingRules = (initialStrategies, resultFiles, kid, splitRule) => {
     const [rules, setRules] = useState({
         knowledgeId: kid,
         fileList: [],
-        separator: ['\\n\\n', '\\n'],
-        separatorRule: ['after', 'after'],
-        chunkSize: "1000",
-        chunkOverlap: "100",
-        retainImages: true,
-        enableFormula: true,
-        forceOcr: true,
-        pageHeaderFooter: true
+        separator: splitRule?.separator || ['\\n\\n', '\\n'],
+        separatorRule: splitRule?.separator_rule || ['after', 'after'],
+        chunkSize: splitRule?.chunk_size?.toString() || "1000",
+        chunkOverlap: splitRule?.chunk_overlap?.toString() || "100",
+        retainImages: splitRule?.retain_images ?? true,
+        enableFormula: splitRule?.enable_formula ?? true,
+        forceOcr: splitRule?.force_ocr ?? true,
+        pageHeaderFooter: splitRule?.filter_page_header_footer ?? true
     });
-    const [applyEachCell, setApplyEachCell] = useState(false); // 为每个表格单独设置
+    
+    const [applyEachCell, setApplyEachCell] = useState(false);
     const [cellGeneralConfig, setCellGeneralConfig] = useState({
-        slice_length: 10,
-        append_header: true,
-        header_start_row: 1,
-        header_end_row: 1
+        slice_length: splitRule?.excel_rule?.slice_length || 10,
+        append_header: splitRule?.excel_rule?.append_header || true,
+        header_start_row: splitRule?.excel_rule?.header_start_row || 1,
+        header_end_row: splitRule?.excel_rule?.header_end_row || 1
     });
-    const [strategies, setStrategies] = useState(initialStrategies);
+    
+  
 
+    // 根据正则表达式生成策略描述
+    const getStrategyRuleDescription = (regex) => {
+        const ruleMap = {
+            '\\n\\n': '双换行后切分,用于分隔段落',
+            '\\n': '单换行后切分，用于分隔普通换行',
+            '第.{1,3}章': '"第X章"前切分，切分章节等',
+            '第.{1,3}条': '"第X条"前切分，切分条目等',
+            '。': '中文句号后切分，中文断句',
+            '\\.': '英文句号后切分，英文断句'
+        };
+        return ruleMap[regex] || `自定义规则: ${regex}`;
+    };
+  const [strategies, setStrategies] = useState(() => {
+        if (splitRule?.separator && splitRule?.separator_rule) {
+            // 从 splitRule 初始化策略
+            return splitRule.separator.map((regex, index) => ({
+                id: `strategy-${index}`,
+                regex,
+                position: splitRule.separator_rule[index] || 'after',
+                rule: getStrategyRuleDescription(regex) // 根据正则生成描述
+            }));
+        }
+        return initialStrategies;
+    });
     // Update rules when strategies change
     useEffect(() => {
         const [separator, separatorRule] = strategies.reduce(([_separator, _separatorRule], strategy) => {

@@ -155,63 +155,63 @@ export default function Paragraphs({ fileId, onBack }) {
         getKnowledgeChunkApi({ ...param, limit: param.pageSize, knowledge_id: id })
     );
     // 处理文件切换
-    const handleFileChange = useCallback(async (newFileId) => {
-        if (!newFileId || !isMountedRef.current) return;
+const handleFileChange = useCallback(async (newFileId) => {
+  if (!newFileId || !isMountedRef.current) return;
 
-        // 1. 切换前先重置错误状态和加载中的临时状态
-        setSelectError(null);
-        setIsFetchingUrl(true); // 新增：显示加载中，避免用户重复操作
+  // 1. 切换前先重置错误状态和加载中的临时状态
+  setSelectError(null);
+  setIsFetchingUrl(true); // 新增：显示加载中，避免用户重复操作
 
-        try {
-            // 2. 先找到选中的文件（同步操作，确保文件信息存在）
-            const selectedFile = rawFiles.find(f => String(f.id) === String(newFileId));
-            if (!selectedFile) throw new Error('未找到选中的文件');
+  try {
+    // 2. 先找到选中的文件（同步操作，确保文件信息存在）
+    const selectedFile = rawFiles.find(f => String(f.id) === String(newFileId));
+    if (!selectedFile) throw new Error('未找到选中的文件');
 
-            // 3. 先刷新表格数据（filterData + reload），等待表格数据更新完成
-            // （关键：表格数据是 safeChunks 的来源，必须先更新）
-            if (filterData) filterData({ file_ids: [newFileId] });
-            await reload(); // 等待表格数据刷新完成
+    // 3. 先刷新表格数据（filterData + reload），等待表格数据更新完成
+    // （关键：表格数据是 safeChunks 的来源，必须先更新）
+    if (filterData) filterData({ file_ids: [newFileId] });
+    await reload(); // 等待表格数据刷新完成
 
-            // 4. 再获取文件URL（依赖选中文件的id）
-            const fileUrlResult = await fetchFileUrl(selectedFile.id);
-            if (!fileUrlResult) throw new Error('获取文件URL失败');
+    // 4. 再获取文件URL（依赖选中文件的id）
+    const fileUrlResult = await fetchFileUrl(selectedFile.id);
+    if (!fileUrlResult) throw new Error('获取文件URL失败');
 
-            // 5. 再加载预览数据（依赖URL）
-            const previewData = await loadFilePreview(selectedFile, fileUrlResult);
+    // 5. 再加载预览数据（依赖URL）
+    const previewData = await loadFilePreview(selectedFile, fileUrlResult);
 
-            // 6. 最后更新所有状态（确保所有异步操作完成后，再更新UI依赖的状态）
-            const fileData = {
-                label: selectedFile.file_name || '',
-                value: String(selectedFile.id || ''),
-                id: selectedFile.id || '',
-                name: selectedFile.file_name || '',
-                size: selectedFile.size || 0,
-                type: selectedFile.file_name?.split('.').pop() || '',
-                filePath: selectedFile.object_name || '',
-                suffix: selectedFile.file_name?.split('.').pop() || '',
-                fileType: selectedFile.parse_type || 'unknown',
-                fullData: selectedFile || {},
-                url: fileUrlResult // 新增：将URL存入currentFile，避免后续取值为空
-            };
-            setCurrentFile(fileData);
-            setFileUrl(fileUrlResult);
-            setSelectedFileId(newFileId); // 最后更新selectedFileId，触发UI重新渲染
-            if (previewData) {
-                setChunks(previewData.chunks || []);
-                setPartitions(previewData.partitions || {});
-            }
+    // 6. 最后更新所有状态（确保所有异步操作完成后，再更新UI依赖的状态）
+    const fileData = {
+      label: selectedFile.file_name || '',
+      value: String(selectedFile.id || ''),
+      id: selectedFile.id || '',
+      name: selectedFile.file_name || '',
+      size: selectedFile.size || 0,
+      type: selectedFile.file_name?.split('.').pop() || '',
+      filePath: selectedFile.object_name || '',
+      suffix: selectedFile.file_name?.split('.').pop() || '',
+      fileType: selectedFile.parse_type || 'unknown',
+      fullData: selectedFile || {},
+      url: fileUrlResult // 新增：将URL存入currentFile，避免后续取值为空
+    };
+    setCurrentFile(fileData);
+    setFileUrl(fileUrlResult);
+    setSelectedFileId(newFileId); // 最后更新selectedFileId，触发UI重新渲染
+    if (previewData) {
+      setChunks(previewData.chunks || []);
+      setPartitions(previewData.partitions || {});
+    }
 
-        } catch (err) {
-            console.error('文件切换失败:', err);
-            setSelectError(err.message || '文件切换失败');
-            // 错误时重置状态，避免组件卡在错误状态
-            setSelectedFileId('');
-            setCurrentFile(null);
-            setFileUrl('');
-        } finally {
-            setIsFetchingUrl(false); // 结束加载状态
-        }
-    }, [rawFiles, fetchFileUrl, loadFilePreview, filterData, reload]);
+  } catch (err) {
+    console.error('文件切换失败:', err);
+    setSelectError(err.message || '文件切换失败');
+    // 错误时重置状态，避免组件卡在错误状态
+    setSelectedFileId('');
+    setCurrentFile(null);
+    setFileUrl('');
+  } finally {
+    setIsFetchingUrl(false); // 结束加载状态
+  }
+}, [rawFiles, fetchFileUrl, loadFilePreview, filterData, reload]);
 
 
 
@@ -344,8 +344,8 @@ export default function Paragraphs({ fileId, onBack }) {
 
 
     const handleAdjustSegmentation = useCallback(() => {
-        console.log(selectedFileId, currentFile, '098');
-        const fullData = currentFile?.fullData || {};
+        console.log(selectedFileId, currentFile,currentFile.fullData.split_rule ,'098');
+
         navigate(`/filelib/adjust/${id}`, {
             state: {
                 skipToStep: 2,
@@ -357,7 +357,8 @@ export default function Paragraphs({ fileId, onBack }) {
                     status: fullData.status,
                     filePath: currentFile.filePath,
                     suffix: currentFile.suffix,
-                    fileType: currentFile.fileType
+                    fileType: currentFile.fileType,
+                    split_rule:currentFile.fullData.split_rule
                 },
                 isAdjustMode: true
             }
@@ -509,12 +510,11 @@ export default function Paragraphs({ fileId, onBack }) {
                                     {filteredFiles.map((file) => (
                                         <DropdownMenuItem
                                             key={file.value}
-                                            onSelect={(e) => {
+                                            onClick={(e) => {
                                                 e.preventDefault();
                                                 console.log('选择文件:', file.value, file.label);
                                                 handleFileChange(file.value);
                                                 setSearchTerm("");
-                                                setIsDropdownOpen(false); // 添加这行来关闭下拉菜单
                                             }}
                                             disabled={!file.value}
                                             className="cursor-pointer hover:bg-gray-50 px-3 py-2 relative"
@@ -579,7 +579,7 @@ export default function Paragraphs({ fileId, onBack }) {
                         {selectError}
                     </div>
                 )}
-                {isParagraphVisible ? (
+                {isParagraphVisible  ? (
                     <div className={isPreviewVisible ? "w-1/2" : "w-full max-w-3xl"}>
                         <div className="flex flex-wrap gap-2 p-2 pt-0 items-start">
                             <PreviewParagraph
