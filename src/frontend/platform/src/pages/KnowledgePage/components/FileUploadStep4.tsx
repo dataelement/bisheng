@@ -11,10 +11,11 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-export default function FileUploadStep4({ data }) {
+export default function FileUploadStep4({ data ,kId}) {
     const [finish, setFinish] = useState(true)
     const navigate = useNavigate()
     const { id: kid } = useParams()
+console.log(data,kId,44);
 
     const [files, setFiles] = useState([])
     const timerRef = useRef(null); // 轮询定时器引用
@@ -45,7 +46,7 @@ export default function FileUploadStep4({ data }) {
         const pollFilesStatus = async () => {
             try {
                 const res = await readFileByLibDatabase({
-                    id: kid,
+                    id: kId,
                     page: 0,
                     pageSize: 0,
                     file_ids: fileIdsRef.current

@@ -235,6 +235,10 @@ export async function subUploadLibFile(data: DefaultUploadFileFc): Promise<any>;
 export async function subUploadLibFile(data: UploadFileFc | DefaultUploadFileFc) {
   return await axios.post(`/api/v1/knowledge/process`, data);
 }
+//调整分段策略
+export async function rebUploadFile(data) {
+  return await axios.post(`/api/v1/knowledge/process/rebuild`, data);
+}
 
 /**
  * 查看文件切片

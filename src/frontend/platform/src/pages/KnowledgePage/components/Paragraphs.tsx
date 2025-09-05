@@ -92,7 +92,7 @@ export default function Paragraphs({ fileId, onBack }) {
     // 加载文件预览数据
     const loadFilePreview = useCallback(async (file, currentFileUrl) => {
         if (!file || !isMountedRef.current) return null;
-        console.log(currentFileUrl, file.split_rule, 78); // 使用传入的 fileUrl
+        console.log('加载预览数据 - URL:', currentFileUrl, 'split_rule:', file.split_rule);
 
         try {
             let excelRule = {};
@@ -111,27 +111,30 @@ export default function Paragraphs({ fileId, onBack }) {
                 knowledge_id: id,
                 file_list: [{
                     file_path: file?.filePath || currentFileUrl || '',
-                    excel_rule: excelRule || {} // 使用处理后的 excelRule
+                    excel_rule: excelRule || {}
                 }]
             });
-            if (res && res !== 'canceled') {
+
+            if (res && res !== 'canceled' && res.chunks) {
+                // 确保返回的 chunks 结构正确，避免空数据
                 return {
-                    chunks: (res.chunks || []).map(chunk => ({
+                    chunks: res.chunks.map(chunk => ({
                         ...chunk,
                         bbox: chunk?.metadata?.bbox || {},
                         activeLabels: {},
                         chunkIndex: chunk?.metadata?.chunk_index || 0,
-                        page: chunk?.metadata?.page || 0
+                        page: chunk?.metadata?.page || 0,
+                        text: chunk.text || '' // 兜底：确保 text 字段存在，避免 PreviewParagraph 报错
                     })),
                     partitions: res.partitions || {}
                 };
             }
-            return null;
+            throw new Error('预览接口返回数据异常');
         } catch (err) {
             console.error('File preview failed:', err);
             return null;
         }
-    }, [id, chunks]);
+    }, [id]); // 仅保留必要的 id 依赖，移除 chunks
     // 表格配置
     const tableConfig = useMemo(() => ({
         file_ids: selectedFileId ? [selectedFileId] : []
@@ -155,13 +158,28 @@ export default function Paragraphs({ fileId, onBack }) {
     const handleFileChange = useCallback(async (newFileId) => {
         if (!newFileId || !isMountedRef.current) return;
 
-        try {
-            setSelectError(null);
-            setSelectedFileId(newFileId);
+        // 1. 切换前先重置错误状态和加载中的临时状态
+        setSelectError(null);
+        setIsFetchingUrl(true); // 新增：显示加载中，避免用户重复操作
 
+        try {
+            // 2. 先找到选中的文件（同步操作，确保文件信息存在）
             const selectedFile = rawFiles.find(f => String(f.id) === String(newFileId));
             if (!selectedFile) throw new Error('未找到选中的文件');
 
+            // 3. 先刷新表格数据（filterData + reload），等待表格数据更新完成
+            // （关键：表格数据是 safeChunks 的来源，必须先更新）
+            if (filterData) filterData({ file_ids: [newFileId] });
+            await reload(); // 等待表格数据刷新完成
+
+            // 4. 再获取文件URL（依赖选中文件的id）
+            const fileUrlResult = await fetchFileUrl(selectedFile.id);
+            if (!fileUrlResult) throw new Error('获取文件URL失败');
+
+            // 5. 再加载预览数据（依赖URL）
+            const previewData = await loadFilePreview(selectedFile, fileUrlResult);
+
+            // 6. 最后更新所有状态（确保所有异步操作完成后，再更新UI依赖的状态）
             const fileData = {
                 label: selectedFile.file_name || '',
                 value: String(selectedFile.id || ''),
@@ -172,30 +190,26 @@ export default function Paragraphs({ fileId, onBack }) {
                 filePath: selectedFile.object_name || '',
                 suffix: selectedFile.file_name?.split('.').pop() || '',
                 fileType: selectedFile.parse_type || 'unknown',
-                fullData: selectedFile || {}
+                fullData: selectedFile || {},
+                url: fileUrlResult // 新增：将URL存入currentFile，避免后续取值为空
             };
             setCurrentFile(fileData);
-            setFileUrl('');
-
-            // 先获取文件URL
-            const fileUrlResult = await fetchFileUrl(selectedFile.id);
-            console.log('获取到的文件URL:', fileUrlResult);
-
-            // 使用获取到的 fileUrl 调用 loadFilePreview
-            const data = await loadFilePreview(selectedFile, fileUrlResult);
-            if (data) {
-                setChunks(data.chunks || []);
-                setPartitions(data.partitions || {});
+            setFileUrl(fileUrlResult);
+            setSelectedFileId(newFileId); // 最后更新selectedFileId，触发UI重新渲染
+            if (previewData) {
+                setChunks(previewData.chunks || []);
+                setPartitions(previewData.partitions || {});
             }
-
-            // 强制刷新表格数据
-            filterData && filterData({ file_ids: [newFileId] });
-            reload(); // 确保数据刷新
 
         } catch (err) {
             console.error('文件切换失败:', err);
             setSelectError(err.message || '文件切换失败');
+            // 错误时重置状态，避免组件卡在错误状态
+            setSelectedFileId('');
+            setCurrentFile(null);
             setFileUrl('');
+        } finally {
+            setIsFetchingUrl(false); // 结束加载状态
         }
     }, [rawFiles, fetchFileUrl, loadFilePreview, filterData, reload]);
 
@@ -307,13 +321,17 @@ export default function Paragraphs({ fileId, onBack }) {
     }, [rawFiles]);
 
     const safeChunks = useMemo(() => {
+        // 新增：文件未选中或数据未加载时，返回空数组（避免旧数据残留）
+        if (!selectedFileId || !datalist.length) return [];
+
         return (datalist || []).map((item, index) => ({
             text: item?.text || '',
             title: `分段${index + 1}`,
             chunkIndex: item?.metadata?.chunk_index || index,
             metadata: item?.metadata || {}
         }));
-    }, [datalist]);
+        // 关键：添加 selectedFileId 依赖，确保文件切换时强制重新计算
+    }, [datalist, selectedFileId]);
 
     const handleMetadataClick = useCallback(() => {
         if (currentFile?.fullData) {
@@ -327,7 +345,7 @@ export default function Paragraphs({ fileId, onBack }) {
 
     const handleAdjustSegmentation = useCallback(() => {
         console.log(selectedFileId, currentFile, '098');
-
+        const fullData = currentFile?.fullData || {};
         navigate(`/filelib/adjust/${id}`, {
             state: {
                 skipToStep: 2,
@@ -335,6 +353,8 @@ export default function Paragraphs({ fileId, onBack }) {
                 fileData: { // 确保传递正确的数据结构
                     id: currentFile.id,
                     name: currentFile.name,
+                    split_rule: fullData.split_rule,
+                    status: fullData.status,
                     filePath: currentFile.filePath,
                     suffix: currentFile.suffix,
                     fileType: currentFile.fileType
@@ -563,11 +583,12 @@ export default function Paragraphs({ fileId, onBack }) {
                     <div className={isPreviewVisible ? "w-1/2" : "w-full max-w-3xl"}>
                         <div className="flex flex-wrap gap-2 p-2 pt-0 items-start">
                             <PreviewParagraph
+                                key={`preview-${selectedFileId}-${datalist.length}`}
                                 fileId={selectedFileId}
                                 previewCount={datalist.length}
                                 edit={isEditable}
                                 fileSuffix={currentFile?.suffix || ''}
-                                loading={loading}
+                                loading={loading && selectedFileId === currentFile?.id}
                                 chunks={safeChunks}
                                 onDel={handleDeleteChunk}
                                 onChange={handleChunkChange}

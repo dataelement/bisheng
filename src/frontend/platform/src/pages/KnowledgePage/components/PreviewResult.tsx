@@ -22,29 +22,46 @@ interface IProps {
     previewCount: number;
     applyEachCell: boolean;
     cellGeneralConfig: any;
-    showPreview:boolean;
-     onPreviewResult?: (isSuccess: boolean) => void; 
+    showPreview: boolean;
+    onPreviewResult?: (isSuccess: boolean) => void;
 }
 export type Partition = {
     [key in string]: { text: string, type: string, part_id: string }
 }
-export default function PreviewResult({ previewCount, rules, step, applyEachCell, cellGeneralConfig,showPreview, onPreviewResult,kId }: IProps) {
-    console.log(kId,rules,33);
-    
+export default function PreviewResult({ previewCount, rules, step, applyEachCell, resultFiles, cellGeneralConfig, showPreview, originalSplitRule, onPreviewResult, kId }: IProps) {
+    console.log(kId, resultFiles,step, 33);
+
     const { id } = useParams()
-   const [previewSuccess, setPreviewSuccess] = useState(true);
+    const [previewSuccess, setPreviewSuccess] = useState(true);
     const [chunks, setChunks] = useState([]) // 当前文件分块
     const [partitions, setPartitions] = useState<Partition>({}) // 当前文件分区
-    const [selectId, setSelectId] = useState(); // 当前选择文件id
+   const [selectId, setSelectId] = useState(step === 1 ||step ===2? resultFiles[0]?.id : ''); // 当前选择文件id
     const [syncChunksSelectId, setSelectIdSyncChunks] = useState(''); // 当前选择文件id(与chunk更新保持同步)
-    useEffect(() => {
-        const file = rules.fileList[0]
-        console.log(file.id,22);
-         const numId = parseInt(file.id, 10);
-        setSelectId(file.id)
-    }, [])
+const currentStepRef = useRef(step);
+
+useEffect(() => {
+    if (currentStepRef.current !== step) {
+        currentStepRef.current = step;
+        let file
+        if (step === 3) {
+            file = rules.fileList[0]
+            console.log(file.id, 22);
+            setSelectId(file.id)
+        }
+        if (step === 1 && resultFiles.length > 0) {
+            setSelectId(resultFiles[0].id);
+        }
+    }
+}, [step, rules.fileList, resultFiles]);
     const currentFile = useMemo(() => {  // 当前选择文件
-        const _currentFile = rules.fileList.find(file => file.id === selectId)
+        console.log(rules, 1);
+        let _currentFile
+        if (step === 2) {
+            _currentFile = rules.fileList.find(file => file.id === selectId)
+        } else {
+            _currentFile = resultFiles[0];
+        }
+
         // 触发keydown事件,切换tab
         if (_currentFile) {
             const dom = document.getElementById(_currentFile.fileType === 'table' ? 'knowledge_table_tab' : 'knowledge_file_tab')
@@ -64,92 +81,118 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
 
     const [loading, setLoading] = useState(false)
     const prevPreviewCountMapRef = useRef({})
-  useEffect(() => {
-    if (!selectId) return
-    
-    const fetchPreviewData = async () => {
-        setTimeout(() => {
-            setLoading(true)
-        }, 0);
-        setFileViewUrl({ load: true, url: '' })
-        setChunks([])
+    useEffect(() => {
+        console.log(!selectId,12);
         
-        // 合并配置
-        const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, knowledgeId, retainImages, separator, separatorRule } = rules
-        const currentFile = fileList.find(file => file.id === selectId)
-        
-        try {
-            console.log(step,333);
-            let filePathRes
-            // 先获取文件路径
-            if(step === 1||(step === 2 &&!showPreview)){
-                console.log(selectId,'分段');
-                
-                 filePathRes = await getFilePathApi(selectId);
-            }
-            console.log('excel_rule类型：',applyEachCell, currentFile.excelRule.constructor.name)
-            captureAndAlertRequestErrorHoc(previewFileSplitApi({
-                // 缓存(修改规则后需要清空缓存, 切换文件使用缓存)
-                // previewCount变更时为重新预览分段操作,不使用缓存
-                cache: prevPreviewCountMapRef.current[currentFile.id] === previewCount,
-                knowledge_id: id ||kId,
-                file_list: [{
-                    file_path: filePathRes || currentFile?.filePath,
-                    excel_rule: applyEachCell
-                        ? currentFile.excelRule
-                        : { ...cellGeneralConfig }
-                }],
-                separator,
-                separator_rule: separatorRule,
-                chunk_size: chunkSize,
-                chunk_overlap: chunkOverlap,
-                retain_images: retainImages,
-                enable_formula: enableFormula,
-                force_ocr: forceOcr,
-                fileter_page_header_footer: pageHeaderFooter
-            }), err => {
-                // 解析失败时,使用支持的原文件预览
-                ["pdf", "txt", "md", "html", "docx", "png", "jpg", "jpeg", "bmp"].includes(currentFile.suffix)
-                    && setFileViewUrl({ load: false, url: currentFile.filePath })
-                setPreviewSuccess(false);
-                onPreviewResult && onPreviewResult(false);
-            }).then(res => {
-                if (!res) {
-                    setFileViewUrl({ load: false, url: '' })
-                    setPreviewSuccess(false);
-                    onPreviewResult && onPreviewResult(false);
-                    return setLoading(false)
-                }
-                if (res === 'canceled') return
-                console.log("previewFileSplitApi:", res)
-                res && setChunks(res.chunks.map(chunk => ({
-                    bbox: chunk.metadata.bbox,
-                    activeLabels: {},
-                    chunkIndex: chunk.metadata.chunk_index,
-                    page: chunk.metadata.page,
-                    text: chunk.text
-                })))
-                setSelectIdSyncChunks(selectId)
+      console.log(resultFiles, 333);
 
-                setFileViewUrl({ load: false, url: res.file_url })
-                setPartitions(res.partitions)
-                const success = res.chunks && res.chunks.length > 0;
-                setPreviewSuccess(success);
-                onPreviewResult && onPreviewResult(success);
-                setLoading(false)
-            })
-        } catch (error) {
-            console.error('Failed to get file path:', error);
-            setLoading(false);
-            setPreviewSuccess(false);
-            onPreviewResult && onPreviewResult(false);
+        const fetchPreviewData = async () => {
+            setTimeout(() => {
+                setLoading(true)
+            }, 0);
+            setFileViewUrl({ load: true, url: '' })
+            setChunks([])
+
+            // 合并配置
+            const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, knowledgeId, retainImages, separator, separatorRule } = rules
+            let _currentFile
+        if (step === 2) {
+            _currentFile = rules.fileList.find(file => file.id === selectId)
+        } else {
+            _currentFile = resultFiles[0].id
         }
 
-        prevPreviewCountMapRef.current[currentFile.id] = previewCount
-    }
+            try {
+           
+                let filePathRes
+                // 先获取文件路径
+                if (step === 1 || (step === 2 && !showPreview)) {
+                    console.log(selectId, originalSplitRule, '分段');
+                    if(selectId){
+                         filePathRes = await getFilePathApi(selectId);
+                    }else{
+                         filePathRes = await getFilePathApi(_currentFile);
+                    }
+                   
+                }else {
+                    filePathRes=resultFiles[0].file_path
+                }
+                const configSource = (step === 1 || (step === 2 && !showPreview))
+                    ? originalSplitRule
+                    : {
+                        separator,
+                        separator_rule: separatorRule,
+                        chunk_size: chunkSize,
+                        chunk_overlap: chunkOverlap,
+                        retain_images: retainImages,
+                        enable_formula: enableFormula,
+                        force_ocr: forceOcr,
+                        filter_page_header_footer: pageHeaderFooter
+                    };
+                console.log( filePathRes , currentFile, 12);
 
-    fetchPreviewData();
-}, [selectId, previewCount])
+                captureAndAlertRequestErrorHoc(previewFileSplitApi({
+                    // 使用配置源的所有值
+                    cache: prevPreviewCountMapRef.current[currentFile?.id] === previewCount,
+                    knowledge_id: id || kId,
+                    file_list: [{
+                        file_path: filePathRes || currentFile?.filePath,
+                        excel_rule: (step === 1 || (step === 2 && !showPreview))
+                            ? originalSplitRule?.excel_rule
+                            : (applyEachCell ? currentFile?.excelRule : { ...cellGeneralConfig })
+                    }],
+                    separator: configSource.separator,
+                    separator_rule: configSource.separator_rule,
+                    chunk_size: configSource.chunk_size,
+                    chunk_overlap: configSource.chunk_overlap,
+                    retain_images: configSource.retain_images,
+                    enable_formula: configSource.enable_formula,
+                    force_ocr: configSource.force_ocr,
+                    fileter_page_header_footer: configSource.filter_page_header_footer
+                }), err => {
+                    // 解析失败时,使用支持的原文件预览
+                    ["pdf", "txt", "md", "html", "docx", "png", "jpg", "jpeg", "bmp"].includes(currentFile.suffix)
+                        && setFileViewUrl({ load: false, url: currentFile.filePath })
+                    setPreviewSuccess(false);
+                    onPreviewResult && onPreviewResult(false);
+                }).then(res => {
+                    if (!res) {
+                        setFileViewUrl({ load: false, url: '' })
+                        setPreviewSuccess(false);
+                        onPreviewResult && onPreviewResult(false);
+                        return setLoading(false)
+                    }
+                    if (res === 'canceled') return
+                    console.log("previewFileSplitApi:", res)
+                    res && setChunks(res.chunks.map(chunk => ({
+                        bbox: chunk.metadata.bbox,
+                        activeLabels: {},
+                        chunkIndex: chunk.metadata.chunk_index,
+                        page: chunk.metadata.page,
+                        text: chunk.text
+                    })))
+                    
+                    setSelectIdSyncChunks(selectId)
+
+                    setFileViewUrl({ load: false, url: res.file_url })
+                    setPartitions(res.partitions)
+                    const success = res.chunks && res.chunks.length > 0;
+                    setPreviewSuccess(success);
+                    onPreviewResult && onPreviewResult(success);
+                    setLoading(false)
+                })
+            } catch (error) {
+                console.error('Failed to get file path:', error);
+                setLoading(false);
+                setPreviewSuccess(false);
+                onPreviewResult && onPreviewResult(false);
+            }
+
+            prevPreviewCountMapRef.current[currentFile.id] = previewCount
+        }
+
+        fetchPreviewData();
+    }, [selectId, previewCount])
 
     const handleDelete = async (chunkIndex: number, text: string) => {
         await captureAndAlertRequestErrorHoc(delChunkInPreviewApi({
@@ -173,15 +216,15 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
     }
 
     return (<div className={cn("h-full flex gap-2 justify-center", step === 2 ? 'w-[100%]' : 'w-full')}>
-        {console.log(chunks,partitions,212,fileViewUrl)}
-        {(step === 3 || step === 2) && currentFile && <PreviewFile
+        {console.log(chunks, partitions, 212, fileViewUrl)}
+        {(step === 3 || (step === 2 && !previewCount)) && currentFile && <PreviewFile
             urlState={fileViewUrl}
             file={currentFile}
             chunks={chunks}
             setChunks={setChunks}
             partitions={partitions}
         />}
-        <div className={cn('relative', step === 2 ? 'w-1/2' : 'w-[100%]')}>
+        <div className={cn('relative', 'w-[100%]')}>
             {/* 下拉框 - 右上角 */}
             <div className="flex justify-end">
                 <Select value={selectId} onValueChange={setSelectId}>
@@ -189,7 +232,8 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                        {rules.fileList.map((file, index) => (
+                        {console.log(step,89)}
+                        {step === 2 && rules.fileList.map((file, index) => (
                             <SelectItem key={file.id} value={file.id}>
                                 <div className="flex items-center gap-2">
                                     <FileIcon type={file.suffix} className="size-4 min-w-4" />
@@ -197,6 +241,14 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
                                 </div>
                             </SelectItem>
                         ))}
+                          {step === 1 &&
+                            <SelectItem key={resultFiles[0].id} value={resultFiles[0].id}>
+                                <div className="flex items-center gap-2">
+                                    <FileIcon type={resultFiles[0].suffix} className="size-4 min-w-4" />
+                                    {resultFiles[0].fileName}
+                                </div>
+                            </SelectItem>
+                        }
                     </SelectContent>
                 </Select>
             </div>
@@ -206,7 +258,7 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
                 fileId={syncChunksSelectId}
                 fileSuffix={currentFile?.suffix}
                 previewCount={previewCount}
-                edit={step === 3||step===2}
+                edit={step === 3 || step === 2}
                 loading={loading}
                 chunks={chunks}
                 onDel={handleDelete}

@@ -18,6 +18,8 @@ import { LoadingIcon } from "@/components/bs-icons/loading";
  */
 export default function PreviewFile({ urlState, file, partitions, chunks, setChunks, h = true }
     : { urlState: { load: false, url: '' }, file: any, partitions: Partition, chunks: any, setChunks: any }) {
+        console.log(file,urlState,123);
+        
     const { t } = useTranslation('knowledge')
 
     const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);

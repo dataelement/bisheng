@@ -39,10 +39,13 @@ const initialStrategies = [
     { id: '2', regex: '\\n', position: 'after', rule: '单换行后切分，用于分隔普通换行' }
 ];
 
-const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode,kId }: IProps, ref) => {
+const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode,kId ,originalSplitRule,setOriginalSplitRule,fileStatus}: IProps, ref) => {
     
     const { id: kid } = useParams()
-    console.log('FileUploadStep2 props:', { step, resultFiles, isAdjustMode,kId });
+    console.log('FileUploadStep2 props:', { step, resultFiles, isAdjustMode,kId,originalSplitRule,fileStatus });
+    // if(step === 1){
+    //      originalSplitRule = JSON.parse(originalSplitRule) 
+    // }
     const { t } = useTranslation('knowledge')
     const setSelectedChunkIndex = useKnowledgeStore((state) => state.setSelectedChunkIndex);
   const [previewFailed, setPreviewFailed] = useState(false);
@@ -141,11 +144,11 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
         setPreviewCount(c => c + 1) // 刷新分段
 
 
-        setApplyRule({
-            applyEachCell,
-            cellGeneralConfig,
-            rules
-        })
+         setApplyRule({
+        applyEachCell,
+        cellGeneralConfig,
+        rules: isAdjustMode ? originalSplitRule : rules
+    })
         console.log(applyRule, 'previewCount');
     }
 
@@ -172,20 +175,26 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
                         <TabsContent value="file">
                             <RuleFile
                                 rules={rules}
+                                originalSplitRule={typeof originalSplitRule === 'string' ? JSON.parse(originalSplitRule) : originalSplitRule}
+                                setOriginalSplitRule={setOriginalSplitRule}
                                 setRules={setRules}
                                 strategies={strategies}
                                 setStrategies={setStrategies}
+                                isAdjustMode={isAdjustMode}
                             />
                         </TabsContent>
                         {/* 表格文档设置 */}
                         <TabsContent value="table">
                             <RuleTable
                                 rules={rules}
+                                  originalSplitRule={typeof originalSplitRule === 'string' ? JSON.parse(originalSplitRule) : originalSplitRule}
+                                setOriginalSplitRule={setOriginalSplitRule}
                                 setRules={setRules}
                                 applyEachCell={applyEachCell}
                                 setApplyEachCell={setApplyEachCell}
                                 cellGeneralConfig={cellGeneralConfig}
                                 setCellGeneralConfig={setCellGeneralConfig}
+                                isAdjustMode={isAdjustMode}
                             />
                         </TabsContent>
                         {/* 预览分段按钮 */}
@@ -205,12 +214,14 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
             }
             {/* 原文预览 & 分段预览 */}
             {
-                (showPreview || step === 3) && (
+                ((showPreview) || step === 3) && (
 
                     <PreviewResult
                         showPreview={showPreview}
                         step={step}
                         previewCount={previewCount}
+                        resultFiles={resultFiles}
+                        originalSplitRule={originalSplitRule}
                         kId={kId}
                         rules={applyRule.rules}
                         applyEachCell={applyRule.applyEachCell}
