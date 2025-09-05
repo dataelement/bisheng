@@ -305,7 +305,6 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
                                 value={formData.applicationCenterWelcomeMessage}
                                 error={errors.applicationCenterWelcomeMessage}
                                 placeholder={t('chatConfig.appCenterWelcomePlaceholder')}
-                                maxLength={1000}
                                 onChange={(v) => handleInputChange('applicationCenterWelcomeMessage', v, 1000)}
                             />
                         </div>
@@ -317,7 +316,6 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
                                 value={formData.applicationCenterDescription}
                                 error={errors.applicationCenterDescription}
                                 placeholder={t('chatConfig.appCenterDescriptionPlaceholder')}
-                                maxLength={1000}
                                 onChange={(v) => handleInputChange('applicationCenterDescription', v, 1000)}
                             />
                         </div>
@@ -777,22 +775,23 @@ const handleInputChange = (field: keyof ChatConfigForm, value: string, maxLength
     const { toast } = useToast()
     const { reloadConfig } = useContext(locationContext)
     const handleSave = async () => {
-        const { isValid, firstErrorRef } = validateForm();
-        if (!isValid) {
-            if (firstErrorRef?.current) {
-                firstErrorRef.current.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'center'
-                });
-                setTimeout(() => {
-                    const input = firstErrorRef.current?.querySelector('input, textarea, [role="combobox"]');
-                    input?.focus();
-                }, 300);
-            }
-            return false; // 明确返回false表示验证失败
-        }
+    const { isValid, firstErrorRef } = validateForm();
+  if (!isValid) {
+    if (firstErrorRef?.current) {
+      firstErrorRef.current.scrollIntoView({
+        behavior: 'smooth', // 平滑滚动
+        block: 'end', // 滚动后文本框底部显示在视图中（下方位置）
+        inline: 'nearest'
+      });
 
-        // 原有保存逻辑...
+      // 延迟聚焦输入框，确保滚动完成后再聚焦（提升体验）
+      setTimeout(() => {
+        const input = firstErrorRef.current?.querySelector('input, textarea, [role="combobox"]');
+        if (input) input.focus(); // 聚焦到错误输入框
+      }, 300); // 300ms 匹配滚动动画时长
+    }
+    return false;
+  }
         const dataToSave = {
             ...formData,
             sidebarSlogan: formData.sidebarSlogan.trim(),
