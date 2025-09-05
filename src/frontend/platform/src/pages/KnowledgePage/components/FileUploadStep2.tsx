@@ -41,7 +41,7 @@ const initialStrategies = [
 ];
 
 const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode,kId }: IProps, ref) => {
-    console.log(resultFiles,778);
+    console.log(resultFiles,778,kId);
     
     const { id: kid } = useParams()
     console.log('FileUploadStep2 props:', { step, resultFiles, isAdjustMode,kId });
@@ -77,8 +77,8 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
         setCellGeneralConfig,
         strategies,
         setStrategies
-    } = useFileProcessingRules(initialStrategies, resultFiles, kid,splitRule);
-    console.log(rules,strategies,887);
+    } = useFileProcessingRules(initialStrategies, resultFiles, kid || kId,resultFiles[0].split_rule);
+    console.log(rules,strategies,resultFiles,887);
     
     const [applyRule, setApplyRule] = useState<any>({}) // 应用规则
     const applyRuleRef = useRef(applyRule);
@@ -143,7 +143,13 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
         handleNext: internalHandleNext
     }));
     // 预览
-
+useEffect(() => {
+  setApplyRule({
+    applyEachCell,
+    cellGeneralConfig,
+    rules
+  });
+}, [applyEachCell, cellGeneralConfig, rules]);
     const handlePreview = () => {
         if (vildateCell()) return
         setShowPreview(true)
@@ -153,7 +159,7 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
         setApplyRule({
             applyEachCell,
             cellGeneralConfig,
-            rules
+            rules: { ...rules, knowledgeId: kId }
         })
         console.log(applyRule, 'previewCount');
     }
@@ -224,7 +230,7 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
                         rules={applyRule.rules}
                         applyEachCell={applyRule.applyEachCell}
                         cellGeneralConfig={applyRule.cellGeneralConfig}
-                          onPreviewResult={(isSuccess) => setPreviewFailed(!isSuccess)}
+                          handlePreviewResult={(isSuccess) => setPreviewFailed(!isSuccess)}
                     />
                 )
             }

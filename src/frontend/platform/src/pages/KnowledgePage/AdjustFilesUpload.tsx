@@ -15,9 +15,9 @@ import { LoadingIcon } from "@/components/bs-icons/loading";
 
 // 调整模式固定步骤标签（3步）
 const AdjustStepLabels = [
-    '分段策略',
-    '原文对比',
-    '数据处理'
+  '分段策略',
+  '原文对比',
+  '数据处理'
 ];
 
 export default function AdjustFilesUpload() {
@@ -33,10 +33,10 @@ export default function AdjustFilesUpload() {
     navigate(-1); // 无数据时回退
     return null;
   }
-
+{console.log(initFileData,123)}
   // 调整模式专属状态
   const [currentStep, setCurrentStep] = useState(1);
-  const getParsedSplitRule = (rawSplitRule) => {
+    const getParsedSplitRule = (rawSplitRule) => {
     // 处理无 split_rule 或为空的情况
     if (!rawSplitRule) {
       return {
@@ -120,6 +120,7 @@ export default function AdjustFilesUpload() {
       split_rule: getParsedSplitRule(initFileData.split_rule) // 传入转换后的配置对象
     }
   ]);
+  console.log(initFileData,78);
   
   const [segmentRules, setSegmentRules] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -219,6 +220,7 @@ export default function AdjustFilesUpload() {
               fileId: res.id // 关键修复：单个对象直接取id
             }))
           );
+          console.log(resultFiles,56);
           
           // 3. 修复步骤跳转时机（确保数据更新后再跳转）
           message({ variant: 'success', description: t('调整分段策略成功') });
@@ -266,18 +268,34 @@ export default function AdjustFilesUpload() {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* 调整模式步骤条 */}
-      <StepProgress
-        align="center"
-        currentStep={currentStep}
-        labels={AdjustStepLabels.map(label => t(label))}
-      />
-      
+    <div className="relative h-full flex flex-col">
+      {/* 顶部返回栏 */}
+      <div className="pt-4 px-4">
+        <div className="flex items-center mb-4">
+          <Button
+            variant="outline"
+            size="icon"
+            className="bg-[#fff] size-8"
+            onClick={handleBack}
+          >
+            <ChevronLeft />
+          </Button>
+          <span className="text-foreground text-sm font-black pl-4">返回知识库详情</span>
+        </div>
+
+        {/* 调整模式步骤条 */}
+        <StepProgress
+          align="center"
+          currentStep={currentStep}
+          labels={AdjustStepLabels.map(label => t(label))}
+        />
+      </div>
+
       {/* 步骤内容区域 */}
       <div className="flex flex-1 overflow-hidden px-4">
         <div className="w-full overflow-y-auto">
           <div className="h-full py-4">
+            {console.log(resultFiles,33)}
             {currentStep === 1 && (
               <FileUploadStep2
                 ref={fileUploadStep2Ref}
@@ -299,7 +317,7 @@ export default function AdjustFilesUpload() {
                   resultFiles={resultFiles}
                   onPrev={handleBack}
                   onNext={() => handleSave(segmentRules)} // 直接调用保存，移除提前跳转
-                  onPreviewResult={handlePreviewResult}
+                  handlePreviewResult={handlePreviewResult}
                   step={currentStep}
                   previewCount={0}
                   applyEachCell={segmentRules.applyEachCell}
@@ -307,7 +325,7 @@ export default function AdjustFilesUpload() {
                   kId={knowledgeId}
                   isAdjustMode
                 />
-
+{console.log(isNextDisabled,666)}
                 {/* 步骤2底部按钮 */}
                 <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
                   <Button
@@ -320,7 +338,7 @@ export default function AdjustFilesUpload() {
                   <Button
                     className="h-8"
                     onClick={handleNext}
-                    disabled={isNextDisabled || isSubmitting}
+                    // disabled={isNextDisabled || isSubmitting}
                   >
                     {isSubmitting ? <LoadingIcon className="h-4 w-4 mr-1" /> : null}
                     {t('nextStep')}

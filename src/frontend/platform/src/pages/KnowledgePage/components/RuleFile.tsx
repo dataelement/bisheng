@@ -40,6 +40,8 @@ export default function RuleFile({
   setOriginalSplitRule = () => {},
   isAdjustMode = false
 }) {
+  console.log(rules,99999999999999999);
+  
   const { appConfig } = useContext(locationContext);
   const { t } = useTranslation('knowledge');
 

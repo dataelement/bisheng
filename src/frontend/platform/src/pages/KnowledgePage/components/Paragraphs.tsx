@@ -353,9 +353,9 @@ const handleFileChange = useCallback(async (newFileId) => {
                 fileData: { // 确保传递正确的数据结构
                     id: currentFile.id,
                     name: currentFile.name,
-                    split_rule: fullData.split_rule,
-                    status: fullData.status,
-                    filePath: currentFile.filePath,
+                    split_rule: currentFile.split_rule,
+                    status: currentFile.status,
+                    filePath: currentFile.url,
                     suffix: currentFile.suffix,
                     fileType: currentFile.fileType,
                     split_rule:currentFile.fullData.split_rule
