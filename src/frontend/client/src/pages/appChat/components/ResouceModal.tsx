@@ -169,7 +169,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
                                 {
                                     _file.parse_type === 'uns' && _file.fileUrl && <Tooltip delayDuration={200}>
                                         <TooltipTrigger >
-                                            <a href="javascript:;" onClick={(event) => { downloadFile(_file.fileUrl, _file.fileName.replace(/\.[\w\d]+$/, '.pdf')); event.stopPropagation() }} >
+                                            <a href="javascript:;" onClick={(event) => { downloadFile(changeMinioUrl(_file.fileUrl), _file.fileName.replace(/\.[\w\d]+$/, '.pdf')); event.stopPropagation() }} >
                                                 <Import color="rgba(53,126,249,1)" size={22} strokeWidth={1.5}></Import>
                                             </a>
                                         </TooltipTrigger>
@@ -186,7 +186,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
                                 {
                                     _file.originUrl && <Tooltip delayDuration={200}>
                                         <TooltipTrigger >
-                                            <a href="javascript:;" onClick={(event) => { downloadFile(_file.originUrl, _file.fileName.replace(/\.[\w\d]+$/, '.pdf')); event.stopPropagation() }} >
+                                            <a href="javascript:;" onClick={(event) => { downloadFile(changeMinioUrl(_file.originUrl), _file.fileName); event.stopPropagation() }} >
                                                 <Import color="rgba(53,126,249,1)" size={22} strokeWidth={1.5}></Import>
                                             </a>
                                         </TooltipTrigger>
@@ -286,5 +286,10 @@ const ResouceModal = forwardRef((props, ref) => {
         </DialogContent>
     </Dialog>
 });
+
+
+export const changeMinioUrl = (url: string) => {
+    return url.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)
+}
 
 export default ResouceModal

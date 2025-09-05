@@ -581,7 +581,7 @@ export const getChatsApi = (page) => {
         ...el,
         latest_message: {
           ...el.latest_message,
-          message: _message.substring(0, 40)
+          message: typeof _message === 'string' ? _message.substring(0, 40) : ''
         }
       }
     })

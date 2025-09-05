@@ -1,8 +1,9 @@
 
-import { FileIcon, Loader2, PaperclipIcon, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useRef, useState } from "react";
 import { uploadChatFile } from "~/api/apps";
 import { AttachmentIcon } from "~/components/svg";
+import { FileIcon, getFileTypebyFileName } from "~/components/ui/icon/File/fileIcon";
 import { useToastContext } from "~/Providers";
 import { generateUUID, getFileExtension } from "~/utils";
 
@@ -150,19 +151,17 @@ export default function InputFiles({ v, accepts, size, onChange }) {
             {/* Displaying files */}
             {!!files.length && <div className="flex flex-wrap gap-2 p-2 rounded-xl max-h-96 overflow-y-auto">
                 {files.map((file, index) => (
-                    <div key={index} className="group relative flex items-center space-x-3 border bg-white p-2 rounded-xl cursor-default">
+                    <div key={index} className="group min-w-52 relative flex items-center gap-2 border bg-white p-2 rounded-2xl cursor-default">
                         {/* Remove button */}
                         <span
                             onClick={() => handleFileRemove(file.name)}
-                            className="hidden group-hover:block p-0.5 absolute -right-1 -top-1 bg-gray-300 text-white rounded-full cursor-pointer"
+                            className="opacity-0 group-hover:opacity-100 absolute p-0.5 right-1.5 top-1.5 bg-black text-white rounded-full cursor-pointer transition-opacity"
                         >
-                            <X size={12} />
+                            <X size={14} />
                         </span>
 
                         {/* File Icon */}
-                        <div className="w-8 h-8 bg-gray-200 rounded-md flex items-center justify-center">
-                            {file.isUploading ? <Loader2 className="size-4" /> : <FileIcon className="w-6 h-6 text-gray-600" />}
-                        </div>
+                        <FileIcon loading={file.isUploading} type={getFileTypebyFileName(file.name)} />
 
                         {/* File details */}
                         <div className="flex-1">

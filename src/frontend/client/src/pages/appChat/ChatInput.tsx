@@ -34,7 +34,7 @@ export default function ChatInput({ v }) {
             <div className="flex gap-2 absolute right-3 bottom-3 z-10">
                 {showStop ?
                     <div
-                        className="w-8 h-8 bg-primary rounded-full hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"
+                        className="w-8 h-8 bg-primary rounded-full cursor-pointer flex justify-center items-center"
                         onClick={handleStopClick}
                     >
                         <div className="size-3 bg-white rounded-[2px]"></div>
@@ -54,7 +54,7 @@ export default function ChatInput({ v }) {
             */}
             <div className="absolute w-full flex justify-center left-0 -top-14">
                 {!showStop && chatState?.flow?.flow_type === 10 && !inputMsg && <Button
-                    className="rounded-full bg-primary/10 text-primary"
+                    className="rounded-full bg-primary/10 bg-blue-50 text-primary"
                     variant="ghost"
                     onClick={handleRestart}>
                     <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/chat.png'} alt="" />重新运行

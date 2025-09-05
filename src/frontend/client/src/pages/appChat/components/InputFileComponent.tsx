@@ -206,7 +206,7 @@ export default function InputFileComponent({
 
     return (
         <div className={disabled ? "input-component-div" : "w-full"}>
-            <div className="input-file-component flex items-center gap-2 border bg-white rounded-md px-2 justify-between">
+            <div className="input-file-component flex items-center gap-2 border bg-search-input rounded-md px-2 justify-between">
                 <span
                     onClick={handleButtonClick}
                     className={
@@ -229,7 +229,7 @@ export default function InputFileComponent({
                             }
                         />
                     )}
-                    {!editNode && loading && (<Loader2 className="text-primary duration-300 pointer-events-none" />)}
+                    {!editNode && loading && (<Loader2 className="text-primary animate-spin duration-300 pointer-events-none" />)}
                 </Button>
             </div>
         </div>

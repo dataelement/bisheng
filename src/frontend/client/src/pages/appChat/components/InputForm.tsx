@@ -62,13 +62,13 @@ const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any })
     const submit = () => {
         const valuesObject = {}
         let stringObject = ""
-        const errors = []
+        const errors: string[] = []
 
         Object.keys(formDataRef.current).forEach((key: string) => {
             const fieldData = formDataRef.current[key]
             const required = data.value.find(item => item.key === key).required
             if (required && !fieldData.value) {
-                showToast({ message: `${fieldData.label} 为必填项，不能为空。`, status: 'error' });
+                errors.push(`${fieldData.label} 为必填项，不能为空。`);
             }
             valuesObject[key] = fieldData.value
             stringObject += `${fieldData.label}:${fieldData.type === FormItemType.File ? fieldData.fileName : fieldData.value}\n`

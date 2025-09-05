@@ -63,6 +63,7 @@ export interface SubmitData {
   chatId?: string,
   flowId?: string,
   nodeId?: string,
+  msgId?: string,
   data?: any,
   flow?: FlowData,
   files?: any[]

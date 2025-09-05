@@ -45,8 +45,9 @@ export const useWebSocket = (helpers) => {
 
             ws.onopen = () => {
                 console.log("WebSocket connection established!");
-                // 助手初始化
+                helpers.clearError()
                 if (helpers.flow.flow_type === 10) {
+                    // 工作流初始化
                     // console.log('helpers.flow :>> ', helpers.flow);
                     const { data, ...flow } = helpers.flow
                     const msg = {
@@ -57,16 +58,17 @@ export const useWebSocket = (helpers) => {
                     }
                     ws?.send(JSON.stringify(msg))
                 } else {
+                    // 助手初始化
                     const msg = {
                         chatHistory: [],
                         chat_id: helpers.chatId,
                         flow_id: helpers.flow.id,
                         inputs: {
-                            data: {
+                            data: helpers.flow.flow_type === 5 ? {
                                 id: helpers.flow.id,
                                 chatId: helpers.chatId,
                                 type: helpers.flow.flow_type,
-                            }
+                            } : undefined
                         },
                         name: helpers.flow.name,
                         description: helpers.flow.description
@@ -184,7 +186,7 @@ export const useWebSocket = (helpers) => {
             if (currentChatId !== helpers.chatId) {
                 // 断开WebSocket连接
                 if (websocket && !helpers.running) {
-                    console.log('ws close xxxx')
+                    console.log('ws close', currentChatId, helpers.chatId)
                     websocket.close()
                     wsMap.delete(helpers.chatId)
                 }
@@ -310,7 +312,8 @@ export const useWebSocket = (helpers) => {
                         data: {
                             [submitData.data.nodeId!]: {
                                 data: submitData.data.data,
-                                message: submitData.data.message
+                                message: submitData.data.message,
+                                message_id: submitData.data.msgId
                             }
                         },
                     })

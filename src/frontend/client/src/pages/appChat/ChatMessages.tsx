@@ -98,7 +98,7 @@ export default function ChatMessages({ useName, title, logo }) {
             })
         }
         {/* 只有引导问题没有开场白 => 上面得要有图标+应用名称 */}
-        {!remark && !messages.some(msg => msg.category === 'guide_word') && guideWord && <MessageRemark
+        {!remark && !messages.some(msg => msg.category === 'guide_word') && !!guideWord?.length && <MessageRemark
             logo={logo}
             title={title}
             message={''}

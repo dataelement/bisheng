@@ -1,21 +1,24 @@
-import { CheckCircle, CheckIcon, File } from "lucide-react";
+import { CheckIcon, File } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { ChatMessageType } from "~/@types/chat";
 import { Button, Textarea } from "~/components";
-import AppAvator from "~/components/Avator";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
 import { downloadFile } from "~/utils";
 import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
+import { changeMinioUrl } from "./ResouceModal";
 
 export default function MessageBsChoose({ type = 'choose', logo, data, flow }: { type?: string, logo: React.ReactNode, data: ChatMessageType }) {
     const [selected, setSelected] = useState(data.message.hisValue || '')
     const handleSelect = (obj) => {
         if (selected) return
-
         emitAreaTextEvent({
             action: EVENT_TYPE.MESSAGE_INPUT, data: {
                 nodeId: data.message.node_id,
-                message: data,
+                message: JSON.stringify({
+                    ...data.message,
+                    hisValue: obj.id
+                }),
+                msgId: data.id,
                 data: {
                     [data.message.key]: obj.id
                 }
@@ -27,7 +30,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data, flow }: {
 
     // download file
     const handleDownloadFile = (file) => {
-        downloadFile(file.path, file.name)
+        downloadFile(changeMinioUrl(file.path), file.name)
     }
 
     // input
@@ -40,7 +43,11 @@ export default function MessageBsChoose({ type = 'choose', logo, data, flow }: {
         emitAreaTextEvent({
             action: EVENT_TYPE.MESSAGE_INPUT, data: {
                 nodeId: data.message.node_id,
-                message: data,
+                message: JSON.stringify({
+                    ...data.message,
+                    hisValue: val
+                }),
+                msgId: data.id,
                 data: {
                     [data.message.key]: val
                 }

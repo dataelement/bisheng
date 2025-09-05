@@ -45,7 +45,7 @@ export default function InputComponent({
                 value={myValue}
                 // maxLength={maxLength}
                 className={cn(
-                    "whitespace-normal border rounded-md w-full bg-white px-2",
+                    "whitespace-normal border rounded-md w-full bg-search-input px-2 py-1",
                     disabled ? " input-disable " : "",
                     password && !pwdVisible && myValue !== ""
                         ? " text-clip password "

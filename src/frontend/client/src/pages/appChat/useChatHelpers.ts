@@ -52,6 +52,16 @@ export default function useChatHelpers() {
         }))
     }
 
+    const clearError = () => {
+        setRunningState((prev) => ({
+            ...prev,
+            [chatId]: {
+                ...prev[chatId],
+                error: "",
+            },
+        }))
+    }
+
     // 显示停止按钮
     const stopShow = (show: boolean) => {
         setRunningState((prev) => ({
@@ -154,6 +164,8 @@ export default function useChatHelpers() {
                         reasoning_log,
                         thought
                     } = data
+                    // 兼容后端问题
+                    const _files = Array.isArray(files) ? files : []
 
                     const messageId = message_id || (category === "guide_word" ? generateUUID(4) : "")
                     const filteredMessages = deduplicateMessages(messages, message_id)
@@ -165,7 +177,7 @@ export default function useChatHelpers() {
                             flow_id,
                             chat_id,
                             id: messageId,
-                            files: files.map(el => ({
+                            files: _files.map(el => ({
                                 // 兼容
                                 file_name: el.file_name || el.name,
                                 file_url: el.file_url || el.url
@@ -322,6 +334,7 @@ export default function useChatHelpers() {
         flow: chatState?.flow,
         stopShow,
         handleMsgError,
+        clearError,
         showInputForm,
         showGuideQuestion
     }

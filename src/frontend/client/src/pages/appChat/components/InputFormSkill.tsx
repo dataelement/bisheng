@@ -28,6 +28,7 @@ const InputFormSkill = forwardRef(({ flow, logo }, ref) => {
     // 从 api中获取
     const [items, setItems] = useState<any[]>([])
     useEffect(() => {
+        if (flow.flow_type === 5) return
         // chat -》L1； diff -> 对比测试
         type === 'chat' ? getVariablesApi({ flow_id: flow.flow_id || flow.id }).then(
             res => setItems(res)
