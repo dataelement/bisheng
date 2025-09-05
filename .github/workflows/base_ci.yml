@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build_bisheng_arm:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04-arm
     # if: startsWith(github.event.ref, 'refs/tags')
     steps:
       - name: checkout
