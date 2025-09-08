@@ -119,12 +119,7 @@ export function SearchOverlay({
                         </div>
                     ) : displayedResults.length > 0 ? (
                         <>
-                            <div className="mb-6">
-                                <h2 className="text-xl font-medium mb-2 text-left">
-                                    搜索结果 "{query}" ({filteredResults.length} 个结果)
-                                </h2>
-                            </div>
-
+                        
                             <div className="grid grid-cols-4 gap-2 mb-8">
                                 {displayedResults.map((agent) => (
                                     <AgentCard
@@ -145,12 +140,6 @@ export function SearchOverlay({
                                         <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
                                         加载更多...
                                     </div>
-                                </div>
-                            )}
-
-                            {!hasMore && displayedResults.length > 0 && (
-                                <div className="text-center py-8">
-                                    <p className="text-muted-foreground">已显示全部结果</p>
                                 </div>
                             )}
                         </>

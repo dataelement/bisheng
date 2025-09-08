@@ -329,11 +329,13 @@ export async function getAppsApi({ page = 1, pageSize = 8, keyword, tag_id = -1,
 }
 
 
-export const getChatOnlineApi = async (page, keyword, tag_id) => {
+export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = false) => {
+    console.log(disableLimit,2);
+    
     const params = {
         page,
         keyword,
-        limit: 8,
+        ...(disableLimit ? {} : { limit: 8 }),
     }
     if (tag_id !== -1 && tag_id != null) {
         params.tag_id = tag_id

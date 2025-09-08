@@ -13,6 +13,7 @@ import { AgentGrid } from "./components/AgentGrid"
 import { AgentNavigation } from "./components/AgentNavigation"
 import { SearchOverlay } from "./components/SearchOverlay"
 import { useGetBsConfig } from '~/data-provider'
+import useToast from '~/hooks/useToast'
 
 export default function AgentCenter() {
     const [searchQuery, setSearchQuery] = useState("")
@@ -27,56 +28,86 @@ export default function AgentCenter() {
         setRefreshTrigger(prev => prev + 1);
     }
     
-    // 从本地存储加载收藏列表
-    useEffect(() => {
-        const savedFavorites = localStorage.getItem('agent-favorites')
-        if (savedFavorites) {
-            setFavorites(JSON.parse(savedFavorites))
-        }
-    }, [])
-
-    // 保存收藏列表到本地存储
-    useEffect(() => {
-        localStorage.setItem('agent-favorites', JSON.stringify(favorites))
-    }, [favorites])
+    const { showToast } = useToast()
 
 const handleCategoryChange = (categoryId: string) => {
-    if (searchQuery) {
-        setSearchQuery("")
-        setIsSearching(false)
+    console.log("点击的标签ID:", categoryId, "当前搜索状态:", isSearching);
+
+    // 1. 清除搜索状态（如果有）
+    const wasSearching = !!searchQuery;
+    if (wasSearching) {
+        setSearchQuery("");
+        setIsSearching(false);
     }
-console.log(categoryId,22);
 
-    // 如果是常用标签，直接滚动到顶部
-    if (categoryId === "favorites") {
-        // console.log(Object.keys(sectionRefs.current));
-        //    const frequentlyUsedKey = Object.keys(sectionRefs.current).find(key => key === "frequently_used");
-        //    console.log(frequentlyUsedKey);
-           
-        if (scrollContainerRef.current) {
-
-            scrollContainerRef.current.scrollTo({
+    // 2. 定义核心滚动逻辑
+    const performScroll = () => {
+        if (categoryId === "favorites") {
+            // 常用标签：直接滚动到顶部（无需依赖sectionRefs）
+            scrollContainerRef.current?.scrollTo({
                 top: 0,
-                behavior: "smooth",
-            })
+                behavior: "smooth"
+            });
+            return;
         }
-        return;
-    }
 
-    // 其他标签的正常滚动逻辑
-    const targetSection = sectionRefs.current[categoryId]
-    if (targetSection && scrollContainerRef.current) {
-        const containerRect = scrollContainerRef.current.getBoundingClientRect();
-        const sectionRect = targetSection.getBoundingClientRect();
-        
-        const relativeTop = sectionRect.top - containerRect.top + scrollContainerRef.current.scrollTop;
-        
-        scrollContainerRef.current.scrollTo({
-            top: relativeTop - 20,
-            behavior: "smooth",
-        })
+        // 其他标签：通过sectionRefs查找DOM并滚动
+        const targetSection = sectionRefs.current[categoryId];
+        if (targetSection && scrollContainerRef.current) {
+            const containerRect = scrollContainerRef.current.getBoundingClientRect();
+            const sectionRect = targetSection.getBoundingClientRect();
+            const relativeTop = sectionRect.top - containerRect.top + scrollContainerRef.current.scrollTop;
+            
+            scrollContainerRef.current.scrollTo({
+                top: relativeTop - 20,
+                behavior: "smooth"
+            });
+        } else {
+            console.log("未找到目标分区，但已尝试滚动");
+        }
+    };
+
+    // 3. 分场景处理
+    if (!wasSearching) {
+        // 场景1：非搜索状态（AgentGrid已渲染）→ 立即滚动
+        performScroll();
+    } else {
+        // 场景2：从搜索状态切换（AgentGrid需要重新渲染）→ 监听DOM变化后滚动
+        const container = scrollContainerRef.current;
+        if (!container) return;
+
+        // 停止之前的监听（避免重复）
+        let observer: MutationObserver | null = null;
+
+        observer = new MutationObserver((mutations, obs) => {
+            // 检查目标分区是否已挂载
+            const targetExists = categoryId === "favorites" 
+                ? true  // 常用标签无需检查DOM
+                : !!sectionRefs.current[categoryId];
+
+            if (targetExists) {
+                performScroll(); // 执行滚动
+                obs.disconnect(); // 完成后断开
+                observer = null;
+            }
+        });
+
+        // 监听滚动容器的DOM变化（AgentGrid渲染会改变子元素）
+        observer.observe(container, {
+            childList: true,    // 监听子元素增减
+            subtree: true       // 监听所有后代
+        });
+
+        // 安全超时：5秒后强制停止监听（防内存泄漏）
+        setTimeout(() => {
+            if (observer) {
+                observer.disconnect();
+                // 超时后仍尝试一次滚动（极端情况保底）
+                performScroll();
+            }
+        }, 2000);
     }
-}
+};
 
     const handleSearchChange = async (query: string) => {
         setSearchQuery(query)
@@ -84,8 +115,8 @@ console.log(categoryId,22);
         if (query.trim()) {
             setIsSearching(true)
             setSearchLoading(true)
-            try {
-                const result = await getChatOnlineApi(1, query, -1)
+            try {         
+                const result = await getChatOnlineApi(1, query, -1, true)
                 setSearchResults(result.data || [])
             } catch (error) {
                 console.error("搜索失败:", error)
@@ -105,20 +136,31 @@ console.log(categoryId,22);
         setSearchResults([])
     }
 
-    const addToFavorites = async (type: string, id: string) => {
-        let mappedType: string;
-        if (type === '1') {
-            mappedType = 'flow';
-        } else if (type === '5') {
-            mappedType = 'assistant';
-        } else {
-            mappedType = 'workflow';
-        }
-        const res = await addToFrequentlyUsed(mappedType, id);
-        setFavorites(res.data);
-
-        return res;
+const addToFavorites = async (type: string, id: string) => {
+    let mappedType: string;
+    if (type === '1') {
+        mappedType = 'flow';
+    } else if (type === '5') {
+        mappedType = 'assistant';
+    } else {
+        mappedType = 'workflow';
     }
+    
+    
+        const res = await addToFrequentlyUsed(mappedType, id);
+        console.log(res);
+        if(res.status_code === 500){
+              showToast({
+                 status: 'error',
+          message: '该智能体已被添加',
+            });
+        }
+        // 成功时更新收藏列表
+        setFavorites(res.data);
+        return res;
+    
+}
+
 
     const removeFromFavorites = async (userId: string, type: string, id: string) => {
         let mappedType: string;
