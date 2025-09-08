@@ -134,10 +134,7 @@ export default function EvaluationPage() {
                     <TableCell>
                       <div className="flex items-center">
                         <Badge className="whitespace-nowrap">
-                          {
-                            t(EvaluationTypeLabelMap[EvaluationType[el.exec_type]]
-                              .label)
-                          }
+                       {t(EvaluationTypeLabelMap[EvaluationType[el.exec_type]]?.label ?? t("unknown"))}
                         </Badge>
                         &nbsp;
                         <span className="whitespace-nowrap text-medium-indigo">
@@ -155,10 +152,10 @@ export default function EvaluationPage() {
   {!!el.status && (
     <div className="flex items-center">
       <Badge
-        variant={EvaluationStatusLabelMap[el.status].variant}
+       variant={EvaluationStatusLabelMap[el.status]?.variant ?? "default"}
         className={"whitespace-nowrap min-w-[60px] justify-center"} 
       >
-        {t(EvaluationStatusLabelMap[el.status].label)}
+           {t(EvaluationStatusLabelMap[el.status]?.label ?? t("unknown"))}
         {el.status === EvaluationStatusEnum.running
           ? ` ${el.progress}`
           : null}
@@ -192,11 +189,7 @@ export default function EvaluationPage() {
                             
                             return (
                               <span className="whitespace-nowrap">
-                                {
-                                  EvaluationScoreLabelMap[
-                                    EvaluationScore[key]
-                                  ].label
-                                }
+                            {EvaluationScoreLabelMap[EvaluationScore[key]]?.label ?? key}
                                 :{value}&nbsp;
                               </span>
                             );
