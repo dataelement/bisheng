@@ -338,7 +338,7 @@ export default function AdjustFilesUpload() {
                   <Button
                     className="h-8"
                     onClick={handleNext}
-                    // disabled={isNextDisabled || isSubmitting}
+                    disabled={isNextDisabled || isSubmitting}
                   >
                     {isSubmitting ? <LoadingIcon className="h-4 w-4 mr-1" /> : null}
                     {t('nextStep')}

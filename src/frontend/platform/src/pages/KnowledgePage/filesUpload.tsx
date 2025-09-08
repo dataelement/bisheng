@@ -60,7 +60,10 @@ export default function FilesUpload() {
 
   // 步骤3：原文对比回调，控制下一步按钮禁用状态
   const handlePreviewResult = (isSuccess) => {
+     if (currentStep === 3) {
+    console.log("更新按钮状态：", { isSuccess, currentStep });
     setIsNextDisabled(!isSuccess);
+  }
   };
 
   // 下一步：按当前步骤跳转
@@ -236,12 +239,12 @@ export default function FilesUpload() {
                 <PreviewResult
                   rules={segmentRules.rules}
                   resultFiles={resultFiles}
+                  handlePreviewResult={handlePreviewResult }
                   onPrev={handleBack}
                   onNext={() => {
                     setCurrentStep(4);
                     handleSave(segmentRules);
                   }}
-                  onPreviewResult={handlePreviewResult}
                   step={currentStep}
                   previewCount={0}
                   applyEachCell={segmentRules.applyEachCell}

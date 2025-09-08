@@ -92,8 +92,7 @@ export default function Paragraphs({ fileId, onBack }) {
     // 加载文件预览数据
     const loadFilePreview = useCallback(async (file, currentFileUrl) => {
         if (!file || !isMountedRef.current) return null;
-        console.log('加载预览数据 - URL:', currentFileUrl, 'split_rule:', file.split_rule);
-
+        console.log(currentFileUrl, file.split_rule, 78);
         try {
             let excelRule = {};
             try {
@@ -111,30 +110,27 @@ export default function Paragraphs({ fileId, onBack }) {
                 knowledge_id: id,
                 file_list: [{
                     file_path: file?.filePath || currentFileUrl || '',
-                    excel_rule: excelRule || {}
+                    excel_rule: excelRule || {} // 使用处理后的 excelRule
                 }]
             });
-
-            if (res && res !== 'canceled' && res.chunks) {
-                // 确保返回的 chunks 结构正确，避免空数据
+            if (res && res !== 'canceled') {
                 return {
-                    chunks: res.chunks.map(chunk => ({
+                    chunks: (res.chunks || []).map(chunk => ({
                         ...chunk,
                         bbox: chunk?.metadata?.bbox || {},
                         activeLabels: {},
                         chunkIndex: chunk?.metadata?.chunk_index || 0,
-                        page: chunk?.metadata?.page || 0,
-                        text: chunk.text || '' // 兜底：确保 text 字段存在，避免 PreviewParagraph 报错
+                        page: chunk?.metadata?.page || 0
                     })),
                     partitions: res.partitions || {}
                 };
             }
-            throw new Error('预览接口返回数据异常');
+            return null;
         } catch (err) {
             console.error('File preview failed:', err);
             return null;
         }
-    }, [id]); // 仅保留必要的 id 依赖，移除 chunks
+    }, [id, chunks]);
     // 表格配置
     const tableConfig = useMemo(() => ({
         file_ids: selectedFileId ? [selectedFileId] : []
@@ -321,17 +317,13 @@ const handleFileChange = useCallback(async (newFileId) => {
     }, [rawFiles]);
 
     const safeChunks = useMemo(() => {
-        // 新增：文件未选中或数据未加载时，返回空数组（避免旧数据残留）
-        if (!selectedFileId || !datalist.length) return [];
-
         return (datalist || []).map((item, index) => ({
             text: item?.text || '',
             title: `分段${index + 1}`,
             chunkIndex: item?.metadata?.chunk_index || index,
             metadata: item?.metadata || {}
         }));
-        // 关键：添加 selectedFileId 依赖，确保文件切换时强制重新计算
-    }, [datalist, selectedFileId]);
+    }, [datalist]);
 
     const handleMetadataClick = useCallback(() => {
         if (currentFile?.fullData) {
@@ -353,12 +345,11 @@ const handleFileChange = useCallback(async (newFileId) => {
                 fileData: { // 确保传递正确的数据结构
                     id: currentFile.id,
                     name: currentFile.name,
-                    split_rule: currentFile.split_rule,
+                    split_rule: currentFile.split_rule||currentFile.fullData.split_rule,
                     status: currentFile.status,
                     filePath: currentFile.url,
                     suffix: currentFile.suffix,
                     fileType: currentFile.fileType,
-                    split_rule:currentFile.fullData.split_rule
                 },
                 isAdjustMode: true
             }
@@ -510,11 +501,12 @@ const handleFileChange = useCallback(async (newFileId) => {
                                     {filteredFiles.map((file) => (
                                         <DropdownMenuItem
                                             key={file.value}
-                                            onClick={(e) => {
+                                            onSelect={(e) => {
                                                 e.preventDefault();
                                                 console.log('选择文件:', file.value, file.label);
                                                 handleFileChange(file.value);
                                                 setSearchTerm("");
+                                                setIsDropdownOpen(false); // 添加这行来关闭下拉菜单
                                             }}
                                             disabled={!file.value}
                                             className="cursor-pointer hover:bg-gray-50 px-3 py-2 relative"
@@ -583,12 +575,11 @@ const handleFileChange = useCallback(async (newFileId) => {
                     <div className={isPreviewVisible ? "w-1/2" : "w-full max-w-3xl"}>
                         <div className="flex flex-wrap gap-2 p-2 pt-0 items-start">
                             <PreviewParagraph
-                                key={`preview-${selectedFileId}-${datalist.length}`}
                                 fileId={selectedFileId}
                                 previewCount={datalist.length}
                                 edit={isEditable}
                                 fileSuffix={currentFile?.suffix || ''}
-                                loading={loading && selectedFileId === currentFile?.id}
+                                loading={loading}
                                 chunks={safeChunks}
                                 onDel={handleDeleteChunk}
                                 onChange={handleChunkChange}

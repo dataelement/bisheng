@@ -23,6 +23,7 @@ interface IProps {
     applyEachCell: boolean;
     cellGeneralConfig: any;
       handlePreviewResult: (isSuccess: boolean) => void;
+        kId?: string | number;
 }
 export type Partition = {
     [key in string]: { text: string, type: string, part_id: string }
@@ -103,6 +104,7 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
             }
             if (res === 'canceled') return
             console.log("previewFileSplitApi:", res)
+             handlePreviewResult(true); 
             res && setChunks(res.chunks.map(chunk => ({
                 bbox: chunk.metadata.bbox,
                 activeLabels: {},
@@ -142,14 +144,14 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
 
     return (<div className={cn("h-full flex gap-2 justify-center", 'w-[100%]')}>
 
-        {(step === 3 || step ===2)&& currentFile && <PreviewFile
+        {(step === 3 || step ===2 && !previewCount)&& currentFile && <PreviewFile
             urlState={fileViewUrl}
             file={currentFile}
             chunks={chunks}
             setChunks={setChunks}
             partitions={partitions}
         />}
-        <div className={cn('relative', step === 2 ? 'w-full' : 'w-1/2')}>
+        <div className={cn('relative', 'w-100%')}>
             {/* 下拉框 - 右上角 */}
             <div className="flex justify-end">
                 <Select value={selectId} onValueChange={setSelectId}>
