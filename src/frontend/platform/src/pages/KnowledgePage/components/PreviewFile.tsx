@@ -18,8 +18,7 @@ import { LoadingIcon } from "@/components/bs-icons/loading";
  */
 export default function PreviewFile({ urlState, file, partitions, chunks, setChunks, h = true }
     : { urlState: { load: false, url: '' }, file: any, partitions: Partition, chunks: any, setChunks: any }) {
-        console.log(file,urlState,123);
-        
+
     const { t } = useTranslation('knowledge')
 
     const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
@@ -192,7 +191,7 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
         const { url, load } = urlState
 
         if (!load && !url) return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>
-        if (!url) return <div className="flex justify-center items-center h-full text-gray-400"><LoadingIcon/></div>
+        if (!url) return <div className="flex justify-center items-center h-full text-gray-400"><LoadingIcon /></div>
         switch (type) {
             case 'ppt':
             case 'pptx':

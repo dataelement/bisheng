@@ -87,30 +87,30 @@ export default function EvaluatingCreate() {
     const errorlist = [];
     if (!selectedType) errorlist.push(t("evaluation.enterExecType"));
     if (!selectedKeyId) errorlist.push(t("evaluation.enterUniqueId"));
-    
+
     // 修复版本验证 - 取消注释并添加正确的验证
     if ((selectedType === "workflow" || selectedType === "skill") && !selectedVersion) {
       errorlist.push(t("evaluation.enterVersion"));
     }
-    
+
     // 修复文件验证 - 所有类型都需要测试集数据
     if (!fileRef.current) errorlist.push(t("evaluation.enterFile"));
-    
+
     if (!prompt) errorlist.push(t("evaluation.enterPrompt"));
 
     if (errorlist.length) return handleError(errorlist);
     setLoading(true);
     try {
       await captureAndAlertRequestErrorHoc(
-              createEvaluationApi({
-        // exec_type: selectedType === "flow" ? "workflow" : selectedType,
-        exec_type: selectedType,
-        unique_id: selectedKeyId,
-        version: selectedVersion,
-        prompt,
-        file: fileRef.current,
-      })
-      ) 
+        createEvaluationApi({
+          // exec_type: selectedType === "flow" ? "workflow" : selectedType,
+          exec_type: selectedType,
+          unique_id: selectedKeyId,
+          version: selectedVersion,
+          prompt,
+          file: fileRef.current,
+        })
+      )
 
       navigate(-1);
     } finally {
@@ -135,7 +135,7 @@ export default function EvaluatingCreate() {
         assistant: 5,
         skill: 1
       };
-      
+
       getAppsApi({
         page: 1,
         pageSize: 100,
@@ -163,7 +163,7 @@ export default function EvaluatingCreate() {
         assistant: 5,
         skill: 1
       };
-      
+
       getAppsApi({
         page: 1,
         pageSize: 100,
@@ -213,8 +213,6 @@ export default function EvaluatingCreate() {
                   <Select
                     value={selectedType}
                     onValueChange={(value) => {
-                      console.log(value,222);
-                      
                       setSelectedType(value as any);
                       setSelectedKeyId("");
                       handleTypeChange(value);
@@ -228,13 +226,9 @@ export default function EvaluatingCreate() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
+                        <SelectItem value="skill">{t("build.skill")}</SelectItem>
+                        <SelectItem value="assistant">{t("build.assistant")}</SelectItem>
                         <SelectItem value="workflow">{t("工作流")}</SelectItem>
-                        <SelectItem value="assistant">
-                          {t("build.assistant")}
-                        </SelectItem>
-                        <SelectItem value="skill">
-                          {t("build.skill")}
-                        </SelectItem>
                       </SelectGroup>
                     </SelectContent>
                   </Select>

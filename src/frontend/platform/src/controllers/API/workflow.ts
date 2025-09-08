@@ -167,7 +167,7 @@ const workflowTemplate = [
         "name": "开始",
         "description": "工作流运行的起始节点。",
         "type": "start",
-        "v": "1",
+        "v": "2",
         "group_params": [
             {
                 "name": "开场引导",

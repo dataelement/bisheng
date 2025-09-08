@@ -237,16 +237,18 @@ export default function PreviewParagraph({ fileId, previewCount, edit, fileSuffi
         document.addEventListener('click', fun)
         return () => document.removeEventListener('click', fun)
     }, [])
- useEffect(() => {
-    // 1. 重置懒加载计数（避免显示旧文件的前 N 项）
-    setVisibleItems(10);
-    // 2. 重置选中的分段（避免跨文件选中旧分段）
-    setSelectedChunkIndex(-1);
-    // 3. 重置滚动位置（避免新文件显示旧文件的滚动位置）
-    if (containerRef.current) {
-      containerRef.current.scrollTop = 0;
-    }
-  }, [fileId, setSelectedChunkIndex]); 
+
+    useEffect(() => {
+        // 1. 重置懒加载计数（避免显示旧文件的前 N 项）
+        setVisibleItems(10);
+        // 2. 重置选中的分段（避免跨文件选中旧分段）
+        setSelectedChunkIndex(-1);
+        // 3. 重置滚动位置（避免新文件显示旧文件的滚动位置）
+        if (containerRef.current) {
+            containerRef.current.scrollTop = 0;
+        }
+    }, [fileId, setSelectedChunkIndex]);
+
     // 懒加载逻辑
     useEffect(() => {
         const container = containerRef.current;
