@@ -23,14 +23,14 @@ export const enum ActionType {
     SKILL_FORM_SUBMIT = 'skill_form_submit'
 }
 
+const restartCallBack: any = { current: null } // 用于存储重启回调函数
+
 export const useWebSocket = (helpers) => {
     const { showToast } = useToast();
     const [submitData, setSubmitData] = useRecoilState(submitDataState)
 
     const websocket = wsMap.get(helpers.chatId)
     const currentChatId = useCurrentChatId(helpers.chatId)
-
-    const restartCallBackRef = useRef<any>(null) // 用于存储重启回调函数
 
     // 连接WebSocket
     useEffect(() => {
@@ -170,9 +170,9 @@ export const useWebSocket = (helpers) => {
                 helpers.message.insetSeparator(helpers.chatId, '本轮会话已结束')
                 // helpers.handleMsgError('')
                 // 重启会话按钮,接收close确认后端处理结束后重启会话
-                if (restartCallBackRef.current) {
-                    restartCallBackRef.current()
-                    restartCallBackRef.current = null
+                if (restartCallBack.current) {
+                    restartCallBack.current()
+                    restartCallBack.current = null
                 }
             } else if (data.type === 'over') {
                 helpers.message.createMsg(helpers.chatId, data)
@@ -216,7 +216,7 @@ export const useWebSocket = (helpers) => {
                     sendWsMsg({ action: 'stop' })
                     const { data, ...other } = submitData.flow
                     const flow = { ...other, edges: data.edges, nodes: data.nodes, viewport: data.viewport }
-                    restartCallBackRef.current = () => {
+                    restartCallBack.current = () => {
                         sendWsMsg({
                             action: ActionType.INIT_DATA,
                             chat_id: submitData.chatId,
