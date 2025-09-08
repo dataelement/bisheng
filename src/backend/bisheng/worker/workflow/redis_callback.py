@@ -54,7 +54,7 @@ class RedisCallback(BaseCallback):
     def get_workflow_data(self) -> dict:
         return self.redis_client.get(self.workflow_data_key)
 
-    def set_workflow_status(self, status: int, reason: str = None):
+    def set_workflow_status(self, status: str, reason: str = None):
         self.redis_client.set(self.workflow_status_key,
                               {'status': status, 'reason': reason, 'time': time.time()},
                               expiration=None)
