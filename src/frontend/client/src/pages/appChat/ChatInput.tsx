@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { Button, SendIcon, Textarea } from "~/components";
 import InputFiles from "./components/InputFiles";
@@ -9,6 +9,7 @@ export default function ChatInput({ v }) {
     const [bishengConfig] = useRecoilState(bishengConfState)
     const { inputDisabled, error: inputMsg, showUpload, showStop } = useRecoilValue(currentRunningState)
     const { accepts, chatState, inputRef, setChatFiles, handleInput, handleRestart, handleSendClick, handleStopClick } = useAreaText()
+    const [fileUploading, setFileUploading] = useState(false)
 
     const placholder = useMemo(() => {
         const reason = inputMsg || ' '
@@ -22,14 +23,17 @@ export default function ChatInput({ v }) {
         }, 60)
     }, [inputDisabled])
 
-
-    const fileUploading = false
-
-
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
         <div className="relative px-4 rounded-3xl bg-surface-tertiary ">
             {/* 附件 */}
-            {showUpload && !inputDisabled && <InputFiles accepts={accepts} size={bishengConfig?.uploaded_files_maximum_size || 50} v={v} onChange={setChatFiles} />}
+            {showUpload && !inputDisabled && <InputFiles
+                v={v}
+                accepts={accepts}
+                size={bishengConfig?.uploaded_files_maximum_size || 50}
+                onChange={(files => {
+                    setFileUploading(!files)
+                    setChatFiles(files)
+                })} />}
             {/* send */}
             <div className="flex gap-2 absolute right-3 bottom-3 z-10">
                 {showStop ?

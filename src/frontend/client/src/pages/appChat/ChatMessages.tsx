@@ -18,7 +18,7 @@ import { useMessage } from "./useMessages";
 
 export default function ChatMessages({ useName, title, logo }) {
     const { messageScrollRef, chatId, messages } = useMessage()
-    const { inputForm, guideWord } = useRecoilValue(currentRunningState)
+    const { inputForm, guideWord, inputDisabled } = useRecoilValue(currentRunningState)
     const chatState = useRecoilValue(currentChatState)
 
     console.log('messages :>> ', chatState, messages, guideWord);
@@ -59,6 +59,7 @@ export default function ChatMessages({ useName, title, logo }) {
                             key={msg.id}
                             useName={useName}
                             data={msg}
+                            showButton={!inputDisabled && chatState?.flow.flow_type !== 10}
                         />;
                     case 'guide_word':
                         return <MessageRemark

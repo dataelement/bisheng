@@ -17,25 +17,25 @@ export type FileType =
     | 'xlsx';
 
 const fileTypeColors: Record<FileType, string> = {
-    pdf: 'bg-red-500',
+    pdf: 'bg-[#FA423E]',
     txt: 'bg-gray-500',
-    doc: 'bg-blue-500',
-    docx: 'bg-blue-600',
-    ppt: 'bg-orange-500',
-    pptx: 'bg-orange-600',
+    doc: 'bg-[#0285FF]',
+    docx: 'bg-[#0285FF]',
+    ppt: 'bg-[#FF9800]',
+    pptx: 'bg-[#FF9800]',
     md: 'bg-gray-400',
     html: 'bg-red-500',
     jpg: 'bg-primary',
     jpeg: 'bg-primary',
     png: 'bg-primary',
     bmp: 'bg-primary',
-    csv: 'bg-emerald-500',
-    xls: 'bg-emerald-600',
-    xlsx: 'bg-emerald-700'
+    csv: 'bg-[#06B84C]',
+    xls: 'bg-[#06B84C]',
+    xlsx: 'bg-[#06B84C]'
 };
 
 // 文件扩展名到图标组件的映射
-const baseClassName = 'size-10 p-3 text-white flex items-center justify-center rounded-[10px] shadow-md shadow-gray-400'
+const baseClassName = 'size-10 p-3 text-white flex items-center justify-center rounded-[10px]'
 const iconComponents: Record<FileType, any> = {
     pdf: <div className={`${baseClassName} ${fileTypeColors.pdf}`}>
         <FileMinus />

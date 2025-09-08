@@ -14,7 +14,8 @@ export const enum EVENT_TYPE {
     FORM_SUBMIT = 'form_submit',
     MESSAGE_INPUT = 'message_input',
     INPUT_SUBMIT = 'input_submit',
-    STOP = 'stop'
+    STOP = 'stop',
+    RE_ENTER = 're_enter'
 }
 
 export const FileTypes = {
@@ -196,7 +197,14 @@ export const useAreaText = () => {
                     break;
                 case EVENT_TYPE.INPUT_SUBMIT:
                     handleSendClick(event.detail.data)
-
+                    break;
+                case EVENT_TYPE.RE_ENTER:
+                    if (event.detail.autoSend) {
+                        handleSendClick(event.detail.text)
+                    } else if (textareaRef.current) {
+                        textareaRef.current.value = event.detail.text
+                    }
+                    break;
                 // case EVENT_TYPE.RETRY:
                 //     setSubmitDataState({
                 //         input: '',

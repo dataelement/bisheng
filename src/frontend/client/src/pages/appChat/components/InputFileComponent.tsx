@@ -214,7 +214,7 @@ export default function InputFileComponent({
                             ? "input-edit-node input-dialog text-muted-foreground"
                             : disabled
                                 ? "input-disable input-dialog input-primary"
-                                : "input-dialog input-primary text-muted-foreground"
+                                : "w-full input-dialog input-primary text-muted-foreground cursor-pointer"
                     }
                 >
                     {myValue !== "" ? myValue : placeholder}

@@ -1,10 +1,31 @@
+import { RefreshCw, Search, SquarePen } from "lucide-react";
 import { useMemo } from "react";
+import { useRecoilState } from "recoil";
 import { formatStrTime } from "~/utils";
+import { bishengConfState } from "../store/atoms";
+import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
 
-export default function MessageUser({ useName, data }) {
+export default function MessageUser({ useName, data, showButton }) {
     const avatar = useMemo(() => {
         return <div className="w-6 h-6 min-w-6 text-white bg-primary rounded-full flex justify-center items-center text-xs">{useName.substring(0, 2).toUpperCase()}</div>
     }, [useName])
+    const [config] = useRecoilState(bishengConfState)
+
+    const msg = useMemo(() => {
+        return typeof data.message === 'string' ? data.message : data.message[data.chatKey]
+    }, [])
+
+    const handleResend = (send) => {
+        emitAreaTextEvent({
+            action: EVENT_TYPE.RE_ENTER,
+            autoSend: send,
+            text: msg
+        })
+    }
+
+    const handleSearch = () => {
+        window.open(config?.dialog_quick_search + encodeURIComponent(msg))
+    }
 
     return <div className="flex w-full">
         <div className="w-fit group min-h-8 max-w-[90%]">
@@ -17,8 +38,17 @@ export default function MessageUser({ useName, data }) {
             <div className="rounded-2xl px-6 py-4 bg-[#EEF2FF] dark:bg-[#333A48]">
                 <div className="flex gap-2 ">
                     {avatar}
-                    <div className="text-[#0D1638] dark:text-[#CFD5E8] text-sm break-all whitespace-break-spaces">{typeof data.message === 'string' ? data.message : data.message[data.chatKey]}</div>
+                    <div className="text-[#0D1638] dark:text-[#CFD5E8] text-sm break-all whitespace-break-spaces">{msg}</div>
                 </div>
+            </div>
+            {/* footer */}
+            <div className="flex justify-between mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <span></span>
+                {showButton && <div className="flex gap-0.5 text-gray-400 cursor-pointer self-end">
+                    <SquarePen className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(false)} />
+                    <RefreshCw className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(true)} />
+                    {config?.dialog_quick_search && <Search className="size-6 p-1 hover:text-gray-500" onClick={handleSearch} />}
+                </div>}
             </div>
         </div>
     </div>
