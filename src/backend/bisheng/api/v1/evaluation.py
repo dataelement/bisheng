@@ -2,7 +2,9 @@ import io
 import json
 from typing import Optional
 
+from datasets import Dataset
 from fastapi import APIRouter, Depends, Query, UploadFile, Form, BackgroundTasks
+from loguru import logger
 
 from bisheng.api.services.evaluation import EvaluationService, add_evaluation_task
 from bisheng.api.services.user_service import UserPayload, get_login_user
@@ -48,8 +50,17 @@ def create_evaluation(*,
         # 尝试做下转码操作
         output_file = io.BytesIO()
         file.file = convert_encoding_cchardet(file.file, output_file)
-        EvaluationService.parse_csv(file_data=io.BytesIO(file.file.read()))
+        csv_data = EvaluationService.parse_csv(file_data=io.BytesIO(file.file.read()))
+        data_samples = {
+            "question": [one.get('question') for one in csv_data],
+            "answer": [one.get('answer') for one in csv_data],
+            "ground_truths": [[one.get('ground_truth')] for one in csv_data]
+        }
+        dataset = Dataset.from_dict(data_samples)
     except ValueError:
+        return resp_500(code=400, message='文件格式不符合要求，请参考模板文件')
+    except Exception:
+        logger.exception('evaluation file parse error')
         return resp_500(code=400, message='文件格式不符合要求，请参考模板文件')
     finally:
         file.file.seek(0)
