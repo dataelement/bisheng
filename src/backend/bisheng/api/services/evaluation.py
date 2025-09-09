@@ -6,6 +6,7 @@ from collections import defaultdict
 from copy import deepcopy
 from typing import List
 
+import numpy as np
 import pandas as pd
 from bisheng_ragas import evaluate
 from bisheng_ragas.llms.langchain import LangchainLLM
@@ -391,7 +392,7 @@ def add_evaluation_task(evaluation_id: int):
                 if unit_type != 1:
                     tmp_dict[field] += value
                 if unit_type == 3:
-                    value = f'{value * 100:.2f}%'
+                    value = f'{value * 100:.2f}%' if value not in ["nan", np.nan] else value
                 row_data[title] = value
             row_list.append(row_data)
 
