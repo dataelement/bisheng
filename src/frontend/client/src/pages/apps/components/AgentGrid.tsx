@@ -451,7 +451,7 @@ const handleAddToFavorites = async (type: number, id: string) => {
             ) : (
               <>
                 {/* 智能体卡片列表 */}
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-4 gap-3">
                   {agents.map((agent) => (
                     <AgentCard
                       key={agent.id}
