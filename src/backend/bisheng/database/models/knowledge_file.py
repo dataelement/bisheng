@@ -272,6 +272,24 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return session.scalar(statement)
 
     @classmethod
+    async def async_count_file_by_filters(cls,
+                                          knowledge_id: int,
+                                          file_name: str = None,
+                                          status: List[int] = None,
+                                          file_ids: List[int] = None) -> int:
+        statement = select(func.count(
+            KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id)
+        if file_name:
+            statement = statement.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
+        if status:
+            statement = statement.where(KnowledgeFile.status.in_(status))
+        if file_ids:
+            statement = statement.where(KnowledgeFile.id.in_(file_ids))
+        async with async_session_getter() as session:
+            result = await session.execute(statement)
+            return result.scalar_one()
+
+    @classmethod
     def get_knowledge_ids_by_name(cls, file_name: str) -> List[int]:
         statement = select(KnowledgeFile.knowledge_id).where(KnowledgeFile.file_name.like(f'%{file_name}%')).group_by(
             KnowledgeFile.knowledge_id)

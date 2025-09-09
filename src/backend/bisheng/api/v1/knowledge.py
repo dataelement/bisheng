@@ -134,18 +134,18 @@ async def copy_knowledge(*,
                          login_user: UserPayload = Depends(get_login_user),
                          knowledge_id: int = Body(..., embed=True)):
     """ 复制知识库. """
-    knowledge = KnowledgeDao.query_by_id(knowledge_id)
+    knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
 
     if not login_user.is_admin and knowledge.user_id != login_user.user_id:
         return UnAuthorizedError.return_resp()
 
-    knowledge_count = KnowledgeFileDao.count_file_by_filters(
+    knowledge_count = await KnowledgeFileDao.async_count_file_by_filters(
         knowledge_id,
         status=[KnowledgeFileStatus.PROCESSING.value],
     )
     if knowledge.state != KnowledgeState.PUBLISHED.value or knowledge_count > 0:
         return KnowledgeCPError.return_resp()
-    knowledge = KnowledgeService.copy_knowledge(request, background_tasks, login_user, knowledge)
+    knowledge = await KnowledgeService.copy_knowledge(request, background_tasks, login_user, knowledge)
     return resp_200(knowledge)
 
 

@@ -1156,15 +1156,14 @@ class KnowledgeService(KnowledgeUtils):
         return json.loads(new_data.read().decode("utf-8"))
 
     @classmethod
-    def copy_knowledge(
+    async def copy_knowledge(
             cls,
             request,
             background_tasks: BackgroundTasks,
             login_user: UserPayload,
             knowledge: Knowledge,
     ) -> Any:
-        knowledge.state = KnowledgeState.COPYING.value
-        KnowledgeDao.update_one(knowledge)
+        await KnowledgeDao.async_update_state(knowledge.id, KnowledgeState.COPYING, update_time=knowledge.update_time)
         knowldge_dict = knowledge.model_dump()
         knowldge_dict.pop("id")
         knowldge_dict.pop("create_time")
@@ -1174,7 +1173,7 @@ class KnowledgeService(KnowledgeUtils):
         knowldge_dict["name"] = f"{knowledge.name} 副本"[:30]
         knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
         knowledge_new = Knowledge(**knowldge_dict)
-        target_knowlege = KnowledgeDao.insert_one(knowledge_new)
+        target_knowlege = await KnowledgeDao.async_insert_one(knowledge_new)
         # celery 还没ok
         params = {
             "source_knowledge_id": knowledge.id,

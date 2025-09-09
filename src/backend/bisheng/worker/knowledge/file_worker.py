@@ -7,7 +7,7 @@ from pymilvus import Collection, MilvusException
 from bisheng.api.services.knowledge_imp import decide_vectorstores, process_file_task, delete_knowledge_file_vectors, \
     KnowledgeUtils, delete_vector_files
 from bisheng.api.v1.schemas import FileProcessBase
-from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum
+from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, KnowledgeState
 from bisheng.database.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
@@ -78,9 +78,9 @@ def file_copy_celery(param: json) -> str:
             break
     # 恢复状态
     logger.info("file_copy_celery end")
-    source_knowledge.state = 1
     target_knowledge.state = 1
-    KnowledgeDao.update_one(source_knowledge)
+    KnowledgeDao.update_state(knowledge_id=source_knowledge.id, state=KnowledgeState.PUBLISHED,
+                              update_time=source_knowledge.update_time)
     KnowledgeDao.update_one(target_knowledge)
     return "copy task done"
 

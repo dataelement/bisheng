@@ -4,7 +4,7 @@ from typing import Any, List, Optional, Union
 
 from pydantic import BaseModel, field_validator
 from sqlmodel import Column, DateTime, Field, delete, func, or_, select, text, update
-from sqlmodel.sql.expression import Select, SelectOfScalar
+from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
 from bisheng.database.base import session_getter, async_session_getter
 from bisheng.database.models.base import SQLModelSerializable
@@ -82,12 +82,38 @@ class KnowledgeDao(KnowledgeBase):
             return data
 
     @classmethod
+    async def async_insert_one(cls, data: Knowledge) -> Knowledge:
+        async with async_session_getter() as session:
+            session.add(data)
+            await session.commit()
+            await session.refresh(data)
+            return data
+
+    @classmethod
     def update_one(cls, data: Knowledge) -> Knowledge:
         with session_getter() as session:
             session.add(data)
             session.commit()
             session.refresh(data)
             return data
+
+    @classmethod
+    async def async_update_state(cls, knowledge_id: int, state: KnowledgeState, update_time: Optional[datetime] = None):
+        async with async_session_getter() as session:
+            statement = update(Knowledge).where(col(Knowledge.id) == knowledge_id)
+            statement = statement.values(state=state.value,
+                                         update_time=update_time or datetime.now())
+            await session.exec(statement)
+            await session.commit()
+
+    @classmethod
+    def update_state(cls, knowledge_id: int, state: KnowledgeState, update_time: Optional[datetime] = None):
+        with session_getter() as session:
+            statement = update(Knowledge).where(col(Knowledge.id) == knowledge_id)
+            statement = statement.values(state=state.value,
+                                         update_time=update_time or datetime.now())
+            session.exec(statement)
+            session.commit()
 
     @classmethod
     def update_knowledge_update_time(cls, knowledge: Knowledge):
@@ -101,6 +127,11 @@ class KnowledgeDao(KnowledgeBase):
     def query_by_id(cls, knowledge_id: int) -> Knowledge:
         with session_getter() as session:
             return session.get(Knowledge, knowledge_id)
+
+    @classmethod
+    async def aquery_by_id(cls, knowledge_id: int) -> Knowledge:
+        async with async_session_getter() as session:
+            return await session.get(Knowledge, knowledge_id)
 
     @classmethod
     async def async_query_by_id(cls, knowledge_id: int) -> Knowledge:
