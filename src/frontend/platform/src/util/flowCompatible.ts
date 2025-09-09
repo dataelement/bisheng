@@ -37,6 +37,8 @@ const comptibleStart = (node) => {
             "type": "var",
             "value": "",
         })
+
+        node.v = 2
     }
 }
 
