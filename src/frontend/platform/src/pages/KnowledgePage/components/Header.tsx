@@ -66,7 +66,7 @@ export default function Header({ fileTitle, onBack, showBackButton = true }: Hea
     }
 
     return (
-        <div className="flex items-start h-14">
+        <div className="flex items-start h-14 z-20">
             {/* 回退按钮 - 根据 showBackButton 控制显示 */}
             {showBackButton && (
                 <ShadTooltip content={t('back')} side="top">

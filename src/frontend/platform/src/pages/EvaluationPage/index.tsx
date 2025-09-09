@@ -134,7 +134,7 @@ export default function EvaluationPage() {
                     <TableCell>
                       <div className="flex items-center">
                         <Badge className="whitespace-nowrap">
-                       {t(EvaluationTypeLabelMap[EvaluationType[el.exec_type]]?.label ?? t("unknown"))}
+                          {t(EvaluationTypeLabelMap[EvaluationType[el.exec_type]]?.label ?? t("unknown"))}
                         </Badge>
                         &nbsp;
                         <span className="whitespace-nowrap text-medium-indigo">
@@ -147,49 +147,52 @@ export default function EvaluationPage() {
                       </div>
                     </TableCell>
 
-               <TableCell>
-  {console.log(el,33)}
-  {!!el.status && (
-    <div className="flex items-center">
-      <Badge
-       variant={EvaluationStatusLabelMap[el.status]?.variant ?? "default"}
-        className={"whitespace-nowrap min-w-[60px] justify-center"} 
-      >
-           {t(EvaluationStatusLabelMap[el.status]?.label ?? t("unknown"))}
-        {el.status === EvaluationStatusEnum.running
-          ? ` ${el.progress}`
-          : null}
-      {el.status === EvaluationStatusEnum.failed && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className=" max-w-[50px]">
-                <CircleHelpIcon className="h-3.5 w-3.5" />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="max-w-xs">
-                {el.description || t("description")}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
-      </Badge>
-      
-   
-    </div>
-  )}
-</TableCell>
+                    <TableCell>
+                      {console.log(el, 33)}
+                      {!!el.status && (
+                        <div className="flex items-center">
+                          <Badge
+                            variant={EvaluationStatusLabelMap[el.status]?.variant ?? "default"}
+                            className={"whitespace-nowrap min-w-[60px] justify-center"}
+                          >
+                            {t(EvaluationStatusLabelMap[el.status]?.label ?? t("unknown"))}
+                            {el.status === EvaluationStatusEnum.running
+                              ? ` ${el.progress}`
+                              : null}
+                            {el.status === EvaluationStatusEnum.failed && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="">
+                                      <CircleHelpIcon className="h-3.5 w-3.5" />
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent
+                                    className="max-w-[400px] whitespace-normal"
+                                    side="top"
+                                  >
+                                    <p className="break-words">
+                                      {el.description || t("description")}
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </Badge>
+
+
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap">
                         {el.result_score
                           ? map(el.result_score, (value, key) => {
-                            console.log(key,222);
-                            
+                            console.log(key, 222);
+
                             return (
                               <span className="whitespace-nowrap">
-                            {EvaluationScoreLabelMap[EvaluationScore[key]]?.label ?? key}
+                                {EvaluationScoreLabelMap[EvaluationScore[key]]?.label ?? key}
                                 :{value}&nbsp;
                               </span>
                             );
@@ -202,13 +205,13 @@ export default function EvaluationPage() {
                     </TableCell>
                     <TableCell className="flex justify-end">
                       <div className="flex">
-                        <Button
+                        {el.status !== EvaluationStatusEnum.failed && <Button
                           variant="link"
                           className="no-underline hover:underline"
                           onClick={() => handleDownload(el)}
                         >
                           {t("evaluation.download")}
-                        </Button>
+                        </Button>}
                         <Button
                           variant="link"
                           onClick={() => handleDelete(el.id)}

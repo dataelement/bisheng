@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/bs-ui/button";
+import TipPng from "@/assets/Vector.svg";
 import { Input, SearchInput } from "../../components/bs-ui/input";
 import {
     Table,
@@ -16,20 +17,19 @@ import { Textarea } from "../../components/bs-ui/input";
 import { userContext } from "../../contexts/userContext";
 import { copyLibDatabase, createFileLib, deleteFileLib, readFileLibDatabase, updateKnowledge } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
-// import PaginationComponent from "../../components/PaginationComponent";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { getKnowledgeModelConfig, getLLmServerDetail, getModelListApi } from "@/controllers/API/finetune";
-import { BookCopyIcon, CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Trash2 } from "lucide-react";
+import { CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Trash2 } from "lucide-react";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import { useTable } from "../../util/hook";
 import { ModelSelect } from "../ModelPage/manage/tabs/WorkbenchModel";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 
-function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', currentLib = null }) {
+function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create', currentLib = null }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
 
@@ -42,7 +42,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
 
     // 统一处理模型数据获取
     useEffect(() => {
-        if (!open) return; // 只在打开时执行
+        if (!open) return;
 
         const fetchModelData = async () => {
             try {
@@ -59,12 +59,9 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
                         const modelItem = { value: model.id, label: model.model_name };
                         models[model.id] = server.name + '/' + model.model_name;
 
-                        // 编辑模式：找到当前知识库使用的模型
                         if (mode === 'edit' && currentLib && model.id === currentLib.model) {
                             _model = [serverItem, modelItem];
-                        }
-                        // 创建模式：找到默认模型
-                        else if (mode === 'create' && model.id === embedding_model_id && !_model) {
+                        } else if (mode === 'create' && model.id === embedding_model_id && !_model) {
                             _model = [serverItem, modelItem];
                         }
                         return [...res, modelItem];
@@ -76,20 +73,14 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
                 setOptions(embeddings);
                 onLoadEnd(models);
 
-                // 设置默认模型选择
                 if (mode === 'edit' && currentLib) {
-                    // 编辑模式：设置表单值
                     if (nameRef.current) nameRef.current.value = currentLib.name;
                     if (descRef.current) descRef.current.value = currentLib.description;
                     setIsModelChanged(false);
 
                     if (_model) {
-                        console.log(_model, 33);
-
                         setModal(_model);
                     } else {
-                        console.log(currentLib.model, 44);
-
                         try {
                             const res = await getLLmServerDetail(currentLib.model);
                             if (res.data) {
@@ -97,14 +88,12 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
                             }
                         } catch (error) {
                             console.warn('Failed to get server detail, using fallback');
-                            // 使用默认的第一个模型作为备选
                             if (embeddings.length > 0 && embeddings[0].children.length > 0) {
                                 setModal([embeddings[0], embeddings[0].children[0]]);
                             }
                         }
                     }
                 } else if (mode === 'create' && _model) {
-                    // 创建模式：使用默认模型
                     setModal(_model);
                 }
             } catch (error) {
@@ -117,43 +106,65 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
         };
 
         fetchModelData();
-    }, [open, mode, currentLib]); // 添加依赖项
+    }, [open, mode, currentLib]);
 
     const { toast } = useToast()
     const [error, setError] = useState({ name: false, desc: false })
 
-    const handleCreate = async (e, isImport = false) => {
-        const name = nameRef.current.value
-        let desc = descRef.current.value
-        if (!desc) {
-            desc = `当回答与${name}相关的问题时，参考此知识库`;
-        }
+const handleCreate = async (e, isImport = false) => {
+  const name = nameRef.current.value || ''; // 名称（默认空字符串，避免null）
+  let desc = descRef.current.value || '';   // 描述（默认空字符串）
 
-        if (!name) {
-            handleError(t('lib.enterLibraryName'))
-            return
-        }
+  // 1. 定义默认描述的“固定文本部分”（不含名称）
+  const defaultDescPrefix = "当回答与";
+  const defaultDescSuffix = "相关的问题时，参考此知识库";
+  // 固定文本总长度 = 前缀长度 + 后缀长度
+  const fixedTextLength = defaultDescPrefix.length + defaultDescSuffix.length;
+  // 名称可占用的最大长度 = 200 - 固定文本长度（确保名称+固定文本≤200）
+  const maxNameLengthForDefaultDesc = 200 - fixedTextLength;
 
-        if (name.length > 200) {
-            handleError('知识库名称不能超过200字')
-            return
-        }
+  // 2. 未输入描述时，生成默认描述（严格控制总长度≤200）
+  if (!desc) {
+    // 情况1：名称长度 ≤ 可占用最大长度 → 直接拼接生成默认描述
+    if (name.length <= maxNameLengthForDefaultDesc) {
+      desc = `${defaultDescPrefix}${name}${defaultDescSuffix}`;
+    } 
+    // 情况2：名称长度 > 可占用最大长度 → 截断名称后再拼接
+    else {
+      // 截断名称（保留前 maxNameLengthForDefaultDesc 个字，避免总长度超200）
+      const truncatedName = name.slice(0, maxNameLengthForDefaultDesc);
+      // 生成截断后的默认描述
+      desc = `${defaultDescPrefix}${truncatedName}${defaultDescSuffix}`;
+      // 提示用户：名称过长已被截断（提升体验，避免用户困惑）
+      toast({
+        variant: "info",
+        description: `知识库名称过长，已自动截断为${maxNameLengthForDefaultDesc}字，确保默认描述不超过200字限制`
+      });
+    }
+  }
 
-        if (!modal) {
-            handleError(t('lib.selectModel'))
-            return
-        }
-
-        // 检查名称是否重复
-        if (datalist.find(data => data.name === name && (!currentLib || data.id !== currentLib.id))) {
-            handleError(t('lib.nameExists'))
-            return
-        }
-
-        if (desc.length > 200) {
-            handleError(t('lib.descriptionLimit'))
-            return
-        }
+  // 3. 原有校验逻辑（仅针对用户手动输入的描述，默认描述已确保≤200）
+  if (!name) {
+    handleError(t('lib.enterLibraryName'));
+    return;
+  }
+  if (name.length > 30) {
+    handleError('知识库名称不能超过30字');
+    return;
+  }
+  if (!modal) {
+    handleError(t('lib.selectModel'));
+    return;
+  }
+  if (datalist.find(data => data.name === name && (!currentLib || data.id !== currentLib.id))) {
+    handleError(t('lib.nameExists'));
+    return;
+  }
+  // 仅校验用户手动输入的描述（默认描述已控制长度，可跳过）
+  if (descRef.current.value && desc.length > 200) {
+    handleError(t('lib.descriptionLimit'));
+    return;
+  }
 
         setIsSubmitting(true)
 
@@ -169,7 +180,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
                     ? `/filelib/upload/${res.id}`
                     : `/filelib/${res.id}`
                 );
-                setOpen(false)
+                onOpenChange(false); // 修复：用onOpenChange关闭弹窗
             })).finally(() => {
                 setIsSubmitting(false)
             })
@@ -186,8 +197,11 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
                     variant: "success",
                     description: '更新成功'
                 })
-                setOpen(false)
+                onOpenChange(false); // 修复：用onOpenChange关闭弹窗（替代原setOpen）
                 onLoadEnd()
+            }).catch(error => {
+                toast({ variant: "error", description: '更新失败，请重试' });
+                onOpenChange(false); // 错误时也关闭弹窗，避免状态卡住
             })).finally(() => {
                 setIsSubmitting(false)
             })
@@ -201,7 +215,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
         });
     }
 
-    return <Dialog open={open} onOpenChange={setOpen}>
+    return <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[625px]">
             <DialogHeader>
                 <DialogTitle>{mode === 'create' ? t('lib.createLibrary') : '知识库设置'}</DialogTitle>
@@ -246,24 +260,13 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
                 <div className="">
                     <label htmlFor="model" className="bisheng-label">知识库embedding模型选择</label>
                     {options.length > 0 && (
-                        // <Cascader
-                        //       defaultValue={mode === 'edit' && currentLib ? currentLib.model : ''}
-                        //     placeholder="请在模型管理中配置 embedding 模型"
-                        //     options={options}
-                        //     onChange={(a, val) => {
-                        //         setModal(val);
-                        //         if (mode === 'edit') setIsModelChanged(true);
-                        //     }}
-                        // />
                         <ModelSelect
                             close
                             value={modal ? modal[1]?.value : (mode === 'edit' && currentLib ? currentLib.model : null)}
                             options={options}
                             onChange={(modelId) => {
-                                // 根据选中的模型ID找到对应的服务器和模型对象
                                 let serverItem = null;
                                 let modelItem = null;
-                                console.log(options);
                                 options.forEach(server => {
                                     const foundModel = server.children?.find(child => child.value == modelId);
                                     if (foundModel) {
@@ -337,13 +340,16 @@ export default function KnowledgeFile() {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [currentSettingLib, setCurrentSettingLib] = useState(null);
     const [copyLoadingId, setCopyLoadingId] = useState<string | null>(null);
-
+    // 新增：控制Select下拉状态，避免偶发不弹出
+    const [selectOpenId, setSelectOpenId] = useState<string | null>(null);
+const [forceRender, setForceRender] = useState(0);
+  const triggerForceRender = () => setForceRender(prev => prev + 1);
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({ cancelLoadingWhenReload: true }, (param) =>
         readFileLibDatabase({ ...param, name: param.keyword })
     )
 
     // 复制中开启轮询
-    useEffect(() => {
+   useEffect(() => {
         const todos = datalist.reduce((prev, curr) => {
             if (curr.state === 1) {
                 prev.push({ id: curr.id, name: curr.name })
@@ -371,6 +377,7 @@ export default function KnowledgeFile() {
         }
     }, [datalist])
 
+
     const handleDelete = (id) => {
         bsConfirm({
             title: t('prompt'),
@@ -383,7 +390,23 @@ export default function KnowledgeFile() {
             },
         })
     }
-
+        const handleOpenSettings = (lib) => {
+        if (!settingsOpen && lib?.id) {
+            setCurrentSettingLib(lib);
+            setSettingsOpen(true);
+            setSelectOpenId(null); // 打开弹窗前先关闭下拉
+            triggerForceRender(); // 强制组件重绘，避免状态延迟
+        }
+    }
+    const handleSettingsClose = (isOpen) => {
+        setSettingsOpen(isOpen);
+        if (!isOpen) {
+            setCurrentSettingLib(null); // 清空当前编辑的库
+            setSelectOpenId(null); // 关闭下拉菜单
+            // 延迟100ms确保状态同步到DOM，避免下次点击时状态残留
+            setTimeout(() => triggerForceRender(), 100);
+        }
+    }
     // 进详情页前缓存 page, 临时方案
     const handleCachePage = () => {
         window.LibPage = { page, type: 'file' }
@@ -413,8 +436,8 @@ export default function KnowledgeFile() {
             });
             return;
         }
-        setCopyLoadingId(elem.id); // 设置当前正在复制的ID
-        doing[elem.id] = true; // 标记为正在复制
+        setCopyLoadingId(elem.id);
+        doing[elem.id] = true;
         try {
             await captureAndAlertRequestErrorHoc(copyLibDatabase(elem.id));
             reload();
@@ -424,9 +447,13 @@ export default function KnowledgeFile() {
                 description: '复制失败'
             });
         } finally {
-            setCopyLoadingId(null); // 重置加载状态
+            setCopyLoadingId(null);
         }
     }
+
+    useEffect(() => {
+        console.log("settingsOpen 状态变化：", settingsOpen);
+    }, [settingsOpen]);
 
     return (
         <div className="relative">
@@ -441,10 +468,7 @@ export default function KnowledgeFile() {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            {/* <TableHead>{t('lib.knowledgeBaseId')}</TableHead> */}
                             <TableHead>{t('lib.libraryName')}</TableHead>
-                            {/* <TableHead>{t('lib.model')}</TableHead> */}
-                            {/* <TableHead>{t('createTime')}</TableHead> */}
                             <TableHead>{t('updateTime')}</TableHead>
                             <TableHead>{t('lib.createUser')}</TableHead>
                             <TableHead className="text-right">{t('operations')}</TableHead>
@@ -454,108 +478,156 @@ export default function KnowledgeFile() {
                         {datalist.map((el: any) => (
                             <TableRow
                                 key={el.id}
-                                onClick={() => {
-                                    window.libname = [el.name, el.description];
-                                    navigate(`/filelib/${el.id}`)
-                                    handleCachePage()
-                                }}
+                                // 移除：原行点击事件，移到内容列单独绑定
                             >
-                                {/* <TableCell>{el.id}</TableCell> */}
-                              <TableCell className="font-medium max-w-[200px]">
-  <div className="flex items-center gap-2 py-2">
-    <div className="bg-primary p-2 rounded-sm text-white">
-      <BookCopyIcon size={18} />
-    </div>
-    <div>
-      {/* 知识库名称（不变） */}
-      <div className="truncate max-w-[500px] w-[264px] text-[18px] font-medium leading-6 flex items-center gap-2">
-        {el.name}
-      </div>
-
-      <QuestionTooltip
-        content={el.description || ''} 
-        error={false} // 蓝色气泡（非错误态）
-        className="w-full text-start" // 触发区域铺满，hover描述文字即触发
-      >
-        <div className="truncate max-w-[300px] text-[14px] text-gray-500 leading-6">
-          {el.description || ''} 
-        </div>
-      </QuestionTooltip>
-    </div>
-  </div>
-</TableCell>
-                                {/* <TableCell>{modelNameMap[el.model] || '--'}</TableCell> */}
-                                {/* <TableCell>{el.create_time.replace('T', ' ')}</TableCell> */}
-                                <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-                                <TableCell className="max-w-[300px] break-all">
-                                    <div className=" truncate-multiline">{el.user_name || '--'}</div>
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    <div className="flex items-center justify-end gap-2">
-                                        <Select onValueChange={(e) => {
-                                            switch (e) {
-                                                case 'copy':
-                                                    el.state === 1 && handleCopy(el);
-                                                    break;
-                                                case 'set':
-                                                    setCurrentSettingLib(el);
-                                                    setSettingsOpen(true);
-                                                    break;
-                                                case 'delete':
-                                                    el.copiable && handleDelete(el.id);
-                                                    break;
-                                            }
-                                        }}>
-                                            <SelectTrigger
-                                                showIcon={false}
-                                                disabled={copyLoadingId === el.id}
-                                                className="size-10 px-2 bg-transparent border-none shadow-none hover:bg-gray-300 flex items-center justify-center duration-200 relative">
-                                                {copyLoadingId === el.id ? (
-                                                    <>
-                                                        <LoaderCircle className="animate-spin" />
-                                                        <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white text-gray-800 text-xs px-2 py-1 rounded whitespace-nowrap border border-gray-300 shadow-sm">
-                                                            复制中
-                                                        </div>
-                                                    </>
-                                                ) : (
-                                                    <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
-                                                )}
-                                            </SelectTrigger>
-                                            <SelectContent onClick={(e) => {
-                                                e.stopPropagation()
-                                                document.body.click()
-                                            }}>
-                                                {
-                                                    (el.copiable || user.role === 'admin') && <SelectItem
-                                                        showIcon={false}
-                                                        value="copy"
-                                                        disabled={el.state !== 1}>
-                                                        <div className="flex gap-2 items-center">
-                                                            <Copy className="w-4 h-4" />
-                                                            {el.state === 1 ? t('lib.copy') : t('lib.copying')}
-                                                        </div>
-                                                    </SelectItem>
-                                                }
-                                                <SelectItem value="set" showIcon={false}>
-                                                    <div className="flex gap-2 items-center">
-                                                        <Settings className="w-4 h-4" />
-                                                        {t('设置')}
-                                                    </div>
-                                                </SelectItem>
-                                                <SelectItem
-                                                    value="delete"
-                                                    showIcon={false}
-                                                    disabled={!el.copiable}
-                                                >
-                                                    <div className="flex gap-2 items-center">
-                                                        <Trash2 className="w-4 h-4" />
-                                                        {t('delete')}
-                                                    </div>
-                                                </SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                                {/* 名称列：单独绑定跳转事件 */}
+                                <TableCell 
+                                    className="font-medium max-w-[200px]"
+                                    onClick={() => {
+                                        window.libname = [el.name, el.description];
+                                        navigate(`/filelib/${el.id}`);
+                                        handleCachePage();
+                                    }}
+                                >
+                                    <div className="flex items-center gap-2 py-2">
+                                        <div className="w-[50px] h-[50px]">
+                                            <img src={TipPng} alt="" />
+                                        </div>
+                                        <div>
+                                            <div className="truncate max-w-[500px] w-[264px] text-[18px] font-medium pt-2 flex items-center gap-2">
+                                                {el.name}
+                                            </div>
+                                            <QuestionTooltip
+                                                content={el.description || ''} 
+                                                error={false}
+                                                className="w-full text-start"
+                                            >
+                                                <div className="truncate max-w-[300px] text-[14px] text-[#5A5A5A] pt-1">
+                                                    {el.description || ''} 
+                                                </div>
+                                            </QuestionTooltip>
+                                        </div>
                                     </div>
                                 </TableCell>
+
+                                {/* 更新时间列：单独绑定跳转事件 */}
+                                <TableCell 
+                                    className="text-[#5A5A5A]"
+                                    onClick={() => {
+                                        window.libname = [el.name, el.description];
+                                        navigate(`/filelib/${el.id}`);
+                                        handleCachePage();
+                                    }}
+                                >
+                                    {el.update_time.replace('T', ' ')}
+                                </TableCell>
+
+                                {/* 创建用户列：单独绑定跳转事件 */}
+                                <TableCell 
+                                    className="max-w-[300px] break-all"
+                                    onClick={() => {
+                                        window.libname = [el.name, el.description];
+                                        navigate(`/filelib/${el.id}`);
+                                        handleCachePage();
+                                    }}
+                                >
+                                    <div className="truncate-multiline text-[#5A5A5A]">{el.user_name || '--'}</div>
+                                </TableCell>
+
+                    {/* 操作列：修复Select的事件逻辑 */}
+<TableCell className="text-right">
+  <div className="flex items-center justify-end gap-2">
+    <Select
+      open={selectOpenId === el.id}
+      onOpenChange={(isOpen) => {
+        setSelectOpenId(isOpen ? el.id : null);
+      }}
+      onValueChange={(selectedValue) => {
+        setSelectOpenId(null); // 点击后关闭下拉
+        // 1. 打印日志（现在会正常触发）
+        console.log("选中的选项值：", selectedValue, "当前知识库ID：", el.id, "settingsOpen状态：", settingsOpen);
+        
+        // 2. 根据选中的值分情况处理
+        switch (selectedValue) {
+          case 'copy':
+            el.state === 1 && handleCopy(el);
+            break;
+          case 'set': // 处理“设置”选项
+            if (!settingsOpen && el?.id) {
+              setCurrentSettingLib(el);
+              setSettingsOpen(true);
+            }
+            break;
+          case 'delete':
+            el.copiable && handleDelete(el.id);
+            break;
+        }
+      }}
+    >
+      <SelectTrigger
+        showIcon={false}
+        disabled={copyLoadingId === el.id}
+        onClick={(e) => {
+          e.stopPropagation(); // 阻止冒泡到表格行
+        }}
+        className="size-10 px-2 bg-transparent border-none shadow-none hover:bg-gray-300 flex items-center justify-center duration-200 relative"
+      >
+        {copyLoadingId === el.id ? (
+          <>
+            <LoaderCircle className="animate-spin" />
+            <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white text-gray-800 text-xs px-2 py-1 rounded whitespace-nowrap border border-gray-300 shadow-sm">
+              复制中
+            </div>
+          </>
+        ) : (
+          <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
+        )}
+      </SelectTrigger>
+      <SelectContent 
+        onClick={(e) => {
+          e.stopPropagation(); // 阻止冒泡到外部
+        }}
+        className="z-50"
+      >
+        {/* 复制选项 */}
+        {(el.copiable || user.role === 'admin') && (
+          <SelectItem
+            showIcon={false}
+            value="copy"
+             disabled={el.state !== 1 || copyLoadingId === el.id}
+          >
+            <div className="flex gap-2 items-center">
+              <Copy className="w-4 h-4" />
+              { t('lib.copy') }
+            </div>
+          </SelectItem>
+        )}
+        {/* 设置选项：删除onClick，仅保留value和内容 */}
+        <SelectItem 
+          value="set" 
+          showIcon={false}
+          
+        >
+          <div className="flex gap-2 items-center">
+            <Settings className="w-4 h-4" />
+            {t('设置')}
+          </div>
+        </SelectItem>
+        {/* 删除选项 */}
+        <SelectItem
+          value="delete"
+          showIcon={false}
+          disabled={!el.copiable}
+        >
+          <div className="flex gap-2 items-center">
+            <Trash2 className="w-4 h-4" />
+            {t('delete')}
+          </div>
+        </SelectItem>
+      </SelectContent>
+    </Select>
+  </div>
+</TableCell>
                             </TableRow>
                         ))}
                     </TableBody>
@@ -572,11 +644,24 @@ export default function KnowledgeFile() {
                     />
                 </div>
             </div>
-            <CreateModal datalist={datalist} open={open} setOpen={setOpen} onLoadEnd={() => { }} mode="create"></CreateModal>
+            {/* 创建弹窗 */}
+            <CreateModal
+                datalist={datalist}
+                open={open}
+                onOpenChange={setOpen}
+                onLoadEnd={() => { }}
+                mode="create"
+            />
+            {/* 编辑（设置）弹窗 */}
             <CreateModal
                 datalist={datalist}
                 open={settingsOpen}
-                setOpen={setSettingsOpen}
+                onOpenChange={(isOpen) => {
+                    setSettingsOpen(isOpen);
+                    if (!isOpen) {
+                        setCurrentSettingLib(null);
+                    }
+                }}
                 onLoadEnd={reload}
                 mode="edit"
                 currentLib={currentSettingLib}

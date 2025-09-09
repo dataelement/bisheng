@@ -276,7 +276,7 @@ export default function Files({ onPreview }) {
                 </div>
             )}
 
-            <div className="absolute right-0 top-[-62px] flex gap-4 items-center">
+            <div className="absolute right-0 top-[-62px] flex gap-4 items-center z-20">
                 <SearchInput placeholder={t('searchFileName')} onChange={(e) => {
                     search(e.target.value);
                     // 搜索时清除选择状态
@@ -301,8 +301,8 @@ export default function Files({ onPreview }) {
                                 />
                             </TableHead>
                             <TableHead className="min-w-[250px]">{t('fileName')}</TableHead>
-                            <TableHead className="min-w-[100px]">{t('uploadTime')}</TableHead>
                             <TableHead>切分策略</TableHead>
+                            <TableHead className="min-w-[100px]">{t('updateTime')}</TableHead>
                             <TableHead className="flex items-center gap-4 min-w-[130px]">
                                 {t('status')}
                                 <div className="relative">
@@ -427,8 +427,7 @@ export default function Files({ onPreview }) {
                                         {truncateString(el.file_name, 35)}
                                     </div>
                                 </TableCell>
-                                <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-                                <TableCell>
+                                     <TableCell>
                                     {el.strategy[0] ? (
                                         <TooltipProvider delayDuration={100}>
                                             <Tooltip>
@@ -440,6 +439,8 @@ export default function Files({ onPreview }) {
                                         </TooltipProvider>
                                     ) : splitRuleDesc(el)}
                                 </TableCell>
+                                <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
+                           
                                 <TableCell>
                                     {el.status === 3 ? (
                                         <div className="flex items-center">

@@ -13,7 +13,7 @@ export default function SqlConfigItem({ data, onChange, onValidate }) {
     const { database_engine, db_address, db_name, db_username, db_password, open } = values;
 
     // 定义可用的数据库选项
-    const DATABASE_OPTIONS = ['mysql', 'db2', 'postgres', 'gaussdb', 'oracle'];
+    const DATABASE_OPTIONS = ['MySQL', 'Db2', 'PostgreSQL', 'GaussDB', 'Oracle'];
 
     // 初始化时设置默认数据库类型
     useEffect(() => {
@@ -114,7 +114,7 @@ export default function SqlConfigItem({ data, onChange, onValidate }) {
                         <SelectContent>
                             {DATABASE_OPTIONS.map((engine) => (
                                 <SelectItem key={engine} value={engine}>
-                                    {engine.toUpperCase()}
+                                    {engine}
                                 </SelectItem>
                             ))}
                         </SelectContent>

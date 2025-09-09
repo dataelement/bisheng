@@ -265,7 +265,7 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
     if (['xlsx', 'xls', 'csv'].includes(file.suffix)) return null
 
 
-    return <div className="w-[100%]" onClick={e => {
+    return <div className="w-1/2" onClick={e => {
         e.stopPropagation()
     }}>
         <div className={`flex justify-center items-center relative mb-2 text-sm ${h ? 'h-10' : 'hidden'}`}>

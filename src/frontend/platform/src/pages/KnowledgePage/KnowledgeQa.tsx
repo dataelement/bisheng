@@ -66,37 +66,46 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
     const { toast } = useToast()
     const [error, setError] = useState({ name: false, desc: false })
 
-    const handleCreate = async () => {
-        const name = nameRef.current.value
-        const desc = descRef.current.value
-        const errorlist = []
-
-        if (!name) errorlist.push(t('lib.enterLibraryName'))
-        if (name.length > 30) errorlist.push(t('lib.libraryNameLimit'))
-        if (!modal) errorlist.push(t('lib.selectModel'))
-        if (datalist.find(data => data.name === name)) errorlist.push(t('lib.nameExists'))
-
-        const nameErrors = errorlist.length
-        if (desc.length > 200) errorlist.push(t('lib.descriptionLimit'))
-
-        setError({ name: !!nameErrors, desc: errorlist.length > nameErrors })
-        if (errorlist.length) return handleError(errorlist)
-
-        setIsSubmitting(true)  // 开始提交
-        await captureAndAlertRequestErrorHoc(createFileLib({
-            name,
-            description: desc,
-            model: modal[1].value,
-            type: 1
-        }).then(res => {
-            // @ts-ignore
-            window.libname = name
-            navigate("/filelib/qalib/" + res.id);
-            setOpen(false)
-            setIsSubmitting(false);
-        }))
-        setIsSubmitting(false);
+const handleCreate = async () => {
+    const name = nameRef.current.value;
+    // 1. 获取用户输入的描述，若为空则生成默认描述
+    let desc = descRef.current.value || ''; // 先保留原始输入（空或用户输入）
+    
+    // 关键：未输入描述时，自动生成默认文本（拼接知识库名称）
+    if (!desc.trim()) { // 用 trim() 排除“只输入空格”的情况
+        desc = `当回答与${name}相关的问题时，参考此知识库`;
     }
+
+    const errorlist = [];
+
+    // 2. 原有校验逻辑不变（仅名称校验，描述此时已确保有值）
+    if (!name) errorlist.push(t('lib.enterLibraryName'));
+    if (name.length > 30) errorlist.push(t('lib.libraryNameLimit'));
+    if (!modal) errorlist.push(t('lib.selectModel'));
+    if (datalist.find(data => data.name === name)) errorlist.push(t('lib.nameExists'));
+
+    // 3. 描述长度校验（默认描述可能因名称过长超200字，需保留校验）
+    if (desc.length > 200) errorlist.push(t('lib.descriptionLimit'));
+
+    const nameErrors = errorlist.length;
+    setError({ name: !!nameErrors, desc: errorlist.length > nameErrors });
+    if (errorlist.length) return handleError(errorlist);
+
+    // 4. 提交逻辑不变（此时 desc 要么是用户输入，要么是默认生成的文本）
+    setIsSubmitting(true);
+    await captureAndAlertRequestErrorHoc(createFileLib({
+        name,
+        description: desc, // 提交自动生成的默认描述
+        model: modal[1].value,
+        type: 1
+    }).then(res => {
+        window.libname = name;
+        navigate("/filelib/qalib/" + res.id);
+        setOpen(false);
+        setIsSubmitting(false);
+    }));
+    setIsSubmitting(false);
+};
 
     const handleError = (list) => {
         toast({
@@ -114,11 +123,11 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
                 <div className="">
                     <label htmlFor="name" className="bisheng-label">{t('lib.libraryName')}</label>
                     <span className="text-red-500">*</span>
-                    <Input name="name" ref={nameRef} placeholder={t('lib.libraryName')} className={`col-span-3 ${error.name && 'border-red-400'}`} />
+                    <Input name="name" ref={nameRef} placeholder={t('请输入知识库名称')} className={`col-span-3 ${error.name && 'border-red-400'}`} />
                 </div>
                 <div className="">
                     <label htmlFor="name" className="bisheng-label">{t('lib.description')}</label>
-                    <Textarea id="desc" ref={descRef} placeholder={t('lib.description')} className={`col-span-3 ${error.desc && 'border-red-400'}`} />
+                    <Textarea id="desc" ref={descRef} placeholder={t('请输入知识库描述')} className={`col-span-3 ${error.desc && 'border-red-400'}`} />
                 </div>
                 <div className="">
                     <label htmlFor="roleAndTasks" className="bisheng-label">{t('lib.model')}</label>
@@ -218,14 +227,22 @@ export default function KnowledgeQa(params) {
             </div>
 
             <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead className="w-[200px]">{t('lib.libraryName')}</TableHead>
-                        <TableHead>{t('updateTime')}</TableHead>
-                        <TableHead>{t('lib.createUser')}</TableHead>
-                        <TableHead className="text-right">{t('operations')}</TableHead>
-                    </TableRow>
-                </TableHeader>
+             <TableHeader>
+  <TableRow className="w-full">
+    <TableHead className="flex: 1 text-left pr-6">
+      {t('lib.libraryName')}
+    </TableHead>
+    <TableHead className="flex: 1 text-left pl-2">
+      {t('updateTime')}
+    </TableHead>
+    <TableHead className="flex: 1 text-left pl-2">
+      {t('lib.createUser')}
+    </TableHead>
+    <TableHead className="flex: 1 text-right pl-2">
+      {t('operations')}
+    </TableHead>
+  </TableRow>
+</TableHeader>
 
                 <TableBody>
                     {datalist.map((el: any) => (
@@ -240,7 +257,7 @@ export default function KnowledgeQa(params) {
                             }}
                         >
                             {/* 名称+描述单元格：恢复原有气泡结构，确保蓝色生效 */}
-   <TableCell className="font-medium max-w-[200px] overflow-visible">
+   <TableCell className="flex: 1 font-medium max-w-[200px] overflow-visible">
   <div className="flex items-start gap-2">
     <img 
       src="/assets/qa-logo.svg" 
@@ -275,21 +292,20 @@ export default function KnowledgeQa(params) {
   </div>
 </TableCell>
 
-                            <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
+                            <TableCell className="text-[#5A5A5A] flex: 1">{el.update_time.replace('T', ' ')}</TableCell>
 
-                            <TableCell className="max-w-[300px] break-all">
+                            <TableCell className="max-w-[300px] break-all text-[#5A5A5A] flex: 1">
                                 <div className="truncate-multiline">{el.user_name || '--'}</div>
                             </TableCell>
 
                             {/* 操作列：修复「按钮移入行不高亮」 */}
-                            <TableCell className="text-right hover:bg-transparent">
+                            <TableCell className="flex: 1 text-right hover:bg-transparent">
                                 {/* 关键：hover:bg-transparent覆盖行的hover:bg-gray-50 */}
                                 <div className="flex items-center justify-end gap-2">
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
                                             <button
-                                                className="w-10 h-10 hover:bg-gray-200 rounded flex items-center justify-center
-                                                         transition-colors duration-200 border border-transparent relative"
+                            className="size-10 px-2 bg-transparent border-none shadow-none hover:bg-gray-300 flex items-center justify-center duration-200 relative"
                                                 onClick={(e) => e.stopPropagation()}
                                                 // 关键：stopPropagation防止触发父行onClick
                                             >

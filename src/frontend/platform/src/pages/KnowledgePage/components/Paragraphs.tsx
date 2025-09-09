@@ -415,10 +415,13 @@ export default function Paragraphs({ fileId, onBack }) {
         separator: [], // 分隔符
         separatorRule: [] // 分隔规则
     }), [currentFile, id]);
+    console.log(selectedFileId,currentFile,fileUrl,isFetchingUrl,78);
+    
     const isPreviewVisible = selectedFileId && currentFile && fileUrl && !isFetchingUrl;
     const isParagraphVisible = datalist.length > 0;
+    console.log(isPreviewVisible,isParagraphVisible,89);
     const contentLayoutClass = useMemo(() => {
-        if (isPreviewVisible && isParagraphVisible) {
+        if (isPreviewVisible && isParagraphVisible && !['xlsx', 'xls', 'csv'].includes(currentFile.suffix)) {
             return "flex bg-background-main"; // 双区域显示：默认Flex
         } else if (isPreviewVisible || isParagraphVisible) {
             return "flex justify-center bg-background-main"; // 单区域显示：居中
@@ -570,9 +573,9 @@ export default function Paragraphs({ fileId, onBack }) {
                         {selectError}
                     </div>
                 )}
-                {isParagraphVisible ? (
-                    <div className={isPreviewVisible ? "w-1/2" : "w-full max-w-3xl"}>
-                        <div className="flex flex-wrap gap-2 p-2 pt-0 items-start">
+                {isParagraphVisible  ? (
+                    <div className={isPreviewVisible ? "w-1/2" : " w-full max-w-3xl"}>
+                        <div className="flex justify-center items-center relative mb-2 text-sm gap-2 p-2 pt-0 ">
                             <PreviewParagraph
                                 fileId={selectedFileId}
                                 previewCount={datalist.length}
@@ -587,7 +590,6 @@ export default function Paragraphs({ fileId, onBack }) {
                     </div>
                 ) : (
                     <div className="flex justify-center items-center flex-col h-full text-gray-400">
-                        <FileText width={160} height={160} className="text-border" />
                     </div>
                 )}
             </div>

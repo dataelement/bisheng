@@ -361,6 +361,7 @@
     "enterExecType": "请选择要评测的应用类型",
     "enterUniqueId": "请选择具体应用",
     "enterVersion": "请选择版本",
+    "workFlow":"请选择工作流",
     "enterFile": "请选择测试集数据",
     "fileSizeLimit": "文件大小限制在10M以内",
     "enterPrompt": "评测指令不能为空",
