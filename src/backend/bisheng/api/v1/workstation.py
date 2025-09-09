@@ -371,7 +371,7 @@ async def chat_completions(
                                       data=delta(id=stepId, delta=content)).toString()
                     prompt = wsConfig.webSearch.prompt.format(
                         search_results=search_res[:max_token],
-                        cur_date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        cur_date=datetime.now().strftime('%Y-%m-%d'),
                         question=data.text)
             elif data.knowledge_enabled:
                 logger.info(f'knowledge, prompt={data.text}')
