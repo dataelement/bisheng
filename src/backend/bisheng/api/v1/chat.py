@@ -6,7 +6,6 @@ from fastapi import (APIRouter, Body, HTTPException, Query, Request, WebSocket, 
                      status)
 from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
-from fastapi_jwt_auth import AuthJWT
 from sqlmodel import select
 
 from bisheng.api.errcode.base import NotFoundError
@@ -40,6 +39,7 @@ from bisheng.graph.graph.base import Graph
 from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
+from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(tags=['Chat'])
 chat_manager = ChatManager()
@@ -188,6 +188,13 @@ def get_chatmessage(*,
     with session_getter() as session:
         db_message = session.exec(where.order_by(ChatMessage.id.desc()).limit(page_size)).all()
     return resp_200(db_message)
+
+
+@router.get('/chat/info')
+async def get_chat_info(chat_id: str = Query(..., description='会话唯一id，chai_id')):
+    """ 通过chat_id获取会话详情 """
+    res = await MessageSessionDao.async_get_one(chat_id)
+    return resp_200(res)
 
 
 @router.post('/chat/conversation/rename')

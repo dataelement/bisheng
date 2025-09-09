@@ -19,6 +19,8 @@ class MessageSessionBase(SQLModelSerializable):
     flow_id: str = Field(index=True, description='应用唯一ID')
     flow_type: int = Field(description='应用类型。技能、助手、工作流')
     flow_name: str = Field(index=True, description='应用名称')
+    flow_description: Optional[str] = Field(default=None, description='应用描述')
+    flow_logo: Optional[str] = Field(default=None, description='应用logo')
     user_id: int = Field(index=True, description='创建会话的用户ID')
     is_delete: Optional[bool] = Field(default=False, description='对应的技能或者会话本身是否被删除')
     like: Optional[int] = Field(default=0, description='点赞的消息数量')
@@ -199,6 +201,20 @@ class MessageSessionDao(MessageSessionBase):
             return
         statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(
             copied=MessageSession.copied + copied_count)
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def update_session_info_by_flow(cls, name: str, description: str, logo: str, flow_id: str, flow_type: int):
+        statement = update(MessageSession).where(
+            MessageSession.flow_id == flow_id,
+            MessageSession.flow_type == flow_type
+        ).values(
+            flow_name=name,
+            flow_description=description,
+            flow_logo=logo
+        )
         with session_getter() as session:
             session.exec(statement)
             session.commit()

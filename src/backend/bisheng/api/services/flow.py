@@ -2,11 +2,11 @@ import asyncio
 import copy
 from typing import List, Dict, AsyncGenerator, Optional
 
-from fastapi.encoders import jsonable_encoder
 from fastapi import Request
+from fastapi.encoders import jsonable_encoder
 from loguru import logger
 
-from bisheng.api.errcode.base import UnAuthorizedError, NotFoundError
+from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.flow import NotFoundVersionError, CurVersionDelError, VersionNameExistsError, \
     NotFoundFlowError, \
     FlowOnlineEditError, WorkFlowOnlineEditError
@@ -21,6 +21,7 @@ from bisheng.database.models.flow import FlowDao, FlowStatus, Flow, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead, FlowVersion
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum, GroupResource
 from bisheng.database.models.role_access import RoleAccessDao, AccessType
+from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
@@ -224,7 +225,7 @@ class FlowService(BaseService):
         """
         flow_ids = []
         if tag_id:
-            ret = TagDao.get_resources_by_tags_batch([tag_id], [ResourceTypeEnum.FLOW,ResourceTypeEnum.WORK_FLOW])
+            ret = TagDao.get_resources_by_tags_batch([tag_id], [ResourceTypeEnum.FLOW, ResourceTypeEnum.WORK_FLOW])
             flow_ids = [one.resource_id for one in ret]
             assistant_ids = [one.resource_id for one in ret]
             if not assistant_ids:
@@ -239,7 +240,7 @@ class FlowService(BaseService):
         else:
             user_role = UserRoleDao.get_user_roles(user.user_id)
             role_ids = [role.role_id for role in user_role]
-            role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.FLOW,AccessType.WORK_FLOW])
+            role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.FLOW, AccessType.WORK_FLOW])
             flow_id_extra = []
             if role_access:
                 flow_id_extra = [access.third_id for access in role_access]
@@ -462,4 +463,8 @@ class FlowService(BaseService):
 
         # 将用户组下关联的技能删除
         GroupResourceDao.delete_group_resource_by_third_id(flow_info.id, ResourceTypeEnum.FLOW)
+
+        # 更新会话信息
+        MessageSessionDao.update_session_info_by_flow(flow_info.name, flow_info.description, flow_info.logo,
+                                                      flow_info.id, flow_info.flow_type)
         return True
