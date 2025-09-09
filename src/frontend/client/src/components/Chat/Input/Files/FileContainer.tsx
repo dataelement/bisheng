@@ -3,7 +3,7 @@ import type { ExtendedFile } from '~/common';
 import FilePreview from './FilePreview';
 import RemoveFile from './RemoveFile';
 import { getFileType } from '~/utils';
-import { getFileTypebyFileName } from '~/components/ui/icon/File/fileIcon';
+import { getFileTypebyFileName } from '~/components/ui/icon/File/FileIcon';
 
 const FileContainer = ({
   file,

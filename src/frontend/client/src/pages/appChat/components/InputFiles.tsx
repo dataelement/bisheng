@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 import { useRef, useState } from "react";
 import { uploadChatFile } from "~/api/apps";
 import { AttachmentIcon } from "~/components/svg";
-import { FileIcon, getFileTypebyFileName } from "~/components/ui/icon/File/fileIcon";
+import { FileIcon, getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
 import { useToastContext } from "~/Providers";
 import { generateUUID, getFileExtension } from "~/utils";
 

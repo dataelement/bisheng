@@ -1,5 +1,5 @@
 import type { ExtendedFile } from '~/common';
-import { FileIcon, getFileTypebyFileName } from '~/components/ui/icon/File/fileIcon';
+import { FileIcon, getFileTypebyFileName } from '~/components/ui/icon/File/FileIcon';
 import type { TFile } from '~/data-provider/data-provider/src';
 import { useProgress } from '~/hooks';
 
