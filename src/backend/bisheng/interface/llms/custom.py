@@ -137,6 +137,7 @@ _llm_node_type: Dict = {
     LLMServerType.MOONSHOT.value: {'client': 'MoonshotChat', 'params_handler': _get_openai_params},
     LLMServerType.VOLCENGINE.value: {'client': 'ChatSparkOpenAI', 'params_handler': _get_openai_params},
     LLMServerType.SILICON.value: {'client': 'ChatSparkOpenAI', 'params_handler': _get_openai_params},
+    LLMServerType.MIND_IE.value: {'client': 'ChatSparkOpenAI', 'params_handler': _get_openai_params},
 }
 
 
