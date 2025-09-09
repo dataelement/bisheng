@@ -259,95 +259,106 @@ export default function QasPage() {
         }
         setTitle(window.libname || localStorage.getItem('libname'))
     }, [])
-    const handleEnableSelected = async () => {
-        if (!selectedItems.length) return;
+const handleEnableSelected = async () => {
+  if (!selectedItems.length) return;
 
-        try {
-            // 筛选出当前未启用的项目
-            const itemsToEnable = selectedItems.filter(id => {
-                const item = datalist.find(el => el.id === id);
-                return item && item.status !== 1; // 只启用状态不是1的项目
-            });
+  try {
+    const itemsToEnable = selectedItems.filter(id => {
+      const item = datalist.find(el => el.id === id);
+      return !item || item.status !== 1;
+    });
 
-            if (itemsToEnable.length === 0) {
-                toast({
-                    variant: 'info',
-                    description: '所选项目已经是启用状态'
-                });
-                return;
-            }
+    if (itemsToEnable.length === 0) {
+      toast({ variant: 'info', description: '所选项目已经是启用状态' });
+      return;
+    }
 
-            // 先更新本地 UI 状态为"处理中"
-            refreshData(item => itemsToEnable.includes(item.id), { status: 2 });
+    refreshData(
+      item => itemsToEnable.includes(item.id), 
+      { status: 2 } // 处理中状态
+    );
 
-            // 调用批量启用 API
-            await Promise.all(itemsToEnable.map(id =>
-                updateQaStatus(id, 1) // 1 表示启用
-            ));
+    // 优化：使用Promise.allSettled，避免单个ID失败导致整体中断
+    const results = await Promise.allSettled(
+      itemsToEnable.map(id => updateQaStatus(id, 1)) // 1 = 启用
+    );
 
-            // 刷新数据
-            reload();
-        } catch (error) {
-            toast({
-                variant: 'error',
-                description: '批量启用失败'
-            });
-        }
-    };
+    // 4. 统计结果（成功/失败）
+    const successCount = results.filter(res => res.status === 'fulfilled').length;
+    const failedIds = results
+      .filter(res => res.status === 'rejected')
+      .map((res, idx) => itemsToEnable[idx]); // 匹配失败的ID
+
+    // 5. 关键：刷新所有分页数据，同步第二页及以后的状态
+    await reload();
+
+    // 6. 操作完成：清空选中项（可选，根据业务需求决定是否保留）
+    setSelectedItems([]);
+    setSelectAll(false);
+
+    // 7. 结果提示
+    if (successCount > 0) {
+      toast({ variant: 'success', description: `成功启用 ${successCount} 个项目` });
+    }
+    if (failedIds.length > 0) {
+      toast({
+        variant: 'warning',
+        description: `部分项目启用失败，ID: ${failedIds.join(', ')}`
+      });
+    }
+  } catch (error) {
+    toast({ variant: 'error', description: '批量启用操作异常，请重试' });
+  }
+};
 
     // 批量禁用勾选的 QA 项
-    const handleDisableSelected = async () => {
-        if (!selectedItems.length) return;
+const handleDisableSelected = async () => {
+  if (!selectedItems.length) return;
 
-        try {
-            const itemsToDisable = [...selectedItems]; 
+  try {
+    // 1. 筛选所有跨页选中项中“未禁用”的ID
+    const itemsToDisable = selectedItems.filter(id => {
+      const item = datalist.find(el => el.id === id);
+      return !item || item.status !== 0; // 0 = 禁用
+    });
 
-            if (itemsToDisable.length === 0) {
-                toast({
-                    variant: 'info',
-                    description: '所选项目已经是禁用状态'
-                });
-                return;
-            }
-            // 用 Promise.all 并行处理，同时添加错误捕获（单个ID失败不影响整体）
-            const results = await Promise.all(
-                itemsToDisable.map(id =>
-                    updateQaStatus(id, 0)
-                        .catch(err => {
-                            console.error(`禁用ID:${id}失败`, err);
-                            return { id, success: false }; // 记录失败ID
-                        })
-                )
-            );
-            const failedIds = results.filter(res => res?.success === false).map(res => res.id);
-            if (failedIds.length > 0) {
-                toast({
-                    variant: 'warning',
-                    description: `部分项目禁用失败，ID: ${failedIds.join(', ')}`
-                });
-            }
+    if (itemsToDisable.length === 0) {
+      toast({ variant: 'info', description: '所选项目已经是禁用状态' });
+      return;
+    }
 
-            //  刷新所有分页数据（关键：确保第二页数据状态同步更新）
-            reload();
+    // 2. 跨页批量调用API
+    const results = await Promise.allSettled(
+      itemsToDisable.map(id => updateQaStatus(id, 0))
+    );
 
-            // 清空选中项，隐藏批量操作按钮
-            setSelectedItems([]);
-            setSelectAll(false);
-            const successCount = itemsToDisable.length - failedIds.length;
-            if (successCount > 0) {
-                toast({
-                    variant: 'success',
-                    description: `成功禁用 ${successCount} 个项目`
-                });
-            }
+    // 3. 统计结果
+    const successCount = results.filter(res => res.status === 'fulfilled').length;
+    const failedIds = results
+      .filter(res => res.status === 'rejected')
+      .map((res, idx) => itemsToDisable[idx]);
 
-        } catch (error) {
-            toast({
-                variant: 'error',
-                description: '批量禁用操作异常，请重试'
-            });
-        }
-    };
+    // 4. 关键：刷新所有数据，同步第二页状态
+    await reload();
+
+    // 5. 清空选中项
+    setSelectedItems([]);
+    setSelectAll(false);
+
+    // 6. 提示
+    if (successCount > 0) {
+      toast({ variant: 'success', description: `成功禁用 ${successCount} 个项目` });
+    }
+    if (failedIds.length > 0) {
+      toast({
+        variant: 'warning',
+        description: `部分项目禁用失败，ID: ${failedIds.join(', ')}`
+      });
+    }
+  } catch (error) {
+    toast({ variant: 'error', description: '批量禁用操作异常，请重试' });
+  }
+};
     const handleCheckboxChange = (id) => {
         setSelectedItems((prevSelectedItems) => {
             if (prevSelectedItems.includes(id)) {
@@ -364,24 +375,30 @@ export default function QasPage() {
             currentPageIds.every(id => selectedItems.includes(id));
         setSelectAll(isAllSelected);
     }, [datalist, selectedItems]);
-    const handleSelectAll = () => {
-        const currentPageIds = datalist.map(item => item.id);
+   // 1. 全选/取消全选当前页（支持跨页累加）
+const handleSelectAll = () => {
+  const currentPageIds = datalist.map(item => item.id);
+  setSelectedItems(prev => {
+    const newSelected = new Set(prev);
+    if (selectAll) {
+      // 取消当前页全选：移除当前页所有ID
+      currentPageIds.forEach(id => newSelected.delete(id));
+    } else {
+      // 全选当前页：添加当前页所有ID（去重）
+      currentPageIds.forEach(id => newSelected.add(id));
+    }
+    return Array.from(newSelected);
+  });
+};
 
-        if (selectAll) {
-            // 取消全选：从选中项中移除当前页的所有项目
-            setSelectedItems(prev => prev.filter(id => !currentPageIds.includes(id)));
-        } else {
-            // 全选：添加当前页的所有项目到选中项中（去重）
-            setSelectedItems(prev => [...new Set([...prev, ...currentPageIds])]);
-        }
-        setSelectAll(!selectAll);
-    };
-
-
-    // useEffect(() => {
-    //     setSelectedItems([]);
-    //     setSelectAll(false);
-    // }, [page]);
+// 2. 计算当前页全选状态（仅判断当前页是否全部被选中）
+useEffect(() => {
+  const currentPageIds = datalist.map(item => item.id);
+  // 条件：1. 当前页有数据；2. 当前页所有ID都在跨页选中列表中
+  const isCurrentPageAllSelected = currentPageIds.length > 0 && 
+    currentPageIds.every(id => selectedItems.includes(id));
+  setSelectAll(isCurrentPageAllSelected); // 仅控制当前页全选框状态
+}, [datalist, selectedItems]); // 依赖当前页数据和跨页选中列表
 
     const handleDelete = (id) => {
         bsConfirm({
@@ -395,19 +412,24 @@ export default function QasPage() {
         })
     }
 
-    const handleDeleteSelected = () => {
-        bsConfirm({
-            desc: t('confirmDeleteSelectedQaData'),
-            onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteQa(selectedItems).then(res => {
-                    reload();
-                    setSelectedItems([]);
-                    setSelectAll(false);
-                }));
-                next();
-            },
-        });
-    };
+const handleDeleteSelected = () => {
+  if (!selectedItems.length) return;
+
+  bsConfirm({
+    desc: t('confirmDeleteSelectedQaData', { count: selectedItems.length }), // 显示跨页选中总数
+    onOk(next) {
+      captureAndAlertRequestErrorHoc(
+        deleteQa(selectedItems) // 传入所有跨页选中ID
+          .then(res => {
+            reload(); // 刷新所有数据，同步第二页
+            setSelectedItems([]); // 清空选中
+            setSelectAll(false);
+          })
+      );
+      next();
+    },
+  });
+};
     const handleStatusClick = async (id: number, checked: boolean) => {
         const targetStatus = checked ? 1 : 0;
         const item = datalist.find(el => el.id === id);

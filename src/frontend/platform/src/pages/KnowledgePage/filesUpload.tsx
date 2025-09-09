@@ -34,7 +34,7 @@ export default function FilesUpload() {
   const [resultFiles, setResultFiles] = useState([]); // 上传的文件列表
   const [segmentRules, setSegmentRules] = useState(null); // 分段策略配置
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isNextDisabled, setIsNextDisabled] = useState(true);
+  const [isNextDisabled, setIsNextDisabled] = useState(false);
   const [repeatFiles, setRepeatFiles] = useState([]); // 重复文件提醒
   const [retryLoad, setRetryLoad] = useState(false);
 

@@ -124,7 +124,7 @@ export default function AdjustFilesUpload() {
   
   const [segmentRules, setSegmentRules] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isNextDisabled, setIsNextDisabled] = useState(true);
+  const [isNextDisabled, setIsNextDisabled] = useState(false);
   const [repeatFiles, setRepeatFiles] = useState([]);
   const [retryLoad, setRetryLoad] = useState(false);
 

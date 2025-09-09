@@ -66,46 +66,46 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
     const { toast } = useToast()
     const [error, setError] = useState({ name: false, desc: false })
 
-const handleCreate = async () => {
-    const name = nameRef.current.value;
-    // 1. 获取用户输入的描述，若为空则生成默认描述
-    let desc = descRef.current.value || ''; // 先保留原始输入（空或用户输入）
-    
-    // 关键：未输入描述时，自动生成默认文本（拼接知识库名称）
-    if (!desc.trim()) { // 用 trim() 排除“只输入空格”的情况
-        desc = `当回答与${name}相关的问题时，参考此知识库`;
-    }
+    const handleCreate = async () => {
+        const name = nameRef.current.value;
+        // 1. 获取用户输入的描述，若为空则生成默认描述
+        let desc = descRef.current.value || ''; // 先保留原始输入（空或用户输入）
 
-    const errorlist = [];
+        // 关键：未输入描述时，自动生成默认文本（拼接知识库名称）
+        if (!desc.trim()) { // 用 trim() 排除“只输入空格”的情况
+            desc = `当回答与${name}相关的问题时，参考此知识库`;
+        }
 
-    // 2. 原有校验逻辑不变（仅名称校验，描述此时已确保有值）
-    if (!name) errorlist.push(t('lib.enterLibraryName'));
-    if (name.length > 30) errorlist.push(t('lib.libraryNameLimit'));
-    if (!modal) errorlist.push(t('lib.selectModel'));
-    if (datalist.find(data => data.name === name)) errorlist.push(t('lib.nameExists'));
+        const errorlist = [];
 
-    // 3. 描述长度校验（默认描述可能因名称过长超200字，需保留校验）
-    if (desc.length > 200) errorlist.push(t('lib.descriptionLimit'));
+        // 2. 原有校验逻辑不变（仅名称校验，描述此时已确保有值）
+        if (!name) errorlist.push(t('lib.enterLibraryName'));
+        if (name.length > 30) errorlist.push(t('lib.libraryNameLimit'));
+        if (!modal) errorlist.push(t('lib.selectModel'));
+        if (datalist.find(data => data.name === name)) errorlist.push(t('lib.nameExists'));
 
-    const nameErrors = errorlist.length;
-    setError({ name: !!nameErrors, desc: errorlist.length > nameErrors });
-    if (errorlist.length) return handleError(errorlist);
+        // 3. 描述长度校验（默认描述可能因名称过长超200字，需保留校验）
+        if (desc.length > 200) errorlist.push(t('lib.descriptionLimit'));
 
-    // 4. 提交逻辑不变（此时 desc 要么是用户输入，要么是默认生成的文本）
-    setIsSubmitting(true);
-    await captureAndAlertRequestErrorHoc(createFileLib({
-        name,
-        description: desc, // 提交自动生成的默认描述
-        model: modal[1].value,
-        type: 1
-    }).then(res => {
-        window.libname = name;
-        navigate("/filelib/qalib/" + res.id);
-        setOpen(false);
+        const nameErrors = errorlist.length;
+        setError({ name: !!nameErrors, desc: errorlist.length > nameErrors });
+        if (errorlist.length) return handleError(errorlist);
+
+        // 4. 提交逻辑不变（此时 desc 要么是用户输入，要么是默认生成的文本）
+        setIsSubmitting(true);
+        await captureAndAlertRequestErrorHoc(createFileLib({
+            name,
+            description: desc, // 提交自动生成的默认描述
+            model: modal[1].value,
+            type: 1
+        }).then(res => {
+            window.libname = name;
+            navigate("/filelib/qalib/" + res.id);
+            setOpen(false);
+            setIsSubmitting(false);
+        }));
         setIsSubmitting(false);
-    }));
-    setIsSubmitting(false);
-};
+    };
 
     const handleError = (list) => {
         toast({
@@ -227,26 +227,26 @@ export default function KnowledgeQa(params) {
             </div>
 
             <Table>
-             <TableHeader>
-  <TableRow className="w-full">
-    <TableHead className="flex: 1 text-left pr-6">
-      {t('lib.libraryName')}
-    </TableHead>
-    <TableHead className="flex: 1 text-left pl-2">
-      {t('updateTime')}
-    </TableHead>
-    <TableHead className="flex: 1 text-left pl-2">
-      {t('lib.createUser')}
-    </TableHead>
-    <TableHead className="flex: 1 text-right pl-2">
-      {t('operations')}
-    </TableHead>
-  </TableRow>
-</TableHeader>
+                <TableHeader>
+                    <TableRow className="w-full">
+                        <TableHead className="flex: 1 text-left pr-6">
+                            {t('lib.libraryName')}
+                        </TableHead>
+                        <TableHead className="flex: 1 text-left pl-2">
+                            {t('updateTime')}
+                        </TableHead>
+                        <TableHead className="flex: 1 text-left pl-2">
+                            {t('lib.createUser')}
+                        </TableHead>
+                        <TableHead className="flex: 1 text-right pl-2">
+                            {t('operations')}
+                        </TableHead>
+                    </TableRow>
+                </TableHeader>
 
                 <TableBody>
                     {datalist.map((el: any) => (
-                        <TableRow 
+                        <TableRow
                             key={el.id}
                             // 行hover样式：仅非按钮区域生效
                             className="hover:bg-gray-50 transition-colors"
@@ -257,40 +257,40 @@ export default function KnowledgeQa(params) {
                             }}
                         >
                             {/* 名称+描述单元格：恢复原有气泡结构，确保蓝色生效 */}
-   <TableCell className="flex: 1 font-medium max-w-[200px] overflow-visible">
-  <div className="flex items-start gap-2">
-    <img 
-      src="/assets/qa-logo.svg" 
-      alt="知识库图标"
-      className="w-[50px] h-[50px] mt-1 flex-shrink-0" 
-    />
-    
-    <div className="min-w-0 overflow-visible">
-      {/* 知识库名称（不变） */}
-  <div className="truncate max-w-[500px] text-[18px] font-medium mb-0 mt-3">
-    {el.name}
-  </div>
-      <QuestionTooltip
-        content={el.description || ''}
-        error={false} 
-        className="w-full text-start" // 触发区域铺满，确保hover描述文字就触发
-      >
-       <div className="truncate max-w-[500px] text-[14px] text-[#5A5A5A] font-semibold">
-      {el.description || ''}
-    </div>
-        <TooltipContent 
-          side="top" // 气泡在描述文字上方显示
-          sideOffset={4}
-          className="bg-primary/80 text-primary-foreground"
-        >
-          <div className="max-w-96 text-left break-all whitespace-normal">
-            {el.description || ''}
-          </div>
-        </TooltipContent>
-      </QuestionTooltip>
-    </div>
-  </div>
-</TableCell>
+                            <TableCell className="flex: 1 font-medium max-w-[200px] overflow-visible">
+                                <div className="flex items-start gap-2">
+                                    <img
+                                        src="/assets/qa-logo.svg"
+                                        alt="知识库图标"
+                                        className="w-[50px] h-[50px] mt-1 flex-shrink-0"
+                                    />
+
+                                    <div className="min-w-0 overflow-visible">
+                                        {/* 知识库名称（不变） */}
+                                        <div className="truncate max-w-[500px] text-[18px] font-medium mb-0 mt-3">
+                                            {el.name}
+                                        </div>
+                                        <QuestionTooltip
+                                            content={el.description || ''}
+                                            error={false}
+                                            className="w-full text-start" // 触发区域铺满，确保hover描述文字就触发
+                                        >
+                                            <div className="truncate max-w-[500px] text-[14px] text-[#5A5A5A] font-semibold">
+                                                {el.description || ''}
+                                            </div>
+                                            <TooltipContent
+                                                side="top" // 气泡在描述文字上方显示
+                                                sideOffset={4}
+                                                className="bg-primary/80 text-primary-foreground"
+                                            >
+                                                <div className="max-w-96 text-left break-all whitespace-normal">
+                                                    {el.description || ''}
+                                                </div>
+                                            </TooltipContent>
+                                        </QuestionTooltip>
+                                    </div>
+                                </div>
+                            </TableCell>
 
                             <TableCell className="text-[#5A5A5A] flex: 1">{el.update_time.replace('T', ' ')}</TableCell>
 
@@ -305,26 +305,25 @@ export default function KnowledgeQa(params) {
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
                                             <button
-                            className="size-10 px-2 bg-transparent border-none shadow-none hover:bg-gray-300 flex items-center justify-center duration-200 relative"
+                                                className="size-10 px-2 bg-transparent border-none shadow-none hover:bg-gray-300 flex items-center justify-center duration-200 relative"
                                                 onClick={(e) => e.stopPropagation()}
-                                                // 关键：stopPropagation防止触发父行onClick
+                                            // 关键：stopPropagation防止触发父行onClick
                                             >
                                                 <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
                                             </button>
                                         </DropdownMenuTrigger>
-                                        
-                                        <DropdownMenuContent 
-                                            align="end" 
-                                            className="rounded-md shadow-lg py-1 border-gray-200 z-[100] border border-transparent"  
+
+                                        <DropdownMenuContent
+                                            align="end"
+                                            className="rounded-md shadow-lg py-1 border-gray-200 z-[100] border border-transparent"
                                             style={{ backgroundColor: 'white', opacity: 1 }}
                                             onInteractOutside={() => setOpenMenus({})}
                                         >
                                             <DropdownMenuItem
-                                                className={`flex items-center gap-2 px-4 py-2 ${
-                                                    (el.copiable || user.role === 'admin') 
-                                                        ? 'hover:bg-gray-100 cursor-pointer' 
+                                                className={`flex items-center gap-2 px-4 py-2 ${(el.copiable || user.role === 'admin')
+                                                        ? 'hover:bg-gray-100 cursor-pointer'
                                                         : 'text-gray-400 cursor-not-allowed'
-                                                }`}
+                                                    }`}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     if (el.copiable || user.role === 'admin') {

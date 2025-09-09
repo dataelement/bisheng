@@ -57,9 +57,23 @@ export default function EvaluatingCreate() {
   const fileRef = useRef(null);
 
   const onDrop = (acceptedFiles) => {
+      const file = acceptedFiles[0];
+  if (!file) return;
+
+  const fileExt = file.name.split('.').pop()?.toLowerCase();
+
+
     fileRef.current = acceptedFiles[0];
     const size = fileRef.current.size
     const errorlist = [];
+
+  // 1. 后缀名校验（双重保险）
+  if (fileExt !== 'csv') {
+    errorlist.push(t("只允许上传csv格式的文件"));
+    fileRef.current = null;
+    handleError(errorlist);
+    return;
+  }
 
     // 限制文件最大为 10M
     if (size > 10 * 1024 * 1024) {
@@ -72,14 +86,30 @@ export default function EvaluatingCreate() {
     setFileName(names);
   };
 
-  const { getRootProps, getInputProps } = useDropzone({
-    accept: {
-      "application/*": [".csv"],
-    },
-    useFsAccessApi: false,
-    onDrop,
-    maxFiles: 1,
-  });
+ const { getRootProps, getInputProps, isDragActive, rejectedFiles } = useDropzone({
+  // 精准匹配CSV的MIME类型和后缀，避免其他文件绕过
+  accept: {
+    "text/csv": [".csv"],          // 标准CSV文本类型
+    "application/csv": [".csv"],   // 部分浏览器识别的CSV应用类型
+    "application/vnd.ms-excel": [".csv"] // 兼容旧版Excel导出的CSV
+  },
+  useFsAccessApi: false,
+  onDrop,
+  maxFiles: 1,
+  onDropRejected: (files) => {
+      if (files.length > 0) {
+      // 检查被拒绝的文件类型
+      const rejectedFile = files[0];
+      const fileExt = rejectedFile.file.name.split('.').pop()?.toLowerCase();
+      
+      if (fileExt === 'xlsx' || fileExt === 'xls') {
+        handleError([t("不支持Excel格式，请上传CSV文件")]);
+      } else {
+        handleError([t("仅支持CSV格式")]);
+      }
+    }
+  }
+});
 
   const navigate = useNavigate();
 
@@ -89,7 +119,7 @@ export default function EvaluatingCreate() {
     // if (!selectedKeyId) errorlist.push(t("evaluation.workFlow"));
     
     // 修复版本验证 - 取消注释并添加正确的验证
-    if ((selectedType === "workflow" || selectedType === "skill"||!selectedKeyId) && !selectedVersion) {
+    if ((selectedType === "workflow" || selectedType === "flow"||!selectedKeyId) && !selectedVersion) {
       errorlist.push(t("evaluation.workFlow"));
     }
 

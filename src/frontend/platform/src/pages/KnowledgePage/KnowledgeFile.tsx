@@ -479,6 +479,7 @@ const [forceRender, setForceRender] = useState(0);
                             <TableRow
                                 key={el.id}
                                 // 移除：原行点击事件，移到内容列单独绑定
+                                className=" h-[70px]"
                             >
                                 {/* 名称列：单独绑定跳转事件 */}
                                 <TableCell 
