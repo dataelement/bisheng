@@ -144,20 +144,6 @@ class InputNode(BaseNode):
             2: chunks list
             3: metadata list
         """
-        # 1、获取默认的embedding模型
-        if self._embedding is None:
-            embedding = LLMService.get_knowledge_default_embedding()
-            if not embedding:
-                raise Exception('没有配置默认的embedding模型')
-            self._embedding = embedding
-
-        if self._vector_client is None:
-            # 2、初始化milvus和es实例
-            milvus_collection_name = self.get_milvus_collection_name(getattr(self._embedding, 'model_id'))
-            self._vector_client = decide_vectorstores(milvus_collection_name, 'Milvus', self._embedding)
-            self._es_client = decide_vectorstores(self.tmp_collection_name, 'ElasticKeywordsSearch',
-                                                  self._embedding)
-
         file_id = md5_hash(f'{file_url}')
         filepath, file_name = file_download(file_url)
         file_name = KnowledgeService.get_upload_file_original_name(file_name)
@@ -170,7 +156,7 @@ class InputNode(BaseNode):
         try:
             file_rule = FileProcessBase(knowledge_id=0)
             texts, metadatas, _, _ = read_chunk_text(filepath, file_name, file_rule.separator, file_rule.separator_rule,
-                                                     file_rule.chunk_size, file_rule.chunk_overlap, None,
+                                                     file_rule.chunk_size, 0, None,
                                                      file_rule.retain_images, file_rule.enable_formula,
                                                      file_rule.force_ocr,
                                                      file_rule.filter_page_header_footer, file_rule.excel_rule)
@@ -193,6 +179,20 @@ class InputNode(BaseNode):
          将文件上传到milvus后
          记录文件的metadata数据、文件全文、文件本地路径
         """
+        # 1、获取默认的embedding模型
+        if self._embedding is None:
+            embedding = LLMService.get_knowledge_default_embedding()
+            if not embedding:
+                raise Exception('没有配置默认的embedding模型')
+            self._embedding = embedding
+
+        if self._vector_client is None:
+            # 2、初始化milvus和es实例
+            milvus_collection_name = self.get_milvus_collection_name(getattr(self._embedding, 'model_id'))
+            self._vector_client = decide_vectorstores(milvus_collection_name, 'Milvus', self._embedding)
+            self._es_client = decide_vectorstores(self.tmp_collection_name, 'ElasticKeywordsSearch',
+                                                  self._embedding)
+
         if 'file_content' not in key_info:
             raise IgnoreException(f'{self.name} -- workflow node is update')
         if not value:

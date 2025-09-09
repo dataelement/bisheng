@@ -57,7 +57,7 @@ class RedisCallback(BaseCallback):
     def set_workflow_status(self, status: str, reason: str = None):
         self.redis_client.set(self.workflow_status_key,
                               {'status': status, 'reason': reason, 'time': time.time()},
-                              expiration=None)
+                              expiration=3600 * 24 * 7)
         self.workflow_cache.clear()
         if status in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
             # 消息事件和状态key可能还需要消费
