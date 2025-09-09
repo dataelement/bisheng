@@ -371,7 +371,7 @@ async def chat_completions(
                                       data=delta(id=stepId, delta=content)).toString()
                     prompt = wsConfig.webSearch.prompt.format(
                         search_results=search_res[:max_token],
-                        cur_date=datetime.now().strftime('%Y-%m-%d'),
+                        cur_date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                         question=data.text)
             elif data.knowledge_enabled:
                 logger.info(f'knowledge, prompt={data.text}')
@@ -399,7 +399,7 @@ async def chat_completions(
             messages = WorkStationService.get_chat_history(conversationId, 8)[:-1]
             inputs = [*messages, HumanMessage(content=prompt)]
             if wsConfig.systemPrompt:
-                system_content = wsConfig.systemPrompt.format(cur_date=datetime.now().strftime('%Y-%m-%d %%H:%M:%S'))
+                system_content = wsConfig.systemPrompt.format(cur_date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
                 inputs.insert(0, SystemMessage(content=system_content))
             task = asyncio.create_task(
                 bishengllm.ainvoke(
