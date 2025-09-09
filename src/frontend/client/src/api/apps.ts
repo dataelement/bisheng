@@ -29,6 +29,16 @@ export async function getFlowApi(flowId: string, version: string = 'v1'): Promis
     return await request.get(`/api/${version}/flows/${flowId}`)
 }
 
+/**
+ * 删除的技能 工作流详情
+ */
+export async function getDeleteFlowApi(chatId: string): Promise<any> {
+    return await request.get(`/api/v1/chat/info?chat_id=${chatId}`).then(res => {
+        res.data.name = res.data.flow_name
+        return res
+    })
+}
+
 // 获取助手详情
 export const getAssistantDetailApi = async (id: string, version: string = 'v1'): Promise<any> => {
     return await request.get(`/api/${version}/assistant/info/${id}`)
@@ -282,25 +292,25 @@ export function getVariablesApi(params) {
         }) as any[]
     });
 }
-export async function getFrequently(page,limit) {
-    return await request.get('/api/v1/workstation/app/frequently_used',{
-            params: {
+export async function getFrequently(page, limit) {
+    return await request.get('/api/v1/workstation/app/frequently_used', {
+        params: {
             page,
             limit
         }
     })
 }
 
-export async function addToFrequentlyUsed(user_link_type,type_detail) {
-  return await request.post('/api/v1/workstation/app/frequently_used', {
-    user_link_type,type_detail
-  });
+export async function addToFrequentlyUsed(user_link_type, type_detail) {
+    return await request.post('/api/v1/workstation/app/frequently_used', {
+        user_link_type, type_detail
+    });
 }
 
 // 从常用列表移除
 export async function removeFromFrequentlyUsed(user_id, type, type_detail) {
     console.log(user_id, type, type_detail, 881);
-    
+
     const url = `/api/v1/workstation/app/frequently_used?user_id=${user_id}&user_link_type=${type}&type_detail=${type_detail}`;
     return await request.delete(url);
 }
@@ -330,8 +340,8 @@ export async function getAppsApi({ page = 1, pageSize = 8, keyword, tag_id = -1,
 
 
 export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = false) => {
-    console.log(disableLimit,2);
-    
+    console.log(disableLimit, 2);
+
     const params = {
         page,
         keyword,
@@ -340,6 +350,6 @@ export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = fal
     if (tag_id !== -1 && tag_id != null) {
         params.tag_id = tag_id
     }
-    
+
     return await request.get(`/api/v1/chat/online`, { params })
 }

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { ChatMessageType, FlowData } from "~/@types/chat";
-import { getAssistantDetailApi, getBysConfigApi, getChatHistoryApi, getFlowApi, postBuildInit } from "~/api/apps";
+import { getAssistantDetailApi, getBysConfigApi, getChatHistoryApi, getDeleteFlowApi, getFlowApi, postBuildInit } from "~/api/apps";
 import { useToastContext } from "~/Providers";
 import ChatView from "./ChatView";
 import { bishengConfState, chatIdState, chatsState, currentChatState, runningState, tabsState } from "./store/atoms";
@@ -52,12 +52,20 @@ export default function index() {
                     getChatHistoryApi(fid, cid, type)
                 ])
 
-                messages = msgRes.reverse()
-                flowData = { ...flowRes.data, isNew: !messages.length }
-
                 if (flowRes.status_code !== 200) {
                     error = flowRes.status_message
                 }
+                if (!flowRes.data) {
+                    const lostFlow = await getDeleteFlowApi(cid)
+                    flowRes.data = {
+                        name: lostFlow.data.flow_name,
+                        logo: lostFlow.data.flow_logo,
+                        flow_type: lostFlow.data.flow_type,
+                    }
+                }
+                messages = msgRes.reverse()
+                flowData = { ...flowRes.data, isNew: !messages.length }
+
                 // 插入分割线
                 // if (messages.length) {
                 //     messages.push({
@@ -77,12 +85,20 @@ export default function index() {
                     getChatHistoryApi(fid, cid, type)
                 ]);
 
-                messages = historyRes.reverse();
-                flowData = { ...assistantRes.data, flow_type: FLOW_TYPES.ASSISTANT, isNew: !messages.length };
-
                 if (assistantRes.status_code !== 200) {
                     error = assistantRes.status_message;
                 }
+                if (!assistantRes.data) {
+                    const lostFlow = await getDeleteFlowApi(cid)
+                    assistantRes.data = {
+                        name: lostFlow.data.flow_name,
+                        logo: lostFlow.data.flow_logo,
+                        flow_type: lostFlow.data.flow_type,
+                    }
+                }
+                messages = historyRes.reverse();
+                flowData = { ...assistantRes.data, flow_type: FLOW_TYPES.ASSISTANT, isNew: !messages.length };
+
                 break;
             default:
         }
@@ -90,7 +106,7 @@ export default function index() {
         setChats(prevChats => ({
             ...prevChats,
             [cid]: {
-                flow: flowData || { name: 'lost' },
+                flow: flowData,
                 messages,
                 historyEnd: false
             }

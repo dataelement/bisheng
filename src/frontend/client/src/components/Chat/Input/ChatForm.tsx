@@ -209,7 +209,7 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
         maximizeChatSpace ? 'w-full max-w-full' : 'md:max-w-2xl xl:max-w-3xl',
       )}
     >
-      <div className="relative flex h-full flex-1 items-stretch md:flex-col">
+      <div className={`relative flex h-full flex-1 items-stretch md:flex-col ${!isLingsi && 'overflow-hidden'}`}>
         {/* 切换模型 */}
         {/* {showPlusPopover && !isAssistantsEndpoint(endpoint) && (
           <Mention
