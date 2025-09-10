@@ -2,18 +2,19 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { Search, X } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useRef, useState } from "react"
 import { useNavigate } from "react-router"
 import { addToFrequentlyUsed, getChatOnlineApi, removeFromFrequentlyUsed } from "~/api/apps"
 import { Input } from "~/components/ui"
+import { useDebounce } from '~/components/ui/MultiSelect'
+import { useGetBsConfig } from '~/data-provider'
 import { ConversationData, QueryKeys } from "~/data-provider/data-provider/src"
+import useToast from '~/hooks/useToast'
 import store from "~/store"
 import { addConversation, generateUUID } from "~/utils"
 import { AgentGrid } from "./components/AgentGrid"
 import { AgentNavigation } from "./components/AgentNavigation"
 import { SearchOverlay } from "./components/SearchOverlay"
-import { useGetBsConfig } from '~/data-provider'
-import useToast from '~/hooks/useToast'
 
 export default function AgentCenter() {
     const [searchQuery, setSearchQuery] = useState("")
@@ -27,95 +28,93 @@ export default function AgentCenter() {
     const refreshAgentData = () => {
         setRefreshTrigger(prev => prev + 1);
     }
-    
+
     const { showToast } = useToast()
 
-const handleCategoryChange = (categoryId: string) => {
-    console.log("点击的标签ID:", categoryId, "当前搜索状态:", isSearching);
+    const handleCategoryChange = (categoryId: string) => {
+        console.log("点击的标签ID:", categoryId, "当前搜索状态:", isSearching);
 
-    // 1. 清除搜索状态（如果有）
-    const wasSearching = !!searchQuery;
-    if (wasSearching) {
-        setSearchQuery("");
-        setIsSearching(false);
-    }
-
-    // 2. 定义核心滚动逻辑
-    const performScroll = () => {
-        if (categoryId === "favorites") {
-            // 常用标签：直接滚动到顶部（无需依赖sectionRefs）
-            scrollContainerRef.current?.scrollTo({
-                top: 0,
-                behavior: "smooth"
-            });
-            return;
+        // 1. 清除搜索状态（如果有）
+        const wasSearching = !!searchQuery;
+        if (wasSearching) {
+            setSearchQuery("");
+            setIsSearching(false);
         }
 
-        // 其他标签：通过sectionRefs查找DOM并滚动
-        const targetSection = sectionRefs.current[categoryId];
-        if (targetSection && scrollContainerRef.current) {
-            const containerRect = scrollContainerRef.current.getBoundingClientRect();
-            const sectionRect = targetSection.getBoundingClientRect();
-            const relativeTop = sectionRect.top - containerRect.top + scrollContainerRef.current.scrollTop;
-            
-            scrollContainerRef.current.scrollTo({
-                top: relativeTop - 20,
-                behavior: "smooth"
-            });
+        // 2. 定义核心滚动逻辑
+        const performScroll = () => {
+            if (categoryId === "favorites") {
+                // 常用标签：直接滚动到顶部（无需依赖sectionRefs）
+                scrollContainerRef.current?.scrollTo({
+                    top: 0,
+                    behavior: "smooth"
+                });
+                return;
+            }
+
+            // 其他标签：通过sectionRefs查找DOM并滚动
+            const targetSection = sectionRefs.current[categoryId];
+            if (targetSection && scrollContainerRef.current) {
+                const containerRect = scrollContainerRef.current.getBoundingClientRect();
+                const sectionRect = targetSection.getBoundingClientRect();
+                const relativeTop = sectionRect.top - containerRect.top + scrollContainerRef.current.scrollTop;
+
+                scrollContainerRef.current.scrollTo({
+                    top: relativeTop - 20,
+                    behavior: "smooth"
+                });
+            } else {
+                console.log("未找到目标分区，但已尝试滚动");
+            }
+        };
+
+        // 3. 分场景处理
+        if (!wasSearching) {
+            // 场景1：非搜索状态（AgentGrid已渲染）→ 立即滚动
+            performScroll();
         } else {
-            console.log("未找到目标分区，但已尝试滚动");
+            // 场景2：从搜索状态切换（AgentGrid需要重新渲染）→ 监听DOM变化后滚动
+            const container = scrollContainerRef.current;
+            if (!container) return;
+
+            // 停止之前的监听（避免重复）
+            let observer: MutationObserver | null = null;
+
+            observer = new MutationObserver((mutations, obs) => {
+                // 检查目标分区是否已挂载
+                const targetExists = categoryId === "favorites"
+                    ? true  // 常用标签无需检查DOM
+                    : !!sectionRefs.current[categoryId];
+
+                if (targetExists) {
+                    performScroll(); // 执行滚动
+                    obs.disconnect(); // 完成后断开
+                    observer = null;
+                }
+            });
+
+            // 监听滚动容器的DOM变化（AgentGrid渲染会改变子元素）
+            observer.observe(container, {
+                childList: true,    // 监听子元素增减
+                subtree: true       // 监听所有后代
+            });
+
+            // 安全超时：5秒后强制停止监听（防内存泄漏）
+            setTimeout(() => {
+                if (observer) {
+                    observer.disconnect();
+                    // 超时后仍尝试一次滚动（极端情况保底）
+                    performScroll();
+                }
+            }, 2000);
         }
     };
 
-    // 3. 分场景处理
-    if (!wasSearching) {
-        // 场景1：非搜索状态（AgentGrid已渲染）→ 立即滚动
-        performScroll();
-    } else {
-        // 场景2：从搜索状态切换（AgentGrid需要重新渲染）→ 监听DOM变化后滚动
-        const container = scrollContainerRef.current;
-        if (!container) return;
-
-        // 停止之前的监听（避免重复）
-        let observer: MutationObserver | null = null;
-
-        observer = new MutationObserver((mutations, obs) => {
-            // 检查目标分区是否已挂载
-            const targetExists = categoryId === "favorites" 
-                ? true  // 常用标签无需检查DOM
-                : !!sectionRefs.current[categoryId];
-
-            if (targetExists) {
-                performScroll(); // 执行滚动
-                obs.disconnect(); // 完成后断开
-                observer = null;
-            }
-        });
-
-        // 监听滚动容器的DOM变化（AgentGrid渲染会改变子元素）
-        observer.observe(container, {
-            childList: true,    // 监听子元素增减
-            subtree: true       // 监听所有后代
-        });
-
-        // 安全超时：5秒后强制停止监听（防内存泄漏）
-        setTimeout(() => {
-            if (observer) {
-                observer.disconnect();
-                // 超时后仍尝试一次滚动（极端情况保底）
-                performScroll();
-            }
-        }, 2000);
-    }
-};
-
     const handleSearchChange = async (query: string) => {
-        setSearchQuery(query)
-
         if (query.trim()) {
             setIsSearching(true)
             setSearchLoading(true)
-            try {         
+            try {
                 const result = await getChatOnlineApi(1, query, -1, true)
                 setSearchResults(result.data || [])
             } catch (error) {
@@ -129,6 +128,7 @@ const handleCategoryChange = (categoryId: string) => {
             setSearchResults([])
         }
     }
+    const handleSearch = useDebounce(handleSearchChange, 360, false)
 
     const handleSearchClear = () => {
         setSearchQuery("")
@@ -136,30 +136,30 @@ const handleCategoryChange = (categoryId: string) => {
         setSearchResults([])
     }
 
-const addToFavorites = async (type: string, id: string) => {
-    let mappedType: string;
-    if (type === '1') {
-        mappedType = 'flow';
-    } else if (type === '5') {
-        mappedType = 'assistant';
-    } else {
-        mappedType = 'workflow';
-    }
-    
-    
+    const addToFavorites = async (type: string, id: string) => {
+        let mappedType: string;
+        if (type === '1') {
+            mappedType = 'flow';
+        } else if (type === '5') {
+            mappedType = 'assistant';
+        } else {
+            mappedType = 'workflow';
+        }
+
+
         const res = await addToFrequentlyUsed(mappedType, id);
         console.log(res);
-        if(res.status_code === 500){
-              showToast({
-                 status: 'error',
-          message: '该智能体已被添加',
+        if (res.status_code === 500) {
+            showToast({
+                status: 'error',
+                message: '该智能体已被添加',
             });
         }
         // 成功时更新收藏列表
         setFavorites(res.data);
         return res;
-    
-}
+
+    }
 
 
     const removeFromFavorites = async (userId: string, type: string, id: string) => {
@@ -223,15 +223,18 @@ const addToFavorites = async (type: string, id: string) => {
                         <h1 className="text-blue-600 text-[32px] truncate max-w-[600px] font-medium mb-2">{bsConfig?.applicationCenterWelcomeMessage || '探索BISHENG的智能体'}</h1>
                         <p className="text-muted-foreground text-base truncate max-w-[600px]">{bsConfig?.applicationCenterDescription || '您可以在这里选择需要的智能体来进行生产与工作～'}</p>
                     </div>
-                    <div className="mt-12 flex items-center justify-between">
+                    <div className="mt-12 flex items-start justify-between">
                         <AgentNavigation onCategoryChange={handleCategoryChange} onRefresh={refreshAgentData} />
-                        <div className="relative w-80">
+                        <div className="relative w-80 min-w-48">
                             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-500 w-4 h-4" />
                             <Input
                                 type="text"
                                 placeholder="搜索您需要的智能体"
                                 value={searchQuery}
-                                onChange={(e) => handleSearchChange(e.target.value)}
+                                onChange={(e) => {
+                                    setSearchQuery(e.target.value)
+                                    handleSearch(e.target.value)
+                                }}
                                 className="pl-10 pr-10 h-10 rounded-full"
                             />
                             {searchQuery && (

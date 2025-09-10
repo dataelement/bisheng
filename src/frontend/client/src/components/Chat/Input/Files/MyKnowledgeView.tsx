@@ -77,12 +77,6 @@ export default function MyKnowledgeView({ open, onOpenChange }) {
   }
 
   const [building] = useModelBuilding()
-  useEffect(() => {
-    building && showToast({
-      message: '个人知识库 embedding 模型已更换，正在重建知识库，请稍后再试',
-      severity: NotificationSeverity.WARNING,
-    })
-  }, [])
 
   return (
     <OGDialog open={open} onOpenChange={onOpenChange}>

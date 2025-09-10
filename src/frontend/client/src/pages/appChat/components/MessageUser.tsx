@@ -47,11 +47,11 @@ export default function MessageUser({ useName, data, showButton }) {
             {/* footer */}
             <div className="flex justify-between mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <span></span>
-                {showButton && <div className="flex gap-0.5 text-gray-400 cursor-pointer self-end">
-                    <SquarePen className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(false)} />
-                    <RefreshCw className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(true)} />
+                <div className="flex gap-0.5 text-gray-400 cursor-pointer self-end">
+                    {showButton && <SquarePen className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(false)} />}
+                    {showButton && <RefreshCw className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(true)} />}
                     {config?.dialog_quick_search && <Search className="size-6 p-1 hover:text-gray-500" onClick={handleSearch} />}
-                </div>}
+                </div>
             </div>
         </div>
     </div>

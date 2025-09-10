@@ -53,7 +53,7 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
     }
 
     return (
-        <nav className="flex items-center gap-2">
+        <nav className="flex items-center gap-2 flex-wrap">
             <Button
                 variant={activeCategory === 'favorites' ? "default" : "outline"}
                 onClick={() => {

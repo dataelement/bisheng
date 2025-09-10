@@ -136,7 +136,12 @@ export default function DataTableKnowledge<TData, TValue>({
           /> */}
         </div>
         <div>
-          {building ? <Button disabled>添加文件</Button> :
+          {building ? <Button onClick={() => {
+            showToast({
+              message: '个人知识库 embedding 模型已更换，正在重建知识库，请稍后再试',
+              severity: NotificationSeverity.WARNING,
+            })
+          }}>添加文件</Button> :
             <AttachFileButton disabled={loading} handleFileChange={handleUpload} />}
         </div>
       </div>

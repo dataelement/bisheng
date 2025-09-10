@@ -276,7 +276,7 @@ export default function useChatHelpers() {
                     ...prev[chatId],
                     running: false,
                     inputDisabled: false,
-                    inputForm: true,
+                    inputForm: false,
                     showStop: false
                 },
             }))
