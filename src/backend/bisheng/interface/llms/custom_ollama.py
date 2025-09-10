@@ -79,6 +79,44 @@ class CustomChatOllamaWithReasoning(ChatOllama):
             )
             yield chunk
 
+    async def _aiterate_over_stream(
+            self,
+            messages: list[BaseMessage],
+            stop: Optional[list[str]] = None,
+            **kwargs: Any,
+    ) -> AsyncIterator[ChatGenerationChunk]:
+        reasoning = kwargs.get("reasoning", self.reasoning)
+        async for stream_resp in self._acreate_chat_stream(messages, stop, **kwargs):
+            if isinstance(stream_resp, str):
+                continue
+
+            content = self._extract_content_from_response(stream_resp)
+
+            # Handle think tags
+            if content == self.THINK_START_TAG:
+                self.in_think = True
+                continue
+            elif content == self.THINK_END_TAG:
+                self.in_think = False
+                continue
+
+            # Skip empty load responses
+            if self._is_empty_load_response(stream_resp, content):
+                continue
+
+            generation_info = self._build_generation_info(stream_resp)
+            additional_kwargs = self._build_additional_kwargs(reasoning, content)
+
+            # Clear content when inside think tags
+            if reasoning and self.in_think and content:
+                additional_kwargs["reasoning_content"] = content
+                content = ""
+
+            chunk = self._create_chat_generation_chunk(
+                content, additional_kwargs, stream_resp, generation_info
+            )
+            yield chunk
+
     def _generate(
             self,
             messages: List[BaseMessage],
