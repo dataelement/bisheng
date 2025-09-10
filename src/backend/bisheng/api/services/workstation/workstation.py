@@ -187,7 +187,7 @@ class WorkStationService(BaseService):
         model_id = knowledge_llm.source_model_id
         
         docs = mixed_retrieval_recall(question, vector_store, keyword_store, max_tokens, model_id)
-        logger.info("docs message:{}", docs)
+        logger.info(f"docs message: {docs}")
         # 将检索结果格式化为指定的模板格式
         formatted_results = []
         if docs:
