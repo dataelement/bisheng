@@ -267,7 +267,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                     onClick={returnPage}
                 ><ChevronLeft /></Button>
                 <div className="flex items-center ml-5">
-                    <AppAvator id={flow.name} url={loca?.logo} flowType={10} className=""></AppAvator>
+                    <AppAvator id={flow.name} url={flow.logo || loca?.logo} flowType={10} className=""></AppAvator>
                     <div className="pl-3">
                         <h1 className="font-medium text-sm flex gap-2">
                             <span className="truncate max-w-48 font-bold">{flow.name}</span>

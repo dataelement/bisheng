@@ -7,7 +7,7 @@ export default function Chat({
     stop = false,
     debug,
     autoRun,
-    logo = '',
+    logo = null,
     clear = false,
     form = false,
     useName,
