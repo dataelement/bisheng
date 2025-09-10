@@ -234,12 +234,12 @@ export default function ChatPanne({ customWsHost = '', chatList, chat, appendHis
             flow && <div className={`w-full chat-box h-full relative px-6 ${type === AppNumType.SKILL ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
-                    <AppAvator id={chat.flow_name} url={chat.logo} flowType={1} ></AppAvator>
-                    <span className="text-sm">{chat.flow_name}</span>
+                    <AppAvator id={flow.name} url={flow.logo} flowType={1} ></AppAvator>
+                    <span className="text-sm">{flow.name}</span>
                 </div>
                 <ChatComponent
                     form={flowSate.isForm}
-                    logo={chat.logo}
+                    logo={flow.logo}
                     stop
                     // stop={flowSate.isReport || flowSate.isRoom}
                     useName={sendUserName}
@@ -258,12 +258,12 @@ export default function ChatPanne({ customWsHost = '', chatList, chat, appendHis
             assistant && <div className={`w-full chat-box h-full relative px-6 ${type === AppNumType.ASSISTANT ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
-                    <AppAvator id={chat.flow_name} url={chat.logo} flowType={5} ></AppAvator>
-                    <span className="text-sm">{chat.flow_name}</span>
+                    <AppAvator id={assistant.name} url={assistant.logo} flowType={5} ></AppAvator>
+                    <span className="text-sm">{assistant.name}</span>
                 </div>
                 <ChatComponent
                     stop
-                    logo={chat.logo}
+                    logo={assistant.logo}
                     chat={chat}
                     useName={sendUserName}
                     questions={assistantState.guide_question.filter((item) => item)}

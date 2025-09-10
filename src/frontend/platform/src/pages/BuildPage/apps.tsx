@@ -34,10 +34,10 @@ export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
     const [value, setValue] = useState<string>(defaultValue)
     const { t } = useTranslation();
 
-    const options = [
-        { label: t('build.workflow'), value: 'flow' },
-        { label: t('build.assistant'), value: 'assistant' },
-        { label: t('build.skill'), value: 'skill' },
+    const options: any = [
+        { label: t('build.workflow'), value: AppType.FLOW },
+        { label: t('build.assistant'), value: AppType.ASSISTANT },
+        { label: t('build.skill'), value: AppType.SKILL },
     ];
 
     if (all) {
