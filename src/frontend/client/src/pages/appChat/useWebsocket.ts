@@ -209,7 +209,6 @@ export const useWebSocket = (helpers) => {
 
     // 监听submitData变化，发送消息（必须在当前会话调用）
     useEffect(() => {
-        console.log('submitData :>> ', submitData);
         if (submitData && websocket && websocket.readyState === WebSocket.OPEN) {
             const action = submitData.action
 

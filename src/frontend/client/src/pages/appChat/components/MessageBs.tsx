@@ -18,7 +18,7 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
         <div className="rounded-sm border">
             <div className="flex justify-between items-center px-4 py-2 cursor-pointer" onClick={() => setOpen(!open)}>
                 {loading ? <div className="flex items-center font-bold gap-2 text-sm">
-                    <Loader2 className="text-primary duration-300" />
+                    <Loader2 className="text-primary duration-300 animate-spin" />
                     <span>思考中</span>
                 </div>
                     : <div className="flex items-center font-bold gap-2 text-sm">
