@@ -40,8 +40,8 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
 }
 
 
-export default function MessageBs({ logo, data, onUnlike = () => { }, onSource }:
-    { logo: React.ReactNode, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
+export default function MessageBs({ logo, title, data, onUnlike = () => { }, onSource }:
+    { logo: React.ReactNode, title: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
 
     const [message, reasoningLog] = useMemo(() => {
         const msg = typeof data.message === 'string' ? data.message : data.message.msg
@@ -70,20 +70,23 @@ export default function MessageBs({ logo, data, onUnlike = () => { }, onSource }
                         <span className="text-slate-400 text-sm">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
                     </div>
                 </div>
-                <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
-                    <div className="flex gap-2">
+                <div className="min-h-8 px-4 py-2 rounded-2xl">
+                    <div className="flex gap-3">
                         {logo}
-                        {message || data.files.length ?
-                            <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
-                                {message && <div className="bs-mkdown text-sm"><Markdown content={message} isLatestMessage={false} webContent={undefined} /></div>}
-                                {data.files.length > 0 && data.files.map(file => <ChatFile key={file.path} fileName={file.name} filePath={file.path} />)}
-                                {/* @user */}
-                                {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}
-                            </div>
-                            : <div>{
-                                !data.end && <LoadingIcon className="size-6 text-primary" />
-                            }</div>
-                        }
+                        <div className="">
+                            <p className="select-none font-semibold text-base mb-1">{title}</p>
+                            {message || data.files.length ?
+                                <div ref={messageRef} className="">
+                                    {message && <div className="bs-mkdown text-base"><Markdown content={message} isLatestMessage={false} webContent={undefined} /></div>}
+                                    {data.files.length > 0 && data.files.map(file => <ChatFile key={file.path} fileName={file.name} filePath={file.path} />)}
+                                    {/* @user */}
+                                    {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}
+                                </div>
+                                : <div>{
+                                    !data.end && <LoadingIcon className="size-6 text-primary" />
+                                }</div>
+                            }
+                        </div>
                     </div>
                 </div>
             </>}

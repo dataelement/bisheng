@@ -35,10 +35,13 @@ export default function MessageUser({ useName, data, showButton }) {
                 </div>
                 {/* {useName && <p className="text-gray-600 text-sm">{useName}</p>} */}
             </div>
-            <div className="rounded-2xl px-6 py-4 bg-[#EEF2FF] dark:bg-[#333A48]">
-                <div className="flex gap-2 ">
+            <div className="rounded-2xl px-4 py-2">
+                <div className="flex gap-3">
                     {avatar}
-                    <div className="text-[#0D1638] dark:text-[#CFD5E8] text-sm break-all whitespace-break-spaces">{msg}</div>
+                    <div className="">
+                        <p className="select-none font-semibold text-base mb-1">{useName}</p>
+                        <div className="text-[#0D1638] dark:text-[#CFD5E8] text-base break-all whitespace-break-spaces">{msg}</div>
+                    </div>
                 </div>
             </div>
             {/* footer */}

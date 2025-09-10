@@ -23,7 +23,7 @@ export default function MessageSystem({ data }) {
 
     const border = { system: 'border-slate-500', question: 'border-amber-500', processing: 'border-cyan-600', answer: 'border-lime-600', report: 'border-slate-500', guide: 'border-none' }
 
-    return <div className="py-1">
+    return <div className="py-1 px-12">
         <div className={`relative rounded-sm px-6 py-4 border text-sm dark:bg-gray-900 ${data.category === 'guide' ? 'bg-[#EDEFF6]' : 'bg-slate-50'} ${border[data.category || 'system']}`}>
             {logMkdown}
             {data.category === 'report' && <Copy className=" absolute right-4 top-2 cursor-pointer" onClick={(e) => handleCopy(e.target.parentNode)}></Copy>}

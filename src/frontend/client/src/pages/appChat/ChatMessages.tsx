@@ -43,7 +43,7 @@ export default function ChatMessages({ useName, title, logo }) {
             messages.map((msg, index) => {
                 // 技能特殊消息
                 if (msg.files?.length) {
-                    return <MessageFile key={msg.id} data={msg} logo={logo} />
+                    return <MessageFile key={msg.id} title={title} data={msg} logo={logo} />
                 } else if (['tool', 'flow', 'knowledge'].includes(msg.category)) {
                     return <MessageRunlog key={msg.id} data={msg} />
                 } else if (msg.thought) {
@@ -75,6 +75,7 @@ export default function ChatMessages({ useName, title, logo }) {
                             key={msg.id}
                             data={msg}
                             logo={logo}
+                            title={title}
                             onUnlike={(messageId) => { thumbRef.current?.openModal(messageId) }}
                             onSource={(data) => { sourceRef.current?.openModal({ ...data, chatId }) }}
                         />;
@@ -99,13 +100,16 @@ export default function ChatMessages({ useName, title, logo }) {
             })
         }
         {/* 只有引导问题没有开场白 => 上面得要有图标+应用名称 */}
-        {!remark && !messages.some(msg => msg.category === 'guide_word') && !!guideWord?.length && <MessageRemark
-            logo={logo}
-            title={title}
-            message={''}
-        />}
+        {!remark
+            && !messages.some(msg => msg.category === 'guide_word')
+            && !!guideWord?.length
+            && <MessageRemark
+                logo={logo}
+                title={title}
+                message={''}
+            />}
         {/* 引导词 */}
-        {guideWord && <GuideWord data={guideWord} />}
+        {guideWord && !inputDisabled && !inputForm && <GuideWord data={guideWord} />}
         {/* 表单 */}
         {inputForm && (chatState?.flow.flow_type === 10 ?
             <InputForm data={inputForm} flow={chatState.flow} logo={logo} /> :

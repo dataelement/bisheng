@@ -37,6 +37,10 @@ export default function useChatHelpers() {
         return routeConfig[type] || '';
     }, [chatState, chatId, bishengConfig])
 
+    const appLost = useMemo(() => {
+        return runState?.error
+    }, [runState])
+
     // handleMsgError
     const handleMsgError = (errorMsg: string) => {
         setRunningState((prev) => ({
@@ -328,6 +332,7 @@ export default function useChatHelpers() {
 
     return {
         wsUrl,
+        appLost,
         chatId,
         running: runState?.running,
         message,

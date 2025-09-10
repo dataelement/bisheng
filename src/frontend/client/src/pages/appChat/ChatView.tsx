@@ -13,7 +13,7 @@ export default function ChatView({ data, v }) {
     useWebSocket(help)
 
     const Logo = useMemo(() => {
-        return <AppAvator url={data.logo} id={data.name} flowType={data.flow_type} />
+        return <AppAvator className="size-6 min-w-6" url={data.logo} id={data.name} flowType={data.flow_type} />
     }, [data]);
 
     return <div className="relative h-full flex flex-col">

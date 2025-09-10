@@ -7,6 +7,7 @@ import { SkillMethod } from "./appUtils/skillMethod"
 import { submitDataState } from "./store/atoms"
 import { ERROR_CODES } from "./store/constants"
 
+export const AppLostMessage = '当前应用已被删除'
 const wsMap = new Map<string, WebSocket>()
 // 会话运行时信息
 const sessionInfoMap = new Map<string, any>()
@@ -37,6 +38,7 @@ export const useWebSocket = (helpers) => {
         const connect = () => {
             if (websocket) return
             if (!helpers.wsUrl) return
+            if (helpers.appLost === AppLostMessage) return
 
             const isSecureProtocol = window.location.protocol === "https:";
             const webSocketProtocol = isSecureProtocol ? "wss" : "ws";

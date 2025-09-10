@@ -61,7 +61,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data, flow }: {
 
     return <MessageWarper flow={flow} logo={logo} >
         <div className="">
-            <div className="text-sm">
+            <div className="text-base text-[#0D1638] dark:text-[#CFD5E8]">
                 {/* message */}
                 <div><Markdown content={data.message.msg} isLatestMessage={false} webContent={undefined} /></div>
                 {/* files */}
@@ -123,14 +123,14 @@ export const MessageWarper = ({ flow, logo, children }) => {
             <div className="flex-shrink-0">
                 {logo}
             </div>
-            <span className="text-sm">{flow.name}</span>
+            <span className="text-base">{flow.name}</span>
         </div>
 
         {/* <p className="text-sm text-gray-500 mt-2 ml-[calc(24px+0.75rem)]">
             {flow.description || '无描述信息'}
         </p> */}
 
-        <div className="border border-gray-100 rounded-md p-4 mt-3 ml-[calc(24px+0.75rem)] bg-white shadow-sm">
+        <div className="p-3 ml-6">
             {children}
         </div>
     </div>

@@ -87,7 +87,7 @@ const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any })
 
     const [multiVal, setMultiVal] = useState([])
     return <MessageWarper flow={flow} logo={logo}>
-        <div className="max-h-[520px] overflow-y-auto space-y-2 px-1">
+        <div className="max-h-[520px] overflow-y-auto space-y-2">
             {
                 data.value.map((item, i) => (
                     <div key={item.id} className="w-full text-sm bisheng-label">

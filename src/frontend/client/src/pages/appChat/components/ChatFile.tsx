@@ -1,4 +1,4 @@
-import { File } from "lucide-react";
+import { FileIcon, getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
 import { downloadFile } from "~/utils";
 export default function ChatFile({ fileName, filePath }) {
 
@@ -8,12 +8,14 @@ export default function ChatFile({ fileName, filePath }) {
     }
 
     return <div
-        className="flex gap-2 w-52 mb-2 ml-2 border border-gray-200 shadow-sm bg-gray-50 dark:bg-gray-600 px-4 py-2 rounded-sm cursor-pointer"
+        className="group min-w-52 relative flex items-center gap-2 border bg-white p-2 rounded-xl cursor-pointer"
         onClick={() => handleDownloadFile(filePath)}
     >
-        <div className="flex items-center"><File /></div>
-        <div>
-            <h1 className="text-sm font-bold">{fileName}</h1>
+        <FileIcon loading={false} type={getFileTypebyFileName(fileName)} />
+        <div className="flex-1">
+            <div className="max-w-48 text-sm font-medium text-gray-700 truncate">
+                {fileName}
+            </div>
             <p className="text-xs text-gray-400 mt-1">点击下载</p>
         </div>
     </div>

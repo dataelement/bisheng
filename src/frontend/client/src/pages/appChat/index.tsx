@@ -6,6 +6,7 @@ import { getAssistantDetailApi, getBysConfigApi, getChatHistoryApi, getDeleteFlo
 import { useToastContext } from "~/Providers";
 import ChatView from "./ChatView";
 import { bishengConfState, chatIdState, chatsState, currentChatState, runningState, tabsState } from "./store/atoms";
+import { AppLostMessage } from "./useWebsocket";
 
 const API_VERSION = 'v1';
 export const enum FLOW_TYPES {
@@ -53,11 +54,12 @@ export default function index() {
                 ])
 
                 if (flowRes.status_code !== 200) {
-                    error = flowRes.status_message
+                    error = AppLostMessage
                 }
                 if (!flowRes.data) {
                     const lostFlow = await getDeleteFlowApi(cid)
                     flowRes.data = {
+                        id: lostFlow.data.flow_id,
                         name: lostFlow.data.flow_name,
                         logo: lostFlow.data.flow_logo,
                         flow_type: lostFlow.data.flow_type,
@@ -86,7 +88,7 @@ export default function index() {
                 ]);
 
                 if (assistantRes.status_code !== 200) {
-                    error = assistantRes.status_message;
+                    error = AppLostMessage;
                 }
                 if (!assistantRes.data) {
                     const lostFlow = await getDeleteFlowApi(cid)
