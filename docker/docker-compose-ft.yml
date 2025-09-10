@@ -1,7 +1,7 @@
 services:
   ft_server:
     container_name: bisheng-ft-server
-    image: dataelement/bisheng-ft:v0.2.0
+    image: dataelement/bisheng-ft:v0.5.0
     shm_size: "4g"
     ports:
       - "8000:8000"
