@@ -143,8 +143,21 @@ def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_mo
         embeddings = FakeEmbedding()
         es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
 
-        # 获取新的embedding模型
+        # 获取新的embedding模型并创建Milvus客户端
+        logger.info(f"[DEBUG] 开始初始化新的embedding模型，model_id={new_model_id}")
         new_embeddings = decide_embeddings(new_model_id)
+        logger.info(f"[DEBUG] 成功创建embedding模型实例: {type(new_embeddings).__name__}, model_id={getattr(new_embeddings, 'model_id', 'unknown')}")
+        
+        # 测试embedding模型是否真的可用
+        try:
+            test_result = new_embeddings.embed_query("测试文本")
+            logger.info(f"[DEBUG] Embedding模型测试成功，返回维度: {len(test_result) if test_result else 'None'}")
+        except Exception as e:
+            logger.error(f"[DEBUG] Embedding模型测试失败: {str(e)}")
+            logger.error(f"[DEBUG] 但重建流程将继续进行...")
+        
+        vector_client = decide_vectorstores(knowledge.collection_name, "Milvus", new_embeddings)
+        logger.info(f"[DEBUG] 成功创建Milvus客户端，collection_name={knowledge.collection_name}")
 
         # 为每个文件重新生成embeddings
         for file in files:
@@ -196,10 +209,16 @@ def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_mo
 
                 logger.info(f"Found {len(texts)} chunks for file_id={file.id}")
 
-                # 重新生成embeddings并插入Milvus
-                vector_client = decide_vectorstores(knowledge.collection_name, "Milvus", new_embeddings)
-                vector_client.add_texts(texts=texts, metadatas=metadatas)
-                vector_client.close_connection(vector_client.alias)
+                # 插入数据到Milvus
+                logger.info(f"[DEBUG] 即将调用vector_client.add_texts，texts数量={len(texts)}")
+                logger.info(f"[DEBUG] 第一个文本示例: {texts[0][:100] if texts else 'No texts'}...")
+                
+                try:
+                    vector_client.add_texts(texts=texts, metadatas=metadatas)
+                    logger.info(f"[DEBUG] vector_client.add_texts调用成功")
+                except Exception as add_error:
+                    logger.error(f"[DEBUG] vector_client.add_texts调用失败: {str(add_error)}")
+                    raise add_error
 
                 success_files.append(file.id)
                 logger.info(f"Successfully rebuilt embeddings for file_id={file.id}")
