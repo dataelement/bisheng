@@ -79,6 +79,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
     model_supports_streaming = _check_model_supports_streaming(agent)
     
     logger.info(f'act=assistant_chat_completions model_supports_streaming={model_supports_streaming}, stream={req_data.stream}, llm_type={type(agent.llm)}')
+    logger.info(f'[调试] 即将判断分支: not req_data.stream={not req_data.stream}, not model_supports_streaming={not model_supports_streaming}')
     
     # 非流式调用或模型不支持流式
     if not req_data.stream or not model_supports_streaming:
@@ -120,29 +121,39 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
     
     async def _streaming_event_generator():
         """真实的流式事件生成器"""
+        logger.info(f'[API流式] _streaming_event_generator开始执行')
         try:
             collected_content = ""
-            last_content_length = 0
             
             # 使用真正的流式调用
             logger.info(f'act = assistant chat completions streaming question={question}, chat_history={chat_history}')
-            async for message_chunk in agent.astream(question, chat_history):
-                if not message_chunk:
-                    continue
-                
-                # 获取最新的消息
-                latest_message = message_chunk[-1] if isinstance(message_chunk, list) else message_chunk
-                
-                if hasattr(latest_message, 'content') and latest_message.content:
-                    new_content = latest_message.content
+            logger.info(f'[API流式] 即将调用agent.astream()')
+            chunk_counter = 0
+            try:
+                async for message_chunk in agent.astream(question, chat_history):
+                    logger.info(f'[API流式] 进入astream循环，收到数据')
+                    chunk_counter += 1
+                    logger.info(f'[API流式] 收到第{chunk_counter}个chunk: {type(message_chunk)}')
                     
-                    # 确保新内容比之前的内容长，避免重复或回退
-                    if len(new_content) > last_content_length:
-                        # 计算增量内容
-                        delta_content = new_content[last_content_length:]
-                        last_content_length = len(new_content)
-                        collected_content = new_content
+                    if not message_chunk:
+                        logger.debug(f'Empty message_chunk received')
+                        continue
+                
+                    logger.debug(f'Received message_chunk: {type(message_chunk)}, content preview: {str(message_chunk)[:200]}')
+                    
+                    # 获取最新的消息
+                    latest_message = message_chunk[-1] if isinstance(message_chunk, list) else message_chunk
+                    logger.info(f'[API流式] 第{chunk_counter}个chunk - latest_message类型: {type(latest_message)}, 有content: {hasattr(latest_message, "content")}')
+                    
+                    if hasattr(latest_message, 'content') and latest_message.content:
+                        # stream_mode="messages"返回独立chunk，直接使用内容作为delta
+                        delta_content = latest_message.content
+                        logger.info(f'[API流式] 第{chunk_counter}个chunk内容: "{delta_content[:50]}..." (长度: {len(delta_content)})')
                         
+                        # 累积完整内容用于历史记录
+                        collected_content += delta_content
+                        
+                        # 每个独立chunk都直接作为delta输出
                         if delta_content:
                             chunk_data = {
                                 "id": openai_resp_id,
@@ -155,24 +166,20 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
                                     "finish_reason": None
                                 }]
                             }
-                            yield f'data: {json.dumps(chunk_data, ensure_ascii=False)}\n\n'
-                    elif new_content != collected_content:
-                        # 如果是全新的内容（不是增量），直接输出
-                        collected_content = new_content
-                        last_content_length = len(new_content)
-                        
-                        chunk_data = {
-                            "id": openai_resp_id,
-                            "object": "chat.completion.chunk",
-                            "created": int(time.time()),
-                            "model": req_data.model,
-                            "choices": [{
-                                "index": 0,
-                                "delta": {"content": new_content},
-                                "finish_reason": None
-                            }]
-                        }
-                        yield f'data: {json.dumps(chunk_data, ensure_ascii=False)}\n\n'
+                            # 使用更安全的JSON序列化，避免传输截断
+                            try:
+                                json_str = json.dumps(chunk_data, ensure_ascii=False, separators=(',', ':'))
+                                logger.info(f'[API流式] 生成独立chunk: "{delta_content}" (长度: {len(delta_content)})')
+                                yield f'data: {json_str}\n\n'
+                                logger.info(f'[API流式] 成功yield第{chunk_counter}个独立chunk')
+                            except Exception as e:
+                                logger.error(f'JSON serialization error: {e}')
+                                continue
+            except Exception as astream_error:
+                logger.error(f'[API流式] agent.astream()调用出错: {str(astream_error)}')
+                raise astream_error
+            
+            logger.info(f'[API流式] astream循环结束，总共处理了{chunk_counter}个chunk')
             
             # 发送结束信号
             end_chunk = {
@@ -207,7 +214,16 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
             yield 'data: [DONE]\n\n'
 
     try:
-        return StreamingResponse(_streaming_event_generator(), media_type='text/event-stream')
+        # 添加HTTP headers以确保流式传输稳定性
+        headers = {
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'  # 禁用Nginx缓冲
+        }
+        logger.info(f'[API流式] 创建StreamingResponse，生成器函数: {_streaming_event_generator}')
+        return StreamingResponse(_streaming_event_generator(), 
+                               media_type='text/event-stream',
+                               headers=headers)
     except Exception as exc:
         logger.error(f'StreamingResponse creation error: {exc}')
         return ORJSONResponse(status_code=500, content=str(exc))
