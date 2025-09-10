@@ -27,7 +27,6 @@ from bisheng.database.models.sft_model import SftModelDao
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
 
-
 sync_job_thread_pool = ThreadPoolExecutor(3)
 
 
@@ -556,7 +555,7 @@ class FinetuneService:
             sft_ret = SFTBackend.get_gpu_info(parse_server_host(server.sft_endpoint))
             if not sft_ret[0]:
                 logger.error(f'get gpu info error: server_id: {server.id}, err: {sft_ret[1]}')
-                return GetGPUInfoError.return_resp()
+                continue
             gpu_info = parse_gpus(sft_ret[1])
             for one in gpu_info:
                 one['server'] = server.server
