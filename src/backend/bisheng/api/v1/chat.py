@@ -194,6 +194,7 @@ def get_chatmessage(*,
 async def get_chat_info(chat_id: str = Query(..., description='会话唯一id，chai_id')):
     """ 通过chat_id获取会话详情 """
     res = await MessageSessionDao.async_get_one(chat_id)
+    res.flow_logo = WorkFlowService.get_logo_share_link(res.flow_logo)
     return resp_200(res)
 
 
