@@ -25,6 +25,7 @@ from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeF
 from bisheng.database.models.llm_server import LLMDao, LLMModelType
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
+from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from bisheng.worker.knowledge.qa import insert_qa_celery
 
@@ -703,12 +704,23 @@ def update_knowledge_model(*,
         if not knowledge:
             return resp_501(message="指定的知识库不存在")
 
+        old_model_id = knowledge.model
+
         # 更新知识库状态和模型
-        knowledge.state = KnowledgeState.REBUILDING.value
         knowledge.model = str(req_data.model_id)
         knowledge.name = req_data.knowledge_name
         knowledge.description = req_data.description
-        KnowledgeDao.update_one(knowledge)
+
+        if old_model_id == req_data.model_id:
+            # 如果模型没有变化，不需要重建
+            knowledge.state = KnowledgeState.PUBLISHED.value
+            KnowledgeDao.update_one(knowledge)
+            return resp_200(
+                message="知识库模型未更改，无需重建"
+            )
+        else:
+            knowledge.state = KnowledgeState.REBUILDING.value
+            KnowledgeDao.update_one(knowledge)
 
         # 发起异步任务
         # 延迟导入以避免循环导入

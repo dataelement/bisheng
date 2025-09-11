@@ -300,7 +300,7 @@ class KnowledgeService(KnowledgeUtils):
         return True
 
     @classmethod
-    def delete_knowledge_file_in_vector(cls, knowledge: Knowledge):
+    def delete_knowledge_file_in_vector(cls, knowledge: Knowledge, del_es: bool = True):
         # 处理vector
         embeddings = FakeEmbedding()
         vector_client = decide_vectorstores(
@@ -322,12 +322,12 @@ class KnowledgeService(KnowledgeUtils):
                 # 判断milvus 是否还有entity
                 if vector_client.col.is_empty:
                     vector_client.col.drop()
-
-        # 处理 es
-        index_name = knowledge.index_name or knowledge.collection_name  # 兼容老版本
-        es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
-        res = es_client.client.indices.delete(index=index_name, ignore=[400, 404])
-        logger.info(f"act=delete_es index={index_name} res={res}")
+        if del_es:
+            # 处理 es
+            index_name = knowledge.index_name or knowledge.collection_name  # 兼容老版本
+            es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
+            res = es_client.client.indices.delete(index=index_name, ignore=[400, 404])
+            logger.info(f"act=delete_es index={index_name} res={res}")
 
     @classmethod
     def delete_knowledge_hook(

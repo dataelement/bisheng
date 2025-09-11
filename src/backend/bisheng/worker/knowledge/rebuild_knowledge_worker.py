@@ -3,6 +3,7 @@ from typing import List
 from loguru import logger
 from pymilvus import Collection
 
+from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import (
     decide_vectorstores,
     decide_embeddings
@@ -14,6 +15,7 @@ from bisheng.database.models.knowledge_file import (
     KnowledgeFileStatus
 )
 from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.settings import settings
 from bisheng.worker import bisheng_celery
 
 
@@ -54,24 +56,26 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: str) -> str:
 
             # 更新文件状态为重建中
             file_ids = [f.id for f in files]
-            for file in files:
-                file.status = KnowledgeFileStatus.REBUILDING.value
-                KnowledgeFileDao.update(file)
+            KnowledgeFileDao.update_status_bulk(file_ids, KnowledgeFileStatus.REBUILDING)
 
             logger.info(f"Updated {len(files)} files to rebuilding status")
 
             # 2. 根据拿到collection_name去milvus中删除向量存储
-            _delete_milvus_collection(knowledge)
+            KnowledgeService.delete_knowledge_file_in_vector(knowledge=knowledge, del_es=False)
+
+            embedding = knowledge.model
+            suffix_id = settings.get_vectors_conf().milvus.partition_suffix
+            knowledge.collection_name = (
+                f"partition_{embedding}_knowledge_{suffix_id}"
+            )
+
+            KnowledgeDao.update_one(knowledge)
 
             # 3. 根据index_name从es中拿到chunk信息，重新embedding插入milvus
             success_files, failed_files = _rebuild_embeddings(knowledge, files, new_model_id)
 
             # 4. 更新文件状态
-            for file_id in success_files:
-                file = next((f for f in files if f.id == file_id), None)
-                if file:
-                    file.status = KnowledgeFileStatus.SUCCESS.value
-                    KnowledgeFileDao.update(file)
+            KnowledgeFileDao.update_status_bulk(success_files, KnowledgeFileStatus.SUCCESS)
 
             for file_id in failed_files:
                 file = next((f for f in files if f.id == file_id), None)
@@ -130,7 +134,7 @@ def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_mo
     List[int], List[int]]:
     """
     重建embeddings
-    
+
     Returns:
         tuple: (成功的文件ID列表, 失败的文件ID列表)
     """
@@ -147,90 +151,51 @@ def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_mo
         # 获取新的embedding模型并创建Milvus客户端
         logger.info(f"[DEBUG] 开始初始化新的embedding模型，model_id={new_model_id}")
         new_embeddings = decide_embeddings(new_model_id)
-        logger.info(f"[DEBUG] 成功创建embedding模型实例: {type(new_embeddings).__name__}, model_id={getattr(new_embeddings, 'model_id', 'unknown')}")
-        
-        # 测试embedding模型是否真的可用
+        logger.info(
+            f"[DEBUG] 成功创建embedding模型实例: {type(new_embeddings).__name__}, model_id={getattr(new_embeddings, 'model_id', 'unknown')}")
+
+        # 测试embedding模型是否可用
         try:
             test_result = new_embeddings.embed_query("测试文本")
             logger.info(f"[DEBUG] Embedding模型测试成功，返回维度: {len(test_result) if test_result else 'None'}")
         except Exception as e:
             logger.error(f"[DEBUG] Embedding模型测试失败: {str(e)}")
-            logger.error(f"[DEBUG] 但重建流程将继续进行...")
-        
+            # 模型测试失败应该终止整个流程，而不是继续
+            raise Exception(f"Embedding模型不可用: {str(e)}")
+
         vector_client = decide_vectorstores(knowledge.collection_name, "Milvus", new_embeddings)
         logger.info(f"[DEBUG] 成功创建Milvus客户端，collection_name={knowledge.collection_name}")
+
+        # 检查ES索引是否存在（提前检查，避免在循环中重复检查）
+        if not es_client.client.indices.exists(index=index_name):
+            logger.error(f"ES index {index_name} does not exist")
+            # 索引不存在，所有文件都失败
+            failed_files = [f.id for f in files]
+            return success_files, failed_files
+
+        # 获取ES索引的mapping信息（用于调试）
+        try:
+            mapping = es_client.client.indices.get_mapping(index=index_name)
+            logger.debug(f"ES index mapping for {index_name}: {mapping}")
+        except Exception as e:
+            logger.warning(f"Failed to get ES mapping: {str(e)}")
 
         # 为每个文件重新生成embeddings
         for file in files:
             try:
-                logger.info(f"Rebuilding embeddings for file_id={file.id}")
-
-                # 先检查ES索引是否存在
-                if not es_client.client.indices.exists(index=index_name):
-                    logger.error(f"ES index {index_name} does not exist")
+                success = _process_single_file(file, es_client, index_name, vector_client)
+                if success:
+                    success_files.append(file.id)
+                    logger.info(f"Successfully rebuilt embeddings for file_id={file.id}")
+                else:
                     failed_files.append(file.id)
-                    continue
-
-                # 获取ES索引的mapping信息（用于调试）
-                try:
-                    mapping = es_client.client.indices.get_mapping(index=index_name)
-                    logger.debug(f"ES index mapping for {index_name}: {mapping}")
-                except Exception as e:
-                    logger.warning(f"Failed to get ES mapping: {str(e)}")
-
-                # 从ES中获取该文件的所有chunks
-                search_query = {
-                    "query": {
-                        "match": {
-                            "metadata.file_id": file.id
-                        }
-                    },
-                    "size": 10000 
-                }
-
-                logger.debug(f"ES search query: {search_query}")
-
-                response = es_client.client.search(index=index_name, body=search_query)
-                chunks = response.get("hits", {}).get("hits", [])
-
-                logger.info(f"Found {len(chunks)} chunks in ES for file_id={file.id}")
-
-                if not chunks:
-                    logger.warning(f"No chunks found for file_id={file.id}")
-                    success_files.append(file.id)  # 认为是成功的，因为没有数据需要处理
-                    continue
-
-                # 提取文本和元数据
-                texts = []
-                metadatas = []
-                for chunk in chunks:
-                    source = chunk["_source"]
-                    texts.append(source["text"])
-                    metadatas.append(source["metadata"])
-
-                logger.info(f"Found {len(texts)} chunks for file_id={file.id}")
-
-                # 插入数据到Milvus
-                logger.info(f"[DEBUG] 即将调用vector_client.add_texts，texts数量={len(texts)}")
-                logger.info(f"[DEBUG] 第一个文本示例: {texts[0][:100] if texts else 'No texts'}...")
-                
-                try:
-                    vector_client.add_texts(texts=texts, metadatas=metadatas)
-                    logger.info(f"[DEBUG] vector_client.add_texts调用成功")
-                except Exception as add_error:
-                    logger.error(f"[DEBUG] vector_client.add_texts调用失败: {str(add_error)}")
-                    raise add_error
-
-                success_files.append(file.id)
-                logger.info(f"Successfully rebuilt embeddings for file_id={file.id}")
-
             except Exception as e:
                 logger.exception(f"Failed to rebuild embeddings for file_id={file.id}: {str(e)}")
                 failed_files.append(file.id)
 
     except Exception as e:
         logger.exception(f"Failed to rebuild embeddings: {str(e)}")
-        # 如果整个过程失败，则所有文件都标记为失败
+        # 如果整个过程失败，则所有未成功的文件都标记为失败
         failed_files.extend([f.id for f in files if f.id not in success_files])
 
     finally:
@@ -243,3 +208,55 @@ def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_mo
                 logger.warning(f"Failed to close milvus connection: {str(close_error)}")
 
     return success_files, failed_files
+
+
+def _process_single_file(file, es_client, index_name, vector_client):
+    """处理单个文件的embedding重建"""
+    logger.info(f"Rebuilding embeddings for file_id={file.id}")
+
+    # 从ES中获取该文件的所有chunks
+    search_query = {
+        "query": {
+            "match": {
+                "metadata.file_id": file.id
+            }
+        },
+        "size": 10000
+    }
+
+    logger.debug(f"ES search query: {search_query}")
+
+    response = es_client.client.search(index=index_name, body=search_query)
+    chunks = response.get("hits", {}).get("hits", [])
+
+    logger.info(f"Found {len(chunks)} chunks in ES for file_id={file.id}")
+
+    if not chunks:
+        logger.warning(f"No chunks found for file_id={file.id}")
+        return True  # 没有数据需要处理，视为成功
+
+    # 提取文本和元数据
+    texts = []
+    metadatas = []
+    for chunk in chunks:
+        source = chunk["_source"]
+        texts.append(source["text"])
+        # 移除pk字段，避免插入Milvus时冲突
+        if "pk" in source["metadata"]:
+            del source["metadata"]["pk"]
+
+        metadatas.append(source["metadata"])
+
+    logger.info(f"Found {len(texts)} chunks for file_id={file.id}")
+
+    # 插入数据到Milvus
+    logger.info(f"[DEBUG] 即将调用vector_client.add_texts，texts数量={len(texts)}")
+    logger.info(f"[DEBUG] 第一个文本示例: {texts[0][:100] if texts else 'No texts'}...")
+
+    try:
+        vector_client.add_texts(texts=texts, metadatas=metadatas)
+        logger.info(f"[DEBUG] vector_client.add_texts调用成功")
+        return True
+    except Exception as add_error:
+        logger.error(f"[DEBUG] vector_client.add_texts调用失败: {str(add_error)}")
+        raise add_error
