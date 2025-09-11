@@ -136,8 +136,7 @@ class BishengEmbedding(BaseModel, Embeddings):
         })
 
         # 非openai官方但是符合openai接口标准的embedding模型，强制chunk_size=1，防止batch_size太大导致服务报错
-        if (self.llm_node_type.get(server_info.type) == "OpenAIEmbeddings" and
-                server_info.type != LLMServerType.OPENAI.value):
+        if self.llm_node_type.get(server_info.type) == "OpenAIEmbeddings":
             params['chunk_size'] = params.pop('chunk_size', 1)
 
         if server_info.type == LLMServerType.QWEN.value:
