@@ -257,8 +257,8 @@ export default function EvaluatingCreate() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectItem value="assistant">{t("build.assistant")}</SelectItem>
                         <SelectItem value="flow">{t("build.skill")}</SelectItem>
+                        <SelectItem value="assistant">{t("build.assistant")}</SelectItem>
                         <SelectItem value="workflow">{t("工作流")}</SelectItem>
                       </SelectGroup>
                     </SelectContent>

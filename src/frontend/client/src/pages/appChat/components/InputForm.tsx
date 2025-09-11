@@ -91,8 +91,8 @@ const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any })
             {
                 data.value.map((item, i) => (
                     <div key={item.id} className="w-full text-sm bisheng-label">
-                        {item.required && <span className="text-red-500">*</span>}
                         {item.value}
+                        {item.required && <span className="text-red-500">*</span>}
                         {/* <span className="text-status-red">{item.required ? " *" : ""}</span> */}
                         <div className="mb-2">
                             {(() => {
