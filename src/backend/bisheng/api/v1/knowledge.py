@@ -25,7 +25,6 @@ from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeF
 from bisheng.database.models.llm_server import LLMDao, LLMModelType
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
-from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from bisheng.worker.knowledge.qa import insert_qa_celery
 
@@ -332,8 +331,11 @@ async def delete_knowledge_chunk(request: Request,
 async def get_file_share_url(request: Request,
                              login_user: UserPayload = Depends(get_login_user),
                              file_id: int = Query(description='文件唯一ID')):
-    url = KnowledgeService.get_file_share_url(file_id)
-    return resp_200(data=url)
+    original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
+    return resp_200(data={
+        'original_url': original_url,
+        'preview_url': preview_url
+    })
 
 
 @router.get('/file_bbox')
