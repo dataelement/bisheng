@@ -30,6 +30,7 @@ from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.interface.llms.custom import BishengLLM
 from bisheng.settings import settings as bisheng_settings
+from bisheng.utils.exceptions import MessageException
 
 router = APIRouter(prefix='/workstation', tags=['WorkStation'])
 
@@ -390,6 +391,9 @@ async def chat_completions(
                 extra['prompt'] = prompt
                 message.extra = json.dumps(extra, ensure_ascii=False)
                 ChatMessageDao.insert_one(message)
+        except MessageException as e:
+            error = True
+            final_res = str(e)
         except Exception as e:
             logger.exception(f'Error in processing the prompt')
             error = True
