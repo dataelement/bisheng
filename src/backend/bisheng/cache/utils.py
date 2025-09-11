@@ -8,7 +8,7 @@ import tempfile
 from collections import OrderedDict
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, BinaryIO
+from typing import Any, Dict
 from urllib.parse import unquote, urlparse
 
 import cchardet
@@ -34,6 +34,7 @@ def create_cache_folder(func):
         return func(*args, **kwargs)
 
     return wrapper
+
 
 def create_cache_folder_async(func):
     async def wrapper(*args, **kwargs):
@@ -213,6 +214,7 @@ async def save_file_to_folder(file: UploadFile, folder_name: str, file_name: str
 
     return str(file_path)
 
+
 @create_cache_folder
 def save_uploaded_file(file, folder_name, file_name, bucket_name: str = tmp_bucket):
     """
@@ -280,7 +282,7 @@ def save_download_file(file_byte, folder_name, filename):
 
     # Create the folder if it doesn't exist
     if not folder_path.exists():
-        folder_path.mkdir()
+        folder_path.mkdir(exist_ok=True)
 
     # Create a hash of the file content
     sha256_hash = hashlib.sha256()
