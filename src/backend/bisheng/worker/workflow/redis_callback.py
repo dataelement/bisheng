@@ -81,6 +81,9 @@ class RedisCallback(BaseCallback):
 
     def get_workflow_response(self) -> ChatResponse | None:
         response = self.redis_client.lpop(self.workflow_event_key)
+        if self.get_workflow_stop():
+            self.redis_client.delete(self.workflow_event_key)
+            return None
         if response:
             response = ChatResponse(**json.loads(response))
             if ((response.category == WorkflowEventType.NodeRun.value and response.type == 'end'
