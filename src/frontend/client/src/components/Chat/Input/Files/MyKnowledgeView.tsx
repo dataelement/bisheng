@@ -35,7 +35,7 @@ export default function MyKnowledgeView({ open, onOpenChange }) {
 
     const res = await useGetDownloadUrl(object_name)
 
-    return axios.get(res.data, { responseType: "blob" }).then((res: any) => {
+    return axios.get(__APP_ENV__.BASE_URL + res.data, { responseType: "blob" }).then((res: any) => {
       const blob = new Blob([res.data]);
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);

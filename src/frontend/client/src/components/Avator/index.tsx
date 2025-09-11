@@ -21,7 +21,7 @@ export default function AppAvator({ id = 1, flowType = '', url = '', className =
         return gradients[parseInt(num + '', 16) % gradients.length]
     }, [id])
 
-    if (url) return <img src={url} className={cn(`w-6 h-6 rounded-sm object-cover`, className)} />
+    if (url) return <img src={__APP_ENV__.BASE_URL + url} className={cn(`w-6 h-6 rounded-sm object-cover`, className)} />
 
     const flowIcons = {
         1: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
