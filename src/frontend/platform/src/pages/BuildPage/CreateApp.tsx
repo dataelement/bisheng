@@ -246,7 +246,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                                 {appType === AppType.ASSISTANT ? t('assistantAvatar') : t('workflowAvatar')}
                             </label>
                             <Avator value={formData.url} className="mt-3" onChange={uploadAvator}>
-                                <AppAvator id={formData.name} url={loca?.logo} flowType={AppTypeToNum[appType]} className="size-8"></AppAvator>
+                                <AppAvator id={6} url={loca?.logo} flowType={AppTypeToNum[appType]} className="size-8"></AppAvator>
                             </Avator>
                         </div>
                         <div className="mb-6">
