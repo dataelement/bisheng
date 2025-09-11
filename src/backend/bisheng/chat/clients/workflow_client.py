@@ -155,6 +155,7 @@ class WorkflowClient(BaseClient):
             return await self._workflow_run()
 
     async def _workflow_run(self):
+        logger.debug('start workflow run')
         if not self.workflow:
             logger.warning('workflow is over by other task')
             return True
@@ -166,6 +167,7 @@ class WorkflowClient(BaseClient):
         status_info = self.workflow.get_workflow_status()
         if not status_info or status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
             await self.send_response('processing', 'close', '')
+            logger.debug(f"workflow is {status_info}, clear workflow object")
             self.workflow.clear_workflow_status()
             self.workflow = None
             return True

@@ -6,7 +6,7 @@ from typing import List, Optional
 # if TYPE_CHECKING:
 from pydantic import field_validator
 from sqlalchemy import JSON, Column, DateTime, String, or_, text, Text
-from sqlmodel import Field, delete, func, select, update
+from sqlmodel import Field, delete, func, select, update, col
 
 from bisheng.database.base import session_getter, async_session_getter
 from bisheng.database.models.base import SQLModelSerializable
@@ -231,8 +231,6 @@ class KnowledgeFileDao(KnowledgeFileBase):
         with session_getter() as session:
             return session.exec(statement).all()
 
-
-
     @classmethod
     def get_files_by_multiple_status(cls, knowledge_id: int, status_list: List[int]) -> List[KnowledgeFile]:
         """
@@ -249,10 +247,9 @@ class KnowledgeFileDao(KnowledgeFileBase):
             KnowledgeFile.knowledge_id == knowledge_id,
             KnowledgeFile.status.in_(status_list)
         )
-        
-        with session_getter() as session:
-            return session.exec(statement).all() 
 
+        with session_getter() as session:
+            return session.exec(statement).all()
 
     @classmethod
     def count_file_by_filters(cls,
@@ -295,6 +292,35 @@ class KnowledgeFileDao(KnowledgeFileBase):
             KnowledgeFile.knowledge_id)
         with session_getter() as session:
             return session.exec(statement).all()
+
+    @classmethod
+    def update_status_bulk(cls, file_ids: List[int], status: KnowledgeFileStatus, remark: str = "") -> None:
+        """
+        批量更新文件状态
+
+        Args:
+            file_ids: 文件ID列表
+            status: 新的状态值
+
+        Returns:
+            None
+        """
+        if not file_ids:
+            return
+
+        statement = (
+            update(KnowledgeFile)
+            .where(col(KnowledgeFile.id).in_(file_ids))
+        )
+
+        statement = statement.values(status=status.value)
+
+        if remark:
+            statement = statement.values(remark=remark)
+
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
 
 
 class QAKnoweldgeDao(QAKnowledgeBase):
