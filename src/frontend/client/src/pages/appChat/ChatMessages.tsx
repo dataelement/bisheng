@@ -47,7 +47,8 @@ export default function ChatMessages({ useName, title, logo }) {
                 } else if (['tool', 'flow', 'knowledge'].includes(msg.category)) {
                     return <MessageRunlog key={msg.id} data={msg} />
                 } else if (msg.thought) {
-                    return <MessageSystem key={msg.id} data={msg} />;
+                    return <MessageSystem
+                        logo={logo} title={title} key={msg.id} data={msg} />;
                 }
 
                 // output节点特殊msg
@@ -90,7 +91,11 @@ export default function ChatMessages({ useName, title, logo }) {
                     case 'node_run':
                         return <MessageNodeRun key={msg.id} data={msg} />;
                     case 'system':
-                        return <MessageSystem key={msg.id} data={msg} />;
+                        return <MessageSystem
+                            logo={logo}
+                            title={title}
+                            key={msg.id}
+                            data={msg} />;
                     case 'reasoning':
                     case 'reasoning_answer':
                         return <ReasoningLog key={msg.id} loading={false} msg={msg.message} />
