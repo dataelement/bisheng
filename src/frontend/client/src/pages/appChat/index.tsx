@@ -78,7 +78,9 @@ export default function index() {
                 //     })
                 // }
                 if (numericType === FLOW_TYPES.SKILL) {
-                    await build(flowData, cid);
+                    try {
+                        await build(flowData, cid);
+                    } catch (error) { }
                 }
                 break;
             case FLOW_TYPES.ASSISTANT:

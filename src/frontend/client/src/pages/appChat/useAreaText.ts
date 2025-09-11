@@ -35,10 +35,12 @@ export const useAreaText = () => {
 
     const [accepts, setAccepts] = useState('')
 
-    const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        const textarea = e.target
-        textarea.style.height = 'auto'
-        textarea.style.height = textarea.scrollHeight + 'px'
+    const handleInput = () => {
+        const textarea = textareaRef.current
+        if (textarea) {
+            textarea.style.height = 'auto'
+            textarea.style.height = textarea.scrollHeight + 'px'
+        }
     }
 
     // 发送输入(引导词)
@@ -64,8 +66,8 @@ export const useAreaText = () => {
         }
         if (textareaRef.current) {
             textareaRef.current.value = ""
+            handleInput() // 重置高度
         }
-        // 高度调整 todo
 
         // running
         setRunningState((prev) => ({
@@ -159,13 +161,13 @@ export const useAreaText = () => {
     }
 
     // 切换会话时，自动提交一次
-    useEffect(() => {
-        setSubmitDataState({
-            input: textareaRef.current?.value || "",
-            chatId,
-            flow: chatState.flow,
-        })
-    }, [chatId])
+    // useEffect(() => {
+    //     setSubmitDataState({
+    //         input: textareaRef.current?.value || "",
+    //         chatId,
+    //         flow: chatState.flow,
+    //     })
+    // }, [chatId])
 
 
     // 接收事件的处理

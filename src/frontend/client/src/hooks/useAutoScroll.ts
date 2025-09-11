@@ -18,7 +18,7 @@ export function useAutoScroll(
     options: UseAutoScrollOptions = {}
 ) {
     const {
-        threshold = 150,
+        threshold = 250,
         scrollBehavior = 'smooth'
     } = options
 
