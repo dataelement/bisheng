@@ -29,6 +29,8 @@ export type Partition = {
     [key in string]: { text: string, type: string, part_id: string }
 }
 export default function PreviewResult({showPreview ,previewCount, rules, step, applyEachCell, cellGeneralConfig,kId,handlePreviewResult }: IProps) {
+    console.log(showPreview,rules,567);
+    
     const { id } = useParams()
 
     const [chunks, setChunks] = useState([]) // 当前文件分块
@@ -71,13 +73,22 @@ export default function PreviewResult({showPreview ,previewCount, rules, step, a
         const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, knowledgeId
             , retainImages, separator, separatorRule } = rules
         const currentFile = fileList.find(file => file.id === selectId)
+       
+       let preview_url
+        if(showPreview){
+            preview_url = currentFile.previewUrl ||currentFile?.filePath
+        }else {
+            preview_url=currentFile?.filePath
+        }
+        console.log(preview_url ,currentFile,6789);
+        
         captureAndAlertRequestErrorHoc(previewFileSplitApi({
             // 缓存(修改规则后需要清空缓存, 切换文件使用缓存)
             // previewCount变更时为重新预览分段操作,不使用缓存
             cache: prevPreviewCountMapRef.current[currentFile.id] === previewCount,
             knowledge_id: id||kId,
             file_list: [{
-                file_path: currentFile?.filePath,
+                file_path:preview_url,
                 excel_rule: applyEachCell
                     ? currentFile.excelRule
                     : { ...cellGeneralConfig }
@@ -151,7 +162,7 @@ export default function PreviewResult({showPreview ,previewCount, rules, step, a
             setChunks={setChunks}
             partitions={partitions}
         />}
-        <div className={cn('relative', 'w-1/2')}>
+        <div className={cn('relative',)}>
             {/* 下拉框 - 右上角 */}
             {(step === 3 ||(step===2 &&showPreview))&&(
                <div className="flex justify-end">
