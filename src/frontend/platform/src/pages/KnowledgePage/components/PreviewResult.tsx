@@ -143,15 +143,15 @@ export default function PreviewResult({showPreview ,previewCount, rules, step, a
     }
 
     return (<div className={cn("h-full flex gap-2 justify-center", 'w-[100%]')}>
-
         {(step === 3 || step ===2 && !previewCount)&& currentFile && <PreviewFile
             urlState={fileViewUrl}
             file={currentFile}
+            step = {step}
             chunks={chunks}
             setChunks={setChunks}
             partitions={partitions}
         />}
-        <div className={cn('relative', 'w-100%')}>
+        <div className={cn('relative', 'w-1/2')}>
             {/* 下拉框 - 右上角 */}
             {(step === 3 ||(step===2 &&showPreview))&&(
                <div className="flex justify-end">

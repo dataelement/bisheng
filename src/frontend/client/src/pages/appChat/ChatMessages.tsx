@@ -30,7 +30,7 @@ export default function ChatMessages({ useName, title, logo }) {
     const remark = chatState?.flow?.guide_word
 
 
-    return <div ref={messageScrollRef} className="h-full overflow-y-auto scrollbar-hide pt-12 pb-60 px-4">
+    return <div ref={messageScrollRef} className="h-full overflow-y-auto scrollbar-hide pt-12 pb-96 px-4">
         {/* 助手开场白 */}
         {remark && <MessageRemark
             logo={logo}

@@ -30,7 +30,7 @@ class KnowledgeState(Enum):
 
 class KnowledgeBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
-    name: str = Field(index=True, min_length=1, max_length=30, description='知识库名, 最少一个字符，最多30个字符')
+    name: str = Field(index=True, min_length=1, max_length=200, description='知识库名, 最少一个字符，最多30个字符')
     type: int = Field(index=False, default=0, description='0 为普通知识库，1 为QA知识库')
     description: Optional[str] = Field(default=None, index=True)
     model: Optional[str] = Field(default=None, index=False)
