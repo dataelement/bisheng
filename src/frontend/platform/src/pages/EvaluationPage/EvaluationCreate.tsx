@@ -124,7 +124,7 @@ export default function EvaluatingCreate() {
     }
 
     // 修复文件验证 - 所有类型都需要测试集数据
-    if (!fileRef.current) errorlist.push(t("evaluation.enterFile"));
+    // if (!fileRef.current) errorlist.push(t("evaluation.enterFile"));
 
     if (!prompt) errorlist.push(t("evaluation.enterPrompt"));
 
@@ -257,8 +257,8 @@ export default function EvaluatingCreate() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectItem value="assistant">{t("build.assistant")}</SelectItem>
                         <SelectItem value="flow">{t("build.skill")}</SelectItem>
+                        <SelectItem value="assistant">{t("build.assistant")}</SelectItem>
                         <SelectItem value="workflow">{t("工作流")}</SelectItem>
                       </SelectGroup>
                     </SelectContent>
@@ -305,7 +305,7 @@ export default function EvaluatingCreate() {
                       onValueChange={(version) => setSelectedVersion(version)}
                       onOpenChange={() => {
                         if (!selectedKeyId)
-                          return handleError([t("evaluation.enterUniqueId")]);
+                          return handleError([t("evaluation.workFlow")]);
                       }}
                     >
                       <SelectTrigger className="min-w-[50px]">

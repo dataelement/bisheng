@@ -28,7 +28,7 @@ interface IProps {
 export type Partition = {
     [key in string]: { text: string, type: string, part_id: string }
 }
-export default function PreviewResult({ previewCount, rules, step, applyEachCell, cellGeneralConfig,kId,handlePreviewResult }: IProps) {
+export default function PreviewResult({showPreview ,previewCount, rules, step, applyEachCell, cellGeneralConfig,kId,handlePreviewResult }: IProps) {
     const { id } = useParams()
 
     const [chunks, setChunks] = useState([]) // 当前文件分块
@@ -153,7 +153,8 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
         />}
         <div className={cn('relative', 'w-100%')}>
             {/* 下拉框 - 右上角 */}
-            <div className="flex justify-end">
+            {(step === 3 ||(step===2 &&showPreview))&&(
+               <div className="flex justify-end">
                 <Select value={selectId} onValueChange={setSelectId}>
                     <SelectTrigger className="w-72">
                         <SelectValue />
@@ -169,8 +170,8 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
                         ))}
                     </SelectContent>
                 </Select>
-            </div>
-
+            </div>)
+            }
             {/* 其他内容 */}
             <PreviewParagraph
                 fileId={syncChunksSelectId}

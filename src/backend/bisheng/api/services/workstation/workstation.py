@@ -9,9 +9,11 @@ from loguru import logger
 from openai import BaseModel
 from pydantic import field_validator
 
-from bisheng.api.services import knowledge_imp, llm
+from bisheng.api.errcode.base import ServerError
+from bisheng.api.services import llm
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.knowledge import KnowledgeService
+from bisheng.api.services.knowledge import mixed_retrieval_recall
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig
 from bisheng.database.constants import MessageCategory
@@ -20,14 +22,9 @@ from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession
-from fastapi import BackgroundTasks, Request
-from langchain_core.messages import AIMessage, HumanMessage
-from loguru import logger
-from openai import BaseModel
-from bisheng.utils.embedding import create_knowledge_keyword_store
+from bisheng.utils.embedding import create_knowledge_keyword_store, decide_embeddings
 from bisheng.utils.embedding import create_knowledge_vector_store
-from bisheng.api.services.knowledge import mixed_retrieval_recall
-
+from bisheng.utils.exceptions import MessageException
 
 
 class WorkStationService(BaseService):
@@ -129,6 +126,10 @@ class WorkStationService(BaseService):
             knowledge = knowledge[0]
         req_data = KnowledgeFileProcess(knowledge_id=knowledge.id,
                                         file_list=[KnowledgeFileOne(file_path=file_path)])
+        try:
+            _ = decide_embeddings(knowledge.model)
+        except Exception as e:
+            raise ServerError.http_exception(msg="请联系管理员检查工作台向量检索模型状态")
         res = KnowledgeService.process_knowledge_file(request,
                                                       UserPayload(user_id=login_user.user_id),
                                                       background_tasks, req_data)
@@ -173,19 +174,24 @@ class WorkStationService(BaseService):
 
         if not knowledge:
             return []
-        
+
+        try:
+            _ = decide_embeddings(knowledge[0].model)
+        except Exception as e:
+            raise MessageException(message="请联系管理员检查工作台向量检索模型状态")
+
         vector_store = create_knowledge_vector_store([str(knowledge[0].id)], login_user.user_name)
         keyword_store = create_knowledge_keyword_store([str(knowledge[0].id)], login_user.user_name)
 
         # 获取配置中的最大token数，如果没有配置则使用默认值
         config = cls.get_config()
         max_tokens = config.maxTokens if config else 1500
-        
+
         # 获取知识库溯源模型 ID，如果没有配置则使用知识库的嵌入模型 ID
         from bisheng.api.services.llm import LLMService
         knowledge_llm = LLMService.get_knowledge_llm()
         model_id = knowledge_llm.source_model_id
-        
+
         docs = mixed_retrieval_recall(question, vector_store, keyword_store, max_tokens, model_id)
         logger.info(f"docs message: {docs}")
         # 将检索结果格式化为指定的模板格式
@@ -197,14 +203,14 @@ class WorkStationService(BaseService):
                 if not file_name or file_name == 'unknown_file':
                     # 尝试从其他字段获取文件名
                     file_name = doc.metadata.get('source', doc.metadata.get('filename', 'unknown_file'))
-                
+
                 # 获取文档内容
                 content = doc.page_content.strip()
-                
+
                 # 按照模板格式组织内容
                 formatted_content = f"[file name]:{file_name}\n[file content begin]\n{content}\n[file content end]\n"
                 formatted_results.append(formatted_content)
-        
+
         return formatted_results
 
     @classmethod

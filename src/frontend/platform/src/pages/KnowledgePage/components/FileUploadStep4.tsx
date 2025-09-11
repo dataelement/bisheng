@@ -91,15 +91,24 @@ console.log(data,kId,44);
     }, [kid]);
 
     // 检查所有文件是否完成
-    useEffect(() => {
-        // 如果所有文件都已完成（成功或失败）
-        if (files.length > 0 && files.every(f => f.progress === 'end')) {
-            clearInterval(timerRef.current);
-            setFinish(true);
-        } else {
-            setFinish(false);
+useEffect(() => {
+    // 检查是否有文件仍在处理中
+    const hasProcessingFiles = files.some(f => f.progress !== 'end');
+    
+    // 只有当存在文件且没有文件在处理中时，才标记为完成
+    if (files.length > 0 && !hasProcessingFiles) {
+        console.log('所有文件处理完成');
+        clearInterval(timerRef.current);
+        setFinish(true);
+    } else {
+        // 仍有文件在处理中或文件列表为空
+        if (files.length > 0) {
+            const processingCount = files.filter(f => f.progress !== 'end').length;
+            console.log(`仍有${processingCount}个文件正在处理中`);
         }
-    }, [files]);
+        setFinish(false);
+    }
+}, [files]);
     console.log('fukes :>> ', data, files);
 
     const [details] = useKnowledgeDetails([kid])
