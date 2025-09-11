@@ -613,7 +613,6 @@ export default function Paragraphs({ fileId, onBack }) {
                         setChunks={setChunks}
                         rules={previewRules}
                         h={false}
-                        className={isParagraphVisible ? "w-1/2" : "w-full max-w-3xl"}
                     />
                 ) : (
                     !isParagraphVisible && (
