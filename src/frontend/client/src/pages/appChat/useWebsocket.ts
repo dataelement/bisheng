@@ -34,153 +34,153 @@ export const useWebSocket = (helpers) => {
     const currentChatId = useCurrentChatId(helpers.chatId)
 
     // 连接WebSocket
+    const connect = (callBack) => {
+        if (websocket) return
+        if (!helpers.wsUrl) return
+        if (helpers.appLost === AppLostMessage) return
+
+        const isSecureProtocol = window.location.protocol === "https:";
+        const webSocketProtocol = isSecureProtocol ? "wss" : "ws";
+        const ws = new WebSocket(`${webSocketProtocol}://${helpers.wsUrl}`)
+        wsMap.set(helpers.chatId, ws)
+
+        ws.onopen = () => {
+            console.log("WebSocket connection established!");
+            helpers.clearError()
+            if (helpers.flow.flow_type === 10) {
+                // 工作流初始化
+                // console.log('helpers.flow :>> ', helpers.flow);
+                const { data, ...flow } = helpers.flow
+                const msg = {
+                    action: helpers.flow.isNew ? ActionType.INIT_DATA : ActionType.CHECK_STATUS,
+                    chat_id: helpers.chatId,
+                    flow_id: helpers.flow.id,
+                    data: { ...flow, ...data },
+                }
+                ws?.send(JSON.stringify(msg))
+            } else {
+                // 助手初始化
+                const msg = {
+                    chatHistory: [],
+                    chat_id: helpers.chatId,
+                    flow_id: helpers.flow.id,
+                    inputs: {
+                        data: helpers.flow.flow_type === 5 ? {
+                            id: helpers.flow.id,
+                            chatId: helpers.chatId,
+                            type: helpers.flow.flow_type,
+                        } : undefined
+                    },
+                    name: helpers.flow.name,
+                    description: helpers.flow.description
+                }
+                ws?.send(JSON.stringify(msg))
+            }
+
+            callBack?.(ws)
+        }
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data)
+                console.log('data :>> ', data);
+                handleMessages(data)
+            } catch (error) {
+                console.error("WebSocket message parse error:", error)
+            }
+        }
+
+        ws.onclose = (event) => {
+            console.log('close chatId:>> ', helpers.chatId);
+            console.error('ws close :>> ', event);
+            helpers.handleMsgError(event.reason)
+            // todo 错误消息写入消息下面
+        }
+
+        ws.onerror = (error) => {
+            console.error('链接异常error', helpers.chatId, error);
+            helpers.handleMsgError('')
+        }
+    }
+    const handleMessages = (data) => {
+        // 过滤无效数据
+        if ((data.category === 'end_cover' && data.type !== 'end_cover')) {
+            return
+        }
+
+        if (data.type === 'begin') {
+            // 工作流input会有再begin之前出现的情况
+            // helpers.stopShow(true)
+        } else if (data.type === 'close' && data.category === 'processing') {
+            helpers.stopShow(false)
+        }
+
+        // messages
+        if (data.category === 'error') {
+            const { code, message } = data.message
+            helpers.handleMsgError(data.intermediate_steps || '')
+
+            const errorMsg = code == 500 ? message : ERROR_CODES[code]
+            showToast({
+                message: errorMsg,
+                severity: NotificationSeverity.ERROR,
+            })
+            return
+        } else if (data.category === 'node_run') {
+            return helpers.message.createNodeMsg(helpers.chatId, data)
+        } else if (data.category === 'guide_word') {
+            data.message.msg = data.message.guide_word
+        } else if (data.category === 'input') {
+            const { node_id, input_schema } = data.message
+            sessionInfoMap.set(helpers.chatId, { node_id, message_id: data.message_id })
+            // 待用户输入
+            helpers.showInputForm({ ...input_schema, node_id })
+            return
+        } else if (data.category === 'guide_question') {
+            return helpers.showGuideQuestion(helpers.chatId, data.message.guide_question.filter(q => q))
+        } else if (data.category === 'stream_msg') {
+            helpers.message.streamMsg(helpers.chatId, data)
+        } else if (data.category === 'end_cover' && data.type === 'end_cover') {
+            // helpers.handleMsgError('')
+            sendWsMsg({ action: 'close' })
+            return helpers.message.endMsg(helpers.chatId, data)
+        }
+
+        /***** 技能 & 助手 start******/
+        if (helpers.flow.flow_type !== 10) {
+            if (Array.isArray(data) && data.length) return
+            if (data.type === 'start') {
+                const _data = SkillMethod.getStartParam(data, helpers.chatId)
+                helpers.message.createMsg(helpers.chatId, _data)
+            } else if (data.type === 'stream') {
+                helpers.message.skillStreamMsg(helpers.chatId, data)
+            }
+            if (['end', 'end_cover'].includes(data.type) && data.receiver?.is_self) {
+                // 群聊@自己时
+                helpers.showInputForm({})
+            } else if (['end', 'end_cover'].includes(data.type)) {
+                // todo 无未闭合的消息，先创建（补一条start）  工具类除外
+                helpers.message.skillStreamMsg(helpers.chatId, data)
+            } else if (data.type === 'close') {
+                helpers.message.skillCloseMsg()
+            }
+
+            return
+        }
+        /***** 技能 end******/
+        if (data.type === 'close' && data.category === 'processing') {
+            helpers.message.insetSeparator(helpers.chatId, '本轮会话已结束')
+            // helpers.handleMsgError('')
+            // 重启会话按钮,接收close确认后端处理结束后重启会话
+            if (restartCallBack.current) {
+                restartCallBack.current()
+                restartCallBack.current = null
+            }
+        } else if (data.type === 'over') {
+            helpers.message.createMsg(helpers.chatId, data)
+        }
+    }
     useEffect(() => {
-        const connect = () => {
-            if (websocket) return
-            if (!helpers.wsUrl) return
-            if (helpers.appLost === AppLostMessage) return
-
-            const isSecureProtocol = window.location.protocol === "https:";
-            const webSocketProtocol = isSecureProtocol ? "wss" : "ws";
-            const ws = new WebSocket(`${webSocketProtocol}://${helpers.wsUrl}`)
-            wsMap.set(helpers.chatId, ws)
-
-            ws.onopen = () => {
-                console.log("WebSocket connection established!");
-                helpers.clearError()
-                if (helpers.flow.flow_type === 10) {
-                    // 工作流初始化
-                    // console.log('helpers.flow :>> ', helpers.flow);
-                    const { data, ...flow } = helpers.flow
-                    const msg = {
-                        action: helpers.flow.isNew ? ActionType.INIT_DATA : ActionType.CHECK_STATUS,
-                        chat_id: helpers.chatId,
-                        flow_id: helpers.flow.id,
-                        data: { ...flow, ...data },
-                    }
-                    ws?.send(JSON.stringify(msg))
-                } else {
-                    // 助手初始化
-                    const msg = {
-                        chatHistory: [],
-                        chat_id: helpers.chatId,
-                        flow_id: helpers.flow.id,
-                        inputs: {
-                            data: helpers.flow.flow_type === 5 ? {
-                                id: helpers.flow.id,
-                                chatId: helpers.chatId,
-                                type: helpers.flow.flow_type,
-                            } : undefined
-                        },
-                        name: helpers.flow.name,
-                        description: helpers.flow.description
-                    }
-                    ws?.send(JSON.stringify(msg))
-                }
-            }
-
-            ws.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data)
-                    console.log('data :>> ', data);
-                    handleMessages(data)
-                } catch (error) {
-                    console.error("WebSocket message parse error:", error)
-                }
-            }
-
-            ws.onclose = (event) => {
-                console.log('close chatId:>> ', helpers.chatId);
-                console.error('ws close :>> ', event);
-                helpers.handleMsgError(event.reason)
-                // todo 错误消息写入消息下面
-            }
-
-            ws.onerror = (error) => {
-                console.error('链接异常error', helpers.chatId, error);
-                helpers.handleMsgError('')
-            }
-        }
-
-        const handleMessages = (data) => {
-            // 过滤无效数据
-            if ((data.category === 'end_cover' && data.type !== 'end_cover')) {
-                return
-            }
-
-            if (data.type === 'begin') {
-                // 工作流input会有再begin之前出现的情况
-                // helpers.stopShow(true)
-            } else if (data.type === 'close' && data.category === 'processing') {
-                helpers.stopShow(false)
-            }
-
-            // messages
-            if (data.category === 'error') {
-                const { code, message } = data.message
-                helpers.handleMsgError(data.intermediate_steps || '')
-
-                const errorMsg = code == 500 ? message : ERROR_CODES[code]
-                showToast({
-                    message: errorMsg,
-                    severity: NotificationSeverity.ERROR,
-                })
-                return
-            } else if (data.category === 'node_run') {
-                return helpers.message.createNodeMsg(helpers.chatId, data)
-            } else if (data.category === 'guide_word') {
-                data.message.msg = data.message.guide_word
-            } else if (data.category === 'input') {
-                const { node_id, input_schema } = data.message
-                sessionInfoMap.set(helpers.chatId, { node_id, message_id: data.message_id })
-                // 待用户输入
-                helpers.showInputForm({ ...input_schema, node_id })
-                return
-            } else if (data.category === 'guide_question') {
-                return helpers.showGuideQuestion(helpers.chatId, data.message.guide_question.filter(q => q))
-            } else if (data.category === 'stream_msg') {
-                helpers.message.streamMsg(helpers.chatId, data)
-            } else if (data.category === 'end_cover' && data.type === 'end_cover') {
-                // helpers.handleMsgError('')
-                sendWsMsg({ action: 'close' })
-                return helpers.message.endMsg(helpers.chatId, data)
-            }
-
-            /***** 技能 & 助手 start******/
-            if (helpers.flow.flow_type !== 10) {
-                if (Array.isArray(data) && data.length) return
-                if (data.type === 'start') {
-                    const _data = SkillMethod.getStartParam(data, helpers.chatId)
-                    helpers.message.createMsg(helpers.chatId, _data)
-                } else if (data.type === 'stream') {
-                    helpers.message.skillStreamMsg(helpers.chatId, data)
-                }
-                if (['end', 'end_cover'].includes(data.type) && data.receiver?.is_self) {
-                    // 群聊@自己时
-                    helpers.showInputForm({})
-                } else if (['end', 'end_cover'].includes(data.type)) {
-                    // todo 无未闭合的消息，先创建（补一条start）  工具类除外
-                    helpers.message.skillStreamMsg(helpers.chatId, data)
-                } else if (data.type === 'close') {
-                    helpers.message.skillCloseMsg()
-                }
-
-                return
-            }
-            /***** 技能 end******/
-            if (data.type === 'close' && data.category === 'processing') {
-                helpers.message.insetSeparator(helpers.chatId, '本轮会话已结束')
-                // helpers.handleMsgError('')
-                // 重启会话按钮,接收close确认后端处理结束后重启会话
-                if (restartCallBack.current) {
-                    restartCallBack.current()
-                    restartCallBack.current = null
-                }
-            } else if (data.type === 'over') {
-                helpers.message.createMsg(helpers.chatId, data)
-            }
-        }
-
         connect()
 
         return () => {
@@ -198,7 +198,13 @@ export const useWebSocket = (helpers) => {
 
     const sendWsMsg = async (msg) => {
         try {
-            websocket?.send(JSON.stringify(msg))
+            if (websocket) {
+                websocket.send(JSON.stringify(msg))
+            } else {
+                connect((_websocket) => {
+                    _websocket.send(JSON.stringify(msg))
+                })
+            }
         } catch (error: any) {
             showToast({
                 message: error.message,
@@ -209,7 +215,8 @@ export const useWebSocket = (helpers) => {
 
     // 监听submitData变化，发送消息（必须在当前会话调用）
     useEffect(() => {
-        if (submitData && websocket && websocket.readyState === WebSocket.OPEN) {
+        if (submitData
+            && (submitData.action === 'skill_input' || websocket && websocket.readyState === WebSocket.OPEN)) {
             const action = submitData.action
 
             switch (action) {
