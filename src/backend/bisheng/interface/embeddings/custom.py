@@ -134,6 +134,12 @@ class BishengEmbedding(BaseModel, Embeddings):
         params.update({
             'model': model_info.model_name,
         })
+
+        # 非openai官方但是符合openai接口标准的embedding模型，强制chunk_size=1，防止batch_size太大导致服务报错
+        if (self.llm_node_type.get(server_info.type) == "OpenAIEmbeddings" and
+                server_info.type != LLMServerType.OPENAI.value):
+            params['chunk_size'] = params.pop('chunk_size', 1)
+
         if server_info.type == LLMServerType.QWEN.value:
             params = {
                 'dashscope_api_key': params.get('openai_api_key'),
@@ -150,9 +156,6 @@ class BishengEmbedding(BaseModel, Embeddings):
             LLMServerType.VLLM.value
         ]:
             params['openai_api_key'] = params.pop('openai_api_key', None) or 'EMPTY'
-            params['chunk_size'] = params.pop('chunk_size', 1)
-        elif server_info.type == LLMServerType.OPENAI.value:
-            params['chunk_size'] = params.pop('chunk_size', 1)
         elif server_info.type == LLMServerType.OLLAMA.value:
             params['query_instruction'] = 'passage: '
         return params
