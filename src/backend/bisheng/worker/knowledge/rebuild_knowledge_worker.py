@@ -136,6 +136,7 @@ def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_mo
     """
     success_files = []
     failed_files = []
+    vector_client = None
 
     try:
         # 获取ES中的chunk信息
@@ -231,5 +232,14 @@ def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_mo
         logger.exception(f"Failed to rebuild embeddings: {str(e)}")
         # 如果整个过程失败，则所有文件都标记为失败
         failed_files.extend([f.id for f in files if f.id not in success_files])
+
+    finally:
+        # 确保关闭Milvus连接
+        if vector_client is not None:
+            try:
+                vector_client.close_connection(vector_client.alias)
+                logger.info(f"[DEBUG] 已关闭Milvus连接: {vector_client.alias}")
+            except Exception as close_error:
+                logger.warning(f"Failed to close milvus connection: {str(close_error)}")
 
     return success_files, failed_files
