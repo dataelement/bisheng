@@ -201,7 +201,7 @@ export const createCustomFlowApi = async (params: {
 }, userName: string) => {
     if (params.logo) {
         // logo保存相对路径
-        params.logo = params.logo.replace('/bisheng', '') 
+        params.logo = params.logo.replace(/^\/\w+/, '') 
     }
     const response: FlowType = await axios.post("/api/v1/flows/", {
         ...params,
@@ -228,7 +228,7 @@ export async function updateFlowApi(
 ): Promise<FlowType> {
     if (updatedFlow.logo) {
         // logo保存相对路径
-        updatedFlow.logo = updatedFlow.logo.replace('/bisheng', '')
+        updatedFlow.logo = updatedFlow.logo.replace(/^\/\w+/, '')
     }
     return await axios.patch(`/api/v1/flows/${updatedFlow.id}`, {
         logo: updatedFlow.logo || '',

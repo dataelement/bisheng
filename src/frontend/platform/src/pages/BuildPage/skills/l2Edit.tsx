@@ -144,9 +144,13 @@ export default function l2Edit() {
     const [logo, setLogo] = useState('')
     const uploadAvator = (file) => {
         uploadFileWithProgress(file, (progress) => { }, 'icon').then(res => {
-            setLogo('/bisheng/' + res.relative_path);
+            setLogo(res.file_path);
         })
     }
+
+    const previewAvatar = useMemo(() =>
+        logo ? __APP_ENV__.BASE_URL + logo : '',
+        [logo])
 
     return <div className="relative box-border h-full overflow-auto">
         <div className="p-6 pb-48 h-full overflow-y-auto">
@@ -174,8 +178,8 @@ export default function l2Edit() {
                     <div className="w-full overflow-hidden transition-all px-1">
                         <div className="mt-4">
                             <Label htmlFor="name">{t('skills.avatar')}</Label>
-                            <Avator value={logo} className="mt-2" onChange={uploadAvator}>
-                                <AppAvator id={6} url={logo} flowType={1} className="w-9 h-9"></AppAvator>
+                            <Avator value={previewAvatar} className="mt-2" onChange={uploadAvator}>
+                                <AppAvator id={6} flowType={1} className="w-9 h-9"></AppAvator>
                             </Avator>
                         </div>
                         <div className="mt-4">
