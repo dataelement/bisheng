@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader } from '@/components/bs-ui/dialog';
 import { SearchInput } from '@/components/bs-ui/input';
 import AutoPagination from '@/components/bs-ui/pagination/autoPagination';
 import ShadTooltip from "@/components/ShadTooltipComponent";
-import { delChunkApi, getFilePathApi, getKnowledgeChunkApi, readFileByLibDatabase, updateChunkApi } from '@/controllers/API';
+import { delChunkApi, getFilePathApi, getKnowledgeChunkApi,getFileBboxApi, readFileByLibDatabase, updateChunkApi } from '@/controllers/API';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useTable } from '@/util/hook';
 import { truncateString } from "@/util/utils";
@@ -12,7 +12,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ArrowLeft, ChevronDown, ChevronUp, FileText, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import useKnowledgeStore from '../useKnowledgeStore';
 import ParagraphEdit from './ParagraphEdit';
 import PreviewFile from './PreviewFile';
@@ -26,7 +26,7 @@ export default function Paragraphs({ fileId, onBack }) {
     const { id } = useParams();
     const navigate = useNavigate();
     const { isEditable, selectedBbox } = useKnowledgeStore();
-
+   const location = useLocation();
     // 状态管理（完全保留原始定义）
     const [selectedFileId, setSelectedFileId] = useState('');
     const [currentFile, setCurrentFile] = useState(null);
@@ -46,7 +46,7 @@ export default function Paragraphs({ fileId, onBack }) {
     });
     const [selectError, setSelectError] = useState(null);
     const [isFetchingUrl, setIsFetchingUrl] = useState(false);
-
+    const [partitions, setPartitions] = useState()
     // 引用（完全保留原始定义）
     const isLoadingFilesRef = useRef(false);
     const isMountedRef = useRef(true);
@@ -64,7 +64,9 @@ export default function Paragraphs({ fileId, onBack }) {
         try {
             setIsFetchingUrl(true);
             const res = await getFilePathApi(fileId);
-            console.log('getFilePathApi 响应:', res);
+            const pares = await getFileBboxApi(fileId)
+            setPartitions(pares)
+            console.log('getFilePathApi 响应:', res,pares);
 
             // 修复：提取URL并解码（解决中文/特殊字符乱码）
             let url;
@@ -133,7 +135,17 @@ export default function Paragraphs({ fileId, onBack }) {
     } = useTable(tableConfig, (param) =>
         getKnowledgeChunkApi({ ...param, limit: param.pageSize, knowledge_id: id })
     );
-
+ useEffect(() => {
+        // 检查当前路径是否是adjust页面且没有有效的state数据
+        if (location.pathname.startsWith('/filelib/adjust/') && !window.history.state?.isAdjustMode) {
+            // 提取ID（如从/filelib/adjust/2066中提取2066）
+            const adjustId = location.pathname.split('/')[3];
+            if (adjustId) {
+                // 重定向到对应的filelib页面
+                navigate(`/filelib/${adjustId}`, { replace: true });
+            }
+        }
+    }, [location.pathname, navigate]);
     // 从datalist生成chunks（完全保留原始逻辑）
     useEffect(() => {
         if (!selectedFileId || !datalist.length) {
@@ -198,6 +210,8 @@ export default function Paragraphs({ fileId, onBack }) {
             };
             // 统一更新UI状态（一次更新，避免多次渲染不一致）
             setSelectedFileId(newFileId);
+            
+            
             setCurrentFile(tempFileData);
             setFileUrl(fileUrlResult);
 
@@ -260,6 +274,7 @@ export default function Paragraphs({ fileId, onBack }) {
                             url: fileUrlResult
                         };
                         setSelectedFileId(defaultFileId);
+                        console.log(fileData,67);
                         setCurrentFile(fileData);
                         setFileUrl(fileUrlResult);
                     }
@@ -398,13 +413,25 @@ export default function Paragraphs({ fileId, onBack }) {
 
     // 格式化文件大小（完全保留原始逻辑）
     const formatFileSize = useCallback((bytes) => {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }, []);
-
+    if (bytes === 0) return '0 Bytes';
+    
+    // 定义单位转换边界（1024进制）
+    const KB = 1024;
+    const MB = KB * 1024;
+    const GB = MB * 1024;
+    
+    // 根据文件大小选择合适的单位
+    if (bytes < MB) {
+        // 小于1024KB（1MB），使用KB
+        return `${(bytes / KB).toFixed(2)} KB`;
+    } else if (bytes < GB) {
+        // 1024KB至1024MB之间，使用MB
+        return `${(bytes / MB).toFixed(2)} MB`;
+    } else {
+        // 1024MB及以上，使用GB
+        return `${(bytes / GB).toFixed(2)} GB`;
+    }
+}, []);
     // 筛选下拉框文件（完全保留原始逻辑）
     const filteredFiles = files.filter(file =>
         file.label.toLowerCase().includes(searchTerm.toLowerCase())
@@ -577,7 +604,9 @@ export default function Paragraphs({ fileId, onBack }) {
                 {/* 预览组件 - 修复显示问题 */}
                 {isPreviewVisible ? (
                     <PreviewFile
+                        rawFiles={rawFiles}
                         key={selectedFileId}
+                        partitions={partitions}
                         urlState={{ load: !isFetchingUrl, url: fileUrl }}
                         file={currentFile}
                         chunks={safeChunks}

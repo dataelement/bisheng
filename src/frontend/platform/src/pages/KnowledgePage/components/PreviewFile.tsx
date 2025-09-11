@@ -8,259 +8,315 @@ import { convertJsonData } from "./ParagraphEdit";
 import { Partition } from "./PreviewResult";
 import TxtFileViewer from "./TxtFileViewer";
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import React from "react";
 
-/**
- * 
- * chunks -> labelsMap
- * labelsMap -> pageLabels -> ui
- * 选中label -> 更新labelsMap
- * 覆盖chunk -> labelsMap + partitions = string -> store -> update markdown
- */
-export default function PreviewFile({ urlState, file, partitions, chunks, setChunks, h = true }
-    : { urlState: { load: false, url: '' }, file: any, partitions: Partition, chunks: any, setChunks: any }) {
+export default function PreviewFile({ 
+  urlState, 
+  file, 
+  partitions, 
+  chunks, 
+  rawFiles, 
+  setChunks, 
+  h = true 
+}: { 
+  urlState: { load: false; url: '' }; 
+  file: any; 
+  partitions: Partition; 
+  chunks: any; 
+  rawFiles: any[]; 
+  setChunks: any; 
+  h?: boolean;
+}) {
+    console.log(chunks,333);
+    
+  const { t } = useTranslation('knowledge')
+  const MemoizedFileView = React.memo(FileView);
+  const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
+  const selectedChunkDistanceFactor = useKnowledgeStore((state) => state.selectedChunkDistanceFactor);
+  const setNeedCoverData = useKnowledgeStore((state) => state.setNeedCoverData);
+  const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
 
-    const { t } = useTranslation('knowledge')
+  // 1. 统一文件匹配和类型判断逻辑（与ParagraphEdit完全对齐）
+  const matchedRawFile = useMemo(() => {
+    if (!rawFiles?.length || !file?.id) return null;
+    return rawFiles.find(raw => raw.id === file.id);
+  }, [rawFiles, file]);
+  
+  const targetFile = matchedRawFile || file;
+  const fileParseType = targetFile.parse_type;
+  const fileName = targetFile.name || file.name;
+  const suffix = useMemo(() => {
+    
+    return fileName?.split('.').pop()?.toLowerCase() || '';
+  }, [fileName]);
+  const isUnsType = useMemo(() => {
+    return fileParseType === 'uns' || 
+           (targetFile.fileType && targetFile.fileType.includes('uns')) ||
+           ['etl4lm', 'un_etl4lm'].includes(fileParseType);
+  }, [fileParseType, targetFile.fileType]);
 
-    const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
-    const selectedChunkDistanceFactor = useKnowledgeStore((state) => state.selectedChunkDistanceFactor);
-    const setNeedCoverData = useKnowledgeStore((state) => state.setNeedCoverData);
-    const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
-    // test
-    // partitions = {
-    //     '1-40-40-400-80': { text: '1111', type: 'Title', part_id: '1' },
-    //     '1-140-140-400-180': { text: '2222', type: 'Title', part_id: '1' },
-    //     '1-240-240-400-330': { text: '3333', type: 'Title', part_id: '2' }
-    // }
-    const [postion, setPostion] = useState([1, 0])
-    const [labelsMap, setLabelsMap] = useState(new Map()) // {p-bbox: label}
-    const labelsMapRef = useRef(new Map())
+  // 2. 调整Excel文件过滤逻辑（仅非uns类型的Excel才返回null）
+  if (['xlsx', 'xls', 'csv'].includes(suffix) && !isUnsType) {
+    return null;
+  }
 
-    const labelsMapTempRef = useRef({}) // 临时存每个分段覆盖后的labels结果
-    // 分段标注有变更
-    const [labelChange, setLabelChange] = useState(false)
-    useEffect(() => {
-        setLabelChange(false)
-        if (file.suffix !== 'pdf') {
-            setSelectedBbox([])
-            labelsMapRef.current = new Map()
-            return setLabelsMap(new Map())
-        }
+  // 3. 状态管理（增加与ParagraphEdit一致的定位状态）
+  const [postion, setPostion] = useState([1, 0])
+  const [labelsMap, setLabelsMap] = useState(new Map())
+  const labelsMapRef = useRef(new Map())
+  const labelsMapTempRef = useRef({})
+  const [labelChange, setLabelChange] = useState(false)
+  const [showPos, setShowPos] = useState(false)
+  const [random, setRandom] = useState(0)
+  const labelTextRef = useRef<any>(partitions);
 
-        let setPostioned = false;
-        const labelsMap = new Map();
+  // 4. 初始化标签数据（完全对齐ParagraphEdit的initData逻辑）
+  useEffect(() => {
+    setLabelChange(false);
+    // 仅对非uns类型的非PDF文件清空标签
+    if (suffix !== 'pdf' && !isUnsType) {
+      setSelectedBbox([]);
+      labelsMapRef.current = new Map();
+      return setLabelsMap(new Map());
+    }
 
-        const _labelsMap = labelsMapTempRef.current[selectedChunkIndex]
-        if (labelsMapTempRef.current[selectedChunkIndex]) {
-            setLabelsMap(_labelsMap)
-            labelsMapRef.current = _labelsMap
-            return
-        }
+    let setPostioned = false;
+    const labelsMap = new Map();
 
-        const allLabels = convertJsonData(partitions)
-        const activeIds = new Set()
-        chunks.forEach(chunk => {
-            if (chunk.chunkIndex === selectedChunkIndex) {
-                const bboxes = (chunk.bbox && JSON.parse(chunk.bbox).chunk_bboxes) || [];
-                bboxes.forEach(label => {
-                    const id = [label.page, ...label.bbox].join('-');
-                    activeIds.add(id)
-                    // 初始定位到第一个激活的标签
-                    if (!setPostioned) {
-                        setPostion([label.page, label.bbox[1]]) // 增量
-                        setPostioned = true;
-                    }
-                })
+    // 优先使用缓存的标签数据
+    const cachedLabels = labelsMapTempRef.current[selectedChunkIndex];
+    if (cachedLabels) {
+      setLabelsMap(cachedLabels);
+      labelsMapRef.current = cachedLabels;
+      return;
+    }
 
-            }
-        })
-
-        allLabels.forEach((label) => {
-            labelsMap.set(label.id, {
-                ...label,
-                active: activeIds.has(label.id)
-            });
-        })
-
-        // 合并覆盖的activeLabels
-        // const activeLabels = chunks.reduce((res, chunk) => {
-        //     res = {...res, ...chunk.activeLabels}
-        //     return res
-        // }, {})
-        // if (chunks[0]) chunks[0].bbox = [{ page: 1, bbox: [40, 40, 400, 80] }, { page: 1, bbox: [140, 140, 400, 180] }]
-        // if (chunks[1]) chunks[1].bbox = [{ page: 1, bbox: [240, 240, 400, 330] }]
-        // chunks.forEach(chunk => {
-        //     const bboxes = (chunk.bbox && JSON.parse(chunk.bbox).chunk_bboxes) || [];
-        //     const isActive = chunk.chunkIndex === selectedChunkIndex;
-
-        //     bboxes.forEach(label => {
-        //         const id = [label.page, ...label.bbox].join('-');
-        //         const existing = labelsMap.get(id);
-
-        //         // const activeded = chunk.activeLabels?.[id];
-        //         // if (activeded !== undefined) {
-        //         //     labelsMap.set(id, {
-        //         //         id,
-        //         //         page: label.page,
-        //         //         label: label.bbox,
-        //         //         active: activeded,
-        //         //         txt: chunk.text
-        //         //     });
-        //         // } else
-        //         if (isActive || !existing) {
-        //             // 处理标签优先级：当前标签激活时强制覆盖，非激活时保留已有（可能包含激活状态）
-        //             labelsMap.set(id, {
-        //                 id,
-        //                 page: label.page,
-        //                 label: label.bbox,
-        //                 // active: obj?.active !== false && isActive,
-        //                 active: isActive,
-        //                 txt: chunk.text
-        //             });
-        //         }
-
-
-        //         // 初始定位到第一个激活的标签
-        //         if (isActive && !setPostioned) {
-        //             setPostion([label.page, label.bbox[1]]) // 增量
-        //             setPostioned = true;
-        //         }
-        //     });
-        // });
-        labelsMap.size && setLabelsMap(labelsMap)
-        labelsMapRef.current = labelsMap
-    }, [file.suffix, chunks, selectedChunkIndex]);
-
-    useEffect(() => {
-        labelsMapTempRef.current = {}
-    }, [file])
-
-    // 点击定位
-    useEffect(() => {
-        setPostion((p) => {
-            return [p[0], p[1] + selectedChunkDistanceFactor]
-        })
-    }, [selectedChunkDistanceFactor])
-
-    const pageLabels = useMemo(() => {
-        // 转换为按页面分组的对象
-        return Array.from(labelsMap.values()).reduce((acc, item) => {
-            (acc[item.page] ||= []).push(item);
-            return acc;
-        }, {});
-    }, [labelsMap])
-
-    // 选择标注框
-    const handleSelectLabels = (lbs) => {
-        if (selectedChunkIndex === -1) return
-
-        const distinct = {}
-        const newActiveLabelMap = lbs.reduce((_labelMap, { id, active }) => {
-            const partId = partitions[id].part_id
-            if (distinct[partId]) return _labelMap // same partId
-            distinct[partId] = true
-            // 相同的partId同时被选中
-            Object.keys(partitions).forEach((key) => {
-                if (partitions[key].part_id === partId) {
-                    _labelMap.set(key, active)
-                }
-            })
-            return _labelMap
-        }, new Map())
-
-        // 高亮(active)标注
-        const newMap = new Map(labelsMap); // 浅拷贝原 Map
-        const bbox = []
-        Array.from(labelsMap.values()).forEach((item) => {
-            const value = newActiveLabelMap.get(item.id)
-            if (value !== undefined) {
-                newMap.set(item.id, { ...item, active: value })
-                value && bbox.push({ page: item.page, bbox: item.label })
-            } else {
-                item.active && bbox.push({ page: item.page, bbox: item.label })
-            }
+    // 转换标签数据（与ParagraphEdit使用相同方法）
+    const allLabels = convertJsonData(labelTextRef.current || partitions);
+    const activeIds = new Set();
+    
+    // 标记当前chunk的激活标签
+    chunks?.forEach(chunk => {
+      if (chunk.chunkIndex === selectedChunkIndex) {
+        const bboxes = (chunk.bbox && JSON.parse(chunk.bbox).chunk_bboxes) || [];
+        bboxes.forEach(label => {
+          const id = [label.page, ...label.bbox].join('-');
+          activeIds.add(id);
+          // 初始定位到第一个激活标签
+          if (!setPostioned) {
+            setPostion([label.page, label.bbox[1]]);
+            setPostioned = true;
+          }
         });
-        // 记录当前chunk选中的bbox
-        setSelectedBbox(bbox)
+      }
+    });
 
-        labelsMapRef.current = newMap
-        setLabelsMap(newMap);
-        setLabelChange(true)
+    // 设置标签激活状态
+    allLabels.forEach((label) => {
+      labelsMap.set(label.id, {
+        ...label,
+        active: activeIds.has(label.id)
+      });
+    });
+
+    if (labelsMap.size) {
+      setLabelsMap(labelsMap);
+      labelsMapRef.current = labelsMap;
     }
+  }, [suffix, chunks, selectedChunkIndex, isUnsType, partitions]); // 增加partitions依赖
 
-    const render = (type) => {
-        const { url, load } = urlState
+  // 5. 页面滚动和定位逻辑（对齐ParagraphEdit的postion计算）
+  useEffect(() => {
+    setPostion(prev => [prev[0], prev[1] + selectedChunkDistanceFactor]);
+  }, [selectedChunkDistanceFactor]);
 
-        if (!load && !url) return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>
-        if (!url) return <div className="flex justify-center items-center h-full text-gray-400"><LoadingIcon /></div>
-        switch (type) {
-            case 'ppt':
-            case 'pptx':
-            case 'pdf':
-                return <FileView
-                    startIndex={0}
-                    select={selectedChunkIndex !== -1}
-                    fileUrl={url}
-                    labels={pageLabels}
-                    scrollTo={postion}
-                    onSelectLabel={handleSelectLabels}
-                // onPageChange={handlePageChange}
-                />
-            case 'txt': return <TxtFileViewer filePath={url} />
-            case 'md': return <TxtFileViewer markdown filePath={url} />
-            case 'html': return <TxtFileViewer html filePath={url} />
-            case 'doc':
-            case 'docx': return <DocxPreview filePath={url} />
-            case 'png':
-            case 'jpg':
-            case 'jpeg':
-            case 'bmp': return <img
-                className="border"
-                src={url.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)} alt="" />
-            default:
-                return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>
+  // 计算定位位置（与ParagraphEdit一致）
+  const calculatedPostion = useMemo(() => {
+    const labelsArray = Array.from(labelsMap.values());
+    const target = labelsArray.find(el => el.active);
+    return target ? [target.page, target.label[1] + random] : [1, 0];
+  }, [labelsMap, random]);
+
+  // 6. 页面标签分组（与ParagraphEdit的labels计算一致）
+  const pageLabels = useMemo(() => {
+    return Array.from(labelsMap.values()).reduce((acc, item) => {
+      if (!acc[item.page]) acc[item.page] = [];
+      acc[item.page].push({ ...item });
+      return acc;
+    }, {});
+  }, [labelsMap]);
+
+  // 7. 标签选择逻辑（完全对齐ParagraphEdit的handleSelectLabels）
+  const handleSelectLabels = (lbs) => {
+    if (selectedChunkIndex === -1) return;
+
+    const distinct = {};
+    const newActiveLabelMap = lbs.reduce((map, { id, active }) => {
+      const partId = labelTextRef.current[id]?.part_id;
+      if (distinct[partId]) return map;
+      
+      distinct[partId] = true;
+      // 同步相同part_id的标签状态
+      Object.keys(labelTextRef.current).forEach(key => {
+        if (labelTextRef.current[key]?.part_id === partId) {
+          map.set(key, active);
         }
+      });
+      return map;
+    }, new Map());
+
+    // 更新标签状态
+    const newMap = new Map(labelsMap);
+    const bbox = [];
+    
+    Array.from(labelsMap.values()).forEach(item => {
+      const value = newActiveLabelMap.get(item.id);
+      if (value !== undefined) {
+        newMap.set(item.id, { ...item, active: value });
+        if (value) bbox.push({ page: item.page, bbox: item.label });
+      } else if (item.active) {
+        bbox.push({ page: item.page, bbox: item.label });
+      }
+    });
+    
+    setSelectedBbox(bbox);
+    labelsMapRef.current = newMap;
+    setLabelsMap(newMap);
+    setLabelChange(true);
+  };
+
+  // 8. 页面滚动检测（新增，与ParagraphEdit的handlePageChange一致）
+  const handlePageChange = (offset, h, paperSize, scale) => {
+    if (offset === 0) return;
+    const labelsArray = Array.from(labelsMap.values());
+    setShowPos(!labelsArray.some(item => {
+      const pageHeight = (item.page - 1) * paperSize;
+      const labelTop = pageHeight + item.label[1] / scale;
+      return item.active && labelTop > offset && labelTop < (offset + h);
+    }));
+  };
+
+  // 9. 渲染逻辑（统一与ParagraphEdit的fileView逻辑）
+  const render = () => {
+    const { url, load } = urlState;
+    const previewFileUrl = targetFile.url;
+    console.log(suffix,2221);
+    // 强制uns类型的Excel文件使用pdf预览
+    const renderType = isUnsType && ['xlsx', 'xls', 'csv'].includes(suffix)
+      ? 'pdf'
+      : suffix;
+
+    const newVersion = ['etl4lm', 'un_etl4lm'].includes(fileParseType);
+    
+    // 旧版本处理
+    if (!newVersion) {
+        console.log(renderType,isUnsType,url,7888);
+        
+      if (renderType === 'pdf' || isUnsType) {
+        return url ? (
+          <FileView 
+            startIndex={0}
+            select={selectedChunkIndex !== -1}
+            fileUrl={url}
+            labels={pageLabels}
+            scrollTo={calculatedPostion}
+            onSelectLabel={handleSelectLabels}
+            onPageChange={handlePageChange}
+          />
+        ) : (
+          <div className="flex justify-center items-center h-full text-gray-400">
+            <LoadingIcon />
+          </div>
+        );
+      } else {
+        return <div className="flex justify-center items-center h-full text-gray-400">旧版文件格式暂不支持预览</div>;
+      }
     }
 
-    // 覆盖分段
-    const handleOvergap = (params) => {
-        setLabelChange(false)
-        let prevType = ''
-        let prevPartId = ''
-        let str = ''
-        const activeMap = {}
-        // 标注块拼接段落
-        labelsMap.forEach((item, key) => {
-            if (item.active) {
-                activeMap[item.id] = true
+    // 加载状态处理
+    if (!load && !url) return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>;
+    if (!url) return <div className="flex justify-center items-center h-full text-gray-400"><LoadingIcon /></div>;
 
-                const { text, type, part_id } = partitions[item.id]
-                if (str === '') {
-                    // 第一个块, title类型，末尾加单换行
-                    str += text + (type === 'Title' ? '\n' : '')
-                } else {
-                    // 非第一个块
-                    if (prevPartId === part_id) {
-                        // 上一个和当前是同一段落
-                        str += text
-                    } else if (prevType === 'Table' || type === 'Table' || (type === 'Title' && prevType !== type)) {
-                        // 上一个是表格 or 当前是表格 or 当前是title并上一个不是title
-                        str += '\n\n' + text
-                    } else {
-                        str += '\n' + text
-                    }
-                }
-
-                prevType = type
-                prevPartId = part_id
-            } else {
-                activeMap[item.id] = false
-            }
-        })
-        console.log('JSON. :>> ', JSON.stringify(str));
-        setNeedCoverData({ index: selectedChunkIndex, txt: str })
-        // setChunks(chunks => chunks.map(chunk => chunk.chunkIndex === selectedChunkIndex ? { ...chunk, activeLabels: activeMap } : chunk))
-        labelsMapTempRef.current[selectedChunkIndex] = labelsMap
+    // 新版文件预览
+    switch (renderType) {
+      case 'ppt':
+      case 'pptx':
+      case 'pdf':
+        return (
+          <FileView
+            startIndex={0}
+            select={selectedChunkIndex !== -1}
+            fileUrl={url}
+            labels={pageLabels}
+            scrollTo={calculatedPostion}
+            onSelectLabel={handleSelectLabels}
+            onPageChange={handlePageChange}
+          />
+        );
+      case 'txt': return <TxtFileViewer filePath={url} />;
+      case 'md': return <TxtFileViewer markdown filePath={url} />;
+      case 'html': return <TxtFileViewer html filePath={url} />;
+      case 'doc':
+      case 'docx': return <DocxPreview filePath={url} />;
+      case 'png':
+      case 'jpg':
+      case 'jpeg':
+      case 'bmp': return (
+        <img
+          className="border"
+          src={url.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)} 
+          alt="预览图片" 
+        />
+      );
+      default:
+        return <div className="flex justify-center items-center h-full text-gray-400">
+          <div className="text-center">
+            <img
+              className="size-52 block mx-auto"
+              src={__APP_ENV__.BASE_URL + "/assets/knowledge/damage.svg"} 
+              alt="不支持的文件类型" 
+            />
+            <p>此文件类型不支持预览</p>
+          </div>
+        </div>;
     }
+  };
+
+  // 10. 覆盖分段逻辑（完全对齐ParagraphEdit）
+  const handleOvergap = () => {
+    setLabelChange(false);
+    let prevType = '';
+    let prevPartId = '';
+    let str = '';
+    
+    Array.from(labelsMap.values()).forEach((item) => {
+      if (typeof labelTextRef.current[item.id] === 'string') {
+        return alert('文件已失效，请上传新文件后重试');
+      }
+      
+      if (item.active) {
+        const { text, type, part_id } = labelTextRef.current[item.id];
+        
+        if (str === '') {
+          str += text + (type === 'Title' ? '\n' : '');
+        } else {
+          if (prevPartId === part_id) {
+            str += text;
+          } else if (prevType === 'Table' || type === 'Table' || (type === 'Title' && prevType !== type)) {
+            str += '\n\n' + text;
+          } else {
+            str += '\n' + text;
+          }
+        }
+        
+        prevType = type;
+        prevPartId = part_id;
+      }
+    });
+    
+    setNeedCoverData({ index: selectedChunkIndex, txt: str });
+    labelsMapTempRef.current[selectedChunkIndex] = labelsMap;
+  };
 
     if (['xlsx', 'xls', 'csv'].includes(file.suffix)) return null
 

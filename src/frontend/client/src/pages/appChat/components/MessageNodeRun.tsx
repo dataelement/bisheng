@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 export default function MessageNodeRun({ data }) {
 
     return <div className="py-1">
-        <div className="rounded-sm border">
+        <div className="rounded-sm">
             <div className="flex justify-between items-center px-4 py-2 cursor-pointer">
                 <div className="flex items-center font-bold gap-2 text-sm">
                     {

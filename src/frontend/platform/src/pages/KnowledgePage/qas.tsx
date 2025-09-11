@@ -257,7 +257,7 @@ export default function QasPage() {
         if (libname) {
             localStorage.setItem('libname', window.libname)
         }
-        setTitle(window.libname || localStorage.getItem('libname'))
+        setTitle(window.libname[0] || localStorage.getItem('libname'))
     }, [])
 const handleEnableSelected = async () => {
   if (!selectedItems.length) return;

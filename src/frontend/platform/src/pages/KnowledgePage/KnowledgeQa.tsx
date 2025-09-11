@@ -260,7 +260,7 @@ export default function KnowledgeQa(params) {
                             <TableCell className="flex: 1 font-medium max-w-[200px] overflow-visible">
                                 <div className="flex items-start gap-2">
                                     <img
-                                        src="/assets/qa-logo.svg"
+                                        src={__APP_ENV__.BASE_URL + "/assets/qa-logo.svg"}
                                         alt="知识库图标"
                                         className="w-[50px] h-[50px] mt-1 flex-shrink-0"
                                     />
@@ -321,8 +321,8 @@ export default function KnowledgeQa(params) {
                                         >
                                             <DropdownMenuItem
                                                 className={`flex items-center gap-2 px-4 py-2 ${(el.copiable || user.role === 'admin')
-                                                        ? 'hover:bg-gray-100 cursor-pointer'
-                                                        : 'text-gray-400 cursor-not-allowed'
+                                                    ? 'hover:bg-gray-100 cursor-pointer'
+                                                    : 'text-gray-400 cursor-not-allowed'
                                                     }`}
                                                 onClick={(e) => {
                                                     e.stopPropagation();

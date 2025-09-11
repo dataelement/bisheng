@@ -159,11 +159,12 @@ class MessageSessionDao(MessageSessionBase):
                              start_date: datetime = None,
                              end_date: datetime = None,
                              include_delete: bool = True,
-                             exclude_chats: List[str] = None) -> int:
+                             exclude_chats: List[str] = None,
+                             flow_type: List[int] = None) -> int:
         statement = select(func.count(MessageSession.chat_id))
         statement = cls.generate_filter_session_statement(statement, chat_ids, sensitive_status,
                                                           flow_ids, user_ids, feedback, start_date,
-                                                          end_date, include_delete, exclude_chats)
+                                                          end_date, include_delete, exclude_chats, flow_type=flow_type)
         with session_getter() as session:
             return session.scalar(statement)
 
