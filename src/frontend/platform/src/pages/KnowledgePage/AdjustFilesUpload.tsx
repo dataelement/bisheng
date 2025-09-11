@@ -112,17 +112,18 @@ export default function AdjustFilesUpload() {
     const fileName = initFileData.name || initFileData.file_name || '';
   const fileSuffix = fileName.split('.').pop()?.toLowerCase() || 'txt';
   const fileType = ['xlsx', 'xls', 'csv'].includes(fileSuffix) ? 'table' : 'file';
+  
   const [resultFiles, setResultFiles] = useState([
     {
       id: initFileData.id,
       fileName: initFileData.name || initFileData.file_name, // 兼容字段名
       file_path: initFileData.filePath || initFileData.object_name, // 兼容文件路径
       suffix: initFileData.suffix || initFileData.file_name?.split(".").pop() || "", // 解析后缀
+      previewUrl:initFileData.previewUrl,
       fileType: fileType,
       split_rule: getParsedSplitRule(initFileData.split_rule) // 传入转换后的配置对象
     }
   ]);
-  console.log(initFileData,78);
   
   const [segmentRules, setSegmentRules] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
