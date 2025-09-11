@@ -401,10 +401,13 @@ async def chat_completions(
                 extra['prompt'] = prompt
                 message.extra = json.dumps(extra, ensure_ascii=False)
                 ChatMessageDao.insert_one(message)
+        except MessageException as e:
+            error = True
+            final_res = str(e)
         except Exception as e:
             logger.exception(f'Error in processing the prompt')
             error = True
-            final_res = 'Error in processing the prompt'
+            final_res = f'Error in processing the prompt: {str(e)[-100:]}'
 
         if not error:
             messages = WorkStationService.get_chat_history(conversationId, 8)[:-1]
