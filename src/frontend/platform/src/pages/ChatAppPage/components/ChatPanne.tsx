@@ -281,8 +281,8 @@ export default function ChatPanne({ customWsHost = '', chatList, chat, appendHis
         {
             workflow && <div className={`w-full chat-box h-full relative ${type === AppNumType.FLOW ? 'block' : 'hidden'}`}>
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-6 py-1 dark:bg-[#1B1B1B]">
-                    <AppAvator id={chat.flow_name} url={chat.logo} flowType={10} ></AppAvator>
-                    <span className="text-sm">{chat.flow_name}</span>
+                    <AppAvator id={workflow.name} url={workflow.logo} flowType={10} ></AppAvator>
+                    <span className="text-sm">{workflow.name}</span>
                 </div>
                 <ChatPane autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl} />
             </div>

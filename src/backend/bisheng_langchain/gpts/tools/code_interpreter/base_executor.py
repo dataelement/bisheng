@@ -32,8 +32,8 @@ class BaseExecutor(ABC):
             endpoint=self.minio.get('sharepoint'),
             access_key=self.minio.get('access_key'),
             secret_key=self.minio.get('secret_key'),
-            secure=self.minio.get('schema'),
-            cert_check=self.minio.get('cert_check'),
+            secure=self.minio.get('share_schema', False),
+            cert_check=self.minio.get('share_cert_check', False),
         )
         bucket = self.minio.get('tmp_bucket', 'tmp-dir')
         logger.debug(

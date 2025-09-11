@@ -54,7 +54,7 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
     </div>
 }
 
-export default function MessageBs({ debug, mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick,chat }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
+export default function MessageBs({ debug, mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick, chat }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
@@ -84,6 +84,7 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                 </div>
                 <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                     <div className="flex gap-2">
+                        {logo}
                         {data.message.toString() ?
                             <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
                                 {<MessageMarkDown message={message} />}

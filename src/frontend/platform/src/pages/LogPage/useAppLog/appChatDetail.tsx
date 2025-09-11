@@ -1,14 +1,16 @@
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import MessagePanne from "@/components/bs-comp/chatComponent/MessagePanne";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Button } from "@/components/bs-ui/button";
 import ShadTooltip from "@/components/ShadTooltipComponent";
+import { getDeleteFlowApi } from "@/controllers/API/flow";
 import ChatMessages from "@/pages/BuildPage/flow/FlowChat/ChatMessages";
 import { useMessageStore as useFlowMessageStore } from "@/pages/BuildPage/flow/FlowChat/messageStore";
 import { useAssistantStore } from "@/store/assistantStore";
 import { AppNumType } from "@/types/app";
 import { ArrowLeft } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 
@@ -47,6 +49,8 @@ export default function AppChatDetail() {
         }
     }, [])
 
+    const logo = useAppAvatar(cid, type)
+
     return <div>
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <LoadingIcon />
@@ -66,8 +70,8 @@ export default function AppChatDetail() {
             </div>
             <div className="h-[calc(100vh-132px)]">
                 {type === AppNumType.FLOW
-                    ? <ChatMessages logo={''} debug useName={''} guideWord={''} loadMore={() => loadMoreFlowHistoryMsg(fid, true)} onMarkClick={null}></ChatMessages>
-                    : <MessagePanne logo='' useName='' guideWord=''
+                    ? <ChatMessages logo={logo} debug useName={''} guideWord={''} loadMore={() => loadMoreFlowHistoryMsg(fid, true)} onMarkClick={null}></ChatMessages>
+                    : <MessagePanne logo={logo} useName='' guideWord=''
                         loadMore={() => loadMoreHistoryMsg(fid, true)}
                     ></MessagePanne>
                 }
@@ -75,3 +79,19 @@ export default function AppChatDetail() {
         </div>
     </div >
 };
+
+
+const useAppAvatar = (cid, flowType) => {
+    const [logo, setLogo] = useState('')
+    const [title, setTitle] = useState('')
+    const loadAppDetail = async () => {
+        const lostflow = await getDeleteFlowApi(cid)
+        setLogo(lostflow.flow_logo)
+        setTitle(lostflow.flow_name)
+    }
+    useEffect(() => {
+        loadAppDetail()
+    }, [])
+
+    return <AppAvator id={title} flowType={flowType} url={logo} className="size-5 min-w-5"></AppAvator>
+}

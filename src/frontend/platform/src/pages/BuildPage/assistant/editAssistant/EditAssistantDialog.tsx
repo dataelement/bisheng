@@ -96,7 +96,7 @@ export default function EditAssistantDialog({ logo, name, desc, onSave, loca }) 
                     className="mt-2"
                     onChange={uploadAvator}
                 >
-                    <AppAvator id={formData.name} url={formData.logo} flowType={5} className="size-8"></AppAvator>
+                    <AppAvator id={6} url={formData.logo} flowType={5} className="size-9"></AppAvator>
                 </Avator>
 
                 {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>}

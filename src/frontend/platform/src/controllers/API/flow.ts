@@ -119,6 +119,13 @@ export async function getFlowApi(flowId: string, version: string = 'v1'): Promis
 }
 
 /**
+ * 删除的技能 工作流详情
+ */
+export async function getDeleteFlowApi(chatId: string): Promise<FlowType> {
+    return await axios.get(`/api/v1/chat/info?chat_id=${chatId}`)
+}
+
+/**
  * Saves a new flow to the database.
  *
  * @param {FlowType} newFlow - The flow data to save.

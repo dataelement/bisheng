@@ -175,7 +175,7 @@ export default function l2Edit() {
                         <div className="mt-4">
                             <Label htmlFor="name">{t('skills.avatar')}</Label>
                             <Avator value={logo} className="mt-2" onChange={uploadAvator}>
-                                <AppAvator id={name} url={logo} flowType={1} className="w-9 h-9"></AppAvator>
+                                <AppAvator id={6} url={logo} flowType={1} className="w-9 h-9"></AppAvator>
                             </Avator>
                         </div>
                         <div className="mt-4">

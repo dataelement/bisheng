@@ -32,8 +32,8 @@ class MinioClient:
             endpoint=_MinioConf.sharepoint,
             access_key=_MinioConf.access_key,
             secret_key=_MinioConf.secret_key,
-            secure=_MinioConf.schema,
-            cert_check=_MinioConf.cert_check)
+            secure=_MinioConf.share_schema,
+            cert_check=_MinioConf.share_cert_check)
 
         self._init_bucket_conf()
 
@@ -165,7 +165,7 @@ class MinioClient:
         获取minio share host
         """
         minio_share = _MinioConf.sharepoint
-        if _MinioConf.schema:
+        if _MinioConf.share_schema:
             return f'https://{minio_share}'
         return f'http://{minio_share}'
 
