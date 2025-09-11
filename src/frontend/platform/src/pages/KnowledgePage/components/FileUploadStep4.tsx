@@ -1,4 +1,3 @@
-
 import CardComponent from "@/components/bs-comp/cardComponent";
 import ProgressItem from "@/components/bs-comp/knowledgeUploadComponent/ProgressItem";
 import { Button } from "@/components/bs-ui/button";
@@ -15,111 +14,148 @@ export default function FileUploadStep4({ data ,kId}) {
     const [finish, setFinish] = useState(true)
     const navigate = useNavigate()
     const { id: kid } = useParams()
-console.log(data,kId,44);
+    console.log(data,kId,44);
 
     const [files, setFiles] = useState([])
     const timerRef = useRef(null); // 轮询定时器引用
     const fileIdsRef = useRef([]); // 文件ID列表引用
-    // 初始化文件状态
+    const processingRef = useRef(new Set()); // 跟踪正在处理的文件ID
+    const isPollingRef = useRef(false); // 防止轮询并发
+
+    // 初始化文件状态（只执行一次）
     useEffect(() => {
-        const initialFiles = data.map(item => ({
-            id: item.fileId,
-            fileName: item.fileName,
-            error: false,
-            reason: '',
-            progress: 'await' // 初始状态设为解析中
-        }));
-        setFiles(initialFiles);
-        fileIdsRef.current = data.map(item => item.fileId); // 保存文件ID列表
-    }, [data]);
+        if (files.length === 0 && data.length > 0) { // 防止重复初始化
+            const initialFiles = data.map(item => ({
+                id: item.fileId,
+                fileName: item.fileName,
+                error: false,
+                reason: '',
+                progress: 'await' // 初始状态设为解析中
+            }));
+            setFiles(initialFiles);
+            fileIdsRef.current = data.map(item => item.fileId);
+            // 初始化处理中的文件集合
+            fileIdsRef.current.forEach(id => processingRef.current.add(id));
+        }
+    }, [data]); // 只依赖data变化
 
 
     // 轮询文件状态
     useEffect(() => {
-        // 如果文件列表为空，直接完成
+        // 如果没有文件需要处理，直接完成
         if (fileIdsRef.current.length === 0) {
             setFinish(true);
             return;
         }
 
-        // 轮询函数
+        // 轮询函数（添加并发控制）
         const pollFilesStatus = async () => {
-            console.log(kid,kId,fileIdsRef.current,22);
-            
+            // 防止上一次请求未完成时发起新请求
+            if (isPollingRef.current) return;
+            isPollingRef.current = true;
+
             try {
+                // 只轮询仍在处理中的文件
+                const pendingFileIds = Array.from(processingRef.current);
+                if (pendingFileIds.length === 0) {
+                    clearInterval(timerRef.current);
+                    setFinish(true);
+                    return;
+                }
+
+                console.log(kid,kId, pendingFileIds, 22);
+                
                 const res = await readFileByLibDatabase({
                     id: kid || kId,
                     page: 0,
                     pageSize: 0,
-                    file_ids: fileIdsRef.current
+                    file_ids: pendingFileIds // 只查询未完成的文件
                 });
 
                 // 更新文件状态
                 setFiles(prev => {
+                    const updatedFiles = [...prev];
                     const resMap = new Map(res.data.map(item => [item.id, item]));
-                    return prev.map(file => {
-                        if (resMap.has(file.id)) {
-                            const resItem = resMap.get(file.id);
-                            let progress = 'await';
-                            let error = false;
-                            let reason = '';
+                    
+                    pendingFileIds.forEach(fileId => {
+                        if (resMap.has(fileId)) {
+                            const resItem = resMap.get(fileId);
+                            const fileIndex = updatedFiles.findIndex(f => f.id === fileId);
+                            
+                            if (fileIndex !== -1) {
+                                let progress = updatedFiles[fileIndex].progress;
+                                let error = updatedFiles[fileIndex].error;
+                                let reason = updatedFiles[fileIndex].reason;
 
-                            if (resItem.status === 2) {
-                                progress = 'end'; // 成功
-                            } else if (resItem.status === 3) {
-                                progress = 'end'; // 失败
-                                error = true;
-                                reason = resItem.remark;
+                                // 状态变为完成或失败时，从处理中集合移除
+                                if (resItem.status === 2) {
+                                    progress = 'end'; // 成功
+                                    processingRef.current.delete(fileId);
+                                } else if (resItem.status === 3) {
+                                    progress = 'end'; // 失败
+                                    error = true;
+                                    reason = resItem.remark;
+                                    processingRef.current.delete(fileId);
+                                }
+
+                                updatedFiles[fileIndex] = {
+                                    ...updatedFiles[fileIndex],
+                                    progress,
+                                    error,
+                                    reason
+                                };
                             }
-
-                            return { ...file, progress, error, reason };
                         }
-                        return file;
                     });
+
+                    return updatedFiles;
                 });
             } catch (e) {
                 console.error("轮询文件状态出错:", e);
+            } finally {
+                isPollingRef.current = false; // 释放锁
             }
         };
 
         // 立即执行第一次轮询，然后每5秒轮询一次
         pollFilesStatus();
-        timerRef.current = setInterval(pollFilesStatus, 3000 + fileIdsRef.current.length * 10);
+        timerRef.current = setInterval(pollFilesStatus, 5000); // 固定间隔，避免过频繁
 
         // 清理定时器
-        return () => clearInterval(timerRef.current);
-    }, [kid]);
+        return () => {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+        };
+    }, [kid, kId]); // 只依赖kid和kId变化
 
     // 检查所有文件是否完成
-useEffect(() => {
-    // 检查是否有文件仍在处理中
-    const hasProcessingFiles = files.some(f => f.progress !== 'end');
-    
-    // 只有当存在文件且没有文件在处理中时，才标记为完成
-    if (files.length > 0 && !hasProcessingFiles) {
-        console.log('所有文件处理完成');
-        clearInterval(timerRef.current);
-        setFinish(true);
-    } else {
-        // 仍有文件在处理中或文件列表为空
-        if (files.length > 0) {
-            const processingCount = files.filter(f => f.progress !== 'end').length;
-            console.log(`仍有${processingCount}个文件正在处理中`);
+    useEffect(() => {
+        // 当处理中集合为空时，标记为完成
+        if (processingRef.current.size === 0 && fileIdsRef.current.length > 0) {
+            console.log('所有文件处理完成');
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+            setFinish(true);
+        } else {
+            setFinish(false);
         }
-        setFinish(false);
-    }
-}, [files]);
-    console.log('fukes :>> ', data, files);
-  let finalId = kid;
-    if ( kId) {
+    }, [files]); // 依赖文件状态变化
+
+    console.log('files :>> ', files);
+    
+    let finalId = kid;
+    if (kId) {
         finalId = kId.replace(/\D/g, '');
     }
     const [details] = useKnowledgeDetails([finalId])
+    
     const handleCreateFlow = async (params) => {
         const model = await getLlmDefaultModel()
         console.log(details,9999);
         
-        const flow = await getKnowledgeDefaultFlowTemplate(finalId, details[0].name, model.model_id)
+        const flow = await getKnowledgeDefaultFlowTemplate(finalId, details[0]?.name || '', model.model_id)
         const res = await captureAndAlertRequestErrorHoc(createWorkflowApi(
             "文档知识库问答-" + generateUUID(5),
             "检索文档知识库，根据检索结果进行回答。",
@@ -153,8 +189,7 @@ useEffect(() => {
     </div>
 };
 
-
-
+// 保持getKnowledgeDefaultFlowTemplate函数不变
 const getKnowledgeDefaultFlowTemplate = async (kid, kname, modelId) => {
     const templates = await getWorkflowNodeTemplate()
     let startNode = null
@@ -295,3 +330,4 @@ const getKnowledgeDefaultFlowTemplate = async (kid, kname, modelId) => {
         }
     }
 }
+    

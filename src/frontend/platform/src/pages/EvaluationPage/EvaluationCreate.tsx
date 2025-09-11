@@ -114,21 +114,22 @@ export default function EvaluatingCreate() {
   const navigate = useNavigate();
 
   const handleCreateEvaluation = async () => {
-    const errorlist = [];
-    if (!selectedType) errorlist.push(t("evaluation.enterExecType"));
-    // if (!selectedKeyId) errorlist.push(t("evaluation.workFlow"));
+     const errorlist = [];
+ if (!selectedType) errorlist.push(t("evaluation.enterExecType"));
+  
+  if (selectedType && !selectedKeyId) {
+    if (selectedType === "workflow") errorlist.push(t("请选择工作流"));
+    if (selectedType === "flow") errorlist.push(t("请选择技能"));
+    if (selectedType === "assistant") errorlist.push(t("请选择助手"));
+  }
 
-    // 修复版本验证 - 取消注释并添加正确的验证
-    if ((selectedType === "workflow" || selectedType === "flow" || !selectedKeyId) && !selectedVersion) {
-      errorlist.push(t("evaluation.workFlow"));
-    }
+  if (selectedKeyId && (selectedType === "workflow" || selectedType === "flow") && !selectedVersion) {
+    errorlist.push(t("请选择版本"));
+  }
+  if (!fileRef.current && selectedKeyId&&selectedVersion) errorlist.push(t("evaluation.enterFile"));
+  if (!prompt) errorlist.push(t("evaluation.enterPrompt"));
 
-    // 修复文件验证 - 所有类型都需要测试集数据
-    // if (!fileRef.current) errorlist.push(t("evaluation.enterFile"));
-
-    if (!prompt) errorlist.push(t("evaluation.enterPrompt"));
-
-    if (errorlist.length) return handleError(errorlist);
+  if (errorlist.length) return handleError(errorlist);
     setLoading(true);
     try {
       await captureAndAlertRequestErrorHoc(
