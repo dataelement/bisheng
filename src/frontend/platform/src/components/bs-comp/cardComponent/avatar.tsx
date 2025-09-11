@@ -23,7 +23,7 @@ export default function AppAvator({ id = 1, flowType = '', url = '', className =
         return gradients[parseInt(num + '', 16) % gradients.length]
     }, [id])
 
-    if (url) return <img src={url} className={cn(`w-6 h-6 rounded-sm object-cover`, className)} />
+    if (url) return <img src={__APP_ENV__.BASE_URL + url} className={cn(`w-6 h-6 rounded-sm object-cover`, className)} />
 
     const flowIcons = {
         [AppNumType.SKILL]: <SkillIcon className="" />,
