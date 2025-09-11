@@ -2,8 +2,6 @@ import json
 from queue import Queue
 from typing import Dict, Callable, List
 
-from bisheng.utils import generate_uuid
-from bisheng_langchain.gpts.message_types import LiberalToolMessage
 from fastapi import WebSocket, status, Request
 from langchain_core.messages import AIMessage, HumanMessage, BaseMessage, ToolMessage
 from loguru import logger
@@ -20,7 +18,9 @@ from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessageDao, ChatMessage as ChatMessageModel
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.settings import settings
+from bisheng.utils import generate_uuid
 from bisheng.utils.threadpool import thread_pool
+from bisheng_langchain.gpts.message_types import LiberalToolMessage
 
 
 class ChatClient:
@@ -301,16 +301,7 @@ class ChatClient:
                     _ = await self.add_message('bot', one.json(), 'tool_result')
                 else:
                     logger.warning("unexpected message type")
-            # for one in result:
-            #     if isinstance(one, AIMessage):
-            #         answer += one.content
 
-            # todo: 后续优化代码解释器的实现方案，保证输出的文件可以公开访问 ugly solve
-            # 获取minio的share地址，把share域名去掉, 为毕昇的部署方案特殊处理下
-            for one in self.gpts_agent.tools:
-                if one.name == "bisheng_code_interpreter":
-                    minio_share = settings.get_minio_conf().sharepoint
-                    answer = answer.replace(f"http://{minio_share}", "")
             answer_end_type = 'end'
             # 如果是流式的llm则用end_cover结束, 覆盖之前流式的输出
             if getattr(self.gpts_agent.llm, 'streaming', False):
