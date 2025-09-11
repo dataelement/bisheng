@@ -22,11 +22,13 @@ interface IProps {
     previewCount: number;
     applyEachCell: boolean;
     cellGeneralConfig: any;
+      handlePreviewResult: (isSuccess: boolean) => void;
+        kId?: string | number;
 }
 export type Partition = {
     [key in string]: { text: string, type: string, part_id: string }
 }
-export default function PreviewResult({ previewCount, rules, step, applyEachCell, cellGeneralConfig }: IProps) {
+export default function PreviewResult({ previewCount, rules, step, applyEachCell, cellGeneralConfig,kId,handlePreviewResult }: IProps) {
     const { id } = useParams()
 
     const [chunks, setChunks] = useState([]) // 当前文件分块
@@ -73,7 +75,7 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
             // 缓存(修改规则后需要清空缓存, 切换文件使用缓存)
             // previewCount变更时为重新预览分段操作,不使用缓存
             cache: prevPreviewCountMapRef.current[currentFile.id] === previewCount,
-            knowledge_id: id,
+            knowledge_id: id||kId,
             file_list: [{
                 file_path: currentFile?.filePath,
                 excel_rule: applyEachCell
@@ -94,12 +96,15 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
             ["pdf", "txt", "md", "html", "docx", "png", "jpg", "jpeg", "bmp"].includes(currentFile.suffix)
                 && setFileViewUrl({ load: false, url: currentFile.filePath })
         }).then(res => {
+        
             if (!res) {
+                     handlePreviewResult(false);
                 setFileViewUrl({ load: false, url: '' })
                 return setLoading(false)
             }
             if (res === 'canceled') return
             console.log("previewFileSplitApi:", res)
+             handlePreviewResult(true); 
             res && setChunks(res.chunks.map(chunk => ({
                 bbox: chunk.metadata.bbox,
                 activeLabels: {},
@@ -108,7 +113,6 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
                 text: chunk.text
             })))
             setSelectIdSyncChunks(selectId)
-
             setFileViewUrl({ load: false, url: res.file_url })
             setPartitions(res.partitions)
             setLoading(false)
@@ -138,15 +142,16 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
         setChunks(chunks => chunks.map(chunk => chunk.chunkIndex === chunkIndex ? { ...chunk, text } : chunk))
     }
 
-    return (<div className={cn("h-full flex gap-2 justify-center", step === 2 ? 'w-1/2' : 'w-full')}>
-        {step === 3 && currentFile && <PreviewFile
+    return (<div className={cn("h-full flex gap-2 justify-center", 'w-[100%]')}>
+
+        {(step === 3 || step ===2 && !previewCount)&& currentFile && <PreviewFile
             urlState={fileViewUrl}
             file={currentFile}
             chunks={chunks}
             setChunks={setChunks}
             partitions={partitions}
         />}
-        <div className={cn('relative', step === 2 ? 'w-full' : 'w-1/2')}>
+        <div className={cn('relative', 'w-100%')}>
             {/* 下拉框 - 右上角 */}
             <div className="flex justify-end">
                 <Select value={selectId} onValueChange={setSelectId}>

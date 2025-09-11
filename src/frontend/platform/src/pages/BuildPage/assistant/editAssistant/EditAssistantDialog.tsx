@@ -1,4 +1,4 @@
-import { AssistantIcon } from "@/components/bs-icons";
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { Button } from "@/components/bs-ui/button";
 import { DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, Textarea } from "@/components/bs-ui/input";
@@ -8,7 +8,7 @@ import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-export default function EditAssistantDialog({ logo, name, desc, onSave }) {
+export default function EditAssistantDialog({ logo, name, desc, onSave, loca }) {
 
     const { t } = useTranslation()
     // State for form fields
@@ -95,7 +95,10 @@ export default function EditAssistantDialog({ logo, name, desc, onSave }) {
                     value={formData.logo}
                     className="mt-2"
                     onChange={uploadAvator}
-                ><AssistantIcon className="bg-primary w-9 h-9 rounded-sm" /></Avator>
+                >
+                    <AppAvator id={formData.name} url={formData.logo} flowType={5} className="size-8"></AppAvator>
+                </Avator>
+
                 {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>}
             </div>
             <div className="">

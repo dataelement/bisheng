@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "../../../components/bs-ui/button";
 import {
     Table,
@@ -9,20 +9,22 @@ import {
     TableRow
 } from "../../../components/bs-ui/table";
 
+import { FileIcon } from "@/components/bs-icons/file";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
-import { Filter, RotateCw } from "lucide-react";
+import { truncateString } from "@/util/utils";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
+import { Filter, RotateCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../../components/bs-ui/input";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "../../../components/bs-ui/select";
 import { deleteFile, readFileByLibDatabase, retryKnowledgeFileApi } from "../../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
-import { LoadingIcon } from "@/components/bs-icons/loading";
 import useKnowledgeStore from "../useKnowledgeStore";
-import { truncateString } from "@/util/utils";
 
 export default function Files({ onPreview }) {
     const { t } = useTranslation('knowledge')
@@ -35,6 +37,16 @@ export default function Files({ onPreview }) {
             return res
         })
     )
+    const navigate = useNavigate()
+
+    // 新增状态
+    const [selectedFilters, setSelectedFilters] = useState<number[]>([]);
+    const [tempFilters, setTempFilters] = useState<number[]>([]);
+    const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+    // 新增状态：跟踪全选状态
+    const [isAllSelected, setIsAllSelected] = useState(false);
+
     // 解析中 轮巡
     const timerRef = useRef(null)
     useEffect(() => {
@@ -46,12 +58,38 @@ export default function Files({ onPreview }) {
         }
     }, [datalist])
 
-    // filter
-    const [filter, setFilter] = useState(999)
-    useEffect(() => {
-        filterData({ status: filter })
-    }, [filter])
+    const applyFilters = () => {
+        setSelectedFilters([...tempFilters]);
+        const params: any = {};
+        if (tempFilters.length > 0) {
+            // 创建多个 status 参数
+            tempFilters.forEach((status, index) => {
+                params[`status`] = status; // 这会覆盖前一个，需要特殊处理
+            });
 
+            // 或者使用另一种方式：修改 useTable 支持数组
+            params.status = tempFilters; // 传递数组，让 useTable 处理
+        } else {
+            // 如果没有选中任何筛选条件，传递空对象来重置筛选
+            params.status = [];
+        }
+
+        filterData(params);
+        setIsFilterOpen(false);
+        setSelectedFiles(new Set());
+        setIsAllSelected(false);
+    };
+
+    const resetFilters = () => {
+        const emptyFilters: number[] = [];
+        setTempFilters(emptyFilters);
+        setSelectedFilters(emptyFilters);
+        filterData({ status: [] });
+        setIsFilterOpen(false);
+        // 重置筛选时清除选择状态
+        setSelectedFiles(new Set());
+        setIsAllSelected(false);
+    };
 
     const handleDelete = (id) => {
         bsConfirm({
@@ -60,21 +98,94 @@ export default function Files({ onPreview }) {
             onOk(next) {
                 captureAndAlertRequestErrorHoc(deleteFile(id).then(res => {
                     reload()
+                    // 删除文件后，从选中集合中移除
+                    setSelectedFiles(prev => {
+                        const newSet = new Set(prev);
+                        newSet.delete(id);
+                        return newSet;
+                    });
                 }))
                 next()
             },
         })
     }
 
-    const selectChange = (id) => {
-        setFilter(Number(id))
-    }
-
     // 重试解析
-    const handleRetry = (objs) => {
-        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi({ file_objs: objs }).then(res => {
+    const handleRetry = (files) => {
+        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi({ file_objs: files }).then(res => {
             reload()
         }))
+    }
+
+    // 全选/取消全选
+    const toggleSelectAll = (checked: boolean) => {
+        if (checked) {
+            // 全选当前页
+            const currentPageIds = datalist.map(file => file.id);
+            const newSelectedFiles = new Set(selectedFiles);
+            currentPageIds.forEach(id => newSelectedFiles.add(id));
+            setSelectedFiles(newSelectedFiles);
+            setIsAllSelected(true);
+        } else {
+            // 取消全选当前页
+            const currentPageIds = datalist.map(file => file.id);
+            const newSelectedFiles = new Set(selectedFiles);
+            currentPageIds.forEach(id => newSelectedFiles.delete(id));
+            setSelectedFiles(newSelectedFiles);
+            setIsAllSelected(false);
+        }
+    };
+
+    // 单个文件选中/取消选中
+    const toggleSelectFile = (fileId: string, checked: boolean) => {
+        const newSelectedFiles = new Set(selectedFiles);
+        if (checked) {
+            newSelectedFiles.add(fileId);
+        } else {
+            newSelectedFiles.delete(fileId);
+            // 如果有文件被取消选择，则取消全选状态
+            setIsAllSelected(false);
+        }
+        setSelectedFiles(newSelectedFiles);
+    };
+
+    // 获取选中的文件
+    const getSelectedFiles = () => {
+        return datalist.filter(file => selectedFiles.has(file.id));
+    };
+
+    // 检查当前页是否全部选中
+    const isCurrentPageAllSelected = useMemo(() => {
+        if (datalist.length === 0) return false;
+        return datalist.every(file => selectedFiles.has(file.id));
+    }, [datalist, selectedFiles]);
+
+    // 批量删除
+    const handleBatchDelete = () => {
+        bsConfirm({
+            title: t('prompt'),
+            desc: t('确认删除选中文件', { count: selectedFiles.size }),
+            onOk(next) {
+                captureAndAlertRequestErrorHoc(Promise.all(
+                    Array.from(selectedFiles).map(id => deleteFile(id))
+                ).then(() => {
+                    reload();
+                    setSelectedFiles(new Set());
+                    setIsAllSelected(false);
+                }))
+                next();
+            },
+        })
+    }
+
+    // 批量重试
+    const handleBatchRetry = () => {
+        const failedFiles = getSelectedFiles().filter(file => file.status === 3);
+        if (failedFiles.length > 0) {
+            handleRetry(failedFiles);
+            setSelectedFiles(new Set());
+            setIsAllSelected(false);
+        }
     }
 
     // 策略解析
@@ -102,108 +213,316 @@ export default function Files({ onPreview }) {
         return ['XLSX', 'XLS', 'CSV'].includes(suffix) ? `每 ${excel_rule.slice_length} 行作为一个分段` : el.strategy[1].replace(/\n/g, '\\n')
     }
 
-    return <div className="relative">
-        {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <LoadingIcon />
-        </div>}
-        <div className="absolute right-0 top-[-62px] flex gap-4 items-center">
-            <SearchInput placeholder={t('searchFileName')} onChange={(e) => search(e.target.value)}></SearchInput>
-            {isEditable && <Link to={`/filelib/upload/${id}`}><Button className="px-8" onClick={() => { }}>{t('uploadFile')}</Button></Link>}
-        </div>
-        <div className="h-[calc(100vh-144px)] overflow-y-auto pb-20">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead className="min-w-[300px]">{t('fileName')}</TableHead>
-                        <TableHead className="min-w-[220px]">文件摘要</TableHead>
-                        <TableHead className="flex items-center gap-4 min-w-[130px]">
-                            {t('status')}
-                            <Select onValueChange={selectChange}>
-                                <SelectTrigger className="border-none w-16">
-                                    <Filter size={16} className={`cursor-pointer ${filter === 999 ? '' : 'text-gray-950'}`} />
-                                </SelectTrigger>
-                                <SelectContent className="w-fit">
-                                    <SelectGroup>
-                                        <SelectItem value={'999'}>{t('all')}</SelectItem>
-                                        <SelectItem value={'1'}>{t('parsing')}</SelectItem>
-                                        <SelectItem value={'2'}>{t('completed')}</SelectItem>
-                                        <SelectItem value={'3'}>{t('parseFailed')}</SelectItem>
-                                    </SelectGroup>
-                                </SelectContent>
-                            </Select>
-                        </TableHead>
-                        <TableHead className="min-w-[100px]">{t('uploadTime')}</TableHead>
-                        <TableHead>切分策略</TableHead>
-                        <TableHead className="text-right pr-6">{t('operations')}</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {dataSouce.map(el => (
-                        <TableRow key={el.id}>
-                            <TableCell className="font-medium">{truncateString(el.file_name, 35)}</TableCell>
-                            <TableCell className="font-medium">
-                                {el.title?.length > 20 ? <TooltipProvider delayDuration={100}>
-                                    <Tooltip>
-                                        <TooltipTrigger>{el.title.slice(0, 20)}...</TooltipTrigger>
-                                        <TooltipContent>
-                                            <div className="max-w-96 text-left break-all whitespace-normal">{el.title}</div>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider> : el.title}
-                            </TableCell>
-                            <TableCell>
-                                {el.status === 3 ? <div className="flex items-center">
-                                    <TooltipProvider delayDuration={100}>
-                                        <Tooltip>
-                                            <TooltipTrigger>
-                                                <span className='text-red-500'>{t('parseFailed')}</span>
-                                            </TooltipTrigger>
-                                            <TooltipContent>
-                                                <div className="max-w-96 text-left break-all whitespace-normal">{el.remark}</div>
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
-                                    <Button variant="link"><RotateCw size={16} onClick={() => handleRetry([el])} /></Button>
-                                </div> :
-                                    <span className={el.status === 3 && 'text-red-500'}>
-                                        {[t('parseFailed'), t('parsing'), t('completed'), t('parseFailed')][el.status]}
-                                    </span>
-                                }
-                            </TableCell>
-                            <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-                            <TableCell>
-                                {el.strategy[0] ? <TooltipProvider delayDuration={100}>
-                                    <Tooltip>
-                                        <TooltipTrigger>{el.strategy[0]}...</TooltipTrigger>
-                                        <TooltipContent>
-                                            <div className="max-w-96 text-left break-all whitespace-normal">{el.strategy[1].replace(/\n/g, '\\n')}</div>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider> : splitRuleDesc(el)}
-                            </TableCell>
-                            <TableCell className="text-right">
-                                <Button variant="link" disabled={el.status !== 2} className="px-2 dark:disabled:opacity-80" onClick={() => onPreview(el.id)}>{t('view')}</Button>
-                                {isEditable ?
-                                    <Button variant="link" onClick={() => handleDelete(el.id)} className="text-red-500 px-2">{t('delete')}</Button> :
-                                    <Button variant="link" className="ml-4 text-gray-400 px-2">{t('delete')}</Button>
-                                }
-                            </TableCell>
+    // 检查是否有选中的解析失败文件
+    const hasSelectedFailedFiles = useMemo(() => {
+        return getSelectedFiles().some(file => file.status === 3);
+    }, [selectedFiles, datalist]);
+    useEffect(() => {
+        if (isFilterOpen) {
+            setTempFilters([...selectedFilters]);
+        }
+    }, [isFilterOpen, selectedFilters]);
+
+    // 当页面数据变化时，更新全选状态
+    useEffect(() => {
+        setIsAllSelected(datalist.length > 0 && datalist.every(file => selectedFiles.has(file.id)));
+    }, [datalist, selectedFiles]);
+
+    // 处理下拉菜单关闭事件
+    const handleOpenChange = (open: boolean) => {
+        if (!open && isFilterOpen) {
+            // 当下拉菜单关闭且之前是打开状态时，应用筛选
+            applyFilters();
+        }
+        setIsFilterOpen(open);
+    };
+
+    return (
+        <div className="relative">
+            {loading && (
+                <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+                    <LoadingIcon />
+                </div>
+            )}
+
+            {/* 顶部操作栏 */}
+            {selectedFiles.size > 0 && (
+                <div className="absolute top-[-62px] left-0 right-0 flex justify-center items-center p-2 border-b z-10">
+                    <div className="flex gap-4 items-center">
+                        {/* 批量操作按钮组 */}
+                        {selectedFiles.size > 0 && (
+                            <div className="flex">
+                                <Button
+                                    variant="outline"
+                                    onClick={handleBatchDelete}
+                                    className="flex items-center gap-1"
+                                >
+                                    <Trash2 size={16} />
+                                    {t('delete')}
+                                </Button>
+                                {hasSelectedFailedFiles && (
+                                    <Button
+                                        variant="outline"
+                                        onClick={handleBatchRetry}
+                                        className="flex items-center gap-1"
+                                    >
+                                        <RotateCw size={16} />
+                                        {t('重试')}
+                                    </Button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            <div className="absolute right-0 top-[-62px] flex gap-4 items-center z-20">
+                <SearchInput placeholder={t('searchFileName')} onChange={(e) => {
+                    search(e.target.value);
+                    // 搜索时清除选择状态
+                    setSelectedFiles(new Set());
+                    setIsAllSelected(false);
+                }} />
+                {isEditable && (
+                    <Link to={`/filelib/upload/${id}`}>
+                        <Button className="px-8">{t('uploadFile')}</Button>
+                    </Link>
+                )}
+            </div>
+
+            <div className="h-[calc(100vh-180px)] overflow-y-auto pb-20">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead className="min-w-[50px]">
+                                <Checkbox
+                                    checked={isCurrentPageAllSelected}
+                                    onCheckedChange={toggleSelectAll}
+                                />
+                            </TableHead>
+                            <TableHead className="min-w-[250px]">{t('fileName')}</TableHead>
+                            <TableHead>切分策略</TableHead>
+                            <TableHead className="min-w-[100px]">{t('updateTime')}</TableHead>
+                            <TableHead className="flex items-center gap-4 min-w-[130px]">
+                                {t('status')}
+                                <div className="relative">
+                                    <DropdownMenu open={isFilterOpen} onOpenChange={handleOpenChange}>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button
+                                                variant="ghost"
+                                                className={`flex items-center gap-1 ${selectedFilters.length > 0 ? 'text-blue-500' : ''}`}
+                                            >
+                                                <Filter size={16} />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent
+                                            className="h-full p-0 shadow-lg rounded-md border"
+                                            style={{
+                                                backgroundColor: 'white',
+                                                opacity: 1,
+                                            }}
+                                            align="end"
+                                        >
+                                            <div className="px-2">
+                                                {[
+                                                    {
+                                                        value: 2,
+                                                        label: '已完成',
+                                                        color: 'text-blue-500',
+                                                        icon: <img src={__APP_ENV__.BASE_URL + "/assets/success.svg"} className="w-16 h-8" alt="已完成" />
+                                                    },
+                                                    {
+                                                        value: 1,
+                                                        label: '解析中',
+                                                        color: 'text-green-500',
+                                                        icon: <img src={__APP_ENV__.BASE_URL + "/assets/analysis.svg"} className="w-16 h-8" alt="解析中" />
+                                                    },
+                                                    {
+                                                        value: 3,
+                                                        label: '解析失败',
+                                                        color: 'text-red-500',
+                                                        icon: <img src={__APP_ENV__.BASE_URL + "/assets/failed.svg"} className="w-[78px] h-8" alt="解析失败" />
+                                                    }
+                                                ].map(({ value, label, color, icon }) => (
+                                                    <div
+                                                        key={value}
+                                                        className="flex items-center gap-3 px-2 py-1.5 hover:bg-gray-100 rounded cursor-pointer"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setTempFilters(prev =>
+                                                                prev.includes(value)
+                                                                    ? prev.filter(v => v !== value)
+                                                                    : [...prev, value]
+                                                            );
+                                                        }}
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={tempFilters.includes(value)}
+                                                            onChange={() => { }}
+                                                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                        />
+                                                        <div className="flex items-center gap-2">
+                                                            {icon}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="border-t border-gray-200"></div>
+                                            <div className="flex justify-end gap-2 px-3 py-2">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        resetFilters()
+                                                    }}
+                                                    disabled={tempFilters.length === 0}
+                                                >
+                                                    重置
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        applyFilters()
+                                                    }}
+                                                >
+                                                    确认
+                                                </Button>
+                                            </div>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
+                            </TableHead>
+                            <TableHead className="text-right pr-6">{t('operations')}</TableHead>
                         </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
-        </div>
-        <div className="bisheng-table-footer px-6">
-            <p></p>
-            <div>
-                <AutoPagination
-                    page={page}
-                    pageSize={pageSize}
-                    total={total}
-                    onChange={(newPage) => setPage(newPage)}
-                />
+                    </TableHeader>
+                    <TableBody>
+                        {dataSouce.map(el => (
+                            <TableRow
+                                key={el.id}
+                                onClick={() => {
+                                    if (!selectedFiles.size && el.status !== 3 && el.status !== 1) {
+                                        onPreview(el.id);
+                                    }
+                                }}
+                                className={selectedFiles.has(el.id) ? 'bg-blue-50' : ''}
+                            >
+                                <TableCell>
+                                    <Checkbox
+                                        checked={selectedFiles.has(el.id)}
+                                        onCheckedChange={(checked) => {
+                                            toggleSelectFile(el.id, checked as boolean);
+                                        }}
+                                        onClick={(e) => e.stopPropagation()}
+                                    />
+                                </TableCell>
+                                <TableCell className="min-w-[250px]">
+                                    <div className="flex items-center gap-2">
+                                        <FileIcon
+                                            type={el.file_name.split('.').pop().toLowerCase() || 'txt'}
+                                            className="size-[30px] min-w-[30px]"
+                                        />
+                                        {truncateString(el.file_name, 35)}
+                                    </div>
+                                </TableCell>
+                                     <TableCell>
+                                    {el.strategy[0] ? (
+                                        <TooltipProvider delayDuration={100}>
+                                            <Tooltip>
+                                                <TooltipTrigger>{el.strategy[0]}...</TooltipTrigger>
+                                                <TooltipContent>
+                                                    <div className="max-w-96 text-left break-all whitespace-normal">{el.strategy[1].replace(/\n/g, '\\n')}</div>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
+                                    ) : splitRuleDesc(el)}
+                                </TableCell>
+                                <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
+                           
+                                <TableCell>
+                                    {el.status === 3 ? (
+                                        <div className="flex items-center">
+                                            <TooltipProvider delayDuration={100}>
+                                                <Tooltip>
+                                                    <TooltipTrigger className="flex items-center gap-2">
+                                                        <img src="/assets/failed.svg" className="w-16 h-8" alt="解析失败" />
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <div className="max-w-96 text-left break-all whitespace-normal">{el.remark}</div>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-2">
+                                            {el.status === 2 ? (
+                                                <img src={__APP_ENV__.BASE_URL + "/assets/success.svg"} className="w-16 h-8" alt="已完成" />
+                                            ) : el.status === 1 ? (
+                                                <img src={__APP_ENV__.BASE_URL + "/assets/analysis.svg"} className="w-16 h-8" alt="解析中" />
+                                            ) : (
+                                                <img src={__APP_ENV__.BASE_URL + "/assets/failed.svg"} className="w-20 h-12" alt="解析失败" />
+                                            )}
+                                        </div>
+                                    )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                    <div className="flex items-center justify-end gap-2">
+                                        {el.status === 3 && (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleRetry([el]);
+                                                }}
+                                                title={t('重试')}
+                                            >
+                                                <RotateCw size={16} />
+                                            </Button>
+                                        )}
+                                        {isEditable ? (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleDelete(el.id);
+                                                }}
+                                                title={t('delete')}
+                                            >
+                                                <Trash2 size={16} />
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="text-gray-400 cursor-not-allowed"
+                                                title={t('delete')}
+                                                disabled
+                                            >
+                                                <Trash2 size={16} />
+                                            </Button>
+                                        )}
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
+            <div className="bisheng-table-footer px-6">
+                <p></p>
+                <div>
+                    <AutoPagination
+                        page={page}
+                        pageSize={pageSize}
+                        total={total}
+                        onChange={(newPage) => setPage(newPage)}
+                    />
+                </div>
             </div>
         </div>
-    </div>
-
-};
+    )
+}

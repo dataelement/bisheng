@@ -4,11 +4,11 @@ export default function RemoveFile({ onRemove }: { onRemove: () => void }) {
   return (
     <button
       type="button"
-      className="absolute right-2 top-2 -translate-y-1/2 translate-x-1/2 rounded-full bg-gray-600/40 p-0.5 transition-colors duration-200 hover:bg-gray-300 z-50 text-white"
+      className="absolute p-0.5 right-1.5 top-1.5 bg-black text-white rounded-full transition-colors duration-200 hover:bg-gray-300 z-50"
       onClick={onRemove}
     >
       <span>
-        <X size={12}/>
+        <X size={12} />
       </span>
     </button>
   );

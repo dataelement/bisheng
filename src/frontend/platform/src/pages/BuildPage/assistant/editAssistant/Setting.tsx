@@ -1,5 +1,6 @@
 import AssistantSetting from "@/components/Pro/security/AssistantSetting";
-import { TitleIconBg, TitleLogo } from "@/components/bs-comp/cardComponent";
+import { TitleIconBg } from "@/components/bs-comp/cardComponent";
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
 import SkillSheet from "@/components/bs-comp/sheets/SkillSheet";
 import ToolsSheet from "@/components/bs-comp/sheets/ToolsSheet";
@@ -291,7 +292,7 @@ export default function Setting() {
                   className="group mt-2 flex cursor-pointer items-center justify-between"
                 >
                   <div className="flex items-center gap-2">
-                    <TitleLogo url={flow.logo} id={flow.id} className="h-7 w-7"></TitleLogo>
+                    <AppAvator id={flow.name} url={flow.logo} flowType={1} className="h-7 w-7"></AppAvator>
                     <p className="text-sm">{flow.name}</p>
                   </div>
                   <CircleMinus

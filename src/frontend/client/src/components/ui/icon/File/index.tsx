@@ -1,6 +1,6 @@
 
 import React from 'react';
-
+// 废弃
 type FileType = 'md' | 'txt' | 'html' | 'csv' | 'dir';
 
 interface FileIconProps {

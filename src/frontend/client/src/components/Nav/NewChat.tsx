@@ -10,6 +10,8 @@ import { Constants, QueryKeys } from '~/data-provider/data-provider/src';
 import { useLocalize, useNewConvo } from '~/hooks';
 import store from '~/store';
 import { getEndpointField, getIconEndpoint, getIconKey } from '~/utils';
+import { Button } from '../ui';
+import AppsIcon from '../ui/icon/Apps';
 
 const NewChatButtonIcon = ({ conversation }: { conversation: TConversation | null }) => {
   const searchQuery = useRecoilValue(store.searchQuery);
@@ -105,15 +107,24 @@ export default function NewChat({
             {/* <CloseToggleIcon className="size-5" /> */}
           </div>
         </div>
-        {/* 新建btn */}
-        <button
-          className="flex items-center w-full shadow-sm bg-white mx-auto border px-4 py-3 rounded-xl "
-          onClick={clickHandler}
-          aria-label={localize('com_ui_new_chat')}
-        >
-          <img className='size-[18px] grayscale' src={__APP_ENV__.BASE_URL + '/assets/chat2.png'} alt="" />
-          <span className="text-sm pl-2.5">{localize('com_ui_new_chat')}</span>
-        </button>
+        <div className='flex gap-1'>
+          <Button variant="outline" className='shadow-sm h-10 rounded-xl'
+            onClick={() => {
+              navigate('/apps');
+            }}>
+            <AppsIcon />
+            <span className="text-sm font-normal">应用中心</span>
+          </Button>
+          {/* 新建btn */}
+          <Button
+            variant="outline" className="shadow-sm h-10  rounded-xl"
+            onClick={clickHandler}
+            aria-label={localize('com_ui_new_chat')}
+          >
+            <img className='size-[18px] grayscale' src={__APP_ENV__.BASE_URL + '/assets/chat2.png'} alt="" />
+            <span className="text-sm font-normal">开始新对话</span>
+          </Button>
+        </div>
       </div>
       {subHeaders != null ? subHeaders : null}
     </div>

@@ -12,6 +12,7 @@ import {
 } from "../../bs-ui/sheet";
 import CardComponent from "../cardComponent";
 import { useTranslation } from "react-i18next";
+import AppAvator from "../cardComponent/avatar";
 
 export default function SkillSheet({ select, children, onSelect }) {
   const [keyword, setKeyword] = useState("");
@@ -61,8 +62,8 @@ export default function SkillSheet({ select, children, onSelect }) {
                 <CardComponent
                   key={i}
                   id={i + 1}
+                  logo={<AppAvator id={flow.name} flowType={flow.flow_type} url={flow.logo} />}
                   data={flow}
-                  logo={flow.logo}
                   title={flow.name}
                   description={flow.description}
                   type="sheet"

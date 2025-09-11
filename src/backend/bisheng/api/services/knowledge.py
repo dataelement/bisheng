@@ -24,6 +24,7 @@ from bisheng.api.services.knowledge_imp import (
     process_file_task,
     read_chunk_text,
 )
+from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schema.knowledge import KnowledgeFileResp
@@ -33,7 +34,7 @@ from bisheng.api.v1.schemas import (
     FileProcessBase,
     KnowledgeFileOne,
     KnowledgeFileProcess,
-    UpdatePreviewFileChunk, ExcelRule,
+    UpdatePreviewFileChunk, ExcelRule, KnowledgeFileReProcess,
 )
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download
@@ -66,6 +67,7 @@ from bisheng.utils import generate_uuid
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import minio_client
 from bisheng.worker.knowledge import file_worker
+from bisheng_langchain.rag.bisheng_rag_chain import BishengRAGTool
 
 
 class KnowledgeService(KnowledgeUtils):
@@ -579,6 +581,43 @@ class KnowledgeService(KnowledgeUtils):
         return failed_files + process_files
 
     @classmethod
+    async def rebuild_knowledge_file(cls, request: Request,
+                                     login_user: UserPayload,
+                                     req_data: KnowledgeFileReProcess):
+        """
+        重建知识库文件
+        :param request:
+        :param login_user:
+        :param req_data:
+        :return:
+        """
+
+        knowledge = await KnowledgeDao.async_query_by_id(req_data.knowledge_id)
+        if not knowledge:
+            raise NotFoundError.http_exception()
+        if not login_user.access_check(
+                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
+        ):
+            raise UnAuthorizedError.http_exception()
+
+        db_file = await KnowledgeFileDao.query_by_id(req_data.kb_file_id)
+
+        if not db_file:
+            raise NotFoundError.http_exception()
+
+        split_rule_dict = req_data.model_dump(include=set(list(FileProcessBase.model_fields.keys())))
+        if req_data.excel_rule is not None:
+            split_rule_dict["excel_rule"] = req_data.excel_rule.model_dump()
+        db_file.split_rule = json.dumps(split_rule_dict)
+        db_file.status = KnowledgeFileStatus.PROCESSING.value  # 解析中
+        db_file = await KnowledgeFileDao.async_update(db_file)
+
+        preview_cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path="", md5_value=db_file.md5)
+        file_worker.retry_knowledge_file_celery.delay(db_file.id, preview_cache_key, req_data.callback_url)
+
+        return db_file.model_dump()
+
+    @classmethod
     def retry_files(
             cls,
             request: Request,
@@ -671,6 +710,9 @@ class KnowledgeService(KnowledgeUtils):
         filepath, file_name = file_download(file_info.file_path)
         md5_ = os.path.splitext(os.path.basename(filepath))[0].split("_")[0]
 
+        # 获取文件大小（单位为bytes）
+        file_size = os.path.getsize(filepath)
+
         file_extension_name = file_name.split(".")[-1]
         original_file_name = cls.get_upload_file_original_name(file_name)
         # 是否包含重复文件
@@ -698,12 +740,15 @@ class KnowledgeService(KnowledgeUtils):
                 minio_client.upload_tmp(db_file.object_name, file.read())
             db_file.status = KnowledgeFileStatus.FAILED.value
             db_file.split_rule = str_split_rule
+            # 更新文件大小信息
+            db_file.file_size = file_size
             return db_file
 
         # 插入新的数据，把原始文件上传到minio
         db_file = KnowledgeFile(
             knowledge_id=knowledge.id,
             file_name=original_file_name,
+            file_size=file_size,
             md5=md5_,
             split_rule=str_split_rule,
             user_id=login_user.user_id,
@@ -723,7 +768,7 @@ class KnowledgeService(KnowledgeUtils):
             login_user: UserPayload,
             knowledge_id: int,
             file_name: str = None,
-            status: int = None,
+            status: List[int] = None,
             page: int = 1,
             page_size: int = 10,
             file_ids: List[int] = None,
@@ -819,6 +864,10 @@ class KnowledgeService(KnowledgeUtils):
         cls.delete_knowledge_file_hook(
             request, login_user, db_knowledge.id, knowledge_file
         )
+
+        # 5分钟检查下文件是否真的被删除
+        file_worker.delete_knowledge_file_celery.apply_async(args=(file_ids, knowledge_file[0].knowledge_id, True),
+                                                             countdown=300)
 
         return True
 
@@ -1107,25 +1156,24 @@ class KnowledgeService(KnowledgeUtils):
         return json.loads(new_data.read().decode("utf-8"))
 
     @classmethod
-    def copy_knowledge(
+    async def copy_knowledge(
             cls,
             request,
             background_tasks: BackgroundTasks,
             login_user: UserPayload,
             knowledge: Knowledge,
     ) -> Any:
-        knowledge.state = KnowledgeState.COPYING.value
-        KnowledgeDao.update_one(knowledge)
+        await KnowledgeDao.async_update_state(knowledge.id, KnowledgeState.COPYING, update_time=knowledge.update_time)
         knowldge_dict = knowledge.model_dump()
         knowldge_dict.pop("id")
         knowldge_dict.pop("create_time")
         knowldge_dict.pop("update_time", None)
         knowldge_dict["user_id"] = login_user.user_id
         knowldge_dict["index_name"] = f"col_{int(time.time())}_{generate_uuid()[:8]}"
-        knowldge_dict["name"] = f"{knowledge.name} 副本"
+        knowldge_dict["name"] = f"{knowledge.name} 副本"[:30]
         knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
         knowledge_new = Knowledge(**knowldge_dict)
-        target_knowlege = KnowledgeDao.insert_one(knowledge_new)
+        target_knowlege = await KnowledgeDao.async_insert_one(knowledge_new)
         # celery 还没ok
         params = {
             "source_knowledge_id": knowledge.id,
@@ -1152,3 +1200,39 @@ class KnowledgeService(KnowledgeUtils):
         if db_knowledge.type == KnowledgeTypeEnum.NORMAL.value:
             raise ServerError.http_exception(msg="知识库为普通知识库")
         return db_knowledge
+
+
+def mixed_retrieval_recall(question: str, vector_store, keyword_store, max_content: int, model_id):
+    """
+    使用 BishengRetrieval进行混合检索召回
+    
+    Args:
+        question: 用户查询问题
+        vector_store: 向量存储（Milvus）
+        keyword_store: 关键词存储（Elasticsearch）
+    
+    Returns:
+        dict: 包含检索结果和源文档的字典
+    """
+    try:
+        llm = LLMService.get_bisheng_llm(model_id=model_id,
+                                         temperature=0.01,
+                                         cache=False)
+        # 创建混合检索器
+        rag_tool = BishengRAGTool(
+            llm=llm,
+            vector_store=vector_store,
+            keyword_store=keyword_store,
+            max_content=max_content,
+            sort_by_source_and_index=True
+        )
+
+        # 执行检索和生成
+        answer, docs = rag_tool.run(question, return_only_outputs=False)
+        logger.info(f"act=mixed_retrieval_recall result={docs}")
+        logger.info(f"act=mixed_retrieval_recall answer={answer}")
+        # 格式化返回结果
+        return docs
+
+    except Exception as e:
+        logger.error(f"检索失败: {str(e)}")

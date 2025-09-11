@@ -7,6 +7,7 @@ import DocxPreview from "./DocxFileViewer";
 import { convertJsonData } from "./ParagraphEdit";
 import { Partition } from "./PreviewResult";
 import TxtFileViewer from "./TxtFileViewer";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 
 /**
  * 
@@ -15,9 +16,11 @@ import TxtFileViewer from "./TxtFileViewer";
  * 选中label -> 更新labelsMap
  * 覆盖chunk -> labelsMap + partitions = string -> store -> update markdown
  */
-export default function PreviewFile({ urlState, file, partitions, chunks, setChunks }
+export default function PreviewFile({ urlState, file, partitions, chunks, setChunks, h = true }
     : { urlState: { load: false, url: '' }, file: any, partitions: Partition, chunks: any, setChunks: any }) {
+
     const { t } = useTranslation('knowledge')
+
     const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
     const selectedChunkDistanceFactor = useKnowledgeStore((state) => state.selectedChunkDistanceFactor);
     const setNeedCoverData = useKnowledgeStore((state) => state.setNeedCoverData);
@@ -188,7 +191,7 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
         const { url, load } = urlState
 
         if (!load && !url) return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>
-        if (!url) return <div className="flex justify-center items-center h-full text-gray-400">加载中...</div>
+        if (!url) return <div className="flex justify-center items-center h-full text-gray-400"><LoadingIcon /></div>
         switch (type) {
             case 'ppt':
             case 'pptx':
@@ -265,14 +268,14 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
     return <div className="w-1/2" onClick={e => {
         e.stopPropagation()
     }}>
-        <div className="flex justify-center items-center relative h-10 mb-2 text-sm">
+        <div className={`flex justify-center items-center relative mb-2 text-sm ${h ? 'h-10' : 'hidden'}`}>
             <div className={`${labelChange ? '' : 'hidden'} flex items-center`}>
                 <Info className='mr-1 text-red-500' size={14} />
                 <span className="text-red-500">{t('segmentRangeDetected')}</span>
                 <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
             </div>
         </div>
-        <div className="relative h-[calc(100vh-284px)] overflow-y-auto">
+        <div className={`relative overflow-y-auto ${h ? 'h-[calc(100vh-284px)]' : 'h-[calc(100vh-206px)]'}`}>
             {render(file.suffix)}
         </div>
     </div>

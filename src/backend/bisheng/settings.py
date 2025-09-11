@@ -119,6 +119,7 @@ class LinsightConf(BaseModel):
     waiting_list_url: str = Field(default=None, description='waiting list 跳转链接')
     default_temperature: float = Field(default=0, description='模型请求时的默认温度')
     retry_temperature: float = Field(default=1, description='react模式json解析失败后重试时模型温度')
+    file_content_length: int = Field(default=5000, description='拆分子任务时读取文件内容的字符数，超过后会截断')
 
 
 class Settings(BaseModel):

@@ -29,6 +29,7 @@ export default function Conversation({
   isLatestConvo,
 }: ConversationProps) {
   const params = useParams();
+
   const currentConvoId = useMemo(() => params.conversationId, [params.conversationId]);
   const updateConvoMutation = useUpdateConversationMutation(currentConvoId ?? '');
   const activeConvos = useRecoilValue(store.allConversationsSelector);
@@ -67,6 +68,9 @@ export default function Conversation({
     if (conversation.flowType === 20) {
       // 灵思
       navigate(`/linsight/${conversationId}`);
+    } else if ([1, 5, 10].includes(conversation.flowType)) {
+      console.log('conversation :>> ', conversation);
+      navigate(`/chat/${conversationId}/${conversation.flowId}/${conversation.flowType}`);
     } else {
       // 会话
       navigateWithLastTools(
@@ -213,6 +217,7 @@ export default function Conversation({
               setTitleInput(title);
               setRenaming(true);
             }}
+            alt={conversation?.flowType}
           >
             <img src={__APP_ENV__.BASE_URL + (conversation?.flowType === 20 ? "/assets/linsi.png" : "/assets/talk.png")} className='size-6 inline-block mr-2.5' alt="" />
             {title}

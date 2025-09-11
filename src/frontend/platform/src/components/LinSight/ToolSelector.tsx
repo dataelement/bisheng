@@ -7,6 +7,8 @@ import { SearchInput } from '../bs-ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../bs-ui/tooltip';
 import { Check, Minus } from "lucide-react";
 import { LoadIcon } from '../bs-icons/loading';
+import { t } from 'i18next';
+import { useTranslation } from 'react-i18next';
 type CheckboxState = 'checked' | 'unchecked' | 'indeterminate';
 
 const ToolSelector = ({
@@ -28,6 +30,7 @@ const ToolSelector = ({
   setManuallyExpandedItems,
   toggleGroup,
 }) => {
+     const { t } = useTranslation()
   const [scrollToParentId, setScrollToParentId] = useState<string | null>(null);
   const [isExpanding, setIsExpanding] = useState(false);
   const [targetCategory, setTargetCategory] = useState<string | null>(null);
@@ -229,7 +232,7 @@ const ToolSelector = ({
         className="w-1/3 flex border rounded-lg bg-white"
       >
         <div className="flex-1 p-4">
-          <h3 className="text-[16px] font-medium">已选工具</h3>
+          <h3 className="text-[16px] font-medium">{t('toolSelector.selectedTools')}</h3>
 
           {selectedTools.length === 0 ? (
             <div className="mt-4 border-2 border-dashed border-gray-200 rounded-lg bg-gray-50 flex flex-col items-center justify-center py-6 px-4 text-center">
@@ -237,10 +240,10 @@ const ToolSelector = ({
                 <Plus className="w-6 h-6 text-gray-400" />
               </div>
               <div className="text-sm font-medium text-gray-500 mb-1">
-                暂未选择任何工具
+                {t('toolSelector.noToolsSelected')}
               </div>
               <div className="text-xs text-gray-400">
-                请在右侧全量工具中挑选工具
+                {t('toolSelector.selectToolsPrompt')}
               </div>
             </div>
           ) : (
@@ -269,7 +272,7 @@ const ToolSelector = ({
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <span className="truncate max-w-[120px]">{tool.name}</span>
+                                    <span className="truncate max-w-[240px]">{tool.name}</span>
                                   </TooltipTrigger>
                                   <TooltipContent>
                                     <p>{tool.name}</p>
@@ -310,11 +313,11 @@ const ToolSelector = ({
           <div
             className="w-1/3 border-r bg-gray-50 flex flex-col">
             <div className="p-2 border-b">
-              <h3 className="font-medium">全量工具</h3>
+              <h3 className="font-medium">{t('toolSelector.allTools')}</h3>
             </div>
             <div className="relative p-2 border-b">
               <SearchInput
-                placeholder="搜索工具..."
+                placeholder={t('toolSelector.searchPlaceholder')}
                 value={toolSearchTerm}
                 onChange={(e) => setToolSearchTerm(e.target.value)}
                 onClear={() => setToolSearchTerm('')}
@@ -329,21 +332,21 @@ const ToolSelector = ({
                   onClick={() => setActiveToolTab('builtin')}
                 >
                   <User className="w-4 h-4 mr-2" />
-                  内置工具
+                  {t('toolSelector.builtinTools')}
                 </button>
                 <button
                   className={`flex items-center w-full text-left p-2 rounded ${activeToolTab === 'api' ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100'}`}
                   onClick={() => setActiveToolTab('api')}
                 >
                   <Star className="w-4 h-4 mr-2" />
-                  API工具
+                  {t('toolSelector.apiTools')}
                 </button>
                 <button
                   className={`flex items-center w-full text-left p-2 rounded ${activeToolTab === 'mcp' ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100'}`}
                   onClick={() => setActiveToolTab('mcp')}
                 >
                   <CpuIcon className="w-4 h-4 mr-2" />
-                  MCP工具
+                  {t('toolSelector.mcpTools')}
                 </button>
               </div>
             </div>
@@ -469,7 +472,7 @@ const ToolSelector = ({
               </Accordion>
             ) : (
               <div className="text-center text-sm text-gray-500 py-4">
-                未找到相关工具
+                {t('toolSelector.noToolsFound')}
               </div>
             )}
           </div>

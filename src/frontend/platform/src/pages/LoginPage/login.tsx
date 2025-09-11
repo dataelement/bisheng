@@ -127,15 +127,15 @@ export const LoginPage = () => {
     return <div className='w-full h-full bg-background-dark'>
         <div className='fixed z-10 sm:w-[1280px] w-full sm:h-[720px] h-full translate-x-[-50%] translate-y-[-50%] left-[50%] top-[50%] border rounded-lg shadow-xl overflow-hidden bg-background-login'>
             <div className='w-[420px] h-[704px] m-[8px] hidden sm:block relative z-20'>
-                <img src={__APP_ENV__.BASE_URL + '/login-logo-big.png'} alt="logo_picture" className='w-full h-full dark:hidden' />
-                <img src={__APP_ENV__.BASE_URL + '/login-logo-dark.png'} alt="logo_picture" className='w-full h-full hidden dark:block' />
+                <img src={__APP_ENV__.BASE_URL + '/assets/bisheng/login-logo-big.png'} alt="logo_picture" className='w-full h-full dark:hidden' />
+                <img src={__APP_ENV__.BASE_URL + '/assets/bisheng/login-logo-dark.png'} alt="logo_picture" className='w-full h-full hidden dark:block' />
                 {/* <iframe src={__APP_ENV__.BASE_URL + '/face.html'} className='w-full h-full'></iframe> */}
             </div>
             <div className='absolute w-full h-full z-10 flex justify-end top-0'>
                 <div className='w-[852px] sm:px-[266px] px-[20px] pyx-[200px] bg-background-login relative'>
                     <div>
-                        <img src={__APP_ENV__.BASE_URL + '/login-logo-small.png'} className="block w-[114px] h-[36px] m-auto mt-[140px] dark:w-[124px] dark:pr-[10px] dark:hidden" alt="" />
-                        <img src={__APP_ENV__.BASE_URL + '/logo-small-dark.png'} className="w-[114px] h-[36px] m-auto mt-[140px] dark:w-[124px] dark:pr-[10px] dark:block hidden" alt="" />
+                        <img src={__APP_ENV__.BASE_URL + '/assets/bisheng/login-logo-small.png'} className="block w-[114px] h-[36px] m-auto mt-[140px] dark:w-[124px] dark:pr-[10px] dark:hidden" alt="" />
+                        <img src={__APP_ENV__.BASE_URL + '/assets/bisheng/logo-small-dark.png'} className="w-[114px] h-[36px] m-auto mt-[140px] dark:w-[124px] dark:pr-[10px] dark:block hidden" alt="" />
                         <span className='block w-fit m-auto font-normal text-[14px] text-tx-color mt-[24px]'>{t('login.slogen')}</span>
                     </div>
                     <div className="grid gap-[12px] mt-[68px]">

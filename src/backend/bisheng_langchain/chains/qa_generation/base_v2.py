@@ -13,9 +13,9 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.prompts import HumanMessagePromptTemplate, PromptTemplate
 
 try:
-    from llama_index.node_parser import SimpleNodeParser
-    from llama_index.readers.schema import Document as LlamaindexDocument
-    from llama_index.schema import BaseNode
+    from llama_index.core.node_parser import SimpleNodeParser
+    from llama_index.core.schema import Document as LlamaindexDocument
+    from llama_index.core.schema import BaseNode
 except ImportError:
     raise ImportError(
         "llama_index must be installed to use this function. "

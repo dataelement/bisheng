@@ -138,6 +138,7 @@
     "chooseInteractionTooltip": "提供选项供用户选择，例如在需要进行敏感操作时，需要用户确定方可继续执行工作流",
     "inputInteraction": "输入型交互",
     "inputInteractionTooltip": "提供用户编辑文本的能力，适合多步任务处理场景，例如用户对模型生成内容直接进行修改，或者输入对生成内容优化意见。用户提交的内容将会存储到 output_result 变量中。",
+    "dbType":"数据库类型",
     "dbAddress": "数据库地址",
     "dbName": "数据库名称",
     "dbUsername": "数据库用户名",

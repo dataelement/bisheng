@@ -85,7 +85,7 @@ const NoLoginLink = ({ type, noLogin = false }) => {
   id="chatbot-iframe-script"
   data-bot-src="${url}"
   data-drag="true"
-  data-open-icon="${location.origin}/user.png"
+  data-open-icon="${location.origin}/assets/user.png"
   data-close-icon="${location.origin}/logo-small-dark.png"
   defer
 ></script>

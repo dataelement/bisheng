@@ -69,6 +69,7 @@ html {
   --surface-primary-contrast: var(--gray-100);
   --surface-secondary: var(--gray-50);
   --surface-secondary-alt: var(--gray-300);
+  --search-input: hsla(220, 100%, 99%, 1);
   --surface-tertiary: var(--gray-100);
   --surface-tertiary-alt: var(--white);
   --surface-dialog: var(--white);
@@ -127,6 +128,7 @@ html {
   --surface-primary-contrast: var(--gray-850);
   --surface-secondary: var(--gray-800);
   --surface-secondary-alt: var(--gray-800);
+  --search-input: hsla(225, 5%, 17%, 1);
   --surface-tertiary: var(--gray-700);
   --surface-tertiary-alt: var(--gray-700);
   --surface-dialog: var(--gray-850);
@@ -190,6 +192,12 @@ html {
   --border-medium: rgba(217, 217, 227, 0.15);
   --border-heavy: rgba(217, 217, 227, 0.2);
   --border-xheavy: rgba(217, 217, 227, 0.25);
+}
+
+@font-face {
+  font-family: AlibabaPuHuiTi-3-55-Regular;
+  /* src: url("assets/text-security-disc.woff") format("woff"); */
+  src: url("assets/AlibabaPuHuiTi-3-55-Regular.woff") format("woff");
 }
 
 .text-token-text-primary {
@@ -285,6 +293,10 @@ html {
 
 .bg-token-surface-secondary {
   background-color: var(--surface-secondary);
+}
+
+.bg-search-input {
+  background-color: var(--search-input) !important
 }
 
 @media (max-width: 640px) {
@@ -1751,6 +1763,7 @@ body,
 html {
   height: 100%;
   font-family:
+    "AlibabaPuHuiTi-3-55-Regular",
     "PingFang SC",
     /* 苹果设备优先使用苹方 */
     "Hiragino Sans GB",
@@ -2891,6 +2904,13 @@ button.scroll-convo {
   /* Firefox悬停样式 */
 }
 
+.scrollbar-hide {
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE and Edge */
+}
+
 @keyframes rotate-border {
   from {
     transform: rotate(0deg);
@@ -2914,4 +2934,32 @@ button.scroll-convo {
     opacity: 0.3;
     background-color: rgb(156, 163, 175);
   }
+}
+
+
+/* 溯源 */
+.flag.active {
+  background: linear-gradient(to right, rgba(53, 126, 249, .60), transparent);
+}
+
+.flag:after {
+  content: "";
+  position: absolute;
+  width: 23px;
+  height: 2px;
+  right: -3px;
+  top: 7px;
+  background: rgba(53, 126, 249, .60);
+  transform: rotate(-50deg) translate(0, 0);
+}
+
+.flag::before {
+  content: "";
+  position: absolute;
+  width: 23px;
+  height: 2px;
+  right: -3px;
+  top: 25px;
+  background: rgba(53, 126, 249, .60);
+  transform: rotate(50deg) translate(0, 0);
 }

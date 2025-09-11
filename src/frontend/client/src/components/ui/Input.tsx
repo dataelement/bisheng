@@ -1,3 +1,4 @@
+import { SearchIcon } from 'lucide-react';
 import * as React from 'react';
 
 import { cn } from '~/utils';
@@ -19,4 +20,15 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(({ className, ...pr
 
 Input.displayName = 'Input';
 
-export { Input };
+const SearchInput = React.forwardRef<HTMLInputElement, InputProps & { inputClassName?: string, iconClassName?: string }>(
+  ({ className, inputClassName, iconClassName, ...props }, ref) => {
+    return <div className={cn("relative", className)}>
+      <SearchIcon className={cn("h-5 w-5 absolute left-2 top-2 text-gray-950 dark:text-gray-500 z-10", iconClassName)} />
+      <Input type="text" ref={ref} className={cn("pl-8 bg-search-input", inputClassName)} {...props}></Input>
+    </div>
+  }
+)
+
+SearchInput.displayName = "SearchInput"
+
+export { Input, SearchInput };

@@ -1,14 +1,20 @@
 export enum EvaluationType {
   flow = "flow",
+   skill = "skill",  
   assistant = "assistant",
+  workflow = "workflow"
 }
 
 export const EvaluationTypeLabelMap = {
   [EvaluationType.flow]: {
     label: "build.skill",
   },
+  [EvaluationType.skill]: { label: "build.skill" },
   [EvaluationType.assistant]: {
     label: "build.assistant",
+  },
+   [EvaluationType.workflow]: {
+    label: "build.workflow",
   },
 };
 

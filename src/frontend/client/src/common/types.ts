@@ -483,6 +483,7 @@ export interface ExtendedFile {
   attached?: boolean;
   embedded?: boolean;
   tool_resource?: string;
+  abortController?: AbortController;
 }
 
 export type ContextType = { navVisible: boolean; setNavVisible: (visible: boolean) => void };

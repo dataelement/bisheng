@@ -1,15 +1,26 @@
 import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Switch } from "@/components/bs-ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next"; // 引入国际化
+import { useTranslation } from "react-i18next";
 
 export default function SqlConfigItem({ data, onChange, onValidate }) {
-    const { t } = useTranslation('flow'); // 使用国际化
+    const { t } = useTranslation('flow');
     const [values, setValues] = useState(data.value);
     const [errors, setErrors] = useState({});
 
-    const { db_address, db_name, db_username, db_password, open } = values;
+    const { database_engine, db_address, db_name, db_username, db_password, open } = values;
+
+    // 定义可用的数据库选项
+    const DATABASE_OPTIONS = ['MySQL', 'Db2', 'PostgreSQL', 'GaussDB', 'Oracle'];
+
+    // 初始化时设置默认数据库类型
+    useEffect(() => {
+        if (!database_engine) {
+            handleChange("database_engine", "mysql");
+        }
+    }, []);
 
     // 校验方法
     const handleValidate = () => {
@@ -19,6 +30,11 @@ export default function SqlConfigItem({ data, onChange, onValidate }) {
         const errorMessages = [];
 
         const validations = [
+            {
+                key: "database_engine",
+                value: database_engine,
+                requiredMsg: t("dbTypeRequired"),
+            },
             {
                 key: "db_address",
                 value: db_address,
@@ -86,6 +102,24 @@ export default function SqlConfigItem({ data, onChange, onValidate }) {
             {/* 配置表单 */}
             {open && (
                 <>
+                    {/* 数据库类型下拉框 */}
+                    <Label className="flex items-center bisheng-label">{t("dbType")}</Label>
+                    <Select
+                        value={database_engine}
+                        onValueChange={(value) => handleChange("database_engine", value)}
+                    >
+                        <SelectTrigger className={`mt-2 mb-4 nodrag ${errors.database_engine ? "border-red-500" : ""}`}>
+                            <SelectValue placeholder={t("selectDbType")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {DATABASE_OPTIONS.map((engine) => (
+                                <SelectItem key={engine} value={engine}>
+                                    {engine}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
                     {/* 数据库地址 */}
                     <Label className="flex items-center bisheng-label">{t("dbAddress")}</Label> {/* 数据库地址 */}
                     <Input

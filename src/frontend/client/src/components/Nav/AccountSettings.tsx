@@ -63,11 +63,12 @@ function AccountSettings() {
                 <UserIcon />
               </div>
             ) : (
-              <img
-                className="rounded-full"
-                src={(user?.avatar ?? '') || avatarSrc}
-                alt={`${name}'s avatar`}
-              />
+              <div className="w-8 h-8 min-w-6 text-white bg-primary rounded-full flex justify-center items-center text-xs">{(user?.name ?? user?.username ?? localize('com_nav_user')).substring(0, 2).toUpperCase()}</div>
+              // <img
+              //   className="rounded-full"
+              //   src={(user?.avatar ?? '') || avatarSrc}
+              //   alt={`${name}'s avatar`}
+              // />
             )}
           </div>
         </div>

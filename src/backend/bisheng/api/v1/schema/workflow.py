@@ -54,6 +54,7 @@ class WorkflowEvent(BaseModel):
     message_id: Optional[str] = Field(default=None, description='message id for save into mysql')
     status: Optional[str] = Field(default='end', description='The event status')
     node_id: Optional[str] = Field(default=None, description='The node id')
+    node_name: Optional[str] = Field(default=None, description='The node name')
     node_execution_id: Optional[str] = Field(default=None, description='The node exec unique id')
     output_schema: Optional[WorkflowOutputSchema] = Field(default=None, description='The output schema')
     input_schema: Optional[WorkflowInputSchema] = Field(default=None, description='The input schema')

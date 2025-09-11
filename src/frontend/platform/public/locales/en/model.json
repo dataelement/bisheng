@@ -29,6 +29,8 @@
         "modelType": "Type",
         "systemModelSettings": "System Settings",
         "knowledgeBaseModel": "Knowledge Model",
+        "workModel":"work Model",
+        "executionMode":"execution mode",
         "assistantModel": "Assistant Model",
         "evaluationModel": "Eval Model",
         "workflowModel": "Workflow Model",

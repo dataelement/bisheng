@@ -582,3 +582,8 @@
 .bs-mkdown svg g[data-mml-node="merror"], .bs-mkdown .mathjax-error {
     opacity: 0;
 }
+
+.anwser-souce span {
+    color: #347ef9;
+    cursor: pointer;
+}

@@ -10,6 +10,7 @@ import { SearchInput } from "../../bs-ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "../../bs-ui/sheet";
 import CardComponent from "../cardComponent";
 import LoadMore from "../loadMore";
+import AppAvator from "../cardComponent/avatar";
 
 export default function SkillChatSheet({ children, onSelect }) {
     const [open, setOpen] = useState(false)
@@ -61,11 +62,10 @@ export default function SkillChatSheet({ children, onSelect }) {
                             <CardComponent key={i}
                                 id={i + 1}
                                 data={flow}
-                                logo={flow.logo}
+                                logo={<AppAvator id={flow.name} flowType={flow.flow_type} url={flow.logo} />}
                                 title={flow.name}
                                 description={flow.desc}
                                 type="sheet"
-                                icon={flow.flow_type === 'flow' ? SkillIcon : AssistantIcon}
                                 footer={
                                     <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md ${flow.flow_type === 'flow' && 'bg-gray-950'}`}>
                                         {flow.flow_type === 'flow' ? t('build.skill') : t('build.assistant')}

@@ -109,6 +109,7 @@ class LLMNode(BaseNode):
         llm_callback = LLMNodeCallbackHandler(callback=self.callback_manager,
                                               unique_id=unique_id,
                                               node_id=self.id,
+                                              node_name=self.name,
                                               output=self._output_user,
                                               output_key=output_key)
         config = RunnableConfig(callbacks=[llm_callback])

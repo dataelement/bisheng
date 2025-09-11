@@ -12,7 +12,6 @@ import type { UseMutationResult } from '@tanstack/react-query';
 
 export const useUploadFileMutation = (
   _options?: t.UploadMutationOptions,
-  signal?: AbortSignal | null,
 ): UseMutationResult<
   t.TFileUpload, // response data
   unknown, // error
@@ -22,7 +21,7 @@ export const useUploadFileMutation = (
   const queryClient = useQueryClient();
   const { onSuccess, ...options } = _options || {};
   return useMutation([MutationKeys.fileUpload], {
-    mutationFn: (body: FormData) => {
+    mutationFn: ({ body, signal }: { body: FormData, signal: AbortSignal | null }) => {
       const width = body.get('width') ?? '';
       const height = body.get('height') ?? '';
       const version = body.get('version') ?? '';
@@ -38,7 +37,7 @@ export const useUploadFileMutation = (
       return dataService.uploadFile(body, signal);
     },
     ...options,
-    onSuccess: (data, formData, context) => {
+    onSuccess: (data, { body: formData }, context) => {
       queryClient.setQueryData<t.TFile[] | undefined>([QueryKeys.files], (_files) => [
         data,
         ...(_files ?? []),

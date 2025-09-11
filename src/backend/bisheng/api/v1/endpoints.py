@@ -70,7 +70,7 @@ def get_env():
     env.update(settings.settings.get_from_db('env') or {})
     env['pro'] = settings.settings.get_system_login_method().bisheng_pro
     env['version'] = __version__
-    env['enable_etl4lm'] = etl_for_lm_url is not None
+    env['enable_etl4lm'] = bool(etl_for_lm_url)
 
     return resp_200(env)
 

@@ -422,12 +422,12 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     }
 
     // stop click
-    const handleStopClick = () => {
-        if (stop.disable) return
-        setStop({ show: true, disable: true });
-        setInputLock({ locked: true, reason: '' })
-        sendWsMsg({ "action": "stop" });
-    }
+    // const handleStopClick = () => {
+    //     if (stop.disable) return
+    //     setStop({ show: true, disable: true });
+    //     setInputLock({ locked: true, reason: '' })
+    //     sendWsMsg({ "action": "stop" });
+    // }
     // restart
     const restartCallBackRef = useRef({})
     const [restarted, setRestarted] = useState(false)

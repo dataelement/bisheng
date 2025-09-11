@@ -9,8 +9,8 @@ export default function NodeTabs({ data, onChange }) {
         const match = help.match(regex);
 
         const images = {
-            "input": "/tabImages/input-demo.jpeg",
-            "form": "/tabImages/form-demo.jpeg"
+            "input": "/assets/tabImages/input-demo.jpeg",
+            "form": "/assets/tabImages/form-demo.jpeg"
         }
 
         if (match) {
@@ -18,7 +18,7 @@ export default function NodeTabs({ data, onChange }) {
             return (
                 <>
                     {before}
-                    <img className="w-60 rounded-sm" src={images[imgSrc]} alt="tooltip" />
+                    <img className="w-60 rounded-sm" src={__APP_ENV__.BASE_URL + images[imgSrc]} alt="tooltip" />
                     {after}
                 </>
             );

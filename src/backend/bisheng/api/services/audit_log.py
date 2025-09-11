@@ -459,13 +459,18 @@ class AuditLogService:
         if sensitive_status:
             filter_status = [SensitiveStatus(sensitive_status)]
 
-        res = MessageSessionDao.filter_session(sensitive_status=filter_status, feedback=feedback,
-                                               flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date,
-                                               end_date=end_date, page=page, limit=page_size)
-        total = MessageSessionDao.filter_session_count(sensitive_status=filter_status, feedback=feedback,
-                                                       flow_ids=filter_flow_ids, user_ids=user_ids,
-                                                       start_date=start_date,
-                                                       end_date=end_date)
+        filters = {
+            'sensitive_status': filter_status,
+            'feedback': feedback,
+            'flow_ids': filter_flow_ids,
+            'user_ids': user_ids,
+            'start_date': start_date,
+            'end_date': end_date,
+            'flow_type': [FlowType.FLOW.value, FlowType.WORKFLOW.value,
+                          FlowType.ASSISTANT.value]
+        }
+        res = MessageSessionDao.filter_session(**filters, page=page, limit=page_size)
+        total = MessageSessionDao.filter_session_count(**filters)
 
         res_users = []
         for one in res:

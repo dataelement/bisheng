@@ -17,7 +17,7 @@ async function _getResponse<T>(url: string, options?: AxiosRequestConfig): Promi
 }
 
 async function _post(url: string, data?: any, config?: AxiosRequestConfig) {
-  const response = await customAxios.post(url, JSON.stringify(data), {
+  const response = await customAxios.post(url, config ? data : JSON.stringify(data), {
     headers: { 'Content-Type': 'application/json' },
     ...config
   });

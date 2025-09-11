@@ -3,6 +3,7 @@ import type { ExtendedFile } from '~/common';
 import FilePreview from './FilePreview';
 import RemoveFile from './RemoveFile';
 import { getFileType } from '~/utils';
+import { getFileTypebyFileName } from '~/components/ui/icon/File/FileIcon';
 
 const FileContainer = ({
   file,
@@ -46,16 +47,16 @@ const FileContainer = ({
   return (
     <div className="group relative inline-block text-sm text-text-primary">
       <div className="relative overflow-hidden rounded-2xl border">
-        <div className="w-56 bg-white p-4">
+        <div className="w-56 bg-white p-2">
           <div className="flex flex-row items-center gap-2">
             <FilePreview file={file} fileType={fileType} className="relative" />
             <div className="overflow-hidden">
-              <div className="truncate" title={file.filename}>
+              <div className="truncate font-bold" title={file.filename}>
                 {file.filename}
               </div>
-              {/* <div className="truncate text-text-secondary" title={fileType.title}>
-                {fileType.title}
-              </div> */}
+              <div className="truncate text-text-secondary" title={fileType.title}>
+                {file.filename && getFileTypebyFileName(file.filename)}
+              </div>
             </div>
           </div>
         </div>

@@ -1,3 +1,4 @@
+import axios from 'axios';
 import React from 'react';
 
 export { default as buildDefaultConvo } from './buildDefaultConvo';
@@ -176,4 +177,97 @@ export const toggleNav = (shouldExpand) => {
 export const formatTime = (time: string, hideTime: boolean = false) => {
   const value = time.replace('T', ' ').replaceAll('-', '/');
   return hideTime ? value.slice(0, -3) : value
+}
+
+// Date转换为目标格式
+export function formatDate(date: Date, format: string): string {
+  const addZero = (num) => num < 10 ? `0${num}` : `${num}`
+  const replacements = {
+    'yyyy': date.getFullYear(),
+    'MM': addZero(date.getMonth() + 1),
+    'dd': addZero(date.getDate()),
+    'HH': addZero(date.getHours()),
+    'mm': addZero(date.getMinutes()),
+    'ss': addZero(date.getSeconds())
+  }
+  return format.replace(/yyyy|MM|dd|HH|mm|ss/g, (match) => replacements[match])
+}
+
+// param time: yyyy-mm-ddTxxxx
+export function formatStrTime(time: string, notSameDayFormat: string): string {
+  if (!time) return ''
+  const date1 = new Date(time)
+  const date2 = new Date()
+  return date1.getFullYear() === date2.getFullYear() &&
+    date1.getMonth() === date2.getMonth() &&
+    date1.getDate() === date2.getDate() ? formatDate(date1, 'HH:mm') : formatDate(date1, notSameDayFormat)
+}
+
+const copyTextInDom = (dom) => {
+  const range = document.createRange();
+
+  range.selectNode(dom);
+  window.getSelection().removeAllRanges();
+  window.getSelection().addRange(range);
+
+  return new Promise((res) => {
+    document.execCommand('copy');
+    window.getSelection().removeAllRanges();
+    res(dom.innerText);
+  })
+}
+
+// 复制到剪切板
+export const copyText = (text: string | HTMLElement) => {
+  // 复制 dom 内文本
+  if (typeof text !== 'string') return copyTextInDom(text)
+  // 高级 API直接复制文本（需要 https 环境）
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text)
+  }
+  // 通过把文本写入 dom, 间接通过选中 dom 复制文本
+  const areaDom = document.createElement("textarea");
+  // 设置样式使其不在屏幕上显示
+  areaDom.style.position = 'absolute';
+  areaDom.style.left = '-9999px';
+  areaDom.value = text;
+  document.body.appendChild(areaDom);
+
+  return copyTextInDom(areaDom).then((str) => {
+    document.body.removeChild(areaDom);
+  })
+};
+
+
+export function downloadFile(url, label) {
+  console.log('download file :>> ', url);
+
+  return axios.get(url, { responseType: "blob" }).then((res: any) => {
+    const blob = new Blob([res.data]);
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = label;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }).catch(console.error);
+}
+
+
+// uuid
+export const generateUUID = (length: number) => {
+  let d = new Date().getTime()
+  const uuid = ''.padStart(length, 'x').replace(/[xy]/g, (c) => {
+    const r = (d + Math.random() * 16) % 16 | 0
+    d = Math.floor(d / 16)
+    return (c == 'x' ? r : (r & 0x7 | 0x8)).toString(16)
+  })
+  return uuid
+}
+
+
+// 取后缀名
+export function getFileExtension(filename) {
+  const basename = filename.split(/[\\/]/).pop(); // 去除路径
+  const match = basename.match(/\.([^.]+)$/);
+  return (match ? match[1] : '').toUpperCase();
 }

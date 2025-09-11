@@ -23,11 +23,12 @@ from bisheng.cache import InMemoryCache
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.assistant import (Assistant, AssistantDao, AssistantLinkDao,
                                                AssistantStatus)
-from bisheng.database.models.flow import Flow, FlowDao
+from bisheng.database.models.flow import Flow, FlowDao, FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsTypeRead, GptsTools
 from bisheng.database.models.group_resource import GroupResourceDao, GroupResource, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
+from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
@@ -214,6 +215,10 @@ class AssistantService(BaseService, AssistantUtils):
 
         # 清理和用户组的关联
         GroupResourceDao.delete_group_resource_by_third_id(assistant.id, ResourceTypeEnum.ASSISTANT)
+
+        # 更新会话信息
+        MessageSessionDao.update_session_info_by_flow(assistant.name, assistant.desc, assistant.logo,
+                                                      assistant.id, FlowType.ASSISTANT.value)
         return True
 
     @classmethod

@@ -62,6 +62,7 @@ export async function getComponents(): Promise<any[]> {
 export async function saveComponent(data): Promise<any[]> {
   return await axios.post(`/api/v1/component`, data);
 }
+
 /**
  * 覆盖 组件
  */
@@ -234,7 +235,10 @@ export async function subUploadLibFile(data: DefaultUploadFileFc): Promise<any>;
 export async function subUploadLibFile(data: UploadFileFc | DefaultUploadFileFc) {
   return await axios.post(`/api/v1/knowledge/process`, data);
 }
-
+//调整分段策略
+export async function rebUploadFile(data) {
+  return await axios.post(`/api/v1/knowledge/process/rebuild`, data);
+}
 /**
  * 查看文件切片
  */
@@ -577,7 +581,7 @@ export const getChatsApi = (page) => {
         ...el,
         latest_message: {
           ...el.latest_message,
-          message: _message.substring(0, 40)
+          message: typeof _message === 'string' ? _message.substring(0, 40) : ''
         }
       }
     })
@@ -801,6 +805,11 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
     console.error(error);
     throw error;
   }
+}
+
+
+export async function updateKnowledge(data): Promise<any[]> {
+  return await axios.post(`/api/v1/knowledge/update_knowledge`, data);
 }
 
 

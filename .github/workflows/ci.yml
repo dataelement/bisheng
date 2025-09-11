@@ -83,6 +83,12 @@ jobs:
       - name: set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # because ibm-db driver not support linux arm64
+      - name: fix ibm-db lib error
+        run: |
+          # remove ibm-db lib
+          sed -i '/ibm-db*/d' ./src/backend/pyproject.toml
+
       - name: Build backend and push
         id: docker_build_backend
         run: |

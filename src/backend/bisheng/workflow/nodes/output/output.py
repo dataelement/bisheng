@@ -100,6 +100,7 @@ class OutputNode(BaseNode):
     def send_output_msg(self, unique_id: str):
         """ 发送output节点的消息 """
         msg_params = {
+            'name': self.name,
             'unique_id': unique_id,
             'node_id': self.id,
             'msg': self._parsed_output_msg,

@@ -29,6 +29,7 @@ class LLMServerType(Enum):
     MOONSHOT = 'moonshot'  # 月之暗面的kimi
     VOLCENGINE = 'volcengine'  # 火山引擎的大模型
     SILICON = 'silicon'  # 硅基流动
+    MIND_IE = 'MindIE'  # 昇腾推理引擎 MindIE
 
 
 # 模型类型枚举

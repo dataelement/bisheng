@@ -19,21 +19,21 @@ class FileDirToolInput(BaseModel):
 
 class SearchFilesInput(BaseModel):
     directory_path: str = Field(..., description="要搜索的目录路径")
-    pattern: Optional[str] = Field(default=None, description="文件名匹配的正则表达式模式（可选）")
-    max_depth: Optional[int] = Field(default=5, description="最大递归深度（可选，默认为5）")
+    pattern: str = Field(default="", description="文件名匹配的正则表达式模式（可选）")
+    max_depth: int = Field(default=5, description="最大递归深度（可选，默认为5）")
 
 
 class ReadFileInput(BaseModel):
     file_path: str = Field(..., description="要读取的文件路径")
-    start_line: Optional[int] = Field(default=1, description="起始行号（从1开始计数）")
-    num_lines: Optional[int] = Field(default=50, description="需要读取的行数，最多250行")
+    start_line: int = Field(default=1, description="起始行号（从1开始计数）")
+    num_lines: int = Field(default=50, description="需要读取的行数，最多250行")
 
 
 class SearchTextInput(BaseModel):
     file_path: str = Field(..., description="要搜索的文件路径")
     keyword: str = Field(..., description="要搜索的短关键词(基于完全匹配)")
-    result_index: Optional[int] = Field(default=0, description="要返回的匹配结果索引（从0开始计数），默认为第一个匹配")
-    context_lines: Optional[int] = Field(default=25, description="显示匹配关键词前后的行数，默认为25行")
+    result_index: int = Field(default=0, description="要返回的匹配结果索引（从0开始计数），默认为第一个匹配")
+    context_lines: int = Field(default=25, description="显示匹配关键词前后的行数，默认为25行")
 
 
 class WriteFileInput(BaseModel):
@@ -286,11 +286,13 @@ class LocalFileTool(BaseModel):
         Args:
             file_path: 要读取的文件路径
             start_line: 起始行号（从1开始计数）
-            num_lines: 需要读取的行数，最多250行
+            num_lines: 需要读取的行数，最多250行, 默认50行
 
         Returns:
             包含文件内容和元数据的字典
         """
+        if not num_lines:
+            num_lines = 50
         flag, lines = await self.judge_file_can_read(file_path)
         if not flag:
             return lines
