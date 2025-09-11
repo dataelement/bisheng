@@ -24,6 +24,7 @@ from bisheng.api.v1.schemas import FrequentlyUsedChat
 from bisheng.api.v1.schemas import WorkstationConfig, resp_200, resp_500, WSPrompt, ExcelRule, UnifiedResponseModel
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download, save_download_file, save_uploaded_file
+from bisheng.core.app_context import app_ctx
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
@@ -377,8 +378,17 @@ async def chat_completions(
             elif data.knowledge_enabled:
                 logger.info(f'knowledge, prompt={data.text}')
                 chunks = WorkStationService.queryChunksFromDB(data.text, login_user)
-                prompt = wsConfig.knowledgeBase.prompt.format(
-                    retrieved_file_content='\n'.join(chunks)[:max_token], question=data.text)
+
+                if wsConfig.knowledgeBase.prompt:
+                    prompt = wsConfig.knowledgeBase.prompt.format(
+                        retrieved_file_content='\n'.join(chunks)[:max_token], question=data.text)
+                else:
+                    prompt_service = app_ctx.get_prompt_loader()
+                    prompt = prompt_service.render_prompt('qa', 'simple_qa', context='\n'.join(chunks)[:max_token],
+                                                          question=data.text).prompt
+
+                logger.debug(f'Knowledge prompt: {prompt}')
+
             elif data.files:
                 #  获取文件全文
                 filecontent = '\n'.join(
