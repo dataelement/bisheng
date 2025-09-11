@@ -4,7 +4,10 @@ export default function ChatFile({ fileName, filePath }) {
 
     // download file
     const handleDownloadFile = (filePath) => {
-        filePath && downloadFile(filePath, fileName)
+        if (filePath) {
+            const path = filePath.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)
+            downloadFile(path, fileName)
+        }
     }
 
     return <div
