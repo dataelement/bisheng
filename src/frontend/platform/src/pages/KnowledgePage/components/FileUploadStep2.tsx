@@ -56,7 +56,6 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
   });
     const displayMode: DisplayModeType | null = useMemo(() => {
         if (!resultFiles || resultFiles.length === 0) return null;
-console.log(resultFiles,55555);
 
         const hasTableFiles = resultFiles.some(file => file.fileType === 'table');
         const hasDocumentFiles = resultFiles.some(file => file.fileType === 'file');
@@ -338,6 +337,7 @@ const useFileProcessingRules = (initialStrategies, resultFiles, kid, splitRule) 
                     id: file.id,
                     filePath: file.file_path,
                     fileName: file.fileName,
+                    previewUrl:file.previewUrl,
                     suffix: file.suffix,
                     fileType: file.fileType,
                     excelRule: file.fileType === 'table' ? {

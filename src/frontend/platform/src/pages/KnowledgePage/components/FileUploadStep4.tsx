@@ -44,7 +44,7 @@ console.log(data,kId,44);
 
         // 轮询函数
         const pollFilesStatus = async () => {
-            console.log(kid,fileIdsRef.current,22);
+            console.log(kid,kId,fileIdsRef.current,22);
             
             try {
                 const res = await readFileByLibDatabase({
@@ -110,11 +110,16 @@ useEffect(() => {
     }
 }, [files]);
     console.log('fukes :>> ', data, files);
-
-    const [details] = useKnowledgeDetails([kid])
+  let finalId = kid;
+    if ( kId) {
+        finalId = kId.replace(/\D/g, '');
+    }
+    const [details] = useKnowledgeDetails([finalId])
     const handleCreateFlow = async (params) => {
         const model = await getLlmDefaultModel()
-        const flow = await getKnowledgeDefaultFlowTemplate(kid, details[0].name, model.model_id)
+        console.log(details,9999);
+        
+        const flow = await getKnowledgeDefaultFlowTemplate(finalId, details[0].name, model.model_id)
         const res = await captureAndAlertRequestErrorHoc(createWorkflowApi(
             "文档知识库问答-" + generateUUID(5),
             "检索文档知识库，根据检索结果进行回答。",
