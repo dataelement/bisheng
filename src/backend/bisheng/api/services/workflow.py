@@ -436,4 +436,8 @@ class WorkFlowService(BaseService):
             data, total = FlowDao.get_all_apps(None, FlowStatus.ONLINE.value, None, None, user.user_id, flow_id_extra, flow_ids_not_in, page,
                                                page_size)
         
+        # 处理logo URL，转换相对路径为可访问的完整链接
+        for one in data:
+            one['logo'] = cls.get_logo_share_link(one['logo'])
+        
         return data, total

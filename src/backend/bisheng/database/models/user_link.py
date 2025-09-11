@@ -29,7 +29,7 @@ class UserLinkDao(UserLinkBase):
     def get_user_link(cls, user_id: int, types: list) -> List[UserLink]:
         with session_getter() as session:
             statement = select(UserLink).where(and_(UserLink.user_id == user_id, UserLink.type.in_(types)))
-            statement = statement.order_by(UserLink.create_time.asc())  # 按创建时间升序排序，新添加的排在后面
+            statement = statement.order_by(UserLink.create_time.desc())  # 按创建时间降序排序，新添加的排在前面
             return session.exec(statement).all()
     
     @classmethod

@@ -300,7 +300,7 @@ class KnowledgeService(KnowledgeUtils):
         return True
 
     @classmethod
-    def delete_knowledge_file_in_vector(cls, knowledge: Knowledge):
+    def delete_knowledge_file_in_vector(cls, knowledge: Knowledge, del_es: bool = True):
         # 处理vector
         embeddings = FakeEmbedding()
         vector_client = decide_vectorstores(
@@ -322,12 +322,12 @@ class KnowledgeService(KnowledgeUtils):
                 # 判断milvus 是否还有entity
                 if vector_client.col.is_empty:
                     vector_client.col.drop()
-
-        # 处理 es
-        index_name = knowledge.index_name or knowledge.collection_name  # 兼容老版本
-        es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
-        res = es_client.client.indices.delete(index=index_name, ignore=[400, 404])
-        logger.info(f"act=delete_es index={index_name} res={res}")
+        if del_es:
+            # 处理 es
+            index_name = knowledge.index_name or knowledge.collection_name  # 兼容老版本
+            es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
+            res = es_client.client.indices.delete(index=index_name, ignore=[400, 404])
+            logger.info(f"act=delete_es index={index_name} res={res}")
 
     @classmethod
     def delete_knowledge_hook(
@@ -1108,22 +1108,24 @@ class KnowledgeService(KnowledgeUtils):
         return True
 
     @classmethod
-    def get_file_share_url(cls, file_id: int) -> str:
+    def get_file_share_url(cls, file_id: int) -> (str, str):
+        """ 获取文件原始下载地址 和 对应的预览文件下载地址 """
         file = KnowledgeFileDao.get_file_by_ids([file_id])
         if not file:
             raise NotFoundError.http_exception()
         file = file[0]
         # 130版本以前的文件解析
         if file.parse_type in [ParseType.LOCAL.value, ParseType.UNS.value]:
-            download_url = minio_client.get_share_link(str(file_id))
+            original_url = minio_client.get_share_link(cls.get_knowledge_file_object_name(file.id, file.file_name))
+            preview_url = minio_client.get_share_link(str(file.id))
         else:
+            original_url = cls.get_file_share_url_with_empty(file.object_name)
+            preview_url = ""
             # 130版本以后的文件解析逻辑，只有源文件和预览文件，不再都转pdf了
             if file.file_name.endswith(('.doc', '.ppt', '.pptx')):
                 preview_object_name = KnowledgeUtils.get_knowledge_preview_file_object_name(file.id, file.file_name)
-                download_url = cls.get_file_share_url_with_empty(preview_object_name)
-            else:
-                download_url = cls.get_file_share_url_with_empty(file.object_name)
-        return download_url
+                preview_url = cls.get_file_share_url_with_empty(preview_object_name)
+        return original_url, preview_url
 
     @classmethod
     def get_file_share_url_with_empty(cls, object_name: str) -> str:

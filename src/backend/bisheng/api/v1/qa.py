@@ -63,9 +63,10 @@ def get_original_file(message_id: Annotated[int, Body(embed=True)],
         file_access = json.loads(chunk.meta_data).get('right', True)
         chunk_res['right'] = file_access
         if file_access and file:
-            chunk_res['source_url'] = KnowledgeService.get_file_share_url(file.id)
-            chunk_res['original_url'] = minio_client.get_share_link(
-                file.object_name if file.object_name else str(file.id))
+            # 预览文件url
+            original_url, preview_url = KnowledgeService.get_file_share_url(file.id)
+            chunk_res['source_url'] = preview_url
+            chunk_res['original_url'] = original_url
             chunk_res['source'] = file.file_name
         else:
             chunk_res['source_url'] = ''

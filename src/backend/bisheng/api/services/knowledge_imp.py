@@ -263,18 +263,29 @@ def delete_vector_files(file_ids: List[int], knowledge: Knowledge) -> bool:
     logger.info(f"delete_files file_ids={file_ids} knowledge_id={knowledge.id}")
     embeddings = FakeEmbedding()
     vector_client = decide_vectorstores(knowledge.collection_name, "Milvus", embeddings)
-    vector_client.col.delete(expr=f"file_id in {file_ids}", timeout=10)
+    # 如果collection不存在则不处理
+    if vector_client.col:
+        vector_client.col.delete(expr=f"file_id in {file_ids}", timeout=10)
     vector_client.close_connection(vector_client.alias)
     logger.info(f"delete_milvus file_ids={file_ids}")
 
     es_client = decide_vectorstores(
         knowledge.index_name, "ElasticKeywordsSearch", embeddings
     )
-    for one in file_ids:
+    # for one in file_ids:
+    #     res = es_client.client.delete_by_query(
+    #         index=knowledge.index_name, query={"match": {"metadata.file_id": one}}
+    #     )
+    #
+    #     logger.info(f"act=delete_es file_id={one} res={res}")
+
+    if es_client.client.indices.exists(index=es_client.index_name):
         res = es_client.client.delete_by_query(
-            index=knowledge.index_name, query={"match": {"metadata.file_id": one}}
+            index=es_client.index_name,
+            query={"terms": {"metadata.file_id": file_ids}},
         )
-        logger.info(f"act=delete_es file_id={one} res={res}")
+        logger.info(f"act=delete_es file_ids={file_ids} res={res}")
+
     return True
 
 

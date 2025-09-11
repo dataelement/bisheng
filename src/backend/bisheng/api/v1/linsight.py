@@ -724,6 +724,8 @@ class IntegratedExecuteRequestBody(BaseModel):
     tool_ids: List[int] = Body(None, description="选择的工具ID列表")
     org_knowledge_enabled: bool = Body(False, description="是否启用组织知识库")
     personal_knowledge_enabled: bool = Body(False, description="是否启用个人知识库")
+    # 只生成灵思SOP，不执行
+    only_generate_sop: bool = Body(False, description="是否只生成SOP，不执行")
 
 
 # 灵思一体化执行接口
@@ -992,6 +994,9 @@ async def integrated_execute(
                         "code": "SOP_GENERATE_ERROR"
                     })
                 }
+                return
+
+            if body_param.only_generate_sop:
                 return
 
             # ======================== 开始执行 ========================
