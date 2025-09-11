@@ -242,6 +242,8 @@ export default function FileView({
     onPageChange = (offset, h, paperSize, scale) => { },
     onSelectLabel = () => { }
 }) {
+    console.log(startIndex,scrollTo,select,drawfont,fileUrl,labels,onPageChange,333333);
+    
     const { t } = useTranslation()
     const paneRef = useRef(null)
     const listRef = useRef(null)
@@ -273,12 +275,16 @@ export default function FileView({
     }, []);
     // 加载文件
     const [pdf, setPdf] = useState(null)
+           
+
     useEffect(() => {
         // loding
         setLoading(true)
-
+ console.log(fileUrl,444);
         // sass环境使用sass地址
         const pdfUrl = fileUrl.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL);  // '/doc.pdf';
+    
+        
         pdfjsLib.GlobalWorkerOptions.workerSrc = __APP_ENV__.BASE_URL + '/pdf.worker.min.js';
         pdfjsLib.getDocument(pdfUrl).promise.then(async (pdfDocument) => {
             pdfPageCache = {}

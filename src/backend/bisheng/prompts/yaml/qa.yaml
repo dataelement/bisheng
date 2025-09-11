@@ -1,7 +1,7 @@
 version: v1
 description: 标准问答（QA）生成器
 prompts:
-  simple_qa:
+  simple_qa_chat:
     description: "生成简单的问答"
     type: chat_prompt
     prompt:
@@ -11,3 +11,12 @@ prompts:
         基于以下上下文信息，生成一个问答对：
         上下文信息：${context}
         请回答以下问题：${question}
+  simple_qa:
+    description: "生成标准的问答"
+    type: prompt
+    prompt: |
+        你是一个问答生成器，基于用户提供的上下文信息，生成简洁明了的问答对。
+        上下文信息：
+        ${context}
+        请回答以下问题：
+        ${question}

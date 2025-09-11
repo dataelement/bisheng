@@ -24,6 +24,7 @@ from bisheng.api.v1.schemas import FrequentlyUsedChat
 from bisheng.api.v1.schemas import WorkstationConfig, resp_200, resp_500, WSPrompt, ExcelRule, UnifiedResponseModel
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download, save_download_file, save_uploaded_file
+from bisheng.core.app_context import app_ctx
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
@@ -260,10 +261,10 @@ async def webSearch(query: str, web_search_config: WSPrompt):
     """
     web_search_info = GptsToolsDao.get_tool_by_tool_key("web_search")
     if not web_search_info:
-        raise Exception(f"No web_search tool found in database")
+        raise Exception("No web_search tool found in database")
     web_search_tool = await AssistantAgent.init_tools_by_tool_ids([web_search_info.id], None)
     if not web_search_tool:
-        raise Exception(f"No web_search tool found in gpts tools")
+        raise Exception("No web_search tool found in gpts tools")
     return web_search_tool[0].invoke(input={"query": query})
 
 
@@ -377,8 +378,17 @@ async def chat_completions(
             elif data.knowledge_enabled:
                 logger.info(f'knowledge, prompt={data.text}')
                 chunks = WorkStationService.queryChunksFromDB(data.text, login_user)
-                prompt = wsConfig.knowledgeBase.prompt.format(
-                    retrieved_file_content='\n'.join(chunks)[:max_token], question=data.text)
+
+                if wsConfig.knowledgeBase.prompt:
+                    prompt = wsConfig.knowledgeBase.prompt.format(
+                        retrieved_file_content='\n'.join(chunks)[:max_token], question=data.text)
+                else:
+                    prompt_service = app_ctx.get_prompt_loader()
+                    prompt = prompt_service.render_prompt('qa', 'simple_qa', context='\n'.join(chunks)[:max_token],
+                                                          question=data.text).prompt
+
+                logger.debug(f'Knowledge prompt: {prompt}')
+
             elif data.files:
                 #  获取文件全文
                 filecontent = '\n'.join(
@@ -391,9 +401,6 @@ async def chat_completions(
                 extra['prompt'] = prompt
                 message.extra = json.dumps(extra, ensure_ascii=False)
                 ChatMessageDao.insert_one(message)
-        except MessageException as e:
-            error = True
-            final_res = str(e)
         except Exception as e:
             logger.exception(f'Error in processing the prompt')
             error = True
@@ -492,8 +499,11 @@ def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
 def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
                          data: FrequentlyUsedChat = Body(..., description='添加常用应用')
                          ):
-    WorkFlowService.add_frequently_used_flows(login_user, data.user_link_type, data.type_detail)
-    return resp_200(message='添加成功')
+    is_new = WorkFlowService.add_frequently_used_flows(login_user, data.user_link_type, data.type_detail)
+    if is_new:
+        return resp_200(message='添加成功')
+    else:
+        return resp_500(message='该智能体已被添加')
 
 
 @router.delete('/app/frequently_used')

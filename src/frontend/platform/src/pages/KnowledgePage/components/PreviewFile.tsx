@@ -10,25 +10,26 @@ import TxtFileViewer from "./TxtFileViewer";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import React from "react";
 
-export default function PreviewFile({ 
-  urlState, 
-  file, 
-  partitions, 
-  chunks, 
-  rawFiles, 
-  setChunks, 
-  h = true 
-}: { 
-  urlState: { load: false; url: '' }; 
-  file: any; 
-  partitions: Partition; 
-  chunks: any; 
-  rawFiles: any[]; 
-  setChunks: any; 
+export default function PreviewFile({
+  urlState,
+  file,
+  partitions,
+  chunks,
+  rawFiles,
+  step,
+  setChunks,
+  h = true
+}: {
+  urlState: { load: false; url: '' };
+  file: any;
+  partitions: Partition;
+  chunks: any;
+  rawFiles: any[];
+  setChunks: any;
   h?: boolean;
 }) {
-    console.log(chunks,333);
-    
+  console.log(chunks,file, 333);
+
   const { t } = useTranslation('knowledge')
   const MemoizedFileView = React.memo(FileView);
   const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
@@ -41,18 +42,18 @@ export default function PreviewFile({
     if (!rawFiles?.length || !file?.id) return null;
     return rawFiles.find(raw => raw.id === file.id);
   }, [rawFiles, file]);
-  
+
   const targetFile = matchedRawFile || file;
   const fileParseType = targetFile.parse_type;
-  const fileName = targetFile.name || file.name;
+  const fileName = targetFile.name || file.fileName;
   const suffix = useMemo(() => {
-    
+
     return fileName?.split('.').pop()?.toLowerCase() || '';
   }, [fileName]);
+  
   const isUnsType = useMemo(() => {
-    return fileParseType === 'uns' || 
-           (targetFile.fileType && targetFile.fileType.includes('uns')) ||
-           ['etl4lm', 'un_etl4lm'].includes(fileParseType);
+    return fileParseType === 'uns' ||
+      (targetFile.fileType && targetFile.fileType.includes('uns'))
   }, [fileParseType, targetFile.fileType]);
 
   // 2. 调整Excel文件过滤逻辑（仅非uns类型的Excel才返回null）
@@ -94,7 +95,7 @@ export default function PreviewFile({
     // 转换标签数据（与ParagraphEdit使用相同方法）
     const allLabels = convertJsonData(labelTextRef.current || partitions);
     const activeIds = new Set();
-    
+
     // 标记当前chunk的激活标签
     chunks?.forEach(chunk => {
       if (chunk.chunkIndex === selectedChunkIndex) {
@@ -154,7 +155,7 @@ export default function PreviewFile({
     const newActiveLabelMap = lbs.reduce((map, { id, active }) => {
       const partId = labelTextRef.current[id]?.part_id;
       if (distinct[partId]) return map;
-      
+
       distinct[partId] = true;
       // 同步相同part_id的标签状态
       Object.keys(labelTextRef.current).forEach(key => {
@@ -168,7 +169,7 @@ export default function PreviewFile({
     // 更新标签状态
     const newMap = new Map(labelsMap);
     const bbox = [];
-    
+
     Array.from(labelsMap.values()).forEach(item => {
       const value = newActiveLabelMap.get(item.id);
       if (value !== undefined) {
@@ -178,7 +179,7 @@ export default function PreviewFile({
         bbox.push({ page: item.page, bbox: item.label });
       }
     });
-    
+
     setSelectedBbox(bbox);
     labelsMapRef.current = newMap;
     setLabelsMap(newMap);
@@ -200,47 +201,27 @@ export default function PreviewFile({
   const render = () => {
     const { url, load } = urlState;
     const previewFileUrl = targetFile.url;
-    console.log(suffix,2221);
+   
     // 强制uns类型的Excel文件使用pdf预览
-    const renderType = isUnsType && ['xlsx', 'xls', 'csv'].includes(suffix)
+    const renderType = fileParseType === 'etl4lm' && ['ppt', 'pptx'].includes(suffix)
       ? 'pdf'
       : suffix;
-
-    const newVersion = ['etl4lm', 'un_etl4lm'].includes(fileParseType);
-    
-    // 旧版本处理
-    if (!newVersion) {
-        console.log(renderType,isUnsType,url,7888);
-        
-      if (renderType === 'pdf' || isUnsType) {
-        return url ? (
-          <FileView 
-            startIndex={0}
-            select={selectedChunkIndex !== -1}
-            fileUrl={url}
-            labels={pageLabels}
-            scrollTo={calculatedPostion}
-            onSelectLabel={handleSelectLabels}
-            onPageChange={handlePageChange}
-          />
-        ) : (
-          <div className="flex justify-center items-center h-full text-gray-400">
-            <LoadingIcon />
-          </div>
-        );
-      } else {
-        return <div className="flex justify-center items-center h-full text-gray-400">旧版文件格式暂不支持预览</div>;
-      }
-    }
-
+       console.log(renderType,suffix,url,load, 2221);
     // 加载状态处理
     if (!load && !url) return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>;
     if (!url) return <div className="flex justify-center items-center h-full text-gray-400"><LoadingIcon /></div>;
 
     // 新版文件预览
     switch (renderType) {
-      case 'ppt':
-      case 'pptx':
+      case 'ppt': 
+      case 'pptx':  return <div className="flex justify-center items-center h-full text-gray-400">
+                    <div className="text-center">
+                        <img
+                            className="size-52 block"
+                            src={__APP_ENV__.BASE_URL + "/assets/knowledge/damage.svg"} alt="" />
+                        <p>此文件类型不支持预览</p>
+                    </div>
+                </div>
       case 'pdf':
         return (
           <FileView
@@ -264,19 +245,13 @@ export default function PreviewFile({
       case 'bmp': return (
         <img
           className="border"
-          src={url.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)} 
-          alt="预览图片" 
+          src={url.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)}
+          alt="预览图片"
         />
       );
       default:
         return <div className="flex justify-center items-center h-full text-gray-400">
           <div className="text-center">
-            <img
-              className="size-52 block mx-auto"
-              src={__APP_ENV__.BASE_URL + "/assets/knowledge/damage.svg"} 
-              alt="不支持的文件类型" 
-            />
-            <p>此文件类型不支持预览</p>
           </div>
         </div>;
     }
@@ -288,15 +263,15 @@ export default function PreviewFile({
     let prevType = '';
     let prevPartId = '';
     let str = '';
-    
+
     Array.from(labelsMap.values()).forEach((item) => {
       if (typeof labelTextRef.current[item.id] === 'string') {
         return alert('文件已失效，请上传新文件后重试');
       }
-      
+
       if (item.active) {
         const { text, type, part_id } = labelTextRef.current[item.id];
-        
+
         if (str === '') {
           str += text + (type === 'Title' ? '\n' : '');
         } else {
@@ -308,31 +283,31 @@ export default function PreviewFile({
             str += '\n' + text;
           }
         }
-        
+
         prevType = type;
         prevPartId = part_id;
       }
     });
-    
+
     setNeedCoverData({ index: selectedChunkIndex, txt: str });
     labelsMapTempRef.current[selectedChunkIndex] = labelsMap;
   };
 
-    if (['xlsx', 'xls', 'csv'].includes(file.suffix)) return null
+  if (['xlsx', 'xls', 'csv'].includes(file.suffix)) return null
 
 
-    return <div className="w-1/2" onClick={e => {
-        e.stopPropagation()
-    }}>
-        <div className={`flex justify-center items-center relative mb-2 text-sm ${h ? 'h-10' : 'hidden'}`}>
-            <div className={`${labelChange ? '' : 'hidden'} flex items-center`}>
-                <Info className='mr-1 text-red-500' size={14} />
-                <span className="text-red-500">{t('segmentRangeDetected')}</span>
-                <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
-            </div>
-        </div>
-        <div className={`relative overflow-y-auto ${h ? 'h-[calc(100vh-284px)]' : 'h-[calc(100vh-206px)]'}`}>
-            {render(file.suffix)}
-        </div>
+  return <div className="w-1/2" onClick={e => {
+    e.stopPropagation()
+  }}>
+    <div className={`flex justify-center items-center relative mb-2 text-sm ${h ? 'h-10' : 'hidden'}`}>
+      <div className={`${labelChange ? '' : 'hidden'} flex items-center`}>
+        <Info className='mr-1 text-red-500' size={14} />
+        <span className="text-red-500">{t('segmentRangeDetected')}</span>
+        <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
+      </div>
     </div>
+    <div className={`relative overflow-y-auto ${h ? 'h-[calc(100vh-284px)]' : 'h-[calc(100vh-206px)]'}`}>
+      {render(file.suffix)}
+    </div>
+  </div>
 };

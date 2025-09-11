@@ -33,14 +33,20 @@ class UserLinkDao(UserLinkBase):
             return session.exec(statement).all()
     
     @classmethod
-    def add_user_link(cls, user_id: int, type: str, type_detail: str) -> UserLink:
+    def add_user_link(cls, user_id: int, type: str, type_detail: str) -> tuple[UserLink, bool]:
+        """
+        添加用户链接
+        
+        Returns:
+            tuple[UserLink, bool]: (用户链接对象, 是否为新添加)
+        """
         with session_getter() as session:
             try:
                 # 直接尝试插入，利用数据库唯一约束
                 user_link = UserLink(user_id=user_id, type=type, type_detail=type_detail, create_time=datetime.now(), update_time=datetime.now())
                 session.add(user_link)
                 session.commit()
-                return user_link
+                return user_link, True  # 新添加
             except IntegrityError:
                 # 如果违反唯一约束，回滚并查询现有记录
                 session.rollback()
@@ -53,7 +59,7 @@ class UserLinkDao(UserLinkBase):
                         )
                     )
                 ).first()
-                return existing
+                return existing, False  # 已存在
 
     @classmethod
     def delete_user_link(cls, user_id: int, type: str, type_detail: str) -> None:
