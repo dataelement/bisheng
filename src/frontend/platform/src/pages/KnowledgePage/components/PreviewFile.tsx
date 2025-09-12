@@ -1,14 +1,13 @@
 import FileView from "@/components/bs-comp/FileView";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Info } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useKnowledgeStore from "../useKnowledgeStore";
 import DocxPreview from "./DocxFileViewer";
 import { convertJsonData } from "./ParagraphEdit";
 import { Partition } from "./PreviewResult";
 import TxtFileViewer from "./TxtFileViewer";
-import { LoadingIcon } from "@/components/bs-icons/loading";
-import React from "react";
 
 export default function PreviewFile({
   urlState,
@@ -18,7 +17,7 @@ export default function PreviewFile({
   rawFiles,
   step,
   setChunks,
-  h = true
+  edit = false
 }: {
   urlState: { load: false; url: '' };
   file: any;
@@ -26,10 +25,8 @@ export default function PreviewFile({
   chunks: any;
   rawFiles: any[];
   setChunks: any;
-  h?: boolean;
+  edit?: boolean;
 }) {
-  console.log(chunks,file, 333);
-
   const { t } = useTranslation('knowledge')
   const MemoizedFileView = React.memo(FileView);
   const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
@@ -45,13 +42,11 @@ export default function PreviewFile({
 
   const targetFile = matchedRawFile || file;
   const fileParseType = targetFile.parse_type;
-  const fileName = targetFile.name || file.fileName||file.name;
+  const fileName = targetFile.name || file.fileName || file.name;
   const suffix = useMemo(() => {
-console.log(fileName,3322);
-
     return fileName?.split('.').pop()?.toLowerCase() || '';
   }, [fileName]);
-  
+
   const isUnsType = useMemo(() => {
     return fileParseType === 'uns' ||
       (targetFile.fileType && targetFile.fileType.includes('uns'))
@@ -134,9 +129,10 @@ console.log(fileName,3322);
 
   // 计算定位位置（与ParagraphEdit一致）
   const calculatedPostion = useMemo(() => {
+    console.log('1111 :>> ', 1111);
     const labelsArray = Array.from(labelsMap.values());
     const target = labelsArray.find(el => el.active);
-    return target ? [target.page, target.label[1] + random] : [1, 0];
+    return target ? [target.page, target.label[1] + random] : [0, 0];
   }, [labelsMap, random]);
 
   // 6. 页面标签分组（与ParagraphEdit的labels计算一致）
@@ -202,27 +198,26 @@ console.log(fileName,3322);
   const render = () => {
     const { url, load } = urlState;
     const previewFileUrl = targetFile.url;
-   
+
     // 强制uns类型的Excel文件使用pdf预览
     const renderType = fileParseType === 'etl4lm' && ['ppt', 'pptx'].includes(suffix)
       ? 'pdf'
       : suffix;
-       console.log(renderType,suffix,url,load, 2221);
     // 加载状态处理
     if (!load && !url) return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>;
     if (!url) return <div className="flex justify-center items-center h-full text-gray-400"><LoadingIcon /></div>;
 
     // 新版文件预览
     switch (renderType) {
-      case 'ppt': 
-      case 'pptx':  return <div className="flex justify-center items-center h-full text-gray-400">
-                    <div className="text-center">
-                        <img
-                            className="size-52 block"
-                            src={__APP_ENV__.BASE_URL + "/assets/knowledge/damage.svg"} alt="" />
-                        <p>此文件类型不支持预览</p>
-                    </div>
-                </div>
+      case 'ppt':
+      case 'pptx': return <div className="flex justify-center items-center h-full text-gray-400">
+        <div className="text-center">
+          <img
+            className="size-52 block"
+            src={__APP_ENV__.BASE_URL + "/assets/knowledge/damage.svg"} alt="" />
+          <p>此文件类型不支持预览</p>
+        </div>
+      </div>
       case 'pdf':
         return (
           <FileView
@@ -297,17 +292,17 @@ console.log(fileName,3322);
   if (['xlsx', 'xls', 'csv'].includes(file.suffix)) return null
 
 
-  return <div className="w-1/2" onClick={e => {
+  return <div className="relative w-1/2" onClick={e => {
     e.stopPropagation()
   }}>
-    <div className={`flex justify-center items-center relative mb-2 text-sm ${h ? 'h-10' : 'hidden'}`}>
+    <div className={`${edit ? 'absolute -top-8 right-0 z-10' : 'relative'} flex justify-center items-center mb-2 text-sm h-10`}>
       <div className={`${labelChange ? '' : 'hidden'} flex items-center`}>
         <Info className='mr-1 text-red-500' size={14} />
         <span className="text-red-500">{t('segmentRangeDetected')}</span>
         <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
       </div>
     </div>
-    <div className={`relative overflow-y-auto ${h ? 'h-[calc(100vh-284px)]' : 'h-[calc(100vh-206px)]'}`}>
+    <div className={`relative overflow-y-auto ${edit ? 'h-[calc(100vh-206px)]' : 'h-[calc(100vh-284px)]'}`}>
       {render(file.suffix)}
     </div>
   </div>

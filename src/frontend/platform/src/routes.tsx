@@ -67,8 +67,8 @@ const privateRouter = [
     path: "/",
     element: <MainLayout />,
     children: [
-      { path: "", element: <SkillChatPage />, },
-      // { path: "", element: <Navigate to="/build/apps" replace /> }, 
+      // { path: "", element: <SkillChatPage />, },
+      { path: "", element: <Navigate to="/build/apps" replace /> }, 
       { path: "filelib", element: <KnowledgePage />, permission: 'knowledge', },
       { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
       { path: "filelib/upload/:id", element: <FilesUpload />, permission: 'knowledge', },

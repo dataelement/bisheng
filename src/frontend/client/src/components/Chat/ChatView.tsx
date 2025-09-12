@@ -138,37 +138,30 @@ export default memo(ChatView);
 
 const Cases = () => {
 
-  const casesData = [
-    { id: 'case1', title: '超详细日本7日旅游攻略' },
-    { id: 'case2', title: '招股书说明书和君七步法阅读报告' },
-    { id: 'case3', title: '招标需求响应' },
-    { id: 'case4', title: '近6个月AI新产品盘点（广度搜索）' },
-    { id: 'case5', title: '制作一个航空航天科普网站' },
-    { id: 'case6', title: '魔塔网页小游戏' }
-  ];
+  const casesData = window.SopCase.list;
 
   const handleCardClick = (caseId: string) => {
     window.open(`${__APP_ENV__.BASE_URL}/linsight/${caseId}`)
   }
 
   return (
-    <div className='absolute bottom-8 w-full mt-20'>
-      <p className='text-sm text-center text-gray-400'>灵思精选案例</p>
+    <div className='absolute -bottom-6 w-full mt-20'>
+      <p className='text-sm max-w-[1728px] pl-16 text-primary'>灵思精选案例</p>
       <div className='flex pt-4 justify-center mx-auto gap-2 px-12'>
         {casesData.map((caseItem) => (
           <div
             key={caseItem.id}
-            className='w-72 relative border border-gray-100 rounded-xl py-4 p-5 text-sm hover:shadow-xl cursor-pointer bg-white/40'
+            className='group w-72 relative border border-gray-50 rounded-xl py-4 pb-12 p-5 text-sm hover:shadow-xl cursor-pointer bg-white/50 hover:-translate-y-10 transition-transform ease-out'
             onClick={() => handleCardClick(caseItem.id)}
           >
             <Button
-              className='absolute bottom-3 right-3 p-0 h-6 w-6 shadow-md border-none'
+              className='absolute bottom-2 right-3 p-0 h-6 w-6 shadow-md border-none hidden group-hover:inline-flex'
               variant="outline"
               size="icon"
             >
               <ArrowRight size="14" />
             </Button>
-            <p>{caseItem.title}</p>
+            <p className='text-gray-600'>{caseItem.title}</p>
           </div>
         ))}
       </div>
