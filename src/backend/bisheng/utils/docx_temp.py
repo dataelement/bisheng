@@ -89,17 +89,16 @@ class DocxTemplateRender(object):
                 # 图片文件不存在，使用原路径
                 logger.error(f"[简单插图] ❌ 图片文件不存在: {image_path}")
                 if paragraph.runs:
-                    paragraph.runs[0].text = f"[图片不存在: {image_path}]"
+                    paragraph.runs[0].text = image_path
                 else:
-                    paragraph.add_run(f"[图片不存在: {image_path}]")
+                    paragraph.add_run(image_path)
         except Exception as e:
-            # 插入图片失败，显示错误信息
+            # 插入图片失败，显示原URL
             logger.error(f"[简单插图] ❌ 插入图片失败: {image_path}, 错误类型: {type(e).__name__}, 错误: {str(e)}")
-            error_text = f"[图片插入失败: {str(e)}]"
             if paragraph.runs:
-                paragraph.runs[0].text = error_text
+                paragraph.runs[0].text = image_path
             else:
-                paragraph.add_run(error_text)
+                paragraph.add_run(image_path)
 
     def _replace_placeholder_with_image(self, paragraph, placeholder, image_path, alt_text):
         """
@@ -561,8 +560,8 @@ class DocxTemplateRender(object):
             logger.info(f"[内联图片] ✅ 成功内联插入图片: {image_path}")
         except Exception as e:
             logger.error(f"[内联图片] ❌ 插入图片失败: {str(e)}")
-            # 插入错误占位文本
-            paragraph.add_run(f"[图片插入失败: {alt_text}]")
+            # 插入原图片路径
+            paragraph.add_run(image_path)
 
     def _csv_to_table(self, csv_path: str) -> List[List[str]]:
         """
