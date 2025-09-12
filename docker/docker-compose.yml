@@ -58,7 +58,7 @@ services:
       - "7860:7860"
     environment:
       TZ: Asia/Shanghai
-      BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
+      BS_MILVUS_CONNECTION_ARGS: '{"host":"bisheng-milvus-standalone","port":"19530","user":"","password":"","secure":false}'
       BS_MILVUS_IS_PARTITION: 'true'
       BS_MILVUS_PARTITION_SUFFIX: '1'
       BS_ELASTICSEARCH_URL: 'http://elasticsearch:9200'
@@ -96,7 +96,7 @@ services:
     image: dataelement/bisheng-backend:v2.0.3
     environment:
       TZ: Asia/Shanghai
-      BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
+      BS_MILVUS_CONNECTION_ARGS: '{"host":"bisheng-milvus-standalone","port":"19530","user":"","password":"","secure":false}'
       BS_MILVUS_IS_PARTITION: 'true'
       BS_MILVUS_PARTITION_SUFFIX: '1'
       BS_ELASTICSEARCH_URL: 'http://elasticsearch:9200'
