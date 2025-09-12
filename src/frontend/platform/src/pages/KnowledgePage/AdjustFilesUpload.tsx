@@ -5,7 +5,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { rebUploadFile, retryKnowledgeFileApi, subUploadLibFile } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ChevronLeft } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import FileUploadStep2 from "./components/FileUploadStep2";
@@ -29,6 +29,12 @@ export default function AdjustFilesUpload() {
   
   // 从路由状态获取调整模式的初始数据（必须传文件数据）
   const initFileData = location.state?.fileData;
+  useEffect(() => {
+    // 如果没有初始化数据，说明是直接访问，跳转到/filelib
+    if (!initFileData) {
+      navigate('/filelib', { replace: true });
+    }
+  }, [initFileData, navigate]);
   if (!initFileData) {
     navigate(-1); // 无数据时回退
     return null;

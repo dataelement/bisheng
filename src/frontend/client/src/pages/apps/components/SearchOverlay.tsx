@@ -128,7 +128,7 @@ export function SearchOverlay({
                                         agent={agent}
                                         isFavorite={favorites ? favorites.includes(agent.id.toString()) : false}
                                         showRemove={false}
-                                        onAddToFavorites={() => onAddToFavorites(agent.id.toString())}
+                                        onAddToFavorites={() => onAddToFavorites(agent.flow_type,agent.id.toString())}
                                         onRemoveFromFavorites={() => onRemoveFromFavorites(agent.id.toString())}
                                     />
                                 ))}

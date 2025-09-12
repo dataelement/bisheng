@@ -63,7 +63,7 @@ export function AgentCard({
                         {/* 2. 描述区域：占满剩余空间，最多显示 2 行（适配 150px 高度） */}
                         <div className="flex-1 overflow-hidden">
                             <p className="text-sm text-[#64748b] leading-5 break-words line-clamp-2">  {/* 文字缩小为 xs，最多 2 行 */}
-                                {agent.description || "无描述信息"}  {/* 空描述兜底，避免高度塌陷 */}
+                                {agent.description}  {/* 空描述兜底，避免高度塌陷 */}
                             </p>
                         </div>
                     </div>

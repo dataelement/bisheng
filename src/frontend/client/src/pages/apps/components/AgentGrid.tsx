@@ -2,7 +2,7 @@
 
 import { ChevronDown, Loader2 } from "lucide-react"
 import type React from "react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { getChatOnlineApi, getFrequently, getHomeLabelApi, getUncategorized } from "~/api/apps"
 import { Button } from "~/components"
 import { AgentCard } from "./AgentCard"
@@ -26,6 +26,7 @@ interface AgentGridProps {
   sectionRefs: React.MutableRefObject<Record<string, HTMLElement | null>>
   refreshTrigger: number
   onCardClick: (agent: Agent) => void
+  onSectionMounted: (id: string, element: HTMLElement | null) => void // 新增回调函数
 }
 
 // 分类标签类型
@@ -49,7 +50,8 @@ export function AgentGrid({
   onRemoveFromFavorites, 
   sectionRefs, 
   refreshTrigger, 
-  onCardClick 
+  onCardClick,
+  onSectionMounted // 新增回调函数
 }: AgentGridProps) {
   const pageSize = 8 // 固定单页容量
   const [categories, setCategories] = useState<Category[]>([])
@@ -435,11 +437,11 @@ const handleAddToFavorites = async (type: number, id: string) => {
         return (
           <section
             key={id}
+             id={id}
             className="relative"
-            ref={(el) => {
+             ref={(el) => {
               sectionRefs.current[id] = el
-            }}
-          >
+            }}          >
             {/* 分区标题 */}
             <h2 className="text-base font-medium mb-4 text-blue-600">{name}</h2>
 

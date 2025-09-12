@@ -14,7 +14,7 @@ const gradients = [
 export default function AppAvator({ id = 1, flowType = '', url = '', className = '' }) {
 
     const color = useMemo(() => {
-        const str = id + ''
+        const str = (id + '').substring(0, 4)
         let hex = '';
         for (let i = 0; i < str.length; i++) {
             hex += str.charCodeAt(i).toString(16);

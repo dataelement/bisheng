@@ -35,11 +35,10 @@ export default function MessageBsChoose({ type = 'choose', logo, data, flow }: {
 
     // input
     const textRef = useRef(null)
-    const [inputSended, setInputSended] = useState(!!data.message.hisValue || false)
+    const inputSended = useMemo(() => !!data.message.hisValue || false, [data.message.hisValue])
     const handleSend = () => {
         const val = textRef.current.value
         if (!val.trim()) return
-        setInputSended(true)
         emitAreaTextEvent({
             action: EVENT_TYPE.MESSAGE_INPUT, data: {
                 nodeId: data.message.node_id,

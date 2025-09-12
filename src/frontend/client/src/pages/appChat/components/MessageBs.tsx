@@ -64,9 +64,9 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { }, onS
         <div className="w-fit group max-w-[90%]">
             <ReasoningLog loading={!data.end && (data.reasoning_log || reasoningLog)} msg={data.reasoning_log || reasoningLog} />
             {!(data.reasoning_log && !message && !data.files.length) && <>
-                <div className="flex justify-between items-center mb-1">
+                <div className="flex gap-2 items-center mb-1 ml-2">
                     {data.sender ? <p className="text-gray-600 text-xs">{data.sender}</p> : <p />}
-                    <div className={`text-right group-hover:opacity-100 opacity-0`}>
+                    <div className={`group-hover:opacity-100 opacity-0`}>
                         <span className="text-slate-400 text-sm">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
                     </div>
                 </div>
@@ -92,7 +92,7 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { }, onS
             </>}
             {/* 附加信息 */}
             {
-                data.end && <div className="flex justify-between mt-2">
+                data.end && <div className="flex justify-between">
                     <MessageSource
                         extra={data.extra || {}}
                         end={data.end}

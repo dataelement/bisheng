@@ -8,9 +8,9 @@ import { Chat } from "~/@types/chat"
 import { baseMsgItem } from "~/api/apps"
 import { formatDate, generateUUID } from "~/utils"
 import { FLOW_TYPES } from "."
+import { SkillMethod } from "./appUtils/skillMethod"
 import { bishengConfState, chatIdState, chatsState, currentChatState, currentRunningState, runningState } from "./store/atoms"
 import { emitAreaTextEvent, EVENT_TYPE } from "./useAreaText"
-import { SkillMethod } from "./appUtils/skillMethod"
 
 export default function useChatHelpers() {
     const chatState = useRecoilValue(currentChatState)
@@ -171,7 +171,7 @@ export default function useChatHelpers() {
                     // 兼容后端问题
                     const _files = Array.isArray(files) ? files : []
 
-                    const messageId = message_id || (category === "guide_word" ? generateUUID(4) : "")
+                    const messageId = message_id || (category === "guide_word" ? 'u-' + generateUUID(6) : "")
                     const filteredMessages = deduplicateMessages(messages, message_id)
 
                     return [
@@ -184,7 +184,7 @@ export default function useChatHelpers() {
                             files: _files.map(el => ({
                                 // 兼容
                                 file_name: el.file_name || el.name,
-                                file_url: el.file_url || el.url
+                                file_url: el.file_url || el.url || el.path
                             })),
                             is_bot,
                             message: msg,
@@ -321,13 +321,40 @@ export default function useChatHelpers() {
                     {
                         ...baseMsgItem,
                         category: "question",
-                        id: generateUUID(8),
+                        id: 'u-' + generateUUID(8),
                         message: msg,
                         create_time: formatDate(new Date(), "yyyy-MM-ddTHH:mm:ss"),
                     },
                 ]),
             )
+
+            // 滚动到底部
+            const dom = document.getElementById('messageScrollPanne')
+            setTimeout(() => {
+                if (dom) {
+                    dom.scrollTop = dom.scrollHeight
+                }
+            }, 0);
         },
+        closeOutputMsg: (input) => {
+            setChats((prev) =>
+                updateChatMessages(prev, chatId, (messages) => {
+                    const updatedMessages = messages.map(msg => {
+                        if (["output_with_input_msg", "output_with_choose_msg"].includes(msg.category)) {
+                            return {
+                                ...msg,
+                                message: {
+                                    ...msg.message,
+                                    hisValue: input
+                                }
+                            }
+                        }
+                        return msg
+                    })
+                    return updatedMessages
+                }),
+            )
+        }
     }
 
     return {

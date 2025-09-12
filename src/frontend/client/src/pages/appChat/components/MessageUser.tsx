@@ -29,7 +29,7 @@ export default function MessageUser({ useName, data, showButton }) {
 
     return <div className="flex w-full">
         <div className="w-fit group min-h-8 max-w-[90%]">
-            <div className="flex justify-end items-center mb-2 gap-2">
+            <div className="flex justify-start items-center gap-2 ml-4">
                 <div className={`text-right group-hover:opacity-100 opacity-0`}>
                     <span className="text-slate-400 text-sm">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
                 </div>

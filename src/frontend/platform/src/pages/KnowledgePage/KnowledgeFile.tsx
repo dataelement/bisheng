@@ -23,7 +23,7 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogT
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { getKnowledgeModelConfig, getLLmServerDetail, getModelListApi } from "@/controllers/API/finetune";
-import { CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Trash2 } from "lucide-react";
+import { BookCopy, CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Trash2 } from "lucide-react";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import { useTable } from "../../util/hook";
 import { ModelSelect } from "../ModelPage/manage/tabs/WorkbenchModel";
@@ -112,7 +112,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
 
         fetchModelData();
     }, [open, mode, currentLib]);
-    
+
     useEffect(() => {
         // 当弹窗关闭时，清空所有内部状态
         if (!open) {
@@ -122,112 +122,112 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
             setError({ name: false, desc: false });
         }
     }, [open]);
-    
+
     const { toast } = useToast()
     const [error, setError] = useState({ name: false, desc: false })
 
-   const handleCreate = async (e, isImport = false) => {
-    const name = nameRef.current.value || ''; // 名称（默认空字符串，避免null）
-    let desc = descRef.current.value || '';   // 描述（默认空字符串）
+    const handleCreate = async (e, isImport = false) => {
+        const name = nameRef.current.value || ''; // 名称（默认空字符串，避免null）
+        let desc = descRef.current.value || '';   // 描述（默认空字符串）
 
-    // 1. 定义默认描述的"固定文本部分"（不含名称）
-    const defaultDescPrefix = "当回答与";
-    const defaultDescSuffix = "相关的问题时，参考此知识库";
-    // 固定文本总长度 = 前缀长度 + 后缀长度
-    const fixedTextLength = defaultDescPrefix.length + defaultDescSuffix.length;
-    // 名称可占用的最大长度 = 200 - 固定文本长度（确保名称+固定文本≤200）
-    const maxNameLengthForDefaultDesc = 200 - fixedTextLength;
+        // 1. 定义默认描述的"固定文本部分"（不含名称）
+        const defaultDescPrefix = "当回答与";
+        const defaultDescSuffix = "相关的问题时，参考此知识库";
+        // 固定文本总长度 = 前缀长度 + 后缀长度
+        const fixedTextLength = defaultDescPrefix.length + defaultDescSuffix.length;
+        // 名称可占用的最大长度 = 200 - 固定文本长度（确保名称+固定文本≤200）
+        const maxNameLengthForDefaultDesc = 200 - fixedTextLength;
 
-    // 2. 未输入描述时，生成默认描述（严格控制总长度≤200）
-    if (!desc) {
-        // 情况1：名称长度 ≤ 可占用最大长度 → 直接拼接生成默认描述
-        if (name.length <= maxNameLengthForDefaultDesc) {
-            desc = `${defaultDescPrefix}${name}${defaultDescSuffix}`;
-        } 
-        // 情况2：名称长度 > 可占用最大长度 → 截断名称后再拼接
-        else {
-            // 截断名称（保留前 maxNameLengthForDefaultDesc 个字，避免总长度超200）
-            const truncatedName = name.slice(0, maxNameLengthForDefaultDesc);
-            // 生成截断截断后的默认描述
-            desc = `${defaultDescPrefix}${truncatedName}${defaultDescSuffix}`;
-            // 提示用户：名称过长已被截断（提升体验，避免用户困惑）
-            toast({
-                variant: "info",
-                description: `知识库名称过长，已自动截断为${maxNameLengthForDefaultDesc}字，确保默认描述不超过200字限制`
-            });
+        // 2. 未输入描述时，生成默认描述（严格控制总长度≤200）
+        if (!desc) {
+            // 情况1：名称长度 ≤ 可占用最大长度 → 直接拼接生成默认描述
+            if (name.length <= maxNameLengthForDefaultDesc) {
+                desc = `${defaultDescPrefix}${name}${defaultDescSuffix}`;
+            }
+            // 情况2：名称长度 > 可占用最大长度 → 截断名称后再拼接
+            else {
+                // 截断名称（保留前 maxNameLengthForDefaultDesc 个字，避免总长度超200）
+                const truncatedName = name.slice(0, maxNameLengthForDefaultDesc);
+                // 生成截断截断后的默认描述
+                desc = `${defaultDescPrefix}${truncatedName}${defaultDescSuffix}`;
+                // 提示用户：名称过长已被截断（提升体验，避免用户困惑）
+                toast({
+                    variant: "info",
+                    description: `知识库名称过长，已自动截断为${maxNameLengthForDefaultDesc}字，确保默认描述不超过200字限制`
+                });
+            }
         }
-    }
 
-    // 3. 原有校验逻辑（仅针对用户手动输入的描述，默认描述已确保≤200）
-    if (!name) {
-        handleError(t('lib.enterLibraryName'));
-        return;
-    }
-    if (name.length > 30) {
-        handleError('知识库名称不能超过30字');
-        return;
-    }
-    if (!modal) {
-        handleError(t('lib.selectModel'));
-        return;
-    }
-    
-    // 修复：名称重复校验逻辑
-    // 编辑模式且名称未变更时，不进行重复校验
-    const isEditMode = mode === 'edit' && currentLib;
-    const nameUnchanged = isEditMode && name === currentLib.name;
-    
-    if (!nameUnchanged && datalist.find(data => data.name === name && (!currentLib || data.id !== currentLib.id))) {
-        handleError(t('lib.nameExists'));
-        return;
-    }
-    
-    // 仅校验用户手动输入的描述（默认描述已控制长度，可跳过）
-    if (descRef.current.value && desc.length > 200) {
-        handleError(t('lib.descriptionLimit'));
-        return;
-    }
-
-    setIsSubmitting(true)
-    if (mode === 'create') {
-        await captureAndAlertRequestErrorHoc(createFileLib({
-            name,
-            description: desc,
-            model: modal[1].value,
-            type: 0
-        }).then(res => {
-            window.libname = [name, desc]
-            navigate(isImport
-                ? `/filelib/upload/${res.id}`
-                : `/filelib/${res.id}`
-            );
-            onOpenChange(false); // 修复：用onOpenChange关闭弹窗
-        })).finally(() => {
-            setIsSubmitting(false)
-        })
-    } else {
-        const data = {
-            "model_id": modal[1].value,
-            "model_type": "embedding",
-            "knowledge_id": currentLib.id,
-            "knowledge_name": name,
-            "description": desc
+        // 3. 原有校验逻辑（仅针对用户手动输入的描述，默认描述已确保≤200）
+        if (!name) {
+            handleError(t('lib.enterLibraryName'));
+            return;
         }
-        await captureAndAlertRequestErrorHoc(updateKnowledge(data).then(res => {
-            toast({
-                variant: "success",
-                description: '更新成功'
+        if (name.length > 200) {
+            handleError('知识库名称不能超过200字');
+            return;
+        }
+        if (!modal) {
+            handleError(t('lib.selectModel'));
+            return;
+        }
+
+        // 修复：名称重复校验逻辑
+        // 编辑模式且名称未变更时，不进行重复校验
+        const isEditMode = mode === 'edit' && currentLib;
+        const nameUnchanged = isEditMode && name === currentLib.name;
+
+        if (!nameUnchanged && datalist.find(data => data.name === name && (!currentLib || data.id !== currentLib.id))) {
+            handleError(t('lib.nameExists'));
+            return;
+        }
+
+        // 仅校验用户手动输入的描述（默认描述已控制长度，可跳过）
+        if (descRef.current.value && desc.length > 200) {
+            handleError(t('lib.descriptionLimit'));
+            return;
+        }
+
+        setIsSubmitting(true)
+        if (mode === 'create') {
+            await captureAndAlertRequestErrorHoc(createFileLib({
+                name,
+                description: desc,
+                model: modal[1].value,
+                type: 0
+            }).then(res => {
+                window.libname = [name, desc]
+                navigate(isImport
+                    ? `/filelib/upload/${res.id}`
+                    : `/filelib/${res.id}`
+                );
+                onOpenChange(false); // 修复：用onOpenChange关闭弹窗
+            })).finally(() => {
+                setIsSubmitting(false)
             })
-            onOpenChange(false); // 修复：用onOpenChange关闭弹窗（替代原setOpen）
-            onLoadEnd()
-        }).catch(error => {
-            toast({ variant: "error", description: '更新失败，请重试' });
-            onOpenChange(false); // 错误时也关闭弹窗，避免状态卡住
-        })).finally(() => {
-            setIsSubmitting(false)
-        })
+        } else {
+            const data = {
+                "model_id": modal[1].value,
+                "model_type": "embedding",
+                "knowledge_id": currentLib.id,
+                "knowledge_name": name,
+                "description": desc
+            }
+            await captureAndAlertRequestErrorHoc(updateKnowledge(data).then(res => {
+                toast({
+                    variant: "success",
+                    description: '更新成功'
+                })
+                onOpenChange(false); // 修复：用onOpenChange关闭弹窗（替代原setOpen）
+                onLoadEnd()
+            }).catch(error => {
+                toast({ variant: "error", description: '更新失败，请重试' });
+                onOpenChange(false); // 错误时也关闭弹窗，避免状态卡住
+            })).finally(() => {
+                setIsSubmitting(false)
+            })
+        }
     }
-}
 
     const handleError = (message) => {
         toast({
@@ -411,21 +411,21 @@ export default function KnowledgeFile() {
         })
     }
 
-const handleOpenSettings = (lib) => {
-      console.log("=== handleOpenSettings 开始执行 ==="); 
-  console.log("当前点击的lib ID:", lib.id);
-  // 1. 深拷贝：彻底断开与原 lib 的引用关联（解决嵌套属性引用不变问题）
-  const newCurrentLib = JSON.parse(JSON.stringify(lib)); 
-  // 2. 注入唯一标识：即使数据完全相同，也让 currentSettingLib 引用绝对唯一
-  newCurrentLib.__updateKey = Date.now(); // 每次点击生成不同的时间戳
-  
-  setCurrentSettingLib(newCurrentLib); // 此时传递的是完全新的对象引用
-  setSettingsOpen(true);
-  setModalKey(prev => prev + 1); // 保留 modalKey 确保弹窗重新挂载
-  console.log("handleOpenSettings called with lib:", newCurrentLib); // 验证打印
-};
+    const handleOpenSettings = (lib) => {
+        console.log("=== handleOpenSettings 开始执行 ===");
+        console.log("当前点击的lib ID:", lib.id);
+        // 1. 深拷贝：彻底断开与原 lib 的引用关联（解决嵌套属性引用不变问题）
+        const newCurrentLib = JSON.parse(JSON.stringify(lib));
+        // 2. 注入唯一标识：即使数据完全相同，也让 currentSettingLib 引用绝对唯一
+        newCurrentLib.__updateKey = Date.now(); // 每次点击生成不同的时间戳
 
-      const handleSettingsClose = (isOpen) => {
+        setCurrentSettingLib(newCurrentLib); // 此时传递的是完全新的对象引用
+        setSettingsOpen(true);
+        setModalKey(prev => prev + 1); // 保留 modalKey 确保弹窗重新挂载
+        console.log("handleOpenSettings called with lib:", newCurrentLib); // 验证打印
+    };
+
+    const handleSettingsClose = (isOpen) => {
         console.log("handleSettingsClose called with isOpen:", isOpen);
         setSettingsOpen(isOpen);
         if (!isOpen) {
@@ -439,7 +439,7 @@ const handleOpenSettings = (lib) => {
     const handleCachePage = () => {
         window.LibPage = { page, type: 'file' }
     }
-    
+
     useEffect(() => {
         const _page = window.LibPage
         if (_page) {
@@ -511,7 +511,7 @@ const handleOpenSettings = (lib) => {
                                 key={el.id}
                                 className=" h-[70px]"
                             >
-                                <TableCell 
+                                <TableCell
                                     className="font-medium max-w-[200px]"
                                     onClick={() => {
                                         window.libname = [el.name, el.description];
@@ -520,27 +520,27 @@ const handleOpenSettings = (lib) => {
                                     }}
                                 >
                                     <div className="flex items-center gap-2 py-2">
-                                        <div className="w-[50px] h-[50px]">
-                                            <img src={TipPng} alt="" />
+                                        <div className="flex items-center justify-center w-[50px] h-[50px] bg-primary text-white rounded-[10px]">
+                                            <BookCopy />
                                         </div>
                                         <div>
                                             <div className="truncate max-w-[500px] w-[264px] text-[18px] font-medium pt-2 flex items-center gap-2">
                                                 {el.name}
                                             </div>
                                             <QuestionTooltip
-                                                content={el.description || ''} 
+                                                content={el.description || ''}
                                                 error={false}
                                                 className="w-full text-start"
                                             >
                                                 <div className="truncate max-w-[300px] text-[14px] text-[#5A5A5A] pt-1">
-                                                    {el.description || ''} 
+                                                    {el.description || ''}
                                                 </div>
                                             </QuestionTooltip>
                                         </div>
                                     </div>
                                 </TableCell>
 
-                                <TableCell 
+                                <TableCell
                                     className="text-[#5A5A5A]"
                                     onClick={() => {
                                         window.libname = [el.name, el.description];
@@ -551,7 +551,7 @@ const handleOpenSettings = (lib) => {
                                     {el.update_time.replace('T', ' ')}
                                 </TableCell>
 
-                                <TableCell 
+                                <TableCell
                                     className="max-w-[300px] break-all"
                                     onClick={() => {
                                         window.libname = [el.name, el.description];
@@ -565,15 +565,15 @@ const handleOpenSettings = (lib) => {
                                 <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-2">
                                         <Select
-                                         key={`${el.id}-${modalKey}`} 
+                                            key={`${el.id}-${modalKey}`}
                                             open={selectOpenId === el.id}
-                                            onOpenChange={(isOpen) => {                                        
+                                            onOpenChange={(isOpen) => {
                                                 setSelectOpenId(isOpen ? el.id : null);
                                             }}
                                             onValueChange={(selectedValue) => {
                                                 setSelectOpenId(null);
                                                 console.log("Selected value:", selectedValue, "for lib:", el.id);
-                                                
+
                                                 switch (selectedValue) {
                                                     case 'copy':
                                                         el.state === 1 && handleCopy(el);
@@ -606,7 +606,7 @@ const handleOpenSettings = (lib) => {
                                                     <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
                                                 )}
                                             </SelectTrigger>
-                                            <SelectContent 
+                                            <SelectContent
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                 }}
@@ -620,12 +620,12 @@ const handleOpenSettings = (lib) => {
                                                     >
                                                         <div className="flex gap-2 items-center">
                                                             <Copy className="w-4 h-4" />
-                                                            { t('lib.copy') }
+                                                            {t('lib.copy')}
                                                         </div>
                                                     </SelectItem>
                                                 )}
-                                                <SelectItem 
-                                                    value="set" 
+                                                <SelectItem
+                                                    value="set"
                                                     showIcon={false}
                                                 >
                                                     <div className="flex gap-2 items-center">
@@ -663,7 +663,7 @@ const handleOpenSettings = (lib) => {
                     />
                 </div>
             </div>
-            
+
             {/* 创建弹窗 */}
             <CreateModal
                 datalist={datalist}
@@ -672,18 +672,18 @@ const handleOpenSettings = (lib) => {
                 onLoadEnd={() => { }}
                 mode="create"
             />
-            
+
             {/* 编辑（设置）弹窗 - 使用 key 强制重新渲染 */}
             {settingsOpen && (
-               <CreateModal
-                key={`settings-modal-${modalKey}`}
-                datalist={datalist}
-                open={settingsOpen}
-                onOpenChange={handleSettingsClose}
-                onLoadEnd={reload}
-                mode="edit"
-                currentLib={currentSettingLib}
-            />
+                <CreateModal
+                    key={`settings-modal-${modalKey}`}
+                    datalist={datalist}
+                    open={settingsOpen}
+                    onOpenChange={handleSettingsClose}
+                    onLoadEnd={reload}
+                    mode="edit"
+                    currentLib={currentSettingLib}
+                />
             )}
         </div>
     );
