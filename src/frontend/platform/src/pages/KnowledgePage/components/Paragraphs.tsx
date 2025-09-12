@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader } from '@/components/bs-ui/dialog';
 import { SearchInput } from '@/components/bs-ui/input';
 import AutoPagination from '@/components/bs-ui/pagination/autoPagination';
 import ShadTooltip from "@/components/ShadTooltipComponent";
-import { delChunkApi, getFilePathApi, getKnowledgeChunkApi,getFileBboxApi, readFileByLibDatabase, updateChunkApi } from '@/controllers/API';
+import { delChunkApi, getFilePathApi, getKnowledgeChunkApi, getFileBboxApi, readFileByLibDatabase, updateChunkApi } from '@/controllers/API';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useTable } from '@/util/hook';
 import { truncateString } from "@/util/utils";
@@ -26,7 +26,7 @@ export default function Paragraphs({ fileId, onBack }) {
     const { id } = useParams();
     const navigate = useNavigate();
     const { isEditable, selectedBbox } = useKnowledgeStore();
-   const location = useLocation();
+    const location = useLocation();
     // 状态管理（完全保留原始定义）
     const [selectedFileId, setSelectedFileId] = useState('');
     const [currentFile, setCurrentFile] = useState(null);
@@ -55,7 +55,7 @@ export default function Paragraphs({ fileId, onBack }) {
     const searchInputRef = useRef(null);
     const isChangingRef = useRef(false);
     const [isInitReady, setIsInitReady] = useState(false);
-    const [previewUrl,setPreviewUrl] = useState()
+    const [previewUrl, setPreviewUrl] = useState()
     // 1. 修复：URL乱码（添加decodeURIComponent）+ 确保数据顺序
     const fetchFileUrl = useCallback(async (fileId) => {
         console.log('获取文件URL:', fileId);
@@ -66,22 +66,21 @@ export default function Paragraphs({ fileId, onBack }) {
             const res = await getFilePathApi(fileId);
             const pares = await getFileBboxApi(fileId)
             setPartitions(pares)
-            console.log('getFilePathApi 响应:', res.original_url,pares);
+            console.log('getFilePathApi 响应:', res.original_url, pares);
 
             // 修复：提取URL并解码（解决中文/特殊字符乱码）
             let url;
             if (res) {
                 url = res.original_url || res.data.filePath || res.url;
-                if(res.preview_url){
+                if (res.preview_url) {
                     setPreviewUrl(res.preview_url)
                 }
             } else {
                 url = res.url || res.filePath || res;
             }
-            console.log(url,2222);
-            
+
             const trimmedUrl = (url || '').trim();
-            
+
             if (!trimmedUrl) {
                 console.log('获取的URL为空，视为无有效URL');
                 if (isMountedRef.current) {
@@ -140,7 +139,7 @@ export default function Paragraphs({ fileId, onBack }) {
     } = useTable(tableConfig, (param) =>
         getKnowledgeChunkApi({ ...param, limit: param.pageSize, knowledge_id: id })
     );
- useEffect(() => {
+    useEffect(() => {
         // 检查当前路径是否是adjust页面且没有有效的state数据
         if (location.pathname.startsWith('/filelib/adjust/') && !window.history.state?.isAdjustMode) {
             // 提取ID（如从/filelib/adjust/2066中提取2066）
@@ -174,13 +173,13 @@ export default function Paragraphs({ fileId, onBack }) {
     // 2. 修复：下拉选择滞后（先准备数据，再统一更新UI状态）
     const handleFileChange = useCallback(async (newFileId) => {
         console.log('文件切换:', { newFileId, current: selectedFileId });
-        
+
         // 防止重复选择和并行操作（保留原始逻辑）
         if (newFileId === selectedFileId || isChangingRef.current || !newFileId) {
             setIsDropdownOpen(false);
             return;
         }
-        
+
         isChangingRef.current = true;
         setSelectError(null);
         setIsFetchingUrl(true);
@@ -215,8 +214,8 @@ export default function Paragraphs({ fileId, onBack }) {
             };
             // 统一更新UI状态（一次更新，避免多次渲染不一致）
             setSelectedFileId(newFileId);
-            
-            
+
+
             setCurrentFile(tempFileData);
             setFileUrl(fileUrlResult);
 
@@ -253,7 +252,7 @@ export default function Paragraphs({ fileId, onBack }) {
 
                 if (filesData.length) {
                     const defaultFileId = fileId ? String(fileId) : String(filesData[0]?.id || '');
-                    
+
                     // 修复：先准备数据（筛选+刷新+URL）
                     const selectedFile = filesData.find(f => String(f.id) === defaultFileId);
                     if (selectedFile) {
@@ -279,7 +278,6 @@ export default function Paragraphs({ fileId, onBack }) {
                             url: fileUrlResult
                         };
                         setSelectedFileId(defaultFileId);
-                        console.log(fileData,67);
                         setCurrentFile(fileData);
                         setFileUrl(fileUrlResult);
                     }
@@ -368,7 +366,7 @@ export default function Paragraphs({ fileId, onBack }) {
                 skipToStep: 2,
                 fileId: selectedFileId,
                 fileData: {
-                    previewUrl:previewUrl,
+                    previewUrl: previewUrl,
                     id: currentFile?.id,
                     name: currentFile?.name,
                     split_rule: currentFile?.split_rule || currentFile?.fullData?.split_rule,
@@ -407,8 +405,6 @@ export default function Paragraphs({ fileId, onBack }) {
 
     // 删除分段（完全保留原始逻辑）
     const handleDeleteChunk = useCallback((data) => {
-        console.log(data, 89);
-
         captureAndAlertRequestErrorHoc(delChunkApi({
             knowledge_id: Number(id),
             file_id: selectedFileId || currentFile?.id || '',
@@ -419,25 +415,25 @@ export default function Paragraphs({ fileId, onBack }) {
 
     // 格式化文件大小（完全保留原始逻辑）
     const formatFileSize = useCallback((bytes) => {
-    if (bytes === 0) return '0 Bytes';
-    
-    // 定义单位转换边界（1024进制）
-    const KB = 1024;
-    const MB = KB * 1024;
-    const GB = MB * 1024;
-    
-    // 根据文件大小选择合适的单位
-    if (bytes < MB) {
-        // 小于1024KB（1MB），使用KB
-        return `${(bytes / KB).toFixed(2)} KB`;
-    } else if (bytes < GB) {
-        // 1024KB至1024MB之间，使用MB
-        return `${(bytes / MB).toFixed(2)} MB`;
-    } else {
-        // 1024MB及以上，使用GB
-        return `${(bytes / GB).toFixed(2)} GB`;
-    }
-}, []);
+        if (bytes === 0) return '0 Bytes';
+
+        // 定义单位转换边界（1024进制）
+        const KB = 1024;
+        const MB = KB * 1024;
+        const GB = MB * 1024;
+
+        // 根据文件大小选择合适的单位
+        if (bytes < MB) {
+            // 小于1024KB（1MB），使用KB
+            return `${(bytes / KB).toFixed(2)} KB`;
+        } else if (bytes < GB) {
+            // 1024KB至1024MB之间，使用MB
+            return `${(bytes / MB).toFixed(2)} MB`;
+        } else {
+            // 1024MB及以上，使用GB
+            return `${(bytes / GB).toFixed(2)} GB`;
+        }
+    }, []);
     // 筛选下拉框文件（完全保留原始逻辑）
     const filteredFiles = files.filter(file =>
         file.label.toLowerCase().includes(searchTerm.toLowerCase())
@@ -466,7 +462,7 @@ export default function Paragraphs({ fileId, onBack }) {
 
     // 预览显示判断（完全保留原始逻辑）
     const isExcelFile = currentFile && ['xlsx', 'xls', 'csv'].includes(currentFile.suffix?.toLowerCase());
-    const isPreviewVisible = !isExcelFile && selectedFileId && currentFile  && fileUrl && !isFetchingUrl
+    const isPreviewVisible = !isExcelFile && selectedFileId && currentFile && fileUrl && !isFetchingUrl
     const isParagraphVisible = datalist.length > 0;
 
     // 布局类名计算（完全保留原始逻辑）
@@ -618,7 +614,7 @@ export default function Paragraphs({ fileId, onBack }) {
                         chunks={safeChunks}
                         setChunks={setChunks}
                         rules={previewRules}
-                        h={false}
+                        edit
                     />
                 ) : (
                     !isParagraphVisible && (

@@ -177,8 +177,8 @@ class OverlapResolver:
         # 3. 同类型资源，先匹配的优先
 
         priority_map = {
-            "markdown_image": 1,
-            "markdown_table": 2,
+            "markdown_table": 1,     # 表格优先级最高，包含其他资源
+            "markdown_image": 2,     # 图片次之
             "minio_image": 3,
             "http_image": 4,
             "local_image": 5,
@@ -272,6 +272,7 @@ class ContentParser:
         self.pattern_matcher = PatternMatcher()
         self.minio_client = minio_client
         self.logger = logger
+        self._table_image_resources = []  # 临时存储表格内的图片资源
 
     def parse_variable_content(self, var_name: str, content: str) -> tuple[str, List[ResourceData]]:
         """
@@ -336,12 +337,22 @@ class ContentParser:
         # 3. 解决重叠问题
         resolved_resources = OverlapResolver.resolve_overlapping_resources(resources)
 
-        # 4. 替换内容
+        # 4. 收集表格内的图片资源
+        table_image_resources = []
+        for resource in resolved_resources:
+            if resource.resource_type == ResourceType.TABLE and hasattr(self, '_table_image_resources'):
+                table_image_resources.extend(self._table_image_resources)
+                self._table_image_resources = []  # 清空临时列表
+
+        # 5. 替换内容
         processed_content = self._replace_content_with_placeholders(content, resolved_resources)
 
-        self.logger.info(f"变量 '{var_name}' 解析完成，生成 {len(resolved_resources)} 个资源")
+        # 6. 合并所有资源（主要资源 + 表格内图片资源）
+        all_resources = resolved_resources + table_image_resources
 
-        return processed_content, resolved_resources
+        self.logger.info(f"变量 '{var_name}' 解析完成，生成 {len(all_resources)} 个资源（主要 {len(resolved_resources)} 个，表格内图片 {len(table_image_resources)} 个）")
+
+        return processed_content, all_resources
 
     def _replace_content_with_placeholders(self, content: str, resources: List[ResourceData]) -> str:
         """正确的内容替换逻辑"""
@@ -426,10 +437,15 @@ class ContentParser:
     # 简化后不再需要_determine_table_source方法，因为只有Markdown表格
 
     def _parse_table_data(self, table_content: str) -> tuple[List[List[str]], List[str]]:
-        """解析表格数据"""
+        """解析表格数据，同时处理表格内的图片"""
         try:
-            # 这里复用表格解析逻辑
-            return self._parse_markdown_table_from_content(table_content)
+            # 先解析表格结构
+            table_data, alignments = self._parse_markdown_table_from_content(table_content)
+            
+            # 处理表格内的图片链接
+            self._process_images_in_table(table_data)
+            
+            return table_data, alignments
         except Exception as e:
             self.logger.error(f"解析表格数据失败: {str(e)}")
             return [["解析失败", str(e)]], ["left"]
@@ -593,6 +609,60 @@ class ContentParser:
             cleaned = cleaned[:97] + "..."
 
         return cleaned
+
+    def _process_images_in_table(self, table_data: List[List[str]]):
+        """处理表格内的图片链接，创建图片资源"""
+        if not table_data:
+            return
+            
+        for row_idx, row in enumerate(table_data):
+            for col_idx, cell in enumerate(row):
+                if not cell:
+                    continue
+                    
+                # 在单元格内容中查找并处理图片链接
+                updated_cell = self._process_cell_images(cell)
+                table_data[row_idx][col_idx] = updated_cell
+                
+    def _process_cell_images(self, cell_content: str) -> str:
+        """处理单元格内的图片，使用现有的模式匹配逻辑"""
+        if not cell_content:
+            return cell_content
+            
+        # 复用现有的模式匹配逻辑查找所有图片
+        matches = self.pattern_matcher.find_all_matches(cell_content)
+        
+        # 只处理图片类型的匹配
+        image_matches = [m for m in matches if m["resource_type"] == ResourceType.IMAGE]
+        
+        updated_content = cell_content
+        
+        # 从后往前处理，避免位置偏移
+        for match in reversed(image_matches):
+            # 创建图片资源
+            placeholder = self.placeholder_manager.create_placeholder(
+                resource_type=match["resource_type"],
+                position=match["start"],
+                original_content=match["full_match"],
+                pattern_name=match["pattern_name"],
+            )
+            
+            # 获取资源对象并调用对应的处理方法
+            resource = self.placeholder_manager.get_resource_by_placeholder(placeholder)
+            handler = getattr(self, match["handler_method"])
+            handler(resource, match)
+            
+            # 将表格内的图片资源添加到临时列表（避免被重叠解决器跳过）
+            self._table_image_resources.append(resource)
+            
+            self.logger.info(f"表格内图片: {match['pattern_name']} {match['full_match']} -> {placeholder}")
+            
+            # 替换为占位符
+            start_pos = match["start"]
+            end_pos = match["end"]
+            updated_content = updated_content[:start_pos] + placeholder + updated_content[end_pos:]
+            
+        return updated_content
 
 class ResourceDownloadManager:
     """资源下载管理器"""

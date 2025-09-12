@@ -55,15 +55,13 @@ const ApiAccess = ({ }) => {
     const python = () => {
         return `import requests
 import json
-
-url = "${window.location.protocol}//${window.location.host}/api/v2/assistant/chat/completions"
-
+url = "http://192.168.106.122:3113/api/v2/assistant/chat/completions"
 payload = json.dumps({
-   "model": "${assisId}",
+   "model": "43606a49e1af40cb8da9a39a6df7eb6a",
    "messages": [
       {
          "role": "user",
-         "content": "你好"
+         "content": "生成5天的旅游规划"
       }
    ],
    "temperature": 0,
@@ -73,10 +71,22 @@ headers = {
    'User-Agent': 'Apifox/1.0.0 (https://apifox.com)',
    'Content-Type': 'application/json'
 }
-
-response = requests.request("POST", url, headers=headers, data=payload)
-
-print(response.text)`
+response = requests.request("POST", url, headers=headers, data=payload, stream=True)
+if response.status_code != 200:
+    print(f"Request failed with status code {response.status_code}: {response.text}")
+answer = ""
+for line in response.iter_lines():
+    if not line:
+        continue
+    line = line.decode("utf-8")
+    if line.startswith('data: '):
+        line = line[len('data: '):].strip()
+        if line == '[DONE]':
+            break
+        data = json.loads(line)
+        for one in data["choices"]:
+            answer = one.get("delta", {}).get("content", "")
+            print(answer)`
     }
 
     const { message } = useToast()

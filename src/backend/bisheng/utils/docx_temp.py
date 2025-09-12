@@ -353,8 +353,22 @@ class DocxTemplateRender(object):
                         for placeholder, resource_info in placeholder_map.items():
                             if placeholder in cell_text:
                                 if resource_info["type"] == "image":
-                                    # 在表格单元格中插入图片路径
-                                    cell_text = cell_text.replace(placeholder, resource_info["path"])
+                                    # 在表格单元格中插入实际图片
+                                    image_path = resource_info.get("local_path") or resource_info.get("path", "")
+                                    if image_path and os.path.exists(image_path):
+                                        try:
+                                            # 在单元格中插入图片（这会清空单元格并插入图片）
+                                            self._insert_image_in_table_cell(cell, image_path)
+                                            logger.info(f"✅ 表格单元格中成功插入图片: {image_path}")
+                                            # 标记占位符已处理，不需要更新文本
+                                            cell_text = ""
+                                        except Exception as e:
+                                            logger.error(f"❌ 表格单元格插入图片失败: {str(e)}")
+                                            # 失败时显示文件名
+                                            cell_text = cell_text.replace(placeholder, os.path.basename(image_path))
+                                    else:
+                                        # 图片文件不存在，显示路径
+                                        cell_text = cell_text.replace(placeholder, resource_info.get("path", placeholder))
                                 elif resource_info["type"] == "excel":
                                     cell_text = cell_text.replace(placeholder, "[Excel表格]")
                                 elif resource_info["type"] == "csv":
@@ -562,6 +576,39 @@ class DocxTemplateRender(object):
             logger.error(f"[内联图片] ❌ 插入图片失败: {str(e)}")
             # 插入原图片路径
             paragraph.add_run(image_path)
+
+    def _insert_image_in_table_cell(self, cell, image_path: str):
+        """
+        在表格单元格中插入图片
+        
+        Args:
+            cell: 表格单元格对象
+            image_path: 图片文件路径
+        """
+        try:
+            from docx.shared import Inches
+            import os
+            
+            if not os.path.exists(image_path):
+                logger.warning(f"[表格单元格图片] 图片文件不存在: {image_path}")
+                return
+                
+            # 清空单元格内容
+            for paragraph in cell.paragraphs:
+                paragraph.clear()
+            
+            # 在第一个段落中插入图片
+            first_paragraph = cell.paragraphs[0] if cell.paragraphs else cell.add_paragraph()
+            run = first_paragraph.add_run()
+            
+            # 插入图片，设置合适的大小
+            run.add_picture(image_path, width=Inches(2.0))  # 表格单元格中使用较小尺寸
+            
+            logger.info(f"[表格单元格图片] ✅ 成功插入图片: {image_path}")
+            
+        except Exception as e:
+            logger.error(f"[表格单元格图片] ❌ 插入失败: {str(e)}")
+            raise e
 
     def _csv_to_table(self, csv_path: str) -> List[List[str]]:
         """
@@ -1334,8 +1381,22 @@ class DocxTemplateRender(object):
                                     for placeholder, resource_info in placeholder_map.items():
                                         if placeholder in cell_text:
                                             if resource_info["type"] == "image":
-                                                # 在表格单元格中插入图片路径
-                                                cell_text = cell_text.replace(placeholder, resource_info["path"])
+                                                # 在表格单元格中插入实际图片
+                                                image_path = resource_info.get("local_path") or resource_info.get("path", "")
+                                                if image_path and os.path.exists(image_path):
+                                                    try:
+                                                        # 清空单元格文本
+                                                        cell_text = cell_text.replace(placeholder, "")
+                                                        # 在单元格中插入图片
+                                                        self._insert_image_in_table_cell(cell, image_path)
+                                                        logger.info(f"✅ 表格单元格中成功插入图片: {image_path}")
+                                                    except Exception as e:
+                                                        logger.error(f"❌ 表格单元格插入图片失败: {str(e)}")
+                                                        # 失败时显示文件名
+                                                        cell_text = cell_text.replace(placeholder, os.path.basename(image_path))
+                                                else:
+                                                    # 图片文件不存在，显示路径
+                                                    cell_text = cell_text.replace(placeholder, resource_info.get("path", placeholder))
                                             elif resource_info["type"] == "excel":
                                                 cell_text = cell_text.replace(placeholder, "[Excel表格]")
                                             elif resource_info["type"] == "csv":
