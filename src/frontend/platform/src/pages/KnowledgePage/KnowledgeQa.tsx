@@ -258,7 +258,7 @@ export default function KnowledgeQa(params) {
                         >
                             {/* 名称+描述单元格：恢复原有气泡结构，确保蓝色生效 */}
                             <TableCell className="flex: 1 font-medium max-w-[200px] overflow-visible">
-                                <div className="flex items-start gap-2">
+                                <div className="flex items-center gap-2 py-1">
                                     <img
                                         src={__APP_ENV__.BASE_URL + "/assets/qa-logo.svg"}
                                         alt="知识库图标"

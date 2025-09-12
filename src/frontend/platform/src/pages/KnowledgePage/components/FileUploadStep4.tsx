@@ -24,7 +24,9 @@ export default function FileUploadStep4({ data ,kId}) {
 
     // 初始化文件状态（只执行一次）
     useEffect(() => {
-        if (files.length === 0 && data.length > 0) { // 防止重复初始化
+        if ( data.length > 0) { // 防止重复初始化
+            console.log(data,111);
+            
             const initialFiles = data.map(item => ({
                 id: item.fileId,
                 fileName: item.fileName,
@@ -32,16 +34,29 @@ export default function FileUploadStep4({ data ,kId}) {
                 reason: '',
                 progress: 'await' // 初始状态设为解析中
             }));
+            console.log(initialFiles,45);
+            
             setFiles(initialFiles);
-            fileIdsRef.current = data.map(item => item.fileId);
-            // 初始化处理中的文件集合
-            fileIdsRef.current.forEach(id => processingRef.current.add(id));
+            
+          fileIdsRef.current = data.map(item => item.fileId);
+        processingRef.current.clear();
+        fileIdsRef.current.forEach(id => processingRef.current.add(id));
+        // 强制设置为未完成
+        setFinish(false);
         }
     }, [data]); // 只依赖data变化
 
 
     // 轮询文件状态
     useEffect(() => {
+          if (fileIdsRef.current.length === 0) {
+        const timer = setTimeout(() => {
+            if (fileIdsRef.current.length > 0) {
+                pollFilesStatus(); // 重新执行轮询
+            }
+        }, 100);
+        return () => clearTimeout(timer);
+    }
         // 如果没有文件需要处理，直接完成
         if (fileIdsRef.current.length === 0) {
             setFinish(true);
@@ -56,7 +71,10 @@ export default function FileUploadStep4({ data ,kId}) {
 
             try {
                 // 只轮询仍在处理中的文件
+                
                 const pendingFileIds = Array.from(processingRef.current);
+                console.log(pendingFileIds,90);
+                
                 if (pendingFileIds.length === 0) {
                     clearInterval(timerRef.current);
                     setFinish(true);
@@ -74,15 +92,23 @@ export default function FileUploadStep4({ data ,kId}) {
 
                 // 更新文件状态
                 setFiles(prev => {
+                    console.log(111);
+                    
                     const updatedFiles = [...prev];
+                    console.log(updatedFiles,84);
+                    
                     const resMap = new Map(res.data.map(item => [item.id, item]));
+                    console.log(pendingFileIds,78);
                     
                     pendingFileIds.forEach(fileId => {
                         if (resMap.has(fileId)) {
                             const resItem = resMap.get(fileId);
                             const fileIndex = updatedFiles.findIndex(f => f.id === fileId);
+                            console.log(fileIndex,67);
                             
                             if (fileIndex !== -1) {
+                                console.log(resItem.status,78);
+                                
                                 let progress = updatedFiles[fileIndex].progress;
                                 let error = updatedFiles[fileIndex].error;
                                 let reason = updatedFiles[fileIndex].reason;
@@ -149,6 +175,8 @@ export default function FileUploadStep4({ data ,kId}) {
     if (kId) {
         finalId = kId.replace(/\D/g, '');
     }
+    console.log(finalId,333);
+    
     const [details] = useKnowledgeDetails([finalId])
     
     const handleCreateFlow = async (params) => {
