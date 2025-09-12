@@ -126,7 +126,16 @@ export default function EvaluatingCreate() {
   if (selectedKeyId && (selectedType === "workflow" || selectedType === "flow") && !selectedVersion) {
     errorlist.push(t("请选择版本"));
   }
-  if (!fileRef.current && selectedKeyId&&selectedVersion) errorlist.push(t("evaluation.enterFile"));
+if (
+  !fileRef.current && 
+  selectedKeyId && 
+  (
+    (selectedType === "workflow" || selectedType === "flow") && selectedVersion // 有版本的类型已选版本
+    || selectedType === "assistant" // 不需要版本的类型
+  )
+) {
+  errorlist.push(t("evaluation.enterFile"));
+}
   if (!prompt) errorlist.push(t("evaluation.enterPrompt"));
 
   if (errorlist.length) return handleError(errorlist);

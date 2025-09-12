@@ -159,7 +159,7 @@ export default function PreviewResult({ showPreview, previewCount, rules, step, 
             setChunks={setChunks}
             partitions={partitions}
         />}
-         <div className={cn('relative', "w-1/2")}>
+         <div className={cn('relative',  showPreview ? "w-full" : "w-1/2")}>
             {/* 下拉框 - 右上角 */}
             {(step === 3 || (step === 2 && showPreview)) && (
                 <div className="flex justify-end">

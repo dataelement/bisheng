@@ -186,6 +186,10 @@ export default function Paragraphs({ fileId, onBack }) {
         setChunks([]);
         setIsDropdownOpen(false); // 立即关闭下拉框（修复视觉滞后）
 
+          setFileUrl(''); 
+    setPreviewUrl('');
+    // 额外清除可能缓存DOC路径的状态（如果存在）
+    setCurrentFile(null); 
         try {
             // 查找选中的文件（保留原始逻辑）
             const selectedFile = rawFiles.find(f => String(f.id) === String(newFileId));

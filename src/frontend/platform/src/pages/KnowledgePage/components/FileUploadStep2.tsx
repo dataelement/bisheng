@@ -167,89 +167,95 @@ useEffect(() => {
 
 
     return <div>
-        <div className="flex flex-row justify-center gap-4">
-            {/* 左侧区域 */}
+        {/* 核心修改：使用flex布局实现预览时的半平分 */}
+        <div className={cn("flex flex-row justify-center gap-4", showPreview ? "px-4" : "")}>
+            {/* 左侧区域：规则设置区 */}
             {
-                displayStep === 2 && (<div className={cn(" h-full flex flex-col max-w-[760px]", showPreview ? 'w-[100%]' : 'w-2/3')}>
-                    <Tabs
-                        defaultValue={displayMode === DisplayModeType.Mixed ? 'file' : displayMode}
-                        className="flex flex-col h-full"
-                    >
-                        {/* 标签页头部 */}
-                        <div className="">
-                            {displayMode === DisplayModeType.Mixed ? (
-                                <TabsList className="">
-                                    <TabsTrigger id="knowledge_file_tab" value="file" className="roundedrounded-xl">{t('defaultStrategy')}</TabsTrigger>
-                                    <TabsTrigger id="knowledge_table_tab" value="table">{t('customStrategy')}</TabsTrigger>
-                                </TabsList>
-                            ) : <div className="h-10"></div>}
-                        </div>
-                        {/* 文件文档设置 */}
-                        <TabsContent value="file">
-                            <RuleFile
-                                rules={rules}
-                                setRules={setRules}
-                                strategies={strategies}
-                                setStrategies={setStrategies}
-                            />
-                        </TabsContent>
-                        {/* 表格文档设置 */}
-                        <TabsContent value="table">
-                            <RuleTable
-                                rules={rules}
-                                setRules={setRules}
-                                applyEachCell={applyEachCell}
-                                setApplyEachCell={setApplyEachCell}
-                                cellGeneralConfig={cellGeneralConfig}
-                                setCellGeneralConfig={setCellGeneralConfig}
-                            />
-                        </TabsContent>
-                        {/* 预览分段按钮 */}
-                        <div className="mt-4">
-                            <Button
-                                className="h-8"
-                                onClick={handlePreview}
-                                disabled={strategies.length === 0}
-                            >
-                                <SearchCheck size={16} />
-                                {showPreview ? '重新预览分段' : t('previewResults')}
-                            </Button>
-                        </div>
-                    </Tabs>
-                </div>)
-
-            }
-            {/* 原文预览 & 分段预览 */}
-        {
-    (showPreview || step === 3) ? (
-        <div className="relative">
-            {previewLoading && (
-                <div className="absolute top-80">
-                    <div className="flex flex-col items-center">
-                        <LoadingIcon className="h-20 w-20 text-primary" />
+                displayStep === 2 && (
+                    <div className={cn(
+                        "h-full flex flex-col max-w-[760px]",
+                        // 预览时占50%，否则占2/3
+                        showPreview ? "w-1/2" : "w-2/3"
+                    )}>
+                        <Tabs
+                            defaultValue={displayMode === DisplayModeType.Mixed ? 'file' : displayMode}
+                            className="flex flex-col h-full"
+                        >
+                            {/* 标签页头部 */}
+                            <div className="">
+                                {displayMode === DisplayModeType.Mixed ? (
+                                    <TabsList className="">
+                                        <TabsTrigger id="knowledge_file_tab" value="file" className="roundedrounded-xl">{t('defaultStrategy')}</TabsTrigger>
+                                        <TabsTrigger id="knowledge_table_tab" value="table">{t('customStrategy')}</TabsTrigger>
+                                    </TabsList>
+                                ) : <div className="h-10"></div>}
+                            </div>
+                            {/* 文件文档设置 */}
+                            <TabsContent value="file">
+                                <RuleFile
+                                    rules={rules}
+                                    setRules={setRules}
+                                    strategies={strategies}
+                                    setStrategies={setStrategies}
+                                    showPreview={showPreview}
+                                />
+                            </TabsContent>
+                            {/* 表格文档设置 */}
+                            <TabsContent value="table">
+                                <RuleTable
+                                    rules={rules}
+                                    setRules={setRules}
+                                    applyEachCell={applyEachCell}
+                                    setApplyEachCell={setApplyEachCell}
+                                    cellGeneralConfig={cellGeneralConfig}
+                                    setCellGeneralConfig={setCellGeneralConfig}
+                                />
+                            </TabsContent>
+                            {/* 预览分段按钮 */}
+                            <div className="mt-4">
+                                <Button
+                                    className="h-8"
+                                    onClick={handlePreview}
+                                    disabled={strategies.length === 0}
+                                >
+                                    <SearchCheck size={16} />
+                                    {showPreview ? '重新预览分段' : t('previewResults')}
+                                </Button>
+                            </div>
+                        </Tabs>
                     </div>
-                </div>
-            )}
-            
-            {/* 预览组件 - 始终渲染以保证Hook稳定性 */}
-            <PreviewResult
-                showPreview={showPreview}
-                step={step}
-                previewCount={previewCount}
-                kId={kId}
-                rules={applyRule.rules}
-                applyEachCell={applyRule.applyEachCell}
-                cellGeneralConfig={applyRule.cellGeneralConfig}
-                handlePreviewResult={(isSuccess) => {
-                    setPreviewFailed(!isSuccess);
-                    // 预览完成后关闭loading
-                    setPreviewLoading(false);
-                }}
-            />
-        </div>
-    ) : null
-}
+                )
+            }
+
+            {/* 原文预览 & 分段预览：预览时占50% */}
+            {
+                (showPreview || step === 3) ? (
+                    <div className={cn(
+                        "relative",
+                        // 预览时占50%宽度
+                        showPreview ? "w-full" : ""
+                    )}>
+                        
+                        {/* 预览组件 - 始终渲染以保证Hook稳定性 */}
+                        <PreviewResult
+                            showPreview={showPreview}
+                            step={step}
+                            previewCount={previewCount}
+                            kId={kId}
+                            rules={applyRule.rules}
+                            applyEachCell={applyRule.applyEachCell}
+                            cellGeneralConfig={applyRule.cellGeneralConfig}
+                            handlePreviewResult={(isSuccess) => {
+                                setPreviewFailed(!isSuccess);
+                                // 预览完成后关闭loading
+                                setPreviewLoading(false);
+                            }}
+                        />
+                    </div>
+                ) : null
+            }
         </div >
+
         <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
             <Button
                 className="h-8"
@@ -374,3 +380,4 @@ const useFileProcessingRules = (initialStrategies, resultFiles, kid, splitRule) 
         setStrategies
     };
 };
+    
