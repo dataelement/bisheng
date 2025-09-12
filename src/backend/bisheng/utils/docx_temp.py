@@ -398,6 +398,10 @@ class DocxTemplateRender(object):
         """
         logger.info(f"[内联混合内容] 开始处理混合内容段落: {original_text[:100]}...")
         
+        # 提取原始段落的样式信息，用于后续段落创建
+        original_style_info = self._extract_paragraph_style_info(paragraph)
+        logger.debug(f"[样式保持] 提取到原始段落样式: 对齐={original_style_info['alignment']}")
+        
         # 分割文本为片段，保持原始顺序
         segments = []
         last_end = 0
@@ -487,9 +491,9 @@ class DocxTemplateRender(object):
                     
                     # 为后续文本创建新段落，并更新current_paragraph
                     if i + 1 < len(segments):
-                        next_paragraph = self._create_new_paragraph_after_table(paragraph_parent, paragraph_index + 1)
+                        next_paragraph = self._create_new_paragraph_after_table(paragraph_parent, paragraph_index + 1, original_style_info)
                         current_paragraph = next_paragraph
-                        logger.info(f"[表格插入调试] 已为后续文本创建新段落")
+                        logger.info(f"[表格插入调试] 已为后续文本创建新段落（继承样式）")
             
             i += 1
         
@@ -1267,13 +1271,14 @@ class DocxTemplateRender(object):
             logger.error(f"[表格创建] ❌ 表格元素创建失败: {str(e)}", exc_info=True)
             return None
     
-    def _create_new_paragraph_after_table(self, parent, table_index):
+    def _create_new_paragraph_after_table(self, parent, table_index, style_info=None):
         """
         在表格后创建新段落
         
         Args:
             parent: 父容器
             table_index: 表格在父容器中的索引
+            style_info: 样式信息字典，用于应用到新段落
         
         Returns:
             新段落对象
@@ -1281,17 +1286,107 @@ class DocxTemplateRender(object):
         try:
             # 创建新段落
             new_paragraph = self.doc.add_paragraph()
+            
+            # 应用样式信息
+            if style_info:
+                self._apply_style_info(new_paragraph, style_info)
+                alignment_info = f"继承样式，对齐={style_info.get('alignment', 'None')}"
+            else:
+                # 兜底：设置为左对齐
+                from docx.enum.text import WD_ALIGN_PARAGRAPH
+                new_paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                alignment_info = "默认左对齐"
+            
             paragraph_element = new_paragraph._element
             
             # 在表格后插入新段落
             parent.insert(table_index + 1, paragraph_element)
             
-            logger.info(f"[段落创建] ✅ 在表格后创建新段落，索引: {table_index + 1}")
+            logger.info(f"[段落创建] ✅ 在表格后创建新段落（{alignment_info}），索引: {table_index + 1}")
             return new_paragraph
             
         except Exception as e:
             logger.error(f"[段落创建] ❌ 创建新段落失败: {str(e)}", exc_info=True)
             return None
+
+    def _extract_paragraph_style_info(self, paragraph):
+        """
+        提取段落的完整样式信息
+        
+        Args:
+            paragraph: 段落对象
+            
+        Returns:
+            dict: 包含段落样式信息的字典
+        """
+        try:
+            style_info = {
+                'alignment': paragraph.alignment,
+                'paragraph_format': {},
+                'style_name': None
+            }
+            
+            # 提取段落格式信息
+            if hasattr(paragraph, 'paragraph_format'):
+                pf = paragraph.paragraph_format
+                style_info['paragraph_format'] = {
+                    'space_before': pf.space_before,
+                    'space_after': pf.space_after,
+                    'line_spacing': pf.line_spacing,
+                    'left_indent': pf.left_indent,
+                    'right_indent': pf.right_indent,
+                    'first_line_indent': pf.first_line_indent,
+                }
+                
+            # 提取样式名称
+            if hasattr(paragraph, 'style') and paragraph.style:
+                style_info['style_name'] = paragraph.style.name
+                
+            logger.debug(f"[样式提取] 段落样式信息: 对齐={style_info['alignment']}, 样式={style_info['style_name']}")
+            return style_info
+            
+        except Exception as e:
+            logger.warning(f"[样式提取] 提取段落样式失败: {str(e)}")
+            return {'alignment': None, 'paragraph_format': {}, 'style_name': None}
+
+    def _apply_style_info(self, paragraph, style_info):
+        """
+        将样式信息应用到段落
+        
+        Args:
+            paragraph: 目标段落对象
+            style_info: 样式信息字典
+        """
+        try:
+            # 应用对齐方式
+            if style_info.get('alignment') is not None:
+                paragraph.alignment = style_info['alignment']
+                logger.debug(f"[样式应用] 应用对齐方式: {style_info['alignment']}")
+                
+            # 应用段落格式
+            paragraph_format = style_info.get('paragraph_format', {})
+            if paragraph_format:
+                pf = paragraph.paragraph_format
+                
+                for attr_name, value in paragraph_format.items():
+                    if value is not None and hasattr(pf, attr_name):
+                        try:
+                            setattr(pf, attr_name, value)
+                            logger.debug(f"[样式应用] 应用段落格式 {attr_name}={value}")
+                        except Exception as attr_e:
+                            logger.debug(f"[样式应用] 跳过段落格式 {attr_name}: {str(attr_e)}")
+                            
+            # 应用样式名称
+            style_name = style_info.get('style_name')
+            if style_name:
+                try:
+                    paragraph.style = style_name
+                    logger.debug(f"[样式应用] 应用样式名称: {style_name}")
+                except Exception as style_e:
+                    logger.debug(f"[样式应用] 跳过样式名称应用: {str(style_e)}")
+                    
+        except Exception as e:
+            logger.warning(f"[样式应用] 应用样式信息失败: {str(e)}")
 
     def _is_number(self, text: str) -> bool:
         """
