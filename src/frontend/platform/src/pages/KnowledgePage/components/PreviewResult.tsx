@@ -22,15 +22,13 @@ interface IProps {
     previewCount: number;
     applyEachCell: boolean;
     cellGeneralConfig: any;
-      handlePreviewResult: (isSuccess: boolean) => void;
-        kId?: string | number;
+    handlePreviewResult: (isSuccess: boolean) => void;
+    kId?: string | number;
 }
 export type Partition = {
     [key in string]: { text: string, type: string, part_id: string }
 }
-export default function PreviewResult({showPreview ,previewCount, rules, step, applyEachCell, cellGeneralConfig,kId,handlePreviewResult }: IProps) {
-    console.log(showPreview,rules,567);
-    
+export default function PreviewResult({ showPreview, previewCount, rules, step, applyEachCell, cellGeneralConfig, kId, handlePreviewResult }: IProps) {
     const { id } = useParams()
 
     const [chunks, setChunks] = useState([]) // 当前文件分块
@@ -73,22 +71,21 @@ export default function PreviewResult({showPreview ,previewCount, rules, step, a
         const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, knowledgeId
             , retainImages, separator, separatorRule } = rules
         const currentFile = fileList.find(file => file.id === selectId)
-       
-       let preview_url
-        if(showPreview){
-            preview_url = currentFile.previewUrl ||currentFile?.filePath
-        }else {
-            preview_url=currentFile?.filePath
+
+        let preview_url
+        if (showPreview) {
+            preview_url = currentFile.previewUrl || currentFile?.filePath
+        } else {
+            preview_url = currentFile?.filePath
         }
-        console.log(preview_url ,currentFile,6789);
-        
+
         captureAndAlertRequestErrorHoc(previewFileSplitApi({
             // 缓存(修改规则后需要清空缓存, 切换文件使用缓存)
             // previewCount变更时为重新预览分段操作,不使用缓存
             cache: prevPreviewCountMapRef.current[currentFile.id] === previewCount,
-            knowledge_id: id||kId,
+            knowledge_id: id || kId,
             file_list: [{
-                file_path:preview_url,
+                file_path: preview_url,
                 excel_rule: applyEachCell
                     ? currentFile.excelRule
                     : { ...cellGeneralConfig }
@@ -107,15 +104,15 @@ export default function PreviewResult({showPreview ,previewCount, rules, step, a
             ["pdf", "txt", "md", "html", "docx", "png", "jpg", "jpeg", "bmp"].includes(currentFile.suffix)
                 && setFileViewUrl({ load: false, url: currentFile.filePath })
         }).then(res => {
-        
+
             if (!res) {
-                     handlePreviewResult(false);
+                handlePreviewResult(false);
                 setFileViewUrl({ load: false, url: '' })
                 return setLoading(false)
             }
             if (res === 'canceled') return
             console.log("previewFileSplitApi:", res)
-             handlePreviewResult(true); 
+            handlePreviewResult(true);
             res && setChunks(res.chunks.map(chunk => ({
                 bbox: chunk.metadata.bbox,
                 activeLabels: {},
@@ -154,34 +151,34 @@ export default function PreviewResult({showPreview ,previewCount, rules, step, a
     }
 
     return (<div className={cn("h-full flex gap-2 justify-center", 'w-[100%]')}>
-        {(step === 3 || step ===2 && !previewCount)&& currentFile && <PreviewFile
+        {(step === 3 || step === 2 && !previewCount) && currentFile && <PreviewFile
             urlState={fileViewUrl}
             file={currentFile}
-            step = {step}
+            step={step}
             chunks={chunks}
             setChunks={setChunks}
             partitions={partitions}
         />}
         <div className={cn('relative',)}>
             {/* 下拉框 - 右上角 */}
-            {(step === 3 ||(step===2 &&showPreview))&&(
-               <div className="flex justify-end">
-                <Select value={selectId} onValueChange={setSelectId}>
-                    <SelectTrigger className="w-72">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {rules.fileList.map((file, index) => (
-                            <SelectItem key={file.id} value={file.id}>
-                                <div className="flex items-center gap-2">
-                                    <FileIcon type={file.suffix} className="size-4 min-w-4" />
-                                    {file.fileName}
-                                </div>
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            </div>)
+            {(step === 3 || (step === 2 && showPreview)) && (
+                <div className="flex justify-end">
+                    <Select value={selectId} onValueChange={setSelectId}>
+                        <SelectTrigger className="w-72">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {rules.fileList.map((file, index) => (
+                                <SelectItem key={file.id} value={file.id}>
+                                    <div className="flex items-center gap-2">
+                                        <FileIcon type={file.suffix} className="size-4 min-w-4" />
+                                        {file.fileName}
+                                    </div>
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>)
             }
             {/* 其他内容 */}
             <PreviewParagraph
