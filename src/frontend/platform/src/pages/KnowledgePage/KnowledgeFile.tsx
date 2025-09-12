@@ -1,6 +1,5 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/bs-ui/button";
-import TipPng from "@/assets/Vector.svg";
 import { Input, SearchInput } from "../../components/bs-ui/input";
 import {
     Table,
@@ -11,23 +10,23 @@ import {
     TableRow
 } from "../../components/bs-ui/table";
 
-import { useContext, useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { Textarea } from "../../components/bs-ui/input";
-import { userContext } from "../../contexts/userContext";
-import { copyLibDatabase, createFileLib, deleteFileLib, readFileLibDatabase, updateKnowledge } from "../../controllers/API";
-import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { toast, useToast } from "@/components/bs-ui/toast/use-toast";
+import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { getKnowledgeModelConfig, getLLmServerDetail, getModelListApi } from "@/controllers/API/finetune";
 import { BookCopy, CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Trash2 } from "lucide-react";
+import { useContext, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Textarea } from "../../components/bs-ui/input";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
+import { userContext } from "../../contexts/userContext";
+import { copyLibDatabase, createFileLib, deleteFileLib, readFileLibDatabase, updateKnowledge } from "../../controllers/API";
+import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useTable } from "../../util/hook";
 import { ModelSelect } from "../ModelPage/manage/tabs/WorkbenchModel";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 
 function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create', currentLib = null }) {
     const { t } = useTranslation()
@@ -450,14 +449,14 @@ export default function KnowledgeFile() {
     // copy
     const handleCopy = async (elem) => {
         const newName = `${elem.name}的副本`;
-      if (newName.length > 200) {
-              toast({
-                    title:  '操作失败',
-                    variant: 'error',
-                    description: '复制后的知识库名称超过字数限制'
-                });
-  return;
-}
+        if (newName.length > 200) {
+            toast({
+                title: '操作失败',
+                variant: 'error',
+                description: '复制后的知识库名称超过字数限制'
+            });
+            return;
+        }
         setCopyLoadingId(elem.id);
         doing[elem.id] = true;
         try {
@@ -513,7 +512,7 @@ export default function KnowledgeFile() {
                                     }}
                                 >
                                     <div className="flex items-center gap-2 py-1">
-                                        <div className="flex items-center justify-center w-[50px] h-[50px] bg-primary text-white rounded-[10px]">
+                                        <div className="flex items-center justify-center size-12 bg-primary text-white rounded-[10px]">
                                             <BookCopy />
                                         </div>
                                         <div>
