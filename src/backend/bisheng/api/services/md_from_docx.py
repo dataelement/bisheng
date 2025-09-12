@@ -1,7 +1,9 @@
-import pypandoc
-from loguru import logger
+import os
 from pathlib import Path
 from uuid import uuid4
+
+import pypandoc
+from loguru import logger
 
 try:
     # 尝试检查 pandoc 版本，如果失败则尝试下载
@@ -19,7 +21,7 @@ except OSError:  # OSError 是 get_pandoc_path 在找不到时抛出的
 
 
 def convert_doc_to_md_pandoc_high_quality(
-    doc_path_str: str, output_md_str: str, image_dir_name: str = "media"
+        doc_path_str: str, output_md_str: str, image_dir_name: str = "media"
 ):
     """
     使用 Pandoc 将 .doc 或 .docx 文件高质量地转换为 Markdown，并提取图片。
@@ -73,6 +75,8 @@ def convert_doc_to_md_pandoc_high_quality(
             )
     except Exception as e:  # 其他潜在错误
         logger.debug(f"转换文件 {doc_path} 时发生未知错误: {e}")
+    if not os.path.exists(output_md_path):
+        raise RuntimeError("convert to md failed")
 
 
 def handler(cache_dir, file_name):
