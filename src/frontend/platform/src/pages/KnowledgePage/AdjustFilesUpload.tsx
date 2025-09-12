@@ -5,7 +5,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { rebUploadFile, retryKnowledgeFileApi, subUploadLibFile } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ChevronLeft } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import FileUploadStep2 from "./components/FileUploadStep2";
@@ -29,6 +29,12 @@ export default function AdjustFilesUpload() {
   
   // 从路由状态获取调整模式的初始数据（必须传文件数据）
   const initFileData = location.state?.fileData;
+  useEffect(() => {
+    // 如果没有初始化数据，说明是直接访问，跳转到/filelib
+    if (!initFileData) {
+      navigate('/filelib', { replace: true });
+    }
+  }, [initFileData, navigate]);
   if (!initFileData) {
     navigate(-1); // 无数据时回退
     return null;
@@ -112,17 +118,18 @@ export default function AdjustFilesUpload() {
     const fileName = initFileData.name || initFileData.file_name || '';
   const fileSuffix = fileName.split('.').pop()?.toLowerCase() || 'txt';
   const fileType = ['xlsx', 'xls', 'csv'].includes(fileSuffix) ? 'table' : 'file';
+  
   const [resultFiles, setResultFiles] = useState([
     {
       id: initFileData.id,
       fileName: initFileData.name || initFileData.file_name, // 兼容字段名
       file_path: initFileData.filePath || initFileData.object_name, // 兼容文件路径
       suffix: initFileData.suffix || initFileData.file_name?.split(".").pop() || "", // 解析后缀
+      previewUrl:initFileData.previewUrl,
       fileType: fileType,
       split_rule: getParsedSplitRule(initFileData.split_rule) // 传入转换后的配置对象
     }
   ]);
-  console.log(initFileData,78);
   
   const [segmentRules, setSegmentRules] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);

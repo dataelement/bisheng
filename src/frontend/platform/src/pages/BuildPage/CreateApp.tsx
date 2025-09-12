@@ -16,7 +16,7 @@ import { copyReportTemplate, createWorkflowApi } from "@/controllers/API/workflo
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import { AppType, AppTypeToNum } from "@/types/app";
-import { forwardRef, useContext, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useContext, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
@@ -230,9 +230,13 @@ ${t('build.exampleTwo', { ns: 'bs' })}
         // 上传头像逻辑
         const uploadAvator = (file: File) => {
             uploadFileWithProgress(file, (progress) => { }, 'icon').then(res => {
-                setFormData(prev => ({ ...prev, url: '/bisheng/' + res.relative_path }));
+                setFormData(prev => ({ ...prev, url: res.file_path }));
             });
         };
+
+        const previewAvatar = useMemo(() =>
+            formData.url ? __APP_ENV__.BASE_URL + formData.url : '',
+            [formData.url])
 
         return (
             <Dialog open={open} onOpenChange={setOpen}>
@@ -245,8 +249,8 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                             <label htmlFor="name" className="bisheng-label">
                                 {appType === AppType.ASSISTANT ? t('assistantAvatar') : t('workflowAvatar')}
                             </label>
-                            <Avator value={formData.url} className="mt-3" onChange={uploadAvator}>
-                                <AppAvator id={formData.name} url={loca?.logo} flowType={AppTypeToNum[appType]} className="size-8"></AppAvator>
+                            <Avator value={previewAvatar} className="mt-3" onChange={uploadAvator}>
+                                <AppAvator id={6} flowType={AppTypeToNum[appType]} className="size-8"></AppAvator>
                             </Avator>
                         </div>
                         <div className="mb-6">

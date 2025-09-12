@@ -88,7 +88,6 @@ export const ChatToolDown = ({ linsi, tools, setTools, config, searchType, setSe
 
 const LinsiTools = ({ tools, setTools }) => {
     const { data: bsConfig } = useGetBsConfig()
-    const [building] = useModelBuilding()
 
     useEffect(() => {
         const defaultTools = [{
@@ -101,7 +100,7 @@ const LinsiTools = ({ tools, setTools }) => {
             id: 'knowledge',
             name: '个人知识库',
             icon: <Pencil size="16" />,
-            checked: !building
+            checked: true
         },]
         if (bsConfig) {
             const tools = bsConfig.linsightConfig?.tools || []
@@ -115,7 +114,7 @@ const LinsiTools = ({ tools, setTools }) => {
             setTools((tools) => [...defaultTools, ...newTools])
         }
 
-    }, [bsConfig, building])
+    }, [bsConfig])
 
 
     const active = useMemo(() => tools.some(tool => tool.checked), [tools])
@@ -136,7 +135,6 @@ const LinsiTools = ({ tools, setTools }) => {
                     </div>
                     <Switch className='data-[state=checked]:bg-blue-600'
                         checked={tool.checked}
-                        disabled={tool.id === 'knowledge' && building}
                         onCheckedChange={val =>
                             setTools(tools.map(t => t.id === tool.id ? { ...t, checked: val } : t))
                         }

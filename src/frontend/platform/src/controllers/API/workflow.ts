@@ -41,7 +41,7 @@ export const createWorkflowApi = async (name, desc, url, flow): Promise<any> => 
 export const saveWorkflow = async (versionId: number, data: WorkFlow): Promise<any> => {
     if (data.logo) {
         // logo保存相对路径
-        data.logo = data.logo.replace('/bisheng', '')
+        data.logo = data.logo.replace(/^\/\w+/, '')
     }
     return await axios.put(`/api/v1/workflow/versions/${versionId}`, data);
 }
@@ -111,7 +111,7 @@ export async function getWorkFlowVersions(flow_id): Promise<{ data: any[], total
 */
 export const onlineWorkflow = async (flow, status = ''): Promise<any> => {
     const { name, description, logo } = flow
-    const data = { name, description, logo: logo && logo.replace('/bisheng', '') }
+    const data = { name, description, logo: logo && logo.replace(/^\/\w+/, '') }
     if (status) {
         data['status'] = status
     }

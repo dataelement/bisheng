@@ -251,14 +251,29 @@ export default function QasPage() {
         }
     }, [datalist])
 
-    useEffect(() => {
-        // @ts-ignore
-        const libname = window.libname // 临时记忆
-        if (libname) {
-            localStorage.setItem('libname', window.libname)
+// 修改 useEffect 中处理标题的部分
+useEffect(() => {
+    // 处理 window.libname 可能的格式问题
+    let libName = '';
+    // 检查 window.libname 是否存在且有效
+    if (window.libname) {
+        // 处理数组格式（[名称, 描述]）
+        if (Array.isArray(window.libname) && window.libname.length > 0) {
+            libName = window.libname[0];
+        } 
+        // 处理字符串格式
+        else if (typeof window.libname === 'string') {
+            libName = window.libname;
         }
-        setTitle(window.libname[0] || localStorage.getItem('libname'))
-    }, [])
+        // 存储到 localStorage 时只存名称
+        localStorage.setItem('libname', libName);
+    } 
+    // 从 localStorage 获取备份
+    else {
+        libName = localStorage.getItem('libname') || '';
+    }
+    setTitle(libName || t('unknownKnowledgeBase')); // 提供默认文本
+}, []);
 const handleEnableSelected = async () => {
   if (!selectedItems.length) return;
 

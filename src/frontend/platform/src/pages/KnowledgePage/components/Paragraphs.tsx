@@ -55,7 +55,7 @@ export default function Paragraphs({ fileId, onBack }) {
     const searchInputRef = useRef(null);
     const isChangingRef = useRef(false);
     const [isInitReady, setIsInitReady] = useState(false);
-
+    const [previewUrl,setPreviewUrl] = useState()
     // 1. 修复：URL乱码（添加decodeURIComponent）+ 确保数据顺序
     const fetchFileUrl = useCallback(async (fileId) => {
         console.log('获取文件URL:', fileId);
@@ -66,15 +66,20 @@ export default function Paragraphs({ fileId, onBack }) {
             const res = await getFilePathApi(fileId);
             const pares = await getFileBboxApi(fileId)
             setPartitions(pares)
-            console.log('getFilePathApi 响应:', res,pares);
+            console.log('getFilePathApi 响应:', res.original_url,pares);
 
             // 修复：提取URL并解码（解决中文/特殊字符乱码）
             let url;
-            if (res.data) {
-                url = res.data.url || res.data.filePath || res.data;
+            if (res) {
+                url = res.original_url || res.data.filePath || res.url;
+                if(res.preview_url){
+                    setPreviewUrl(res.preview_url)
+                }
             } else {
                 url = res.url || res.filePath || res;
             }
+            console.log(url,2222);
+            
             const trimmedUrl = (url || '').trim();
             
             if (!trimmedUrl) {
@@ -363,6 +368,7 @@ export default function Paragraphs({ fileId, onBack }) {
                 skipToStep: 2,
                 fileId: selectedFileId,
                 fileData: {
+                    previewUrl:previewUrl,
                     id: currentFile?.id,
                     name: currentFile?.name,
                     split_rule: currentFile?.split_rule || currentFile?.fullData?.split_rule,

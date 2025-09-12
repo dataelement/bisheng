@@ -45,8 +45,9 @@ export default function PreviewFile({
 
   const targetFile = matchedRawFile || file;
   const fileParseType = targetFile.parse_type;
-  const fileName = targetFile.name || file.fileName;
+  const fileName = targetFile.name || file.fileName||file.name;
   const suffix = useMemo(() => {
+console.log(fileName,3322);
 
     return fileName?.split('.').pop()?.toLowerCase() || '';
   }, [fileName]);

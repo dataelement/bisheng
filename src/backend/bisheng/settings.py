@@ -78,6 +78,8 @@ class MinioConf(BaseModel):
     cert_check: Optional[bool] = Field(default=False, description="是否校验证书")
     endpoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio 地址")
     sharepoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio 公开访问地址")
+    share_schema: Optional[bool] = Field(default=False, description="minio 公开访问地址是否使用https")
+    share_cert_check: Optional[bool] = Field(default=False, description="minio 公开访问地址是否校验证书")
     access_key: Optional[str] = Field(default="minioadmin", description="minio 用户名")
     secret_key: Optional[str] = Field(default="minioadmin", description="minio 密码")
     public_bucket: Optional[str] = Field(default="bisheng",

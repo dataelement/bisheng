@@ -325,6 +325,8 @@ export const useWebSocket = (helpers) => {
                             }
                         },
                     })
+                    // 闭合所有输出节点
+                    helpers.message.closeOutputMsg(submitData.data.data.output_result)
                     break;
                 case ActionType.STOP:
                     sendWsMsg({ action: 'stop' })

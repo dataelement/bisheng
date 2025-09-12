@@ -5,7 +5,7 @@ import { Input, Textarea } from "@/components/bs-ui/input";
 import Avator from "@/components/bs-ui/input/avator";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function EditAssistantDialog({ logo, name, desc, onSave, loca }) {
@@ -84,6 +84,10 @@ export default function EditAssistantDialog({ logo, name, desc, onSave, loca }) 
         })
     }
 
+    const previewAvatar = useMemo(() =>
+        formData.logo ? __APP_ENV__.BASE_URL + formData.logo : '',
+        [formData.logo])
+
     return <DialogContent className="sm:max-w-[625px] bg-background-login">
         <DialogHeader>
             <DialogTitle>{t('build.editAssistant')}</DialogTitle>
@@ -92,11 +96,11 @@ export default function EditAssistantDialog({ logo, name, desc, onSave, loca }) 
             <div className="">
                 <label htmlFor="name" className="bisheng-label">{t('build.assistantAvatar')}<span className="bisheng-tip">*</span></label>
                 <Avator
-                    value={formData.logo}
+                    value={previewAvatar}
                     className="mt-2"
                     onChange={uploadAvator}
                 >
-                    <AppAvator id={formData.name} url={formData.logo} flowType={5} className="size-8"></AppAvator>
+                    <AppAvator id={6} flowType={5} className="size-9"></AppAvator>
                 </Avator>
 
                 {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>}

@@ -47,6 +47,9 @@ const useLoadMessage = (chatId: string, chatState: any, messageScrollRef: React.
     const loadMore = async (chatId: string) => {
         // 运行中or没有更多 || 最后一条消息id不存在，忽略
         if (running || historyEnd || !messages?.[0]?.id || !flow) return
+        const messageId = messages[0].id
+        // u-开头的消息表示新建会话，新建会话无需加载历史消息
+        if (typeof messageId === 'string' && messageId.startsWith('u-')) return
 
         const msgs = await getChatHistoryApi(flow.id, chatId, flow.flow_type, messages[0].id || 0)
         setChats((prev) => {
