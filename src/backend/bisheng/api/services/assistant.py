@@ -459,6 +459,8 @@ class AssistantService(BaseService, AssistantUtils):
             one.is_delete = 0
             one.is_preset = req.is_preset
 
+        tool_extra = {"api_location": req.api_location, "parameter_name": req.parameter_name}
+        req.extra = json.dumps(tool_extra, ensure_ascii=False)
         # 添加工具类别和对应的 工具列表
         res = GptsToolsDao.insert_tool_type(req)
 

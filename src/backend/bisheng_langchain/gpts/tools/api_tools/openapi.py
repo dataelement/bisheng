@@ -33,7 +33,8 @@ class OpenApiTools(APIToolBase):
         for k, v in kwargs.items():
             if params_define.get(k):
                 if params_define[k]['in'] == 'query':
-                    params[k] = v
+                    field_type = params_define[k]['schema']['type']
+                    params[k] = convert_openapi_field_value(v, field_type)
                 elif params_define[k]['in'] == 'path':
                     path_params[k] = v
                 else:

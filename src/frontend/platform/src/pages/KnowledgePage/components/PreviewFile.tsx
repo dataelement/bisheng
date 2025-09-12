@@ -55,11 +55,6 @@ export default function PreviewFile({
       (targetFile.fileType && targetFile.fileType.includes('uns'))
   }, [fileParseType, targetFile.fileType]);
 
-  // 2. 调整Excel文件过滤逻辑（仅非uns类型的Excel才返回null）
-  if (['xlsx', 'xls', 'csv'].includes(suffix) && !isUnsType) {
-    return null;
-  }
-
   // 3. 状态管理（增加与ParagraphEdit一致的定位状态）
   const [postion, setPostion] = useState([1, 0])
   const [labelsMap, setLabelsMap] = useState(new Map())
@@ -292,6 +287,7 @@ export default function PreviewFile({
     labelsMapTempRef.current[selectedChunkIndex] = labelsMap;
   };
 
+  // 2. 调整Excel文件过滤逻辑
   if (['xlsx', 'xls', 'csv'].includes(file.suffix)) return null
 
 
