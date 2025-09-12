@@ -21,7 +21,7 @@ import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { toast, useToast } from "@/components/bs-ui/toast/use-toast";
 import { getKnowledgeModelConfig, getLLmServerDetail, getModelListApi } from "@/controllers/API/finetune";
 import { BookCopy, CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Trash2 } from "lucide-react";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
@@ -146,15 +146,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
             }
             // 情况2：名称长度 > 可占用最大长度 → 截断名称后再拼接
             else {
-                // 截断名称（保留前 maxNameLengthForDefaultDesc 个字，避免总长度超200）
-                const truncatedName = name.slice(0, maxNameLengthForDefaultDesc);
-                // 生成截断截断后的默认描述
-                desc = `${defaultDescPrefix}${truncatedName}${defaultDescSuffix}`;
-                // 提示用户：名称过长已被截断（提升体验，避免用户困惑）
-                toast({
-                    variant: "info",
-                    description: `知识库名称过长，已自动截断为${maxNameLengthForDefaultDesc}字，确保默认描述不超过200字限制`
-                });
+                desc = '';
             }
         }
 
@@ -458,13 +450,14 @@ export default function KnowledgeFile() {
     // copy
     const handleCopy = async (elem) => {
         const newName = `${elem.name}的副本`;
-        if (newName.length > 200) {
-            message({
-                variant: 'error',
-                description: '复制失败：复制后的知识库名称超过200字限制'
-            });
-            return;
-        }
+      if (newName.length > 200) {
+              toast({
+                    title:  '操作失败',
+                    variant: 'error',
+                    description: '复制后的知识库名称超过字数限制'
+                });
+  return;
+}
         setCopyLoadingId(elem.id);
         doing[elem.id] = true;
         try {
@@ -509,7 +502,7 @@ export default function KnowledgeFile() {
                         {datalist.map((el: any) => (
                             <TableRow
                                 key={el.id}
-                                className=" h-[70px]"
+                                className=""
                             >
                                 <TableCell
                                     className="font-medium max-w-[200px]"
@@ -519,7 +512,7 @@ export default function KnowledgeFile() {
                                         handleCachePage();
                                     }}
                                 >
-                                    <div className="flex items-center gap-2 py-2">
+                                    <div className="flex items-center gap-2 py-1">
                                         <div className="flex items-center justify-center w-[50px] h-[50px] bg-primary text-white rounded-[10px]">
                                             <BookCopy />
                                         </div>

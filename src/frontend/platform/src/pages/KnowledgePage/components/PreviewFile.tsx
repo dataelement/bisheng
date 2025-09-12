@@ -17,7 +17,8 @@ export default function PreviewFile({
   rawFiles,
   step,
   setChunks,
-  edit = false
+  edit = false,
+  previewUrl
 }: {
   urlState: { load: false; url: '' };
   file: any;
@@ -27,6 +28,8 @@ export default function PreviewFile({
   setChunks: any;
   edit?: boolean;
 }) {
+  console.log(urlState,file,rawFiles,67);
+  
   const { t } = useTranslation('knowledge')
   const MemoizedFileView = React.memo(FileView);
   const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
@@ -234,7 +237,7 @@ export default function PreviewFile({
       case 'md': return <TxtFileViewer markdown filePath={url} />;
       case 'html': return <TxtFileViewer html filePath={url} />;
       case 'doc':
-      case 'docx': return <DocxPreview filePath={url} />;
+      case 'docx': return <DocxPreview filePath={previewUrl||url} />;
       case 'png':
       case 'jpg':
       case 'jpeg':

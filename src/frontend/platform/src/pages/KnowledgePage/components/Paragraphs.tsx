@@ -609,7 +609,8 @@ export default function Paragraphs({ fileId, onBack }) {
                         rawFiles={rawFiles}
                         key={selectedFileId}
                         partitions={partitions}
-                        urlState={{ load: !isFetchingUrl, url: fileUrl }}
+                        previewUrl={previewUrl}
+                        urlState={{ load: !isFetchingUrl, url: previewUrl||fileUrl }}
                         file={currentFile}
                         chunks={safeChunks}
                         setChunks={setChunks}

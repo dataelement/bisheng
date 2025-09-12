@@ -50,6 +50,12 @@ class ChatMessage(MessageBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     receiver: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
 
+    # 关键：设置表级别字符集为 utf8mb4
+    __table_args__ = {
+        "mysql_charset": "utf8mb4",
+        "mysql_collate": "utf8mb4_unicode_ci"
+    }
+
 
 class ChatMessageRead(MessageBase):
     id: Optional[int] = None

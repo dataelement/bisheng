@@ -372,7 +372,7 @@ const ModelSelect = ({ options, value, onChange }: { options?: BsConfig['models'
     }
   }, [options, value])
 
-  return <Select onValueChange={onChange}>
+  return <Select value={useMemo(() => value + '', [value])} onValueChange={onChange}>
     <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent">
       <div
         className='flex gap-2'

@@ -42,7 +42,7 @@ const initialStrategies = [
 
 const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode,kId }: IProps, ref) => {
     console.log(resultFiles,778,kId);
-    
+    const [previewLoading, setPreviewLoading] = useState(false);
     const { id: kid } = useParams()
     console.log('FileUploadStep2 props:', { step, resultFiles, isAdjustMode,kId });
     const { t } = useTranslation('knowledge')
@@ -153,6 +153,7 @@ useEffect(() => {
     const handlePreview = () => {
         if (vildateCell()) return
         setShowPreview(true)
+          setPreviewLoading(true); 
         setPreviewCount(c => c + 1) // 刷新分段
 
 
@@ -219,21 +220,35 @@ useEffect(() => {
 
             }
             {/* 原文预览 & 分段预览 */}
-            {
-                (showPreview || step === 3) && (
-
-                    <PreviewResult
-                        showPreview={showPreview}
-                        step={step}
-                        previewCount={previewCount}
-                        kId={kId}
-                        rules={applyRule.rules}
-                        applyEachCell={applyRule.applyEachCell}
-                        cellGeneralConfig={applyRule.cellGeneralConfig}
-                          handlePreviewResult={(isSuccess) => setPreviewFailed(!isSuccess)}
-                    />
-                )
-            }
+        {
+    (showPreview || step === 3) ? (
+        <div className="relative">
+            {previewLoading && (
+                <div className="absolute top-80">
+                    <div className="flex flex-col items-center">
+                        <LoadingIcon className="h-20 w-20 text-primary" />
+                    </div>
+                </div>
+            )}
+            
+            {/* 预览组件 - 始终渲染以保证Hook稳定性 */}
+            <PreviewResult
+                showPreview={showPreview}
+                step={step}
+                previewCount={previewCount}
+                kId={kId}
+                rules={applyRule.rules}
+                applyEachCell={applyRule.applyEachCell}
+                cellGeneralConfig={applyRule.cellGeneralConfig}
+                handlePreviewResult={(isSuccess) => {
+                    setPreviewFailed(!isSuccess);
+                    // 预览完成后关闭loading
+                    setPreviewLoading(false);
+                }}
+            />
+        </div>
+    ) : null
+}
         </div >
         <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
             <Button

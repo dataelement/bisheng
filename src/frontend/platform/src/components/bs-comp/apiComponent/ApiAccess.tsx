@@ -55,9 +55,9 @@ const ApiAccess = ({ }) => {
     const python = () => {
         return `import requests
 import json
-url = "http://192.168.106.122:3113/api/v2/assistant/chat/completions"
+url = "${window.location.protocol}//${window.location.host}/api/v2/assistant/chat/completions"
 payload = json.dumps({
-   "model": "43606a49e1af40cb8da9a39a6df7eb6a",
+   "model": "${assisId}",
    "messages": [
       {
          "role": "user",

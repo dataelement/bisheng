@@ -29,17 +29,19 @@ class DatabaseService(Service):
 
     def _create_engine(self):
         connect_args = {'check_same_thread': False} if self.database_url.startswith("sqlite") else {}
+        connect_args['charset'] = "utf8mb4"  # Ensure utf8mb4 charset for MySQL
         return create_engine(
             self.database_url,
             connect_args=connect_args,
             pool_size=100,
             max_overflow=20,
             pool_timeout=3,
-            pool_pre_ping=True
+            pool_pre_ping=True,
         )
 
     def _create_async_engine(self):
         connect_args = {'check_same_thread': False} if self.async_database_url.startswith("sqlite") else {}
+        connect_args['charset'] = "utf8mb4"  # Ensure utf8mb4 charset for MySQL
         return create_async_engine(
             self.async_database_url,
             connect_args=connect_args,
