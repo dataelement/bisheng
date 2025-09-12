@@ -21,7 +21,6 @@ from bisheng.chat.types import WorkType
 from bisheng.settings import settings
 from bisheng.utils import generate_uuid
 
-
 router = APIRouter(prefix='/assistant', tags=['OpenAPI', 'Assistant'])
 
 
@@ -74,13 +73,15 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
     # 初始化助手agent
     agent = AssistantAgent(assistant_info, '')
     await agent.init_assistant()
-    
+
     # 判断模型是否支持流式调用
     model_supports_streaming = _check_model_supports_streaming(agent)
-    
-    logger.info(f'act=assistant_chat_completions model_supports_streaming={model_supports_streaming}, stream={req_data.stream}, llm_type={type(agent.llm)}')
-    logger.info(f'[调试] 即将判断分支: not req_data.stream={not req_data.stream}, not model_supports_streaming={not model_supports_streaming}')
-    
+
+    logger.info(
+        f'act=assistant_chat_completions model_supports_streaming={model_supports_streaming}, stream={req_data.stream}, llm_type={type(agent.llm)}')
+    logger.info(
+        f'[调试] 即将判断分支: not req_data.stream={not req_data.stream}, not model_supports_streaming={not model_supports_streaming}')
+
     # 非流式调用或模型不支持流式
     if not req_data.stream or not model_supports_streaming:
         answer = await agent.run(question, chat_history)
@@ -88,7 +89,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
 
         openai_resp_id = generate_uuid()
         logger.info(f'act=assistant_chat_completions_non_streaming openai_resp_id={openai_resp_id}')
-        
+
         # 将结果包装成openai的数据格式
         openai_resp = OpenAIChatCompletionResp(
             id=openai_resp_id,
@@ -114,17 +115,17 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
             yield 'data: [DONE]\n\n'
 
         return StreamingResponse(_pseudo_event_stream(), media_type='text/event-stream')
-    
+
     # 模型支持流式且用户要求流式，使用真实的流式调用
     openai_resp_id = generate_uuid()
     logger.info(f'act=assistant_chat_completions_streaming openai_resp_id={openai_resp_id}')
-    
+
     async def _streaming_event_generator():
         """真实的流式事件生成器"""
         logger.info(f'[API流式] _streaming_event_generator开始执行')
         try:
             collected_content = ""
-            
+
             # 使用真正的流式调用
             logger.info(f'act = assistant chat completions streaming question={question}, chat_history={chat_history}')
             logger.info(f'[API流式] 即将调用agent.astream()')
@@ -134,25 +135,28 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
                     logger.info(f'[API流式] 进入astream循环，收到数据')
                     chunk_counter += 1
                     logger.info(f'[API流式] 收到第{chunk_counter}个chunk: {type(message_chunk)}')
-                    
+
                     if not message_chunk:
                         logger.debug(f'Empty message_chunk received')
                         continue
-                
-                    logger.debug(f'Received message_chunk: {type(message_chunk)}, content preview: {str(message_chunk)[:200]}')
-                    
+
+                    logger.debug(
+                        f'Received message_chunk: {type(message_chunk)}, content preview: {str(message_chunk)[:200]}')
+
                     # 获取最新的消息
                     latest_message = message_chunk[-1] if isinstance(message_chunk, list) else message_chunk
-                    logger.info(f'[API流式] 第{chunk_counter}个chunk - latest_message类型: {type(latest_message)}, 有content: {hasattr(latest_message, "content")}')
-                    
+                    logger.info(
+                        f'[API流式] 第{chunk_counter}个chunk - latest_message类型: {type(latest_message)}, 有content: {hasattr(latest_message, "content")}')
+
                     if hasattr(latest_message, 'content') and latest_message.content:
                         # stream_mode="messages"返回独立chunk，直接使用内容作为delta
                         delta_content = latest_message.content
-                        logger.info(f'[API流式] 第{chunk_counter}个chunk内容: "{delta_content[:50]}..." (长度: {len(delta_content)})')
-                        
+                        logger.info(
+                            f'[API流式] 第{chunk_counter}个chunk内容: "{delta_content[:50]}..." (长度: {len(delta_content)})')
+
                         # 累积完整内容用于历史记录
                         collected_content += delta_content
-                        
+
                         # 每个独立chunk都直接作为delta输出
                         if delta_content:
                             chunk_data = {
@@ -178,9 +182,9 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
             except Exception as astream_error:
                 logger.error(f'[API流式] agent.astream()调用出错: {str(astream_error)}')
                 raise astream_error
-            
+
             logger.info(f'[API流式] astream循环结束，总共处理了{chunk_counter}个chunk')
-            
+
             # 发送结束信号
             end_chunk = {
                 "id": openai_resp_id,
@@ -195,7 +199,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
             }
             yield f'data: {json.dumps(end_chunk, ensure_ascii=False)}\n\n'
             yield 'data: [DONE]\n\n'
-            
+
         except Exception as exc:
             logger.error(f'Streaming error: {exc}')
             # 发送错误信息
@@ -214,16 +218,9 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
             yield 'data: [DONE]\n\n'
 
     try:
-        # 添加HTTP headers以确保流式传输稳定性
-        headers = {
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'X-Accel-Buffering': 'no'  # 禁用Nginx缓冲
-        }
         logger.info(f'[API流式] 创建StreamingResponse，生成器函数: {_streaming_event_generator}')
-        return StreamingResponse(_streaming_event_generator(), 
-                               media_type='text/event-stream',
-                               headers=headers)
+        return StreamingResponse(_streaming_event_generator(),
+                                 media_type='text/event-stream')
     except Exception as exc:
         logger.error(f'StreamingResponse creation error: {exc}')
         return ORJSONResponse(status_code=500, content=str(exc))
@@ -248,7 +245,7 @@ def _check_model_supports_streaming(agent: AssistantAgent) -> bool:
             # 检查底层llm的stream属性
             elif hasattr(agent.llm, 'llm') and hasattr(agent.llm.llm, 'streaming'):
                 return agent.llm.llm.streaming
-        
+
         # 如果无法判断，默认支持流式（大多数现代LLM都支持）
         return True
     except Exception as e:

@@ -17,7 +17,8 @@ export default function PreviewFile({
   rawFiles,
   step,
   setChunks,
-  edit = false
+  edit = false,
+  previewUrl
 }: {
   urlState: { load: false; url: '' };
   file: any;
@@ -27,6 +28,8 @@ export default function PreviewFile({
   setChunks: any;
   edit?: boolean;
 }) {
+  console.log(urlState,file,rawFiles,67);
+  
   const { t } = useTranslation('knowledge')
   const MemoizedFileView = React.memo(FileView);
   const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
@@ -51,11 +54,6 @@ export default function PreviewFile({
     return fileParseType === 'uns' ||
       (targetFile.fileType && targetFile.fileType.includes('uns'))
   }, [fileParseType, targetFile.fileType]);
-
-  // 2. 调整Excel文件过滤逻辑（仅非uns类型的Excel才返回null）
-  if (['xlsx', 'xls', 'csv'].includes(suffix) && !isUnsType) {
-    return null;
-  }
 
   // 3. 状态管理（增加与ParagraphEdit一致的定位状态）
   const [postion, setPostion] = useState([1, 0])
@@ -234,7 +232,7 @@ export default function PreviewFile({
       case 'md': return <TxtFileViewer markdown filePath={url} />;
       case 'html': return <TxtFileViewer html filePath={url} />;
       case 'doc':
-      case 'docx': return <DocxPreview filePath={url} />;
+      case 'docx': return <DocxPreview filePath={previewUrl||url} />;
       case 'png':
       case 'jpg':
       case 'jpeg':
@@ -289,6 +287,7 @@ export default function PreviewFile({
     labelsMapTempRef.current[selectedChunkIndex] = labelsMap;
   };
 
+  // 2. 调整Excel文件过滤逻辑
   if (['xlsx', 'xls', 'csv'].includes(file.suffix)) return null
 
 
