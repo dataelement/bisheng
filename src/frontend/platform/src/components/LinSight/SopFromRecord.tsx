@@ -47,39 +47,53 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, onS
   const [selectedRecords, setSelectedRecords] = useState<SopRecord[]>([]);
   const [isSavingAsNew, setIsSavingAsNew] = useState(false);
   const [isOverwriting, setIsOverwriting] = useState(false);
+  const isMountedRef = useRef(false);
   // 获取SOP记录
-const fetchRecords = async (isSearch = false) => {
-  setLoading(true);
-  try {
-    const params = {
-      keyword: searchTerm,
-      ...(isSearch ? {} : { page, page_size: pageSize }),
-      sort: sortConfig.direction,
-    };
+  const fetchRecords = async (isSearch = false) => {
+    setLoading(true);
+    try {
+      const params = {
+        keyword: searchTerm,
+        // 修复1：始终传递分页参数，无论是否搜索
+        page,
+        page_size: pageSize,
+        sort: sortConfig.direction,
+      };
 
-    const res = await sopApi.GetSopRecord(params);
+      const res = await sopApi.GetSopRecord(params);
 
-    if (Array.isArray(res)) {
-      setAllRecords(res);  // 存储所有数据
-      setRecords(res);     // 当前页数据
-      setTotal(res.length);
-      // 默认选中第一项
-      if (res.length > 0) {
-        setCurrentRecord(res[0]);
+      if (Array.isArray(res)) {
+        setAllRecords(res);
+        setRecords(res);
+        setTotal(res.length);
+        if (res.length > 0 && !currentRecord) {
+          setCurrentRecord(res[0]);
+        }
+      } else if (res?.list) {
+        setAllRecords(res.list);
+        setRecords(res.list);
+        setTotal(res.total);
+        if (res.list.length > 0 && !currentRecord) {
+          setCurrentRecord(res.list[0]);
+        }
       }
-    } else if (res?.list) {
-      setAllRecords(res.list);  // 存储所有数据
-      setRecords(res.list);     // 当前页数据
-      setTotal(res.total);
-      // 默认选中第一项
-      if (res.list.length > 0) {
-        setCurrentRecord(res.list[0]);
-      }
+    } finally {
+      setLoading(false);
     }
-  } finally {
-    setLoading(false);
-  }
-};
+  };
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!open) {
+      setIsOverwriting(false);
+      setIsSavingAsNew(false);
+    }
+  }, [open]);
   // 初始化数据
   useEffect(() => {
     if (open) {
@@ -95,22 +109,16 @@ const fetchRecords = async (isSearch = false) => {
   useEffect(() => {
     const timer = setTimeout(() => {
       if (open) {
-        if (searchTerm) {
-          // 执行搜索时，重置页码为1并使用全局搜索
-          setPage(1);
-          fetchRecords(true);  // 传入true表示是搜索请求
-        } else {
-          // 没有搜索词时，恢复普通分页模式
-          fetchRecords();
-        }
+        setPage(1);  // 搜索时重置到第一页
+        fetchRecords(!!searchTerm);  // 使用统一的fetchRecords调用
       }
     }, 500);
     return () => clearTimeout(timer);
   }, [searchTerm]);
   // 搜索和分页变化时重新获取数据
   useEffect(() => {
-    if (open && !searchTerm) {
-      fetchRecords();
+    if (open) {
+      fetchRecords(!!searchTerm);
     }
   }, [page, pageSize, sortConfig]);
 
@@ -567,9 +575,16 @@ const fetchRecords = async (isSearch = false) => {
                     onOpenChange(false);
                   } catch (error) {
                     toast({ variant: 'error', description: t('ImportFromRecordsDialog.error') });
+                    // 错误时也重置状态
+                    if (isMountedRef.current) {
+                      setIsOverwriting(false);
+                    }
                   } finally {
                     setLoading(false);
-                    setIsOverwriting(false);
+                    // 确保状态重置
+                    if (isMountedRef.current) {
+                      setIsOverwriting(false);
+                    }
                   }
                 } else {
                   const recordsToUse = selectedRecordIds.length > 0
@@ -577,10 +592,16 @@ const fetchRecords = async (isSearch = false) => {
                     : currentRecord
                       ? [currentRecord]
                       : [];
-                  importSops(recordsToUse, true, false);
-                  setDuplicateDialogOpen(false);
+                  try {
+                    await importSops(recordsToUse, true, false);
+                    setDuplicateDialogOpen(false);
+                  } finally {
+                    // 确保状态重置
+                    if (isMountedRef.current) {
+                      setIsOverwriting(false);
+                    }
+                  }
                 }
-
               }}
             >
               {isOverwriting ? (

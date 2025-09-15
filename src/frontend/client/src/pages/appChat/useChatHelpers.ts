@@ -50,7 +50,7 @@ export default function useChatHelpers() {
                 running: false,
                 showStop: false,
                 showUpload: false,
-                inputDisabled: chatState?.flow.flow_type !== 1, // 技能不禁止输入
+                inputDisabled: !!errorMsg, //chatState?.flow.flow_type !== 1, // 技能不禁止输入
                 error: errorMsg,
             },
         }))

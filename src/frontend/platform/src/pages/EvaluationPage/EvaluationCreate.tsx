@@ -114,31 +114,31 @@ export default function EvaluatingCreate() {
   const navigate = useNavigate();
 
   const handleCreateEvaluation = async () => {
-     const errorlist = [];
- if (!selectedType) errorlist.push(t("evaluation.enterExecType"));
-  
-  if (selectedType && !selectedKeyId) {
-    if (selectedType === "workflow") errorlist.push(t("请选择工作流"));
-    if (selectedType === "flow") errorlist.push(t("请选择技能"));
-    if (selectedType === "assistant") errorlist.push(t("请选择助手"));
-  }
+    const errorlist = [];
+    if (!selectedType) errorlist.push(t("evaluation.enterExecType"));
 
-  if (selectedKeyId && (selectedType === "workflow" || selectedType === "flow") && !selectedVersion) {
-    errorlist.push(t("请选择版本"));
-  }
-if (
-  !fileRef.current && 
-  selectedKeyId && 
-  (
-    (selectedType === "workflow" || selectedType === "flow") && selectedVersion // 有版本的类型已选版本
-    || selectedType === "assistant" // 不需要版本的类型
-  )
-) {
-  errorlist.push(t("evaluation.enterFile"));
-}
-  if (!prompt) errorlist.push(t("evaluation.enterPrompt"));
+    if (selectedType && !selectedKeyId) {
+      if (selectedType === "workflow") errorlist.push(t("请选择工作流"));
+      if (selectedType === "flow") errorlist.push(t("请选择技能"));
+      if (selectedType === "assistant") errorlist.push(t("请选择助手"));
+    }
 
-  if (errorlist.length) return handleError(errorlist);
+    if (selectedKeyId && (selectedType === "workflow" || selectedType === "flow") && !selectedVersion) {
+      errorlist.push(t("请选择版本"));
+    }
+    if (
+      !fileRef.current &&
+      selectedKeyId &&
+      (
+        (selectedType === "workflow" || selectedType === "flow") && selectedVersion // 有版本的类型已选版本
+        || selectedType === "assistant" // 不需要版本的类型
+      )
+    ) {
+      errorlist.push(t("evaluation.enterFile"));
+    }
+    if (!prompt) errorlist.push(t("evaluation.enterPrompt"));
+
+    if (errorlist.length) return handleError(errorlist);
     setLoading(true);
     try {
       await captureAndAlertRequestErrorHoc(
@@ -314,8 +314,13 @@ if (
                       value={selectedVersion}
                       onValueChange={(version) => setSelectedVersion(version)}
                       onOpenChange={() => {
-                        if (!selectedKeyId)
-                          return handleError([t("evaluation.workFlow")]);
+                        if (!selectedKeyId) {
+                          if (selectedType === "workflow") {
+                            return handleError([t("请选择工作流")]);
+                          } else if (selectedType === "flow") {
+                            return handleError([t("请选择技能")]);
+                          }
+                        }
                       }}
                     >
                       <SelectTrigger className="min-w-[50px]">

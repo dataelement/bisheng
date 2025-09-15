@@ -93,7 +93,6 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                         placeholder={t("tools.search")}
                         className="mt-6"
                         onChange={(e) => setKeyword(e.target.value)}
-                          readOnly={true}
                     />
                     <div className="mt-4">
                         <div

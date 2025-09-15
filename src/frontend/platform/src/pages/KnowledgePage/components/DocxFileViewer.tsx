@@ -3,6 +3,8 @@ import * as mammoth from "mammoth";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
 const DocxPreview = ({ filePath }) => {
+    console.log(filePath,445);
+    
     const [htmlContent, setHtmlContent] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);

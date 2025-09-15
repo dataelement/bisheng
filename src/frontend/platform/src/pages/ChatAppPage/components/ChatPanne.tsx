@@ -239,7 +239,7 @@ export default function ChatPanne({ customWsHost = '', chatList, chat, appendHis
                 </div>
                 <ChatComponent
                     form={flowSate.isForm}
-                    logo={flow.logo}
+                    logo={<AppAvator id={flow.name} url={flow.logo} flowType={1} ></AppAvator>}
                     stop
                     // stop={flowSate.isReport || flowSate.isRoom}
                     useName={sendUserName}
@@ -263,7 +263,7 @@ export default function ChatPanne({ customWsHost = '', chatList, chat, appendHis
                 </div>
                 <ChatComponent
                     stop
-                    logo={assistant.logo}
+                    logo={<AppAvator id={assistant.name} url={assistant.logo} flowType={5} ></AppAvator>}
                     chat={chat}
                     useName={sendUserName}
                     questions={assistantState.guide_question.filter((item) => item)}

@@ -60,17 +60,17 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { }, onS
         copyText(messageRef.current)
     }
 
-    return <div className="flex w-full">
+    return <div className="flex w-full py-2">
         <div className="w-fit group max-w-[90%]">
             <ReasoningLog loading={!data.end && (data.reasoning_log || reasoningLog)} msg={data.reasoning_log || reasoningLog} />
             {!(data.reasoning_log && !message && !data.files.length) && <>
-                <div className="flex gap-2 items-center mb-1 ml-2">
-                    {data.sender ? <p className="text-gray-600 text-xs">{data.sender}</p> : <p />}
-                    <div className={`group-hover:opacity-100 opacity-0`}>
+                <div className="flex gap-2 items-center">
+                    {data.sender ? <p className="text-gray-600 text-xs mb-1 ml-2">{data.sender}</p> : <p />}
+                    {/* <div className={`group-hover:opacity-100 opacity-0`}>
                         <span className="text-slate-400 text-sm">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
-                    </div>
+                    </div> */}
                 </div>
-                <div className="min-h-8 px-4 py-2 rounded-2xl">
+                <div className="min-h-8 px-4 rounded-2xl">
                     <div className="flex gap-3">
                         {logo}
                         <div className="">
@@ -108,7 +108,9 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { }, onS
                         data={data.liked}
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
-                    ></MessageButtons>
+                    >
+                        <span className="text-slate-400 text-sm pt-0.5">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
+                    </MessageButtons>
                 </div>
             }
         </div>

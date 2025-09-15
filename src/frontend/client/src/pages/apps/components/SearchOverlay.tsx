@@ -110,7 +110,7 @@ export function SearchOverlay({
     }, [filteredResults, hasMore, isLoadingMore, loadMoreItems, itemsPerLoad])
 
     return (
-        <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-50">
+        <div className="absolute inset-0 bg-background backdrop-blur-sm z-50">
             <div ref={scrollContainerRef} className="h-full overflow-auto">
                 <div className="container mx-auto px-6 py-6">
                     {loading && displayedResults.length === 0 ? (

@@ -26,7 +26,7 @@ export default function ChatView({ data, v }) {
         // style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/points.png)` }}
         >
             <div className="relative h-full max-w-[860px] mx-auto">
-                <ChatMessages useName={user?.username} title={data.name} logo={Logo} />
+                <ChatMessages useName={user?.username} title={data.name} logo={Logo} disabledSearch={data.flow_type === 10} />
                 <ChatInput v={v} />
             </div>
         </div>

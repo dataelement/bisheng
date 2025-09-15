@@ -153,7 +153,7 @@ async def judge_source(result, source_document, chat_id, extra: Dict):
 
 
 def sync_process_source_document(source_document: List[Document], chat_id, message_id, answer):
-    if not source_document:
+    if not source_document or not message_id:
         return
 
     # 使用大模型进行关键词抽取，模型配置临时方案

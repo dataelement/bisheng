@@ -28,7 +28,7 @@ export default function PreviewFile({
   setChunks: any;
   edit?: boolean;
 }) {
-  console.log(urlState,file,rawFiles,67);
+  console.log(urlState,file,rawFiles,previewUrl,67);
   
   const { t } = useTranslation('knowledge')
   const MemoizedFileView = React.memo(FileView);

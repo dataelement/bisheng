@@ -209,6 +209,7 @@ useEffect(() => {
                                     setApplyEachCell={setApplyEachCell}
                                     cellGeneralConfig={cellGeneralConfig}
                                     setCellGeneralConfig={setCellGeneralConfig}
+                                     showPreview={showPreview}
                                 />
                             </TabsContent>
                             {/* 预览分段按钮 */}
