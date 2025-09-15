@@ -45,7 +45,7 @@ export default function ChatMessages({ useName, title, logo, disabledSearch = fa
                 if (msg.files?.length) {
                     return <MessageFile key={msg.id} title={title} data={msg} logo={logo} />
                 } else if (['tool', 'flow', 'knowledge'].includes(msg.category)) {
-                    return <MessageRunlog key={msg.id} data={msg} />
+                    return <MessageRunlog key={msg.id || msg.extra} data={msg} />
                 } else if (msg.thought) {
                     return <MessageSystem
                         logo={logo} title={title} key={msg.id} data={msg} />;
