@@ -447,30 +447,42 @@ export default function KnowledgeFile() {
     }, [i18n]);
 
     // copy
-    const handleCopy = async (elem) => {
-        const newName = `${elem.name}的副本`;
-        if (newName.length > 200) {
-            toast({
-                title: '操作失败',
-                variant: 'error',
-                description: '复制后的知识库名称超过字数限制'
-            });
-            return;
-        }
-        setCopyLoadingId(elem.id);
-        doing[elem.id] = true;
-        try {
-            await captureAndAlertRequestErrorHoc(copyLibDatabase(elem.id));
-            reload();
-        } catch (error) {
-            message({
-                variant: 'error',
-                description: '复制失败'
-            });
-        } finally {
-            setCopyLoadingId(null);
-        }
+const handleCopy = async (elem) => {
+    const newName = `${elem.name}的副本`;
+    if (newName.length > 200) {
+        toast({
+            title: '操作失败',
+            variant: 'error',
+            description: '复制后的知识库名称超过字数限制'
+        });
+        
+        // 重置所有相关状态
+        setSelectOpenId(null);
+        setCopyLoadingId(null);
+        
+        // 强制重新渲染 Select 组件
+        setModalKey(prev => prev + 1);
+        return;
     }
+    
+    setCopyLoadingId(elem.id);
+    doing[elem.id] = true;
+    
+    try {
+        await captureAndAlertRequestErrorHoc(copyLibDatabase(elem.id));
+        reload();
+    } catch (error) {
+        message({
+            variant: 'error',
+            description: '复制失败'
+        });
+    } finally {
+        setCopyLoadingId(null);
+        setSelectOpenId(null);
+        // 确保 Select 组件重置
+        setModalKey(prev => prev + 1);
+    }
+}
 
     useEffect(() => {
         console.log("settingsOpen state changed:", settingsOpen);
@@ -560,7 +572,12 @@ export default function KnowledgeFile() {
                                             key={`${el.id}-${modalKey}`}
                                             open={selectOpenId === el.id}
                                             onOpenChange={(isOpen) => {
-                                                setSelectOpenId(isOpen ? el.id : null);
+                                                 if (copyLoadingId !== el.id) {
+                                                    setSelectOpenId(isOpen ? el.id : null);
+                                                } else if (!isOpen) {
+                                                    // 如果是复制中状态且要关闭，允许关闭
+                                                    setSelectOpenId(null);
+                                                }
                                             }}
                                             onValueChange={(selectedValue) => {
                                                 setSelectOpenId(null);

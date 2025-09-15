@@ -6,6 +6,7 @@ import { useContext, useMemo, useEffect, useState, useRef, useCallback } from "r
 import { useTranslation } from "react-i18next";
 import FileUploadSplitStrategy from "./FileUploadSplitStrategy";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { cn } from "@/utils";
 
 // 工具函数：将1/0或布尔值转为标准布尔值
 const toBoolean = (value) => {
@@ -38,9 +39,10 @@ export default function RuleFile({
   setStrategies = () => {},
   originalSplitRule,
   setOriginalSplitRule = () => {},
-  isAdjustMode = false
+  isAdjustMode = false,
+  showPreview =false
 }) {
-  console.log(rules,99999999999999999);
+  console.log(showPreview,199);
   
   const { appConfig } = useContext(locationContext);
   const { t } = useTranslation('knowledge');
@@ -189,11 +191,12 @@ export default function RuleFile({
           <h3 className="font-bold text-gray-800 text-left text-md">{t('splitSettings')}</h3>
 
           <div className="flex gap-4">
-            <div className="w-1/2 flex items-center gap-3">
-              <Label htmlFor="splitLength" className="whitespace-nowrap text-sm min-w-[100px]">
+            {/* 核心修改：根据showPreview调整间距 */}
+            <div className={cn("w-1/2 flex items-center", showPreview ? "gap-0" : "gap-3")}>
+              <Label htmlFor="splitLength"className={cn("whitespace-nowrap text-sm min-w-[100px]", showPreview ? "-mr-4" : "")}>
                 {t('splitLength')}
               </Label>
-              <div className="relative">
+              <div className={cn('relative', showPreview ? "pl-2" : "")}>
                 <Input
                   id="splitLength"
                   type="number"
@@ -213,8 +216,9 @@ export default function RuleFile({
               </div>
             </div>
 
-            <div className="w-1/2 flex items-center gap-3">
-              <Label htmlFor="chunkOverlap" className="whitespace-nowrap text-sm min-w-[100px]">
+            {/* 核心修改：根据showPreview调整间距 */}
+            <div className={cn("w-1/2 flex items-center", showPreview ? "gap-0" : "gap-3")}>
+              <Label htmlFor="chunkOverlap" className={cn("whitespace-nowrap text-sm min-w-[100px]", showPreview ? "-mr-5" : "")}>
                 {t('chunkOverlap')}
               </Label>
               <div className="relative">

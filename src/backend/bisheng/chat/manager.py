@@ -6,8 +6,6 @@ from collections import defaultdict
 from queue import Queue
 from typing import Any, Dict, List
 
-from bisheng.utils import generate_uuid
-from bisheng_langchain.input_output.output import Report
 from fastapi import Request, WebSocket, WebSocketDisconnect, status
 from loguru import logger
 
@@ -24,14 +22,14 @@ from bisheng.chat.types import IgnoreException, WorkType
 from bisheng.chat.utils import process_node_data
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow, FlowType, FlowDao
-from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.graph.utils import find_next_node
 from bisheng.processing.process import process_tweaks
+from bisheng.utils import generate_uuid
 from bisheng.utils.threadpool import ThreadPoolManager, thread_pool
 from bisheng.utils.util import get_cache_key
-
+from bisheng_langchain.input_output.output import Report
 
 
 class ChatHistory(Subject):
@@ -319,8 +317,8 @@ class ChatManager:
                             logger.info('act=new_chat message={}', message)
                             erro_resp = ChatResponse(intermediate_steps=message, **base_param)
                             erro_resp.category = 'error'
-                            await self.send_json(flow_id, chat_id, erro_resp, add=False)
-                            continue
+                            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=message)
+                            break
                         logger.info('act=new_chat_init_success key={}', key)
                         key_list.add(key)
                     if not payload.get('inputs'):
