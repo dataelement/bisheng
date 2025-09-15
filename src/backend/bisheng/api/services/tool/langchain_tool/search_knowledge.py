@@ -101,6 +101,6 @@ class SearchKnowledgeBase(BaseTool):
             raise Exception("知识库配置的embedding模型不存在或已被删除")
         embeddings = decide_embeddings(knowledge_info.model)
         milvus_client = decide_vectorstores(
-            knowledge_info.collection_name, "Milvus", embeddings
+            knowledge_info.collection_name, "Milvus", embeddings, knowledge_id=knowledge_id
         )
         return await self.base_search(milvus_client, query, limit)
