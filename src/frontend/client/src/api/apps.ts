@@ -117,10 +117,13 @@ export async function getChatHistoryApi(flowId: string, chatId: string, flowType
                 }
             })
 
+            let chatKey = Number(flowType) === 5 ? 'input' : (typeof message === 'string' ? undefined : Object.keys(message)[0]);
+            chatKey = chatKey === 'data' ? 'query' : chatKey // 排除data
+
             return {
                 ...other,
                 category: _category,
-                chatKey: Number(flowType) === 5 ? 'input' : (typeof message === 'string' ? undefined : Object.keys(message)[0]),
+                chatKey,
                 end: true,
                 files: _files,
                 isSend: _isSend,
