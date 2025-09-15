@@ -3,12 +3,9 @@ from typing import Any, Dict
 
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
-from pydantic import BaseModel
-
-from bisheng_langchain.gpts.assistant import ConfigurableAssistant
-from bisheng_langchain.gpts.load_tools import load_tools
 from langgraph.prebuilt import create_react_agent
 from loguru import logger
+from pydantic import BaseModel
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.llm import LLMService
@@ -20,6 +17,8 @@ from bisheng.workflow.callback.event import StreamMsgOverData
 from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
+from bisheng_langchain.gpts.assistant import ConfigurableAssistant
+from bisheng_langchain.gpts.load_tools import load_tools
 
 agent_executor_dict = {
     'ReAct': 'get_react_agent_executor',
@@ -82,8 +81,9 @@ class AgentNode(BaseNode):
         ]
 
         # 是否支持nl2sql
-        self._sql_agent = SqlAgentParams.model_validate(self.node_params['sql_agent']) if self.node_params.get(
-            'sql_agent', None) else None
+        self._sql_agent_params = self.node_params.get('sql_agent', None)
+        self._sql_agent = SqlAgentParams.model_validate(self.node_params['sql_agent']) if (
+                    self._sql_agent_params and self._sql_agent_params.get("open", False)) else None
         self._sql_address = ''
         if self._sql_agent and self._sql_agent.open:
             self._sql_address = self._init_sql_address()
