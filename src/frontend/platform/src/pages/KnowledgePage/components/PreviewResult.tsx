@@ -29,7 +29,7 @@ export type Partition = {
     [key in string]: { text: string, type: string, part_id: string }
 }
 export default function PreviewResult({ showPreview, previewCount, rules, step, applyEachCell, cellGeneralConfig, kId, handlePreviewResult }: IProps) {
-    const { id } = useParams()
+    const { fileId: id } = useParams()
 console.log(showPreview, previewCount, rules, step, applyEachCell, cellGeneralConfig, kId,handlePreviewResult,676786);
 
     const [chunks, setChunks] = useState([]) // 当前文件分块
