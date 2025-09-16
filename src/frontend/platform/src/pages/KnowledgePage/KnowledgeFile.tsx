@@ -523,12 +523,12 @@ const handleCopy = async (elem) => {
                                         handleCachePage();
                                     }}
                                 >
-                                    <div className="flex items-center gap-2 py-1">
-                                        <div className="flex items-center justify-center size-12 bg-primary text-white rounded-[10px]">
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex items-center justify-center size-12 bg-primary text-white rounded-[4px]  w-[40px] h-[40px]">
                                             <BookCopy />
                                         </div>
                                         <div>
-                                            <div className="truncate max-w-[500px] w-[264px] text-[18px] font-medium pt-2 flex items-center gap-2">
+                                            <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">
                                                 {el.name}
                                             </div>
                                             <QuestionTooltip
@@ -536,7 +536,7 @@ const handleCopy = async (elem) => {
                                                 error={false}
                                                 className="w-full text-start"
                                             >
-                                                <div className="truncate max-w-[300px] text-[14px] text-[#5A5A5A] pt-1">
+                                                <div className="truncate max-w-[500px] text-[12px] text-[#5A5A5A] pt-1">
                                                     {el.description || ''}
                                                 </div>
                                             </QuestionTooltip>

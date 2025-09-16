@@ -53,40 +53,32 @@ const ApiAccess = ({ }) => {
     }
 
     const python = () => {
-        return `import requests
-import json
-url = "${window.location.protocol}//${window.location.host}/api/v2/assistant/chat/completions"
-payload = json.dumps({
-   "model": "${assisId}",
-   "messages": [
-      {
-         "role": "user",
-         "content": "生成5天的旅游规划"
-      }
-   ],
-   "temperature": 0,
-   "stream": True
-})
-headers = {
-   'User-Agent': 'Apifox/1.0.0 (https://apifox.com)',
-   'Content-Type': 'application/json'
-}
-response = requests.request("POST", url, headers=headers, data=payload, stream=True)
-if response.status_code != 200:
-    print(f"Request failed with status code {response.status_code}: {response.text}")
-answer = ""
-for line in response.iter_lines():
-    if not line:
-        continue
-    line = line.decode("utf-8")
-    if line.startswith('data: '):
-        line = line[len('data: '):].strip()
-        if line == '[DONE]':
-            break
-        data = json.loads(line)
-        for one in data["choices"]:
-            answer = one.get("delta", {}).get("content", "")
-            print(answer)`
+        return `from openai import OpenAI
+base_url = "${window.location.protocol}//${window.location.host}/api/v2/assistant"
+model = "${assisId}"
+client = OpenAI(base_url=base_url, api_key="empty")
+# Round 1
+messages = [{"role": "user", "content": "9.11 and 9.8, 谁更大?"}]
+response = client.chat.completions.create(
+    model=model,
+    messages=messages,
+    stream=True
+)
+reasoning_content = ""
+content = ""
+for chunk in response:
+    if chunk.choices[0].delta.model_extra.get("reasoning_content"):
+        if not reasoning_content:
+            print("\n\n-----Reasoning Content-----\n")
+        reasoning_chunk = chunk.choices[0].delta.reasoning_content
+        print(reasoning_chunk, end='', flush=True)  # 流式打印reasoning
+        reasoning_content += reasoning_chunk
+    elif chunk.choices[0].delta.content:
+        if not content:
+            print("\n\n-----Final content-----\n")
+        content_chunk = chunk.choices[0].delta.content
+        print(content_chunk, end='', flush=True)  # 流式打印答案
+        content += content_chunk`
     }
 
     const { message } = useToast()

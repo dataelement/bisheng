@@ -30,6 +30,7 @@ export type Partition = {
 }
 export default function PreviewResult({ showPreview, previewCount, rules, step, applyEachCell, cellGeneralConfig, kId, handlePreviewResult }: IProps) {
     const { id } = useParams()
+console.log(showPreview, previewCount, rules, step, applyEachCell, cellGeneralConfig, kId,handlePreviewResult,676786);
 
     const [chunks, setChunks] = useState([]) // 当前文件分块
     const [partitions, setPartitions] = useState<Partition>(null) // 当前文件分区
@@ -145,9 +146,19 @@ export default function PreviewResult({ showPreview, previewCount, rules, step, 
     // 更新分段
     const selectedBbox = useKnowledgeStore((state) => state.selectedBbox);
     const handleChunkChange = (chunkIndex, text) => {
-        const bbox = { chunk_bboxes: selectedBbox }
+       
+        
+         const existingBbox = chunks[chunkIndex]?.bbox ? JSON.parse(chunks[chunkIndex].bbox) : { chunk_bboxes: [] };
+          const targetChunkBboxes = selectedBbox && selectedBbox.length > 0 
+        ? selectedBbox 
+        : existingBbox.chunk_bboxes;
+    const bbox = { 
+        chunk_bboxes: targetChunkBboxes 
+    };
+    console.log( bbox,existingBbox,98999898);
+    
         updatePreviewChunkApi({
-            knowledge_id: Number(id), file_path: currentFile.filePath, chunk_index: chunkIndex, text, bbox: JSON.stringify(bbox)
+            knowledge_id: Number(id)||kId, file_path: currentFile.filePath, chunk_index: chunkIndex, text, bbox: JSON.stringify(bbox)
         })
         setChunks(chunks => chunks.map(chunk => chunk.chunkIndex === chunkIndex ? { ...chunk, text } : chunk))
     }
@@ -162,7 +173,7 @@ export default function PreviewResult({ showPreview, previewCount, rules, step, 
             setChunks={setChunks}
             partitions={partitions}
         />}
-         <div className={cn('relative',  showPreview ? "w-full" : "w-1/2")}>
+         <div className={cn('relative',  "w-full")}>
             {/* 下拉框 - 右上角 */}
             {(step === 3 || (step === 2 && showPreview)) && (
                 <div className="flex justify-end">
@@ -188,7 +199,8 @@ export default function PreviewResult({ showPreview, previewCount, rules, step, 
                 fileId={syncChunksSelectId}
                 fileSuffix={currentFile?.suffix}
                 previewCount={previewCount}
-                edit={step === 3}
+                className="h-[calc(100vh-284px)]"
+                edit={step === 3 || step === 2}
                 loading={loading}
                 chunks={chunks}
                 onDel={handleDelete}

@@ -8,6 +8,7 @@ import DocxPreview from "./DocxFileViewer";
 import { convertJsonData } from "./ParagraphEdit";
 import { Partition } from "./PreviewResult";
 import TxtFileViewer from "./TxtFileViewer";
+import { cn } from "@/utils";
 
 export default function PreviewFile({
   urlState,
@@ -28,8 +29,8 @@ export default function PreviewFile({
   setChunks: any;
   edit?: boolean;
 }) {
-  console.log(urlState,file,rawFiles,previewUrl,67);
-  
+  console.log(urlState, file, rawFiles, previewUrl, 67);
+
   const { t } = useTranslation('knowledge')
   const MemoizedFileView = React.memo(FileView);
   const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
@@ -67,6 +68,7 @@ export default function PreviewFile({
 
   // 4. 初始化标签数据（完全对齐ParagraphEdit的initData逻辑）
   useEffect(() => {
+    if (selectedChunkIndex === -1) return
     setLabelChange(false);
     // 仅对非uns类型的非PDF文件清空标签
     if (suffix !== 'pdf' && !isUnsType) {
@@ -232,7 +234,7 @@ export default function PreviewFile({
       case 'md': return <TxtFileViewer markdown filePath={url} />;
       case 'html': return <TxtFileViewer html filePath={url} />;
       case 'doc':
-      case 'docx': return <DocxPreview filePath={previewUrl||url} />;
+      case 'docx': return <DocxPreview filePath={previewUrl || url} />;
       case 'png':
       case 'jpg':
       case 'jpeg':
@@ -291,7 +293,7 @@ export default function PreviewFile({
   if (['xlsx', 'xls', 'csv'].includes(file.suffix)) return null
 
 
-  return <div className="relative w-1/2" onClick={e => {
+  return  <div className={cn('relative' ,  step === 3 ? "w-full" : "w-1/2", step === 2 ? "-mt-9 w-full" : "")} onClick={e => {
     e.stopPropagation()
   }}>
     <div className={`${edit ? 'absolute -top-8 right-0 z-10' : 'relative'} flex justify-center items-center mb-2 text-sm h-10`}>

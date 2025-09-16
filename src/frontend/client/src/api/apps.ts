@@ -355,15 +355,13 @@ export async function getAppsApi({ page = 1, pageSize = 8, keyword, tag_id = -1,
 }
 
 
-export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = false) => {
-    console.log(disableLimit, 2);
-
+export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = 8) => {
     const params = {
         page,
         keyword,
-        ...(disableLimit ? {} : { limit: 8 }),
+        limit: disableLimit
     }
-    if (tag_id !== -1 && tag_id != null) {
+    if (tag_id !== -1 && tag_id != null && !['favorites', 'uncategorized'].includes(tag_id)) {
         params.tag_id = tag_id
     }
 

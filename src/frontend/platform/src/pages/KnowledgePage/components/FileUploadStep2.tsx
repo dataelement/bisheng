@@ -49,6 +49,7 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
     const setSelectedChunkIndex = useKnowledgeStore((state) => state.setSelectedChunkIndex);
   const [previewFailed, setPreviewFailed] = useState(false);
     const displayStep = isAdjustMode ? step + 1 : step;
+    const [step2Config, setStep2Config] = useState(null); 
       const splitRule = resultFiles[0]?.split_rule;
       console.log("子组件接收的布尔值：", {
     retain_images: splitRule?.retain_images,
@@ -173,9 +174,9 @@ useEffect(() => {
             {
                 displayStep === 2 && (
                     <div className={cn(
-                        "h-full flex flex-col max-w-[760px]",
-                        // 预览时占50%，否则占2/3
-                        showPreview ? "w-1/2" : "w-2/3"
+                        "h-full flex flex-col min-w-[540px]",
+                        // 预览时占50%
+                        showPreview ? "w-1/2" : ""
                     )}>
                         <Tabs
                             defaultValue={displayMode === DisplayModeType.Mixed ? 'file' : displayMode}
@@ -188,7 +189,7 @@ useEffect(() => {
                                         <TabsTrigger id="knowledge_file_tab" value="file" className="roundedrounded-xl">{t('defaultStrategy')}</TabsTrigger>
                                         <TabsTrigger id="knowledge_table_tab" value="table">{t('customStrategy')}</TabsTrigger>
                                     </TabsList>
-                                ) : <div className="h-10"></div>}
+                                ) : <div className="h-1"></div>}
                             </div>
                             {/* 文件文档设置 */}
                             <TabsContent value="file">
@@ -295,7 +296,7 @@ const useFileProcessingRules = (initialStrategies, resultFiles, kid, splitRule) 
         separator: splitRule?.separator || ['\\n\\n', '\\n'],
         separatorRule: splitRule?.separator_rule || ['after', 'after'],
         chunkSize: splitRule?.chunk_size?.toString() || "1000",
-        chunkOverlap: splitRule?.chunk_overlap?.toString() || "100",
+        chunkOverlap: splitRule?.chunk_overlap?.toString() || "0",
         retainImages: splitRule?.retain_images ?? true,
         enableFormula: splitRule?.enable_formula ?? true,
         forceOcr: splitRule?.force_ocr ?? true,

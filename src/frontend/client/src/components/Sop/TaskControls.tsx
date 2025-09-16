@@ -195,8 +195,8 @@ export default function FeedbackComponent({ stop, onFeedback }: FeedbackComponen
                         placeholder="对结果不满意？您还可以输入意见重新发起任务。"
                         value={comment}
                         onChange={(e) => setComment(e.target.value)}
-                        className="resize-none min-h-[40px] text-sm border-none shadow-none focus:ring-0 focus:outline-none"
-                        rows={1}
+                        className="resize-none min-h-[40px] bg-transparenttext-sm border-none shadow-none focus:ring-0 focus:outline-none"
+                        rows={2}
                     />
                 </div>
                 <Button
