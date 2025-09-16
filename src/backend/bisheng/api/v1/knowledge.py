@@ -10,7 +10,7 @@ from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPExcept
 from fastapi.encoders import jsonable_encoder
 
 from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError
+from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import add_qa
@@ -713,16 +713,16 @@ def update_knowledge_model(*,
         knowledge.name = req_data.knowledge_name
         knowledge.description = req_data.description
 
-        if old_model_id == req_data.model_id:
+        if int(old_model_id) == int(req_data.model_id):
             # 如果模型没有变化，不需要重建
-            knowledge.state = KnowledgeState.PUBLISHED.value
             KnowledgeDao.update_one(knowledge)
             return resp_200(
                 message="知识库模型未更改，无需重建"
             )
-        else:
-            knowledge.state = KnowledgeState.REBUILDING.value
-            KnowledgeDao.update_one(knowledge)
+        if knowledge.state == KnowledgeState.REBUILDING.value:
+            raise KnowledgeRebuildingError.http_exception()
+        knowledge.state = KnowledgeState.REBUILDING.value
+        KnowledgeDao.update_one(knowledge)
 
         # 发起异步任务
         # 延迟导入以避免循环导入
