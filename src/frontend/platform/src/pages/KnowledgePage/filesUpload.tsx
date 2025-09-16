@@ -193,7 +193,7 @@ export default function FilesUpload() {
             variant="outline"
             size="icon"
             className="bg-[#fff] size-8"
-            onClick={handleBack}
+           onClick={() => navigate(-1)}
           >
             <ChevronLeft />
           </Button>

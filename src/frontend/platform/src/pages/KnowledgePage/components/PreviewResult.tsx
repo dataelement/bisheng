@@ -32,7 +32,7 @@ export default function PreviewResult({ showPreview, previewCount, rules, step, 
     const { id } = useParams()
 
     const [chunks, setChunks] = useState([]) // 当前文件分块
-    const [partitions, setPartitions] = useState<Partition>({}) // 当前文件分区
+    const [partitions, setPartitions] = useState<Partition>(null) // 当前文件分区
     const [selectId, setSelectId] = useState(''); // 当前选择文件id
     const [syncChunksSelectId, setSelectIdSyncChunks] = useState(''); // 当前选择文件id(与chunk更新保持同步)
     useEffect(() => {
@@ -73,6 +73,8 @@ export default function PreviewResult({ showPreview, previewCount, rules, step, 
         const currentFile = fileList.find(file => file.id === selectId)
 
         let preview_url
+        console.log(currentFile,789);
+        
         if (showPreview) {
             preview_url = currentFile.previewUrl || currentFile?.filePath
         } else {
@@ -151,7 +153,8 @@ export default function PreviewResult({ showPreview, previewCount, rules, step, 
     }
 
     return (<div className={cn("h-full flex gap-2 justify-center", "w-full")}>
-        {(step === 3 || step === 2 && !previewCount) && currentFile && <PreviewFile
+        
+        {(step === 3 || step === 2 && !previewCount) && currentFile && !loading  && <PreviewFile
             urlState={fileViewUrl}
             file={currentFile}
             step={step}

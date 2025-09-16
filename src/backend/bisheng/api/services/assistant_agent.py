@@ -429,10 +429,10 @@ class AssistantAgent(AssistantUtils):
             # function-calling模式，也添加递归限制
             logger.info(f'Creating LangGraph agent with {len(self.tools)} tools, llm type: {type(self.llm)}')
             logger.info(f'LLM streaming capability: {getattr(self.llm, "streaming", "unknown")}')
-            
+
             self.agent = create_react_agent(self.llm, self.tools, prompt=prompt, checkpointer=False)
             logger.info(f'LangGraph agent created: {type(self.agent)}')
-            
+
             # 为agent添加递归限制配置
             self.agent = self.agent.with_config({'recursion_limit': 100})
             logger.info(f'Agent config applied: recursion_limit=100')
@@ -584,47 +584,38 @@ class AssistantAgent(AssistantUtils):
             # 使用流式调用
             config = RunnableConfig(callbacks=callback)
             final_messages = []
-            
+
             logger.info(f'Using function-calling mode, starting astream...')
-            
+
             chunk_count = 0
-            
+
             try:
                 # 使用messages模式的LangGraph streaming获得token级别的流式输出
-                logger.info(f'Using LangGraph astream with stream_mode="messages"...')
                 async for chunk in self.agent.astream({'messages': inputs}, config=config, stream_mode="messages"):
                     chunk_count += 1
-                    logger.debug(f'LangGraph chunk {chunk_count}: {type(chunk)}')
-                    
+
                     # stream_mode="messages" 返回 (message, metadata) 元组
                     message = None
                     if isinstance(chunk, tuple) and len(chunk) >= 2:
                         message, metadata = chunk[:2]
-                        logger.debug(f'Chunk {chunk_count}: message={type(message)}, metadata={metadata}')
                     elif hasattr(chunk, 'content'):
                         # 直接是消息对象
                         message = chunk
-                        
-                    if message and hasattr(message, 'content') and message.content:
+
+                    if message:
                         # stream_mode="messages"返回的是独立chunk，直接使用其内容
                         final_messages = [message]  # 保存消息用于历史记录
-                        logger.debug(f'Yielding independent chunk with content: {message.content[:50]}...')
                         yield [message]
-                        
+
             except Exception as astream_error:
-                logger.error(f'Error in astream async for loop: {str(astream_error)}')
-                logger.error(f'Error type: {type(astream_error)}')
-                import traceback
-                logger.error(f'Traceback: {traceback.format_exc()}')
+                logger.exception(f'Error in astream async for loop: {str(astream_error)}')
                 raise astream_error
-                        
+
             logger.info(f'Function calling astream completed, total chunks: {chunk_count}')
-            
+
             if chunk_count == 0:
                 logger.warning(f'No chunks received from agent.astream()! This indicates a streaming issue.')
-                logger.warning(f'Agent details: type={type(self.agent)}, tools={len(self.tools)}, llm={type(self.llm)}')
-                logger.warning(f'Inputs: {[f"{type(msg).__name__}: {msg.content[:50]}..." for msg in inputs]}')
-            
+
             # 记录聊天历史
             if final_messages:
                 await self.record_chat_history([one.to_json() for one in final_messages])

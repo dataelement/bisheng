@@ -9,7 +9,7 @@ import type { Plugin } from 'vite';
 
 const app_env = {
   BASE_URL: '/workspace',
-  BISHENG_HOST: ''
+  BISHENG_HOST: 'build/apps'
 }
 // https://vitejs.dev/config/
 export default defineConfig({

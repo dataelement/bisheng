@@ -84,7 +84,7 @@ export const useWebSocket = (helpers) => {
             try {
                 const data = JSON.parse(event.data)
                 console.log('data :>> ', data);
-                handleMessages(data)
+                handleMessages(data, ws)
             } catch (error) {
                 console.error("WebSocket message parse error:", error)
             }
@@ -102,7 +102,7 @@ export const useWebSocket = (helpers) => {
             helpers.handleMsgError('')
         }
     }
-    const handleMessages = (data) => {
+    const handleMessages = (data, _ws) => {
         // 过滤无效数据
         if ((data.category === 'end_cover' && data.type !== 'end_cover')) {
             return
@@ -142,7 +142,7 @@ export const useWebSocket = (helpers) => {
             helpers.message.streamMsg(helpers.chatId, data)
         } else if (data.category === 'end_cover' && data.type === 'end_cover') {
             // helpers.handleMsgError('')
-            sendWsMsg({ action: 'close' })
+            _ws.send(JSON.stringify({ action: 'stop' }))
             return helpers.message.endMsg(helpers.chatId, data)
         }
 

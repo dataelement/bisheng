@@ -88,10 +88,19 @@ const latestPreviewUrlRef = useRef('');
             let chunkBboxes = [];
             try {
                 const firstChunk = response.data?.[0];
-                if (firstChunk?.metadata?.bbox) {
+                 if (firstChunk?.metadata?.bbox) {
+                    console.log(JSON.parse(firstChunk?.metadata?.bbox).chunk_bboxes,6666666666666);
+                    
+                // 先判断bbox是否为空字符串
+                if (typeof firstChunk.metadata.bbox === 'string' && JSON.parse(firstChunk?.metadata?.bbox).chunk_bboxes === '') {
+                    console.log('bbox为空字符串');
+                    chunkBboxes = [];
+                } else {
+                    // 解析JSON
                     const bboxObj = JSON.parse(firstChunk.metadata.bbox);
                     chunkBboxes = bboxObj.chunk_bboxes || [];
                 }
+            }
             } catch (e) {
                 console.error('解析 chunk_bboxes 失败:', e);
                 chunkBboxes = [];
@@ -115,19 +124,69 @@ const fetchFileUrl = useCallback(async (fileId) => {
     const pares = await getFileBboxApi(fileId);
     setPartitions(pares || []);
 
-    // 严格判断URL有效性
+    // 获取当前选中的文件信息
+    const currentFile = rawFiles.find(f => String(f.id) === String(fileId));
     let finalUrl = '';
-    if (typeof res.preview_url === 'string' && res.preview_url.trim() !== '') {
-      finalUrl = res.preview_url.trim();
-    } else if (typeof res.original_url === 'string' && res.original_url.trim() !== '') {
-      finalUrl = res.original_url.trim();
+    let finalPreviewUrl = '';
+
+    // 检查是否有有效的preview_url和original_url
+    const hasPreviewUrl = typeof res.preview_url === 'string' && res.preview_url.trim() !== '';
+    const hasOriginalUrl = typeof res.original_url === 'string' && res.original_url.trim() !== '';
+
+    if (currentFile) {
+        console.log(currentFile,3);
+        
+      // 判断是否为UNS或LOCAL类型
+      const isUnsOrLocal = currentFile.parse_type === "uns" || currentFile.parse_type === "local";
+      console.log(isUnsOrLocal,currentFile,4444444);
+      
+      
+      if (isUnsOrLocal) {
+        // UNS或LOCAL类型：根据bbox是否有效选择URL
+        const isBboxesValid = hasChunkBboxes;
+        const isBboxesEmpty = !hasChunkBboxes || chunkBboxes.length === 0;
+        if (!isBboxesEmpty && hasPreviewUrl) {
+          // 有有效bbox且有preview_url → 使用preview_url
+          console.log(1111);
+          
+          finalUrl = res.preview_url.trim();
+          finalPreviewUrl = res.preview_url.trim();
+          console.log('UNS/LOCAL类型（有有效bbox）：使用preview_url');
+        } else {
+          // 无有效bbox（为空数组/字符串）或无preview_url → 强制使用original_url
+          console.log(2222);
+          
+          finalUrl = hasOriginalUrl ? res.original_url.trim() : '';
+          finalPreviewUrl = finalUrl;
+          console.log('UNS/LOCAL类型（无有效bbox或无preview_url）：使用original_url');
+        }
+      } else {
+        // 其他类型：优先使用preview_url，无则使用original_url
+        if (hasPreviewUrl) {
+          // 有preview_url → 优先使用
+          finalUrl = res.preview_url.trim();
+          finalPreviewUrl = res.preview_url.trim();
+          console.log('其他类型：使用preview_url');
+        } else {
+          // 无preview_url → 使用original_url或备选URL
+          finalUrl = hasOriginalUrl ? res.original_url.trim() : '';
+          finalPreviewUrl = finalUrl;
+          console.log('其他类型（无preview_url）：使用original_url');
+        }
+      }
+    } else {
+      // 如果没有找到当前文件，使用默认策略
+      finalUrl = hasPreviewUrl ? res.preview_url.trim() : (hasOriginalUrl ? res.original_url.trim() : '');
+      finalPreviewUrl = finalUrl;
+      console.log('未找到文件信息，使用默认URL策略');
     }
 
     if (finalUrl) {
       finalUrl = decodeURIComponent(finalUrl);
+      finalPreviewUrl = decodeURIComponent(finalPreviewUrl);
       // 同时更新状态和ref（ref会同步生效）
       setFileUrl(finalUrl);
-      setPreviewUrl(finalUrl);
+      setPreviewUrl(finalPreviewUrl);
       return finalUrl;
     } else {
       setFileUrl('');
@@ -143,7 +202,7 @@ const fetchFileUrl = useCallback(async (fileId) => {
   } finally {
     setIsFetchingUrl(false);
   }
-}, []);
+}, [rawFiles, hasChunkBboxes]);
 
 
 
