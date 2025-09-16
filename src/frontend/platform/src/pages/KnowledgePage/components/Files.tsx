@@ -294,7 +294,7 @@ export default function Files({ onPreview }) {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="min-w-[50px]">
+                            <TableHead className="min-w-[10px]">
                                 <Checkbox
                                     checked={isCurrentPageAllSelected}
                                     onCheckedChange={toggleSelectAll}
@@ -328,21 +328,59 @@ export default function Files({ onPreview }) {
                                                     {
                                                         value: 2,
                                                         label: '已完成',
-                                                        color: 'text-blue-500',
-                                                        icon: <img src={__APP_ENV__.BASE_URL + "/assets/success.svg"} className="w-16 h-8" alt="已完成" />
+                                                        color: 'text-green-500',
+                                                        // 绿色圆点+文字（与表格"已完成"样式统一）
+                                                        icon: (
+                                                            <div className="flex items-center gap-2 mt-2">
+                                                                <span className="size-[6px] rounded-full bg-green-500"></span>
+                                                                <span className="font-[500] text-[14px] text-green-500 leading-[100%]">
+                                                                    已完成
+                                                                </span>
+                                                            </div>
+                                                        )
                                                     },
                                                     {
                                                         value: 1,
                                                         label: '解析中',
-                                                        color: 'text-green-500',
-                                                        icon: <img src={__APP_ENV__.BASE_URL + "/assets/analysis.svg"} className="w-16 h-8" alt="解析中" />
+                                                        color: 'text-[#4D9BF0]',
+                                                        // 蓝色圆点+文字（与表格"解析中"样式统一）
+                                                        icon: (
+                                                            <div className="flex items-center gap-2 mt-2">
+                                                                <span className="size-[6px] rounded-full bg-[#4D9BF0]"></span>
+                                                                <span className="font-[500] text-[14px] text-[#4D9BF0] leading-[100%]">
+                                                                    解析中
+                                                                </span>
+                                                            </div>
+                                                        )
                                                     },
                                                     {
                                                         value: 3,
                                                         label: '解析失败',
                                                         color: 'text-red-500',
-                                                        icon: <img src={__APP_ENV__.BASE_URL + "/assets/failed.svg"} className="w-[78px] h-8" alt="解析失败" />
-                                                    }
+                                                        // 红色圆点+文字（与表格"解析失败"样式统一）
+                                                        icon: (
+                                                            <div className="flex items-center gap-2 mt-2">
+                                                                <span className="size-[6px] rounded-full bg-red-500"></span>
+                                                                <span className="font-[500] text-[14px] text-red-500 leading-[100%]">
+                                                                    解析失败
+                                                                </span>
+                                                            </div>
+                                                        )
+                                                    },
+                                                    {
+                                                        value: 4,
+                                                        label: '向量模型切换中',
+                                                        color: 'text-[#4D9BF0]',
+                                                        // 蓝色圆点+文字（与表格"解析中"样式统一）
+                                                        icon: (
+                                                            <div className="flex items-center gap-2 mt-2">
+                                                                <span className="size-[6px] rounded-full bg-[#4D9BF0]"></span>
+                                                                <span className="font-[500] text-[14px] text-[#4D9BF0] leading-[100%]">
+                                                                    向量模型切换中
+                                                                </span>
+                                                            </div>
+                                                        )
+                                                    },
                                                 ].map(({ value, label, color, icon }) => (
                                                     <div
                                                         key={value}
@@ -360,7 +398,7 @@ export default function Files({ onPreview }) {
                                                             type="checkbox"
                                                             checked={tempFilters.includes(value)}
                                                             onChange={() => { }}
-                                                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                            className="h-4 w-4 mt-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                                                         />
                                                         <div className="flex items-center gap-2">
                                                             {icon}
@@ -369,7 +407,7 @@ export default function Files({ onPreview }) {
                                                 ))}
                                             </div>
                                             <div className="border-t border-gray-200"></div>
-                                            <div className="flex justify-end gap-2 px-3 py-2">
+                                            <div className="flex justify-around gap-2 px-3 py-2">
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
@@ -427,7 +465,7 @@ export default function Files({ onPreview }) {
                                         {truncateString(el.file_name, 35)}
                                     </div>
                                 </TableCell>
-                                     <TableCell>
+                                <TableCell>
                                     {el.strategy[0] ? (
                                         <TooltipProvider delayDuration={100}>
                                             <Tooltip>
@@ -440,15 +478,24 @@ export default function Files({ onPreview }) {
                                     ) : splitRuleDesc(el)}
                                 </TableCell>
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-                           
+
                                 <TableCell>
                                     {el.status === 3 ? (
                                         <div className="flex items-center">
                                             <TooltipProvider delayDuration={100}>
                                                 <Tooltip>
-                                                    <TooltipTrigger className="flex items-center gap-2">
-                                                        <img src="/assets/failed.svg" className="w-16 h-8" alt="解析失败" />
-                                                    </TooltipTrigger>
+                                                    <Tooltip>
+                                                        <TooltipTrigger className="flex items-center gap-2">
+                                                            {/* 红色圆点 - 12x12px */}
+                                                            <span className="size-[6px] rounded-full bg-red-500"></span>
+
+                                                            {/* 解析失败文字 - 符合Poppins SemiBold 14px样式 */}
+                                                            <span className="font-[500] text-[14px] text-red-500 leading-[100%] text-center">
+                                                                解析失败
+                                                            </span>
+                                                        </TooltipTrigger>
+                                                    </Tooltip>
+
                                                     <TooltipContent>
                                                         <div className="max-w-96 text-left break-all whitespace-normal">{el.remark}</div>
                                                     </TooltipContent>
@@ -458,11 +505,41 @@ export default function Files({ onPreview }) {
                                     ) : (
                                         <div className="flex items-center gap-2">
                                             {el.status === 2 ? (
-                                                <img src={__APP_ENV__.BASE_URL + "/assets/success.svg"} className="w-16 h-8" alt="已完成" />
+                                                <Tooltip>
+                                                    <TooltipTrigger className="flex items-center gap-2">
+                                                        {/* 红色圆点 - 12x12px */}
+                                                        <span className="size-[6px] rounded-full bg-green-500"></span>
+
+                                                        {/* 解析失败文字 - 符合Poppins SemiBold 14px样式 */}
+                                                        <span className="font-[500] text-[14px] text-green-500 leading-[100%] text-center">
+                                                            已完成
+                                                        </span>
+                                                    </TooltipTrigger>
+                                                </Tooltip>
                                             ) : el.status === 1 ? (
-                                                <img src={__APP_ENV__.BASE_URL + "/assets/analysis.svg"} className="w-16 h-8" alt="解析中" />
+                                                <Tooltip>
+                                                    <TooltipTrigger className="flex items-center gap-2">
+                                                        {/* 红色圆点 - 12x12px */}
+                                                        <span className="size-[6px] rounded-full bg-[#4D9BF0]"></span>
+
+                                                        {/* 解析失败文字 - 符合Poppins SemiBold 14px样式 */}
+                                                        <span className="font-[500] text-[14px] text-[#4D9BF0] leading-[100%] text-center">
+                                                            解析中
+                                                        </span>
+                                                    </TooltipTrigger>
+                                                </Tooltip>
                                             ) : (
-                                                <img src={__APP_ENV__.BASE_URL + "/assets/failed.svg"} className="w-20 h-12" alt="解析失败" />
+                                                <Tooltip>
+                                                    <TooltipTrigger className="flex items-center gap-2">
+                                                        {/* 红色圆点 - 12x12px */}
+                                                        <span className="size-[6px] rounded-full bg-[#4D9BF0]"></span>
+
+                                                        {/* 解析失败文字 - 符合Poppins SemiBold 14px样式 */}
+                                                        <span className="font-[500] text-[14px] text-[#4D9BF0] leading-[100%] text-center">
+                                                            向量模型切换中
+                                                        </span>
+                                                    </TooltipTrigger>
+                                                </Tooltip>
                                             )}
                                         </div>
                                     )}

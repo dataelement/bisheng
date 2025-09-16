@@ -265,7 +265,7 @@ export default function KnowledgeQa(params) {
 
                                     <div className="min-w-0 overflow-visible">
                                         {/* 知识库名称（不变） */}
-                                        <div className="truncate max-w-[500px] w-[264px] text-[18px] font-medium pt-2 flex items-center gap-2">
+                                        <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">
                                             {el.name}
                                         </div>
                                         <QuestionTooltip
@@ -273,7 +273,7 @@ export default function KnowledgeQa(params) {
                                             error={false}
                                             className="w-full text-start" // 触发区域铺满，确保hover描述文字就触发
                                         >
-                                            <div className="truncate max-w-[500px] text-[14px] text-[#5A5A5A]">
+                                            <div className="truncate max-w-[500px] text-[12px] text-[#5A5A5A]">
                                                 {el.description || ''}
                                             </div>
                                             <TooltipContent

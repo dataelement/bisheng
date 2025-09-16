@@ -583,7 +583,12 @@ export default function Paragraphs({ fileId, onBack }) {
                                     {selectedFileId ? (
                                         <>
                                             <FileIcon
-                                                type={files.find(f => f.value === selectedFileId)?.label.split('.').pop().toLowerCase() || 'txt'}
+                                                 type={(() => {
+                                                    const targetFile = files.find(f => f.value === selectedFileId);
+                                                    if (!targetFile) return 'txt'; // 文件不存在时默认'txt'
+                                                    const parts = targetFile.label.split('.');
+                                                    return parts.length > 1 ? parts.pop().toLowerCase() : 'txt';
+                                                })()}
                                                 className="size-[30px] min-w-[30px]"
                                             />
                                             <div className="truncate">{files.find(f => f.value === selectedFileId)?.label || ''}</div>
@@ -645,7 +650,10 @@ export default function Paragraphs({ fileId, onBack }) {
                                         >
                                             <div className="flex items-center gap-3 w-full h-full">
                                                 <FileIcon
-                                                    type={file.label.split('.').pop().toLowerCase() || 'txt'}
+                                                  type={(() => {
+                                                        const parts = file.label.split('.');
+                                                        return parts.length > 1 ? parts.pop().toLowerCase() : 'txt';
+                                                    })()}
                                                     className="size-[30px] min-w-[30px] text-current"
                                                 />
                                                 <span className="flex-1 min-w-0 truncate">

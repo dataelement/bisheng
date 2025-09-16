@@ -528,7 +528,7 @@ const handleCopy = async (elem) => {
                                             <BookCopy />
                                         </div>
                                         <div>
-                                            <div className="truncate max-w-[500px] w-[264px] text-[18px] font-medium pt-2 flex items-center gap-2">
+                                            <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">
                                                 {el.name}
                                             </div>
                                             <QuestionTooltip
@@ -536,7 +536,7 @@ const handleCopy = async (elem) => {
                                                 error={false}
                                                 className="w-full text-start"
                                             >
-                                                <div className="truncate max-w-[500px] text-[14px] text-[#5A5A5A] pt-1">
+                                                <div className="truncate max-w-[500px] text-[12px] text-[#5A5A5A] pt-1">
                                                     {el.description || ''}
                                                 </div>
                                             </QuestionTooltip>

@@ -306,7 +306,7 @@ export default function AdjustFilesUpload() {
         <div className="w-full overflow-y-auto">
           <div className="h-full py-4">
             {console.log(resultFiles,33)}
-            {currentStep === 1 && (
+            <div className={currentStep === 1 ? "block" : "hidden"}>
               <FileUploadStep2
                 ref={fileUploadStep2Ref}
                 step={currentStep}
@@ -317,16 +317,18 @@ export default function AdjustFilesUpload() {
                 kId={knowledgeId}
                 isAdjustMode
               />
-            )}
+            </div>
+
+            {console.log(resultFiles, segmentRules, 3333333)}
 
             {/* 步骤2：原文对比 */}
             {currentStep === 2 && segmentRules && (
-              <>
+              <div className="block">
                 <PreviewResult
                   rules={segmentRules.rules}
                   resultFiles={resultFiles}
                   onPrev={handleBack}
-                  onNext={() => handleSave(segmentRules)} // 直接调用保存，移除提前跳转
+                  onNext={() => handleSave(segmentRules)}
                   handlePreviewResult={handlePreviewResult}
                   step={currentStep}
                   previewCount={0}
@@ -335,7 +337,7 @@ export default function AdjustFilesUpload() {
                   kId={knowledgeId}
                   isAdjustMode
                 />
-{console.log(isNextDisabled,666)}
+
                 {/* 步骤2底部按钮 */}
                 <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
                   <Button
@@ -354,9 +356,8 @@ export default function AdjustFilesUpload() {
                     {t('nextStep')}
                   </Button>
                 </div>
-              </>
+              </div>
             )}
-
             {/* 步骤3：数据处理 */}
             {currentStep === 3 && (
               <FileUploadStep4 data={resultFiles} kId={knowledgeId} isAdjustMode />

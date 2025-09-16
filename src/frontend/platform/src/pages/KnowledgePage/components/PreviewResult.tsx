@@ -30,6 +30,7 @@ export type Partition = {
 }
 export default function PreviewResult({ showPreview, previewCount, rules, step, applyEachCell, cellGeneralConfig, kId, handlePreviewResult }: IProps) {
     const { id } = useParams()
+console.log(showPreview, previewCount, rules, step, applyEachCell, cellGeneralConfig, kId,handlePreviewResult,676786);
 
     const [chunks, setChunks] = useState([]) // 当前文件分块
     const [partitions, setPartitions] = useState<Partition>(null) // 当前文件分区
@@ -122,6 +123,8 @@ export default function PreviewResult({ showPreview, previewCount, rules, step, 
                 page: chunk.metadata.page,
                 text: chunk.text
             })))
+            console.log(chunks,6666666666666666666666666666666666666);
+            
             setSelectIdSyncChunks(selectId)
             setFileViewUrl({ load: false, url: res.file_url })
             setPartitions(res.partitions)
@@ -188,8 +191,8 @@ export default function PreviewResult({ showPreview, previewCount, rules, step, 
                 fileId={syncChunksSelectId}
                 fileSuffix={currentFile?.suffix}
                 previewCount={previewCount}
-                edit={step === 3}
                 className="h-[calc(100vh-284px)]"
+                edit={step === 3 || step === 2}
                 loading={loading}
                 chunks={chunks}
                 onDel={handleDelete}

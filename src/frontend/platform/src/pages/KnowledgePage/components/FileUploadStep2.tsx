@@ -49,6 +49,7 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
     const setSelectedChunkIndex = useKnowledgeStore((state) => state.setSelectedChunkIndex);
   const [previewFailed, setPreviewFailed] = useState(false);
     const displayStep = isAdjustMode ? step + 1 : step;
+    const [step2Config, setStep2Config] = useState(null); 
       const splitRule = resultFiles[0]?.split_rule;
       console.log("子组件接收的布尔值：", {
     retain_images: splitRule?.retain_images,
