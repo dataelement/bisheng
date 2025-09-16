@@ -1,4 +1,5 @@
 import { FileIcon } from "@/components/bs-icons/file";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Button } from '@/components/bs-ui/button';
 import { Dialog, DialogContent, DialogHeader } from '@/components/bs-ui/dialog';
 import { SearchInput } from '@/components/bs-ui/input';
@@ -72,6 +73,7 @@ export default function Paragraphs({ fileId, onBack }) {
     const tableConfig = useMemo(() => ({
         file_ids: selectedFileId ? [selectedFileId] : []
     }), [selectedFileId]);
+
     const {
         page,
         pageSize,
@@ -121,6 +123,8 @@ export default function Paragraphs({ fileId, onBack }) {
             return response;
         }
     );
+
+    const [load, setLoad] = useState(true);
     const fetchFileUrl = useCallback(async (fileId) => {
         console.log('获取文件URL:', fileId);
         if (!fileId) return '';
@@ -299,8 +303,11 @@ export default function Paragraphs({ fileId, onBack }) {
         } finally {
             setIsFetchingUrl(false);
             isChangingRef.current = false;
+            setLoad(false);
         }
     }, [rawFiles, fetchFileUrl, filterData, reload, selectedFileId]);
+
+
     useEffect(() => {
         const loadFiles = async () => {
             if (isLoadingFilesRef.current || !isMountedRef.current) return;
@@ -560,6 +567,11 @@ export default function Paragraphs({ fileId, onBack }) {
         latestPreviewUrlRef.current = previewUrl;
     }, [fileUrl, previewUrl]);
     // 渲染部分（完全保留原始样式，无任何修改）
+
+    if (load) return <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+        <LoadingIcon />
+    </div>
+
     return (
         <div className="relative flex flex-col h-[calc(100vh-64px)]">
             {/* 顶部导航栏 */}
@@ -583,7 +595,7 @@ export default function Paragraphs({ fileId, onBack }) {
                                     {selectedFileId ? (
                                         <>
                                             <FileIcon
-                                                 type={(() => {
+                                                type={(() => {
                                                     const targetFile = files.find(f => f.value === selectedFileId);
                                                     if (!targetFile) return 'txt'; // 文件不存在时默认'txt'
                                                     const parts = targetFile.label.split('.');
@@ -650,7 +662,7 @@ export default function Paragraphs({ fileId, onBack }) {
                                         >
                                             <div className="flex items-center gap-3 w-full h-full">
                                                 <FileIcon
-                                                  type={(() => {
+                                                    type={(() => {
                                                         const parts = file.label.split('.');
                                                         return parts.length > 1 ? parts.pop().toLowerCase() : 'txt';
                                                     })()}

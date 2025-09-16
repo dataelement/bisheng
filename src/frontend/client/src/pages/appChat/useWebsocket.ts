@@ -142,7 +142,7 @@ export const useWebSocket = (helpers) => {
             helpers.message.streamMsg(helpers.chatId, data)
         } else if (data.category === 'end_cover' && data.type === 'end_cover') {
             // helpers.handleMsgError('')
-            // _ws.send(JSON.stringify({ action: 'stop' }))
+            _ws.send(JSON.stringify({ action: 'stop' }))
             return helpers.message.endMsg(helpers.chatId, data)
         }
 

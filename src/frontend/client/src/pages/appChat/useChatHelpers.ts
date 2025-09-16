@@ -299,7 +299,7 @@ export default function useChatHelpers() {
         insetSeparator: (chatid: string, msg: string) => {
             setChats((prev) =>
                 updateChatMessages(prev, chatid, (messages) => {
-                    if (messages[messages.length - 1]?.category === "separator") return messages
+                    if (messages[messages.length - 1]?.category === "divider") return messages
 
                     return [
                         ...messages,

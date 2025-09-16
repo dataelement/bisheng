@@ -296,7 +296,7 @@ const useFileProcessingRules = (initialStrategies, resultFiles, kid, splitRule) 
         separator: splitRule?.separator || ['\\n\\n', '\\n'],
         separatorRule: splitRule?.separator_rule || ['after', 'after'],
         chunkSize: splitRule?.chunk_size?.toString() || "1000",
-        chunkOverlap: splitRule?.chunk_overlap?.toString() || "10",
+        chunkOverlap: splitRule?.chunk_overlap?.toString() || "0",
         retainImages: splitRule?.retain_images ?? true,
         enableFormula: splitRule?.enable_formula ?? true,
         forceOcr: splitRule?.force_ocr ?? true,
