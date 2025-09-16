@@ -10,7 +10,7 @@ from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPExcept
 from fastapi.encoders import jsonable_encoder
 
 from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError
+from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import add_qa
@@ -719,6 +719,8 @@ def update_knowledge_model(*,
             return resp_200(
                 message="知识库模型未更改，无需重建"
             )
+        if knowledge.state == KnowledgeState.REBUILDING.value:
+            raise KnowledgeRebuildingError.http_exception()
         knowledge.state = KnowledgeState.REBUILDING.value
         KnowledgeDao.update_one(knowledge)
 

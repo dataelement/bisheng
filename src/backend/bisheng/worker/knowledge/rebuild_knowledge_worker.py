@@ -1,7 +1,6 @@
 from typing import List
 
 from loguru import logger
-from pymilvus import Collection
 
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import (
@@ -50,6 +49,11 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: str) -> str:
             if not files:
                 logger.info(f"knowledge_id={knowledge_id} has no success files")
                 # 直接更新知识库状态为成功
+                embedding = knowledge.model
+                suffix_id = settings.get_vectors_conf().milvus.partition_suffix
+                knowledge.collection_name = (
+                    f"partition_{embedding}_knowledge_{suffix_id}"
+                )
                 knowledge.state = KnowledgeState.PUBLISHED.value
                 KnowledgeDao.update_one(knowledge)
                 return f"knowledge {knowledge_id} rebuild completed (no files)"
@@ -112,7 +116,6 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: str) -> str:
                 logger.exception(f"Failed to update knowledge state after error: {str(e2)}")
 
             raise e
-
 
 
 def _delete_es_files(knowledge: Knowledge, file_ids: List[int]):
