@@ -28,8 +28,8 @@ export default function PreviewFile({
   setChunks: any;
   edit?: boolean;
 }) {
-  console.log(urlState,file,rawFiles,previewUrl,67);
-  
+  console.log(urlState, file, rawFiles, previewUrl, 67);
+
   const { t } = useTranslation('knowledge')
   const MemoizedFileView = React.memo(FileView);
   const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
@@ -67,6 +67,7 @@ export default function PreviewFile({
 
   // 4. 初始化标签数据（完全对齐ParagraphEdit的initData逻辑）
   useEffect(() => {
+    if (selectedChunkIndex === -1) return
     setLabelChange(false);
     // 仅对非uns类型的非PDF文件清空标签
     if (suffix !== 'pdf' && !isUnsType) {
@@ -232,7 +233,7 @@ export default function PreviewFile({
       case 'md': return <TxtFileViewer markdown filePath={url} />;
       case 'html': return <TxtFileViewer html filePath={url} />;
       case 'doc':
-      case 'docx': return <DocxPreview filePath={previewUrl||url} />;
+      case 'docx': return <DocxPreview filePath={previewUrl || url} />;
       case 'png':
       case 'jpg':
       case 'jpeg':

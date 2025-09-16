@@ -60,10 +60,10 @@ export default function FilesUpload() {
 
   // 步骤3：原文对比回调，控制下一步按钮禁用状态
   const handlePreviewResult = (isSuccess) => {
-     if (currentStep === 3) {
-    console.log("更新按钮状态：", { isSuccess, currentStep });
-    setIsNextDisabled(!isSuccess);
-  }
+    if (currentStep === 3) {
+      console.log("更新按钮状态：", { isSuccess, currentStep });
+      setIsNextDisabled(!isSuccess);
+    }
   };
 
   // 下一步：按当前步骤跳转
@@ -183,9 +183,6 @@ export default function FilesUpload() {
       repeatCallBackRef.current();
     }));
   };
-useEffect(() => {
-  console.log("父组件文件数据:", resultFiles);
-}, [resultFiles]);
   return (
     <div className="relative h-full flex flex-col">
       {/* 顶部返回栏 */}
@@ -195,7 +192,7 @@ useEffect(() => {
             variant="outline"
             size="icon"
             className="bg-[#fff] size-8"
-           onClick={() => navigate(-1)}
+            onClick={() => navigate(-1)}
           >
             <ChevronLeft />
           </Button>
@@ -213,7 +210,7 @@ useEffect(() => {
       {/* 步骤内容区域（正常模式专属步骤） */}
       <div className="flex flex-1 overflow-hidden px-4">
         <div className="w-full overflow-y-auto">
-          <div className="h-full py-4">
+          <div className="h-full">
             {/* 步骤1：文件上传（正常模式独有） */}
             {currentStep === 1 && (
               <FileUploadStep1
@@ -242,7 +239,7 @@ useEffect(() => {
                 <PreviewResult
                   rules={segmentRules.rules}
                   resultFiles={resultFiles}
-                  handlePreviewResult={handlePreviewResult }
+                  handlePreviewResult={handlePreviewResult}
                   onPrev={handleBack}
                   onNext={() => {
                     setCurrentStep(4);

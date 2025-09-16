@@ -189,6 +189,7 @@ export default function PreviewResult({ showPreview, previewCount, rules, step, 
                 fileSuffix={currentFile?.suffix}
                 previewCount={previewCount}
                 edit={step === 3}
+                className="h-[calc(100vh-284px)]"
                 loading={loading}
                 chunks={chunks}
                 onDel={handleDelete}

@@ -226,7 +226,7 @@ const EditMarkdown = ({ data, active, fileSuffix, onClick, onDel, onChange, onPo
 }
 
 // 分段结果列表
-export default function PreviewParagraph({ fileId, previewCount, edit, fileSuffix, loading, chunks, onDel, onChange }) {
+export default function PreviewParagraph({ fileId, previewCount, edit, fileSuffix, loading, chunks, className, onDel, onChange }) {
     const containerRef = useRef(null);
     const [visibleItems, setVisibleItems] = useState(10); // 初始加载数量
     const loadingRef = useRef(false);
@@ -269,13 +269,13 @@ export default function PreviewParagraph({ fileId, previewCount, edit, fileSuffi
         return () => container.removeEventListener('scroll', handleScroll);
     }, [chunks.length]);
 
-    return <div className=" pt-3 pb-10 relative w-full">
+    return <div className="pt-3 relative w-full">
         {loading && (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <LoadingIcon />
             </div>
         )}
-        <div ref={containerRef} className={`${edit ? 'h-[calc(100vh-206px)]' : 'h-[calc(100vh-284px)] mt-9'}  overflow-y-auto`}
+        <div ref={containerRef} className={`${className} overflow-y-auto`}
             style={{ scrollbarWidth: 'thin' }}
         >
             <div className="space-y-6">

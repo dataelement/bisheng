@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader } from '@/components/bs-ui/dialog';
 import { SearchInput } from '@/components/bs-ui/input';
 import AutoPagination from '@/components/bs-ui/pagination/autoPagination';
 import ShadTooltip from "@/components/ShadTooltipComponent";
-import { delChunkApi, getFilePathApi, getKnowledgeChunkApi, getFileBboxApi, readFileByLibDatabase, updateChunkApi } from '@/controllers/API';
+import { delChunkApi, getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, readFileByLibDatabase, updateChunkApi } from '@/controllers/API';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useTable } from '@/util/hook';
 import { truncateString } from "@/util/utils";
@@ -60,7 +60,13 @@ export default function Paragraphs({ fileId, onBack }) {
     const [previewUrl, setPreviewUrl] = useState()
     const [hasChunkBboxes, setHasChunkBboxes] = useState(false);
     const latestFileUrlRef = useRef('');
-const latestPreviewUrlRef = useRef('');
+    const latestPreviewUrlRef = useRef('');
+
+    const [selectedChunkIndex, setSelectedBbox] = useKnowledgeStore((state) => [state.selectedChunkIndex, state.setSelectedBbox]);
+    useEffect(() => {
+        // 切换chunk清空选中的高亮标注bbox
+        setSelectedBbox([])
+    }, [selectedChunkIndex])
 
     // 表格配置（完全保留原始逻辑）
     const tableConfig = useMemo(() => ({
@@ -89,19 +95,19 @@ const latestPreviewUrlRef = useRef('');
             let chunkBboxes = [];
             try {
                 const firstChunk = response.data?.[0];
-                 if (firstChunk?.metadata?.bbox) {
-                    console.log(JSON.parse(firstChunk?.metadata?.bbox).chunk_bboxes,6666666666666);
-                    
-                // 先判断bbox是否为空字符串
-                if (typeof firstChunk.metadata.bbox === 'string' && JSON.parse(firstChunk?.metadata?.bbox).chunk_bboxes === '') {
-                    console.log('bbox为空字符串');
-                    chunkBboxes = [];
-                } else {
-                    // 解析JSON
-                    const bboxObj = JSON.parse(firstChunk.metadata.bbox);
-                    chunkBboxes = bboxObj.chunk_bboxes || [];
+                if (firstChunk?.metadata?.bbox) {
+                    console.log(JSON.parse(firstChunk?.metadata?.bbox).chunk_bboxes, 6666666666666);
+
+                    // 先判断bbox是否为空字符串
+                    if (typeof firstChunk.metadata.bbox === 'string' && JSON.parse(firstChunk?.metadata?.bbox).chunk_bboxes === '') {
+                        console.log('bbox为空字符串');
+                        chunkBboxes = [];
+                    } else {
+                        // 解析JSON
+                        const bboxObj = JSON.parse(firstChunk.metadata.bbox);
+                        chunkBboxes = bboxObj.chunk_bboxes || [];
+                    }
                 }
-            }
             } catch (e) {
                 console.error('解析 chunk_bboxes 失败:', e);
                 chunkBboxes = [];
@@ -115,95 +121,95 @@ const latestPreviewUrlRef = useRef('');
             return response;
         }
     );
-const fetchFileUrl = useCallback(async (fileId) => {
-  console.log('获取文件URL:', fileId);
-  if (!fileId) return '';
+    const fetchFileUrl = useCallback(async (fileId) => {
+        console.log('获取文件URL:', fileId);
+        if (!fileId) return '';
 
-  try {
-    setIsFetchingUrl(true);
-    const res = await getFilePathApi(fileId);
-    const pares = await getFileBboxApi(fileId);
-    setPartitions(pares || []);
+        try {
+            setIsFetchingUrl(true);
+            const res = await getFilePathApi(fileId);
+            const pares = await getFileBboxApi(fileId);
+            setPartitions(pares || []);
 
-    // 获取当前选中的文件信息
-    const currentFile = rawFiles.find(f => String(f.id) === String(fileId));
-    let finalUrl = '';
-    let finalPreviewUrl = '';
+            // 获取当前选中的文件信息
+            const currentFile = rawFiles.find(f => String(f.id) === String(fileId));
+            let finalUrl = '';
+            let finalPreviewUrl = '';
 
-    // 检查是否有有效的preview_url和original_url
-    const hasPreviewUrl = typeof res.preview_url === 'string' && res.preview_url.trim() !== '';
-    const hasOriginalUrl = typeof res.original_url === 'string' && res.original_url.trim() !== '';
+            // 检查是否有有效的preview_url和original_url
+            const hasPreviewUrl = typeof res.preview_url === 'string' && res.preview_url.trim() !== '';
+            const hasOriginalUrl = typeof res.original_url === 'string' && res.original_url.trim() !== '';
 
-    if (currentFile) {
-        console.log(currentFile,3);
-        
-      // 判断是否为UNS或LOCAL类型
-      const isUnsOrLocal = currentFile.parse_type === "uns" || currentFile.parse_type === "local";
-      console.log(isUnsOrLocal,currentFile,4444444);
-      
-      
-      if (isUnsOrLocal) {
-        // UNS或LOCAL类型：根据bbox是否有效选择URL
-        const isBboxesValid = hasChunkBboxes;
-        const isBboxesEmpty = !hasChunkBboxes || chunkBboxes.length === 0;
-        if (!isBboxesEmpty && hasPreviewUrl) {
-          // 有有效bbox且有preview_url → 使用preview_url
-          console.log(1111);
-          
-          finalUrl = res.preview_url.trim();
-          finalPreviewUrl = res.preview_url.trim();
-          console.log('UNS/LOCAL类型（有有效bbox）：使用preview_url');
-        } else {
-          // 无有效bbox（为空数组/字符串）或无preview_url → 强制使用original_url
-          console.log(2222);
-          
-          finalUrl = hasOriginalUrl ? res.original_url.trim() : '';
-          finalPreviewUrl = finalUrl;
-          console.log('UNS/LOCAL类型（无有效bbox或无preview_url）：使用original_url');
+            if (currentFile) {
+                console.log(currentFile, 3);
+
+                // 判断是否为UNS或LOCAL类型
+                const isUnsOrLocal = currentFile.parse_type === "uns" || currentFile.parse_type === "local";
+                console.log(isUnsOrLocal, currentFile, 4444444);
+
+
+                if (isUnsOrLocal) {
+                    // UNS或LOCAL类型：根据bbox是否有效选择URL
+                    const isBboxesValid = hasChunkBboxes;
+                    const isBboxesEmpty = !hasChunkBboxes || chunkBboxes.length === 0;
+                    if (!isBboxesEmpty && hasPreviewUrl) {
+                        // 有有效bbox且有preview_url → 使用preview_url
+                        console.log(1111);
+
+                        finalUrl = res.preview_url.trim();
+                        finalPreviewUrl = res.preview_url.trim();
+                        console.log('UNS/LOCAL类型（有有效bbox）：使用preview_url');
+                    } else {
+                        // 无有效bbox（为空数组/字符串）或无preview_url → 强制使用original_url
+                        console.log(2222);
+
+                        finalUrl = hasOriginalUrl ? res.original_url.trim() : '';
+                        finalPreviewUrl = finalUrl;
+                        console.log('UNS/LOCAL类型（无有效bbox或无preview_url）：使用original_url');
+                    }
+                } else {
+                    // 其他类型：优先使用preview_url，无则使用original_url
+                    if (hasPreviewUrl) {
+                        // 有preview_url → 优先使用
+                        finalUrl = res.preview_url.trim();
+                        finalPreviewUrl = res.preview_url.trim();
+                        console.log('其他类型：使用preview_url');
+                    } else {
+                        // 无preview_url → 使用original_url或备选URL
+                        finalUrl = hasOriginalUrl ? res.original_url.trim() : '';
+                        finalPreviewUrl = finalUrl;
+                        console.log('其他类型（无preview_url）：使用original_url');
+                    }
+                }
+            } else {
+                // 如果没有找到当前文件，使用默认策略
+                finalUrl = hasPreviewUrl ? res.preview_url.trim() : (hasOriginalUrl ? res.original_url.trim() : '');
+                finalPreviewUrl = finalUrl;
+                console.log('未找到文件信息，使用默认URL策略');
+            }
+
+            if (finalUrl) {
+                finalUrl = decodeURIComponent(finalUrl);
+                finalPreviewUrl = decodeURIComponent(finalPreviewUrl);
+                // 同时更新状态和ref（ref会同步生效）
+                setFileUrl(finalUrl);
+                setPreviewUrl(finalPreviewUrl);
+                return finalUrl;
+            } else {
+                setFileUrl('');
+                setPreviewUrl('');
+                return '';
+            }
+        } catch (err) {
+            console.error('获取文件URL失败:', err);
+            setFileUrl('');
+            setPreviewUrl('');
+            setPartitions([]);
+            return '';
+        } finally {
+            setIsFetchingUrl(false);
         }
-      } else {
-        // 其他类型：优先使用preview_url，无则使用original_url
-        if (hasPreviewUrl) {
-          // 有preview_url → 优先使用
-          finalUrl = res.preview_url.trim();
-          finalPreviewUrl = res.preview_url.trim();
-          console.log('其他类型：使用preview_url');
-        } else {
-          // 无preview_url → 使用original_url或备选URL
-          finalUrl = hasOriginalUrl ? res.original_url.trim() : '';
-          finalPreviewUrl = finalUrl;
-          console.log('其他类型（无preview_url）：使用original_url');
-        }
-      }
-    } else {
-      // 如果没有找到当前文件，使用默认策略
-      finalUrl = hasPreviewUrl ? res.preview_url.trim() : (hasOriginalUrl ? res.original_url.trim() : '');
-      finalPreviewUrl = finalUrl;
-      console.log('未找到文件信息，使用默认URL策略');
-    }
-
-    if (finalUrl) {
-      finalUrl = decodeURIComponent(finalUrl);
-      finalPreviewUrl = decodeURIComponent(finalPreviewUrl);
-      // 同时更新状态和ref（ref会同步生效）
-      setFileUrl(finalUrl);
-      setPreviewUrl(finalPreviewUrl);
-      return finalUrl;
-    } else {
-      setFileUrl('');
-      setPreviewUrl('');
-      return '';
-    }
-  } catch (err) {
-    console.error('获取文件URL失败:', err);
-    setFileUrl('');
-    setPreviewUrl('');
-    setPartitions([]);
-    return '';
-  } finally {
-    setIsFetchingUrl(false);
-  }
-}, [rawFiles, hasChunkBboxes]);
+    }, [rawFiles, hasChunkBboxes]);
 
 
 
@@ -286,7 +292,7 @@ const fetchFileUrl = useCallback(async (fileId) => {
             if (filterData) filterData({ file_ids: [newFileId] });
             await fetchFileUrl(newFileId);
             await reload();
- setChunkSwitchTrigger(prev => prev + 1);
+            setChunkSwitchTrigger(prev => prev + 1);
         } catch (err) {
             console.error('文件切换失败:', err);
             setSelectError(err.message || '文件切换失败');
@@ -347,7 +353,8 @@ const fetchFileUrl = useCallback(async (fileId) => {
     // 处理分段修改（完全保留原始逻辑）
     const handleChunkChange = useCallback((chunkIndex, text) => {
         const bbox = { chunk_bboxes: selectedBbox };
-        const bboxStr = JSON.stringify(bbox);
+        // selectedBbox空数组时，使用safeChunks的bbox
+        const bboxStr = selectedBbox.length ? JSON.stringify(bbox) : safeChunks[chunkIndex].bbox;
 
         captureAndAlertRequestErrorHoc(updateChunkApi({
             knowledge_id: Number(id),
@@ -392,7 +399,7 @@ const fetchFileUrl = useCallback(async (fileId) => {
             chunkIndex: item?.metadata?.chunk_index || index,
             bbox: item?.metadata?.bbox
         }));
-    }, [datalist, selectedFileId,chunkSwitchTrigger]);
+    }, [datalist, selectedFileId, chunkSwitchTrigger]);
 
     // 打开元数据弹窗（完全保留原始逻辑）
     const handleMetadataClick = useCallback(() => {
@@ -407,8 +414,8 @@ const fetchFileUrl = useCallback(async (fileId) => {
     // 调整分段策略（完全保留原始逻辑）
     const handleAdjustSegmentation = useCallback(() => {
         console.log(currentFile, fileUrl, previewUrl, 789);
-  const currentFileUrl = latestFileUrlRef.current;
-  const currentPreviewUrl = latestPreviewUrlRef.current;
+        const currentFileUrl = latestFileUrlRef.current;
+        const currentPreviewUrl = latestPreviewUrlRef.current;
 
         navigate(`/filelib/adjust/${id}`, {
             state: {
@@ -430,46 +437,46 @@ const fetchFileUrl = useCallback(async (fileId) => {
     }, [id, selectedFileId, currentFile, navigate]);
 
     // 解析切分策略描述（完全保留原始逻辑）
-   const splitRuleDesc = useCallback((file) => {
-    if (!file.split_rule) return '';
-    const suffix = file.file_name?.split('.').pop()?.toUpperCase() || '';
-    try {
-        const rule = JSON.parse(file.split_rule);
-        const { excel_rule } = rule;
-        
-        // 处理Excel文件规则
-        if (excel_rule && ['XLSX', 'XLS', 'CSV'].includes(suffix)) {
-            return `每 ${excel_rule.slice_length} 行作为一个分段`;
+    const splitRuleDesc = useCallback((file) => {
+        if (!file.split_rule) return '';
+        const suffix = file.file_name?.split('.').pop()?.toUpperCase() || '';
+        try {
+            const rule = JSON.parse(file.split_rule);
+            const { excel_rule } = rule;
+
+            // 处理Excel文件规则
+            if (excel_rule && ['XLSX', 'XLS', 'CSV'].includes(suffix)) {
+                return `每 ${excel_rule.slice_length} 行作为一个分段`;
+            }
+
+            // 处理分隔符规则
+            const { separator, separator_rule } = rule;
+            if (separator && separator_rule && separator.length === separator_rule.length) {
+                const displayItems = separator.map((sep, index) => {
+                    // 核心修复：将实际换行符转换为可见的 \n 字符串
+                    const displaySep = sep
+                        .replace(/\n/g, '\\n')  // 替换换行符
+                        .replace(/\r/g, '\\r')  // 替换回车符（可选）
+                        .replace(/\t/g, '\\t'); // 替换制表符（可选）
+
+                    // 根据规则添加切割符号
+                    const prefix = separator_rule[index] === 'before' ? '✂️' : '';
+                    const suffix = separator_rule[index] === 'after' ? '✂️' : '';
+
+                    return `${prefix}${displaySep}${suffix}`;
+                });
+                return displayItems.join(', ');
+            }
+        } catch (e) {
+            console.error('解析切分策略失败:', e);
         }
 
-        // 处理分隔符规则
-        const { separator, separator_rule } = rule;
-        if (separator && separator_rule && separator.length === separator_rule.length) {
-            const displayItems = separator.map((sep, index) => {
-                // 核心修复：将实际换行符转换为可见的 \n 字符串
-                const displaySep = sep
-                    .replace(/\n/g, '\\n')  // 替换换行符
-                    .replace(/\r/g, '\\r')  // 替换回车符（可选）
-                    .replace(/\t/g, '\\t'); // 替换制表符（可选）
-                
-                // 根据规则添加切割符号
-                const prefix = separator_rule[index] === 'before' ? '✂️' : '';
-                const suffix = separator_rule[index] === 'after' ? '✂️' : '';
-                
-                return `${prefix}${displaySep}${suffix}`;
-            });
-            return displayItems.join(', ');
-        }
-    } catch (e) {
-        console.error('解析切分策略失败:', e);
-    }
-    
-    // 解析失败时的兜底处理
-    return file.split_rule
-        .replace(/\n/g, '\\n')
-        .replace(/\r/g, '\\r')
-        .replace(/\t/g, '\\t');
-}, []);
+        // 解析失败时的兜底处理
+        return file.split_rule
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\r')
+            .replace(/\t/g, '\\t');
+    }, []);
 
 
     // 删除分段（完全保留原始逻辑）
@@ -544,20 +551,17 @@ const fetchFileUrl = useCallback(async (fileId) => {
     const contentLayoutClass = useMemo(() => {
         const isSingleVisible = isPreviewVisible !== isParagraphVisible;
         if (isSingleVisible) {
-            return "flex justify-center bg-background-main";
+            return "flex justify-center bg-background-main min-h-0";
         }
-        if (isPreviewVisible && isParagraphVisible && !isExcelFile) {
-            return "flex bg-background-main";
-        }
-        return "flex bg-background-main";
+        return "flex bg-background-main min-h-0";
     }, [isPreviewVisible, isParagraphVisible, isExcelFile]);
-useEffect(() => {
-  latestFileUrlRef.current = fileUrl;
-  latestPreviewUrlRef.current = previewUrl;
-}, [fileUrl, previewUrl]);
+    useEffect(() => {
+        latestFileUrlRef.current = fileUrl;
+        latestPreviewUrlRef.current = previewUrl;
+    }, [fileUrl, previewUrl]);
     // 渲染部分（完全保留原始样式，无任何修改）
     return (
-        <div className="relative">
+        <div className="relative flex flex-col h-[calc(100vh-64px)]">
             {/* 顶部导航栏 */}
             <div className="flex justify-between items-center px-4 pt-4 pb-4">
                 <div className="min-w-72 max-w-[440px] flex items-center gap-2">
@@ -709,12 +713,13 @@ useEffect(() => {
                 {/* 分段组件 */}
                 {isParagraphVisible ? (
                     <div className={isPreviewVisible ? "w-1/2" : " w-full max-w-3xl"}>
-                        <div className="flex justify-center items-center relative mb-2 text-sm gap-2 p-2 pt-0 ">
+                        <div className="flex justify-center items-center relative text-sm gap-2 p-2 pt-0 ">
                             <PreviewParagraph
-                                 key={`preview-${selectedFileId}-${chunkSwitchTrigger}`}
+                                key={`preview-${selectedFileId}-${chunkSwitchTrigger}`}
                                 fileId={selectedFileId}
                                 previewCount={datalist.length}
                                 edit={isEditable}
+                                className="h-[calc(100vh-206px)]"
                                 fileSuffix={currentFile?.suffix || ''}
                                 loading={loading}
                                 chunks={safeChunks}
@@ -751,7 +756,7 @@ useEffect(() => {
                     <DialogHeader>
                         <h3 className="text-lg font-semibold">{t('文档元数据')}</h3>
                     </DialogHeader>
-                    {console.log(metadataDialog.file,67678)}
+                    {console.log(metadataDialog.file, 67678)}
                     <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
                         <div className="space-y-2">
                             {[
