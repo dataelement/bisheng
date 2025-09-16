@@ -4,12 +4,14 @@ from pathlib import Path
 from typing import IO, Dict, List, Any, Tuple
 from urllib.parse import unquote, urlparse
 
+import pandas as pd
 import requests
-from bisheng.utils.minio_client import MinioClient
-from bisheng.utils.util import _is_valid_url
 from docx import Document
 from docx.shared import Inches
 from loguru import logger
+
+from bisheng.utils.minio_client import MinioClient
+from bisheng.utils.util import _is_valid_url
 
 
 def find_lcs(str1, str2):
@@ -26,7 +28,7 @@ def find_lcs(str1, str2):
                     maxNum = record[i + 1][j + 1]
                     p = i + 1
 
-    return str1[p - maxNum : p], maxNum
+    return str1[p - maxNum: p], maxNum
 
 
 class DocxTemplateRender(object):
@@ -37,16 +39,16 @@ class DocxTemplateRender(object):
             self.doc = Document(self.filepath)
         else:
             self.doc = Document(self.file_content)
-        
+
         # 添加调试：检查模板文档初始内容
         logger.info("[模板调试] Word模板文档初始化完成")
         self._log_template_initial_content()
-    
+
     def _log_template_initial_content(self):
         """记录模板的初始内容，用于调试"""
         try:
             logger.info(f"[模板调试] 模板总段落数: {len(self.doc.paragraphs)}")
-            
+
             # 查找包含特定标签的段落
             for i, paragraph in enumerate(self.doc.paragraphs):
                 paragraph_text = paragraph.text.strip()
@@ -78,11 +80,11 @@ class DocxTemplateRender(object):
                 # 检查文件大小
                 file_size = os.path.getsize(image_path)
                 logger.debug(f"[简单插图] 图片文件存在: {image_path}, 大小: {file_size}字节")
-                
+
                 # 插入图片，设置最大宽度为6英寸
                 run = paragraph.runs[0] if paragraph.runs else paragraph.add_run()
                 logger.debug(f"[简单插图] 准备在run中插入图片，run数量: {len(paragraph.runs)}")
-                
+
                 run.add_picture(image_path, width=Inches(6))
                 logger.info(f"[简单插图] ✅ 成功插入图片: {image_path}, 大小: {file_size}字节")
             else:
@@ -111,7 +113,7 @@ class DocxTemplateRender(object):
             alt_text: 图片替代文字
         """
         logger.debug(f"[图片替换] 开始替换占位符: {placeholder} -> {image_path}")
-        
+
         # 获取段落的完整文本
         paragraph_text = paragraph.text
 
@@ -200,7 +202,7 @@ class DocxTemplateRender(object):
                 logger.warning(f"[图片渲染] 图片文件不存在，使用原路径: {image_path}")
                 run.text = image_path
                 return
-            
+
             # 检查文件大小和格式
             file_size = os.path.getsize(image_path)
             file_ext = os.path.splitext(image_path)[1].lower()
@@ -303,6 +305,7 @@ class DocxTemplateRender(object):
             # 清除中间的runs
             for i in range(end_run_index - 1, start_run_index, -1):
                 paragraph.runs[i].text = ""
+
     def _process_resource_placeholders(self, doc, placeholder_map):
         """
         按位置顺序处理段落中混合的占位符
@@ -313,7 +316,7 @@ class DocxTemplateRender(object):
         """
         # 处理所有段落中的占位符
         paragraphs_to_process = list(doc.paragraphs)  # 创建副本，因为我们可能会修改段落结构
-        
+
         for i, p in enumerate(paragraphs_to_process):
             paragraph_text = p.text
             if not paragraph_text:
@@ -336,10 +339,10 @@ class DocxTemplateRender(object):
 
             # 按位置排序，从前往后处理
             placeholders_with_positions.sort(key=lambda x: x['position'])
-            
+
             # 分割段落为文本段和占位符段
             self._process_mixed_content_paragraph(doc, p, placeholders_with_positions, paragraph_text)
-        
+
         # 处理表格单元格中的占位符
         for table in doc.tables:
             for i, row in enumerate(table.rows):
@@ -368,7 +371,8 @@ class DocxTemplateRender(object):
                                             cell_text = cell_text.replace(placeholder, os.path.basename(image_path))
                                     else:
                                         # 图片文件不存在，显示路径
-                                        cell_text = cell_text.replace(placeholder, resource_info.get("path", placeholder))
+                                        cell_text = cell_text.replace(placeholder,
+                                                                      resource_info.get("path", placeholder))
                                 elif resource_info["type"] == "excel":
                                     cell_text = cell_text.replace(placeholder, "[Excel表格]")
                                 elif resource_info["type"] == "csv":
@@ -397,15 +401,15 @@ class DocxTemplateRender(object):
             original_text: 原始段落文本
         """
         logger.info(f"[内联混合内容] 开始处理混合内容段落: {original_text[:100]}...")
-        
+
         # 提取原始段落的样式信息，用于后续段落创建
         original_style_info = self._extract_paragraph_style_info(paragraph)
         logger.debug(f"[样式保持] 提取到原始段落样式: 对齐={original_style_info['alignment']}")
-        
+
         # 分割文本为片段，保持原始顺序
         segments = []
         last_end = 0
-        
+
         for item in placeholders_with_positions:
             # 添加占位符前的文本
             if item['position'] > last_end:
@@ -415,16 +419,16 @@ class DocxTemplateRender(object):
                         'type': 'text',
                         'content': text_before
                     })
-            
+
             # 添加占位符对应的资源
             segments.append({
                 'type': 'resource',
                 'placeholder': item['placeholder'],
                 'resource_info': item['resource_info']
             })
-            
+
             last_end = item['end_position']
-        
+
         # 添加最后剩余的文本
         if last_end < len(original_text):
             text_after = original_text[last_end:]
@@ -433,39 +437,42 @@ class DocxTemplateRender(object):
                     'type': 'text',
                     'content': text_after
                 })
-        
+
         logger.info(f"[内联混合内容] 分割为 {len(segments)} 个片段")
-        
+
         # 详细记录每个片段
         for i, seg in enumerate(segments):
             if seg['type'] == 'text':
-                logger.info(f"[分割调试] 片段{i+1} (文本): '{seg['content'][:100]}{'...' if len(seg['content']) > 100 else ''}'")
+                logger.info(
+                    f"[分割调试] 片段{i + 1} (文本): '{seg['content'][:100]}{'...' if len(seg['content']) > 100 else ''}'")
             else:
-                logger.info(f"[分割调试] 片段{i+1} (资源): {seg['placeholder']} -> {seg['resource_info']['type']}")
-        
+                logger.info(f"[分割调试] 片段{i + 1} (资源): {seg['placeholder']} -> {seg['resource_info']['type']}")
+
         # 清空原始段落
         paragraph.clear()
-        
+
         # 重新设计：分段处理，保持文档结构一致性
         current_paragraph = paragraph
-        
+
         i = 0
         while i < len(segments):
             segment = segments[i]
-            
+
             if segment['type'] == 'text':
                 # 直接添加文本内容，不做任何清理
                 current_paragraph.add_run(segment['content'])
-                logger.info(f"[处理调试] 片段{i+1} (文本): 已添加到段落 '{segment['content'][:50]}{'...' if len(segment['content']) > 50 else ''}'")
-                
+                logger.info(
+                    f"[处理调试] 片段{i + 1} (文本): 已添加到段落 '{segment['content'][:50]}{'...' if len(segment['content']) > 50 else ''}'")
+
             elif segment['type'] == 'resource':
                 resource_info = segment['resource_info']
-                
+
                 if resource_info['type'] == 'image':
                     # 图片可以真正内联在段落中
-                    self._insert_inline_image(current_paragraph, resource_info['path'], resource_info.get('alt_text', ''))
-                    logger.info(f"[内联混合内容] 片段{i+1}: 内联插入图片")
-                    
+                    self._insert_inline_image(current_paragraph, resource_info['path'],
+                                              resource_info.get('alt_text', ''))
+                    logger.info(f"[内联混合内容] 片段{i + 1}: 内联插入图片")
+
                 elif resource_info['type'] in ['excel', 'csv', 'markdown_table']:
                     # 表格内联处理：在当前位置插入表格，然后为后续内容创建新段落
                     if resource_info['type'] == 'markdown_table':
@@ -473,30 +480,31 @@ class DocxTemplateRender(object):
                     else:
                         table_data = resource_info.get('table_data', [["表格数据解析失败"]])
                         alignments = None
-                    
-                    logger.info(f"[表格插入调试] 在片段{i+1}位置插入表格，当前段落: {current_paragraph.text[:50]}")
-                    
+
+                    logger.info(f"[表格插入调试] 在片段{i + 1}位置插入表格，当前段落: {current_paragraph.text[:50]}")
+
                     # 在当前段落后立即插入表格
                     table_element = self._create_table_element(table_data)
-                    
+
                     # 获取当前段落在文档中的位置
                     paragraph_element = current_paragraph._element
                     paragraph_parent = paragraph_element.getparent()
                     paragraph_index = list(paragraph_parent).index(paragraph_element)
-                    
+
                     # 在当前段落后插入表格
                     paragraph_parent.insert(paragraph_index + 1, table_element)
-                    
+
                     logger.info(f"[表格插入调试] 表格已插入到段落后，段落索引: {paragraph_index}")
-                    
+
                     # 为后续文本创建新段落，并更新current_paragraph
                     if i + 1 < len(segments):
-                        next_paragraph = self._create_new_paragraph_after_table(paragraph_parent, paragraph_index + 1, original_style_info)
+                        next_paragraph = self._create_new_paragraph_after_table(paragraph_parent, paragraph_index + 1,
+                                                                                original_style_info)
                         current_paragraph = next_paragraph
                         logger.info(f"[表格插入调试] 已为后续文本创建新段落（继承样式）")
-            
+
             i += 1
-        
+
         logger.info(f"[内联混合内容] ✅ 内联混合内容处理完成")
 
     def _insert_table_inline(self, current_paragraph, table_data, segments, current_index):
@@ -515,24 +523,25 @@ class DocxTemplateRender(object):
         # 1. 在当前段落后插入表格段落
         table_paragraph = self._create_new_paragraph_after(current_paragraph)
         self._insert_table(table_paragraph, table_data)
-        
+
         # 2. 检查是否有后续文本片段，如果有则创建新段落
         remaining_segments = segments[current_index + 1:]
         text_segments = [seg for seg in remaining_segments if seg['type'] == 'text']
-        
+
         logger.info(f"[表格内联调试] 当前片段索引: {current_index}, 总片段数: {len(segments)}")
         logger.info(f"[表格内联调试] 剩余片段数: {len(remaining_segments)}, 其中文本片段: {len(text_segments)}")
-        
+
         if text_segments:
             # 为后续文本创建新段落
             next_text_paragraph = self._create_new_paragraph_after(table_paragraph)
             logger.info(f"[表格内联调试] 为后续文本创建新段落")
-            
+
             # 将所有后续文本片段添加到新段落
             for j, seg in enumerate(text_segments):
                 next_text_paragraph.add_run(seg['content'])
-                logger.info(f"[表格内联调试] 后续文本片段{j+1}: '{seg['content'][:100]}{'...' if len(seg['content']) > 100 else ''}'")
-            
+                logger.info(
+                    f"[表格内联调试] 后续文本片段{j + 1}: '{seg['content'][:100]}{'...' if len(seg['content']) > 100 else ''}'")
+
             # 返回跳过的文本片段数量（让主循环不再处理这些片段）
             skipped_count = len(text_segments)
             logger.info(f"[表格内联调试] 表格已插入，跳过后续{skipped_count}个文本片段")
@@ -553,17 +562,17 @@ class DocxTemplateRender(object):
         """
         from docx.oxml import parse_xml
         from docx.text.paragraph import Paragraph
-        
+
         # 创建新的段落元素
         new_p_xml = '<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:p>'
         new_p_element = parse_xml(new_p_xml)
-        
+
         # 在当前段落后插入新段落
         paragraph._element.getparent().insert(
             list(paragraph._element.getparent()).index(paragraph._element) + 1,
             new_p_element
         )
-        
+
         # 返回包装后的段落对象
         return Paragraph(new_p_element, paragraph._parent)
 
@@ -592,24 +601,24 @@ class DocxTemplateRender(object):
         try:
             from docx.shared import Inches
             import os
-            
+
             if not os.path.exists(image_path):
                 logger.warning(f"[表格单元格图片] 图片文件不存在: {image_path}")
                 return
-                
+
             # 清空单元格内容
             for paragraph in cell.paragraphs:
                 paragraph.clear()
-            
+
             # 在第一个段落中插入图片
             first_paragraph = cell.paragraphs[0] if cell.paragraphs else cell.add_paragraph()
             run = first_paragraph.add_run()
-            
+
             # 插入图片，设置合适的大小
             run.add_picture(image_path, width=Inches(2.0))  # 表格单元格中使用较小尺寸
-            
+
             logger.info(f"[表格单元格图片] ✅ 成功插入图片: {image_path}")
-            
+
         except Exception as e:
             logger.error(f"[表格单元格图片] ❌ 插入失败: {str(e)}")
             raise e
@@ -1092,14 +1101,14 @@ class DocxTemplateRender(object):
 
             rows = len(table_data)
             cols = max(len(row) for row in table_data) if table_data else 1
-            
+
             logger.info(f"[表格插入调试] 准备插入表格，大小: {rows}行 x {cols}列")
 
             # 获取段落在文档中的位置
             paragraph_element = paragraph._element
             paragraph_parent = paragraph_element.getparent()
             paragraph_index = list(paragraph_parent).index(paragraph_element)
-            
+
             logger.info(f"[表格插入调试] 段落在父容器中的索引: {paragraph_index}")
 
             # 创建表格
@@ -1108,7 +1117,7 @@ class DocxTemplateRender(object):
 
             # 在段落之前插入表格（这样表格就出现在当前内容位置）
             paragraph_parent.insert(paragraph_index, table_element)
-            
+
             logger.info(f"[表格插入调试] 表格已插入到段落之前，索引: {paragraph_index}")
 
             # 填充表格数据并设置样式
@@ -1249,28 +1258,29 @@ class DocxTemplateRender(object):
         Returns:
             表格元素
         """
-        logger.info(f"[表格创建] 开始创建表格元素，数据大小: {len(table_data)}x{len(table_data[0]) if table_data else 0}")
-        
+        logger.info(
+            f"[表格创建] 开始创建表格元素，数据大小: {len(table_data)}x{len(table_data[0]) if table_data else 0}")
+
         if not table_data or not table_data[0]:
             logger.warning("[表格创建] 表格数据为空")
             return None
-        
+
         try:
             # 创建表格
             rows = len(table_data)
             cols = len(table_data[0])
             table = self.doc.add_table(rows=rows, cols=cols)
-            
+
             # 填充表格数据并设置样式
             self._fill_and_style_table(table, table_data)
-            
+
             logger.info(f"[表格创建] ✅ 表格元素创建完成")
             return table._tbl
-            
+
         except Exception as e:
             logger.error(f"[表格创建] ❌ 表格元素创建失败: {str(e)}", exc_info=True)
             return None
-    
+
     def _create_new_paragraph_after_table(self, parent, table_index, style_info=None):
         """
         在表格后创建新段落
@@ -1286,7 +1296,7 @@ class DocxTemplateRender(object):
         try:
             # 创建新段落
             new_paragraph = self.doc.add_paragraph()
-            
+
             # 应用样式信息
             if style_info:
                 self._apply_style_info(new_paragraph, style_info)
@@ -1296,15 +1306,15 @@ class DocxTemplateRender(object):
                 from docx.enum.text import WD_ALIGN_PARAGRAPH
                 new_paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
                 alignment_info = "默认左对齐"
-            
+
             paragraph_element = new_paragraph._element
-            
+
             # 在表格后插入新段落
             parent.insert(table_index + 1, paragraph_element)
-            
+
             logger.info(f"[段落创建] ✅ 在表格后创建新段落（{alignment_info}），索引: {table_index + 1}")
             return new_paragraph
-            
+
         except Exception as e:
             logger.error(f"[段落创建] ❌ 创建新段落失败: {str(e)}", exc_info=True)
             return None
@@ -1325,7 +1335,7 @@ class DocxTemplateRender(object):
                 'paragraph_format': {},
                 'style_name': None
             }
-            
+
             # 提取段落格式信息
             if hasattr(paragraph, 'paragraph_format'):
                 pf = paragraph.paragraph_format
@@ -1337,14 +1347,14 @@ class DocxTemplateRender(object):
                     'right_indent': pf.right_indent,
                     'first_line_indent': pf.first_line_indent,
                 }
-                
+
             # 提取样式名称
             if hasattr(paragraph, 'style') and paragraph.style:
                 style_info['style_name'] = paragraph.style.name
-                
+
             logger.debug(f"[样式提取] 段落样式信息: 对齐={style_info['alignment']}, 样式={style_info['style_name']}")
             return style_info
-            
+
         except Exception as e:
             logger.warning(f"[样式提取] 提取段落样式失败: {str(e)}")
             return {'alignment': None, 'paragraph_format': {}, 'style_name': None}
@@ -1362,12 +1372,12 @@ class DocxTemplateRender(object):
             if style_info.get('alignment') is not None:
                 paragraph.alignment = style_info['alignment']
                 logger.debug(f"[样式应用] 应用对齐方式: {style_info['alignment']}")
-                
+
             # 应用段落格式
             paragraph_format = style_info.get('paragraph_format', {})
             if paragraph_format:
                 pf = paragraph.paragraph_format
-                
+
                 for attr_name, value in paragraph_format.items():
                     if value is not None and hasattr(pf, attr_name):
                         try:
@@ -1375,7 +1385,7 @@ class DocxTemplateRender(object):
                             logger.debug(f"[样式应用] 应用段落格式 {attr_name}={value}")
                         except Exception as attr_e:
                             logger.debug(f"[样式应用] 跳过段落格式 {attr_name}: {str(attr_e)}")
-                            
+
             # 应用样式名称
             style_name = style_info.get('style_name')
             if style_name:
@@ -1384,7 +1394,7 @@ class DocxTemplateRender(object):
                     logger.debug(f"[样式应用] 应用样式名称: {style_name}")
                 except Exception as style_e:
                     logger.debug(f"[样式应用] 跳过样式名称应用: {str(style_e)}")
-                    
+
         except Exception as e:
             logger.warning(f"[样式应用] 应用样式信息失败: {str(e)}")
 
@@ -1477,7 +1487,8 @@ class DocxTemplateRender(object):
                                         if placeholder in cell_text:
                                             if resource_info["type"] == "image":
                                                 # 在表格单元格中插入实际图片
-                                                image_path = resource_info.get("local_path") or resource_info.get("path", "")
+                                                image_path = resource_info.get("local_path") or resource_info.get(
+                                                    "path", "")
                                                 if image_path and os.path.exists(image_path):
                                                     try:
                                                         # 清空单元格文本
@@ -1488,10 +1499,12 @@ class DocxTemplateRender(object):
                                                     except Exception as e:
                                                         logger.error(f"❌ 表格单元格插入图片失败: {str(e)}")
                                                         # 失败时显示文件名
-                                                        cell_text = cell_text.replace(placeholder, os.path.basename(image_path))
+                                                        cell_text = cell_text.replace(placeholder,
+                                                                                      os.path.basename(image_path))
                                                 else:
                                                     # 图片文件不存在，显示路径
-                                                    cell_text = cell_text.replace(placeholder, resource_info.get("path", placeholder))
+                                                    cell_text = cell_text.replace(placeholder, resource_info.get("path",
+                                                                                                                 placeholder))
                                             elif resource_info["type"] == "excel":
                                                 cell_text = cell_text.replace(placeholder, "[Excel表格]")
                                             elif resource_info["type"] == "csv":
@@ -1579,13 +1592,13 @@ class DocxTemplateRender(object):
         self._log_final_document_content(doc)
 
         return doc
-    
+
     def _log_final_document_content(self, doc):
         """记录最终文档内容，用于调试标签来源"""
         try:
             logger.info("[最终文档] 开始检查文档最终内容")
             logger.info(f"[最终文档] 总段落数: {len(doc.paragraphs)}")
-            
+
             for i, paragraph in enumerate(doc.paragraphs):
                 paragraph_text = paragraph.text.strip()
                 if paragraph_text:
@@ -1595,7 +1608,7 @@ class DocxTemplateRender(object):
                     # 记录前10个段落的内容
                     elif i < 10:
                         logger.info(f"[最终文档] 段落{i}: {paragraph_text[:100]}...")
-                        
+
             logger.info("[最终文档] 文档内容检查完成")
         except Exception as e:
             logger.error(f"[最终文档] 检查文档内容失败: {str(e)}")
