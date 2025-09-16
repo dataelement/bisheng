@@ -175,8 +175,8 @@ useEffect(() => {
                 displayStep === 2 && (
                     <div className={cn(
                         "h-full flex flex-col min-w-[540px]",
-                        // 预览时占50%，否则占2/3
-                        showPreview ? "w-1/2" : "w-2/3"
+                        // 预览时占50%
+                        showPreview ? "w-1/2" : ""
                     )}>
                         <Tabs
                             defaultValue={displayMode === DisplayModeType.Mixed ? 'file' : displayMode}
@@ -189,7 +189,7 @@ useEffect(() => {
                                         <TabsTrigger id="knowledge_file_tab" value="file" className="roundedrounded-xl">{t('defaultStrategy')}</TabsTrigger>
                                         <TabsTrigger id="knowledge_table_tab" value="table">{t('customStrategy')}</TabsTrigger>
                                     </TabsList>
-                                ) : <div className="h-10"></div>}
+                                ) : <div className="h-1"></div>}
                             </div>
                             {/* 文件文档设置 */}
                             <TabsContent value="file">

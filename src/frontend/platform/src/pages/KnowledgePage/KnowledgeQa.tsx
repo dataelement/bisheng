@@ -238,7 +238,7 @@ export default function KnowledgeQa(params) {
         <TableHead>
             {t('lib.createUser')}
         </TableHead>
-        <TableHead>
+        <TableHead className="text-right">
             {t('operations')}
         </TableHead>
                     </TableRow>
@@ -255,8 +255,8 @@ export default function KnowledgeQa(params) {
                             }}
                         >
                             {/* 名称+描述单元格：恢复原有气泡结构，确保蓝色生效 */}
-                            <TableCell  className="font-medium max-w-[200px]">
-                                 <div className="flex items-center gap-2 py-1">
+                            <TableCell  className="font-medium max-w-[280px]">
+                                 <div className="flex items-center gap-2">
                                     <img
                                         src={__APP_ENV__.BASE_URL + "/assets/qa-logo.svg"}
                                         alt="知识库图标"
@@ -290,7 +290,7 @@ export default function KnowledgeQa(params) {
                                 </div>
                             </TableCell>
 
-                            <TableCell className="text-[#5A5A5A]">{el.update_time.replace('T', ' ')}</TableCell>
+                            <TableCell className="text-[#5A5A5A]  min-w-[220px]">{el.update_time.replace('T', ' ')}</TableCell>
 
                             <TableCell className="max-w-[300px] break-all">
                                  <div className="truncate-multiline text-[#5A5A5A]">{el.user_name || '--'}</div>
@@ -305,7 +305,6 @@ export default function KnowledgeQa(params) {
                                             <button
                                                 className="size-10 px-2 bg-transparent border-none shadow-none hover:bg-gray-300 flex items-center justify-center duration-200 relative"
                                                 onClick={(e) => e.stopPropagation()}
-                                            // 关键：stopPropagation防止触发父行onClick
                                             >
                                                 <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
                                             </button>

@@ -523,8 +523,8 @@ const handleCopy = async (elem) => {
                                         handleCachePage();
                                     }}
                                 >
-                                    <div className="flex items-center gap-2 py-1">
-                                        <div className="flex items-center justify-center size-12 bg-primary text-white rounded-[10px]  w-[44px] h-[44px]">
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex items-center justify-center size-12 bg-primary text-white rounded-[4px]  w-[40px] h-[40px]">
                                             <BookCopy />
                                         </div>
                                         <div>

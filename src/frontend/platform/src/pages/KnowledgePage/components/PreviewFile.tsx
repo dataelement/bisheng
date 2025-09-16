@@ -8,6 +8,7 @@ import DocxPreview from "./DocxFileViewer";
 import { convertJsonData } from "./ParagraphEdit";
 import { Partition } from "./PreviewResult";
 import TxtFileViewer from "./TxtFileViewer";
+import { cn } from "@/utils";
 
 export default function PreviewFile({
   urlState,
@@ -292,7 +293,7 @@ export default function PreviewFile({
   if (['xlsx', 'xls', 'csv'].includes(file.suffix)) return null
 
 
-  return <div className="relative w-full" onClick={e => {
+  return  <div className={cn('relative' ,  step === 3 ? "w-full" : "w-1/2", step === 2 ? "-mt-9 w-full" : "")} onClick={e => {
     e.stopPropagation()
   }}>
     <div className={`${edit ? 'absolute -top-8 right-0 z-10' : 'relative'} flex justify-center items-center mb-2 text-sm h-10`}>

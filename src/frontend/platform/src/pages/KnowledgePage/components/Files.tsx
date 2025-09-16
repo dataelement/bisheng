@@ -39,15 +39,16 @@ export default function Files({ onPreview }) {
     )
     const navigate = useNavigate()
 
-    // 新增状态
+    // 存储完整文件对象（保留所有原始参数）
+    const [selectedFileObjs, setSelectedFileObjs] = useState<Array<Record<string, any>>>([]);
+    const [isAllSelected, setIsAllSelected] = useState(false);
+    
+    // 其他原有状态
     const [selectedFilters, setSelectedFilters] = useState<number[]>([]);
     const [tempFilters, setTempFilters] = useState<number[]>([]);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
-    const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
-    // 新增状态：跟踪全选状态
-    const [isAllSelected, setIsAllSelected] = useState(false);
 
-    // 解析中 轮巡
+    // 解析中轮巡
     const timerRef = useRef(null)
     useEffect(() => {
         if (datalist.some(el => el.status === 1)) {
@@ -62,21 +63,14 @@ export default function Files({ onPreview }) {
         setSelectedFilters([...tempFilters]);
         const params: any = {};
         if (tempFilters.length > 0) {
-            // 创建多个 status 参数
-            tempFilters.forEach((status, index) => {
-                params[`status`] = status; // 这会覆盖前一个，需要特殊处理
-            });
-
-            // 或者使用另一种方式：修改 useTable 支持数组
-            params.status = tempFilters; // 传递数组，让 useTable 处理
+            params.status = tempFilters;
         } else {
-            // 如果没有选中任何筛选条件，传递空对象来重置筛选
             params.status = [];
         }
 
         filterData(params);
         setIsFilterOpen(false);
-        setSelectedFiles(new Set());
+        setSelectedFileObjs([]);
         setIsAllSelected(false);
     };
 
@@ -86,8 +80,7 @@ export default function Files({ onPreview }) {
         setSelectedFilters(emptyFilters);
         filterData({ status: [] });
         setIsFilterOpen(false);
-        // 重置筛选时清除选择状态
-        setSelectedFiles(new Set());
+        setSelectedFileObjs([]);
         setIsAllSelected(false);
     };
 
@@ -98,79 +91,67 @@ export default function Files({ onPreview }) {
             onOk(next) {
                 captureAndAlertRequestErrorHoc(deleteFile(id).then(res => {
                     reload()
-                    // 删除文件后，从选中集合中移除
-                    setSelectedFiles(prev => {
-                        const newSet = new Set(prev);
-                        newSet.delete(id);
-                        return newSet;
-                    });
+                    setSelectedFileObjs(prev => prev.filter(file => file.id !== id));
                 }))
                 next()
             },
         })
     }
 
-    // 重试解析
+    // 重试解析（保留原始文件参数结构）
     const handleRetry = (files) => {
         captureAndAlertRequestErrorHoc(retryKnowledgeFileApi({ file_objs: files }).then(res => {
             reload()
         }))
     }
 
-    // 全选/取消全选
+    // 全选/取消全选（存储完整文件对象）
     const toggleSelectAll = (checked: boolean) => {
         if (checked) {
-            // 全选当前页
-            const currentPageIds = datalist.map(file => file.id);
-            const newSelectedFiles = new Set(selectedFiles);
-            currentPageIds.forEach(id => newSelectedFiles.add(id));
-            setSelectedFiles(newSelectedFiles);
-            setIsAllSelected(true);
+            // 全选当前页并去重
+            const newFiles = datalist
+                .filter(file => !selectedFileObjs.some(item => item.id === file.id))
+                .map(file => ({ ...file })); // 深拷贝保留所有参数
+            setSelectedFileObjs([...selectedFileObjs, ...newFiles]);
         } else {
             // 取消全选当前页
-            const currentPageIds = datalist.map(file => file.id);
-            const newSelectedFiles = new Set(selectedFiles);
-            currentPageIds.forEach(id => newSelectedFiles.delete(id));
-            setSelectedFiles(newSelectedFiles);
-            setIsAllSelected(false);
+            const currentPageIds = new Set(datalist.map(file => file.id));
+            setSelectedFileObjs(prev => prev.filter(file => !currentPageIds.has(file.id)));
         }
+        setIsAllSelected(checked);
     };
 
     // 单个文件选中/取消选中
-    const toggleSelectFile = (fileId: string, checked: boolean) => {
-        const newSelectedFiles = new Set(selectedFiles);
+    const toggleSelectFile = (file: Record<string, any>, checked: boolean) => {
         if (checked) {
-            newSelectedFiles.add(fileId);
+            // 避免重复添加
+            if (!selectedFileObjs.some(item => item.id === file.id)) {
+                setSelectedFileObjs([...selectedFileObjs, { ...file }]);
+            }
         } else {
-            newSelectedFiles.delete(fileId);
-            // 如果有文件被取消选择，则取消全选状态
+            setSelectedFileObjs(prev => prev.filter(item => item.id !== file.id));
             setIsAllSelected(false);
         }
-        setSelectedFiles(newSelectedFiles);
-    };
-
-    // 获取选中的文件
-    const getSelectedFiles = () => {
-        return datalist.filter(file => selectedFiles.has(file.id));
     };
 
     // 检查当前页是否全部选中
     const isCurrentPageAllSelected = useMemo(() => {
         if (datalist.length === 0) return false;
-        return datalist.every(file => selectedFiles.has(file.id));
-    }, [datalist, selectedFiles]);
+        const selectedIds = new Set(selectedFileObjs.map(file => file.id));
+        return datalist.every(file => selectedIds.has(file.id));
+    }, [datalist, selectedFileObjs]);
 
     // 批量删除
     const handleBatchDelete = () => {
         bsConfirm({
             title: t('prompt'),
-            desc: t('确认删除选中文件', { count: selectedFiles.size }),
+            desc: t('确认删除选中文件', { count: selectedFileObjs.length }),
             onOk(next) {
                 captureAndAlertRequestErrorHoc(Promise.all(
-                    Array.from(selectedFiles).map(id => deleteFile(id))
+                    selectedFileObjs.map(file => deleteFile(file.id))
                 ).then(() => {
                     reload();
-                    setSelectedFiles(new Set());
+                    setSelectedFileObjs([]);
                     setIsAllSelected(false);
                 }))
                 next();
@@ -178,17 +159,19 @@ export default function Files({ onPreview }) {
         })
     }
 
-    // 批量重试
+    // 批量重试（核心修复：传递完整文件对象）
     const handleBatchRetry = () => {
-        const failedFiles = getSelectedFiles().filter(file => file.status === 3);
+        // 筛选失败文件，保留完整参数
+        const failedFiles = selectedFileObjs.filter(file => file.status === 3);
+
         if (failedFiles.length > 0) {
-            handleRetry(failedFiles);
-            setSelectedFiles(new Set());
+            handleRetry(failedFiles); // 直接传递完整文件对象数组
+            setSelectedFileObjs([]);
             setIsAllSelected(false);
         }
     }
 
-    // 策略解析
+    // 策略解析（原有逻辑不变）
     const dataSouce = useMemo(() => {
         return datalist.map(el => {
             if (!el.split_rule) return {
@@ -206,32 +189,34 @@ export default function Files({ onPreview }) {
     }, [datalist])
 
     const splitRuleDesc = (el) => {
-        if (!el.split_rule) return el.strategy[1].replace(/\n/g, '\\n') // 兼容历史数据
+        if (!el.split_rule) return el.strategy[1].replace(/\n/g, '\\n')
         const suffix = el.file_name.split('.').pop().toUpperCase()
         const excel_rule = JSON.parse(el.split_rule).excel_rule
-        if (!excel_rule) return el.strategy[1].replace(/\n/g, '\\n') // 兼容历史数据
+        if (!excel_rule) return el.strategy[1].replace(/\n/g, '\\n')
         return ['XLSX', 'XLS', 'CSV'].includes(suffix) ? `每 ${excel_rule.slice_length} 行作为一个分段` : el.strategy[1].replace(/\n/g, '\\n')
     }
 
     // 检查是否有选中的解析失败文件
     const hasSelectedFailedFiles = useMemo(() => {
-        return getSelectedFiles().some(file => file.status === 3);
-    }, [selectedFiles, datalist]);
+        return selectedFileObjs.some(file => file.status === 3);
+    }, [selectedFileObjs]);
+
     useEffect(() => {
         if (isFilterOpen) {
             setTempFilters([...selectedFilters]);
         }
     }, [isFilterOpen, selectedFilters]);
 
-    // 当页面数据变化时，更新全选状态
+    // 页面数据变化时更新全选状态
     useEffect(() => {
-        setIsAllSelected(datalist.length > 0 && datalist.every(file => selectedFiles.has(file.id)));
-    }, [datalist, selectedFiles]);
+        setIsAllSelected(datalist.length > 0 && datalist.every(file => 
+            selectedFileObjs.some(item => item.id === file.id)
+        ));
+    }, [datalist, selectedFileObjs]);
 
     // 处理下拉菜单关闭事件
     const handleOpenChange = (open: boolean) => {
         if (!open && isFilterOpen) {
-            // 当下拉菜单关闭且之前是打开状态时，应用筛选
             applyFilters();
         }
         setIsFilterOpen(open);
@@ -246,32 +231,29 @@ export default function Files({ onPreview }) {
             )}
 
             {/* 顶部操作栏 */}
-            {selectedFiles.size > 0 && (
+            {selectedFileObjs.length > 0 && (
                 <div className="absolute top-[-62px] left-0 right-0 flex justify-center items-center p-2 border-b z-10">
                     <div className="flex gap-4 items-center">
-                        {/* 批量操作按钮组 */}
-                        {selectedFiles.size > 0 && (
-                            <div className="flex">
+                        <div className="flex">
+                            <Button
+                                variant="outline"
+                                onClick={handleBatchDelete}
+                                className="flex items-center gap-1"
+                            >
+                                <Trash2 size={16} />
+                                {t('delete')}
+                            </Button>
+                            {hasSelectedFailedFiles && (
                                 <Button
                                     variant="outline"
-                                    onClick={handleBatchDelete}
+                                    onClick={handleBatchRetry}
                                     className="flex items-center gap-1"
                                 >
-                                    <Trash2 size={16} />
-                                    {t('delete')}
+                                    <RotateCw size={16} />
+                                    {t('重试')}
                                 </Button>
-                                {hasSelectedFailedFiles && (
-                                    <Button
-                                        variant="outline"
-                                        onClick={handleBatchRetry}
-                                        className="flex items-center gap-1"
-                                    >
-                                        <RotateCw size={16} />
-                                        {t('重试')}
-                                    </Button>
-                                )}
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
@@ -279,8 +261,7 @@ export default function Files({ onPreview }) {
             <div className="absolute right-0 top-[-62px] flex gap-4 items-center z-20">
                 <SearchInput placeholder={t('searchFileName')} onChange={(e) => {
                     search(e.target.value);
-                    // 搜索时清除选择状态
-                    setSelectedFiles(new Set());
+                    setSelectedFileObjs([]);
                     setIsAllSelected(false);
                 }} />
                 {isEditable && (
@@ -329,7 +310,6 @@ export default function Files({ onPreview }) {
                                                         value: 2,
                                                         label: '已完成',
                                                         color: 'text-green-500',
-                                                        // 绿色圆点+文字（与表格"已完成"样式统一）
                                                         icon: (
                                                             <div className="flex items-center gap-2 mt-2">
                                                                 <span className="size-[6px] rounded-full bg-green-500"></span>
@@ -343,7 +323,6 @@ export default function Files({ onPreview }) {
                                                         value: 1,
                                                         label: '解析中',
                                                         color: 'text-[#4D9BF0]',
-                                                        // 蓝色圆点+文字（与表格"解析中"样式统一）
                                                         icon: (
                                                             <div className="flex items-center gap-2 mt-2">
                                                                 <span className="size-[6px] rounded-full bg-[#4D9BF0]"></span>
@@ -357,7 +336,6 @@ export default function Files({ onPreview }) {
                                                         value: 3,
                                                         label: '解析失败',
                                                         color: 'text-red-500',
-                                                        // 红色圆点+文字（与表格"解析失败"样式统一）
                                                         icon: (
                                                             <div className="flex items-center gap-2 mt-2">
                                                                 <span className="size-[6px] rounded-full bg-red-500"></span>
@@ -371,7 +349,6 @@ export default function Files({ onPreview }) {
                                                         value: 4,
                                                         label: '向量模型切换中',
                                                         color: 'text-[#4D9BF0]',
-                                                        // 蓝色圆点+文字（与表格"解析中"样式统一）
                                                         icon: (
                                                             <div className="flex items-center gap-2 mt-2">
                                                                 <span className="size-[6px] rounded-full bg-[#4D9BF0]"></span>
@@ -441,17 +418,17 @@ export default function Files({ onPreview }) {
                             <TableRow
                                 key={el.id}
                                 onClick={() => {
-                                    if (!selectedFiles.size && el.status !== 3 && el.status !== 1) {
+                                    if (selectedFileObjs.length === 0 && el.status !== 3 && el.status !== 1) {
                                         onPreview(el.id);
                                     }
                                 }}
-                                className={selectedFiles.has(el.id) ? 'bg-blue-50' : ''}
+                                className={selectedFileObjs.some(file => file.id === el.id) ? 'bg-blue-50' : ''}
                             >
                                 <TableCell>
                                     <Checkbox
-                                        checked={selectedFiles.has(el.id)}
+                                        checked={selectedFileObjs.some(file => file.id === el.id)}
                                         onCheckedChange={(checked) => {
-                                            toggleSelectFile(el.id, checked as boolean);
+                                            toggleSelectFile(el, checked as boolean);
                                         }}
                                         onClick={(e) => e.stopPropagation()}
                                     />
@@ -480,23 +457,20 @@ export default function Files({ onPreview }) {
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
 
                                 <TableCell>
+                                    {console.log(el.remark,44444)}
                                     {el.status === 3 ? (
+                                        
                                         <div className="flex items-center">
                                             <TooltipProvider delayDuration={100}>
                                                 <Tooltip>
-                                                    <Tooltip>
                                                         <TooltipTrigger className="flex items-center gap-2">
-                                                            {/* 红色圆点 - 12x12px */}
                                                             <span className="size-[6px] rounded-full bg-red-500"></span>
-
-                                                            {/* 解析失败文字 - 符合Poppins SemiBold 14px样式 */}
                                                             <span className="font-[500] text-[14px] text-red-500 leading-[100%] text-center">
                                                                 解析失败
                                                             </span>
                                                         </TooltipTrigger>
-                                                    </Tooltip>
 
-                                                    <TooltipContent>
+                                                    <TooltipContent side="top" className="whitespace-pre-line">
                                                         <div className="max-w-96 text-left break-all whitespace-normal">{el.remark}</div>
                                                     </TooltipContent>
                                                 </Tooltip>
@@ -507,10 +481,7 @@ export default function Files({ onPreview }) {
                                             {el.status === 2 ? (
                                                 <Tooltip>
                                                     <TooltipTrigger className="flex items-center gap-2">
-                                                        {/* 红色圆点 - 12x12px */}
                                                         <span className="size-[6px] rounded-full bg-green-500"></span>
-
-                                                        {/* 解析失败文字 - 符合Poppins SemiBold 14px样式 */}
                                                         <span className="font-[500] text-[14px] text-green-500 leading-[100%] text-center">
                                                             已完成
                                                         </span>
@@ -519,10 +490,7 @@ export default function Files({ onPreview }) {
                                             ) : el.status === 1 ? (
                                                 <Tooltip>
                                                     <TooltipTrigger className="flex items-center gap-2">
-                                                        {/* 红色圆点 - 12x12px */}
                                                         <span className="size-[6px] rounded-full bg-[#4D9BF0]"></span>
-
-                                                        {/* 解析失败文字 - 符合Poppins SemiBold 14px样式 */}
                                                         <span className="font-[500] text-[14px] text-[#4D9BF0] leading-[100%] text-center">
                                                             解析中
                                                         </span>
@@ -531,10 +499,7 @@ export default function Files({ onPreview }) {
                                             ) : (
                                                 <Tooltip>
                                                     <TooltipTrigger className="flex items-center gap-2">
-                                                        {/* 红色圆点 - 12x12px */}
                                                         <span className="size-[6px] rounded-full bg-[#4D9BF0]"></span>
-
-                                                        {/* 解析失败文字 - 符合Poppins SemiBold 14px样式 */}
                                                         <span className="font-[500] text-[14px] text-[#4D9BF0] leading-[100%] text-center">
                                                             向量模型切换中
                                                         </span>
@@ -552,7 +517,7 @@ export default function Files({ onPreview }) {
                                                 size="icon"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    handleRetry([el]);
+                                                    handleRetry([el]); // 单个重试传递完整对象
                                                 }}
                                                 title={t('重试')}
                                             >
