@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, List, Literal
 from loguru import logger
 from sqlalchemy import update
 from sqlalchemy.dialects.mysql import LONGTEXT
-from sqlmodel import Field, select, delete, col, or_, func, Column, Text, DateTime, text, CHAR, ForeignKey
+from sqlmodel import Field, select, delete, col, or_, func, Column, Text, DateTime, text, CHAR
 
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema
 from bisheng.database.base import async_session_getter, async_get_count
@@ -22,14 +22,13 @@ class LinsightSOPBase(SQLModelSerializable):
                          sa_column=Column(LONGTEXT, nullable=False, comment="SOP内容"))
 
     rating: Optional[int] = Field(default=0, ge=0, le=5, description='SOP评分，范围0-5')
-
+    is_banner: Optional[bool] = Field(default=False, description='是否作为精选案例在首页展示')
     vector_store_id: Optional[str] = Field(..., description='向量存储ID',
                                            sa_column=Column(CHAR(36), nullable=False, comment="向量存储ID"))
 
-    linsight_session_id: Optional[str] = Field(default=None, description='灵思会话ID',
-                                               sa_column=Column(CHAR(36),
-                                                                ForeignKey("message_session.chat_id"),
-                                                                nullable=True))
+    linsight_version_id: Optional[str] = Field(default=None,
+                                               description='灵思会话版本ID，用来查询精选案例的运行结果',
+                                               sa_column=Column(CHAR(36), nullable=True))
     create_time: datetime = Field(default_factory=datetime.now, description='创建时间',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

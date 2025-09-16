@@ -169,6 +169,7 @@ class SOPManageService:
                         description=one_record.description,
                         content=one_record.content,
                         rating=one_record.rating,
+                        linsight_version_id=one.linsight_version_id,
                     ))
                     override_name_dict[one.name] = True
             # 再新增剩下的sop记录
@@ -180,6 +181,7 @@ class SOPManageService:
                     description=one.description,
                     content=one.content,
                     rating=one.rating,
+                    linsight_version_id=one.linsight_version_id,
                 ), one.user_id)
         elif save_new:
             for one in sop_records:
@@ -192,6 +194,7 @@ class SOPManageService:
                     description=one.description,
                     content=one.content,
                     rating=one.rating,
+                    linsight_version_id=one.linsight_version_id,
                 ), one.user_id)
         else:
             # 说明有重复的记录，需要用户确认
@@ -204,6 +207,7 @@ class SOPManageService:
                     description=one.description,
                     content=one.content,
                     rating=one.rating,
+                    linsight_version_id=one.linsight_version_id,
                 ), one.user_id)
         if oversize_records:
             raise ValueError(f"{'、'.join(oversize_records)}内容超长")
