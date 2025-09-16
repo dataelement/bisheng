@@ -28,6 +28,7 @@ export default function Paragraphs({ fileId, onBack }) {
     const { isEditable, selectedBbox } = useKnowledgeStore();
     const [hasInited, setHasInited] = useState(false);
     const location = useLocation();
+    const [chunkSwitchTrigger, setChunkSwitchTrigger] = useState(0);
     // 状态管理（完全保留原始定义）
     const [selectedFileId, setSelectedFileId] = useState('');
     const [currentFile, setCurrentFile] = useState(null);
@@ -285,7 +286,7 @@ const fetchFileUrl = useCallback(async (fileId) => {
             if (filterData) filterData({ file_ids: [newFileId] });
             await fetchFileUrl(newFileId);
             await reload();
-
+ setChunkSwitchTrigger(prev => prev + 1);
         } catch (err) {
             console.error('文件切换失败:', err);
             setSelectError(err.message || '文件切换失败');
@@ -391,7 +392,7 @@ const fetchFileUrl = useCallback(async (fileId) => {
             chunkIndex: item?.metadata?.chunk_index || index,
             bbox: item?.metadata?.bbox
         }));
-    }, [datalist, selectedFileId]);
+    }, [datalist, selectedFileId,chunkSwitchTrigger]);
 
     // 打开元数据弹窗（完全保留原始逻辑）
     const handleMetadataClick = useCallback(() => {
@@ -429,27 +430,47 @@ const fetchFileUrl = useCallback(async (fileId) => {
     }, [id, selectedFileId, currentFile, navigate]);
 
     // 解析切分策略描述（完全保留原始逻辑）
-    const splitRuleDesc = useCallback((file) => {
-        if (!file.split_rule) return '';
-        const suffix = file.file_name?.split('.').pop()?.toUpperCase() || '';
-        try {
-            const rule = JSON.parse(file.split_rule);
-            const { excel_rule } = rule;
-            if (excel_rule && ['XLSX', 'XLS', 'CSV'].includes(suffix)) {
-                return `每 ${excel_rule.slice_length} 行作为一个分段`;
-            }
-            const { separator, separator_rule } = rule;
-            if (separator && separator_rule) {
-                const data = separator.map((el, i) =>
-                    `${separator_rule[i] === 'before' ? '✂️' : ''}${el}${separator_rule[i] === 'after' ? '✂️' : ''}`
-                );
-                return data.join(', ');
-            }
-        } catch (e) {
-            console.error('解析切分策略失败:', e);
+   const splitRuleDesc = useCallback((file) => {
+    if (!file.split_rule) return '';
+    const suffix = file.file_name?.split('.').pop()?.toUpperCase() || '';
+    try {
+        const rule = JSON.parse(file.split_rule);
+        const { excel_rule } = rule;
+        
+        // 处理Excel文件规则
+        if (excel_rule && ['XLSX', 'XLS', 'CSV'].includes(suffix)) {
+            return `每 ${excel_rule.slice_length} 行作为一个分段`;
         }
-        return file.split_rule.replace(/\n/g, '\\n');
-    }, []);
+
+        // 处理分隔符规则
+        const { separator, separator_rule } = rule;
+        if (separator && separator_rule && separator.length === separator_rule.length) {
+            const displayItems = separator.map((sep, index) => {
+                // 核心修复：将实际换行符转换为可见的 \n 字符串
+                const displaySep = sep
+                    .replace(/\n/g, '\\n')  // 替换换行符
+                    .replace(/\r/g, '\\r')  // 替换回车符（可选）
+                    .replace(/\t/g, '\\t'); // 替换制表符（可选）
+                
+                // 根据规则添加切割符号
+                const prefix = separator_rule[index] === 'before' ? '✂️' : '';
+                const suffix = separator_rule[index] === 'after' ? '✂️' : '';
+                
+                return `${prefix}${displaySep}${suffix}`;
+            });
+            return displayItems.join(', ');
+        }
+    } catch (e) {
+        console.error('解析切分策略失败:', e);
+    }
+    
+    // 解析失败时的兜底处理
+    return file.split_rule
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '\\r')
+        .replace(/\t/g, '\\t');
+}, []);
+
 
     // 删除分段（完全保留原始逻辑）
     const handleDeleteChunk = useCallback((data) => {
@@ -690,7 +711,7 @@ useEffect(() => {
                     <div className={isPreviewVisible ? "w-1/2" : " w-full max-w-3xl"}>
                         <div className="flex justify-center items-center relative mb-2 text-sm gap-2 p-2 pt-0 ">
                             <PreviewParagraph
-                                key={selectedFileId}
+                                 key={`preview-${selectedFileId}-${chunkSwitchTrigger}`}
                                 fileId={selectedFileId}
                                 previewCount={datalist.length}
                                 edit={isEditable}
@@ -730,6 +751,7 @@ useEffect(() => {
                     <DialogHeader>
                         <h3 className="text-lg font-semibold">{t('文档元数据')}</h3>
                     </DialogHeader>
+                    {console.log(metadataDialog.file,67678)}
                     <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
                         <div className="space-y-2">
                             {[

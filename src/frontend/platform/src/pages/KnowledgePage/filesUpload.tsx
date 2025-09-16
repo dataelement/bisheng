@@ -5,7 +5,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { retryKnowledgeFileApi, subUploadLibFile } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ChevronLeft } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import FileUploadStep1 from "./components/FileUploadStep1";
@@ -183,7 +183,9 @@ export default function FilesUpload() {
       repeatCallBackRef.current();
     }));
   };
-
+useEffect(() => {
+  console.log("父组件文件数据:", resultFiles);
+}, [resultFiles]);
   return (
     <div className="relative h-full flex flex-col">
       {/* 顶部返回栏 */}
@@ -218,6 +220,7 @@ export default function FilesUpload() {
                 onNext={handleStep1Next}
                 onSave={handleSaveByDefaultConfig}
                 kId={knowledgeId} // 传递知识库ID
+                initialFiles={resultFiles}
               />
             )}
             {/* 步骤2：分段策略 */}

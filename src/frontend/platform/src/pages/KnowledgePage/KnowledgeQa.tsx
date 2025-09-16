@@ -228,19 +228,19 @@ export default function KnowledgeQa(params) {
 
             <Table>
                 <TableHeader>
-                    <TableRow className="w-full">
-                        <TableHead className="flex: 1 text-left pr-6">
-                            {t('lib.libraryName')}
-                        </TableHead>
-                        <TableHead className="flex: 1 text-left pl-2">
-                            {t('updateTime')}
-                        </TableHead>
-                        <TableHead className="flex: 1 text-left pl-2">
-                            {t('lib.createUser')}
-                        </TableHead>
-                        <TableHead className="flex: 1 text-right pl-2">
-                            {t('operations')}
-                        </TableHead>
+                    <TableRow>
+                           <TableHead>
+            {t('lib.libraryName')}
+        </TableHead>
+        <TableHead>
+            {t('updateTime')}
+        </TableHead>
+        <TableHead>
+            {t('lib.createUser')}
+        </TableHead>
+        <TableHead>
+            {t('operations')}
+        </TableHead>
                     </TableRow>
                 </TableHeader>
 
@@ -248,8 +248,6 @@ export default function KnowledgeQa(params) {
                     {datalist.map((el: any) => (
                         <TableRow
                             key={el.id}
-                            // 行hover样式：仅非按钮区域生效
-                            className="hover:bg-gray-50 transition-colors"
                             onClick={() => {
                                 window.libname = [el.name, el.description];
                                 navigate(`/filelib/qalib/${el.id}`);
@@ -257,8 +255,8 @@ export default function KnowledgeQa(params) {
                             }}
                         >
                             {/* 名称+描述单元格：恢复原有气泡结构，确保蓝色生效 */}
-                            <TableCell className="flex: 1 font-medium max-w-[200px] overflow-visible">
-                                <div className="flex items-center gap-2 py-1">
+                            <TableCell  className="font-medium max-w-[200px]">
+                                 <div className="flex items-center gap-2 py-1">
                                     <img
                                         src={__APP_ENV__.BASE_URL + "/assets/qa-logo.svg"}
                                         alt="知识库图标"
@@ -267,7 +265,7 @@ export default function KnowledgeQa(params) {
 
                                     <div className="min-w-0 overflow-visible">
                                         {/* 知识库名称（不变） */}
-                                        <div className="truncate max-w-[500px] text-[18px] font-medium mb-0 mt-3">
+                                        <div className="truncate max-w-[500px] w-[264px] text-[18px] font-medium pt-2 flex items-center gap-2">
                                             {el.name}
                                         </div>
                                         <QuestionTooltip
@@ -275,7 +273,7 @@ export default function KnowledgeQa(params) {
                                             error={false}
                                             className="w-full text-start" // 触发区域铺满，确保hover描述文字就触发
                                         >
-                                            <div className="truncate max-w-[500px] text-[14px] text-[#5A5A5A] font-semibold">
+                                            <div className="truncate max-w-[500px] text-[14px] text-[#5A5A5A]">
                                                 {el.description || ''}
                                             </div>
                                             <TooltipContent
@@ -292,16 +290,16 @@ export default function KnowledgeQa(params) {
                                 </div>
                             </TableCell>
 
-                            <TableCell className="text-[#5A5A5A] flex: 1">{el.update_time.replace('T', ' ')}</TableCell>
+                            <TableCell className="text-[#5A5A5A]">{el.update_time.replace('T', ' ')}</TableCell>
 
-                            <TableCell className="max-w-[300px] break-all text-[#5A5A5A] flex: 1">
-                                <div className="truncate-multiline">{el.user_name || '--'}</div>
+                            <TableCell className="max-w-[300px] break-all">
+                                 <div className="truncate-multiline text-[#5A5A5A]">{el.user_name || '--'}</div>
                             </TableCell>
 
                             {/* 操作列：修复「按钮移入行不高亮」 */}
-                            <TableCell className="flex: 1 text-right hover:bg-transparent">
+                            <TableCell className="text-right">
                                 {/* 关键：hover:bg-transparent覆盖行的hover:bg-gray-50 */}
-                                <div className="flex items-center justify-end gap-2">
+                               <div className="flex items-center justify-end gap-2">
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
                                             <button

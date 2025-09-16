@@ -269,7 +269,7 @@ export default function PreviewParagraph({ fileId, previewCount, edit, fileSuffi
         return () => container.removeEventListener('scroll', handleScroll);
     }, [chunks.length]);
 
-    return <div className=" pt-3 pb-10 relative ">
+    return <div className=" pt-3 pb-10 relative w-full">
         {loading && (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <LoadingIcon />

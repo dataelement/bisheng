@@ -173,7 +173,7 @@ useEffect(() => {
             {
                 displayStep === 2 && (
                     <div className={cn(
-                        "h-full flex flex-col max-w-[760px]",
+                        "h-full flex flex-col min-w-[540px]",
                         // 预览时占50%，否则占2/3
                         showPreview ? "w-1/2" : "w-2/3"
                     )}>

@@ -186,7 +186,7 @@ export default function RuleFile({
 
   return (
     <div className="flex-1 flex flex-col relative max-w-[760px] mx-auto">
-      <div className="flex flex-col gap-4" style={{ gridTemplateColumns: '114px 1fr' }}>
+      <div className="flex flex-col gap-4 mt-9" style={{ gridTemplateColumns: '114px 1fr' }}>
         <div className="space-y-4 p-4 border rounded-lg">
           <h3 className="font-bold text-gray-800 text-left text-md">{t('splitSettings')}</h3>
 
