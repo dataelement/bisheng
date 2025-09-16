@@ -22,7 +22,7 @@ class LinsightSOPBase(SQLModelSerializable):
                          sa_column=Column(LONGTEXT, nullable=False, comment="SOP内容"))
 
     rating: Optional[int] = Field(default=0, ge=0, le=5, description='SOP评分，范围0-5')
-    is_banner: Optional[bool] = Field(default=False, description='是否作为精选案例在首页展示')
+    showcase: Optional[bool] = Field(default=False, index=True, description='是否作为精选案例在首页展示')
     vector_store_id: Optional[str] = Field(..., description='向量存储ID',
                                            sa_column=Column(CHAR(36), nullable=False, comment="向量存储ID"))
 
@@ -98,7 +98,8 @@ class LinsightSOPDao(LinsightSOPBase):
             return sop
 
     @classmethod
-    async def get_sop_page(cls, keywords: Optional[str] = None, sort: Literal["asc", "desc"] = "desc", page: int = 1,
+    async def get_sop_page(cls, keywords: Optional[str] = None, showcase: bool = None,
+                           sort: Literal["asc", "desc"] = "desc", page: int = 1,
                            page_size: int = 10) -> Dict[str, Any]:
         """
         获取SOP分页列表
@@ -117,6 +118,9 @@ class LinsightSOPDao(LinsightSOPBase):
             statement = statement.order_by(col(LinsightSOP.rating).asc(), col(LinsightSOP.create_time).asc())
         else:
             statement = statement.order_by(col(LinsightSOP.rating).desc(), col(LinsightSOP.create_time).desc())
+
+        if showcase is not None:
+            statement = statement.where(LinsightSOP.showcase == showcase)
 
         async with async_session_getter() as session:
             total_count = await async_get_count(session, statement)
@@ -274,6 +278,18 @@ class LinsightSOPDao(LinsightSOPBase):
         """
         statement = update(LinsightSOPRecord).where(
             col(LinsightSOPRecord.linsight_version_id) == linsight_version_id).values(rating=rating)
+        async with async_session_getter() as session:
+            await session.exec(statement)
+            await session.commit()
+            return True
+
+    @classmethod
+    async def set_sop_showcase(cls, sop_id: int, showcase: bool) -> bool:
+        """
+        设置SOP是否作为精选案例在首页展示
+        """
+        statement = update(LinsightSOP).where(
+            col(LinsightSOP.id) == sop_id).values(showcase=showcase)
         async with async_session_getter() as session:
             await session.exec(statement)
             await session.commit()
