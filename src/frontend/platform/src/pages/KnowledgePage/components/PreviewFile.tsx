@@ -292,7 +292,7 @@ export default function PreviewFile({
   if (['xlsx', 'xls', 'csv'].includes(file.suffix)) return null
 
 
-  return <div className="relative w-1/2" onClick={e => {
+  return <div className="relative w-full" onClick={e => {
     e.stopPropagation()
   }}>
     <div className={`${edit ? 'absolute -top-8 right-0 z-10' : 'relative'} flex justify-center items-center mb-2 text-sm h-10`}>

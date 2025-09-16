@@ -123,8 +123,6 @@ console.log(showPreview, previewCount, rules, step, applyEachCell, cellGeneralCo
                 page: chunk.metadata.page,
                 text: chunk.text
             })))
-            console.log(chunks,6666666666666666666666666666666666666);
-            
             setSelectIdSyncChunks(selectId)
             setFileViewUrl({ load: false, url: res.file_url })
             setPartitions(res.partitions)

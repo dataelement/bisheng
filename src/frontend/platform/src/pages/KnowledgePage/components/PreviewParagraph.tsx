@@ -129,8 +129,18 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
             },
         });
 
-        return () => {
-            vditorRef.current?.destroy();
+         return () => {
+            // 1. 校验实例存在 + 初始化完成 + DOM节点存在
+            if (vditorRef.current && readyRef.current && domRef.current) {
+                try {
+                    vditorRef.current.destroy(); // 仅在安全状态下执行销毁
+                } catch (error) {
+                    console.warn('Vditor销毁时发生异常:', error); // 捕获异常避免阻断流程
+                }
+            }
+            // 2. 清空引用，释放内存
+            vditorRef.current = null;
+            readyRef.current = false;
         };
     }, []);
 
