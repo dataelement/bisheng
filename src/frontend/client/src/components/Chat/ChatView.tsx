@@ -19,7 +19,6 @@ import InvitationCodeForm from './InviteCode';
 import Landing from './Landing';
 import MessagesView from './Messages/MessagesView';
 import Presentation from './Presentation';
-import { sameSopLabelState } from './Input/SameSopSpan';
 
 
 const ChatView = ({ index = 0 }: { index?: number }) => {
@@ -162,7 +161,6 @@ export default memo(ChatView);
 
 
 const Cases = () => {
-  const [_, setSameSopLabel] = useRecoilState(sameSopLabelState)
 
   const casesData = window.SopCase.list;
 

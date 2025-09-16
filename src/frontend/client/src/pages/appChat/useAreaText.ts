@@ -102,6 +102,7 @@ export const useAreaText = () => {
     const handleFormSubmit = ({ message, nodeId, data, skill }: { message: string; nodeId: string; data: any, skill?: boolean }) => {
         if (skill) {
             const _data = SkillMethod.getSendParam({ tabs, flow: chatState.flow, chatId, message })
+            _data.inputs.data = data;
 
             setSubmitDataState({
                 input: message,
