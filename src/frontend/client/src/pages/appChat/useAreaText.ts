@@ -101,21 +101,12 @@ export const useAreaText = () => {
     // 表单输入
     const handleFormSubmit = ({ message, nodeId, data, skill }: { message: string; nodeId: string; data: any, skill?: boolean }) => {
         if (skill) {
+            const _data = SkillMethod.getSendParam({ tabs, flow: chatState.flow, chatId, message })
+
             setSubmitDataState({
                 input: message,
                 action: ActionType.SKILL_FORM_SUBMIT,
-                data: {
-                    chatHistory: [],
-                    chat_id: chatId,
-                    flow_id: chatState.flow.id,
-                    description: chatState.flow.description,
-                    inputs: {
-                        data,
-                        id: '',
-                        query: message,
-                    },
-                    name: chatState.flow.name,
-                }
+                data: _data
             })
         } else {
             setSubmitDataState({
