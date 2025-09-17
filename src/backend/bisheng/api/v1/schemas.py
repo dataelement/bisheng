@@ -535,9 +535,9 @@ class FileProcessBase(BaseModel):
     @model_validator(mode='before')
     @classmethod
     def check_separator_rule(cls, values: Any):
-        if values.get('separator', None) is None:
+        if not values.get('separator', None):
             values['separator'] = ['\n\n', '\n']
-        if values.get('separator_rule', None) is None:
+        if not values.get('separator_rule', None):
             values['separator_rule'] = ['after' for _ in values['separator']]
         if values.get('chunk_size', None) is None:
             values['chunk_size'] = 1000
