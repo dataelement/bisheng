@@ -56,19 +56,21 @@ class LinsightAgent(BaseModel):
         sop_flag = False
         sop_content = ""
         answer = ""
-        split_tag = "<Thought_END>"
+        split_tags = ["<Thought_END>", "</Thought_END>"]
         async for one in self.llm.astream(sop_prompt):
             answer += f"{one.content}"
             if sop_flag:
                 yield one
                 sop_content += one.content
                 continue
-            if answer.find(split_tag) != -1:
-                sop_flag = True
-                sop_content = answer.split(split_tag)[-1].strip()
-                if sop_content:
-                    one.content = sop_content
-                    yield one
+            for split_tag in split_tags:
+                if answer.find(split_tag) != -1:
+                    sop_flag = True
+                    sop_content = answer.split(split_tag)[-1].strip()
+                    if sop_content:
+                        one.content = sop_content
+                        yield one
+                    break
         if not sop_content:
             one.content = answer
             yield one
