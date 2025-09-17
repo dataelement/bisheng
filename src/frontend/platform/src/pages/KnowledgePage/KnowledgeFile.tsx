@@ -67,7 +67,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                         const modelItem = { value: model.id, label: model.model_name };
                         models[model.id] = server.name + '/' + model.model_name;
 
-                        if (mode === 'edit' && currentLib && model.id === currentLib.model) {
+                        if (mode === 'edit' && currentLib && model.id === Number(currentLib.model)) {
                             _model = [serverItem, modelItem];
                         } else if (mode === 'create' && model.id === embedding_model_id && !_model) {
                             _model = [serverItem, modelItem];
@@ -94,17 +94,17 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                     if (_model) {
                         setModal(_model);
                     } else {
-                        try {
-                            const res = await getLLmServerDetail(currentLib.model);
-                            if (res.data) {
-                                setModal(res.data);
-                            }
-                        } catch (error) {
-                            console.warn('Failed to get server detail, using fallback');
-                            if (embeddings.length > 0 && embeddings[0].children.length > 0) {
-                                setModal([embeddings[0], embeddings[0].children[0]]);
-                            }
-                        }
+                        // try {
+                        //     const res = await getLLmServerDetail(currentLib.model);
+                        //     if (res.data) {
+                        //         setModal(res.data);
+                        //     }
+                        // } catch (error) {
+                        //     console.warn('Failed to get server detail, using fallback');
+                        //     if (embeddings.length > 0 && embeddings[0].children.length > 0) {
+                        //         setModal([embeddings[0], embeddings[0].children[0]]);
+                        //     }
+                        // }
                     }
                 } else if (mode === 'create' && _model) {
                     setModal(_model);
@@ -627,20 +627,19 @@ export default function KnowledgeFile() {
                                                 }}
                                                 className="z-50"
                                             >
-                                                {(el.copiable || user.role === 'admin') && (
-                                                    <SelectItem
-                                                        showIcon={false}
-                                                        value="copy"
-                                                        disabled={el.state !== KnowledgeBaseStatus.Published || copyLoadingId === el.id}
-                                                    >
-                                                        <div className="flex gap-2 items-center">
-                                                            <Copy className="w-4 h-4" />
-                                                            {t('lib.copy')}
-                                                        </div>
-                                                    </SelectItem>
-                                                )}
+                                                <SelectItem
+                                                    showIcon={false}
+                                                    value="copy"
+                                                    disabled={!(el.copiable || user.role === 'admin') || el.state !== KnowledgeBaseStatus.Published || copyLoadingId === el.id}
+                                                >
+                                                    <div className="flex gap-2 items-center">
+                                                        <Copy className="w-4 h-4" />
+                                                        {t('lib.copy')}
+                                                    </div>
+                                                </SelectItem>
                                                 <SelectItem
                                                     value="set"
+                                                    disabled={!el.copiable}
                                                     showIcon={false}
                                                 >
                                                     <div className="flex gap-2 items-center">
