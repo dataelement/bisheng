@@ -27,6 +27,7 @@ import { copyLibDatabase, createFileLib, deleteFileLib, readFileLibDatabase, upd
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useTable } from "../../util/hook";
 import { ModelSelect } from "../ModelPage/manage/tabs/WorkbenchModel";
+import { BookIcon } from "@/components/bs-icons/knowledge";
 
 // 知识库状态
 const enum KnowledgeBaseStatus {
@@ -541,7 +542,7 @@ export default function KnowledgeFile() {
                                     <div className="flex items-center gap-2">
                                         <div className="flex items-center justify-center size-12 text-white rounded-[4px]  w-[40px] h-[40px]">
                                             {/* <BookCopy  className="size-5"/> */}
-                                            <img src="/assets/file-logo.svg" alt="" className="size-10" />
+                                            <BookIcon className="text-primary" />
                                         </div>
                                         <div>
                                             <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">

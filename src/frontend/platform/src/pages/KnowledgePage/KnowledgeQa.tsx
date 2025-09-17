@@ -1,25 +1,25 @@
+import { QaIcon } from "@/components/bs-icons/knowledge";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button, LoadButton } from "@/components/bs-ui/button";
+import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, SearchInput, Textarea } from "@/components/bs-ui/input";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import Cascader from "@/components/bs-ui/select/cascader";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { QuestionTooltip, TooltipContent } from "@/components/bs-ui/tooltip";
 import { userContext } from "@/contexts/userContext";
 import { createFileLib, deleteFileLib, readFileLibDatabase } from "@/controllers/API";
 import { getKnowledgeModelConfig, getModelListApi } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { t } from "i18next";
-import { Ellipsis, MessageSquare, MessageSquareIcon, MessagesSquare, Trash2 } from "lucide-react";
+import { Ellipsis, Trash2 } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router-dom";
-import index from "../BuildPage/bench/LingSiWork";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
-import { QuestionTooltip, TooltipContent, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { useNavigate } from "react-router-dom";
 
 function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
     const { t } = useTranslation()
@@ -231,18 +231,18 @@ export default function KnowledgeQa(params) {
             <Table>
                 <TableHeader>
                     <TableRow>
-                           <TableHead>
-            {t('lib.libraryName')}
-        </TableHead>
-        <TableHead>
-            {t('updateTime')}
-        </TableHead>
-        <TableHead>
-            {t('lib.createUser')}
-        </TableHead>
-        <TableHead className="text-right">
-            {t('operations')}
-        </TableHead>
+                        <TableHead>
+                            {t('lib.libraryName')}
+                        </TableHead>
+                        <TableHead>
+                            {t('updateTime')}
+                        </TableHead>
+                        <TableHead>
+                            {t('lib.createUser')}
+                        </TableHead>
+                        <TableHead className="text-right">
+                            {t('operations')}
+                        </TableHead>
                     </TableRow>
                 </TableHeader>
 
@@ -257,11 +257,11 @@ export default function KnowledgeQa(params) {
                             }}
                         >
                             {/* 名称+描述单元格：恢复原有气泡结构，确保蓝色生效 */}
-                            <TableCell  className="font-medium max-w-[280px]">
-                                 <div className="flex items-center gap-2">
+                            <TableCell className="font-medium max-w-[280px]">
+                                <div className="flex items-center gap-2">
                                     <div className="flex items-center justify-center size-[40px] min-w-[40px] text-white rounded-[4px] ">
-                                        <img src="/assets/qa-logo.svg" alt="" className="size-10" />
-                                        </div>
+                                        <QaIcon className="text-primary" />
+                                    </div>
 
                                     <div className="min-w-0 overflow-visible">
                                         {/* 知识库名称（不变） */}
@@ -293,7 +293,7 @@ export default function KnowledgeQa(params) {
                             <TableCell className="text-[#5A5A5A]  min-w-[220px]">{el.update_time.replace('T', ' ')}</TableCell>
 
                             <TableCell className="max-w-[300px] break-all">
-                                 <div className="truncate-multiline text-[#5A5A5A]">{el.user_name || '--'}</div>
+                                <div className="truncate-multiline text-[#5A5A5A]">{el.user_name || '--'}</div>
                             </TableCell>
 
                             {/* 操作列：修复「按钮移入行不高亮」 */}
