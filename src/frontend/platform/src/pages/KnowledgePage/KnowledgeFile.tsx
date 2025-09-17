@@ -528,15 +528,15 @@ export default function KnowledgeFile() {
                             <TableRow
                                 key={el.id}
                                 className=""
+                                onClick={() => {
+                                    if ([KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state)) return;
+                                    window.libname = [el.name, el.description];
+                                    navigate(`/filelib/${el.id}`);
+                                    handleCachePage();
+                                }}
                             >
                                 <TableCell
                                     className="font-medium max-w-[200px]"
-                                    onClick={() => {
-                                        if ([KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state)) return
-                                        window.libname = [el.name, el.description];
-                                        navigate(`/filelib/${el.id}`);
-                                        handleCachePage();
-                                    }}
                                 >
                                     <div className="flex items-center gap-2">
                                         <div className="flex items-center justify-center size-12 bg-primary/60 text-white rounded-[4px]  w-[40px] h-[40px]">
@@ -561,22 +561,12 @@ export default function KnowledgeFile() {
 
                                 <TableCell
                                     className="text-[#5A5A5A]"
-                                    onClick={() => {
-                                        window.libname = [el.name, el.description];
-                                        navigate(`/filelib/${el.id}`);
-                                        handleCachePage();
-                                    }}
                                 >
                                     {el.update_time.replace('T', ' ')}
                                 </TableCell>
 
                                 <TableCell
                                     className="max-w-[300px] break-all"
-                                    onClick={() => {
-                                        window.libname = [el.name, el.description];
-                                        navigate(`/filelib/${el.id}`);
-                                        handleCachePage();
-                                    }}
                                 >
                                     <div className="truncate-multiline text-[#5A5A5A]">{el.user_name || '--'}</div>
                                 </TableCell>
