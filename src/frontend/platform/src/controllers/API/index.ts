@@ -165,7 +165,11 @@ export async function copyLibDatabase(knowledge_id) {
  * 获取知识库下文件列表
  */
 export async function readFileByLibDatabase({ id, page, pageSize = 20, name = '', status, file_ids }) {
-
+  if (status?.includes(1)) { // 4合并到解析中
+    status.push(4)
+  } else {
+    status = status?.filter(item => item !== 4)
+  }
   const params = {
     page_num: page,
     page_size: pageSize,

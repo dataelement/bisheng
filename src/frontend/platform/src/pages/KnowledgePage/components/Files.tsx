@@ -42,7 +42,7 @@ export default function Files({ onPreview }) {
     // 存储完整文件对象（保留所有原始参数）
     const [selectedFileObjs, setSelectedFileObjs] = useState<Array<Record<string, any>>>([]);
     const [isAllSelected, setIsAllSelected] = useState(false);
-    
+
     // 其他原有状态
     const [selectedFilters, setSelectedFilters] = useState<number[]>([]);
     const [tempFilters, setTempFilters] = useState<number[]>([]);
@@ -209,7 +209,7 @@ export default function Files({ onPreview }) {
 
     // 页面数据变化时更新全选状态
     useEffect(() => {
-        setIsAllSelected(datalist.length > 0 && datalist.every(file => 
+        setIsAllSelected(datalist.length > 0 && datalist.every(file =>
             selectedFileObjs.some(item => item.id === file.id)
         ));
     }, [datalist, selectedFileObjs]);
@@ -344,20 +344,7 @@ export default function Files({ onPreview }) {
                                                                 </span>
                                                             </div>
                                                         )
-                                                    },
-                                                    {
-                                                        value: 4,
-                                                        label: '向量模型切换中',
-                                                        color: 'text-[#4D9BF0]',
-                                                        icon: (
-                                                            <div className="flex items-center gap-2 mt-2">
-                                                                <span className="size-[6px] rounded-full bg-[#4D9BF0]"></span>
-                                                                <span className="font-[500] text-[14px] text-[#4D9BF0] leading-[100%]">
-                                                                    向量模型切换中
-                                                                </span>
-                                                            </div>
-                                                        )
-                                                    },
+                                                    }
                                                 ].map(({ value, label, color, icon }) => (
                                                     <div
                                                         key={value}
@@ -457,18 +444,17 @@ export default function Files({ onPreview }) {
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
 
                                 <TableCell>
-                                    {console.log(el.remark,44444)}
                                     {el.status === 3 ? (
-                                        
+
                                         <div className="flex items-center">
                                             <TooltipProvider delayDuration={100}>
                                                 <Tooltip>
-                                                        <TooltipTrigger className="flex items-center gap-2">
-                                                            <span className="size-[6px] rounded-full bg-red-500"></span>
-                                                            <span className="font-[500] text-[14px] text-red-500 leading-[100%] text-center">
-                                                                解析失败
-                                                            </span>
-                                                        </TooltipTrigger>
+                                                    <TooltipTrigger className="flex items-center gap-2">
+                                                        <span className="size-[6px] rounded-full bg-red-500"></span>
+                                                        <span className="font-[500] text-[14px] text-red-500 leading-[100%] text-center">
+                                                            解析失败
+                                                        </span>
+                                                    </TooltipTrigger>
 
                                                     <TooltipContent side="top" className="whitespace-pre-line">
                                                         <div className="max-w-96 text-left break-all whitespace-normal">{el.remark}</div>
@@ -487,7 +473,7 @@ export default function Files({ onPreview }) {
                                                         </span>
                                                     </TooltipTrigger>
                                                 </Tooltip>
-                                            ) : el.status === 1 ? (
+                                            ) : el.status === 1 || el.status === 4 ? (
                                                 <Tooltip>
                                                     <TooltipTrigger className="flex items-center gap-2">
                                                         <span className="size-[6px] rounded-full bg-[#4D9BF0]"></span>
@@ -496,16 +482,7 @@ export default function Files({ onPreview }) {
                                                         </span>
                                                     </TooltipTrigger>
                                                 </Tooltip>
-                                            ) : (
-                                                <Tooltip>
-                                                    <TooltipTrigger className="flex items-center gap-2">
-                                                        <span className="size-[6px] rounded-full bg-[#4D9BF0]"></span>
-                                                        <span className="font-[500] text-[14px] text-[#4D9BF0] leading-[100%] text-center">
-                                                            向量模型切换中
-                                                        </span>
-                                                    </TooltipTrigger>
-                                                </Tooltip>
-                                            )}
+                                            ) : null}
                                         </div>
                                     )}
                                 </TableCell>
