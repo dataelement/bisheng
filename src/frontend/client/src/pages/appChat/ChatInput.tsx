@@ -58,7 +58,7 @@ export default function ChatInput({ v }) {
             */}
             <div className="absolute w-full flex justify-center left-0 -top-14">
                 {/* {!showStop && chatState?.flow?.flow_type === 10 && !inputMsg  */}
-                {!showStop && showReRun && !inputMsg && <Button
+                { showReRun && !inputMsg && <Button
                     className="rounded-full bg-primary/10 bg-blue-50 text-primary"
                     variant="ghost"
                     onClick={handleRestart}>
