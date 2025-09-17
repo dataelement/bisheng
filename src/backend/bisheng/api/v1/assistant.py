@@ -5,6 +5,8 @@ from fastapi import (APIRouter, Body, Depends, HTTPException, Query, Request, We
                      WebSocketException)
 from fastapi import status as http_status
 from fastapi.responses import StreamingResponse
+
+from bisheng.api.errcode.base import NotFoundError
 from fastapi_jwt_auth import AuthJWT
 
 from bisheng.api.services.assistant import AssistantService
@@ -108,7 +110,7 @@ async def auto_update_assistant_task(*, request: Request, login_user: UserPayloa
 async def auto_update_assistant(*, task_id: str = Query(description='优化任务唯一ID')):
     task = redis_client.get(f'auto_update_task:{task_id}')
     if not task:
-        raise HTTPException(status_code=404, detail='task info not found')
+        raise NotFoundError()
     assistant_id = task['assistant_id']
     prompt = task['prompt']
 

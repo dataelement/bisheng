@@ -9,6 +9,8 @@ from urllib import parse
 from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks, Request, HTTPException, Form
 from pydantic import BaseModel, ValidationError
 
+from bisheng.api.errcode.linsight import *
+from bisheng.api.errcode.server import InvalidOperationError, ResourceDownloadError
 from bisheng.utils.minio_client import minio_client
 from fastapi_jwt_auth import AuthJWT
 from loguru import logger
@@ -66,7 +68,7 @@ async def upload_file(
         }
     except Exception as e:
         logger.error(f"文件上传失败: {str(e)}")
-        return resp_500(code=500, message=str(e))
+        return FileUploadError.return_resp()
 
     # 返回上传结果
     return resp_200(data=result, message="文件上传成功 并开始解析。请稍后查看解析状态。")
@@ -84,22 +86,15 @@ async def get_file_parsing_status(
     :return:
     """
 
-    try:
-        # 调用实现类获取文件解析状态
-        key_prefix = LinsightWorkbenchImpl.FILE_INFO_REDIS_KEY_PREFIX
+    # 调用实现类获取文件解析状态
+    key_prefix = LinsightWorkbenchImpl.FILE_INFO_REDIS_KEY_PREFIX
 
-        if not file_ids:
-            return resp_500(code=400, message="文件ID列表不能为空")
+    file_ids = [f"{key_prefix}{file_id}" for file_id in file_ids]
 
-        file_ids = [f"{key_prefix}{file_id}" for file_id in file_ids]
+    # 使用 Redis 的 amget 方法批量获取文件解析状态
+    parsing_status = await redis_client.amget(file_ids)
 
-        # 使用 Redis 的 amget 方法批量获取文件解析状态
-        parsing_status = await redis_client.amget(file_ids)
-
-        return resp_200(data=parsing_status, message="文件解析状态获取成功")
-    except Exception as e:
-        logger.error(f"获取文件解析状态失败: {str(e)}")
-        return resp_500(code=500, message=str(e))
+    return resp_200(data=parsing_status, message="文件解析状态获取成功")
 
 
 # 提交灵思用户问题请求
@@ -129,10 +124,7 @@ async def submit_linsight_workbench(
 
             if linsight_invitation_code:
                 if await InviteCodeService.use_invite_code(user_id=login_user.user_id) is False:
-                    yield {
-                        "event": "error",
-                        "data": "您的灵思使用次数已用完，请使用新的邀请码激活灵思功能。"
-                    }
+                    yield LinsightUseUpError.to_sse_event()
                     return
 
             message_session_model, linsight_session_version_model = await LinsightWorkbenchImpl.submit_user_question(
@@ -144,10 +136,7 @@ async def submit_linsight_workbench(
                 "linsight_session_version": linsight_session_version_model.model_dump()
             }
         except Exception as e:
-            yield {
-                "event": "error",
-                "data": "提交灵思用户问题失败: " + str(e)
-            }
+            yield LinsightQuestionError.to_sse_event(data=str(e))
             return
 
         yield {
@@ -197,6 +186,7 @@ async def generate_sop(
     # 获取有权限的知识库列表
     if not session_version:
         raise NotFoundError.http_exception()
+
     res = []
     linsight_conf = settings.get_linsight_conf()
     if session_version.org_knowledge_enabled and linsight_conf.max_knowledge_num > 0:
@@ -252,12 +242,15 @@ async def modify_sop(
         linsight_session_version_id=linsight_session_version_id)
 
     if not session_version_model:
-        return resp_500(code=404, message="灵思会话版本不存在")
+        return NotFoundError.return_resp()
     if login_user.user_id != session_version_model.user_id:
-        return resp_500(code=403, message="无权限修改该灵思SOP")
+        return UnAuthorizedError.return_resp()
 
-    modify_res = await LinsightWorkbenchImpl.modify_sop(linsight_session_version_id=linsight_session_version_id,
-                                                        sop_content=sop_content)
+    try:
+        modify_res = await LinsightWorkbenchImpl.modify_sop(linsight_session_version_id=linsight_session_version_id,
+                                                            sop_content=sop_content)
+    except Exception as e:
+        return LinsightModifySopError.return_resp(data=str(e))
     return resp_200(modify_res)
 
 
@@ -277,14 +270,15 @@ async def start_execute_sop(
     session_version_model = await LinsightSessionVersionDao.get_by_id(
         linsight_session_version_id=linsight_session_version_id)
     if not session_version_model:
-        return resp_500(code=404, message="灵思会话版本不存在")
+        return NotFoundError.return_resp()
 
     if login_user.user_id != session_version_model.user_id:
-        return resp_500(code=403, message="无权限执行该灵思SOP")
+        return UnAuthorizedError.return_resp()
 
     if session_version_model.status in [SessionVersionStatusEnum.COMPLETED, SessionVersionStatusEnum.TERMINATED,
                                         SessionVersionStatusEnum.IN_PROGRESS]:
-        return resp_500(code=400, message="灵思会话版本已完成或正在执行，无法再次执行")
+        # 灵思会话版本已完成或正在执行，无法再次执行
+        return LinsightSessionVersionRunningError.return_resp()
 
     from bisheng.linsight.worker import LinsightQueue
     try:
@@ -304,7 +298,7 @@ async def start_execute_sop(
     except Exception as e:
         logger.error(f"开始执行灵思任务失败: {str(e)}")
         await InviteCodeService.revoke_invite_code(user_id=login_user.user_id)
-        return resp_500(code=500, message=str(e))
+        return LinsightStartTaskError.return_resp(data=str(e))
 
     return resp_200(data=True, message="灵思执行任务已开始，执行结果将通过消息流返回")
 
@@ -328,10 +322,10 @@ async def user_input(
     session_version_model = await LinsightSessionVersionDao.get_by_id(
         linsight_session_version_id=session_version_id)
     if not session_version_model:
-        return resp_500(code=404, message="灵思会话版本不存在")
+        return NotFoundError.return_resp()
 
     if login_user.user_id != session_version_model.user_id:
-        return resp_500(code=403, message="无权限输入该灵思SOP")
+        return UnAuthorizedError.return_resp()
 
     state_message_manager = LinsightStateMessageManager(session_version_id=session_version_id)
 
@@ -366,10 +360,10 @@ async def submit_feedback(
         linsight_session_version_id=linsight_session_version_id)
 
     if not session_version_model:
-        return resp_500(code=404, message="灵思会话版本不存在")
+        return NotFoundError.return_resp()
 
     if login_user.user_id != session_version_model.user_id:
-        return resp_500(code=403, message="无权限提交该灵思的反馈")
+        return UnAuthorizedError.return_resp()
 
     if score is not None and 0 < score <= 5:
         session_version_model.score = score
@@ -397,7 +391,7 @@ async def submit_feedback(
 
         if linsight_invitation_code:
             if await InviteCodeService.use_invite_code(user_id=login_user.user_id) is False:
-                return resp_500(code=400, message="您的灵思使用次数已用完，请使用新的邀请码激活灵思功能。")
+                return LinsightUseUpError.return_resp()
 
         # 灵思会话版本
         linsight_session_version_model = LinsightSessionVersion(
@@ -444,15 +438,17 @@ async def terminate_execute(
         linsight_session_version_id=linsight_session_version_id)
 
     if not session_version_model:
-        return resp_500(code=404, message="灵思会话版本不存在")
+        return NotFoundError.return_resp()
     if login_user.user_id != session_version_model.user_id:
-        return resp_500(code=403, message="无权限终止该灵思执行")
+        return UnAuthorizedError.return_resp()
 
     if session_version_model.status == SessionVersionStatusEnum.COMPLETED:
-        return resp_500(code=400, message="灵思会话版本已完成，无法终止执行")
+        # return resp_500(code=400, message="灵思会话版本已完成，无法终止执行")
+        return InvalidOperationError.return_resp()
 
     if session_version_model.status == SessionVersionStatusEnum.TERMINATED:
-        return resp_500(code=400, message="灵思会话版本已终止执行")
+        # return resp_500(code=400, message="灵思会话版本已终止执行")
+        return InvalidOperationError.return_resp()
 
     from bisheng.linsight.worker import LinsightQueue
 
@@ -578,7 +574,7 @@ async def batch_download_files(
         )
     except Exception as e:
         logger.error(f"批量下载文件失败: {str(e)}")
-        return resp_500(code=500, message=str(e))
+        return ResourceDownloadError.return_resp(data=str(e))
 
 
 # 获取队列排队状态
@@ -600,7 +596,7 @@ async def get_queue_status(
         return resp_200(data={"index": index}, message="获取灵思队列排队状态成功")
     except Exception as e:
         logger.error(f"获取灵思队列排队状态失败: {str(e)}")
-        return resp_500(code=500, message=str(e))
+        return LinsightQueueStatusError.return_resp(data=str(e))
 
 
 @router.post("/sop/add", summary="添加灵思SOP", response_model=UnifiedResponseModel)

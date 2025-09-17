@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Optional
 
 from pydantic import BaseModel, Field
 
+from bisheng.api.errcode.base import ServerError
 from bisheng.cache.redis import redis_client
 from bisheng.database.models import LinsightExecuteTask
 from bisheng.database.models.linsight_execute_task import ExecuteTaskStatusEnum, LinsightExecuteTaskDao
@@ -293,7 +294,7 @@ class LinsightStateMessageManager:
 
         except Exception as e:
             self._logger.error(f"Failed to set user input for task {task_id}: {e}")
-            raise
+            raise ServerError.http_exception()
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
     async def get_execution_task(self, task_id: str) -> Optional[LinsightExecuteTask]:

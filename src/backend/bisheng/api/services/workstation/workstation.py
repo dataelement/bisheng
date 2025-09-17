@@ -10,6 +10,7 @@ from openai import BaseModel
 from pydantic import field_validator
 
 from bisheng.api.errcode.base import ServerError
+from bisheng.api.errcode.server import EmbeddingModelStatusError
 from bisheng.api.services import llm
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.knowledge import KnowledgeService
@@ -129,7 +130,7 @@ class WorkStationService(BaseService):
         try:
             _ = decide_embeddings(knowledge.model)
         except Exception as e:
-            raise ServerError.http_exception(msg="请联系管理员检查工作台向量检索模型状态")
+            raise EmbeddingModelStatusError(exception=e)
         res = KnowledgeService.process_knowledge_file(request,
                                                       UserPayload(user_id=login_user.user_id),
                                                       background_tasks, req_data)
@@ -178,7 +179,7 @@ class WorkStationService(BaseService):
         try:
             _ = decide_embeddings(knowledge[0].model)
         except Exception as e:
-            raise MessageException(message="请联系管理员检查工作台向量检索模型状态")
+            raise EmbeddingModelStatusError(exception=e)
 
         vector_store = create_knowledge_vector_store([str(knowledge[0].id)], login_user.user_name)
         keyword_store = create_knowledge_keyword_store([str(knowledge[0].id)], login_user.user_name)

@@ -168,13 +168,13 @@ class WorkFlowService(BaseService):
         """
         db_flow = FlowDao.get_flow_by_id(flow_id)
         if not db_flow:
-            raise NotFoundError.http_exception()
+            raise NotFoundError()
         if not login_user.access_check(db_flow.user_id, flow_id, AccessType.WORK_FLOW_WRITE):
-            raise UnAuthorizedError.http_exception()
+            raise UnAuthorizedError()
 
         version_info = FlowVersionDao.get_version_by_id(version_id)
         if not version_info or version_info.flow_id != flow_id:
-            raise NotFoundError.http_exception()
+            raise NotFoundError()
         if status == FlowStatus.ONLINE.value:
             # workflow的初始化校验
             try:
@@ -183,7 +183,7 @@ class WorkFlowService(BaseService):
                              10,
                              None)
             except Exception as e:
-                raise WorkFlowInitError.http_exception(f'workflow init error: {str(e)}')
+                raise WorkFlowInitError(msg=str(e))
 
             FlowVersionDao.change_current_version(flow_id, version_info)
         db_flow.status = status

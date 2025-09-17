@@ -11,6 +11,9 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
+from bisheng.api.errcode.base import ServerError
+from bisheng.api.errcode.workstation import WebSearchToolNotFoundError, ConversationNotFoundError, \
+    AgentAlreadyExistsError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.knowledge import KnowledgeService
@@ -226,8 +229,7 @@ async def gen_title(conversationId: str = Body(..., description='', embed=True),
         return resp_200({'title': title})
     else:
         # 如果标题不存在，则返回空值
-        return resp_500(
-            data="Title not found or method not implemented for the conversation\'s endpoint")
+        raise ServerError(exception=Exception("Title not found or method not implemented for the conversation's endpoint"))
 
 
 @router.get('/messages/{conversationId}')
@@ -261,10 +263,10 @@ async def webSearch(query: str, web_search_config: WSPrompt):
     """
     web_search_info = GptsToolsDao.get_tool_by_tool_key("web_search")
     if not web_search_info:
-        raise Exception("No web_search tool found in database")
+        raise WebSearchToolNotFoundError(exception=Exception("No web_search tool found in database"))
     web_search_tool = await AssistantAgent.init_tools_by_tool_ids([web_search_info.id], None)
     if not web_search_tool:
-        raise Exception("No web_search tool found in gpts tools")
+        raise WebSearchToolNotFoundError(exception=Exception("No web_search tool found in gpts tools"))
     return web_search_tool[0].invoke(input={"query": query})
 
 
@@ -309,7 +311,7 @@ async def chat_completions(
 
     conversaiton = MessageSessionDao.get_one(conversationId)
     if conversaiton is None:
-        return resp_500('会话不存在')
+        return ConversationNotFoundError.return_resp()
 
     if data.overrideParentMessageId:
         message = ChatMessageDao.get_message_by_id(data.overrideParentMessageId)
@@ -506,7 +508,7 @@ def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
     if is_new:
         return resp_200(message='添加成功')
     else:
-        return resp_500(message='该智能体已被添加')
+        return AgentAlreadyExistsError.return_resp()
 
 
 @router.delete('/app/frequently_used')

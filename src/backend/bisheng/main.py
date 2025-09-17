@@ -7,6 +7,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, ORJSONResponse
 from fastapi.staticfiles import StaticFiles
+
+from bisheng.api.errcode.base import BaseErrorCode
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
 from loguru import logger
@@ -28,6 +30,10 @@ def handle_http_exception(req: Request, exc: Exception) -> ORJSONResponse:
             'status_code': exc.status_code,
             'status_message': exc.detail['error'] if isinstance(exc.detail, dict) else exc.detail
         }
+    elif isinstance(exc, BaseErrorCode):
+        data = {'exception': str(exc), **exc.kwargs} if exc.kwargs else {'exception': str(exc)}
+        msg = {'status_code': exc.code, 'status_message': exc.message,
+               'data': data}
     else:
         msg = {'status_code': 500, 'status_message': str(exc)}
     logger.error(f'{req.method} {req.url} {str(exc)}')

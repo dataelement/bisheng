@@ -12,6 +12,8 @@ from fastapi import UploadFile
 from langchain_core.tools import BaseTool
 from loguru import logger
 
+from bisheng.api.errcode.base import UnAuthorizedError, BaseErrorCode
+from bisheng.api.errcode.linsight import LinsightToolInitError, LinsightBishengLLMError, LinsightGenerateSopError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.knowledge_imp import read_chunk_text, decide_vectorstores
 from bisheng.api.services.linsight.sop_manage import SOPManageService
@@ -74,17 +76,15 @@ class LinsightWorkbenchImpl:
     class SearchSOPError(Exception):
         """SOP检索错误"""
 
-        def __init__(self, message: str):
-            super().__init__(message)
-            self.message = message
+        def __init__(self, error_class: BaseErrorCode):
+            super().__init__(error_class.Msg)
+            self.error_class = error_class
 
     class ToolsInitializationError(Exception):
         """工具初始化错误"""
-        pass
 
     class BishengLLMError(Exception):
         """Bisheng LLM相关错误"""
-        pass
 
     @classmethod
     async def _get_llm(cls) -> (BishengLLM, Any):
@@ -308,7 +308,7 @@ class LinsightWorkbenchImpl:
             return {"success": True, "message": "modify sop content successfully"}
         except Exception as e:
             logger.error(f"修改SOP内容失败: {str(e)}")
-            return {"success": False, "message": str(e)}
+            raise cls.LinsightError(str(e))
 
     @classmethod
     async def generate_sop(cls, linsight_session_version_id: str,
@@ -337,7 +337,7 @@ class LinsightWorkbenchImpl:
             session_version = await cls._get_session_version(linsight_session_version_id)
 
             if login_user.user_id != session_version.user_id:
-                yield {"event": "error", "data": "无权限操作该会话版本"}
+                yield UnAuthorizedError.to_sse_event()
                 return
             try:
                 # 创建LLM和工具
@@ -363,7 +363,7 @@ class LinsightWorkbenchImpl:
                     agent, session_version, feedback_content, history_summary, knowledge_list
             ):
                 if isinstance(res, cls.SearchSOPError):
-                    yield {"event": "search_sop_error", "data": str(res.message)}
+                    yield res.error_class.to_sse_event(event="search_sop_error")
                     continue
 
                 content += res.content
@@ -384,22 +384,22 @@ class LinsightWorkbenchImpl:
         except cls.ToolsInitializationError as e:
             logger.exception(
                 f"初始化灵思工作台工具失败: session_version_id={linsight_session_version_id}, error={str(e)}")
-            error_message = f"初始化灵思工作台工具失败: {str(e)}"
+            error_message = LinsightToolInitError(exception=e)
         except cls.BishengLLMError as e:
             logger.exception(f"Bisheng LLM错误: session_version_id={linsight_session_version_id}, error={str(e)}")
-            error_message = str(e)
+            error_message = LinsightBishengLLMError(exception=e)
         except Exception as e:
             logger.exception(f"生成SOP内容失败: session_version_id={linsight_session_version_id}, error={str(e)}")
-            error_message = f"生成SOP内容失败: {str(e)}"
+            error_message = LinsightGenerateSopError(exception=e)
 
         finally:
             if error_message:
                 session_version = await LinsightSessionVersionDao.get_by_id(linsight_session_version_id)
                 if session_version:
-                    session_version.sop = error_message
+                    session_version.sop = f"{error_message.Msg}: {str(error_message.exception)}"
                     session_version.status = SessionVersionStatusEnum.SOP_GENERATION_FAILED
                     await LinsightSessionVersionDao.insert_one(session_version)
-                yield {"event": "error", "data": error_message}
+                yield error_message.to_sse_event_instance()
 
     @classmethod
     async def _get_session_version(cls, session_version_id: str) -> LinsightSessionVersion:
@@ -424,7 +424,7 @@ class LinsightWorkbenchImpl:
 
             return tools
         except Exception as e:
-            raise cls.ToolsInitializationError(f"初始化灵思工作台工具失败: {str(e)}")
+            raise cls.ToolsInitializationError(str(e))
 
     @classmethod
     async def prepare_file_list(cls, session_version: LinsightSessionVersion) -> List[str]:
@@ -503,13 +503,14 @@ class LinsightWorkbenchImpl:
 
         if feedback_content is None:
             # 检索SOP模板
-            sop_template, search_sop_error_msg = await SOPManageService.search_sop(
+            sop_template, search_sop_error = await SOPManageService.search_sop(
                 query=session_version.question, k=3
             )
 
-            if search_sop_error_msg:
-                logger.error(f"检索SOP模板失败: {search_sop_error_msg}")
-                yield cls.SearchSOPError(message=search_sop_error_msg)
+            if search_sop_error:
+                search_sop_error: BaseErrorCode
+                logger.error(f"检索SOP模板失败: {search_sop_error.Msg}")
+                yield cls.SearchSOPError(error_class=search_sop_error)
 
             sop_template = "\n\n".join([
                 f"例子:\n\n{sop.page_content}"
@@ -834,7 +835,8 @@ class LinsightWorkbenchImpl:
 
     @classmethod
     async def init_linsight_config_tools(cls, session_version: LinsightSessionVersion,
-                                         llm: BishengLLM, need_upload:bool=False, file_dir:str=None) -> List[BaseTool]:
+                                         llm: BishengLLM, need_upload: bool = False, file_dir: str = None) -> List[
+        BaseTool]:
         """
         初始化灵思配置的工具
 
