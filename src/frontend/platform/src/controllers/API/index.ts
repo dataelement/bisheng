@@ -790,7 +790,7 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
     });
 
     return Object.keys(fileMap).map(fileId => {
-      const { file_id: id, source: fileName, source_url: fileUrl, original_url: originUrl, ...other } = fileMap[fileId][0]
+      const { file_id: id, source: fileName, source_url, original_url: originUrl, ...other } = fileMap[fileId][0]
 
       const chunks = fileMap[fileId].sort((a, b) => b.score - a.score)
         .map(chunk => ({
@@ -799,7 +799,20 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
         }))
       const score = chunks[0].score
 
-      return { id, fileName, fileUrl, originUrl, chunks, ...other, score }
+      // 兼容后端历史逻辑
+      let fileUrl = ''
+      let suffix = fileName.split('.').pop().toLowerCase()
+      let isNew = false
+      if (['uns', 'local'].includes(other.parse_type)) {
+        fileUrl = other.chunk_bboxes ? source_url : originUrl;
+        if (other.chunk_bboxes) {
+          suffix = 'pdf'
+        }
+      } else if (['etl4lm', 'un_etl4lm'].includes(other.parse_type)) {
+        fileUrl = source_url || originUrl
+        isNew = true
+      }
+      return { id, fileName, suffix, isNew, fileUrl, originUrl, chunks, ...other, score }
     }).sort((a, b) => b.score - a.score)
   } catch (error) {
     console.error(error);
