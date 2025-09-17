@@ -539,8 +539,8 @@ export default function KnowledgeFile() {
                                     }}
                                 >
                                     <div className="flex items-center gap-2">
-                                        <div className="flex items-center justify-center size-12 bg-primary text-white rounded-[4px]  w-[40px] h-[40px]">
-                                            <BookCopy />
+                                        <div className="flex items-center justify-center size-12 bg-primary/60 text-white rounded-[4px]  w-[40px] h-[40px]">
+                                            <BookCopy  className="size-5"/>
                                         </div>
                                         <div>
                                             <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">

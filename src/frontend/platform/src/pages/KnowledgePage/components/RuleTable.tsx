@@ -93,6 +93,16 @@ const ItemForm = ({ data, setData }) => {
 
 
 
+interface RuleTableProps {
+  rules: any;
+  setRules: (updater: any) => void;
+  applyEachCell: boolean;
+  setApplyEachCell: (checked: boolean) => void;
+  cellGeneralConfig: any;
+  setCellGeneralConfig: (updater: any) => void;
+  showPreview?: boolean;
+}
+
 export default function RuleTable({
   rules,
   setRules,
@@ -101,7 +111,7 @@ export default function RuleTable({
   cellGeneralConfig,
   setCellGeneralConfig,
   showPreview,
-}) {
+}: RuleTableProps) {
   const { t } = useTranslation('knowledge')
 
   console.log('rules.fileList :>> ', rules.fileList);

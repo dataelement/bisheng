@@ -13,12 +13,12 @@ import { getKnowledgeModelConfig, getModelListApi } from "@/controllers/API/fine
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { t } from "i18next";
-import { Ellipsis, Trash2 } from "lucide-react";
+import { Ellipsis, MessageSquare, MessageSquareIcon, MessagesSquare, Trash2 } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import index from "../BuildPage/bench/LingSiWork";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { QuestionTooltip, TooltipContent, TooltipTrigger } from "@/components/bs-ui/tooltip";
 
 function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
@@ -167,6 +167,8 @@ export default function KnowledgeQa(params) {
     const navigate = useNavigate()
     const [copyLoadingId, setCopyLoadingId] = useState<string | null>(null);
     const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
+    const [selectOpenId, setSelectOpenId] = useState<string | null>(null);
+    const [modalKey, setModalKey] = useState(0);
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) => {
         return readFileLibDatabase({ ...param, name: param.keyword, type: 1 })
@@ -257,11 +259,9 @@ export default function KnowledgeQa(params) {
                             {/* 名称+描述单元格：恢复原有气泡结构，确保蓝色生效 */}
                             <TableCell  className="font-medium max-w-[280px]">
                                  <div className="flex items-center gap-2">
-                                    <img
-                                        src={__APP_ENV__.BASE_URL + "/assets/qa-logo.svg"}
-                                        alt="知识库图标"
-                                        className="w-[50px] h-[50px] mt-1 flex-shrink-0"
-                                    />
+                                    <div className="flex items-center justify-center size-[40px] min-w-[40px] bg-[rgb(255,237,160)] text-white rounded-[4px] ">
+                                            <MessagesSquare className="size-5 text-black"/>
+                                        </div>
 
                                     <div className="min-w-0 overflow-visible">
                                         {/* 知识库名称（不变） */}
@@ -298,42 +298,52 @@ export default function KnowledgeQa(params) {
 
                             {/* 操作列：修复「按钮移入行不高亮」 */}
                             <TableCell className="text-right">
-                                {/* 关键：hover:bg-transparent覆盖行的hover:bg-gray-50 */}
-                               <div className="flex items-center justify-end gap-2">
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <button
-                                                className="size-10 px-2 bg-transparent border-none shadow-none hover:bg-gray-300 flex items-center justify-center duration-200 relative"
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
-                                            </button>
-                                        </DropdownMenuTrigger>
+                                <div className="flex items-center justify-end gap-2">
+                                    <Select
+                                        key={`${el.id}-${modalKey}`}
+                                        open={selectOpenId === el.id}
+                                        onOpenChange={(isOpen) => {
+                                            setSelectOpenId(isOpen ? el.id : null);
+                                        }}
+                                        onValueChange={(selectedValue) => {
+                                            setSelectOpenId(null);
+                                            console.log("Selected value:", selectedValue, "for qa:", el.id);
 
-                                        <DropdownMenuContent
-                                            align="end"
-                                            className="rounded-md shadow-lg py-1 border-gray-200 z-[100] border border-transparent"
-                                            style={{ backgroundColor: 'white', opacity: 1 }}
-                                            onInteractOutside={() => setOpenMenus({})}
-                                        >
-                                            <DropdownMenuItem
-                                                className={`flex items-center gap-2 px-4 py-2 ${(el.copiable || user.role === 'admin')
-                                                    ? 'hover:bg-gray-100 cursor-pointer'
-                                                    : 'text-gray-400 cursor-not-allowed'
-                                                    }`}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
+                                            switch (selectedValue) {
+                                                case 'delete':
                                                     if (el.copiable || user.role === 'admin') {
                                                         handleDelete(el.id);
                                                     }
-                                                }}
+                                                    break;
+                                            }
+                                        }}
+                                    >
+                                        <SelectTrigger
+                                            showIcon={false}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                            }}
+                                            className="size-10 px-2 bg-transparent border-none shadow-none hover:bg-gray-300 flex items-center justify-center duration-200 relative"
+                                        >
+                                            <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
+                                        </SelectTrigger>
+                                        <SelectContent
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                            }}
+                                            className="z-50"
+                                        >
+                                            <SelectItem
+                                                value="delete"
                                                 disabled={!(el.copiable || user.role === 'admin')}
                                             >
-                                                <Trash2 className="w-4 h-4" />
-                                                {t('delete')}
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
+                                                <div className="flex gap-2 items-center">
+                                                    <Trash2 className="w-4 h-4" />
+                                                    {t('delete')}
+                                                </div>
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                             </TableCell>
                         </TableRow>

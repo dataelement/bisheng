@@ -21,7 +21,7 @@ export default function PreviewFile({
   edit = false,
   previewUrl
 }: {
-  urlState: { load: false; url: '' };
+  urlState: { load: boolean; url: string };
   file: any;
   partitions: Partition;
   chunks: any;
@@ -203,7 +203,7 @@ export default function PreviewFile({
     const previewFileUrl = targetFile.url;
 
     // 强制uns类型的Excel文件使用pdf预览
-    const renderType = fileParseType === 'etl4lm' && ['ppt', 'pptx'].includes(suffix)
+    const renderType = (fileParseType === 'etl4lm'||fileParseType === 'un_etl4lm') && ['ppt', 'pptx'].includes(suffix)
       ? 'pdf'
       : suffix;
     // 加载状态处理

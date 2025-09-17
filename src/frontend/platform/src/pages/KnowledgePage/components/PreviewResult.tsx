@@ -24,6 +24,7 @@ interface IProps {
     cellGeneralConfig: any;
     handlePreviewResult: (isSuccess: boolean) => void;
     kId?: string | number;
+    showPreview?: boolean;
 }
 export type Partition = {
     [key in string]: { text: string, type: string, part_id: string }
@@ -57,7 +58,7 @@ console.log(showPreview, previewCount, rules, step, applyEachCell, cellGeneralCo
         }
         return _currentFile
     }, [selectId, rules])
-    const [fileViewUrl, setFileViewUrl] = useState({ load: true, url: '' }) // 当前选择文件预览url
+    const [fileViewUrl, setFileViewUrl] = useState<{ load: boolean; url: string }>({ load: true, url: '' }) // 当前选择文件预览url
 
     const [loading, setLoading] = useState(false)
     const prevPreviewCountMapRef = useRef({})
@@ -82,6 +83,11 @@ console.log(showPreview, previewCount, rules, step, applyEachCell, cellGeneralCo
             preview_url = currentFile?.filePath
         }
 
+        // 将 UI 可见的 "\\n" 还原为真实 "\n"
+        const normalizeSeparators = (arr) => (arr || []).map((s) =>
+            typeof s === 'string' ? s.replace(/\\n/g, '\n') : s
+        );
+
         captureAndAlertRequestErrorHoc(previewFileSplitApi({
             // 缓存(修改规则后需要清空缓存, 切换文件使用缓存)
             // previewCount变更时为重新预览分段操作,不使用缓存
@@ -93,7 +99,7 @@ console.log(showPreview, previewCount, rules, step, applyEachCell, cellGeneralCo
                     ? currentFile.excelRule
                     : { ...cellGeneralConfig }
             }],
-            separator,
+            separator: normalizeSeparators(separator),
             separator_rule: separatorRule,
             chunk_size: chunkSize,
             chunk_overlap: chunkOverlap,
