@@ -191,7 +191,7 @@ class KnowledgeDao(KnowledgeBase):
                            page: int = 0,
                            limit: int = 10,
                            filter_knowledge: List[int] = None) -> List[Knowledge]:
-        statement = select(Knowledge).where(Knowledge.state > 0)
+        statement = select(Knowledge)
 
         statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
                                                 knowledge_type, name, page, limit,
@@ -210,7 +210,7 @@ class KnowledgeDao(KnowledgeBase):
                                   page: int = 0,
                                   limit: int = 10,
                                   filter_knowledge: List[int] = None) -> List[Knowledge]:
-        statement = select(Knowledge).where(Knowledge.state > 0)
+        statement = select(Knowledge)
 
         statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
                                                 knowledge_type, name, page, limit,
@@ -226,7 +226,7 @@ class KnowledgeDao(KnowledgeBase):
                              knowledge_id_extra: List[int] = None,
                              knowledge_type: KnowledgeTypeEnum = None,
                              name: str = None) -> int:
-        statement = select(func.count(Knowledge.id)).where(Knowledge.state > 0)
+        statement = select(func.count(Knowledge.id))
         statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
                                                 knowledge_type, name)
         with session_getter() as session:
@@ -238,7 +238,7 @@ class KnowledgeDao(KnowledgeBase):
                                     knowledge_id_extra: List[int] = None,
                                     knowledge_type: KnowledgeTypeEnum = None,
                                     name: str = None) -> int:
-        statement = select(func.count(Knowledge.id)).where(Knowledge.state > 0)
+        statement = select(func.count(Knowledge.id))
         statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
                                                 knowledge_type, name)
         async with async_session_getter() as session:
@@ -355,7 +355,7 @@ class KnowledgeDao(KnowledgeBase):
                           knowledge_type: KnowledgeTypeEnum = None,
                           page: int = 0,
                           limit: int = 0) -> List[Knowledge]:
-        statement = select(Knowledge).where(Knowledge.state > 0)
+        statement = select(Knowledge)
         statement = cls.generate_all_knowledge_filter(statement,
                                                       name=name,
                                                       knowledge_type=knowledge_type)
@@ -372,7 +372,7 @@ class KnowledgeDao(KnowledgeBase):
                                  knowledge_type: KnowledgeTypeEnum = None,
                                  page: int = 0,
                                  limit: int = 0) -> List[Knowledge]:
-        statement = select(Knowledge).where(Knowledge.state > 0)
+        statement = select(Knowledge)
         statement = cls.generate_all_knowledge_filter(statement,
                                                       name=name,
                                                       knowledge_type=knowledge_type)
@@ -387,7 +387,7 @@ class KnowledgeDao(KnowledgeBase):
     def count_all_knowledge(cls,
                             name: str = None,
                             knowledge_type: KnowledgeTypeEnum = None) -> int:
-        statement = select(func.count(Knowledge.id)).where(Knowledge.state > 0)
+        statement = select(func.count(Knowledge.id))
         statement = cls.generate_all_knowledge_filter(statement,
                                                       name=name,
                                                       knowledge_type=knowledge_type)
@@ -398,7 +398,7 @@ class KnowledgeDao(KnowledgeBase):
     async def acount_all_knowledge(cls,
                                    name: str = None,
                                    knowledge_type: KnowledgeTypeEnum = None) -> int:
-        statement = select(func.count(Knowledge.id)).where(Knowledge.state > 0)
+        statement = select(func.count(Knowledge.id))
         statement = cls.generate_all_knowledge_filter(statement,
                                                       name=name,
                                                       knowledge_type=knowledge_type)
@@ -415,7 +415,7 @@ class KnowledgeDao(KnowledgeBase):
     @classmethod
     def get_knowledge_by_name(cls, name: str, user_id: int = 0) -> Knowledge:
         """ 通过知识库名称获取知识库详情 """
-        statement = select(Knowledge).where(Knowledge.name == name).where(Knowledge.state > 0)
+        statement = select(Knowledge).where(Knowledge.name == name)
         if user_id:
             statement = statement.where(Knowledge.user_id == user_id)
         with session_getter() as session:
