@@ -69,13 +69,13 @@ content = ""
 for chunk in response:
     if chunk.choices[0].delta.model_extra.get("reasoning_content"):
         if not reasoning_content:
-            print("\n\n-----Reasoning Content-----\n")
+            print("\\n\\n-----Reasoning Content-----\\n")
         reasoning_chunk = chunk.choices[0].delta.reasoning_content
         print(reasoning_chunk, end='', flush=True)  # 流式打印reasoning
         reasoning_content += reasoning_chunk
     elif chunk.choices[0].delta.content:
         if not content:
-            print("\n\n-----Final content-----\n")
+            print("\\n\\n-----Final content-----\\n")
         content_chunk = chunk.choices[0].delta.content
         print(content_chunk, end='', flush=True)  # 流式打印答案
         content += content_chunk`
