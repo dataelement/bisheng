@@ -62,6 +62,7 @@ export default function Paragraphs({ fileId, onBack }) {
     const [hasChunkBboxes, setHasChunkBboxes] = useState(false);
     const latestFileUrlRef = useRef('');
     const latestPreviewUrlRef = useRef('');
+    const latestOriginalUrlRef = useRef('');
 
     const [selectedChunkIndex, setSelectedBbox] = useKnowledgeStore((state) => [state.selectedChunkIndex, state.setSelectedBbox]);
     useEffect(() => {
@@ -155,7 +156,7 @@ export default function Paragraphs({ fileId, onBack }) {
                 if (isUnsOrLocal) {
                     // UNS或LOCAL类型：根据bbox是否有效选择URL
                     const isBboxesValid = hasChunkBboxes;
-                    const isBboxesEmpty = !hasChunkBboxes || chunkBboxes.length === 0;
+                    const isBboxesEmpty = !hasChunkBboxes;
                     if (!isBboxesEmpty && hasPreviewUrl) {
                         // 有有效bbox且有preview_url → 使用preview_url
                         console.log(1111);
@@ -198,10 +199,13 @@ export default function Paragraphs({ fileId, onBack }) {
                 // 同时更新状态和ref（ref会同步生效）
                 setFileUrl(finalUrl);
                 setPreviewUrl(finalPreviewUrl);
+                // 存储original_url到ref中
+                latestOriginalUrlRef.current = hasOriginalUrl ? decodeURIComponent(res.original_url.trim()) : '';
                 return finalUrl;
             } else {
                 setFileUrl('');
                 setPreviewUrl('');
+                latestOriginalUrlRef.current = '';
                 return '';
             }
         } catch (err) {
@@ -209,6 +213,7 @@ export default function Paragraphs({ fileId, onBack }) {
             setFileUrl('');
             setPreviewUrl('');
             setPartitions([]);
+            latestOriginalUrlRef.current = '';
             return '';
         } finally {
             setIsFetchingUrl(false);
@@ -289,6 +294,7 @@ export default function Paragraphs({ fileId, onBack }) {
         setIsDropdownOpen(false);
         setFileUrl('');
         setPreviewUrl('');
+        latestOriginalUrlRef.current = '';
 
         try {
             if (!selectedFile) throw new Error('未找到选中的文件');
@@ -420,9 +426,10 @@ export default function Paragraphs({ fileId, onBack }) {
 
     // 调整分段策略（完全保留原始逻辑）
     const handleAdjustSegmentation = useCallback(() => {
-        console.log(currentFile, fileUrl, previewUrl, 789);
-        const currentFileUrl = latestFileUrlRef.current;
+        console.log(latestFileUrlRef, fileUrl, previewUrl,56565);
+        const currentFileUrl = latestOriginalUrlRef.current; // 使用original_url而不是preview_url
         const currentPreviewUrl = latestPreviewUrlRef.current;
+console.log(currentPreviewUrl,currentFileUrl,6666666666667);
 
         navigate(`/filelib/adjust/${id}`, {
             state: {
