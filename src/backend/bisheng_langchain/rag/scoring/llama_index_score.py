@@ -8,10 +8,10 @@ import pandas as pd
 nest_asyncio.apply()
 from collections import defaultdict
 
-from llama_index import ServiceContext
+from llama_index.core import ServiceContext
 from llama_index.embeddings.openai import OpenAIEmbedding
-from llama_index.evaluation import CorrectnessEvaluator
-from llama_index.llms import OpenAI
+from llama_index.core.evaluation import CorrectnessEvaluator
+from llama_index.llms.openai import OpenAI
 from tqdm import tqdm
 
 openai_api_key = os.environ.get('OPENAI_API_KEY', '')

@@ -6,6 +6,8 @@ import { LoadIcon } from "../bs-icons/loading";
 import { Input, Textarea } from "../bs-ui/input";
 import SopMarkdown from "./SopMarkdown";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { t } from "i18next";
+import { useTranslation } from "react-i18next";
 
 const SopFormDrawer = ({
   isDrawerOpen,
@@ -16,6 +18,7 @@ const SopFormDrawer = ({
   tools,
   handleSaveSOP
 }) => {
+  const { t } = useTranslation()
   const [errors, setErrors] = useState({
     name: '',
     content: ''
@@ -43,18 +46,18 @@ const SopFormDrawer = ({
     let isValid = true;
 
     if (!sopForm.name.trim()) {
-      newErrors.name = '名称不能为空';
+      newErrors.name = t('sopForm.nameRequired');
       isValid = false;
     } else if (sopForm.name.length > MAX_LENGTHS.name) {
-      newErrors.name = `名称不能超过${MAX_LENGTHS.name}字`;
+      newErrors.name = t('sopForm.nameMaxLength', { max: MAX_LENGTHS.name });
       isValid = false;
     }
 
     if (!sopForm.content.trim()) {
-      newErrors.content = '详细内容不能为空';
+      newErrors.content = t('sopForm.contentRequired');
       isValid = false;
     } else if (sopForm.content.length > MAX_LENGTHS.content) {
-      newErrors.content = `详细内容不能超过${MAX_LENGTHS.content}字`;
+      newErrors.content = t('sopForm.contentMaxLength', { max: MAX_LENGTHS.content });
       isValid = false;
     }
 
@@ -77,7 +80,9 @@ const SopFormDrawer = ({
     if (length > MAX_LENGTHS[field]) {
       setErrors(prev => ({
         ...prev,
-        [field]: `${field === 'content' ? '详细内容' : '名称'}不能超过${MAX_LENGTHS[field]}字`
+        [field]: field === 'content' 
+          ? t('sopForm.contentMaxLength', { max: MAX_LENGTHS[field] })
+          : t('sopForm.nameMaxLength', { max: MAX_LENGTHS[field] })
       }));
     } else if (errors[field]) {
       // 清除错误
@@ -90,8 +95,8 @@ const SopFormDrawer = ({
     if (isSubmitting) return;
     // toast({
     //   variant: 'error',
-    //   title: 'SOP 导入失败',
-    //   description: `${sopForm.name}内容超长`
+    //   title: t('sopForm.importFailed'),
+    //   description: `${sopForm.name}${t('sopForm.contentTooLong')}`
     // })
     if (validateForm()) {
       setIsSubmitting(true);
@@ -99,7 +104,7 @@ const SopFormDrawer = ({
       try {
         await handleSaveSOP();
       } catch (error) {
-        console.error('保存失败:', error);
+        console.error(t('sopForm.saveFailed'), error);
       } finally {
         setIsSubmitting(false);
       }
@@ -129,14 +134,14 @@ const SopFormDrawer = ({
         <div className="flex flex-col ">
           <div className="flex items-center justify-between px-4 pt-5 border-gray-200">
             <SheetTitle className="text-lg font-medium text-gray-900">
-              {isEditing ? '编辑指导手册' : '新建指导手册'}
+              {isEditing ? t('sopForm.editManual') : t('components.sopForm.createManual')}
             </SheetTitle>
           </div>
           <div className="flex-1 px-4 pb-4 pt-3">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label htmlFor="sop-name" className="block text-sm font-medium pb-1 text-gray-700">
-                  指导手册名称<span className="text-red-500">*</span>
+                  {t('sopForm.manualName')}<span className="text-red-500">*</span>
                 </label>
                 < Input
                   type="text"
@@ -147,7 +152,7 @@ const SopFormDrawer = ({
                   value={sopForm.name}
                   onChange={(e) => handleInputChange('name', e.target.value)}
                   className={`mt-1 block w-full border ${errors.name ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-[16px]`}
-                  placeholder="请输入指导手册名称"
+                  placeholder={t('sopForm.namePlaceholder')}
                 />
                 <div className="flex justify-between">
                   {errors.name && (
@@ -158,7 +163,7 @@ const SopFormDrawer = ({
 
               <div>
                 <label htmlFor="sop-description" className="block text-sm pb-1 font-medium text-gray-700">
-                  描述
+                  {t('sopForm.description')}
                 </label>
                 <Textarea
                   id="sop-description"
@@ -167,13 +172,13 @@ const SopFormDrawer = ({
                   value={sopForm.description}
                   onChange={(e) => handleInputChange('description', e.target.value)}
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-[16px]"
-                  placeholder="请输入指导手册描述"
+                  placeholder={t('sopForm.descriptionPlaceholder')}
                 />
               </div>
 
               <div>
                 <label htmlFor="sop-content" className="h-full block text-sm pb-1 font-medium text-gray-700">
-                  详细内容<span className="text-red-500">*</span>
+                  {t('sopForm.detailedContent')}<span className="text-red-500">*</span>
                 </label>
                 {isDrawerOpen && (
                   <div className="relative mt-1">
@@ -196,7 +201,7 @@ const SopFormDrawer = ({
                   value={sopForm.content}
                   onChange={(e) => handleInputChange('content', e.target.value)}
                   className={`mt-1 block w-full border ${errors.content ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
-                  placeholder="请输入SOP详细内容"
+                  placeholder={t('sopForm.contentPlaceholder')}
                 /> */}
                 <div className="flex justify-between">
                   {errors.content && (
@@ -207,7 +212,7 @@ const SopFormDrawer = ({
               </div>
 
               <div className="flex-shrink-0 px-4 py-2 border-t border-gray-200 flex justify-end space-x-3">
-                <Button type="button" variant='outline' onClick={() => setIsDrawerOpen(false)}>取消</Button>
+                <Button type="button" variant='outline' onClick={() => setIsDrawerOpen(false)}>{t('sopForm.cancel')}</Button>
                 <Button
                   type="submit"
                   onClick={handleSubmit}
@@ -216,10 +221,10 @@ const SopFormDrawer = ({
                   {isSubmitting ? (
                     <>
                       <LoadIcon className="animate-spin mr-2" />
-                      保存中...
+                      {t('sopForm.saving')}
                     </>
                   ) : (
-                    '保存'
+                    t('sopForm.save')
                   )}
                 </Button>
               </div>

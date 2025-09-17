@@ -1,5 +1,5 @@
-import { AssistantIcon, FlowIcon } from "@/components/bs-icons/";
 import { cname } from "@/components/bs-ui/utils";
+import { AppNumType, AppType } from "@/types/app";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SkillIcon } from "../../bs-icons";
@@ -16,8 +16,8 @@ interface IProps<T> {
   data: T,
   /** id为''时，表示新建 */
   id?: number | string,
-  logo?: string,
-  type: "skill" | "sheet" | "assistant" | "setting", // 技能列表｜侧边弹窗列表
+  logo?: React.ReactNode,
+  type: AppType | AppNumType;// 技能列表｜侧边弹窗列表
   title: string,
   edit?: boolean,
   description: React.ReactNode | string,
@@ -28,7 +28,6 @@ interface IProps<T> {
   isAdmin?: boolean,
   headSelecter?: React.ReactNode,
   footer?: React.ReactNode,
-  icon?: any,
   onClick?: () => void,
   onSwitchClick?: () => void,
   onAddTemp?: (data: T) => void,
@@ -67,16 +66,11 @@ export function TitleIconBg({ id, className = '', children = <SkillIcon /> }) {
   return <div className={cname(`rounded-md flex justify-center items-center ${gradients[parseInt(id + '', 16) % gradients.length]}`, className)}>{children}</div>
 }
 
-export function TitleLogo({ id = 0, url, className = '', children = <SkillIcon /> }) {
-  return url ? <img src={url} className={cname(`w-6 h-6 rounded-sm object-cover`, className)} /> : <TitleIconBg id={id} className={className}>{children}</TitleIconBg>
-}
-
 export default function CardComponent<T>({
   id = '',
   logo = '',
   data,
   type,
-  icon: Icon = SkillIcon,
   edit = false,
   user,
   labelPannel = null,
@@ -143,12 +137,7 @@ export default function CardComponent<T>({
     <CardHeader className="pb-2">
       <CardTitle className="truncate-doubleline">
         <div className="flex gap-2 pb-2 items-center">
-          <TitleLogo
-            url={logo}
-            id={id}
-          >
-            <Icon />
-          </TitleLogo>
+          {logo}
           <p className="leading-5 align-middle">{title}</p>
         </div>
         {/* <span></span> */}
@@ -163,15 +152,10 @@ export default function CardComponent<T>({
   </Card>
 
   // 助手&技能&工作流列表卡片组件
-  return <Card className="group w-[320px] hover:bg-card/80 cursor-pointer grid" onClick={() => edit && onClick()}>
+  return <Card className="group w-[320px] hover:bg-card/80 cursor-pointer grid" onClick={() => onClick()}>
     <CardHeader>
       <div className="flex justify-between pb-2">
-        <TitleLogo
-          url={logo}
-          id={id}
-        >
-          {type === 'skill' ? <SkillIcon /> : type === 'assistant' ? <AssistantIcon /> : <FlowIcon />}
-        </TitleLogo>
+        {logo}
         <div className="flex gap-1 items-center">
           {headSelecter}
           <Switch
@@ -184,10 +168,10 @@ export default function CardComponent<T>({
           ></Switch>
         </div>
       </div>
-      <CardTitle className="truncate-doubleline leading-5 max-w-[280px]">{title}</CardTitle>
+      <CardTitle className="truncate-doubleline leading-5">{title}</CardTitle>
     </CardHeader>
     <CardContent className="h-[140px] overflow-auto scrollbar-hide">
-      <CardDescription className="break-all min-w-0">{description}</CardDescription>
+      <CardDescription className="break-all">{description}</CardDescription>
     </CardContent>
     <CardFooter className="h-20 grid grid-rows-2 self-end">
       {labelPannel}

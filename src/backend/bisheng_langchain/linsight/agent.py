@@ -56,19 +56,21 @@ class LinsightAgent(BaseModel):
         sop_flag = False
         sop_content = ""
         answer = ""
-        split_tag = "<Thought_END>"
+        split_tags = ["<Thought_END>", "</Thought_END>"]
         async for one in self.llm.astream(sop_prompt):
             answer += f"{one.content}"
             if sop_flag:
                 yield one
                 sop_content += one.content
                 continue
-            if answer.find(split_tag) != -1:
-                sop_flag = True
-                sop_content = answer.split(split_tag)[-1].strip()
-                if sop_content:
-                    one.content = sop_content
-                    yield one
+            for split_tag in split_tags:
+                if answer.find(split_tag) != -1:
+                    sop_flag = True
+                    sop_content = answer.split(split_tag)[-1].strip()
+                    if sop_content:
+                        one.content = sop_content
+                        yield one
+                    break
         if not sop_content:
             one.content = answer
             yield one
@@ -157,7 +159,8 @@ class LinsightAgent(BaseModel):
         if not self.task_manager:
             self.task_manager = TaskManage(tasks=tasks, tools=self.tools, task_mode=self.task_mode)
             self.task_manager.rebuild_tasks(query=self.query, llm=self.llm, file_dir=self.file_dir, sop=sop,
-                                            exec_config=self.exec_config, file_list_str=file_list_str)
+                                            exec_config=self.exec_config, file_list=file_list,
+                                            file_list_str=file_list_str)
 
         async for one in self.task_manager.ainvoke_task():
             yield one

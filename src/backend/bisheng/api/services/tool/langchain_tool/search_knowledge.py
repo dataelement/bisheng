@@ -15,8 +15,8 @@ from bisheng.utils.embedding import decide_embeddings
 
 class ToolInput(BaseModel):
     query: str = Field(..., description='需要检索的关键词')
-    knowledge_id: Optional[str] = Field(default=None, description='语义检索库id')
-    limit: Optional[int] = Field(default=2, description='返回结果的最大数量')
+    knowledge_id: str = Field(..., description='语义检索库id')
+    limit: int = Field(default=2, description='返回结果的最大数量')
     call_reason: str = Field(default='', description='调用该工具的原因，原因中不要使用id来描述文件或知识库')
 
 
@@ -101,6 +101,6 @@ class SearchKnowledgeBase(BaseTool):
             raise Exception("知识库配置的embedding模型不存在或已被删除")
         embeddings = decide_embeddings(knowledge_info.model)
         milvus_client = decide_vectorstores(
-            knowledge_info.collection_name, "Milvus", embeddings
+            knowledge_info.collection_name, "Milvus", embeddings, knowledge_id=knowledge_id
         )
         return await self.base_search(milvus_client, query, limit)

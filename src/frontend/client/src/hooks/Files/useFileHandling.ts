@@ -143,8 +143,7 @@ const useFileHandling = (params?: UseFileHandling) => {
         // // : (error?.response?.data?.message ?? 'com_error_files_upload');
         // setError(errorMessage);
       },
-    },
-    abortControllerRef.current?.signal,
+    }
   );
 
   const startUpload = async (extendedFile: ExtendedFile) => {
@@ -189,7 +188,7 @@ const useFileHandling = (params?: UseFileHandling) => {
     }
 
     if (!isAssistantsEndpoint(endpoint)) {
-      uploadFile.mutate(formData);
+      uploadFile.mutate({ body: formData, signal: extendedFile.abortController.signal });
       return;
     }
 
@@ -240,7 +239,7 @@ const useFileHandling = (params?: UseFileHandling) => {
   };
 
   const handleFiles = async (_files: FileList | File[], _toolResource?: string) => {
-    abortControllerRef.current = new AbortController();
+    // abortControllerRef.current = new AbortController();
     const fileList = Array.from(_files);
     /* Validate files */
     let filesAreValid: boolean;
@@ -279,6 +278,7 @@ const useFileHandling = (params?: UseFileHandling) => {
           preview,
           progress: 0.2,
           size: originalFile.size,
+          abortController: new AbortController()
         };
 
         if (_toolResource != null && _toolResource !== '') {
@@ -314,16 +314,18 @@ const useFileHandling = (params?: UseFileHandling) => {
     event.stopPropagation();
     if (event.target.files) {
       setFilesLoading(true);
-      Array.from(event.target.files).forEach(file => {
-        handleFiles([file], _toolResource);
-      });
+      handleFiles(event.target.files, _toolResource);
       // reset the input
       event.target.value = '';
     }
   };
 
-  const abortUpload = () => {
-    if (abortControllerRef.current) {
+  const abortUpload = (file) => {
+    if (file.abortController) {
+      logger.log('files', 'Aborting upload');
+      file.abortController.abort('User aborted upload');
+      file.abortController = null;
+    } else if (abortControllerRef.current) {
       logger.log('files', 'Aborting upload');
       abortControllerRef.current.abort('User aborted upload');
       abortControllerRef.current = null;

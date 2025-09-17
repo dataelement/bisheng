@@ -426,7 +426,16 @@ class AssistantAgent(AssistantUtils):
                                                llm=self.llm,
                                                assistant_message=prompt)
         else:
+            # function-calling模式，也添加递归限制
+            logger.info(f'Creating LangGraph agent with {len(self.tools)} tools, llm type: {type(self.llm)}')
+            logger.info(f'LLM streaming capability: {getattr(self.llm, "streaming", "unknown")}')
+
             self.agent = create_react_agent(self.llm, self.tools, prompt=prompt, checkpointer=False)
+            logger.info(f'LangGraph agent created: {type(self.agent)}')
+
+            # 为agent添加递归限制配置
+            self.agent = self.agent.with_config({'recursion_limit': 100})
+            logger.info(f'Agent config applied: recursion_limit=100')
 
     async def optimize_assistant_prompt(self):
         """ 自动优化生成prompt """
@@ -549,6 +558,67 @@ class AssistantAgent(AssistantUtils):
         await self.record_chat_history([one.to_json() for one in result])
 
         return result
+
+    async def astream(self, query: str, chat_history: List = None, callback: Callbacks = None):
+        """
+        运行智能体对话 - 流式版本
+        """
+        await self.fake_callback(callback)
+
+        if chat_history:
+            chat_history.append(HumanMessage(content=query))
+            inputs = chat_history
+        else:
+            inputs = [HumanMessage(content=query)]
+
+        # trim message
+        inputs = await self.trim_messages(inputs)
+
+        if self.current_agent_executor == 'ReAct':
+            # ReAct模式暂时不支持流式，降级到非流式
+            result = await self.react_run(inputs, callback)
+            # 记录聊天历史
+            await self.record_chat_history([one.to_json() for one in result])
+            yield result
+        else:
+            # 使用流式调用
+            config = RunnableConfig(callbacks=callback)
+            final_messages = []
+
+            logger.info(f'Using function-calling mode, starting astream...')
+
+            chunk_count = 0
+
+            try:
+                # 使用messages模式的LangGraph streaming获得token级别的流式输出
+                async for chunk in self.agent.astream({'messages': inputs}, config=config, stream_mode="messages"):
+                    chunk_count += 1
+
+                    # stream_mode="messages" 返回 (message, metadata) 元组
+                    message = None
+                    if isinstance(chunk, tuple) and len(chunk) >= 2:
+                        message, metadata = chunk[:2]
+                    elif hasattr(chunk, 'content'):
+                        # 直接是消息对象
+                        message = chunk
+
+                    if message:
+                        # stream_mode="messages"返回的是独立chunk，直接使用其内容
+                        final_messages = [message]  # 保存消息用于历史记录
+                        yield [message]
+
+            except Exception as astream_error:
+                logger.exception(f'Error in astream async for loop: {str(astream_error)}')
+                raise astream_error
+
+            logger.info(f'Function calling astream completed, total chunks: {chunk_count}')
+
+            if chunk_count == 0:
+                logger.warning(f'No chunks received from agent.astream()! This indicates a streaming issue.')
+
+            # 记录聊天历史
+            if final_messages:
+                await self.record_chat_history([one.to_json() for one in final_messages])
 
     async def react_run(self, inputs: List, callback: Callbacks = None):
         """ react 模式的输入和执行 """

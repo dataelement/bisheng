@@ -78,6 +78,8 @@ class MinioConf(BaseModel):
     cert_check: Optional[bool] = Field(default=False, description="是否校验证书")
     endpoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio 地址")
     sharepoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio 公开访问地址")
+    share_schema: Optional[bool] = Field(default=False, description="minio 公开访问地址是否使用https")
+    share_cert_check: Optional[bool] = Field(default=False, description="minio 公开访问地址是否校验证书")
     access_key: Optional[str] = Field(default="minioadmin", description="minio 用户名")
     secret_key: Optional[str] = Field(default="minioadmin", description="minio 密码")
     public_bucket: Optional[str] = Field(default="bisheng",
@@ -119,6 +121,7 @@ class LinsightConf(BaseModel):
     waiting_list_url: str = Field(default=None, description='waiting list 跳转链接')
     default_temperature: float = Field(default=0, description='模型请求时的默认温度')
     retry_temperature: float = Field(default=1, description='react模式json解析失败后重试时模型温度')
+    file_content_length: int = Field(default=5000, description='拆分子任务时读取文件内容的字符数，超过后会截断')
 
 
 class Settings(BaseModel):

@@ -52,7 +52,7 @@ export const saveAssistanttApi = async (
 ): Promise<any> => {
     if (data.logo) {
         // logo保存相对路径
-        data.logo = data.logo.replace('/bisheng', '')
+        data.logo = data.logo.replace(/^\/\w+/, '')
     }
     return await axios.put(`/api/v1/assistant`, data)
 };

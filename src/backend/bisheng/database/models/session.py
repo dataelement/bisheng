@@ -6,7 +6,6 @@ from sqlmodel import Field, Column, DateTime, text, select, func, update
 
 from bisheng.database.base import session_getter, async_session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from bisheng.database.models.flow import FlowType
 
 
 class SensitiveStatus(Enum):
@@ -20,6 +19,8 @@ class MessageSessionBase(SQLModelSerializable):
     flow_id: str = Field(index=True, description='应用唯一ID')
     flow_type: int = Field(description='应用类型。技能、助手、工作流')
     flow_name: str = Field(index=True, description='应用名称')
+    flow_description: Optional[str] = Field(default=None, description='应用描述')
+    flow_logo: Optional[str] = Field(default=None, description='应用logo')
     user_id: int = Field(index=True, description='创建会话的用户ID')
     is_delete: Optional[bool] = Field(default=False, description='对应的技能或者会话本身是否被删除')
     like: Optional[int] = Field(default=0, description='点赞的消息数量')
@@ -114,13 +115,6 @@ class MessageSessionDao(MessageSessionBase):
                 MessageSession.sensitive_status.in_([one.value for one in sensitive_status]))
         if flow_type:
             statement = statement.where(MessageSession.flow_type.in_(flow_type))
-        else:
-            # 过滤掉工作站的会话, 默认不带工作站 和 灵思
-            statement = statement.where(
-                MessageSession.flow_type != FlowType.WORKSTATION.value)  # noqa
-            statement = statement.where(
-                MessageSession.flow_type != FlowType.LINSIGHT.value)  # noqa
-        # 过滤掉被删除的会话
         return statement
 
     @classmethod
@@ -165,11 +159,12 @@ class MessageSessionDao(MessageSessionBase):
                              start_date: datetime = None,
                              end_date: datetime = None,
                              include_delete: bool = True,
-                             exclude_chats: List[str] = None) -> int:
+                             exclude_chats: List[str] = None,
+                             flow_type: List[int] = None) -> int:
         statement = select(func.count(MessageSession.chat_id))
         statement = cls.generate_filter_session_statement(statement, chat_ids, sensitive_status,
                                                           flow_ids, user_ids, feedback, start_date,
-                                                          end_date, include_delete, exclude_chats)
+                                                          end_date, include_delete, exclude_chats, flow_type=flow_type)
         with session_getter() as session:
             return session.scalar(statement)
 
@@ -207,6 +202,20 @@ class MessageSessionDao(MessageSessionBase):
             return
         statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(
             copied=MessageSession.copied + copied_count)
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def update_session_info_by_flow(cls, name: str, description: str, logo: str, flow_id: str, flow_type: int):
+        statement = update(MessageSession).where(
+            MessageSession.flow_id == flow_id,
+            MessageSession.flow_type == flow_type
+        ).values(
+            flow_name=name,
+            flow_description=description,
+            flow_logo=logo
+        )
         with session_getter() as session:
             session.exec(statement)
             session.commit()

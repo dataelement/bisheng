@@ -12,7 +12,7 @@ from bisheng.api.v1.schemas import ChatResponse
 from bisheng.api.v1.schema.workflow import WorkflowEvent, WorkflowEventType, WorkflowInputSchema, WorkflowInputItem, \
     WorkflowOutputSchema
 from bisheng.chat.utils import SourceType
-from bisheng.database.models.flow import FlowDao, FlowType, FlowStatus
+from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
@@ -24,7 +24,8 @@ from bisheng.workflow.common.node import BaseNodeData, NodeType
 from bisheng.workflow.graph.graph_state import GraphState
 from bisheng.workflow.graph.workflow import Workflow
 from bisheng.workflow.nodes.node_manage import NodeFactory
-
+from bisheng.database.models.user_link import UserLinkDao
+from bisheng.database.models.flow import UserLinkType
 
 class WorkFlowService(BaseService):
 
@@ -46,7 +47,7 @@ class WorkFlowService(BaseService):
 
         # 获取用户可见的技能列表
         if user.is_admin():
-            data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, None, None, page, page_size)
+            data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, None, None, None, page, page_size)
         else:
             user_role = UserRoleDao.get_user_roles(user.user_id)
             role_ids = [role.role_id for role in user_role]
@@ -55,7 +56,7 @@ class WorkFlowService(BaseService):
             flow_id_extra = []
             if role_access:
                 flow_id_extra = [access.third_id for access in role_access]
-            data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, user.user_id, flow_id_extra, page,
+            data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, user.user_id, flow_id_extra, None, page,
                                                page_size)
 
         # 应用ID列表
@@ -196,6 +197,7 @@ class WorkFlowService(BaseService):
             message_id=chat_response.message_id,
             status='end',
             node_id=chat_response.message.get('node_id'),
+            node_name=chat_response.message.get('name'),
             node_execution_id=chat_response.message.get('unique_id'),
         )
         match workflow_event.event:
@@ -310,3 +312,132 @@ class WorkFlowService(BaseService):
             )]
         )
         return workflow_event
+    
+    @classmethod
+    def get_frequently_used_flows(cls, user: UserPayload, user_link_type: str, 
+                      page: int = 1,
+                      page_size: int = 8) -> (list[dict], int):
+        """
+        获取常用技能
+        """
+        # 通过user_id和tag获取id列表，并保持按create_time升序的顺序
+        flow_ids = []
+        user_link_order = {}  # 记录每个应用在用户常用列表中的顺序
+        
+        ret = UserLinkDao.get_user_link(user.user_id, [app_type.value for app_type in UserLinkType.app.value])
+        if not ret:
+            return [], 0
+        
+        # 保存原始顺序和flow_ids
+        for index, user_link in enumerate(ret):
+            flow_ids.append(user_link.type_detail)
+            user_link_order[user_link.type_detail] = index
+
+        # 获取用户可见的技能列表（不进行分页，因为我们需要手动排序）
+        if user.is_admin():
+            data, _ = FlowDao.get_all_apps(None, FlowStatus.ONLINE.value, flow_ids, None, None, None, None, 0, 0)
+        else:
+            user_role = UserRoleDao.get_user_roles(user.user_id)
+            role_ids = [role.role_id for role in user_role]
+            role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.FLOW, AccessType.WORK_FLOW,
+                                                                         AccessType.ASSISTANT_READ])
+            flow_id_extra = []
+            if role_access:
+                flow_id_extra = [access.third_id for access in role_access]
+            data, _ = FlowDao.get_all_apps(None, FlowStatus.ONLINE.value, flow_ids, None, user.user_id, flow_id_extra, 0, 0)
+        
+        # 按照用户添加到常用的顺序重新排序
+        data.sort(key=lambda x: user_link_order.get(x['id'], float('inf')))
+        
+        # 手动实现分页
+        total = len(data)
+        start_index = (page - 1) * page_size
+        end_index = start_index + page_size
+        data = data[start_index:end_index]
+
+        # 应用ID列表
+        resource_ids = []
+        # 技能创建用户的ID列表
+        user_ids = []
+        for one in data:
+            one['id'] = one['id']
+            resource_ids.append(one['id'])
+            user_ids.append(one['user_id'])
+        # 获取列表内的用户信息
+        user_infos = UserDao.get_user_by_ids(user_ids)
+        user_dict = {one.user_id: one.user_name for one in user_infos}
+
+        # 获取列表内的版本信息
+        version_infos = FlowVersionDao.get_list_by_flow_ids(resource_ids)
+        flow_versions = {}
+        for one in version_infos:
+            if one.flow_id not in flow_versions:
+                flow_versions[one.flow_id] = []
+            flow_versions[one.flow_id].append(jsonable_encoder(one))
+
+        resource_groups = GroupResourceDao.get_resources_group(None, resource_ids)
+        resource_group_dict = {}
+        for one in resource_groups:
+            if one.third_id not in resource_group_dict:
+                resource_group_dict[one.third_id] = []
+            resource_group_dict[one.third_id].append(one.group_id)
+
+        resource_tag_dict = TagDao.get_tags_by_resource(None, resource_ids)
+
+        # 增加额外的信息
+        for one in data:
+            one['user_name'] = user_dict.get(one['user_id'], one['user_id'])
+            one['write'] = True if user.is_admin() or user.user_id == one['user_id'] else False
+            one['version_list'] = flow_versions.get(one['id'], [])
+            one['group_ids'] = resource_group_dict.get(one['id'], [])
+            one['tags'] = resource_tag_dict.get(one['id'], [])
+            one['logo'] = cls.get_logo_share_link(one['logo'])
+            one['id'] = one['id']
+
+        return data, total
+    
+    @classmethod
+    def delete_frequently_used_flows(cls, user: UserPayload, user_link_type: str, type_detail: str):
+        UserLinkDao.delete_user_link(user.user_id, user_link_type, type_detail)
+        return True
+
+    @classmethod
+    def add_frequently_used_flows(cls, user: UserPayload, user_link_type: str, type_detail: str):
+        user_link, is_new = UserLinkDao.add_user_link(user.user_id, user_link_type, type_detail)
+        return is_new
+
+    @classmethod
+    def get_uncategorized_flows(cls, user: UserPayload, page: int = 1, page_size: int = 8) -> tuple[list, int]:
+        """
+        获取未分类的技能列表
+        """
+        # 通过tag获取id列表
+        all_tags = TagDao.search_tags(None, None, None)
+        tag_id = [tag.id for tag in all_tags]
+        flow_ids_not_in = []
+        if tag_id:
+            ret = TagDao.get_resources_by_tags_batch(tag_id, [ResourceTypeEnum.FLOW, ResourceTypeEnum.WORK_FLOW,
+                                                                ResourceTypeEnum.ASSISTANT])
+            if not ret:
+                return [], 0
+            flow_ids_not_in = [one.resource_id for one in ret]
+
+        # 获取用户可见的技能列表
+        if user.is_admin():
+            data, total = FlowDao.get_all_apps(None, FlowStatus.ONLINE.value, None, None, None, None, flow_ids_not_in, page, page_size)
+        else:
+            user_role = UserRoleDao.get_user_roles(user.user_id)
+            role_ids = [role.role_id for role in user_role]
+            role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.FLOW, AccessType.WORK_FLOW,
+                                                                         AccessType.ASSISTANT_READ])
+            flow_id_extra = []
+            if role_access:
+                flow_id_extra = [access.third_id for access in role_access]
+            data, total = FlowDao.get_all_apps(None, FlowStatus.ONLINE.value, None, None, user.user_id, flow_id_extra, flow_ids_not_in, page,
+                                               page_size)
+        
+        # 处理logo URL，转换相对路径为可访问的完整链接
+        for one in data:
+            one['logo'] = cls.get_logo_share_link(one['logo'])
+        
+        return data, total

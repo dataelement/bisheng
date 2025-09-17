@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build_bisheng_arm:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04-arm
     # if: startsWith(github.event.ref, 'refs/tags')
     steps:
       - name: checkout
@@ -38,13 +38,15 @@ jobs:
           # DOCKERHUB_TOKEN: docker hub => Account Setting => Security 创建.
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-          
-      # 构建 backend 并推送到 Docker hub
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
 
       - name: set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+      
+      # because ibm-db driver not support linux arm64
+      - name: fix ibm-db lib error
+        run: |
+          # remove ibm-db lib
+          sed -i '/ibm-db*/d' ./src/backend/pyproject.toml
 
       - name: Build backend arm64 and push
         id: docker_build_backend

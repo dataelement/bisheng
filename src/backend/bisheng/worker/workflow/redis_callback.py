@@ -3,7 +3,7 @@ import json
 import os
 import time
 import uuid
-from typing import AsyncIterator
+from typing import AsyncIterator, Iterator
 
 from cachetools import TTLCache
 from langchain_core.documents import Document
@@ -23,7 +23,6 @@ from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeStartData, NodeEndData, UserInputData, GuideWordData, GuideQuestionData, \
     OutputMsgData, StreamMsgData, StreamMsgOverData, OutputMsgChooseData, OutputMsgInputData
 from bisheng.workflow.common.workflow import WorkflowStatus
-
 
 
 class RedisCallback(BaseCallback):
@@ -55,10 +54,10 @@ class RedisCallback(BaseCallback):
     def get_workflow_data(self) -> dict:
         return self.redis_client.get(self.workflow_data_key)
 
-    def set_workflow_status(self, status: int, reason: str = None):
+    def set_workflow_status(self, status: str, reason: str = None):
         self.redis_client.set(self.workflow_status_key,
                               {'status': status, 'reason': reason, 'time': time.time()},
-                              expiration=None)
+                              expiration=3600 * 24 * 7)
         self.workflow_cache.clear()
         if status in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
             # 消息事件和状态key可能还需要消费
@@ -82,6 +81,9 @@ class RedisCallback(BaseCallback):
 
     def get_workflow_response(self) -> ChatResponse | None:
         response = self.redis_client.lpop(self.workflow_event_key)
+        if self.get_workflow_stop():
+            self.redis_client.delete(self.workflow_event_key)
+            return None
         if response:
             response = ChatResponse(**json.loads(response))
             if ((response.category == WorkflowEventType.NodeRun.value and response.type == 'end'
@@ -125,6 +127,53 @@ class RedisCallback(BaseCallback):
         else:
             return self.build_chat_response(WorkflowEventType.Error.value, 'over',
                                             {'code': 500, 'message': status_info['reason']})
+
+    def sync_get_response_until_break(self) -> Iterator[ChatResponse]:
+        while True:
+            # get workflow status
+            status_info = self.get_workflow_status()
+            if not status_info:
+                yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
+                                               {'code': 500, 'message': 'workflow status not found'})
+                break
+            elif status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
+                while True:
+                    chat_response = self.get_workflow_response()
+                    if not chat_response:
+                        break
+                    yield chat_response
+                if status_info['status'] == WorkflowStatus.FAILED.value:
+                    error_resp = self.parse_workflow_failed(status_info)
+                    if error_resp:
+                        yield error_resp
+                break
+            elif status_info['status'] == WorkflowStatus.INPUT.value:
+                while True:
+                    chat_response = self.get_workflow_response()
+                    if not chat_response:
+                        break
+                    yield chat_response
+                break
+            elif status_info['status'] in [WorkflowStatus.WAITING.value,
+                                           WorkflowStatus.INPUT_OVER.value] and time.time() - status_info['time'] > 10:
+                # 10秒内没有收到状态更新，说明workflow没有启动，可能是celery worker线程数已满
+                self.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow task execute busy')
+                yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
+                                               {'code': WorkFlowTaskBusyError.Code,
+                                                'message': WorkFlowTaskBusyError.Msg})
+                break
+            elif time.time() - status_info['time'] > 86400:
+                yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
+                                               {'code': 500, 'message': 'workflow status not update over 1 day'})
+                self.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow status not update over 1 day')
+                self.set_workflow_stop()
+                break
+            else:
+                chat_response = self.get_workflow_response()
+                if not chat_response:
+                    time.sleep(1)
+                    continue
+                yield chat_response
 
     async def get_response_until_break(self) -> AsyncIterator[ChatResponse]:
         """ 不断获取workflow的response，直到遇到运行结束或者待输入 """
@@ -224,6 +273,7 @@ class RedisCallback(BaseCallback):
 
     def set_workflow_stop(self):
         from bisheng.worker.workflow.tasks import stop_workflow
+        self.redis_client.set(self.workflow_stop_key, 1, expiration=3600 * 24)
         stop_workflow.delay(self.unique_id, self.workflow_id, self.chat_id, self.user_id)
 
     def get_workflow_stop(self) -> bool | None:

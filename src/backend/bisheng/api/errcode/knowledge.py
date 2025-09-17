@@ -30,3 +30,8 @@ class KnowledgeQAError(BaseErrorCode):
 class KnowledgeCPError(BaseErrorCode):
     Code: int = 10940
     Msg: str = '当前有文件正在解析，不可复制'
+
+
+class KnowledgeRebuildingError(BaseErrorCode):
+    Code: int = 10950
+    Msg: str = '知识库重新构建中，不允许修改embedding模型'

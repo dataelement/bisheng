@@ -161,6 +161,7 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
 
     return (
         <div className="max-w-[520px] mx-auto gap-y-4 flex flex-col mt-16 relative">
+            {console.log(form.sourceModelId,33)}
             <ModelSelect
                 close
                 label={t('model.workVectorModel')}
@@ -176,7 +177,7 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
         <div className="flex-1">
             <ModelSelect
                 close
-                label={t('模型')}
+                label={t('model.model')}
                 tooltipText={t('model.lingsiTaskModelTooltip')}
                 value={form.extractModelId}
                 options={llmOptions}
@@ -185,7 +186,7 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
         </div>
         <div className="flex-1">
             <Label className="bisheng-label">
-                <span>执行模式</span>
+                <span>{t('model.executionMode')}</span>
                 <QuestionTooltip className="relative top-0.5 ml-1" content="一般情况可选择 function call 模式，模型不支持 function call 或追求最佳任务执行效果时可选择 ReAct 模式" />
             </Label>
             <Select

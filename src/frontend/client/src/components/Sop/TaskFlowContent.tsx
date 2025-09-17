@@ -258,7 +258,7 @@ const Task = ({
                         <Textarea
                             id={task.id}
                             placeholder="请输入"
-                            className='border-none ![box-shadow:initial] pl-0 pr-10 pt-4 h-auto'
+                            className='border-none bg-transparent ![box-shadow:initial] pl-0 pr-10 pt-4 h-auto'
                             rows={1}
                             value={inputValue}
                             maxLength={10000}
@@ -350,6 +350,7 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
         );
     }
 
+    console.log('tasks :>> ', tasks);
     return (
         <div className="w-[80%] mx-auto p-5 text-gray-800 leading-relaxed">
             {/* load */}

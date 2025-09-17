@@ -164,8 +164,7 @@ class MilvusWithPermissionCheck(MilvusLangchain):
         self._init()
 
     def close_connection(self, using):
-        from pymilvus import connections
-        connections.remove_connection(using)
+        logger.warning(f'forbidden close milvus connection: {using}, because alias can be reused by others threads')
 
     def _init(
             self,

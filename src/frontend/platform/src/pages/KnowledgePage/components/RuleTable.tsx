@@ -93,14 +93,25 @@ const ItemForm = ({ data, setData }) => {
 
 
 
+interface RuleTableProps {
+  rules: any;
+  setRules: (updater: any) => void;
+  applyEachCell: boolean;
+  setApplyEachCell: (checked: boolean) => void;
+  cellGeneralConfig: any;
+  setCellGeneralConfig: (updater: any) => void;
+  showPreview?: boolean;
+}
+
 export default function RuleTable({
   rules,
   setRules,
   applyEachCell,
   setApplyEachCell,
   cellGeneralConfig,
-  setCellGeneralConfig
-}) {
+  setCellGeneralConfig,
+  showPreview,
+}: RuleTableProps) {
   const { t } = useTranslation('knowledge')
 
   console.log('rules.fileList :>> ', rules.fileList);
@@ -122,54 +133,63 @@ export default function RuleTable({
         {applyEachCell ? (
           <div>
             <div className="relative after:absolute after:inset-0 after:bg-gray-100/50 after:z-10 after:pointer-events-none">
-              <div className="flex items-center justify-between p-4 border rounded-lg text-sm">
+              {/* 当 showPreview 为 true 时使用垂直布局，否则保持原有水平布局 */}
+              <div className={showPreview ? "flex flex-col p-4 border rounded-lg text-sm" : "flex items-center justify-between p-4 border rounded-lg text-sm"}>
+                {/* 第一行：始终显示标题 */}
                 <h3 className="text-md font-bold shrink-0 text-gray-500">
                   {t('splitSettings')}
                 </h3>
-                {/* disable head */}
-                <div className="flex items-center gap-1 mx-auto">
-                  <span className="whitespace-nowrap text-gray-500">{t('every')}</span>
-                  <div className="relative">
-                    <Input
-                      id="split"
-                      type="number"
-                      value={cellGeneralConfig.slice_length}
-                      disabled={true}
-                      className="w-[106px] h-8"
-                    />
-                    <span className="absolute right-7 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
+
+                {/* 第二行：包含其他内容，仅在 showPreview 为 true 时添加额外样式 */}
+                <div className={showPreview ? "flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-2 w-full" : "flex items-center gap-1 mx-auto"}>
+                  <div className="flex items-center gap-1 w-full sm:w-auto">
+                    <span className="whitespace-nowrap text-gray-500">{t('every')}</span>
+                    <div className="relative">
+                      <Input
+                        id="split"
+                        type="number"
+                        value={cellGeneralConfig.slice_length}
+                        disabled={true}
+                        className="w-[106px] h-8"
+                      />
+                      <span className="absolute right-7 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
+                    </div>
+                    <span className="whitespace-nowrap text-gray-500">{t('segemnt')}</span>
                   </div>
-                  <span className="whitespace-nowrap text-gray-500">{t('segemnt')}</span>
+
+                  {cellGeneralConfig.append_header ? (
+                    <div className="flex items-center gap-1 shrink-0 w-full sm:w-auto mt-2 sm:mt-0">
+                      <span className="whitespace-nowrap text-gray-500">{t('bonly')}</span>
+                      <div className="relative">
+                        <Input
+                          id="split"
+                          type="number"
+                          value={cellGeneralConfig.header_start_row}
+                          disabled={true}
+                          className="w-24 h-8"
+                        />
+                        <span className="absolute right-7 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
+                      </div>
+                      <span className="whitespace-nowrap text-gray-500">{t('arrive')}</span>
+                      <div className="relative">
+                        <Input
+                          id="split"
+                          type="number"
+                          value={cellGeneralConfig.header_end_row}
+                          disabled={true}
+                          className="w-24 h-8"
+                        />
+                        <span className="absolute right-7 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
+                      </div>
+                      <span className="whitespace-nowrap text-gray-500">{t('gauge')}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                      <Checkbox disabled={true} />
+                      <Label className="text-sm"> {t("addHeader")} </Label>
+                    </div>
+                  )}
                 </div>
-                {cellGeneralConfig.append_header ? <div className="flex items-center gap-1 shrink-0">
-                  <span className="whitespace-nowrap text-gray-500">{t('bonly')}</span>
-                  <div className="relative">
-                    <Input
-                      id="split"
-                      type="number"
-                      value={cellGeneralConfig.header_start_row}
-                      disabled={true}
-                      className="w-24 h-8"
-                    />
-                    <span className="absolute right-7 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
-                  </div>
-                  <span className="whitespace-nowrap text-gray-500">{t('arrive')}</span>
-                  <div className="relative">
-                    <Input
-                      id="split"
-                      type="number"
-                      value={cellGeneralConfig.header_end_row}
-                      disabled={true}
-                      className="w-24 h-8"
-                    />
-                    <span className="absolute right-7 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
-                  </div>
-                  <span className="whitespace-nowrap text-gray-500">{t('gauge')}</span>
-                </div> : <div className="flex items-center gap-2">
-                  <Checkbox disabled={true} />
-                  <Label className="text-sm"> {t("addHeader")} </Label>
-                </div>
-                }
               </div>
             </div>
             {/* splice rule */}

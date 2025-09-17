@@ -29,6 +29,16 @@ const comptibleStart = (node) => {
         // TODO 历史使用过的预知问题变量替换
 
         node.v = 1
+    } else if (node.v == 1) {
+        node.group_params[1].params.unshift({
+            "key": "user_info",
+            "global": "key",
+            "label": "用户信息",
+            "type": "var",
+            "value": "",
+        })
+
+        node.v = 2
     }
 }
 
@@ -151,7 +161,7 @@ const comptibleLLM = (node) => {
     if (!node.v) {
         node.v = 1
     }
-    
+
     if (node.v == 1) {
 
         node.group_params[2].params.push({

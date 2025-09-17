@@ -5,8 +5,6 @@ import time
 from typing import Any, Dict, List, Optional, BinaryIO, Union
 
 import requests
-from bisheng_langchain.rag.extract_info import extract_title
-from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
 from langchain.text_splitter import CharacterTextSplitter
@@ -59,6 +57,8 @@ from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.settings import settings
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import minio_client
+from bisheng_langchain.rag.extract_info import extract_title
+from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 
 filetype_load_map = {
     "txt": TextLoader,
@@ -80,8 +80,9 @@ class KnowledgeUtils:
     chunk_split = "\n----------\n"
 
     @classmethod
-    def get_preview_cache_key(cls, knowledge_id: int, file_path: str) -> str:
-        md5_value = md5_hash(file_path)
+    def get_preview_cache_key(cls, knowledge_id: int, file_path: str, md5_value=None) -> str:
+        if not md5_value:
+            md5_value = md5_hash(file_path)
         return f"preview_file_chunk:{knowledge_id}:{md5_value}"
 
     @classmethod
@@ -262,18 +263,29 @@ def delete_vector_files(file_ids: List[int], knowledge: Knowledge) -> bool:
     logger.info(f"delete_files file_ids={file_ids} knowledge_id={knowledge.id}")
     embeddings = FakeEmbedding()
     vector_client = decide_vectorstores(knowledge.collection_name, "Milvus", embeddings)
-    vector_client.col.delete(expr=f"file_id in {file_ids}", timeout=10)
+    # 如果collection不存在则不处理
+    if vector_client.col:
+        vector_client.col.delete(expr=f"file_id in {file_ids}", timeout=10)
     vector_client.close_connection(vector_client.alias)
     logger.info(f"delete_milvus file_ids={file_ids}")
 
     es_client = decide_vectorstores(
         knowledge.index_name, "ElasticKeywordsSearch", embeddings
     )
-    for one in file_ids:
+    # for one in file_ids:
+    #     res = es_client.client.delete_by_query(
+    #         index=knowledge.index_name, query={"match": {"metadata.file_id": one}}
+    #     )
+    #
+    #     logger.info(f"act=delete_es file_id={one} res={res}")
+
+    if es_client.client.indices.exists(index=es_client.index_name):
         res = es_client.client.delete_by_query(
-            index=knowledge.index_name, query={"match": {"metadata.file_id": one}}
+            index=es_client.index_name,
+            query={"terms": {"metadata.file_id": file_ids}},
         )
-        logger.info(f"act=delete_es file_id={one} res={res}")
+        logger.info(f"act=delete_es file_ids={file_ids} res={res}")
+
     return True
 
 
@@ -318,9 +330,9 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
 
 
 def decide_vectorstores(
-        collection_name: str, vector_store: str, embedding: Embeddings
+        collection_name: str, vector_store: str, embedding: Embeddings, knowledge_id: int = None
 ) -> Union[VectorStore, Any]:
-    """vector db"""
+    """ vector db if used by query, must have knowledge_id"""
     param: dict = {"embedding": embedding}
 
     if vector_store == "ElasticKeywordsSearch":
@@ -333,6 +345,8 @@ def decide_vectorstores(
             vector_config["ssl_verify"] = eval(vector_config["ssl_verify"])
 
     elif vector_store == "Milvus":
+        if knowledge_id and collection_name.startswith("partition"):
+            param["partition_key"] = knowledge_id
         vector_config = settings.get_vectors_conf().milvus.model_dump()
         if not vector_config:
             # 无相关配置
@@ -606,7 +620,7 @@ def parse_partitions(partitions: List[Any]) -> Dict:
             if index == len(bboxes) - 1:
                 val = text[indexes[index][0]:]
             else:
-                val = text[indexes[index][0]:indexes[index][1] + 1]
+                val = text[indexes[index][0]:indexes[index][1]]
             res[key] = {"text": val, "type": part["type"], "part_id": part_index}
     return res
 
@@ -752,7 +766,7 @@ def read_chunk_text(
             )
 
         # 沿用原来的方法处理md文件
-        loader = filetype_load_map["md"](file_path=md_file_name)
+        loader = filetype_load_map["md"](file_path=md_file_name, autodetect_encoding=True)
         documents = loader.load()
 
     elif file_extension_name in ["txt", "md"]:

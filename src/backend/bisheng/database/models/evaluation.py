@@ -12,6 +12,7 @@ from bisheng.database.models.base import SQLModelSerializable
 class ExecType(Enum):
     FLOW = 'flow'
     ASSISTANT = 'assistant'
+    WORKFLOW = 'workflow'
 
 
 class EvaluationTaskStatus(Enum):
@@ -24,13 +25,14 @@ class EvaluationBase(SQLModelSerializable):
     user_id: int = Field(default=None, index=True)
     file_name: str = Field(default='', description='上传的文件名')
     file_path: str = Field(default='', description='文件 minio 地址')
-    exec_type: str = Field(description='执行主体类别。助手或技能 flow 和 assistant')
-    unique_id: str = Field(index=True, description='助手或技能唯一ID')
-    version: Optional[int] = Field(default=None, description='技能的版本ID')
+    exec_type: str = Field(description='执行主体类别。助手、技能、工作流，参考ExecType枚举')
+    unique_id: str = Field(index=True, description='执行主体的唯一ID')
+    version: Optional[int] = Field(default=None, description='工作流或技能的版本ID')
     status: int = Field(index=True, default=1, description='任务执行状态。1:执行中 2: 执行失败 3:执行成功')
     prompt: str = Field(default='', sa_column=Column(Text), description='评测指令文本')
     result_file_path: str = Field(default='', description='评测结果的 minio 地址')
-    result_score: Optional[Dict] = Field(default=None, sa_column=Column(JSON), description='最终评测分数')
+    result_score: Optional[Dict | str] = Field(default=None, sa_column=Column(JSON), description='最终评测分数')
+    description: str = Field(default='', sa_column=Column(Text), description='错误描述信息')
     is_delete: int = Field(default=0, description='是否删除')
     create_time: Optional[datetime] = Field(default=None,
                                             sa_column=Column(DateTime, nullable=False,

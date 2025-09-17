@@ -6,56 +6,57 @@ import { viteStaticCopy } from 'vite-plugin-static-copy';
 import svgr from "vite-plugin-svgr";
 // import { visualizer } from 'rollup-plugin-visualizer';
 
-// Use environment variable to determine the target.
-//  const target = process.env.VITE_PROXY_TARGET || "http://127.0.0.1:7860";
-const target = process.env.VITE_PROXY_TARGET || "http://192.168.106.120:3002";
-const apiRoutes = ["/api/", "/health"];
-
-const proxyTargets = apiRoutes.reduce((proxyObj, route) => {
-  proxyObj[route] = {
-    target: target,
-    changeOrigin: true,
-    withCredentials: true,
-    secure: false,
-    ws: true,
-    // rewrite: (path) => {
-    //   return path.replace(/^\/console/, '');
-    // },
-  };
-  return proxyObj;
-}, {});
-// 文件服务地址
-proxyTargets['/bisheng'] = {
-  target: "http://192.168.106.116:9000",
-  changeOrigin: true,
-  withCredentials: true,
-  secure: false,
-  // rewrite: (path) => {
-  //   return path.replace(/^\/console/, '');
-  // },
-}
-proxyTargets['/tmp-dir'] = proxyTargets['/bisheng']
-proxyTargets['/custom_base/api'] = {
-  target,
-  changeOrigin: true,
-  withCredentials: true,
-  secure: false,
-  // rewrite: (path) => {
-  //   return path.replace(/^\/console/, '');
-  // },
-  configure: (proxy, options) => {
-    proxy.on('proxyReq', (proxyReq, req, res) => {
-      console.log('Proxying request to:', proxyReq.path);
-    });
-  }
-}
-
 /**
  * 开启子路由访问
  * 开启后一般外层网管匹配【custom】时直接透传转到内层网关
  * 内层网关访问 api或者前端静态资源需要去掉【custom】前缀
 */
-const app_env = { BASE_URL: '' }
+const app_env = { BASE_URL: '' } // /custom
+
+// Use environment variable to determine the target.
+//  const target = process.env.VITE_PROXY_TARGET || "http://127.0.0.1:7860";
+const target = process.env.VITE_PROXY_TARGET || "http://192.168.106.120:3002";
+const fileServiceTarget = "http://192.168.106.116:9000";
+
+// 公共代理配置
+const commonProxyOptions = {
+  changeOrigin: true,
+  withCredentials: true,
+  secure: false
+};
+
+// 带重写功能的配置生成器
+const createProxyConfig = (target, rewrite = true) => ({
+  ...commonProxyOptions,
+  target,
+  ...(rewrite && {
+    rewrite: (path) => path.replace(new RegExp(`^${app_env.BASE_URL}`), '')
+  }),
+  configure: (proxy, options) => {
+    proxy.on('proxyReq', (proxyReq, req, res) => {
+      console.log('Proxying request to:', proxyReq.path);
+    });
+  }
+});
+
+// API路由配置
+const apiRoutes = ["/api/", "/health"];
+const apiProxyConfig = createProxyConfig(target);
+// 文件服务路由配置
+const fileServiceRoutes = ["/bisheng", "/tmp-dir"];
+const fileServiceProxyConfig = createProxyConfig(fileServiceTarget);
+
+const proxyTargets = {};
+
+// 添加API路由代理
+apiRoutes.forEach(route => {
+  proxyTargets[`${app_env.BASE_URL}${route}`] = apiProxyConfig;
+});
+// 添加文件服务路由代理
+fileServiceRoutes.forEach(route => {
+  proxyTargets[`${app_env.BASE_URL}${route}`] = fileServiceProxyConfig;
+});
+
 
 export default defineConfig(() => {
   return {

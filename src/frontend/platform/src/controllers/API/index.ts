@@ -62,6 +62,7 @@ export async function getComponents(): Promise<any[]> {
 export async function saveComponent(data): Promise<any[]> {
   return await axios.post(`/api/v1/component`, data);
 }
+
 /**
  * 覆盖 组件
  */
@@ -164,7 +165,11 @@ export async function copyLibDatabase(knowledge_id) {
  * 获取知识库下文件列表
  */
 export async function readFileByLibDatabase({ id, page, pageSize = 20, name = '', status, file_ids }) {
-
+  if (status?.includes(1)) { // 4合并到解析中
+    status.push(4)
+  } else {
+    status = status?.filter(item => item !== 4)
+  }
   const params = {
     page_num: page,
     page_size: pageSize,
@@ -234,7 +239,10 @@ export async function subUploadLibFile(data: DefaultUploadFileFc): Promise<any>;
 export async function subUploadLibFile(data: UploadFileFc | DefaultUploadFileFc) {
   return await axios.post(`/api/v1/knowledge/process`, data);
 }
-
+//调整分段策略
+export async function rebUploadFile(data) {
+  return await axios.post(`/api/v1/knowledge/process/rebuild`, data);
+}
 /**
  * 查看文件切片
  */
@@ -577,7 +585,7 @@ export const getChatsApi = (page) => {
         ...el,
         latest_message: {
           ...el.latest_message,
-          message: _message.substring(0, 40)
+          message: typeof _message === 'string' ? _message.substring(0, 40) : ''
         }
       }
     })
@@ -786,7 +794,7 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
     });
 
     return Object.keys(fileMap).map(fileId => {
-      const { file_id: id, source: fileName, source_url: fileUrl, original_url: originUrl, ...other } = fileMap[fileId][0]
+      const { file_id: id, source: fileName, source_url, original_url: originUrl, ...other } = fileMap[fileId][0]
 
       const chunks = fileMap[fileId].sort((a, b) => b.score - a.score)
         .map(chunk => ({
@@ -795,12 +803,30 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
         }))
       const score = chunks[0].score
 
-      return { id, fileName, fileUrl, originUrl, chunks, ...other, score }
+      // 兼容后端历史逻辑
+      let fileUrl = ''
+      let suffix = fileName.split('.').pop().toLowerCase()
+      let isNew = false
+      if (['uns', 'local'].includes(other.parse_type)) {
+        fileUrl = other.chunk_bboxes ? source_url : originUrl;
+        if (other.chunk_bboxes) {
+          suffix = 'pdf'
+        }
+      } else if (['etl4lm', 'un_etl4lm'].includes(other.parse_type)) {
+        fileUrl = source_url || originUrl
+        isNew = true
+      }
+      return { id, fileName, suffix, isNew, fileUrl, originUrl, chunks, ...other, score }
     }).sort((a, b) => b.score - a.score)
   } catch (error) {
     console.error(error);
     throw error;
   }
+}
+
+
+export async function updateKnowledge(data): Promise<any[]> {
+  return await axios.post(`/api/v1/knowledge/update_knowledge`, data);
 }
 
 

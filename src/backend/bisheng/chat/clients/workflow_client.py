@@ -1,5 +1,6 @@
 import asyncio
 import json
+import threading
 from typing import Dict, Optional
 
 from fastapi import Request, WebSocket, status
@@ -30,6 +31,7 @@ class WorkflowClient(BaseClient):
         self.workflow: Optional[RedisCallback] = None
         self.latest_history: Optional[ChatMessage] = None
         self.ws_closed = False
+        self.run_lock = threading.Lock()
 
     async def close(self, force_stop=False):
         # 不是用户主动停止的话，设置ws关闭标志，但是不需要中止workflow的执行
@@ -39,11 +41,11 @@ class WorkflowClient(BaseClient):
         if self.workflow:
             if force_stop or not self.chat_id:
                 self.workflow.set_workflow_stop()
-                workflow_over = await self._workflow_run()
+                workflow_over = await self.workflow_run()
                 while not workflow_over:
                     if self.ws_closed:
                         break
-                    workflow_over = await self._workflow_run()
+                    workflow_over = await self.workflow_run()
                     await asyncio.sleep(0.5)
         else:
             await self.send_response('processing', 'close', '')
@@ -149,26 +151,23 @@ class WorkflowClient(BaseClient):
             return
 
     async def workflow_run(self):
-        await self._workflow_run()
-        # workflow_over = False
-        # while not workflow_over:
-        #     if self.ws_closed:
-        #         break
-        #     workflow_over = await self._workflow_run()
-        #     await asyncio.sleep(0.5)
+        with self.run_lock:
+            return await self._workflow_run()
 
     async def _workflow_run(self):
-        # 需要不断从redis中获取workflow返回的消息
-        async for event in self.workflow.get_response_until_break():
-            await self.send_json(event)
-
+        logger.debug('start workflow run')
         if not self.workflow:
             logger.warning('workflow is over by other task')
             return True
 
+        # 需要不断从redis中获取workflow返回的消息
+        async for event in self.workflow.get_response_until_break():
+            await self.send_json(event)
+
         status_info = self.workflow.get_workflow_status()
         if not status_info or status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
             await self.send_response('processing', 'close', '')
+            logger.debug(f"workflow is {status_info}, clear workflow object")
             self.workflow.clear_workflow_status()
             self.workflow = None
             return True

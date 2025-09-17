@@ -273,12 +273,15 @@ export default function FileView({
     }, []);
     // 加载文件
     const [pdf, setPdf] = useState(null)
+
+
     useEffect(() => {
         // loding
         setLoading(true)
-
         // sass环境使用sass地址
         const pdfUrl = fileUrl.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL);  // '/doc.pdf';
+
+
         pdfjsLib.GlobalWorkerOptions.workerSrc = __APP_ENV__.BASE_URL + '/pdf.worker.min.js';
         pdfjsLib.getDocument(pdfUrl).promise.then(async (pdfDocument) => {
             pdfPageCache = {}

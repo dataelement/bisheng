@@ -3,6 +3,7 @@ import uniqueId from "lodash-es/uniqueId";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { RouterProvider } from "react-router-dom";
 import "./App.css";
+import "./style/vditor.css"
 
 import i18next from "i18next";
 import { useTranslation } from "react-i18next";

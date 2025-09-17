@@ -57,6 +57,7 @@ export default function DataTableKnowledge<TData, TValue>({
   onUpload,
   columns,
   data,
+  building
 }: DataTableProps<TData, TValue>) {
   const localize = useLocalize();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -86,8 +87,14 @@ export default function DataTableKnowledge<TData, TValue>({
         const formData = new FormData();
         formData.append('filename', file.name);
         formData.append('file', file);
-        await dataService.knowledgeUpload(formData); // 等待每个文件上传完成
-        console.log(`File ${file.name} uploaded successfully`);
+        const res = await dataService.knowledgeUpload(formData); // 等待每个文件上传完成
+        console.log(`File ${file.name} uploaded successfully`, res);
+        if (res.status_code === 500) {
+          showToast({
+            message: res.status_message,
+            severity: NotificationSeverity.ERROR,
+          })
+        }
       }
     } catch (error) {
       showToast({
@@ -135,7 +142,13 @@ export default function DataTableKnowledge<TData, TValue>({
           /> */}
         </div>
         <div>
-          <AttachFileButton disabled={loading} handleFileChange={handleUpload} />
+          {building ? <Button onClick={() => {
+            showToast({
+              message: '个人知识库 embedding 模型已更换，正在重建知识库，请稍后再试',
+              severity: NotificationSeverity.WARNING,
+            })
+          }}>添加文件</Button> :
+            <AttachFileButton disabled={loading} handleFileChange={handleUpload} />}
         </div>
       </div>
       <div className="relative grid h-full max-h-[calc(100vh-20rem)] w-full flex-1 overflow-hidden overflow-x-auto overflow-y-auto rounded-md border border-black/10 dark:border-white/10">

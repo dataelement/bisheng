@@ -1,24 +1,24 @@
-import FlowSetting from "@/components/Pro/security/FlowSetting";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { locationContext } from "@/contexts/locationContext";
-import { ArrowLeft, ChevronUp } from "lucide-react";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
 import L2ParameterComponent from "@/CustomNodes/GenericNode/components/parameterComponent/l2Index";
+import FlowSetting from "@/components/Pro/security/FlowSetting";
 import ShadTooltip from "@/components/ShadTooltipComponent";
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { Button } from "@/components/bs-ui/button";
 import { Input, Textarea } from "@/components/bs-ui/input";
+import Avator from "@/components/bs-ui/input/avator";
 import { Label } from "@/components/bs-ui/label";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { locationContext } from "@/contexts/locationContext";
 import { TabsContext } from "@/contexts/tabsContext";
 import { userContext } from "@/contexts/userContext";
 import { createCustomFlowApi, getFlowApi, updateVersion } from "@/controllers/API/flow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { useHasForm } from "@/util/hook";
-import FormSet from "./FormSet";
-import Avator from "@/components/bs-ui/input/avator";
-import { SkillIcon } from "@/components/bs-icons";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
+import { useHasForm } from "@/util/hook";
+import { ArrowLeft, ChevronUp } from "lucide-react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate, useParams } from "react-router-dom";
+import FormSet from "./FormSet";
 
 export default function l2Edit() {
     const { t } = useTranslation()
@@ -144,9 +144,13 @@ export default function l2Edit() {
     const [logo, setLogo] = useState('')
     const uploadAvator = (file) => {
         uploadFileWithProgress(file, (progress) => { }, 'icon').then(res => {
-            setLogo('/bisheng/' + res.relative_path);
+            setLogo(res.file_path);
         })
     }
+
+    const previewAvatar = useMemo(() =>
+        logo ? __APP_ENV__.BASE_URL + logo : '',
+        [logo])
 
     return <div className="relative box-border h-full overflow-auto">
         <div className="p-6 pb-48 h-full overflow-y-auto">
@@ -174,7 +178,9 @@ export default function l2Edit() {
                     <div className="w-full overflow-hidden transition-all px-1">
                         <div className="mt-4">
                             <Label htmlFor="name">{t('skills.avatar')}</Label>
-                            <Avator value={logo} className="mt-2" onChange={uploadAvator}><SkillIcon className="bg-primary w-9 h-9 rounded-sm" /></Avator>
+                            <Avator value={previewAvatar} className="mt-2" onChange={uploadAvator}>
+                                <AppAvator id={6} flowType={1} className="w-9 h-9"></AppAvator>
+                            </Avator>
                         </div>
                         <div className="mt-4">
                             <Label htmlFor="name">{t('skills.skillName')}</Label>

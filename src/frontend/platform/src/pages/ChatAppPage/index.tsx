@@ -1,7 +1,6 @@
-import { TitleLogo } from "@/components/bs-comp/cardComponent";
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 import LoadMore from "@/components/bs-comp/loadMore";
-import { AssistantIcon, SkillIcon } from "@/components/bs-icons";
 import { PlusBoxIcon, PlusBoxIconDark } from "@/components/bs-icons/plusBox";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { message } from "@/components/bs-ui/toast/use-toast";
@@ -13,9 +12,9 @@ import { deleteChatApi, getChatsApi } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useDebounce } from "../../util/hook";
 import { generateUUID } from "../../utils";
+import { useMessageStore as useFlowMessageStore } from "../BuildPage/flow/FlowChat/messageStore";
 import HomePage from "./components/ChatHome";
 import ChatPanne from "./components/ChatPanne";
-import { useMessageStore as useFlowMessageStore } from "../BuildPage/flow/FlowChat/messageStore";
 
 const ChatItem = ({ chat, chatId, location, handleSelectChat, handleDeleteChat }) => {
 
@@ -30,13 +29,8 @@ const ChatItem = ({ chat, chatId, location, handleSelectChat, handleDeleteChat }
             onClick={() => handleSelectChat(chat)}
         >
             <div className="flex place-items-center space-x-3">
-                <div className="inline-block bg-purple-500 rounded-md">
-                    <TitleLogo
-                        url={chat.logo}
-                        id={chat.flow_id}
-                    >
-                        {chat.flow_type === 'assistant' ? <AssistantIcon /> : <SkillIcon />}
-                    </TitleLogo>
+                <div className="inline-block rounded-md">
+                    <AppAvator id={chat.flow_name} url={chat.logo} flowType={chat.flow_type} className="min-w-5 size-5"></AppAvator>
                 </div>
                 <p className="truncate text-sm font-bold leading-6">{chat.flow_name}</p>
             </div>
@@ -66,7 +60,7 @@ export default function SkillChatPage() {
 
     // 对话列表
     const { chatList, chatId, chatsRef, setChatId, addChat, deleteChat, onScrollLoad } = useChatList()
-
+    const [tchat, setTchat] = useState<any>(null)
     const [location, setLocation] = useState(true)
     // select flow(新建会话)
     const handlerSelectFlow = async (card) => {
@@ -78,7 +72,7 @@ export default function SkillChatPage() {
             // 会话ID
             const _chatId = generateUUID(32)
             // add list
-            addChat({
+            const chat = {
                 "logo": card.logo || '',
                 "flow_name": card.name,
                 "flow_description": card.desc,
@@ -87,10 +81,12 @@ export default function SkillChatPage() {
                 "create_time": "-",
                 "update_time": Date.now(),
                 "flow_type": card.flow_type
-            })
+            }
+            addChat(chat)
             setSelelctChat({ id: card.id, chatId: _chatId, type: card.flow_type })
             setChatId(_chatId)
             setLocation(false)
+            setTchat(chat)
         } else {
             return message({ title: t('prompt'), variant: 'warning', description: t('chat.pleaseSelectAnApp') })
         }
@@ -99,6 +95,7 @@ export default function SkillChatPage() {
     // select chat
     const handleSelectChat = useDebounce(async (chat) => {
         setLocation(false)
+        setTchat(chat)
         if (chat.chat_id === chatId) return
         setSelelctChat({ id: chat.flow_id, chatId: chat.chat_id, type: chat.flow_type })
         setChatId(chat.chat_id)
@@ -150,11 +147,16 @@ export default function SkillChatPage() {
             </div>
         </div>
         {/* chat */}
-        {
-            location
-                ? <HomePage onSelect={handlerSelectFlow}></HomePage>
-                : <ChatPanne appendHistory data={selectChat}></ChatPanne>
-        }
+    {
+    location
+        ? <HomePage onSelect={handlerSelectFlow}></HomePage>
+        : <ChatPanne 
+            appendHistory 
+            chatList={chatList}  
+            chat={tchat} // 获取当前选中的chat
+            data={selectChat}
+          ></ChatPanne>
+}
     </div>
 };
 /**
@@ -209,7 +211,7 @@ const useChatList = () => {
     const onScrollLoad = async () => {
         pageRef.current++
         const res = await getChatsApi(pageRef.current)
-        setChatList((chats => [...chats, ...res]))
+        setChatList((chats => [...chats, ...res])) 
     }
 
     return {

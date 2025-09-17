@@ -4,7 +4,7 @@ from typing import Any, List, Optional, Union
 
 from pydantic import BaseModel, field_validator
 from sqlmodel import Column, DateTime, Field, delete, func, or_, select, text, update
-from sqlmodel.sql.expression import Select, SelectOfScalar
+from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
 from bisheng.database.base import session_getter, async_session_getter
 from bisheng.database.models.base import SQLModelSerializable
@@ -15,20 +15,22 @@ from bisheng.database.models.user_role import UserRoleDao
 
 
 class KnowledgeTypeEnum(Enum):
-    QA = 1
-    NORMAL = 0
+    QA = 1  # QA知识库
+    NORMAL = 0  # 文档知识库
     PRIVATE = 2  # 工作台的个人知识库
 
 
 class KnowledgeState(Enum):
     UNPUBLISHED = 0
-    PUBLISHED = 1
+    PUBLISHED = 1  # 文档知识库成功的状态
     COPYING = 2
+    REBUILDING = 3  # 文档知识库重建中的状态
+    FAILED = 4  # 文档知识库重建失败的状态
 
 
 class KnowledgeBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
-    name: str = Field(index=True, min_length=1, max_length=30, description='知识库名, 最少一个字符，最多30个字符')
+    name: str = Field(index=True, min_length=1, max_length=200, description='知识库名, 最少一个字符，最多30个字符')
     type: int = Field(index=False, default=0, description='0 为普通知识库，1 为QA知识库')
     description: Optional[str] = Field(default=None, index=True)
     model: Optional[str] = Field(default=None, index=False)
@@ -80,12 +82,38 @@ class KnowledgeDao(KnowledgeBase):
             return data
 
     @classmethod
+    async def async_insert_one(cls, data: Knowledge) -> Knowledge:
+        async with async_session_getter() as session:
+            session.add(data)
+            await session.commit()
+            await session.refresh(data)
+            return data
+
+    @classmethod
     def update_one(cls, data: Knowledge) -> Knowledge:
         with session_getter() as session:
             session.add(data)
             session.commit()
             session.refresh(data)
             return data
+
+    @classmethod
+    async def async_update_state(cls, knowledge_id: int, state: KnowledgeState, update_time: Optional[datetime] = None):
+        async with async_session_getter() as session:
+            statement = update(Knowledge).where(col(Knowledge.id) == knowledge_id)
+            statement = statement.values(state=state.value,
+                                         update_time=update_time or datetime.now())
+            await session.exec(statement)
+            await session.commit()
+
+    @classmethod
+    def update_state(cls, knowledge_id: int, state: KnowledgeState, update_time: Optional[datetime] = None):
+        with session_getter() as session:
+            statement = update(Knowledge).where(col(Knowledge.id) == knowledge_id)
+            statement = statement.values(state=state.value,
+                                         update_time=update_time or datetime.now())
+            session.exec(statement)
+            session.commit()
 
     @classmethod
     def update_knowledge_update_time(cls, knowledge: Knowledge):
@@ -99,6 +127,17 @@ class KnowledgeDao(KnowledgeBase):
     def query_by_id(cls, knowledge_id: int) -> Knowledge:
         with session_getter() as session:
             return session.get(Knowledge, knowledge_id)
+
+    @classmethod
+    async def aquery_by_id(cls, knowledge_id: int) -> Knowledge:
+        async with async_session_getter() as session:
+            return await session.get(Knowledge, knowledge_id)
+
+    @classmethod
+    async def async_query_by_id(cls, knowledge_id: int) -> Knowledge:
+        async with async_session_getter() as session:
+            result = await session.execute(select(Knowledge).where(Knowledge.id == knowledge_id))
+            return result.scalars().first()
 
     @classmethod
     def get_list_by_ids(cls, ids: List[int]) -> List[Knowledge]:
@@ -125,7 +164,11 @@ class KnowledgeDao(KnowledgeBase):
             statement = statement.where(Knowledge.id.in_(filter_knowledge))
         if knowledge_type:
             statement = statement.where(Knowledge.type == knowledge_type.value)
+        elif knowledge_type is False:
+            # 当显式传入False时，不过滤个人知识库
+            pass
         else:
+            # 默认情况下过滤掉个人知识库
             statement = statement.where(Knowledge.type != KnowledgeTypeEnum.PRIVATE.value)
         if name:
             # 同时模糊检索知识库内的文件名称来查询对应的知识库
@@ -148,7 +191,7 @@ class KnowledgeDao(KnowledgeBase):
                            page: int = 0,
                            limit: int = 10,
                            filter_knowledge: List[int] = None) -> List[Knowledge]:
-        statement = select(Knowledge).where(Knowledge.state > 0)
+        statement = select(Knowledge)
 
         statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
                                                 knowledge_type, name, page, limit,
@@ -167,7 +210,7 @@ class KnowledgeDao(KnowledgeBase):
                                   page: int = 0,
                                   limit: int = 10,
                                   filter_knowledge: List[int] = None) -> List[Knowledge]:
-        statement = select(Knowledge).where(Knowledge.state > 0)
+        statement = select(Knowledge)
 
         statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
                                                 knowledge_type, name, page, limit,
@@ -183,7 +226,7 @@ class KnowledgeDao(KnowledgeBase):
                              knowledge_id_extra: List[int] = None,
                              knowledge_type: KnowledgeTypeEnum = None,
                              name: str = None) -> int:
-        statement = select(func.count(Knowledge.id)).where(Knowledge.state > 0)
+        statement = select(func.count(Knowledge.id))
         statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
                                                 knowledge_type, name)
         with session_getter() as session:
@@ -195,7 +238,7 @@ class KnowledgeDao(KnowledgeBase):
                                     knowledge_id_extra: List[int] = None,
                                     knowledge_type: KnowledgeTypeEnum = None,
                                     name: str = None) -> int:
-        statement = select(func.count(Knowledge.id)).where(Knowledge.state > 0)
+        statement = select(func.count(Knowledge.id))
         statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
                                                 knowledge_type, name)
         async with async_session_getter() as session:
@@ -208,11 +251,13 @@ class KnowledgeDao(KnowledgeBase):
 
     @classmethod
     def judge_knowledge_permission(cls, user_name: str,
-                                   knowledge_ids: List[int]) -> List[Knowledge]:
+                                   knowledge_ids: List[int],
+                                   include_private: bool = False) -> List[Knowledge]:
         """
         根据用户名和知识库ID列表，获取用户有权限查看的知识库列表
         :param user_name: 用户名
         :param knowledge_ids: 知识库ID列表
+        :param include_private: 是否包含个人知识库
         :return: 返回用户有权限的知识库列表
         """
         # 获取用户信息
@@ -240,8 +285,15 @@ class KnowledgeDao(KnowledgeBase):
                                                           AccessType.KNOWLEDGE)
 
         # 查询是否包含了用户自己创建的知识库
-        user_knowledge_list = cls.get_user_knowledge(user_info.user_id,
-                                                     filter_knowledge=knowledge_ids)
+        if include_private:
+            # 如果需要包含个人知识库，则不进行类型过滤
+            user_knowledge_list = cls.get_user_knowledge(user_info.user_id,
+                                                         filter_knowledge=knowledge_ids,
+                                                         knowledge_type=False)
+        else:
+            # 默认行为：过滤掉个人知识库
+            user_knowledge_list = cls.get_user_knowledge(user_info.user_id,
+                                                         filter_knowledge=knowledge_ids)
         if not role_access_list and not user_knowledge_list:
             return []
 
@@ -303,7 +355,7 @@ class KnowledgeDao(KnowledgeBase):
                           knowledge_type: KnowledgeTypeEnum = None,
                           page: int = 0,
                           limit: int = 0) -> List[Knowledge]:
-        statement = select(Knowledge).where(Knowledge.state > 0)
+        statement = select(Knowledge)
         statement = cls.generate_all_knowledge_filter(statement,
                                                       name=name,
                                                       knowledge_type=knowledge_type)
@@ -320,7 +372,7 @@ class KnowledgeDao(KnowledgeBase):
                                  knowledge_type: KnowledgeTypeEnum = None,
                                  page: int = 0,
                                  limit: int = 0) -> List[Knowledge]:
-        statement = select(Knowledge).where(Knowledge.state > 0)
+        statement = select(Knowledge)
         statement = cls.generate_all_knowledge_filter(statement,
                                                       name=name,
                                                       knowledge_type=knowledge_type)
@@ -335,7 +387,7 @@ class KnowledgeDao(KnowledgeBase):
     def count_all_knowledge(cls,
                             name: str = None,
                             knowledge_type: KnowledgeTypeEnum = None) -> int:
-        statement = select(func.count(Knowledge.id)).where(Knowledge.state > 0)
+        statement = select(func.count(Knowledge.id))
         statement = cls.generate_all_knowledge_filter(statement,
                                                       name=name,
                                                       knowledge_type=knowledge_type)
@@ -346,7 +398,7 @@ class KnowledgeDao(KnowledgeBase):
     async def acount_all_knowledge(cls,
                                    name: str = None,
                                    knowledge_type: KnowledgeTypeEnum = None) -> int:
-        statement = select(func.count(Knowledge.id)).where(Knowledge.state > 0)
+        statement = select(func.count(Knowledge.id))
         statement = cls.generate_all_knowledge_filter(statement,
                                                       name=name,
                                                       knowledge_type=knowledge_type)
@@ -363,7 +415,7 @@ class KnowledgeDao(KnowledgeBase):
     @classmethod
     def get_knowledge_by_name(cls, name: str, user_id: int = 0) -> Knowledge:
         """ 通过知识库名称获取知识库详情 """
-        statement = select(Knowledge).where(Knowledge.name == name).where(Knowledge.state > 0)
+        statement = select(Knowledge).where(Knowledge.name == name)
         if user_id:
             statement = statement.where(Knowledge.user_id == user_id)
         with session_getter() as session:

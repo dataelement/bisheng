@@ -112,7 +112,8 @@ const resetCols = (values, options) => {
 }
 
 export default function Cascader({ error = false, selectClass = '', close = false, placholder = '', defaultValue = [], options, loadData, onChange }: IProps) {
-
+    console.log(defaultValue,33);
+    
     const [open, setOpen] = useState(false)
     const [values, setValues] = useState<any>(defaultValue)
     const [isHover, setIsHover] = useState(false)

@@ -1,3 +1,5 @@
+import time
+
 from loguru import logger
 
 from bisheng.settings import settings
@@ -113,10 +115,18 @@ def stop_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: str):
     with logger.contextualize(trace_id=unique_id):
         redis_callback = RedisCallback(unique_id, workflow_id, chat_id, user_id)
         if unique_id not in _global_workflow:
+            redis_callback.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow stop by user')
             logger.warning("stop_workflow called but workflow not found in global cache")
             return
         workflow = _global_workflow[unique_id]
         workflow.stop()
-        redis_callback.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow stop by user')
+
+        while workflow.status() == WorkflowStatus.RUNNING.value:
+            time.sleep(0.3)
+        status, reason = workflow.status(), workflow.reason()
+        if status != WorkflowStatus.FAILED.value:
+            status = WorkflowStatus.FAILED.value
+            reason = 'workflow stop by user'
+        redis_callback.set_workflow_status(status, reason)
         _clear_workflow_obj(unique_id)
         logger.info(f'workflow stop by user {user_id}')

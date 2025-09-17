@@ -1,10 +1,15 @@
+import asyncio
 import json
 import os
+import time
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Annotated
 from urllib import parse
 
-from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks, Request, HTTPException
+from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks, Request, HTTPException, Form
+from pydantic import BaseModel, ValidationError
+
+from bisheng.utils.minio_client import minio_client
 from fastapi_jwt_auth import AuthJWT
 from loguru import logger
 from sse_starlette import EventSourceResponse
@@ -20,7 +25,8 @@ from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
 from bisheng.api.services.user_service import get_login_user, UserPayload, get_admin_user
 from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
-from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, BatchDownloadFilesSchema
+from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, BatchDownloadFilesSchema, \
+    SubmitFileSchema, LinsightToolSchema, ToolChildrenSchema
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
 from bisheng.cache.redis import redis_client
 from bisheng.database.models.knowledge import KnowledgeTypeEnum, KnowledgeDao
@@ -711,3 +717,436 @@ async def remove_sop(
     """
 
     return await SOPManageService.remove_sop(sop_ids, login_user)
+
+
+class IntegratedExecuteRequestBody(BaseModel):
+    query: str = Body(..., description="用户提交的问题")
+    tool_ids: List[int] = Body(None, description="选择的工具ID列表")
+    org_knowledge_enabled: bool = Body(False, description="是否启用组织知识库")
+    personal_knowledge_enabled: bool = Body(False, description="是否启用个人知识库")
+    # 只生成灵思SOP，不执行
+    only_generate_sop: bool = Body(False, description="是否只生成SOP，不执行")
+
+
+# 灵思一体化执行接口
+@router.post("/integrated-execute", summary="灵思一体化执行接口")
+async def integrated_execute(
+        request: Request,
+        body_param: str = Form(..., description="请求体参数，JSON字符串",
+                               example='{"query": "请帮我写一个Python函数，计算两个数的和。", "tool_ids": [1, 2], "org_knowledge_enabled": true, "personal_knowledge_enabled": false}'),
+        files: List[UploadFile] = File(None, description="上传的文件列表"),
+        login_user: UserPayload = Depends(get_login_user)
+) -> EventSourceResponse:
+    """
+    灵思一体化执行接口
+    :param body_param: 请求体参数，JSON字符串
+    :param request: 请求对象
+    :param files: 上传的文件列表
+    :param login_user: 登录用户信息
+    :return: SSE事件流响应
+    """
+
+    # ======================== 参数验证 ========================
+    try:
+        body_param = IntegratedExecuteRequestBody.model_validate_json(body_param)
+    except ValidationError as e:
+        logger.error(f"用户 {login_user.user_id} 请求体参数解析失败: {str(e)}")
+        return EventSourceResponse(iter([{
+            "event": "error",
+            "data": json.dumps({
+                "error": "请求体参数解析失败",
+                "message": str(e),
+                "code": "PARAM_VALIDATION_ERROR"
+            })
+        }]))
+    except Exception as e:
+        logger.error(f"用户 {login_user.user_id} 参数解析异常: {str(e)}")
+        return EventSourceResponse(iter([{
+            "event": "error",
+            "data": json.dumps({
+                "error": "参数解析异常",
+                "message": str(e),
+                "code": "PARAM_PARSE_ERROR"
+            })
+        }]))
+
+    logger.info(f"用户 {login_user.user_id} 提交灵思问题: {body_param.query}")
+
+    # ======================== 上传文件并解析 ========================
+    upload_file_results = []
+    if files:
+        logger.info(f"用户 {login_user.user_id} 开始上传 {len(files)} 个文件")
+
+        for idx, file in enumerate(files):
+            try:
+                # 文件大小和类型验证
+                if file.size and file.size > 100 * 1024 * 1024:  # 100MB限制
+                    raise ValueError(f"文件 {file.filename} 大小超过限制(100MB)")
+
+                if not file.filename:
+                    raise ValueError(f"第{idx + 1}个文件名为空")
+
+                logger.debug(f"开始上传文件: {file.filename}")
+                upload_result = await LinsightWorkbenchImpl.upload_file(file)
+
+                if not upload_result:
+                    raise ValueError(f"文件 {file.filename} 上传失败，返回结果为空")
+
+                # 异步解析文件，增加超时控制
+                parse_result = await asyncio.wait_for(
+                    LinsightWorkbenchImpl.parse_file(upload_result),
+                    timeout=300  # 5分钟超时
+                )
+
+                if not parse_result:
+                    raise ValueError(f"文件 {file.filename} 解析失败，返回结果为空")
+
+                upload_file_results.append(parse_result)
+                logger.debug(f"文件 {file.filename} 上传解析完成")
+
+            except asyncio.TimeoutError:
+                error_msg = f"文件 {file.filename} 解析超时"
+                logger.error(f"用户 {login_user.user_id} {error_msg}")
+                return EventSourceResponse(iter([{
+                    "event": "error",
+                    "data": json.dumps({
+                        "error": "文件解析超时",
+                        "message": error_msg,
+                        "code": "FILE_PARSE_TIMEOUT"
+                    })
+                }]))
+
+
+            except Exception as e:
+                error_msg = f"文件 {getattr(file, 'filename', f'第{idx + 1}个文件')} 处理失败: {str(e)}"
+                logger.error(f"用户 {login_user.user_id} {error_msg}")
+                return EventSourceResponse(iter([{
+                    "event": "error",
+                    "data": json.dumps({
+                        "error": "文件上传失败",
+                        "message": error_msg,
+                        "code": "FILE_UPLOAD_ERROR"
+                    })
+                }]))
+
+        # 检查文件解析结果
+        if upload_file_results:
+            failed_files = [
+                f.get("original_filename", "未知文件")
+                for f in upload_file_results
+                if f.get("parsing_status") == "failed"
+            ]
+
+            if failed_files:
+                error_msg = f"以下文件解析失败: {', '.join(failed_files)}"
+                logger.error(f"用户 {login_user.user_id} {error_msg}")
+                return EventSourceResponse(iter([{
+                    "event": "error",
+                    "data": json.dumps({
+                        "error": "文件解析失败",
+                        "message": error_msg,
+                        "code": "FILE_PARSE_FAILED",
+                        "failed_files": failed_files
+                    })
+                }]))
+
+    async def event_generator():
+        """
+        事件生成器，用于生成SSE事件
+        """
+        linsight_session_version_model = None
+        state_message_manager = None
+
+        try:
+
+            # ======================== 提交灵思问题 ========================
+            try:
+                submit_files = []
+                if upload_file_results:
+                    for f in upload_file_results:
+                        if not f.get("file_id"):
+                            logger.warning(f"文件 {f.get('original_filename', '未知')} 缺少file_id")
+                            continue
+                        submit_files.append(SubmitFileSchema(
+                            file_id=f.get("file_id"),
+                            file_name=f.get("original_filename"),
+                            parsing_status=f.get("parsing_status")
+                        ))
+
+                submit_tools = None
+                if body_param.tool_ids:
+                    try:
+                        submit_tools = [LinsightToolSchema(
+                            id="1",
+                            is_preset=1,
+                            children=[
+                                ToolChildrenSchema(id=int(tool_id))
+                                for tool_id in body_param.tool_ids
+                            ]
+                        )]
+                    except (ValueError, TypeError) as e:
+                        logger.error(f"用户 {login_user.user_id} 工具ID转换失败: {str(e)}")
+                        yield {
+                            "event": "error",
+                            "data": json.dumps({
+                                "error": "工具ID格式错误",
+                                "message": f"工具ID必须为数字: {str(e)}",
+                                "code": "INVALID_TOOL_ID"
+                            })
+                        }
+                        return
+
+                submit_obj = LinsightQuestionSubmitSchema(
+                    question=body_param.query,
+                    org_knowledge_enabled=body_param.org_knowledge_enabled,
+                    personal_knowledge_enabled=body_param.personal_knowledge_enabled,
+                    files=submit_files,
+                    tools=submit_tools
+                )
+
+                _, linsight_session_version_model = await LinsightWorkbenchImpl.submit_user_question(
+                    submit_obj, login_user
+                )
+
+                if not linsight_session_version_model:
+                    raise ValueError("提交灵思问题失败，返回结果为空")
+
+                yield {
+                    "event": "linsight_workbench_submit",
+                    "data": linsight_session_version_model.model_dump_json()
+                }
+
+            except Exception as e:
+                error_msg = f"提交灵思问题失败: {str(e)}"
+                logger.error(f"用户 {login_user.user_id} {error_msg}")
+                yield {
+                    "event": "error",
+                    "data": json.dumps({
+                        "error": "提交问题失败",
+                        "message": error_msg,
+                        "code": "SUBMIT_QUESTION_ERROR"
+                    })
+                }
+                return
+
+            # ======================== 生成SOP ========================
+            try:
+                knowledge_res = []
+                linsight_conf = settings.get_linsight_conf()
+
+                # 获取组织知识库
+                if (linsight_session_version_model.org_knowledge_enabled and
+                        linsight_conf and linsight_conf.max_knowledge_num > 0):
+                    try:
+                        org_knowledge, _ = await KnowledgeService.get_knowledge(
+                            request, login_user, KnowledgeTypeEnum.NORMAL, None, 1,
+                            linsight_conf.max_knowledge_num
+                        )
+                        if org_knowledge:
+                            knowledge_res.extend(org_knowledge)
+                            logger.debug(f"获取到 {len(org_knowledge)} 个组织知识")
+                    except Exception as e:
+                        logger.warning(f"用户 {login_user.user_id} 获取组织知识库失败: {str(e)}")
+                        # 继续执行，不中断流程
+
+                # 获取个人知识库
+                if linsight_session_version_model.personal_knowledge_enabled:
+                    try:
+                        personal_knowledge = await KnowledgeDao.aget_user_knowledge(
+                            login_user.user_id, None, KnowledgeTypeEnum.PRIVATE
+                        )
+                        if personal_knowledge:
+                            knowledge_res.extend(personal_knowledge)
+                            logger.debug(f"获取到 {len(personal_knowledge)} 个个人知识")
+                    except Exception as e:
+                        logger.warning(f"用户 {login_user.user_id} 获取个人知识库失败: {str(e)}")
+                        # 继续执行，不中断流程
+
+                # 生成SOP
+                sop_generate = LinsightWorkbenchImpl.generate_sop(
+                    linsight_session_version_id=linsight_session_version_model.id,
+                    previous_session_version_id=None,
+                    feedback_content=None,
+                    reexecute=False,
+                    login_user=login_user,
+                    knowledge_list=knowledge_res
+                )
+
+                async for event in sop_generate:
+                    if event.get("event") == "error":
+                        yield event
+                        return
+                    yield event
+
+                yield {
+                    "event": "sop_generate_complete",
+                    "data": json.dumps({"message": "SOP生成完成"})
+                }
+
+            except Exception as e:
+                error_msg = f"SOP生成失败: {str(e)}"
+                logger.error(f"用户 {login_user.user_id} {error_msg}")
+                yield {
+                    "event": "error",
+                    "data": json.dumps({
+                        "error": "SOP生成失败",
+                        "message": error_msg,
+                        "code": "SOP_GENERATE_ERROR"
+                    })
+                }
+                return
+
+            if body_param.only_generate_sop:
+                return
+
+            # ======================== 开始执行 ========================
+            try:
+                from bisheng.linsight.worker import LinsightQueue
+
+                queue = LinsightQueue('queue', namespace="linsight", redis=redis_client)
+                await queue.put(data=linsight_session_version_model.id)
+
+                yield {
+                    "event": "linsight_execute_submitted",
+                    "data": json.dumps({"message": "灵思执行任务已提交"})
+                }
+
+            except Exception as e:
+                error_msg = f"提交执行任务失败: {str(e)}"
+                logger.error(f"用户 {login_user.user_id} {error_msg}")
+                yield {
+                    "event": "error",
+                    "data": json.dumps({
+                        "error": "提交执行任务失败",
+                        "message": error_msg,
+                        "code": "SUBMIT_TASK_ERROR"
+                    })
+                }
+                return
+
+            # ======================== 消费消息流 ========================
+            try:
+                state_message_manager = LinsightStateMessageManager(
+                    session_version_id=linsight_session_version_model.id
+                )
+                final_result_message = None
+                message_count = 0
+                max_messages = 10000  # 防止无限循环
+                max_wait_time = 60 * 60  # 最大等待1小时
+                start_time = time.time()
+
+                while message_count < max_messages:
+                    # 检查超时
+                    if time.time() - start_time > max_wait_time:
+                        logger.warning(f"用户 {login_user.user_id} 消息消费超时")
+                        yield {
+                            "event": "warning",
+                            "data": json.dumps({
+                                "message": "执行时间较长，可能需要更多时间完成",
+                                "code": "EXECUTION_TIMEOUT_WARNING"
+                            })
+                        }
+                        break
+
+                    try:
+                        message = await asyncio.wait_for(
+                            state_message_manager.pop_message(),
+                            timeout=10.0  # 10秒超时
+                        )
+                    except asyncio.TimeoutError:
+                        # 超时继续等待
+                        continue
+                    except Exception as e:
+                        logger.error(f"用户 {login_user.user_id} 获取消息失败: {str(e)}")
+                        break
+
+                    if message:
+                        message_count += 1
+                        yield {
+                            "event": "linsight_execute_message",
+                            "data": message.model_dump_json()
+                        }
+
+                        # 保存最终结果消息
+                        if message.event_type == MessageEventType.FINAL_RESULT:
+                            final_result_message = message
+
+                        # 检查终止条件
+                        if message.event_type in [
+                            MessageEventType.ERROR_MESSAGE,
+                            MessageEventType.TASK_TERMINATED,
+                            MessageEventType.FINAL_RESULT
+                        ]:
+                            break
+                    else:
+                        await asyncio.sleep(1)
+
+                # 处理最终结果消息
+                final_files = []
+                all_from_session_files = []
+
+                if final_result_message and final_result_message.data:
+                    try:
+                        session_version_model = LinsightSessionVersion.model_validate(final_result_message.data)
+
+                        if session_version_model.output_result:
+                            final_files = session_version_model.output_result.get("final_files", [])
+                            all_from_session_files = session_version_model.output_result.get("all_from_session_files",
+                                                                                             [])
+
+                            # 生成文件分享链接
+                            for final_file in final_files:
+                                if final_file.get("url"):
+                                    try:
+                                        final_file["url"] = minio_client.get_share_link(final_file["url"])
+                                    except Exception as e:
+                                        logger.warning(f"生成最终文件分享链接失败: {str(e)}")
+
+                            for session_file in all_from_session_files:
+                                if session_file.get("url"):
+                                    try:
+                                        session_file["url"] = minio_client.get_share_link(session_file["url"])
+                                    except Exception as e:
+                                        logger.warning(f"生成会话文件分享链接失败: {str(e)}")
+
+                    except Exception as e:
+                        logger.error(f"用户 {login_user.user_id} 处理最终结果失败: {str(e)}")
+
+                yield {
+                    "event": "final_result_files",
+                    "data": json.dumps({
+                        "final_files": final_files,
+                        "all_from_session_files": all_from_session_files
+                    })
+                }
+
+            except Exception as e:
+                error_msg = f"消息消费失败: {str(e)}"
+                logger.error(f"用户 {login_user.user_id} {error_msg}")
+                yield {
+                    "event": "error",
+                    "data": json.dumps({
+                        "error": "消息消费失败",
+                        "message": error_msg,
+                        "code": "MESSAGE_CONSUME_ERROR"
+                    })
+                }
+                return
+
+        except Exception as e:
+            # 捕获所有未处理的异常
+            error_msg = f"接口执行异常: {str(e)}"
+            logger.error(f"用户 {login_user.user_id} {error_msg}", exc_info=True)
+            yield {
+                "event": "error",
+                "data": json.dumps({
+                    "error": "系统异常",
+                    "message": error_msg,
+                    "code": "SYSTEM_ERROR"
+                })
+            }
+
+        finally:
+            pass
+
+    return EventSourceResponse(event_generator())

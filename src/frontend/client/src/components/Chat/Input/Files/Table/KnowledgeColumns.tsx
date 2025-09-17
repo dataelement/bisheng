@@ -49,7 +49,7 @@ export const getKnowledgeColumns = (
         return '状态';
       },
       cell: ({ row }) => {
-        return ['', '处理中', '成功', '失败'][row.original.status]
+        return ['', '处理中', '成功', '失败', '处理中'][row.original.status]
       },
     },
     {

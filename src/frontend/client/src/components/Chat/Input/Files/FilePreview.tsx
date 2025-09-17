@@ -1,9 +1,7 @@
 import type { ExtendedFile } from '~/common';
+import { FileIcon, getFileTypebyFileName } from '~/components/ui/icon/File/FileIcon';
 import type { TFile } from '~/data-provider/data-provider/src';
 import { useProgress } from '~/hooks';
-import { cn } from '~/utils';
-import ProgressCircle from './ProgressCircle';
-import SourceIcon from './SourceIcon';
 
 const FilePreview = ({
   file,
@@ -32,19 +30,18 @@ const FilePreview = ({
     transition: 'stroke-dashoffset 0.5s linear',
   };
 
-  return (
-    <div className={cn('size-8 shrink-0 overflow-hidden rounded-lg', className)}>
-      {/* <FileIcon file={file} fileType={fileType} /> */}
-      <FontIcon name={progress < 1 ? '' : file.filename} />
-      <SourceIcon source={file?.source} />
-      {progress < 1 && (
-        <ProgressCircle
-          circumference={circumference}
-          offset={offset}
-          circleCSSProperties={circleCSSProperties}
-        />
-      )}
-    </div>
+  return (<FileIcon loading={progress < 1} type={getFileTypebyFileName(file.filename)} />
+    // <div className={cn('size-8 shrink-0 overflow-hidden rounded-lg', className)}>
+    //   <FontIcon name={progress < 1 ? '' : file.filename} />
+    //   <SourceIcon source={file?.source} />
+    //   {progress < 1 && (
+    //     <ProgressCircle
+    //       circumference={circumference}
+    //       offset={offset}
+    //       circleCSSProperties={circleCSSProperties}
+    //     />
+    //   )}
+    // </div>
   );
 };
 

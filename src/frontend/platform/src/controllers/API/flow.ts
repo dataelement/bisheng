@@ -119,6 +119,13 @@ export async function getFlowApi(flowId: string, version: string = 'v1'): Promis
 }
 
 /**
+ * 删除的技能 工作流详情
+ */
+export async function getDeleteFlowApi(chatId: string): Promise<FlowType> {
+    return await axios.get(`/api/v1/chat/info?chat_id=${chatId}`)
+}
+
+/**
  * Saves a new flow to the database.
  *
  * @param {FlowType} newFlow - The flow data to save.
@@ -194,7 +201,7 @@ export const createCustomFlowApi = async (params: {
 }, userName: string) => {
     if (params.logo) {
         // logo保存相对路径
-        params.logo = params.logo.replace('/bisheng', '') 
+        params.logo = params.logo.replace(/^\/\w+/, '') 
     }
     const response: FlowType = await axios.post("/api/v1/flows/", {
         ...params,
@@ -221,7 +228,7 @@ export async function updateFlowApi(
 ): Promise<FlowType> {
     if (updatedFlow.logo) {
         // logo保存相对路径
-        updatedFlow.logo = updatedFlow.logo.replace('/bisheng', '')
+        updatedFlow.logo = updatedFlow.logo.replace(/^\/\w+/, '')
     }
     return await axios.patch(`/api/v1/flows/${updatedFlow.id}`, {
         logo: updatedFlow.logo || '',

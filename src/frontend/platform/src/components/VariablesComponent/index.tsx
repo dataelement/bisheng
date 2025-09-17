@@ -64,7 +64,7 @@ export default function VariablesComponent({ vid, nodeId, flowId, onChange }: {
             version_id: vid,
             "variable_name": _item.name,
             "value_type": Number(_item.type === VariableType.Select) + 1,
-            "value": _item.type === VariableType.Text ? _item.maxLength : _item.options.map(el => el.value).join(',')
+            "value": _item.type === VariableType.Text ? (_item.maxLength + '') : _item.options.map(el => el.value).join(',')
         }
         if (_item.update) {
             param.id = _item.id
@@ -107,7 +107,7 @@ export default function VariablesComponent({ vid, nodeId, flowId, onChange }: {
                 return (
                     <div key={idx} className="flex w-full gap-3">
                         <div className="input-primary min-h-8" onClick={() => setOpenPop(true)}>{item.name}</div>
-                        <button  onClick={() => setOpenPop(true)}><ExternalLink className={"h-4 w-4 hover:text-accent-foreground"} /></button>
+                        <button onClick={() => setOpenPop(true)}><ExternalLink className={"h-4 w-4 hover:text-accent-foreground"} /></button>
                         <Dialog open={openPop} onOpenChange={setOpenPop}>
                             <VarDialog data={item} onSave={handleSave} onClose={setOpenPop} />
                         </Dialog>

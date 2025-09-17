@@ -165,7 +165,10 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
                             onEdgesDelete={onEdgesDelete}
                             onNodeDragStart={onNodeDragStart} // 快照
                             onSelectionDragStart={onSelectionDragStart} // 快照
-                            onNodesDelete={() => takeSnapshot(flow)} // 更新setEdges
+                            onNodesDelete={() => {
+                                console.log('【删除节点】');
+                                takeSnapshot(flow)
+                            }} // 更新setEdges
                             // 自定义线组件
                             // connectionLineComponent={ConnectionLineComponent} 
                             // 校验连线合法性
