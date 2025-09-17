@@ -259,8 +259,8 @@ export default function KnowledgeQa(params) {
                             {/* 名称+描述单元格：恢复原有气泡结构，确保蓝色生效 */}
                             <TableCell  className="font-medium max-w-[280px]">
                                  <div className="flex items-center gap-2">
-                                    <div className="flex items-center justify-center size-[40px] min-w-[40px] bg-[rgb(255,237,160)] text-white rounded-[4px] ">
-                                            <MessagesSquare className="size-5 text-black"/>
+                                    <div className="flex items-center justify-center size-[40px] min-w-[40px] text-white rounded-[4px] ">
+                                        <img src="/assets/qa-logo.svg" alt="" className="size-10" />
                                         </div>
 
                                     <div className="min-w-0 overflow-visible">
