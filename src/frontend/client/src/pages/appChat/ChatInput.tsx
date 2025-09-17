@@ -7,7 +7,7 @@ import { useAreaText } from "./useAreaText";
 
 export default function ChatInput({ v }) {
     const [bishengConfig] = useRecoilState(bishengConfState)
-    const { inputDisabled, error: inputMsg, showUpload, showStop } = useRecoilValue(currentRunningState)
+    const { inputDisabled, error: inputMsg, showUpload, showStop, showReRun } = useRecoilValue(currentRunningState)
     const { accepts, chatState, inputRef, setChatFiles, handleInput, handleRestart, handleSendClick, handleStopClick } = useAreaText()
     const [fileUploading, setFileUploading] = useState(false)
 
@@ -57,7 +57,8 @@ export default function ChatInput({ v }) {
                 is工作流 & 未展示停止按钮 & 没有错误消息
             */}
             <div className="absolute w-full flex justify-center left-0 -top-14">
-                {!showStop && chatState?.flow?.flow_type === 10 && !inputMsg && <Button
+                {/* {!showStop && chatState?.flow?.flow_type === 10 && !inputMsg  */}
+                {!showStop && showReRun && !inputMsg && <Button
                     className="rounded-full bg-primary/10 bg-blue-50 text-primary"
                     variant="ghost"
                     onClick={handleRestart}>
