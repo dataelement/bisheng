@@ -28,6 +28,15 @@ import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useTable } from "../../util/hook";
 import { ModelSelect } from "../ModelPage/manage/tabs/WorkbenchModel";
 
+// 知识库状态
+const enum KnowledgeBaseStatus {
+    Unpublished = 0,
+    Published = 1,   // 文档知识库构建成功的状态
+    Copying = 2,
+    Rebuilding = 3,  // 文档知识库重建中的状态
+    Failed = 4       // 文档知识库重建失败的状态
+}
+
 function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create', currentLib = null }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
@@ -363,7 +372,7 @@ export default function KnowledgeFile() {
     // 复制中开启轮询
     useEffect(() => {
         const todos = datalist.reduce((prev, curr) => {
-            if (curr.state === 1) {
+            if (curr.state === KnowledgeBaseStatus.Copying) {
                 prev.push({ id: curr.id, name: curr.name })
             }
             return prev
@@ -372,7 +381,7 @@ export default function KnowledgeFile() {
         todos.map(todo => {
             if (doing[todo.id]) {
                 const lib = datalist.find(item => item.id === todo.id);
-                if (lib && lib.state !== 1) {
+                if (lib && lib.state !== KnowledgeBaseStatus.Copying) {
                     message({
                         variant: 'success',
                         description: `${todo.name} 复制完成`
@@ -382,10 +391,15 @@ export default function KnowledgeFile() {
             }
         })
 
+        let timer = null
         if (todos.length > 0) {
-            setTimeout(() => {
+            timer = setTimeout(() => {
                 reload()
             }, 5000);
+        }
+
+        return () => {
+            clearTimeout(timer)
         }
     }, [datalist])
 
@@ -447,42 +461,42 @@ export default function KnowledgeFile() {
     }, [i18n]);
 
     // copy
-const handleCopy = async (elem) => {
-    const newName = `${elem.name}的副本`;
-    if (newName.length > 200) {
-        toast({
-            title: '操作失败',
-            variant: 'error',
-            description: '复制后的知识库名称超过字数限制'
-        });
-        
-        // 重置所有相关状态
-        setSelectOpenId(null);
-        setCopyLoadingId(null);
-        
-        // 强制重新渲染 Select 组件
-        setModalKey(prev => prev + 1);
-        return;
+    const handleCopy = async (elem) => {
+        const newName = `${elem.name}的副本`;
+        if (newName.length > 200) {
+            toast({
+                title: '操作失败',
+                variant: 'error',
+                description: '复制后的知识库名称超过字数限制'
+            });
+
+            // 重置所有相关状态
+            setSelectOpenId(null);
+            setCopyLoadingId(null);
+
+            // 强制重新渲染 Select 组件
+            setModalKey(prev => prev + 1);
+            return;
+        }
+
+        setCopyLoadingId(elem.id);
+        doing[elem.id] = true;
+
+        try {
+            await captureAndAlertRequestErrorHoc(copyLibDatabase(elem.id));
+            reload();
+        } catch (error) {
+            message({
+                variant: 'error',
+                description: '复制失败'
+            });
+        } finally {
+            setCopyLoadingId(null);
+            setSelectOpenId(null);
+            // 确保 Select 组件重置
+            setModalKey(prev => prev + 1);
+        }
     }
-    
-    setCopyLoadingId(elem.id);
-    doing[elem.id] = true;
-    
-    try {
-        await captureAndAlertRequestErrorHoc(copyLibDatabase(elem.id));
-        reload();
-    } catch (error) {
-        message({
-            variant: 'error',
-            description: '复制失败'
-        });
-    } finally {
-        setCopyLoadingId(null);
-        setSelectOpenId(null);
-        // 确保 Select 组件重置
-        setModalKey(prev => prev + 1);
-    }
-}
 
     useEffect(() => {
         console.log("settingsOpen state changed:", settingsOpen);
@@ -518,6 +532,7 @@ const handleCopy = async (elem) => {
                                 <TableCell
                                     className="font-medium max-w-[200px]"
                                     onClick={() => {
+                                        if ([KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state)) return
                                         window.libname = [el.name, el.description];
                                         navigate(`/filelib/${el.id}`);
                                         handleCachePage();
@@ -572,7 +587,7 @@ const handleCopy = async (elem) => {
                                             key={`${el.id}-${modalKey}`}
                                             open={selectOpenId === el.id}
                                             onOpenChange={(isOpen) => {
-                                                 if (copyLoadingId !== el.id) {
+                                                if (copyLoadingId !== el.id) {
                                                     setSelectOpenId(isOpen ? el.id : null);
                                                 } else if (!isOpen) {
                                                     // 如果是复制中状态且要关闭，允许关闭
@@ -585,7 +600,7 @@ const handleCopy = async (elem) => {
 
                                                 switch (selectedValue) {
                                                     case 'copy':
-                                                        el.state === 1 && handleCopy(el);
+                                                        el.state === KnowledgeBaseStatus.Published && handleCopy(el);
                                                         break;
                                                     case 'set':
                                                         handleOpenSettings(el);
@@ -604,7 +619,7 @@ const handleCopy = async (elem) => {
                                                 }}
                                                 className="size-10 px-2 bg-transparent border-none shadow-none hover:bg-gray-300 flex items-center justify-center duration-200 relative"
                                             >
-                                                {copyLoadingId === el.id ? (
+                                                {[KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state) ? (
                                                     <>
                                                         <LoaderCircle className="animate-spin" />
                                                         <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white text-gray-800 text-xs px-2 py-1 rounded whitespace-nowrap border border-gray-300 shadow-sm">
@@ -625,7 +640,7 @@ const handleCopy = async (elem) => {
                                                     <SelectItem
                                                         showIcon={false}
                                                         value="copy"
-                                                        disabled={el.state !== 1 || copyLoadingId === el.id}
+                                                        disabled={el.state !== KnowledgeBaseStatus.Published || copyLoadingId === el.id}
                                                     >
                                                         <div className="flex gap-2 items-center">
                                                             <Copy className="w-4 h-4" />
