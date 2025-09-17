@@ -112,7 +112,6 @@ export const useWebSocket = (helpers) => {
             // 工作流input会有再begin之前出现的情况
             // helpers.stopShow(true)
         } else if (data.type === 'close' && data.category === 'processing') {
-            helpers.flow.flow_type === 10 && helpers.reRunShow(true)
             helpers.stopShow(false)
         }
 
@@ -177,6 +176,8 @@ export const useWebSocket = (helpers) => {
             if (restartCallBack.current) {
                 restartCallBack.current()
                 restartCallBack.current = null
+            } else {
+                helpers.flow.flow_type === 10 && helpers.reRunShow(true)
             }
         } else if (data.type === 'over') {
             helpers.message.createMsg(helpers.chatId, data)
