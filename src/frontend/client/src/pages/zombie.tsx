@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "~/components"
 import { Card } from "~/components/ui/Card"
+import { useLocalize } from "~/hooks"
 
 interface Plant {
     id: string
@@ -60,6 +61,7 @@ interface ZombieType {
 }
 
 export default function PlantsVsZombiesGame() {
+    const localize = useLocalize()
     const [sunPoints, setSunPoints] = useState(50)
     const [selectedPlant, setSelectedPlant] = useState<string | null>(null)
     const [gameStarted, setGameStarted] = useState(false)
@@ -515,20 +517,20 @@ export default function PlantsVsZombiesGame() {
         <div className="min-h-screen bg-gradient-to-b from-green-400 to-green-600 p-4">
             {/* 游戏标题 */}
             <div className="text-center mb-6">
-                <h1 className="text-4xl font-bold text-white mb-2 drop-shadow-lg">植物大战僵尸（灵思版）</h1>
-                <p className="text-green-100">保卫你的花园！</p>
+                <h1 className="text-4xl font-bold text-white mb-2 drop-shadow-lg">{localize('com_game_title')}</h1>
+                <p className="text-green-100">{localize('com_game_subtitle')}</p>
             </div>
 
             {gameOver && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                     <Card className="p-8 text-center">
-                        <h2 className="text-3xl font-bold text-red-600 mb-4">游戏结束！</h2>
-                        <p className="text-lg mb-4">僵尸攻破了你的防线！</p>
-                        <p className="mb-2">你坚持了 {wave} 波僵尸攻击</p>
-                        <p className="mb-2">击杀了 {zombiesKilled} 只僵尸</p>
-                        <p className="mb-6">最终得分: {score}</p>
+                        <h2 className="text-3xl font-bold text-red-600 mb-4">{localize('com_game_over')}</h2>
+                        <p className="text-lg mb-4">{localize('com_game_over_message')}</p>
+                        <p className="mb-2">{localize('com_game_waves_survived', { 0: wave })}</p>
+                        <p className="mb-2">{localize('com_game_zombies_killed', { 0: zombiesKilled })}</p>
+                        <p className="mb-6">{localize('com_game_final_score', { 0: score })}</p>
                         <Button onClick={resetGame} className="bg-green-500 hover:bg-green-600">
-                            重新开始
+                            {localize('com_game_restart')}
                         </Button>
                     </Card>
                 </div>
@@ -537,13 +539,13 @@ export default function PlantsVsZombiesGame() {
             {gameWon && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                     <Card className="p-8 text-center">
-                        <h2 className="text-3xl font-bold text-green-600 mb-4">恭喜胜利！</h2>
-                        <p className="text-lg mb-4">你成功保卫了花园！</p>
-                        <p className="mb-2">完成了 {wave} 波僵尸攻击</p>
-                        <p className="mb-2">击杀了 {zombiesKilled} 只僵尸</p>
-                        <p className="mb-6">最终得分: {score}</p>
+                        <h2 className="text-3xl font-bold text-green-600 mb-4">{localize('com_game_win')}</h2>
+                        <p className="text-lg mb-4">{localize('com_game_win_message')}</p>
+                        <p className="mb-2">{localize('com_game_waves_completed', { 0: wave })}</p>
+                        <p className="mb-2">{localize('com_game_zombies_killed', { 0: zombiesKilled })}</p>
+                        <p className="mb-6">{localize('com_game_final_score', { 0: score })}</p>
                         <Button onClick={resetGame} className="bg-green-500 hover:bg-green-600">
-                            再玩一次
+                            {localize('com_game_play_again')}
                         </Button>
                     </Card>
                 </div>
@@ -600,11 +602,11 @@ export default function PlantsVsZombiesGame() {
                             className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2"
                             disabled={gameOver || gameWon}
                         >
-                            {gameStarted ? "暂停游戏" : "开始游戏"}
+                            {gameStarted ? localize('com_game_pause') : localize('com_game_start')}
                         </Button>
 
                         <Button onClick={resetGame} className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2">
-                            重置
+                            {localize('com_game_reset')}
                         </Button>
                     </div>
                 </div>
@@ -612,7 +614,7 @@ export default function PlantsVsZombiesGame() {
                 <div className="flex gap-4">
                     {/* 植物选择面板 */}
                     <Card className="p-4 bg-brown-100 border-brown-300 w-48">
-                        <h3 className="font-bold mb-3 text-brown-800">选择植物</h3>
+                        <h3 className="font-bold mb-3 text-brown-800">{localize('com_game_select_plants')}</h3>
                         <div className="space-y-2">
                             {plantTypes.map((plant) => (
                                 <Button
@@ -634,9 +636,9 @@ export default function PlantsVsZombiesGame() {
 
                         <div className="mt-4 pt-4 border-t border-brown-300">
                             <div className="text-xs text-brown-600 space-y-1">
-                                <div>植物: {plants.length}</div>
-                                <div>僵尸: {zombies.length}</div>
-                                <div>击杀: {zombiesKilled}</div>
+                                <div>{localize('com_game_plants_count', { 0: plants.length })}</div>
+                                <div>{localize('com_game_zombies_count', { 0: zombies.length })}</div>
+                                <div>{localize('com_game_kills_count', { 0: zombiesKilled })}</div>
                             </div>
                         </div>
                     </Card>
@@ -668,12 +670,12 @@ export default function PlantsVsZombiesGame() {
 
                 {/* 游戏说明 */}
                 <Card className="mt-4 p-4 bg-blue-50 border-blue-200">
-                    <h3 className="font-bold mb-2 text-blue-800">游戏说明</h3>
+                    <h3 className="font-bold mb-2 text-blue-800">{localize('com_game_instructions')}</h3>
                     <div className="text-sm text-blue-700 space-y-1">
-                        <p>• 选择植物后点击网格种植（消耗阳光）</p>
-                        <p>• 向日葵每3秒产生25阳光，豌豆射手攻击僵尸</p>
-                        <p>• 樱桃炸弹种植1秒后爆炸，范围攻击周围僵尸</p>
-                        <p>• 坚持5波僵尸攻击即可获胜！点击音量按钮控制音效</p>
+                        <p>{localize('com_game_instruction_1')}</p>
+                        <p>{localize('com_game_instruction_2')}</p>
+                        <p>{localize('com_game_instruction_3')}</p>
+                        <p>{localize('com_game_instruction_4')}</p>
                     </div>
                 </Card>
             </div>

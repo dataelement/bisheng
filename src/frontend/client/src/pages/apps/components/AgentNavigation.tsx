@@ -3,7 +3,7 @@
 import { SettingsIcon } from "lucide-react"
 import { useEffect, useState } from "react"
 import { Button } from "~/components"
-import { useAuthContext } from "~/hooks"
+import { useAuthContext, useLocalize } from "~/hooks"
 import MarkLabel from "./MarkLabel"
 import { getHomeLabelApi } from "~/api/apps"
 
@@ -20,6 +20,7 @@ interface AgentNavigationProps {
 
 export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigationProps) {
     const { user } = useAuthContext();
+    const localize = useLocalize();
 
     const [isLabelModalOpen, setIsLabelModalOpen] = useState(false)
     const [activeCategory, setActiveCategory] = useState<string>("favorites")
@@ -61,7 +62,7 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
                     setActiveCategory('favorites')
                 }}
                 className="text-xs h-8 font-normal"
-            >常用</Button>
+            >{localize('com_app_common')}</Button>
             {categories.map((category) => (
                 <Button
                     key={category.value}
@@ -83,7 +84,7 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
                     setActiveCategory('uncategorized')
                 }}
                 className="text-xs h-8 font-normal"
-            >未分类</Button>
+            >{localize('com_app_uncategorized')}</Button>
             {/* edit label  */}
             {user?.role === 'admin' && (
                 <Button size={'icon'} variant={"outline"} className="h-8" onClick={() => setIsLabelModalOpen(true)}>

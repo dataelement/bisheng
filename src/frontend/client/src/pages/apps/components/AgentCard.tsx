@@ -5,6 +5,7 @@ import { useState } from "react"
 import { Button } from "~/components"
 import AppAvator from "~/components/Avator"
 import { Card, CardContent } from "~/components/ui/Card"
+import { useLocalize } from "~/hooks"
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip2"
 
@@ -34,6 +35,7 @@ export function AgentCard({
     onRemoveFromFavorites,
 }: AgentCardProps) {
     const [isHovered, setIsHovered] = useState(false)
+    const localize = useLocalize()
 
     return (
         <TooltipProvider>
@@ -86,7 +88,7 @@ export function AgentCard({
                                     </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                    <p className="text-xs">{showRemove ? "从常用应用删除" : "添加到常用应用"}</p>
+                                    <p className="text-xs">{showRemove ? localize('com_agent_remove_from_favorites') : localize('com_agent_add_to_favorites')}</p>
                                 </TooltipContent>
                             </Tooltip>
                         </div>

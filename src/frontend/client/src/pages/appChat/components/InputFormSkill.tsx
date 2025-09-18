@@ -2,6 +2,7 @@
 import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { getVariablesApi } from "~/api/apps";
 import { useToastContext } from "~/Providers";
+import { useLocalize } from "~/hooks";
 import InputComponent from "./InputComponent";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/Select";
 import InputFileComponent from "./InputFileComponent";
@@ -18,6 +19,7 @@ const InputFormSkill = forwardRef(({ flow, logo }, ref) => {
     const type = 'chat'
     const vid = 0
     const { showToast } = useToastContext();
+    const localize = useLocalize()
 
     useImperativeHandle(ref, () => ({
         submit: () => {
@@ -113,7 +115,7 @@ const InputFormSkill = forwardRef(({ flow, logo }, ref) => {
                                     <InputFileComponent
                                         isSSO
                                         disabled={false}
-                                        placeholder="当前文件为空"
+                                        placeholder={localize('com_file_current_empty')}
                                         value={''}
                                         onChange={(e) => fileKindexVpath.current[i] = e}
                                         fileTypes={["pdf"]}

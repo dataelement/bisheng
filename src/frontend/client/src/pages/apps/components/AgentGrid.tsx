@@ -5,6 +5,7 @@ import type React from "react"
 import { useEffect, useState, useCallback } from "react"
 import { getChatOnlineApi, getFrequently, getHomeLabelApi, getUncategorized } from "~/api/apps"
 import { Button } from "~/components"
+import { useLocalize } from "~/hooks"
 import { AgentCard } from "./AgentCard"
 
 // 智能体类型定义
@@ -53,6 +54,7 @@ export function AgentGrid({
   onCardClick,
   onSectionMounted // 新增回调函数
 }: AgentGridProps) {
+  const localize = useLocalize()
   const pageSize = 8 // 固定单页容量
   const [categories, setCategories] = useState<Category[]>([])
   const [agentsByCategory, setAgentsByCategory] = useState<Record<string, Agent[]>>({})
@@ -402,7 +404,7 @@ const handleAddToFavorites = async (type: number, id: string) => {
     // 常用智能体
     {
       id: "frequently_used",
-      name: "常用智能体",
+      name: localize('com_app_frequently_used'),
       agents: allAgents,
       isFavoriteSection: true,
       pagination: frequentlyUsedPagination,
@@ -420,7 +422,7 @@ const handleAddToFavorites = async (type: number, id: string) => {
     // 未分类智能体
     {
       id: "uncategorized",
-      name: "未分类",
+      name: localize('com_app_uncategorized'),
       agents: uncategorizedAgents,
       isFavoriteSection: false,
       pagination: uncategorizedPagination,
@@ -481,7 +483,7 @@ const handleAddToFavorites = async (type: number, id: string) => {
                       ) : (
                         <ChevronDown size={14} className="mr-1" />
                       )}
-                      展示更多
+                      {localize('com_show_more')}
                     </Button>
                   </div>
                 )}

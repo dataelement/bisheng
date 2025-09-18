@@ -4,6 +4,7 @@ import { Switch } from '~/components/ui';
 import { Select, SelectContent, SelectTrigger } from '~/components/ui/Select';
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip2";
 import { useGetBsConfig, useModelBuilding } from '~/data-provider';
+import { useLocalize } from '~/hooks';
 
 import {
     BsConfig
@@ -14,6 +15,7 @@ import { cn } from '~/utils';
 export const ChatToolDown = ({ linsi, tools, setTools, config, searchType, setSearchType, disabled }
     : { linsi: boolean, config?: BsConfig, searchType: string, setSearchType: (type: string) => void, disabled: boolean }) => {
     const [building] = useModelBuilding()
+    const localize = useLocalize()
 
     // 每次重置工具
     useEffect(() => {
@@ -26,7 +28,7 @@ export const ChatToolDown = ({ linsi, tools, setTools, config, searchType, setSe
         <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent data-[state=open]:border-blue-500">
             <div className={cn('flex gap-2', searchType && 'text-blue-600')}>
                 <Settings2Icon size="16" />
-                <span className="text-xs font-normal">工具</span>
+                <span className="text-xs font-normal">{localize('com_tools_title')}</span>
             </div>
         </SelectTrigger>
         <SelectContent className='bg-white rounded-xl p-2 w-52'>
@@ -34,7 +36,7 @@ export const ChatToolDown = ({ linsi, tools, setTools, config, searchType, setSe
                 config?.webSearch.enabled && <div className='flex justify-between mb-3'>
                     <div className='flex gap-2 items-center'>
                         <GlobeIcon className='' size="16" />
-                        <span className="text-xs font-normal">联网搜索</span>
+                        <span className="text-xs font-normal">{localize('com_tools_web_search')}</span>
                     </div>
                     <Switch className='data-[state=checked]:bg-blue-600'
                         disabled={disabled}
@@ -53,7 +55,7 @@ export const ChatToolDown = ({ linsi, tools, setTools, config, searchType, setSe
                 config?.knowledgeBase.enabled && <div className='flex justify-between'>
                     <div className='flex gap-2 items-center'>
                         <FileText size="16" />
-                        <span className="text-xs font-normal">个人知识库</span>
+                        <span className="text-xs font-normal">{localize('com_tools_personal_knowledge')}</span>
                     </div>
                     <Tooltip delayDuration={200}>
                         <TooltipTrigger >
@@ -75,7 +77,7 @@ export const ChatToolDown = ({ linsi, tools, setTools, config, searchType, setSe
                             avoidCollisions={false}
                             sticky="always"
                         >
-                            <p>个人知识库 embedding 模型已更换，正在重建知识库，请稍后再试</p>
+                            <p>{localize('com_tools_knowledge_rebuilding')}</p>
                         </TooltipContent>
                         }
                     </Tooltip>
@@ -88,17 +90,18 @@ export const ChatToolDown = ({ linsi, tools, setTools, config, searchType, setSe
 
 const LinsiTools = ({ tools, setTools }) => {
     const { data: bsConfig } = useGetBsConfig()
+    const localize = useLocalize()
 
     useEffect(() => {
         const defaultTools = [{
             id: 'pro_knowledge',
-            name: '组织知识库',
+            name: localize('com_tools_org_knowledge'),
             icon: <KeyRound size="16" />,
             checked: true
         },
         {
             id: 'knowledge',
-            name: '个人知识库',
+            name: localize('com_tools_personal_knowledge'),
             icon: <Pencil size="16" />,
             checked: true
         },]
@@ -123,7 +126,7 @@ const LinsiTools = ({ tools, setTools }) => {
         <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent data-[state=open]:border-blue-500">
             <div className={cn('flex gap-2', active && 'text-blue-600')}>
                 <Settings2Icon size="16" />
-                <span className="text-xs font-normal">工具</span>
+                <span className="text-xs font-normal">{localize('com_tools_title')}</span>
             </div>
         </SelectTrigger>
         <SelectContent className='bg-white rounded-xl p-2 w-64'>

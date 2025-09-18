@@ -50,7 +50,7 @@ function AccountSettings() {
         onClick={() => setShowKnowledge(true)}
       >
         <FileText className="icon-md" />
-        <div>个人知识库</div>
+        <div>{localize('com_nav_personal_knowledge')}</div>
       </div>
       <div className='h-[1px] bg-gray-200'></div>
       <DropdownMenu>
@@ -93,22 +93,22 @@ function AccountSettings() {
           <a href={"/" + __APP_ENV__.BISHENG_HOST} target='_blank'>
             <DropdownMenuItem className='select-item text-sm font-normal'>
               <GanttChartIcon className="icon-md" />
-              {localize('com_managementPortal')}
+            {localize('com_nav_admin_panel')}
             </DropdownMenuItem>
           </a>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger className='select-item text-sm font-normal'>
               <Globe className="icon-md" />
-              {localize('com_language')}
+             {localize('com_nav_language')}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className='w-40 rounded-2xl'>
-              <span className='text-xs text-gray-400 pl-2'>{localize('com_language')}</span>
+              <span className='text-xs text-gray-400 pl-2'>{localize('com_nav_language_label')}</span>
               <DropdownMenuItem className='font-normal justify-between' onClick={() => changeLang('zh-Hans')}>
-                {localize('com_chinese')}
+               {localize('com_nav_simplified_chinese')}
                 {langcode === 'zh-Hans' && <Check size={16} />}
               </DropdownMenuItem>
               <DropdownMenuItem className='font-normal justify-between' onClick={() => changeLang('en-US')}>
-                {localize('com_english')}
+                {localize('com_nav_english')}
                 {langcode === 'en-US' && <Check size={16} />}
               </DropdownMenuItem>
             </DropdownMenuSubContent>

@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { ChevronDown, ChevronUp } from 'lucide-react'
+import { useLocalize } from '~/hooks'
 
 interface TaskErrorDisplayProps {
     title: string
@@ -9,6 +10,7 @@ interface TaskErrorDisplayProps {
 }
 
 export default function ErrorDisplay({ title, taskError }: TaskErrorDisplayProps) {
+    const localize = useLocalize()
     const [isExpanded, setIsExpanded] = useState(false)
 
     const toggleExpanded = () => {
@@ -31,15 +33,15 @@ export default function ErrorDisplay({ title, taskError }: TaskErrorDisplayProps
                         onClick={toggleExpanded}
                         className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 transition-colors"
                     >
-                        {/* {isExpanded ? (
+                        {isExpanded ? (
                             <>
-                                收起 <ChevronUp className="w-3 h-3" />
+                                {localize('com_ui_collapse')} <ChevronUp className="w-3 h-3" />
                             </>
                         ) : (
                             <>
-                                展开 <ChevronDown className="w-3 h-3" />
+                                {localize('com_ui_expand')} <ChevronDown className="w-3 h-3" />
                             </>
-                        )} */}
+                        )}
                     </button>
                 </div>
             )}

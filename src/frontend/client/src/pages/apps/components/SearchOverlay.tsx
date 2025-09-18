@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useLocalize } from "~/hooks"
 import { AgentCard } from "./AgentCard"
 
 interface SearchOverlayProps {
@@ -24,6 +25,7 @@ export function SearchOverlay({
     onCardClick,
     onClose
 }: SearchOverlayProps) {
+    const localize = useLocalize()
     const [displayedResults, setDisplayedResults] = useState<any[]>([])
     const [isLoadingMore, setIsLoadingMore] = useState(false)
     const [hasMore, setHasMore] = useState(true)
@@ -114,7 +116,7 @@ export function SearchOverlay({
                         <div className="text-center py-12">
                             <div className="inline-flex items-center gap-2 text-muted-foreground">
                                 <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                                搜索中...
+                                {localize('com_search_searching')}
                             </div>
                         </div>
                     ) : displayedResults.length > 0 ? (
@@ -138,14 +140,14 @@ export function SearchOverlay({
                                 <div className="text-center py-8">
                                     <div className="inline-flex items-center gap-2 text-muted-foreground">
                                         <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                                        加载更多...
+                                        {localize('com_search_loading_more')}
                                     </div>
                                 </div>
                             )}
                         </>
                     ) : (
                         <div className="text-center py-12">
-                            <p className="text-muted-foreground">未找到相关智能体</p>
+                            <p className="text-muted-foreground">{localize('com_search_no_results')}</p>
                         </div>
                     )}
                 </div>

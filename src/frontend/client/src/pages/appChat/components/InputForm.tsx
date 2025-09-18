@@ -4,6 +4,7 @@ import { Button } from "~/components";
 import MultiSelect from "~/components/ui/MultiSelect";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/Select";
 import { useToastContext } from "~/Providers";
+import { useLocalize } from "~/hooks";
 import { emitAreaTextEvent, EVENT_TYPE, FileTypes } from "../useAreaText";
 import InputComponent from "./InputComponent";
 import InputFileComponent from "./InputFileComponent";
@@ -41,6 +42,7 @@ interface WorkflowNodeParam {
 }
 
 const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any }) => {
+    const localize = useLocalize()
     const formDataRef = useRef(data.value.reduce((map, item) => {
         map[item.key] = { key: item.key, type: item.type, label: item.value, fileName: '', value: '' }
         return map
@@ -148,7 +150,7 @@ const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any })
                                             <InputFileComponent
                                                 isSSO
                                                 disabled={false}
-                                                placeholder="当前文件为空"
+                                                placeholder={localize('com_file_current_empty')}
                                                 value={''}
                                                 multiple={item.multiple}
                                                 onChange={(name) => updataFileName(item, name)}

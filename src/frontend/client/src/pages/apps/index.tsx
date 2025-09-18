@@ -10,6 +10,7 @@ import { useDebounce } from '~/components/ui/MultiSelect'
 import { useGetBsConfig } from '~/data-provider'
 import { ConversationData, QueryKeys } from "~/data-provider/data-provider/src"
 import useToast from '~/hooks/useToast'
+import { useLocalize } from '~/hooks'
 import store from "~/store"
 import { addConversation, generateUUID } from "~/utils"
 import { AgentGrid } from "./components/AgentGrid"
@@ -30,6 +31,7 @@ export default function AgentCenter() {
     }
 
     const { showToast } = useToast()
+    const localize = useLocalize()
 
     const handleCategoryChange = (categoryId: string) => {
         console.log("点击的标签ID:", categoryId, "当前搜索状态:", isSearching);
@@ -183,8 +185,8 @@ const handleSearchChange = async (query: string) => {
         console.log(res);
         if (res.status_code === 500) {
             showToast({
-                status: 'error',
-                message: '该智能体已被添加',
+                status: 'success',
+                message: localize('com_agent_added_success'),
             });
         }
         // 成功时更新收藏列表
@@ -252,8 +254,8 @@ const handleSearchChange = async (query: string) => {
             <div className="sticky top-0 z-40 bg-background">
                 <div className="container mx-auto px-6 py-6">
                     <div className="mt-2">
-                        <h1 className="text-blue-600 text-[32px] truncate max-w-[600px] font-medium mb-2">{bsConfig?.applicationCenterWelcomeMessage || '探索BISHENG的智能体'}</h1>
-                        <p className="text-muted-foreground text-base truncate max-w-[600px]">{bsConfig?.applicationCenterDescription || '您可以在这里选择需要的智能体来进行生产与工作～'}</p>
+                        <h1 className="text-blue-600 text-[32px] truncate max-w-[600px] font-medium mb-2">{bsConfig?.applicationCenterWelcomeMessage || localize('com_app_center_welcome')}</h1>
+                        <p className="text-muted-foreground text-base truncate max-w-[600px]">{bsConfig?.applicationCenterDescription || localize('com_app_center_description')}</p>
                     </div>
                     <div className="mt-12 flex items-start justify-between">
                         <AgentNavigation onCategoryChange={handleCategoryChange} onRefresh={refreshAgentData} />
@@ -261,7 +263,7 @@ const handleSearchChange = async (query: string) => {
                             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-500 w-4 h-4" />
                             <Input
                                 type="text"
-                                placeholder="搜索您需要的智能体"
+                                placeholder={localize('com_agent_search_placeholder')}
                                 value={searchQuery}
                                 onChange={(e) => {
                                     setSearchQuery(e.target.value)
