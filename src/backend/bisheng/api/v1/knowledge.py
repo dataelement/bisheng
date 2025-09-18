@@ -354,6 +354,10 @@ async def qa_add(*, QACreate: QAKnowledgeUpsert,
     db_knowledge = KnowledgeDao.query_by_id(QACreate.knowledge_id)
     if db_knowledge.type != KnowledgeTypeEnum.QA.value:
         raise HTTPException(status_code=404, detail='知识库类型错误')
+    if not login_user.access_check(
+            db_knowledge.user_id, str(db_knowledge.id), AccessType.KNOWLEDGE_WRITE
+    ):
+        raise UnAuthorizedError.http_exception()
 
     db_q = QAKnoweldgeDao.get_qa_knowledge_by_name(QACreate.questions, QACreate.knowledge_id, exclude_id=QACreate.id)
     # create repeat question or update
@@ -370,7 +374,16 @@ def qa_status_switch(*,
                      id: int = Body(embed=True),
                      login_user: UserPayload = Depends(get_login_user)):
     """ 修改知识库信息. """
-    new_qa_db = knowledge_imp.qa_status_change(id, status)
+    qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
+    if qa_db.status == status:
+        return resp_200()
+    db_knowledge = KnowledgeDao.query_by_id(qa_db.knowledge_id)
+    if not login_user.access_check(
+            db_knowledge.user_id, str(db_knowledge.id), AccessType.KNOWLEDGE_WRITE
+    ):
+        raise UnAuthorizedError.http_exception()
+
+    new_qa_db = knowledge_imp.qa_status_change(qa_db, status, db_knowledge)
     if not new_qa_db:
         return resp_200()
     if new_qa_db.status != status:
@@ -397,6 +410,12 @@ def qa_append(
     """ 增加知识库信息. """
     QA_list = QAKnoweldgeDao.select_list(ids)
     knowledge = KnowledgeDao.query_by_id(QA_list[0].knowledge_id)
+    # check knowledge access
+    if not login_user.access_check(
+            knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
+    ):
+        raise UnAuthorizedError.http_exception()
+
     for q in QA_list:
         if question in q.questions:
             raise KnowledgeQAError.http_exception()
@@ -705,6 +724,11 @@ def update_knowledge_model(*,
         knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
         if not knowledge:
             return resp_501(message="指定的知识库不存在")
+
+        if not login_user.access_check(
+                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
+        ):
+            raise UnAuthorizedError.http_exception()
 
         old_model_id = knowledge.model
 
