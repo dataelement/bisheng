@@ -11,6 +11,7 @@ import { LoadIcon } from '../bs-icons/loading';
 import AutoPagination from '../bs-ui/pagination/autoPagination';
 import SopMarkdown from './SopMarkdown';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../bs-ui/tooltip';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../bs-ui/tabs';
 import { useTranslation } from 'react-i18next';
 
 interface SopRecord {
@@ -252,7 +253,7 @@ const fetchRecords = async (isSearch = false) => {
               <SheetTitle>{t('ImportFromRecordsDialog.title')}</SheetTitle>
             </SheetHeader>
 
-            <div className="relative mt-6 mb-6 w-[80%]">
+            <div className="relative mt-6 mb-6 w-[100%]">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
@@ -432,12 +433,19 @@ const fetchRecords = async (isSearch = false) => {
           {/* 右侧预览区域 */}
           <div className="flex-1 bg-[#fff] p-6 h-full flex flex-col w-[50%]">
             {currentRecord ? (
-              <>
-                <div className="mb-4">
+              <Tabs defaultValue="manual" className="flex flex-col h-full">
+                <div className=" flex items-center justify-between gap-4">
                   <h3 className="text-lg font-semibold truncate">{currentRecord.name}</h3>
+                  <TabsList className='mr-4'>
+                    <TabsTrigger value="manual">指导手册</TabsTrigger>
+                    <TabsTrigger value="result">运行结果</TabsTrigger>
+                  </TabsList>
+                </div>
+
+                <TabsContent value="manual" className="flex-1 flex flex-col">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <p className="text-muted-foreground truncate max-w-[460px]">
+                      <p className="text-muted-foreground truncate">
                         {currentRecord.description}
                       </p>
                     </TooltipTrigger>
@@ -445,36 +453,42 @@ const fetchRecords = async (isSearch = false) => {
                       <p className="max-w-[300px] break-words">{currentRecord.description}</p>
                     </TooltipContent>
                   </Tooltip>
-                </div>
-                <div className="flex-1 overflow-y-auto bg-gray-50 rounded-md">
-                  <SopMarkdown
-                    ref={markdownRef}
-                    defaultValue={currentRecord?.content}
-                    tools={tools}
-                    height='h-[calc(100vh-170px)]'
-                    className="h-full"
-                    disabled={true}
-                  />
-                </div>
-                <div className="flex justify-start gap-2 pt-4">
-                  <Button
-                    onClick={() => {
-                      if (!currentRecord) return;
-                      setSelectedRecordIds([]);
-                      setSelectedRecords([]);
-                      // 直接尝试导入当前SOP
-                      importSops([currentRecord]).then((hasDuplicate) => {
-                        if (hasDuplicate === false) {
-                          setDuplicateDialogOpen(true);
-                        }
-                      });
-                    }}
-                    disabled={!currentRecord || loading}
-                  >
-                    {loading ? t('ImportFromRecordsDialog.loading') : t('ImportFromRecordsDialog.importCurrent')}
-                  </Button>
-                </div>
-              </>
+                  <div className="flex-1 overflow-y-auto bg-gray-50 rounded-md mt-2">
+                    <SopMarkdown
+                      ref={markdownRef}
+                      defaultValue={currentRecord?.content}
+                      tools={tools}
+                      height='h-[calc(100vh-170px)]'
+                      className="h-full"
+                      disabled={true}
+                    />
+                  </div>
+                  <div className="flex justify-start gap-2 pt-4">
+                    <Button
+                      onClick={() => {
+                        if (!currentRecord) return;
+                        setSelectedRecordIds([]);
+                        setSelectedRecords([]);
+                        // 直接尝试导入当前SOP
+                        importSops([currentRecord]).then((hasDuplicate) => {
+                          if (hasDuplicate === false) {
+                            setDuplicateDialogOpen(true);
+                          }
+                        });
+                      }}
+                      disabled={!currentRecord || loading}
+                    >
+                      {loading ? t('ImportFromRecordsDialog.loading') : t('ImportFromRecordsDialog.importCurrent')}
+                    </Button>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="result" className="flex-1 flex flex-col">
+                  <div className="flex-1 overflow-y-auto bg-gray-50 rounded-md p-4 text-sm text-gray-500">
+                    暂无运行结果
+                  </div>
+                </TabsContent>
+              </Tabs>
             ) : (
               <div className="flex justify-center items-center h-full text-muted-foreground">
                 {t('ImportFromRecordsDialog.preview.noSelection')}

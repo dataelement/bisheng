@@ -1,10 +1,11 @@
 // components/SopTable.tsx
 import { useState } from 'react';
-import { ChevronUp, ChevronDown, Star, Check } from 'lucide-react';
+import { ChevronUp, ChevronDown, Star, Check, Filter } from 'lucide-react';
 import AutoPagination from '../bs-ui/pagination/autoPagination';
 import { LoadIcon } from '../bs-icons';
 import { Button } from '../bs-ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../bs-ui/tooltip';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu';
 
 const SopTable = ({
     datalist,
@@ -24,6 +25,32 @@ const SopTable = ({
     handlePageInputConfirm,
     handleKeyDown
 }) => {
+    // 是否精选筛选：状态管理（仿照 Files.tsx）
+    const [featuredSelectedFilters, setFeaturedSelectedFilters] = useState<number[]>([]);
+    const [featuredTempFilters, setFeaturedTempFilters] = useState<number[]>([]);
+    const [isFeaturedFilterOpen, setIsFeaturedFilterOpen] = useState(false);
+
+    const applyFeaturedFilters = () => {
+        setFeaturedSelectedFilters([...featuredTempFilters]);
+        setIsFeaturedFilterOpen(false);
+    };
+
+    const resetFeaturedFilters = () => {
+        const empty: number[] = [];
+        setFeaturedTempFilters(empty);
+        setFeaturedSelectedFilters(empty);
+        setIsFeaturedFilterOpen(false);
+    };
+
+    const handleFeaturedOpenChange = (open: boolean) => {
+        if (!open && isFeaturedFilterOpen) {
+            applyFeaturedFilters();
+        }
+        if (open) {
+            setFeaturedTempFilters([...featuredSelectedFilters]);
+        }
+        setIsFeaturedFilterOpen(open);
+    };
     const ratingDisplay = (rating) => {
         return rating > 0 ? (
             <div className="flex items-center">
@@ -47,26 +74,102 @@ const SopTable = ({
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <button
                                 type="button"
-                                className={`h-4 w-4 rounded border flex items-center justify-center transition-colors ${datalist.length > 0 && 
-    datalist.every(item => selectedItems.includes(item.id)) 
-                                        ? 'bg-blue-600 border-blue-600'
-                                        : 'bg-white border-gray-300'
+                                className={`h-4 w-4 rounded border flex items-center justify-center transition-colors ${datalist.length > 0 &&
+                                    datalist.every(item => selectedItems.includes(item.id))
+                                    ? 'bg-blue-600 border-blue-600'
+                                    : 'bg-white border-gray-300'
                                     }`}
                                 style={{ color: 'white' }}
                                 onClick={(e) => {
                                     handleSelectAll();
                                 }}
-                                aria-pressed={datalist.length > 0 && 
-    datalist.every(item => selectedItems.includes(item.id)) }
+                                aria-pressed={datalist.length > 0 &&
+                                    datalist.every(item => selectedItems.includes(item.id))}
                             >
-                                {datalist.length > 0 && 
-    datalist.every(item => selectedItems.includes(item.id)) && (
-                                    <Check className="w-3 h-3 text-white" />
-                                )}
+                                {datalist.length > 0 &&
+                                    datalist.every(item => selectedItems.includes(item.id)) && (
+                                        <Check className="w-3 h-3 text-white" />
+                                    )}
                             </button>
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名称</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">创建者</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">描述</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <div className="flex items-center gap-2">
+                                <span>是否精选</span>
+                                <div className="relative">
+                                    <DropdownMenu open={isFeaturedFilterOpen} onOpenChange={handleFeaturedOpenChange}>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button
+                                                variant="ghost"
+                                                className={`flex items-center gap-1 ${featuredSelectedFilters.length > 0 ? 'text-blue-500' : ''}`}
+                                            >
+                                                <Filter size={16} />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent
+                                            className="h-full p-0 shadow-lg rounded-md border"
+                                            style={{ backgroundColor: 'white', opacity: 1 }}
+                                            align="end"
+                                        >
+                                            <div className="px-2">
+                                                {[
+                                                    { value: 1, label: '精选' },
+                                                    { value: 0, label: '未精选' }
+                                                ].map(({ value, label }) => (
+                                                    <div
+                                                        key={value}
+                                                        className="flex items-center gap-3 px-2 py-3 hover:bg-gray-100 rounded cursor-pointer"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setFeaturedTempFilters(prev =>
+                                                                prev.includes(value)
+                                                                    ? prev.filter(v => v !== value)
+                                                                    : [...prev, value]
+                                                            );
+                                                        }}
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={featuredTempFilters.includes(value)}
+                                                            onChange={() => { }}
+                                                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                        />
+                                                        <div className="flex items-center gap-2">
+                                                            <span>{label}</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="border-t border-gray-200"></div>
+                                            <div className="flex justify-end gap-2 px-3 py-2">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        resetFeaturedFilters();
+                                                    }}
+                                                    disabled={featuredTempFilters.length === 0}
+                                                >
+                                                    重置
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        applyFeaturedFilters();
+                                                    }}
+                                                >
+                                                    确认
+                                                </Button>
+                                            </div>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
+                            </div>
+                        </th>
                         {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <div className="flex items-center h-full">
                                 <span className="align-middle">星级评分</span>
@@ -118,9 +221,20 @@ const SopTable = ({
                                                     {item.name}
                                                 </div>
                                             </TooltipTrigger>
-                                            <TooltipContent className='max-w-[700px] break-words whitespace-normal'>
+                                            <TooltipContent align="start" className='max-w-[700px] break-words whitespace-normal text-left'>
                                                 <p>{item.name}</p>
                                             </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap max-w-[200px]">
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <div className="text-sm font-medium text-gray-900 truncate">
+                                                    admin
+                                                </div>
+                                            </TooltipTrigger>
                                         </Tooltip>
                                     </TooltipProvider>
                                 </td>
@@ -132,9 +246,20 @@ const SopTable = ({
                                                     {item.description}
                                                 </div>
                                             </TooltipTrigger>
-                                               <TooltipContent className="max-w-[900px] break-words whitespace-normal">
-                                                    <p className="text-sm">{item.description}</p>
-                                                </TooltipContent>
+                                            <TooltipContent className="max-w-[900px] break-words whitespace-normal">
+                                                <p className="text-sm">{item.description}</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap max-w-[200px]">
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <div className="text-sm font-medium text-gray-500 truncate">
+                                                    精选
+                                                </div>
+                                            </TooltipTrigger>
                                         </Tooltip>
                                     </TooltipProvider>
                                 </td>
@@ -161,7 +286,7 @@ const SopTable = ({
                         ))
                     ) : (
                         <tr>
-                            <td colSpan="5" className="px-6 py-4 text-center text-sm text-gray-500">
+                            <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
                                 未找到相关SOP
                             </td>
                         </tr>

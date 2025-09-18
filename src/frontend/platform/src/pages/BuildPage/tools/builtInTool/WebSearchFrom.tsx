@@ -27,6 +27,12 @@ const defaultToolParams = {
     tavily: {
         api_key: ''
     },
+    cloudsway: {
+        api_key: ''
+    },
+    searXNG: {
+        server_url: ''
+    },
 };
 
 const WebSearchForm = ({ formData, onSubmit, errors = {},enabled,prompt }) => {
@@ -92,6 +98,12 @@ const WebSearchForm = ({ formData, onSubmit, errors = {},enabled,prompt }) => {
         },
         tavily: {
             api_key: (value) => !value && 'API Key 不能为空'
+        },
+        cloudsway: {
+            api_key: (value) => !value && 'API Key 不能为空'
+        },
+        searXNG: {
+            server_url: (value) => !value && '服务器地址不能为空'
         }
     };
 
@@ -253,6 +265,32 @@ const WebSearchForm = ({ formData, onSubmit, errors = {},enabled,prompt }) => {
                         id="tavily-api-key"
                     />
                 );
+            case 'cloudsway':
+                    return (
+                        <InputField
+                            required
+                            label="API Key"
+                            type="password"
+                            name="api_key"
+                            value={currentTool.api_key || ''}
+                            onChange={handleParamChange}
+                            error={formErrors.api_key}
+                            id="cloudsway-api-key"
+                        />
+                    );
+            case 'searXNG':
+                return (
+                    <InputField
+                        required
+                        label="服务器地址"
+                        name="server_url"
+                        value={currentTool.server_url || ''}
+                        onChange={handleParamChange}
+                        error={formErrors.server_url}
+                        id="searxng-server-url"
+                        placeholder="填写您部署 searXNG 的访问地址，例如：http://localhost:8080"
+                    />
+                );
             default:
                 return null;
         }
@@ -272,6 +310,8 @@ const WebSearchForm = ({ formData, onSubmit, errors = {},enabled,prompt }) => {
                     { value: 'jina', label: 'Jina 深度搜索' },
                     { value: 'serp', label: 'Serp API' },
                     { value: 'tavily', label: 'Tavily' },
+                    { value: 'cloudsway', label: 'cloudsway' },
+                    { value: 'searXNG', label: 'searXNG' },
                 ]}
                 id="search-tool-selector"
                 name="search_tool"

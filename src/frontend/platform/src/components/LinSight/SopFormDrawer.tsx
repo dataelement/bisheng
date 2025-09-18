@@ -8,6 +8,8 @@ import SopMarkdown from "./SopMarkdown";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { t } from "i18next";
 import { useTranslation } from "react-i18next";
+import { Tabs, TabsList, TabsTrigger } from "../bs-ui/tabs";
+import { Star } from "lucide-react";
 
 const SopFormDrawer = ({
   isDrawerOpen,
@@ -31,6 +33,7 @@ const SopFormDrawer = ({
   const nameInputRef = useRef(null);
   const contentInputRef = useRef(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFeatured, setIsFeatured] = useState(false);
   // 各字段的最大字数限制
   const MAX_LENGTHS = {
     name: 500,      // 名称不超过500字
@@ -134,8 +137,35 @@ const SopFormDrawer = ({
         <div className="flex flex-col ">
           <div className="flex items-center justify-between px-4 pt-5 border-gray-200">
             <SheetTitle className="text-lg font-medium text-gray-900">
-              {isEditing ? t('sopForm.editManual') : t('components.sopForm.createManual')}
+              {isEditing ? t('sopForm.editManual') : t('sopForm.createManual')}
             </SheetTitle>
+            {isEditing && (
+              <div className="flex items-center gap-3 mr-6">
+                <Tabs defaultValue="manual">
+                  <TabsList>
+                    <TabsTrigger value="manual">指导手册</TabsTrigger>
+                    <TabsTrigger value="result">运行结果</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                <Button
+                  type="button"
+                  variant='outline'
+                  onClick={() => setIsFeatured(prev => !prev)}
+                  className={`${isFeatured ? 'border-yellow-500 bg-yellow-50 text-yellow-700' : ''}`}
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-sm ">
+                      {isFeatured ? (
+                        <Star className="w-3 h-3 text-yellow-500" fill="currentColor" />
+                      ) : (
+                        <Star className="w-3 h-3 text-gray-400" />
+                      )}
+                    </span>
+                    {isFeatured ? '精选案例' : '设为精选案例'}
+                  </span>
+                </Button>
+              </div>
+            )}
           </div>
           <div className="flex-1 px-4 pb-4 pt-3">
             <form onSubmit={handleSubmit} className="space-y-4">
