@@ -13,6 +13,7 @@ import store from '~/store';
 import { buildTree, cn } from '~/utils';
 import { Button } from '../ui';
 import { Card, CardContent } from '../ui/Card';
+import useLocalize from '~/hooks/useLocalize';
 import HeaderTitle from './HeaderTitle';
 import ChatForm from './Input/ChatForm';
 import InvitationCodeForm from './InviteCode';
@@ -22,6 +23,7 @@ import Presentation from './Presentation';
 
 
 const ChatView = ({ index = 0 }: { index?: number }) => {
+  const t = useLocalize();
   const { conversationId } = useParams();
   const rootSubmission = useRecoilValue(store.submissionByIndex(index));
   const addedSubmission = useRecoilValue(store.submissionByIndex(index + 1));
@@ -146,21 +148,24 @@ const ChatView = ({ index = 0 }: { index?: number }) => {
                     {!inputFloat && <div className="h-[2vh]"></div>}
                   </div>
                 </div>
-                {isLingsi && <Cases />}
+                {isLingsi && <Cases t={t} />}
               </div>
+              {/* <Footer /> */}
+              {isLingsi && selfHost && <Cases t={t} />}
+              {/*   邀请码 */}
               <InvitationCodeForm showCode={showCode} setShowCode={setShowCode} />
-            </div>
-          </Presentation>
-        </AddedChatContext.Provider>
-      </ChatContext.Provider>
-    </ChatFormProvider>
+            </div >
+          </Presentation >
+        </AddedChatContext.Provider >
+      </ChatContext.Provider >
+    </ChatFormProvider >
   );
 };
 
 export default memo(ChatView);
 
 
-const Cases = () => {
+const Cases = ({ t }) => {
 
   const casesData = window.SopCase.list;
 
@@ -169,8 +174,8 @@ const Cases = () => {
   }
 
   return (
-    <div className='absolute -bottom-6 w-full mt-20'>
-      <p className='text-sm max-w-[1728px] pl-16 text-primary'>灵思精选案例</p>
+    <div className='absolute bottom-8 w-full mt-20'>
+      <p className='text-sm text-center text-gray-400'>{t('com_case_featured')}</p>
       <div className='flex pt-4 justify-center mx-auto gap-2 px-12'>
         {casesData.map((caseItem) => (
           <div
