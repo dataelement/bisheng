@@ -18,6 +18,7 @@ import useKnowledgeStore from '../useKnowledgeStore';
 import ParagraphEdit from './ParagraphEdit';
 import PreviewFile from './PreviewFile';
 import PreviewParagraph from './PreviewParagraph';
+import Tip from "@/components/bs-ui/tooltip/tip";
 
 
 export default function Paragraphs({ fileId, onBack }) {
@@ -426,10 +427,8 @@ export default function Paragraphs({ fileId, onBack }) {
 
     // 调整分段策略（完全保留原始逻辑）
     const handleAdjustSegmentation = useCallback(() => {
-        console.log(latestFileUrlRef, fileUrl, previewUrl,56565);
         const currentFileUrl = latestOriginalUrlRef.current; // 使用original_url而不是preview_url
         const currentPreviewUrl = latestPreviewUrlRef.current;
-console.log(currentPreviewUrl,currentFileUrl,6666666666667);
 
         navigate(`/filelib/adjust/${id}`, {
             state: {
@@ -706,9 +705,14 @@ console.log(currentPreviewUrl,currentFileUrl,6666666666667);
                     <Button variant="outline" onClick={handleMetadataClick} className="px-4 whitespace-nowrap">
                         {t('元数据')}
                     </Button>
-                    <Button onClick={handleAdjustSegmentation} className="px-4 whitespace-nowrap">
-                        {t('调整分段策略')}
-                    </Button>
+                    <Tip content={!isEditable && '暂无操作权限'} side='top'>
+                        <Button
+                            disabled={!isEditable}
+                            onClick={handleAdjustSegmentation}
+                            className={`px-4 whitespace-nowrap disabled:pointer-events-auto`}>
+                            {t('调整分段策略')}
+                        </Button>
+                    </Tip>
                 </div>
             </div>
 

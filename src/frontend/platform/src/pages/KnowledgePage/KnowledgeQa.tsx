@@ -10,6 +10,7 @@ import Cascader from "@/components/bs-ui/select/cascader";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip, TooltipContent } from "@/components/bs-ui/tooltip";
+import Tip from "@/components/bs-ui/tooltip/tip";
 import { userContext } from "@/contexts/userContext";
 import { createFileLib, deleteFileLib, readFileLibDatabase } from "@/controllers/API";
 import { getKnowledgeModelConfig, getModelListApi } from "@/controllers/API/finetune";
@@ -301,7 +302,7 @@ export default function KnowledgeQa(params) {
                                 <div className="flex items-center justify-end gap-2">
                                     <Select
                                         key={`${el.id}-${modalKey}`}
-                                        open={selectOpenId === el.id}
+                                        // open={selectOpenId === el.id}
                                         onOpenChange={(isOpen) => {
                                             setSelectOpenId(isOpen ? el.id : null);
                                         }}
@@ -331,17 +332,20 @@ export default function KnowledgeQa(params) {
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                             }}
-                                            className="z-50"
+                                            className="z-50 overflow-visible"
                                         >
-                                            <SelectItem
-                                                value="delete"
-                                                disabled={!(el.copiable || user.role === 'admin')}
-                                            >
-                                                <div className="flex gap-2 items-center">
-                                                    <Trash2 className="w-4 h-4" />
-                                                    {t('delete')}
-                                                </div>
-                                            </SelectItem>
+                                            <Tip content={!el.copiable && '暂无操作权限'} side='bottom'>
+                                                <SelectItem
+                                                    value="delete"
+                                                    className="data-[disabled]:pointer-events-auto"
+                                                    disabled={!(el.copiable || user.role === 'admin')}
+                                                >
+                                                    <div className="flex gap-2 items-center">
+                                                        <Trash2 className="w-4 h-4" />
+                                                        {t('delete')}
+                                                    </div>
+                                                </SelectItem>
+                                            </Tip>
                                         </SelectContent>
                                     </Select>
                                 </div>
