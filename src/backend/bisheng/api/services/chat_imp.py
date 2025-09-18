@@ -5,6 +5,7 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
 
+from bisheng.api.errcode.base import ServerError
 from bisheng.api.v1.schemas import resp_500
 from bisheng.database.base import session_getter
 from bisheng.database.models.message import ChatMessage
@@ -116,14 +117,14 @@ async def event_stream(
     try:
         await webosocket.send(json.dumps(payload, ensure_ascii=False))
     except Exception as e:
-        yield json.dumps(resp_500(message=str(e)).__dict__)
+        yield ServerError(exception=e).to_sse_event_instance()
         return
     sync = ''
     while True:
         try:
             msg = await webosocket.recv()
         except Exception as e:
-            yield json.dumps(resp_500(message=str(e)).__dict__)
+            yield ServerError(exception=e).to_sse_event_instance()
             break
         if msg is None:
             continue

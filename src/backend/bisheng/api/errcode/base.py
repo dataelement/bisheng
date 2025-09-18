@@ -59,15 +59,23 @@ class BaseErrorCode(Exception):
             }
         }
 
+    def to_dict(self, data: any = None) -> dict:
+        data = data if data is not None else {"exception": str(self), **self.kwargs}
+        return {
+            "status_code": self.code,
+            "status_message": self.message,
+            "data": data
+        }
+
     # websocket error message
-    def websocket_close_message(self, websocket: WebSocket):
+    async def websocket_close_message(self, websocket: WebSocket):
         reason = {
             "status_code": self.code,
             "status_message": self.message,
             "data": {"exception": str(self), **self.kwargs}
         }
 
-        websocket.close(code=self.code, reason=json.dumps(reason))
+        await websocket.close(code=self.code, reason=json.dumps(reason))
 
 
 class UnAuthorizedError(BaseErrorCode):

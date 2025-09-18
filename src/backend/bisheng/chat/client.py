@@ -328,13 +328,13 @@ class ChatClient:
         except BaseErrorCode as e:
             logger.exception('handle gpts message error: ')
             await self.send_response('system', 'start', '')
-            await self.send_response('system', 'end', "Error: " + json.dumps(e.to_sse_event_instance()))
-            e.websocket_close_message(websocket=self.websocket)
+            await self.send_response('error', 'end', message=json.dumps(e.to_dict()))
+            await e.websocket_close_message(websocket=self.websocket)
         except Exception as e:
             e = AssistantOtherError(exception=e)
             logger.exception('handle gpts message error: ')
             await self.send_response('system', 'start', '')
-            await self.send_response('system', 'end', 'Error: ' + json.dumps(e.to_sse_event_instance()))
-            e.websocket_close_message(websocket=self.websocket)
+            await self.send_response('error', 'end', message=json.dumps(e.to_dict()))
+            await e.websocket_close_message(websocket=self.websocket)
         finally:
             await self.send_response('processing', 'close', '')
