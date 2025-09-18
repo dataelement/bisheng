@@ -25,7 +25,7 @@ const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
                 onInit(data)
             }).catch(e => {
                 // 自动重试
-                e === '后台处理中，稍后再试' && setTimeout(() => {
+                e === 14001 && setTimeout(() => {
                     loadData()
                 }, 1800);
             })

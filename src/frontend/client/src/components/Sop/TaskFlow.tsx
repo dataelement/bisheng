@@ -47,9 +47,8 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
             is_reexecute: check,
             cancel_feedback: cancel
         }).then(res => {
-            console.log('res :>> ', res);
             if (res.status_code !== 200) {
-                return showToast({ status: 'error', message: res.status_message })
+                return
             }
 
             const newVersionId = res.data.id

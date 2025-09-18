@@ -95,7 +95,9 @@ export const useWebSocket = (helpers) => {
         ws.onclose = (event) => {
             console.log('close chatId:>> ', helpers.chatId);
             console.error('ws close :>> ', event);
-            helpers.handleMsgError(event.reason)
+            // helpers.handleMsgError(event.reason)
+            const reason = localize(getErrorI18nKey(String(event.code)))
+            helpers.handleMsgError(reason)
             // todo 错误消息写入消息下面
         }
 
@@ -119,14 +121,15 @@ export const useWebSocket = (helpers) => {
 
         // messages
         if (data.category === 'error') {
-            const { code, message } = data.message
-            helpers.handleMsgError(data.intermediate_steps || '')
-
-            const errorMsg = code == 500 ? message : localize(getErrorI18nKey(code))
-            showToast({
-                message: errorMsg,
-                severity: NotificationSeverity.ERROR,
-            })
+            const { status_code, status_message, data: _data } = JSON.parse(data.message || '{}')
+            const errorMsg = status_code == 500 ? status_message : localize(getErrorI18nKey(status_code))
+            helpers.handleMsgError(errorMsg)
+            if (![10421, 13002].includes(status_code)) {
+                showToast({
+                    message: errorMsg,
+                    severity: NotificationSeverity.ERROR,
+                })
+            }
             return
         } else if (data.category === 'node_run') {
             return helpers.message.createNodeMsg(helpers.chatId, data)

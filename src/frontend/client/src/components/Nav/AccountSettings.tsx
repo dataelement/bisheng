@@ -93,18 +93,18 @@ function AccountSettings() {
           <a href={"/" + __APP_ENV__.BISHENG_HOST} target='_blank'>
             <DropdownMenuItem className='select-item text-sm font-normal'>
               <GanttChartIcon className="icon-md" />
-            {localize('com_nav_admin_panel')}
+              {localize('com_nav_admin_panel')}
             </DropdownMenuItem>
           </a>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger className='select-item text-sm font-normal'>
               <Globe className="icon-md" />
-             {localize('com_nav_language')}
+              {localize('com_nav_language')}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className='w-40 rounded-2xl'>
               <span className='text-xs text-gray-400 pl-2'>{localize('com_nav_language_label')}</span>
               <DropdownMenuItem className='font-normal justify-between' onClick={() => changeLang('zh-Hans')}>
-               {localize('com_nav_simplified_chinese')}
+                {localize('com_nav_simplified_chinese')}
                 {langcode === 'zh-Hans' && <Check size={16} />}
               </DropdownMenuItem>
               <DropdownMenuItem className='font-normal justify-between' onClick={() => changeLang('en-US')}>
@@ -113,12 +113,12 @@ function AccountSettings() {
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
-          <DropdownMenuItem className='select-item text-sm font-normal'>
+          {/* <DropdownMenuItem className='select-item text-sm font-normal'>
             <div className='w-full flex gap-2 items-center' onClick={() => setShowSettings(true)} >
               <GearIcon className="icon-md" aria-hidden="true" />
               {localize('com_nav_settings')}
             </div>
-          </DropdownMenuItem>
+          </DropdownMenuItem> */}
           <DropdownMenuItem className='select-item text-sm font-normal'>
             <div className='w-full flex gap-2 items-center' onClick={logout} >
               <LogOut className="icon-md" />
