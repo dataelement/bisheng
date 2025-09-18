@@ -90,8 +90,9 @@ export default function Header({ fileTitle, onBack, showBackButton = true }: Hea
                             {libInfo.name}
                         </span>
                     )}
+                    <div className="h-10"></div>
                     {/* edit dialog */}
-                    {isEditable ? <Dialog open={open} onOpenChange={setOpen}>
+                    {/* {isEditable ? <Dialog open={open} onOpenChange={setOpen}>
                         <DialogTrigger asChild>
                             <Button variant="ghost" size="icon" className="group-hover:visible invisible disabled:pointer-events-auto">
                                 <SquarePen className="w-4 h-4" />
@@ -104,7 +105,7 @@ export default function Header({ fileTitle, onBack, showBackButton = true }: Hea
                                 onSave={handleSave}
                             />
                         }
-                    </Dialog> : <div className="h-10"></div>}
+                    </Dialog> : <div className="h-10"></div>} */}
                 </div>
             </div>
         </div>
