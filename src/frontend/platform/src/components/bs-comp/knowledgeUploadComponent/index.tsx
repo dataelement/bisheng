@@ -24,7 +24,8 @@ const KnowledgeUploadComponent = ({
     size = 50,
     progressClassName = '',
     onFileChange,
-    onSelectFile
+    onSelectFile,
+    initialFiles = [] 
 }) => {
     const { t } = useTranslation()
     const { message } = useToast()
@@ -128,6 +129,29 @@ const KnowledgeUploadComponent = ({
         failFilesRef.current = failFilesRef.current.filter((pros) => pros.id !== id)
         setProgressList((list) => list.filter((pros) => pros.id !== id))
     }
+ useEffect(() => {
+        if (initialFiles.length > 0) {
+            // 将初始文件转换为组件需要的Progress格式
+            const initialProgress = initialFiles.map(file => ({
+                id: file.id || generateUUID(6), // 用现有ID或生成新ID
+                fileName: file.fileName,
+                // 模拟已完成状态（无实际File对象，因为是回显）
+                progress: ProgressStatus.End,
+                error: false,
+                // 保留原始文件数据
+                fileData: file
+            }));
+
+            // 添加到进度列表
+            setProgressList(initialProgress);
+            // 更新计数和成功文件列表
+            progressCountRef.current = initialFiles.length;
+            successFilesRef.current = initialFiles;
+            // 通知父组件
+            onSelectFile(initialFiles.length);
+            onFileChange(initialFiles, []);
+        }
+    }, [initialFiles]);
 
     return <div className="">
         <DropZone onDrop={handleDrop} />
@@ -135,7 +159,11 @@ const KnowledgeUploadComponent = ({
             {progressList.map((pros) =>
                 <ProgressItem
                     key={pros.id}
-                    item={pros}
+                        item={{
+                            ...pros,
+                            // 优先使用fileData（回显文件），其次用原始file（新上传文件）
+                            displayFile: pros.fileData || pros.file
+                        }}
                     onResulte={handleUploadResult}
                     onDelete={handleDelete}
                 />

@@ -2,10 +2,12 @@
 
 import { ChevronDown, Loader2 } from "lucide-react"
 import type React from "react"
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { useRecoilState } from "recoil"
 import { getChatOnlineApi, getFrequently, getHomeLabelApi, getUncategorized } from "~/api/apps"
 import { Button } from "~/components"
 import { useLocalize } from "~/hooks"
+import { addCommonlyAppState } from ".."
 import { AgentCard } from "./AgentCard"
 
 // 智能体类型定义
@@ -45,12 +47,14 @@ interface Pagination {
   isPreloading: boolean // 是否正在预请求下一页（防重复）
 }
 
-export function AgentGrid({ 
-  favorites, 
-  onAddToFavorites, 
-  onRemoveFromFavorites, 
-  sectionRefs, 
-  refreshTrigger, 
+const uncategorizedPageSize = 24
+
+export function AgentGrid({
+  favorites,
+  onAddToFavorites,
+  onRemoveFromFavorites,
+  sectionRefs,
+  refreshTrigger,
   onCardClick,
   onSectionMounted // 新增回调函数
 }: AgentGridProps) {
@@ -61,23 +65,23 @@ export function AgentGrid({
   const [uncategorizedAgents, setUncategorizedAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState<Record<string, boolean>>({}) // 分类加载状态
   const [uncategorizedLoading, setUncategorizedLoading] = useState(false) // 未分类加载状态
-  const [categoriesLoading, setCategoriesLoading] = useState(true) // 分类标签加载状态
   const [allAgents, setAllAgents] = useState<Agent[]>([]) // 常用智能体数据
   const [frequentlyUsedLoading, setFrequentlyUsedLoading] = useState(false) // 常用加载状态
+  const [commonlyApp, addCommonlyApp] = useRecoilState(addCommonlyAppState)
 
   // 分页状态初始化（含预请求字段）
   const [pagination, setPagination] = useState<Record<string, Pagination>>({})
-  const [uncategorizedPagination, setUncategorizedPagination] = useState<Pagination>({ 
-    page: 1, 
-    hasMore: false, 
-    preloadedNextPage: null, 
-    isPreloading: false 
+  const [uncategorizedPagination, setUncategorizedPagination] = useState<Pagination>({
+    page: 1,
+    hasMore: false,
+    preloadedNextPage: null,
+    isPreloading: false
   })
-  const [frequentlyUsedPagination, setFrequentlyUsedPagination] = useState<Pagination>({ 
-    page: 1, 
-    hasMore: false, 
-    preloadedNextPage: null, 
-    isPreloading: false 
+  const [frequentlyUsedPagination, setFrequentlyUsedPagination] = useState<Pagination>({
+    page: 1,
+    hasMore: false,
+    preloadedNextPage: null,
+    isPreloading: false
   })
 
   // 判断是否为常用智能体
@@ -103,9 +107,9 @@ export function AgentGrid({
     } else if (categoryType === "uncategorized") {
       setUncategorizedPagination(prev => ({ ...prev, isPreloading: true }))
     } else if (categoryType === "category" && categoryId) {
-      setPagination(prev => ({ 
-        ...prev, 
-        [categoryId]: { ...(prev[categoryId] || initialPagination), isPreloading: true } 
+      setPagination(prev => ({
+        ...prev,
+        [categoryId]: { ...(prev[categoryId] || initialPagination), isPreloading: true }
       }))
     }
 
@@ -116,7 +120,7 @@ export function AgentGrid({
         const res = await getFrequently(nextPageNum, pageSize)
         nextPageData = res.data || []
       } else if (categoryType === "uncategorized") {
-        const res = await getUncategorized(nextPageNum, pageSize)
+        const res = await getUncategorized(nextPageNum, uncategorizedPageSize)
         nextPageData = res.data || []
       } else if (categoryType === "category" && categoryId) {
         const res = await getChatOnlineApi(nextPageNum, "", parseInt(categoryId))
@@ -160,9 +164,9 @@ export function AgentGrid({
       } else if (categoryType === "uncategorized") {
         setUncategorizedPagination(prev => ({ ...prev, hasMore: false, isPreloading: false }))
       } else if (categoryType === "category" && categoryId) {
-        setPagination(prev => ({ 
-          ...prev, 
-          [categoryId]: { ...(prev[categoryId] || initialPagination), hasMore: false, isPreloading: false } 
+        setPagination(prev => ({
+          ...prev,
+          [categoryId]: { ...(prev[categoryId] || initialPagination), hasMore: false, isPreloading: false }
         }))
       }
     }
@@ -177,42 +181,41 @@ export function AgentGrid({
   }
 
   // 1. 加载常用智能体（含预请求）
-const fetchFrequentlyUsed = async (targetPage: number = 1) => {
-  setFrequentlyUsedLoading(true);
-  try {
-    let allLoadedAgents: Agent[] = [];
+  const fetchFrequentlyUsed = async (targetPage: number = 1) => {
+    setFrequentlyUsedLoading(true);
+    try {
+      let allLoadedAgents: Agent[] = [];
 
-    // 步骤2：加载「第1页到目标页码」的所有数据（确保数据最新且完整）
-    for (let page = 1; page <= targetPage; page++) {
-      const res = await getFrequently(page, pageSize);
-      const pageAgents = res.data || [];
-      allLoadedAgents = [...allLoadedAgents, ...pageAgents];
+      // 步骤2：加载「第1页到目标页码」的所有数据（确保数据最新且完整）
+      for (let page = 1; page <= targetPage; page++) {
+        const res = await getFrequently(page, pageSize);
+        const pageAgents = res.data || [];
+        allLoadedAgents = [...allLoadedAgents, ...pageAgents];
+      }
+
+      // 步骤3：更新数据（覆盖为最新的完整数据）
+      setAllAgents(allLoadedAgents);
+
+      // 步骤4：保持分页状态（页码不变），并重新预请求下一页
+      setFrequentlyUsedPagination(prev => ({
+        ...prev,
+        page: targetPage, // 保持当前页码
+        preloadedNextPage: null // 清空已使用的预请求数据，避免重复
+      }));
+
+      // 步骤5：重新预请求下一页（确保「显示更多」按钮状态正确）
+      preloadNextPage("frequently", undefined, targetPage);
+
+    } catch (error) {
+      console.error("获取常用助手失败:", error);
+    } finally {
+      setFrequentlyUsedLoading(false);
     }
-
-    // 步骤3：更新数据（覆盖为最新的完整数据）
-    setAllAgents(allLoadedAgents);
-
-    // 步骤4：保持分页状态（页码不变），并重新预请求下一页
-    setFrequentlyUsedPagination(prev => ({
-      ...prev,
-      page: targetPage, // 保持当前页码
-      preloadedNextPage: null // 清空已使用的预请求数据，避免重复
-    }));
-
-    // 步骤5：重新预请求下一页（确保「显示更多」按钮状态正确）
-    preloadNextPage("frequently", undefined, targetPage);
-
-  } catch (error) {
-    console.error("获取常用助手失败:", error);
-  } finally {
-    setFrequentlyUsedLoading(false);
-  }
-};
+  };
 
   // 2. 加载分类标签
   const fetchCategoryTags = async () => {
     try {
-      setCategoriesLoading(true)
       const res = await getHomeLabelApi()
       const categoryList = (res.data || []).map((tag: any) => ({
         label: tag.name,
@@ -237,8 +240,6 @@ const fetchFrequentlyUsed = async (targetPage: number = 1) => {
       fetchUncategorizedAgents(1)
     } catch (error) {
       console.error("获取分类失败:", error)
-    } finally {
-      setCategoriesLoading(false)
     }
   }
 
@@ -285,7 +286,7 @@ const fetchFrequentlyUsed = async (targetPage: number = 1) => {
   const fetchUncategorizedAgents = async (pageNum: number = 1) => {
     setUncategorizedLoading(true)
     try {
-      const res = await getUncategorized(pageNum, pageSize)
+      const res = await getUncategorized(pageNum, uncategorizedPageSize)
       const agents = res.data || []
 
       // 首次加载第1页后，预请求第2页
@@ -371,27 +372,33 @@ const fetchFrequentlyUsed = async (targetPage: number = 1) => {
   }
 
   // 6. 移除常用智能体
-const handleRemoveFromFavorites = async (userId: string, type: number, id: string) => {
-  try {
-    onRemoveFromFavorites(userId, type, id);
-    await new Promise(resolve => setTimeout(resolve, 100));
-    // 关键修改：传入当前页码，而非固定1
-    fetchFrequentlyUsed(frequentlyUsedPagination.page);
-  } catch (error) {
-    console.error("移除常用助手失败:", error);
-  }
-};
+  const handleRemoveFromFavorites = async (userId: string, type: number, id: string) => {
+    try {
+      onRemoveFromFavorites(userId, type, id);
+      await new Promise(resolve => setTimeout(resolve, 100));
+      // 关键修改：传入当前页码，而非固定1
+      fetchFrequentlyUsed(frequentlyUsedPagination.page);
+    } catch (error) {
+      console.error("移除常用助手失败:", error);
+    }
+  };
 
   // 7. 添加常用智能体
-const handleAddToFavorites = async (type: number, id: string) => {
-  try {
-    await onAddToFavorites(type, id);
-    // 关键修改：传入当前页码，而非固定1
-    fetchFrequentlyUsed(frequentlyUsedPagination.page);
-  } catch (error) {
-    console.error("添加常用助手失败:", error);
-  }
-};
+  const handleAddToFavorites = async (type: number, id: string) => {
+    try {
+      await onAddToFavorites(type, id);
+      // 关键修改：传入当前页码，而非固定1
+      fetchFrequentlyUsed(frequentlyUsedPagination.page);
+    } catch (error) {
+      console.error("添加常用助手失败:", error);
+    }
+  };
+  useEffect(() => {
+    if (commonlyApp) {
+      handleAddToFavorites(commonlyApp.type, commonlyApp.id)
+      addCommonlyApp(null)
+    }
+  }, [commonlyApp])
 
   // 8. 初始化加载+刷新触发
   useEffect(() => {
@@ -400,7 +407,7 @@ const handleAddToFavorites = async (type: number, id: string) => {
   }, [refreshTrigger])
 
   // 构建分区数据
-  const sections = [
+  const sections = useMemo(() => [
     // 常用智能体
     {
       id: "frequently_used",
@@ -429,8 +436,9 @@ const handleAddToFavorites = async (type: number, id: string) => {
       loading: uncategorizedLoading
     }
   ].filter(section => {
-     return section.id !== "frequently_used" || section.id !== "uncategorized" || true;
-  })
+    return section.id !== "frequently_used" || section.id !== "uncategorized" || true;
+  }), [allAgents, agentsByCategory, categories, frequentlyUsedLoading, frequentlyUsedPagination,
+    loading, pagination, uncategorizedAgents, uncategorizedLoading, uncategorizedPagination])
 
   return (
     <div className="space-y-8">
@@ -439,13 +447,13 @@ const handleAddToFavorites = async (type: number, id: string) => {
         return (
           <section
             key={id}
-             id={id}
+            id={id}
             className="relative"
-             ref={(el) => {
+            ref={(el) => {
               sectionRefs.current[id] = el
             }}          >
             {/* 分区标题 */}
-            <h2 className="text-base font-medium mb-4 text-blue-600">{name}</h2>
+            <h2 className={`text-base font-medium mb-4 text-blue-600 ${id === 'frequently_used' && 'hidden'}`}>{name}</h2>
 
             {/* 加载状态（仅空数据时显示） */}
             {loading && agents.length === 0 ? (
@@ -463,7 +471,7 @@ const handleAddToFavorites = async (type: number, id: string) => {
                       onClick={() => onCardClick(agent)}
                       isFavorite={isFavorite(agent.id)}
                       showRemove={isFavoriteSection}
-                      onAddToFavorites={() => handleAddToFavorites(agent.flow_type, agent.id)}
+                      onAddToFavorites={() => addCommonlyApp({ type: agent.flow_type, id: agent.id })}
                       onRemoveFromFavorites={() => handleRemoveFromFavorites(agent.user_id, agent.flow_type, agent.id)}
                     />
                   ))}

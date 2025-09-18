@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useLocalize } from "~/hooks"
 import { AgentCard } from "./AgentCard"
+import { addCommonlyAppState } from ".."
+import { useRecoilState } from "recoil"
 
 interface SearchOverlayProps {
     query: string
@@ -30,6 +32,7 @@ export function SearchOverlay({
     const [isLoadingMore, setIsLoadingMore] = useState(false)
     const [hasMore, setHasMore] = useState(true)
     const scrollContainerRef = useRef<HTMLDivElement>(null)
+    const [_, addCommonlyApp] = useRecoilState(addCommonlyAppState)
     const itemsPerLoad = 8
 
     // 过滤结果
@@ -109,7 +112,7 @@ export function SearchOverlay({
     }, [filteredResults, hasMore, isLoadingMore, loadMoreItems, itemsPerLoad])
 
     return (
-        <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-50">
+        <div className="absolute inset-0 bg-background backdrop-blur-sm z-50">
             <div ref={scrollContainerRef} className="h-full overflow-auto">
                 <div className="container mx-auto px-6 py-6">
                     {loading && displayedResults.length === 0 ? (
@@ -121,7 +124,7 @@ export function SearchOverlay({
                         </div>
                     ) : displayedResults.length > 0 ? (
                         <>
-                        
+
                             <div className="grid grid-cols-4 gap-2 mb-8">
                                 {displayedResults.map((agent) => (
                                     <AgentCard
@@ -130,7 +133,7 @@ export function SearchOverlay({
                                         agent={agent}
                                         isFavorite={favorites ? favorites.includes(agent.id.toString()) : false}
                                         showRemove={false}
-                                        onAddToFavorites={() => onAddToFavorites(agent.flow_type,agent.id.toString())}
+                                        onAddToFavorites={() => addCommonlyApp({ type: agent.flow_type, id: agent.id.toString() })}
                                         onRemoveFromFavorites={() => onRemoveFromFavorites(agent.id.toString())}
                                     />
                                 ))}

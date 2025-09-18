@@ -9,6 +9,8 @@ import { Link, useParams, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "../../../components/bs-ui/button";
 import ShadTooltip from "../../../components/ShadTooltipComponent";
 import KnowledgeBaseSettingsDialog from "./EditKnowledgeDialog";
+import Tip from "@/components/bs-ui/tooltip/tip";
+import useKnowledgeStore from "../useKnowledgeStore";
 
 interface HeaderProps {
     fileTitle: boolean;
@@ -65,42 +67,45 @@ export default function Header({ fileTitle, onBack, showBackButton = true }: Hea
         })
     }
 
+    const { isEditable } = useKnowledgeStore();
+
     return (
-        <div className="flex items-start h-14 z-20">
+        <div className="flex items-start h-14 z-30">
             {/* 回退按钮 - 根据 showBackButton 控制显示 */}
             {showBackButton && (
                 <ShadTooltip content={t('back')} side="top">
-                    <button 
-                        className="extra-side-bar-buttons w-[36px]" 
+                    <button
+                        className="extra-side-bar-buttons w-[36px]"
                         onClick={handleBackClick}
                     >
                         <ArrowLeft className="side-bar-button-size" />
                     </button>
                 </ShadTooltip>
             )}
-            
+
             <div>
                 <div className="group flex items-center">
                     {fileTitle && (
-                        <span className="text-foreground text-sm font-black pl-4 pt-2">
+                        <span className="text-foreground text-sm font-black pl-4">
                             {libInfo.name}
                         </span>
                     )}
+                    <div className="h-10"></div>
                     {/* edit dialog */}
-                    <Dialog open={open} onOpenChange={setOpen}>
+                    {/* {isEditable ? <Dialog open={open} onOpenChange={setOpen}>
                         <DialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="group-hover:visible invisible">
+                            <Button variant="ghost" size="icon" className="group-hover:visible invisible disabled:pointer-events-auto">
                                 <SquarePen className="w-4 h-4" />
                             </Button>
                         </DialogTrigger>
                         {
-                            open && <KnowledgeBaseSettingsDialog 
-                                initialName={libInfo.name} 
-                                initialDesc={libInfo.desc} 
+                            open && <KnowledgeBaseSettingsDialog
+                                initialName={libInfo.name}
+                                initialDesc={libInfo.desc}
                                 onSave={handleSave}
                             />
                         }
-                    </Dialog>
+                    </Dialog> : <div className="h-10"></div>} */}
                 </div>
             </div>
         </div>

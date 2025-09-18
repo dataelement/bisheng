@@ -330,9 +330,9 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
 
 
 def decide_vectorstores(
-        collection_name: str, vector_store: str, embedding: Embeddings
+        collection_name: str, vector_store: str, embedding: Embeddings, knowledge_id: int = None
 ) -> Union[VectorStore, Any]:
-    """vector db"""
+    """ vector db if used by query, must have knowledge_id"""
     param: dict = {"embedding": embedding}
 
     if vector_store == "ElasticKeywordsSearch":
@@ -345,6 +345,8 @@ def decide_vectorstores(
             vector_config["ssl_verify"] = eval(vector_config["ssl_verify"])
 
     elif vector_store == "Milvus":
+        if knowledge_id and collection_name.startswith("partition"):
+            param["partition_key"] = knowledge_id
         vector_config = settings.get_vectors_conf().milvus.model_dump()
         if not vector_config:
             # 无相关配置
@@ -1044,17 +1046,14 @@ def add_qa(db_knowledge: Knowledge, data: QAKnowledgeUpsert) -> QAKnowledge:
         raise e
 
 
-def qa_status_change(qa_id: int, target_status: int):
+def qa_status_change(qa_db: QAKnowledge, target_status: int, db_knowledge: Knowledge):
     """QA 状态切换"""
-    qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(qa_id)
 
     if qa_db.status == target_status:
         logger.info("qa status is same, skip")
         return
-
-    db_knowledge = KnowledgeDao.query_by_id(qa_db.knowledge_id)
     if target_status == QAStatus.DISABLED.value:
-        delete_vector_data(db_knowledge, [qa_id])
+        delete_vector_data(db_knowledge, [qa_db.id])
         qa_db.status = target_status
         QAKnoweldgeDao.update(qa_db)
     else:

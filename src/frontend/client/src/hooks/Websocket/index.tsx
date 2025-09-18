@@ -179,7 +179,7 @@ export const useLinsightWebSocket = (versionId) => {
                 case 'task_end':
                     updateLinsight(id, (prev) => {
                         const newStatus = taskData.data.status
-                        const errorMsg = taskData.data.result.answer
+                        const errorMsg = taskData.data.result?.answer
                         if (!taskData.data.parent_task_id) {
                             // 更新一级任务
                             const newTasks = prev.tasks.map(task =>

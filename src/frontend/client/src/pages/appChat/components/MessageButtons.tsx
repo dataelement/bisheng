@@ -8,7 +8,7 @@ const enum ThumbsState {
     ThumbsDown
 }
 
-export default function MessageButtons({ id, onCopy, data, onUnlike }) {
+export default function MessageButtons({ id, onCopy, data, onUnlike, children = null }) {
     const [state, setState] = useState<ThumbsState>(data)
     const [copied, setCopied] = useState(false)
 
@@ -33,6 +33,7 @@ export default function MessageButtons({ id, onCopy, data, onUnlike }) {
     }
 
     return <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {children}
         <MessageIcon
             type='copy'
             className={`cursor-pointer ${copied && 'text-primary hover:text-primary'}`}

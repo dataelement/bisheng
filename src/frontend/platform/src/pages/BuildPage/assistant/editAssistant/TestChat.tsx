@@ -39,13 +39,13 @@ export default function TestChat({ assisId, guideQuestion, onClear }) {
 
     return <div className="relative h-full px-4 bs-chat-bg bg-background-login" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/points.png)` }}>
         <div className="absolute flex w-full left-0 top-0 gap-2 px-4 py-2 items-center z-10 bg-background-login shadow-sm">
-             <AppAvator id={assistantState.name} url={assistantState.logo} flowType={5} className=""></AppAvator>
+            <AppAvator id={assistantState.name} url={assistantState.logo} flowType={5} className=""></AppAvator>
             <span className="text-sm ">{t('build.debugPreview')}</span>
         </div>
         <ChatComponent
             debug
             clear
-            logo={assistantState.logo}
+            logo={<AppAvator id={assistantState.name} url={assistantState.logo} flowType={5} className=""></AppAvator>}
             questions={guideQuestion}
             useName=''
             guideWord=''

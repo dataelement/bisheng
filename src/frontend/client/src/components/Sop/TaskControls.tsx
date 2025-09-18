@@ -199,8 +199,8 @@ export default function FeedbackComponent({ stop, onFeedback }: FeedbackComponen
                         placeholder={localize('com_agent_unsatisfied_feedback')}
                         value={comment}
                         onChange={(e) => setComment(e.target.value)}
-                        className="resize-none min-h-[40px] text-sm border-none shadow-none focus:ring-0 focus:outline-none"
-                        rows={1}
+                        className="resize-none min-h-[40px] bg-transparenttext-sm border-none shadow-none focus:ring-0 focus:outline-none"
+                        rows={2}
                     />
                 </div>
                 <Button

@@ -50,7 +50,7 @@ export default function useChatHelpers() {
                 running: false,
                 showStop: false,
                 showUpload: false,
-                inputDisabled: chatState?.flow.flow_type !== 1, // 技能不禁止输入
+                inputDisabled: !!errorMsg, //chatState?.flow.flow_type !== 1, // 技能不禁止输入
                 error: errorMsg,
             },
         }))
@@ -74,6 +74,17 @@ export default function useChatHelpers() {
                 ...prev[chatId],
                 running: true,
                 showStop: show,
+            },
+        }))
+    }
+
+    // 显示重试按钮
+    const reRunShow = (show: boolean) => {
+        setRunningState((prev) => ({
+            ...prev,
+            [chatId]: {
+                ...prev[chatId],
+                showReRun: show,
             },
         }))
     }
@@ -299,7 +310,7 @@ export default function useChatHelpers() {
         insetSeparator: (chatid: string, msg: string) => {
             setChats((prev) =>
                 updateChatMessages(prev, chatid, (messages) => {
-                    if (messages[messages.length - 1]?.category === "separator") return messages
+                    if (messages[messages.length - 1]?.category === "divider") return messages
 
                     return [
                         ...messages,
@@ -365,6 +376,7 @@ export default function useChatHelpers() {
         message,
         flow: chatState?.flow,
         stopShow,
+        reRunShow,
         handleMsgError,
         clearError,
         showInputForm,

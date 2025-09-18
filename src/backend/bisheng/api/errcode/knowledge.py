@@ -35,3 +35,7 @@ class KnowledgeCPError(BaseErrorCode):
 class KnowledgeFileDeleteError(BaseErrorCode):
     Code: int = 10950
     Msg: str = '不支持多个知识库的文件同时删除'
+
+class KnowledgeRebuildingError(BaseErrorCode):
+    Code: int = 10951
+    Msg: str = '知识库重新构建中，不允许修改embedding模型'

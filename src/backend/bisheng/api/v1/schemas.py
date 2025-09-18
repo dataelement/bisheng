@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Generic, List, Optional, TypeVar, Union, Literal
+from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 
 from langchain.docstore.document import Document
 from orjson import orjson
@@ -175,7 +175,7 @@ class ChatMessage(BaseModel):
 class ChatResponse(ChatMessage):
     """Chat response schema."""
 
-    intermediate_steps: str = ''
+    intermediate_steps: Optional[str] = ''
     is_bot: bool | int = True
     category: str = 'processing'
 
@@ -535,9 +535,9 @@ class FileProcessBase(BaseModel):
     @model_validator(mode='before')
     @classmethod
     def check_separator_rule(cls, values: Any):
-        if values.get('separator', None) is None:
+        if not values.get('separator', None):
             values['separator'] = ['\n\n', '\n']
-        if values.get('separator_rule', None) is None:
+        if not values.get('separator_rule', None):
             values['separator_rule'] = ['after' for _ in values['separator']]
         if values.get('chunk_size', None) is None:
             values['chunk_size'] = 1000
