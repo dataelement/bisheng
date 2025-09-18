@@ -171,7 +171,7 @@ export const useWebSocket = (helpers) => {
         }
         /***** 技能 end******/
         if (data.type === 'close' && data.category === 'processing') {
-            helpers.message.insetSeparator(helpers.chatId, '本轮会话已结束')
+            helpers.message.insetSeparator(helpers.chatId, localize('com_chat_round_finished'))
             // helpers.handleMsgError('')
             // 重启会话按钮,接收close确认后端处理结束后重启会话
             if (restartCallBack.current) {

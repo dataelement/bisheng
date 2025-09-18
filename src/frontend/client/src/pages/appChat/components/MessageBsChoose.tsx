@@ -6,8 +6,10 @@ import Markdown from "~/components/Chat/Messages/Content/Markdown";
 import { downloadFile } from "~/utils";
 import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
 import { changeMinioUrl } from "./ResouceModal";
+import useLocalize from "~/hooks/useLocalize";
 
 export default function MessageBsChoose({ type = 'choose', logo, data, flow }: { type?: string, logo: React.ReactNode, data: ChatMessageType }) {
+    const t = useLocalize()
     const [selected, setSelected] = useState(data.message.hisValue || '')
     const handleSelect = (obj) => {
         if (selected) return
@@ -72,7 +74,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data, flow }: {
                         <div className="flex items-center"><File size={14} /></div>
                         <div>
                             <h1 className="text-sm font-bold">{file.name}</h1>
-                            <p className="text-xs text-gray-400 mt-1">点击下载</p>
+                            <p className="text-xs text-gray-400 mt-1">{t('com_bschoose_click_to_download')}</p>
                         </div>
                     </div>)
                     }
@@ -92,7 +94,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data, flow }: {
                                     className="h-8"
                                     disabled={inputSended}
                                     onClick={handleSend}
-                                >{inputSended ? '已确认' : '确认'}</Button>
+                                >{inputSended ? t('com_bschoose_confirmed') : t('com_bschoose_confirm')}</Button>
                             </div>
                         </div>
                         : <div>

@@ -12,6 +12,7 @@ import { AddedChatContext, ChatContext, ChatFormProvider, useFileMapContext } fr
 import store from '~/store';
 import { buildTree, cn } from '~/utils';
 import { Button } from '../ui';
+import useLocalize from '~/hooks/useLocalize';
 import HeaderTitle from './HeaderTitle';
 import ChatForm from './Input/ChatForm';
 import InvitationCodeForm from './InviteCode';
@@ -20,6 +21,7 @@ import MessagesView from './Messages/MessagesView';
 import Presentation from './Presentation';
 
 function ChatView({ index = 0 }: { index?: number }) {
+  const t = useLocalize();
   const { conversationId } = useParams();
   const rootSubmission = useRecoilValue(store.submissionByIndex(index));
   const addedSubmission = useRecoilValue(store.submissionByIndex(index + 1));
@@ -122,7 +124,7 @@ function ChatView({ index = 0 }: { index?: number }) {
                 </div>
               </div>
               {/* <Footer /> */}
-              {isLingsi && selfHost && <Cases />}
+              {isLingsi && selfHost && <Cases t={t} />}
               {/*   邀请码 */}
               <InvitationCodeForm showCode={showCode} setShowCode={setShowCode} />
             </div>
@@ -136,15 +138,15 @@ function ChatView({ index = 0 }: { index?: number }) {
 export default memo(ChatView);
 
 
-const Cases = () => {
+const Cases = ({ t }) => {
 
   const casesData = [
-    { id: 'case1', title: '超详细日本7日旅游攻略' },
-    { id: 'case2', title: '招股书说明书和君七步法阅读报告' },
-    { id: 'case3', title: '招标需求响应' },
-    { id: 'case4', title: '近6个月AI新产品盘点（广度搜索）' },
-    { id: 'case5', title: '制作一个航空航天科普网站' },
-    { id: 'case6', title: '魔塔网页小游戏' }
+    { id: 'case1', title: t('com_case_japan_7days') },
+    { id: 'case2', title: t('com_case_prospectus_report') },
+    { id: 'case3', title: t('com_case_tender_response') },
+    { id: 'case4', title: t('com_case_ai_products_6m') },
+    { id: 'case5', title: t('com_case_aero_site') },
+    { id: 'case6', title: t('com_case_magic_tower') }
   ];
 
   const handleCardClick = (caseId: string) => {
@@ -153,7 +155,7 @@ const Cases = () => {
 
   return (
     <div className='absolute bottom-8 w-full mt-20'>
-      <p className='text-sm text-center text-gray-400'>灵思精选案例</p>
+      <p className='text-sm text-center text-gray-400'>{t('com_case_featured')}</p>
       <div className='flex pt-4 justify-center mx-auto gap-2 px-12'>
         {casesData.map((caseItem) => (
           <div

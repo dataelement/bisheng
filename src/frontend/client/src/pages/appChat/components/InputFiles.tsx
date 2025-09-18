@@ -6,9 +6,11 @@ import { AttachmentIcon } from "~/components/svg";
 import { FileIcon, getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
 import { useToastContext } from "~/Providers";
 import { generateUUID, getFileExtension } from "~/utils";
+import useLocalize from "~/hooks/useLocalize";
 
 // @accepts '.png,.jpg'
 export default function InputFiles({ v, accepts, size, onChange }) {
+    const t = useLocalize()
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
     const remainingUploadsRef = useRef(0);
@@ -35,7 +37,7 @@ export default function InputFiles({ v, accepts, size, onChange }) {
         // Show invalid file toast
         if (invalidFiles.length > 0) {
             invalidFiles.map(file =>
-                showToast({ message: `文件：${file.file.name}超过${size}M，已移除`, status: 'info' })
+                showToast({ message: t('com_inputfiles_exceed_limit', { 0: file.file.name, 1: size }), status: 'info' })
             )
         }
 
@@ -99,7 +101,7 @@ export default function InputFiles({ v, accepts, size, onChange }) {
                 }
             }).catch((e) => {
                 console.log('e :>> ', e);
-                showToast({ message: `文件上传失败: ${file.name}`, status: 'error' })
+                showToast({ message: t('com_inputfiles_upload_failed', { 0: file.name }), status: 'error' })
                 handleFileRemove(file.name);
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
                 if (remainingUploadsRef.current === 0) {
@@ -169,8 +171,8 @@ export default function InputFiles({ v, accepts, size, onChange }) {
                                 {file.name}
                             </div>
                             {file.isUploading ? file.progress === 100
-                                ? <div className="text-xs text-gray-500">解析中...</div>
-                                : <div className="text-xs text-gray-500">上传中... {file.progress}%</div>
+                                ? <div className="text-xs text-gray-500">{t('com_inputfiles_parsing')}</div>
+                                : <div className="text-xs text-gray-500">{t('com_inputfiles_uploading')} {file.progress}%</div>
                                 : <div className="text-xs text-gray-500">{getFileExtension(file.name)} {formatFileSize(file.size)}</div>}
                         </div>
                     </div>

@@ -4,8 +4,10 @@ import { generateUUID } from "~/utils";
 import DocxPreview from "./DocxFileViewer";
 import FileView from "./FileView";
 import TxtFileViewer from "./TxtFileViewer";
+import useLocalize from "~/hooks/useLocalize";
 
 export default function FileViewPanne({ file }) {
+    const t = useLocalize()
     const MemoizedFileView = React.memo(FileView);
     const [postion, setPositon] = useState(null)
     const [currentIndex, setCurrentIndex] = useState(0)
@@ -51,7 +53,7 @@ export default function FileViewPanne({ file }) {
             if (suffix === 'pdf' || file.parse_type === 'uns') {
                 return previewFileUrl && <MemoizedFileView scrollTo={postion} fileUrl={file.fileUrl} labels={labels} />
             } else {
-                return <div className="flex justify-center items-center h-full text-gray-400">旧版文件格式暂不支持预览</div>
+                return <div className="flex justify-center items-center h-full text-gray-400">{t('com_preview_old_version_unsupported')}</div>
             }
         }
         switch (suffix) {
@@ -72,7 +74,7 @@ export default function FileViewPanne({ file }) {
                 className="border"
                 src={previewFileUrl.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)} alt="" />
             default:
-                return <div className="flex justify-center items-center h-full text-gray-400">该类型文件不支持预览</div>
+                return <div className="flex justify-center items-center h-full text-gray-400">{t('com_preview_type_unsupported')}</div>
         }
     }
 
@@ -82,7 +84,7 @@ export default function FileViewPanne({ file }) {
         </div>
         {/* chunk menu */}
         {showP && <div className="absolute left-[0px] rounded-sm p-4 px-0 top-[50%] translate-y-[-50%] max-2xl:scale-75 origin-top-left">
-            <p className="mb-1 text-sm font-bold text-center rounded-sm bg-[rgb(186,210,249)] text-blue-600">来源段落</p>
+            <p className="mb-1 text-sm font-bold text-center rounded-sm bg-[rgb(186,210,249)] text-blue-600">{t('com_preview_source_paragraph')}</p>
             <div className="flex flex-col gap-2 ">
                 {file.chunks.map((chunk, i) =>
                     <div key={i}
