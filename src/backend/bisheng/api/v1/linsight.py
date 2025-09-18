@@ -635,19 +635,18 @@ async def update_sop(
 @router.get("/sop/list", summary="获取灵思SOP列表", response_model=UnifiedResponseModel)
 async def get_sop_list(
         keywords: str = Query(None, description="搜索关键词"),
+        showcase: bool = Query(None, description="是否只获取精选案例"),
         page: int = Query(1, ge=1, description="页码"),
         page_size: int = Query(10, ge=1, le=100, description="每页数量"),
         sort: Literal["asc", "desc"] = Query("desc", description="排序方式，asc或desc"),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(get_admin_user)) -> UnifiedResponseModel:
     """
     获取灵思SOP列表
     :return:
     """
 
-    if not login_user.is_admin():
-        return UnAuthorizedError.return_resp()
-
-    sop_pages = await LinsightSOPDao.get_sop_page(keywords=keywords, page=page, page_size=page_size, sort=sort)
+    sop_pages = await LinsightSOPDao.get_sop_page(keywords=keywords, showcase=showcase, page=page, page_size=page_size,
+                                                  sort=sort)
     return resp_200(data=sop_pages)
 
 
