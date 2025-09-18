@@ -23,7 +23,8 @@ const SopTable = ({
     handlePageChange,
     handlePageInputChange,
     handlePageInputConfirm,
-    handleKeyDown
+    handleKeyDown,
+    onShowcaseFilterChange
 }) => {
     // 是否精选筛选：状态管理（仿照 Files.tsx）
     const [featuredSelectedFilters, setFeaturedSelectedFilters] = useState<number[]>([]);
@@ -33,6 +34,17 @@ const SopTable = ({
     const applyFeaturedFilters = () => {
         setFeaturedSelectedFilters([...featuredTempFilters]);
         setIsFeaturedFilterOpen(false);
+        // 传递给父组件：仅当选择为单一 1 或 0 时生效；多选或为空表示不过滤
+        if (Array.isArray(featuredTempFilters)) {
+            if (featuredTempFilters.length === 1) {
+                const value = featuredTempFilters[0];
+                onShowcaseFilterChange?.(value === 1 ? 1 : 0);
+            } else {
+                onShowcaseFilterChange?.(undefined);
+            }
+        } else {
+            onShowcaseFilterChange?.(undefined);
+        }
     };
 
     const resetFeaturedFilters = () => {
@@ -258,6 +270,7 @@ const SopTable = ({
                                             <TooltipTrigger asChild>
                                                 <div className="text-sm font-medium text-gray-500 truncate">
                                                     精选
+                                                    {item.showcase ? '精选' : '非精选'}
                                                 </div>
                                             </TooltipTrigger>
                                         </Tooltip>

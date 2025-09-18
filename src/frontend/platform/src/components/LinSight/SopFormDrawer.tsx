@@ -6,6 +6,7 @@ import { LoadIcon } from "../bs-icons/loading";
 import { Input, Textarea } from "../bs-ui/input";
 import SopMarkdown from "./SopMarkdown";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { sopApi } from "@/controllers/API/linsight";
 import { t } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsList, TabsTrigger } from "../bs-ui/tabs";
@@ -150,7 +151,15 @@ const SopFormDrawer = ({
                 <Button
                   type="button"
                   variant='outline'
-                  onClick={() => setIsFeatured(prev => !prev)}
+                  onClick={async () => {
+                    try {
+                      const next = !isFeatured;
+                      await sopApi.setSopShowcase({ sop_id: sopForm.id, showcase: next });
+                      setIsFeatured(next);
+                    } catch (e) {
+                      toast({ variant: 'error', description: '操作失败，请稍后重试' });
+                    }
+                  }}
                   className={`${isFeatured ? 'border-yellow-500 bg-yellow-50 text-yellow-700' : ''}`}
                 >
                   <span className="inline-flex items-center gap-2">

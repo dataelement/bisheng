@@ -3,7 +3,7 @@ import axios from "../request";
 // src/controllers/API.ts
 export const sopApi = {
   // 获取SOP列表
-  getSopList: (params: { keywords?: string; page?: number; page_size?: number; sort?: string }) => {
+  getSopList: (params: { keywords?: string; page?: number; page_size?: number; showcase?: 0 | 1 }) => {
     return axios.get('/api/v1/linsight/sop/list', { params });
   },
 
@@ -46,5 +46,9 @@ export const sopApi = {
   },
   UploadSopRecord:(data) => {
      return axios.post(`/api/v1/linsight/sop/upload`, data);
+  },
+  // 设为/取消精选
+  setSopShowcase: (data: { sop_id: string; showcase: boolean }) => {
+    return axios.post(`/api/v1/linsight/sop/showcase`, data);
   },
 }

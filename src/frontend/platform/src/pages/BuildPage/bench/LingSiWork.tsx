@@ -256,6 +256,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         pageSize: number;
         keyword?: string;
         sort?: 'asc' | 'desc';
+        showcase?: 0 | 1;
     }) => {
         setLoading(true);
         try {
@@ -263,7 +264,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                 page_size: params.pageSize,
                 page: params.page,
                 keywords: params.keyword || '',
-                sort: params.sort,
+                // sort: params.sort,
+                showcase: params.showcase,
             });
 
             setDatalist(res.items || []);
@@ -515,7 +517,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         const requestParams: any = {
             page: newPage,
             keyword: keywords,
-            pageSize
+            pageSize,
+            showcase: showcaseFilter
         };
 
 
@@ -525,6 +528,13 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         }
 
         fetchData(requestParams);
+    };
+    const [showcaseFilter, setShowcaseFilter] = useState<0 | 1 | undefined>(undefined);
+    const handleShowcaseFilterChange = (val?: 0 | 1) => {
+        setShowcaseFilter(val);
+        fetchData({ page: 1, pageSize, keyword: keywords, sort: sortConfig.direction as any, showcase: val });
+        setPage(1);
+        setPageInputValue('1');
     };
     const handleBatchDelete = async () => {
         setBatchDeleting(true);
@@ -957,7 +967,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 importFormData={importFormData}
                             />
                             {/* 表格区域 */}
-                            <SopTable datalist={datalist} selectedItems={selectedItems} handleSelectItem={handleSelectItem} handleSelectAll={handleSelectAll} handleSort={handleSort} handleEdit={handleEdit} handleDelete={handleDelete} page={page} pageSize={pageSize} total={total} loading={loading} pageInputValue={pageInputValue} handlePageChange={handlePageChange} handlePageInputChange={handlePageInputChange} handlePageInputConfirm={handlePageInputConfirm} handleKeyDown={handleKeyDown} />
+                            <SopTable datalist={datalist} selectedItems={selectedItems} handleSelectItem={handleSelectItem} handleSelectAll={handleSelectAll} handleSort={handleSort} handleEdit={handleEdit} handleDelete={handleDelete} page={page} pageSize={pageSize} total={total} loading={loading} pageInputValue={pageInputValue} handlePageChange={handlePageChange} handlePageInputChange={handlePageInputChange} handlePageInputConfirm={handlePageInputConfirm} handleKeyDown={handleKeyDown} onShowcaseFilterChange={handleShowcaseFilterChange} />
                             {deleteConfirmModal.open && (
                                 <div className="fixed inset-0 z-[1000] bg-opacity-50 flex items-center justify-center">
                                     <div className="relative rounded-lg p-6 w-[500px]  h-[150px]" style={{ background: 'white', opacity: 1, border: '1px solid #e5e7eb' }}>
