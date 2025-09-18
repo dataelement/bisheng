@@ -1,4 +1,7 @@
+import json
+
 from fastapi.exceptions import HTTPException
+from fastapi import WebSocket
 
 from bisheng.api.v1.schemas import UnifiedResponseModel
 
@@ -55,6 +58,16 @@ class BaseErrorCode(Exception):
                 "data": data
             }
         }
+
+    # websocket error message
+    def websocket_close_message(self, websocket: WebSocket):
+        reason = {
+            "status_code": self.code,
+            "status_message": self.message,
+            "data": {"exception": str(self), **self.kwargs}
+        }
+
+        websocket.close(code=self.code, reason=json.dumps(reason))
 
 
 class UnAuthorizedError(BaseErrorCode):

@@ -6,6 +6,7 @@ from fastapi import WebSocket, status, Request
 from langchain_core.messages import AIMessage, HumanMessage, BaseMessage, ToolMessage
 from loguru import logger
 
+from bisheng.api.errcode.assistant import *
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
@@ -143,20 +144,19 @@ class ChatClient:
                 # 会话业务agent通过数据库数据固定生成,不用每次变化
                 assistant = AssistantDao.get_one_assistant(self.client_id)
                 if not assistant:
-                    raise IgnoreException('该助手已被删除')
+                    raise AssistantDeletedError()
                     # 判断下agent是否上线
                 if assistant.status != AssistantStatus.ONLINE.value:
-                    raise IgnoreException('当前助手未上线，无法直接对话')
+                    raise AssistantNotOnlineError()
             elif not self.chat_id:
                 # 调试界面没测都重新生成
                 assistant = AssistantDao.get_one_assistant(self.client_id)
                 if not assistant:
-                    raise IgnoreException('该助手已被删除')
-        except IgnoreException as e:
-            logger.exception("get assistant info error")
-            await self.websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(e))
-            raise IgnoreException(f'get assistant info error: {str(e)}')
-        try:
+                    raise AssistantDeletedError()
+
+            # await self.websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(e))
+            # raise IgnoreException(f'get assistant info error: {str(e)}')
+
             if self.chat_id and self.gpts_agent is None:
                 self.db_assistant = assistant
                 # 会话业务agent通过数据库数据固定生成,不用每次变化
@@ -167,9 +167,13 @@ class ChatClient:
                 # 调试界面每次都重新生成
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id)
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)
+
+        except BaseErrorCode as e:
+            logger.exception("get assistant info error")
+            raise e
         except Exception as e:
-            logger.exception("agent init error")
-            raise Exception(f'agent init error: {str(e)}')
+            logger.exception("get assistant info error")
+            raise AssistantOtherError(exception=e)
 
     async def init_chat_history(self):
         # 初始化历史记录，不为空则不用重新初始化
@@ -320,9 +324,17 @@ class ChatClient:
             await self.send_response('answer', answer_end_type, answer, message_id=res.id if res else None)
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} question:{input_msg}')
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} answer:{answer}')
-        except Exception as e:
+
+        except BaseErrorCode as e:
             logger.exception('handle gpts message error: ')
             await self.send_response('system', 'start', '')
-            await self.send_response('system', 'end', 'Error: ' + str(e))
+            await self.send_response('system', 'end', "Error: " + json.dumps(e.to_sse_event_instance()))
+            e.websocket_close_message(websocket=self.websocket)
+        except Exception as e:
+            e = AssistantOtherError(exception=e)
+            logger.exception('handle gpts message error: ')
+            await self.send_response('system', 'start', '')
+            await self.send_response('system', 'end', 'Error: ' + json.dumps(e.to_sse_event_instance()))
+            e.websocket_close_message(websocket=self.websocket)
         finally:
             await self.send_response('processing', 'close', '')
