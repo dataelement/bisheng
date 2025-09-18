@@ -179,6 +179,7 @@ async def generate_sop(
         previous_session_version_id: str = Body(None, description="上一个灵思会话版本ID"),
         feedback_content: str = Body(None, description="用户反馈内容"),
         reexecute: bool = Body(False, description="是否重新执行生成SOP"),
+        sop_id: int = Body(None, description="精选案例的ID"),
         login_user: UserPayload = Depends(get_login_user)) -> EventSourceResponse:
     """
     生成与重新规划灵思SOP
@@ -186,6 +187,7 @@ async def generate_sop(
     :param reexecute:
     :param linsight_session_version_id:
     :param feedback_content:
+    :param sop_id:
     :param login_user:
     :return:
     """

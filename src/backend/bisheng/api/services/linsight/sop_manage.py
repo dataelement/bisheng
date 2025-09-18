@@ -421,6 +421,18 @@ class SOPManageService:
 
         return resp_200(data=True)
 
+    @classmethod
+    async def get_sop_by_id(cls, sop_id: int) -> LinsightSOP | None:
+        """
+        根据ID获取SOP
+        :param sop_id: SOP唯一ID
+        :return: SOP对象
+        """
+        sop_models = await LinsightSOPDao.get_sops_by_ids([sop_id])
+        if not sop_models:
+            return None
+        return sop_models[0]
+    
     # sop 库检索
     @classmethod
     async def search_sop(cls, query: str, k: int = 3) -> (List[Document], str | None):

@@ -316,7 +316,8 @@ class LinsightWorkbenchImpl:
                            feedback_content: Optional[str] = None,
                            reexecute: bool = False,
                            login_user: Optional[UserPayload] = None,
-                           knowledge_list: List[KnowledgeRead] = None) -> AsyncGenerator[Dict, None]:
+                           knowledge_list: List[KnowledgeRead] = None,
+                           sop_id: Optional[int] = None) -> AsyncGenerator[Dict, None]:
         """
         生成SOP内容
 
@@ -358,9 +359,14 @@ class LinsightWorkbenchImpl:
             if previous_session_version_id:
                 session_version = await LinsightSessionVersionDao.get_by_id(previous_session_version_id)
 
+            example_sop = None
+            if sop_id:
+                sop_db = await SOPManageService.get_sop_by_id(sop_id)
+                example_sop = sop_db.content if sop_db else None
+
             content = ""
             async for res in cls._generate_sop_content(
-                    agent, session_version, feedback_content, history_summary, knowledge_list
+                    agent, session_version, feedback_content, history_summary, knowledge_list, example_sop=example_sop
             ):
                 if isinstance(res, cls.SearchSOPError):
                     yield {"event": "search_sop_error", "data": str(res.message)}
@@ -496,12 +502,15 @@ class LinsightWorkbenchImpl:
     async def _generate_sop_content(cls, agent, session_version: LinsightSessionVersion,
                                     feedback_content: Optional[str],
                                     history_summary: List[str],
-                                    knowledge_list: List[KnowledgeRead] = None) -> AsyncGenerator:
+                                    knowledge_list: List[KnowledgeRead] = None,
+                                    example_sop: str = None) -> AsyncGenerator:
         """生成SOP内容"""
         file_list = await cls.prepare_file_list(session_version)
         knowledge_list = await cls.prepare_knowledge_list(knowledge_list)
-
-        if feedback_content is None:
+        if example_sop:
+            async for res in agent.generate_sop(sop=example_sop, file_list=file_list, knowledge_list=knowledge_list):
+                yield res
+        elif feedback_content is None:
             # 检索SOP模板
             sop_template, search_sop_error_msg = await SOPManageService.search_sop(
                 query=session_version.question, k=3
@@ -834,7 +843,8 @@ class LinsightWorkbenchImpl:
 
     @classmethod
     async def init_linsight_config_tools(cls, session_version: LinsightSessionVersion,
-                                         llm: BishengLLM, need_upload:bool=False, file_dir:str=None) -> List[BaseTool]:
+                                         llm: BishengLLM, need_upload: bool = False, file_dir: str = None) -> List[
+        BaseTool]:
         """
         初始化灵思配置的工具
 
