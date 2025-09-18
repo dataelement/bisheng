@@ -27,6 +27,8 @@ import { copyLibDatabase, createFileLib, deleteFileLib, readFileLibDatabase, upd
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useTable } from "../../util/hook";
 import { ModelSelect } from "../ModelPage/manage/tabs/WorkbenchModel";
+import { BookIcon } from "@/components/bs-icons/knowledge";
+import Tip from "@/components/bs-ui/tooltip/tip";
 
 // 知识库状态
 const enum KnowledgeBaseStatus {
@@ -541,7 +543,7 @@ export default function KnowledgeFile() {
                                     <div className="flex items-center gap-2">
                                         <div className="flex items-center justify-center size-12 text-white rounded-[4px]  w-[40px] h-[40px]">
                                             {/* <BookCopy  className="size-5"/> */}
-                                            <img src="/assets/file-logo.svg" alt="" className="size-10" />
+                                            <BookIcon className="text-primary" />
                                         </div>
                                         <div>
                                             <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">
@@ -625,38 +627,47 @@ export default function KnowledgeFile() {
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                 }}
-                                                className="z-50"
+                                                className="z-50 overflow-visible"
                                             >
-                                                <SelectItem
-                                                    showIcon={false}
-                                                    value="copy"
-                                                    disabled={!(el.copiable || user.role === 'admin') || el.state !== KnowledgeBaseStatus.Published || copyLoadingId === el.id}
-                                                >
-                                                    <div className="flex gap-2 items-center">
-                                                        <Copy className="w-4 h-4" />
-                                                        {t('lib.copy')}
-                                                    </div>
-                                                </SelectItem>
-                                                <SelectItem
-                                                    value="set"
-                                                    disabled={!el.copiable}
-                                                    showIcon={false}
-                                                >
-                                                    <div className="flex gap-2 items-center">
-                                                        <Settings className="w-4 h-4" />
-                                                        {t('设置')}
-                                                    </div>
-                                                </SelectItem>
-                                                <SelectItem
-                                                    value="delete"
-                                                    showIcon={false}
-                                                    disabled={!el.copiable}
-                                                >
-                                                    <div className="flex gap-2 items-center">
-                                                        <Trash2 className="w-4 h-4" />
-                                                        {t('delete')}
-                                                    </div>
-                                                </SelectItem>
+                                                <Tip content={!el.copiable && '暂无操作权限'} side='top'>
+                                                    <SelectItem
+                                                        showIcon={false}
+                                                        value="copy"
+                                                        className="data-[disabled]:pointer-events-auto"
+                                                        disabled={!(el.copiable || user.role === 'admin') || el.state !== KnowledgeBaseStatus.Published || copyLoadingId === el.id}
+                                                    >
+                                                        <div className="flex gap-2 items-center" >
+                                                            <Copy className="w-4 h-4" />
+                                                            {t('lib.copy')}
+                                                        </div>
+                                                    </SelectItem>
+                                                </Tip>
+                                                <Tip content={!el.copiable && '暂无操作权限'} side='top'>
+                                                    <SelectItem
+                                                        value="set"
+                                                        disabled={!el.copiable}
+                                                        className="data-[disabled]:pointer-events-auto"
+                                                        showIcon={false}
+                                                    >
+                                                        <div className="flex gap-2 items-center">
+                                                            <Settings className="w-4 h-4" />
+                                                            {t('设置')}
+                                                        </div>
+                                                    </SelectItem>
+                                                </Tip>
+                                                <Tip content={!el.copiable && '暂无操作权限'} side='top'>
+                                                    <SelectItem
+                                                        value="delete"
+                                                        showIcon={false}
+                                                        className="data-[disabled]:pointer-events-auto"
+                                                        disabled={!el.copiable}
+                                                    >
+                                                        <div className="flex gap-2 items-center">
+                                                            <Trash2 className="w-4 h-4" />
+                                                            {t('delete')}
+                                                        </div>
+                                                    </SelectItem>
+                                                </Tip>
                                             </SelectContent>
                                         </Select>
                                     </div>

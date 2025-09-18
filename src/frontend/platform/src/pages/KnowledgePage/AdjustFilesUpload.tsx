@@ -25,11 +25,11 @@ export default function AdjustFilesUpload() {
   const navigate = useNavigate();
   const location = useLocation();
   const { message } = useToast();
-  const { fileId: knowledgeId } = useParams(); 
-  
+  const { fileId: knowledgeId } = useParams();
+
   // 从路由状态获取调整模式的初始数据（必须传文件数据）
   const initFileData = location.state?.fileData;
-  
+
   useEffect(() => {
     // 如果没有初始化数据，说明是直接访问，跳转到/filelib
     if (!initFileData) {
@@ -40,10 +40,9 @@ export default function AdjustFilesUpload() {
     navigate(-1); // 无数据时回退
     return null;
   }
-{console.log(initFileData,123)}
   // 调整模式专属状态
   const [currentStep, setCurrentStep] = useState(1);
-    const getParsedSplitRule = (rawSplitRule) => {
+  const getParsedSplitRule = (rawSplitRule) => {
     // 处理无 split_rule 或为空的情况
     if (!rawSplitRule) {
       return {
@@ -74,13 +73,13 @@ export default function AdjustFilesUpload() {
         // 分隔符：确保是数组，默认双换行+单换行
         separator: Array.isArray(parsed.separator) ? parsed.separator : ["\\n\\n", "\\n"],
         // 分隔符规则：确保与 separator 长度一致，默认 after
-        separator_rule: Array.isArray(parsed.separator_rule) 
-          ? parsed.separator_rule 
+        separator_rule: Array.isArray(parsed.separator_rule)
+          ? parsed.separator_rule
           : ["after", "after"],
         // chunk大小：数字转字符串（子组件用字符串格式），默认1000
-        chunk_size: parsed.chunk_size || 1000,
+        chunk_size: parsed.chunk_size ?? 1000,
         // 重叠大小：默认100
-        chunk_overlap: parsed.chunk_overlap || 100,
+        chunk_overlap: parsed.chunk_overlap ?? 100,
         // 布尔值转换：0→false，1→true，默认false
         retain_images: parsed.retain_images === 1,
         force_ocr: parsed.force_ocr === 1,
@@ -116,22 +115,22 @@ export default function AdjustFilesUpload() {
       };
     }
   };
-    const fileName = initFileData.name || initFileData.file_name || '';
+  const fileName = initFileData.name || initFileData.file_name || '';
   const fileSuffix = fileName.split('.').pop()?.toLowerCase() || 'txt';
   const fileType = ['xlsx', 'xls', 'csv'].includes(fileSuffix) ? 'table' : 'file';
-  
+
   const [resultFiles, setResultFiles] = useState([
     {
       id: initFileData.id,
       fileName: initFileData.name || initFileData.file_name, // 兼容字段名
       file_path: initFileData.filePath || initFileData.object_name, // 兼容文件路径
       suffix: initFileData.suffix || initFileData.file_name?.split(".").pop() || "", // 解析后缀
-      previewUrl:initFileData.previewUrl,
+      previewUrl: initFileData.previewUrl,
       fileType: fileType,
       split_rule: getParsedSplitRule(initFileData.split_rule) // 传入转换后的配置对象
     }
   ]);
-  
+
   const [segmentRules, setSegmentRules] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isNextDisabled, setIsNextDisabled] = useState(false);
@@ -224,8 +223,7 @@ export default function AdjustFilesUpload() {
     captureAndAlertRequestErrorHoc(
       rebUploadFile(apiConfig)
         .then(res => {
-          console.log(apiConfig,2323);
-          
+
           // 1. 修复重复文件判断（单个对象处理）
           const _repeatFiles = res.status === 3 ? [res] : [];
           if (_repeatFiles.length) {
@@ -234,14 +232,13 @@ export default function AdjustFilesUpload() {
           }
 
           // 2. 修复文件ID更新（直接使用res.id，无需数组索引）
-          setResultFiles(prevFiles => 
+          setResultFiles(prevFiles =>
             prevFiles.map(file => ({
               ...file,
               fileId: res.id // 关键修复：单个对象直接取id
             }))
           );
-          console.log(resultFiles,56);
-          
+
           // 3. 修复步骤跳转时机（确保数据更新后再跳转）
           message({ variant: 'success', description: t('调整分段策略成功') });
           setCurrentStep(3); // 只有成功且无重复时才跳转
@@ -270,7 +267,7 @@ export default function AdjustFilesUpload() {
       retryKnowledgeFileApi(params)
         .then(res => {
           // 补充：更新覆盖后的文件ID
-          setResultFiles(prevFiles => 
+          setResultFiles(prevFiles =>
             prevFiles.map(file => ({
               ...file,
               fileId: res.id // 假设retry接口也返回单个对象带id
@@ -296,7 +293,7 @@ export default function AdjustFilesUpload() {
             variant="outline"
             size="icon"
             className="bg-[#fff] size-8"
-           onClick={() => navigate(-1)}
+            onClick={() => navigate(-1)}
           >
             <ChevronLeft />
           </Button>
@@ -312,10 +309,9 @@ export default function AdjustFilesUpload() {
       </div>
 
       {/* 步骤内容区域 */}
-      <div className="flex flex-1 overflow-hidden px-4">
-        <div className="w-full overflow-y-auto">
+      <div className="flex flex-1 px-4">
+        <div className="w-full">
           <div className="h-full py-4">
-            {console.log(resultFiles,33)}
             <div className={currentStep === 1 ? "block" : "hidden"}>
               <FileUploadStep2
                 ref={fileUploadStep2Ref}
@@ -328,9 +324,6 @@ export default function AdjustFilesUpload() {
                 isAdjustMode
               />
             </div>
-
-            {console.log(resultFiles, segmentRules, 3333333)}
-
             {/* 步骤2：原文对比 */}
             {currentStep === 2 && segmentRules && (
               <div className="block">

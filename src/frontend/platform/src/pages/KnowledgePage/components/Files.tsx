@@ -25,6 +25,7 @@ import { deleteFile, readFileByLibDatabase, retryKnowledgeFileApi } from "../../
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import useKnowledgeStore from "../useKnowledgeStore";
+import Tip from "@/components/bs-ui/tooltip/tip";
 
 export default function Files({ onPreview }) {
     const { t } = useTranslation('knowledge')
@@ -233,25 +234,31 @@ export default function Files({ onPreview }) {
             {/* 顶部操作栏 */}
             {selectedFileObjs.length > 0 && (
                 <div className="absolute top-[-62px] left-0 right-0 flex justify-center items-center p-2 border-b z-10">
-                    <div className="flex gap-4 items-center">
-                        <div className="flex">
-                            <Button
-                                variant="outline"
-                                onClick={handleBatchDelete}
-                                className="flex items-center gap-1"
-                            >
-                                <Trash2 size={16} />
-                                {t('delete')}
-                            </Button>
-                            {hasSelectedFailedFiles && (
+                    <div className="flex items-center">
+                        <div className="flex gap-2">
+                            <Tip content={!isEditable && '暂无操作权限'} side='bottom'>
                                 <Button
                                     variant="outline"
-                                    onClick={handleBatchRetry}
-                                    className="flex items-center gap-1"
+                                    onClick={handleBatchDelete}
+                                    disabled={!isEditable}
+                                    className="flex items-center gap-1 disabled:pointer-events-auto"
                                 >
-                                    <RotateCw size={16} />
-                                    {t('重试')}
+                                    <Trash2 size={16} />
+                                    {t('delete')}
                                 </Button>
+                            </Tip>
+                            {hasSelectedFailedFiles && (
+                                <Tip content={!isEditable && '暂无操作权限'} side='bottom'>
+                                    <Button
+                                        variant="outline"
+                                        onClick={handleBatchRetry}
+                                        disabled={!isEditable}
+                                        className="flex items-center gap-1 disabled:pointer-events-auto"
+                                    >
+                                        <RotateCw size={16} />
+                                        {t('重试')}
+                                    </Button>
+                                </Tip>
                             )}
                         </div>
                     </div>
@@ -487,43 +494,43 @@ export default function Files({ onPreview }) {
                                     )}
                                 </TableCell>
                                 <TableCell className="text-right">
-                                    <div className="flex items-center justify-end gap-2">
+                                    <div className="flex items-center justify-end gap-1">
                                         {el.status === 3 && (
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleRetry([el]); // 单个重试传递完整对象
-                                                }}
-                                                title={t('重试')}
-                                            >
-                                                <RotateCw size={16} />
-                                            </Button>
+                                            <Tip content={!isEditable && '暂无操作权限'} side='top'>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    disabled={!isEditable}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleRetry([el]); // 单个重试传递完整对象
+                                                    }}
+                                                    className="disabled:pointer-events-auto"
+                                                    title={t('重试')}
+                                                >
+                                                    <RotateCw size={16} />
+                                                </Button>
+                                            </Tip>
                                         )}
-                                        {isEditable ? (
+                                        <Tip
+                                            content={!isEditable && '暂无操作权限'}
+                                            side='top'
+                                            styleClasses="-translate-x-6"
+                                        >
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
+                                                className="disabled:pointer-events-auto"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     handleDelete(el.id);
                                                 }}
+                                                disabled={!isEditable}
                                                 title={t('delete')}
                                             >
                                                 <Trash2 size={16} />
                                             </Button>
-                                        ) : (
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="text-gray-400 cursor-not-allowed"
-                                                title={t('delete')}
-                                                disabled
-                                            >
-                                                <Trash2 size={16} />
-                                            </Button>
-                                        )}
+                                        </Tip>
                                     </div>
                                 </TableCell>
                             </TableRow>

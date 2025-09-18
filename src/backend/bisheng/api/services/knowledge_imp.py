@@ -1046,17 +1046,14 @@ def add_qa(db_knowledge: Knowledge, data: QAKnowledgeUpsert) -> QAKnowledge:
         raise e
 
 
-def qa_status_change(qa_id: int, target_status: int):
+def qa_status_change(qa_db: QAKnowledge, target_status: int, db_knowledge: Knowledge):
     """QA 状态切换"""
-    qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(qa_id)
 
     if qa_db.status == target_status:
         logger.info("qa status is same, skip")
         return
-
-    db_knowledge = KnowledgeDao.query_by_id(qa_db.knowledge_id)
     if target_status == QAStatus.DISABLED.value:
-        delete_vector_data(db_knowledge, [qa_id])
+        delete_vector_data(db_knowledge, [qa_db.id])
         qa_db.status = target_status
         QAKnoweldgeDao.update(qa_db)
     else:
