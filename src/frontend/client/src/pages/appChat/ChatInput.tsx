@@ -4,17 +4,19 @@ import { Button, SendIcon, Textarea } from "~/components";
 import InputFiles from "./components/InputFiles";
 import { bishengConfState, currentRunningState } from "./store/atoms";
 import { useAreaText } from "./useAreaText";
+import { useLocalize } from "~/hooks";
 
 export default function ChatInput({ v }) {
     const [bishengConfig] = useRecoilState(bishengConfState)
     const { inputDisabled, error: inputMsg, showUpload, showStop } = useRecoilValue(currentRunningState)
     const { accepts, chatState, inputRef, setChatFiles, handleInput, handleRestart, handleSendClick, handleStopClick } = useAreaText()
     const [fileUploading, setFileUploading] = useState(false)
+    const localize = useLocalize()
 
     const placholder = useMemo(() => {
         const reason = inputMsg || ' '
-        return inputDisabled ? reason : '请输入问题'
-    }, [inputDisabled, inputMsg])
+        return inputDisabled ? reason : localize('com_ui_please_enter_question')
+    }, [inputDisabled, inputMsg, localize])
 
     // auto focus
     useEffect(() => {
@@ -61,7 +63,7 @@ export default function ChatInput({ v }) {
                     className="rounded-full bg-primary/10 bg-blue-50 text-primary"
                     variant="ghost"
                     onClick={handleRestart}>
-                    <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/chat.png'} alt="" />重新运行
+                    <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/chat.png'} alt="" />{localize('com_ui_restart')}
                 </Button>
                 }
             </div>

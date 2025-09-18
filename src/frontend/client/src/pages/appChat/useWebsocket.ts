@@ -5,7 +5,8 @@ import { NotificationSeverity } from "~/common"
 import { useToast } from "~/hooks"
 import { SkillMethod } from "./appUtils/skillMethod"
 import { submitDataState } from "./store/atoms"
-import { ERROR_CODES } from "./store/constants"
+import { getErrorI18nKey } from "./store/constants"
+import { useLocalize } from "~/hooks"
 
 export const AppLostMessage = '当前应用已被删除'
 const wsMap = new Map<string, WebSocket>()
@@ -29,6 +30,7 @@ const restartCallBack: any = { current: null } // 用于存储重启回调函数
 export const useWebSocket = (helpers) => {
     const { showToast } = useToast();
     const [submitData, setSubmitData] = useRecoilState(submitDataState)
+    const localize = useLocalize()
 
     const websocket = wsMap.get(helpers.chatId)
     const currentChatId = useCurrentChatId(helpers.chatId)
@@ -120,7 +122,7 @@ export const useWebSocket = (helpers) => {
             const { code, message } = data.message
             helpers.handleMsgError(data.intermediate_steps || '')
 
-            const errorMsg = code == 500 ? message : ERROR_CODES[code]
+            const errorMsg = code == 500 ? message : localize(getErrorI18nKey(code))
             showToast({
                 message: errorMsg,
                 severity: NotificationSeverity.ERROR,
