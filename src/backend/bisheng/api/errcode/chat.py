@@ -16,27 +16,27 @@ class SkillNotOnlineError(BaseErrorCode):
 
 # 当前编译没通过
 class SkillNotBuildError(BaseErrorCode):
-    code = 13003
-    message = "当前技能未编译通过，无法直接对话"
+    Code = 13003
+    Msg = "当前技能未编译通过，无法直接对话"
 
 
 # 后端服务异常
 class ChatServiceError(BaseErrorCode):
-    code = 13004
-    message = "后端服务异常"
+    Code = 13004
+    Msg = "后端服务异常"
 
 
 # LLM 技能执行错误. error={str(e)}
 class LLMExecutionError(BaseErrorCode):
-    code = 13005
-    message = "LLM 技能执行错误. error={error}"
+    Code = 13005
+    Msg = "LLM 技能执行错误. error={error}"
 
 # 文档解析失败，点击输入框上传按钮重新上传\n\n{str(e)}
 class DocumentParseError(BaseErrorCode):
-    code = 13006
-    message = "文档解析失败，点击输入框上传按钮重新上传\n\n{error}"
+    Code = 13006
+    Msg = "文档解析失败，点击输入框上传按钮重新上传\n\n{error}"
 
 # Input data is parsed fail. error={str(e)}
 class InputDataParseError(BaseErrorCode):
-    code = 13007
-    message = "Input data is parsed fail. error={error}"
+    Code = 13007
+    Msg = "Input data is parsed fail. error={error}"
