@@ -78,6 +78,17 @@ export default function useChatHelpers() {
         }))
     }
 
+    // 显示重试按钮
+    const reRunShow = (show: boolean) => {
+        setRunningState((prev) => ({
+            ...prev,
+            [chatId]: {
+                ...prev[chatId],
+                showReRun: show,
+            },
+        }))
+    }
+
     // 唤起输入(表单输入，文本输入)
     const showInputForm = (inputSchema) => {
         const { tab, value } = inputSchema
@@ -365,6 +376,7 @@ export default function useChatHelpers() {
         message,
         flow: chatState?.flow,
         stopShow,
+        reRunShow,
         handleMsgError,
         clearError,
         showInputForm,

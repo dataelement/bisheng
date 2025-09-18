@@ -128,7 +128,8 @@ export default function index() {
                     inputForm: numericType !== FLOW_TYPES.WORK_FLOW || null,
                     showUpload: numericType === FLOW_TYPES.WORK_FLOW,
                     showStop: false,
-                    guideWord: flowData?.guide_question
+                    guideWord: flowData?.guide_question,
+                    showReRun: false
                 }
             }
         })

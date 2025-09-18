@@ -199,9 +199,17 @@ export default function AdjustFilesUpload() {
     submittingRef.current = true;
     setIsSubmitting(true);
 
+    /**
+     * 将 UI 可见的换行转义("\\n")还原为真实换行("\n")
+     */
+    const normalizeSeparators = (arr) =>
+      (arr || []).map((s) =>
+        typeof s === 'string' ? s.replace(/\\n/g, '\n') : s
+      );
+
     const apiConfig = {
       knowledge_id: Number(_config.rules.knowledgeId || initFileData.knowledgeId || knowledgeId),
-      separator: _config.rules.separator,
+      separator: normalizeSeparators(_config.rules.separator),
       separator_rule: _config.rules.separatorRule,
       chunk_size: _config.rules.chunkSize,
       chunk_overlap: _config.rules.chunkOverlap,
@@ -216,6 +224,8 @@ export default function AdjustFilesUpload() {
     captureAndAlertRequestErrorHoc(
       rebUploadFile(apiConfig)
         .then(res => {
+          console.log(apiConfig,2323);
+          
           // 1. 修复重复文件判断（单个对象处理）
           const _repeatFiles = res.status === 3 ? [res] : [];
           if (_repeatFiles.length) {

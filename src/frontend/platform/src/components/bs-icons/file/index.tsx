@@ -16,7 +16,7 @@ export type FileType =
     | 'docx'
     | 'ppt'
     | 'pptx'
-    | 'md' | 'html' | 'txt'
+    | 'md' | 'html' | 'txt' | 'json'
     | 'jpg'
     | 'jpeg'
     | 'png'
@@ -29,6 +29,7 @@ export type FileType =
 const iconComponents: Record<FileType, React.ComponentType<any>> = {
     pdf: PdfIcon,
     txt: TxtIcon,
+    json: TxtIcon,
     doc: DocIcon,
     docx: DocxIcon,
     ppt: PptIcon,
@@ -58,7 +59,7 @@ export const FileIcon = forwardRef<
 
     if (!IconComponent) {
         console.warn(`No icon found for type: ${props.type}`);
-        return null;
+        return <TxtIcon ref={ref} className={props.className} {...props} />;
     }
 
     return <IconComponent ref={ref} className={props.className} {...props} />;

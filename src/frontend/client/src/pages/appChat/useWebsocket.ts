@@ -139,6 +139,7 @@ export const useWebSocket = (helpers) => {
         } else if (data.category === 'guide_question') {
             return helpers.showGuideQuestion(helpers.chatId, data.message.guide_question.filter(q => q))
         } else if (data.category === 'stream_msg') {
+            helpers.flow.flow_type === 10 && helpers.reRunShow(true)
             helpers.message.streamMsg(helpers.chatId, data)
         } else if (data.category === 'end_cover' && data.type === 'end_cover') {
             // helpers.handleMsgError('')
@@ -175,6 +176,8 @@ export const useWebSocket = (helpers) => {
             if (restartCallBack.current) {
                 restartCallBack.current()
                 restartCallBack.current = null
+            } else {
+                helpers.flow.flow_type === 10 && helpers.reRunShow(true)
             }
         } else if (data.type === 'over') {
             helpers.message.createMsg(helpers.chatId, data)

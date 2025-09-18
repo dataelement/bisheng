@@ -28,6 +28,7 @@ interface IProps {
     onNext: (step: number, config?: any) => void
     onPrev: () => void
     isAdjustMode?: boolean
+    kId?: string | number
 }
 const enum DisplayModeType {
     OnlyTables = 'table',
@@ -86,26 +87,50 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
     useEffect(() => {
         applyRuleRef.current = applyRule;
     }, [applyRule]);
-    // 起始行不能大于结束行校验
+    // 起始行与切分参数校验
     const vildateCell = () => {
+        // 表头行区间校验
         if (applyEachCell
             ? rules.fileList.some(file => file.excelRule.append_header && Number(file.excelRule.header_start_row) > Number(file.excelRule.header_end_row))
             : cellGeneralConfig.append_header && Number(cellGeneralConfig.header_start_row) > Number(cellGeneralConfig.header_end_row)) {
-            return toast({
+            toast({
                 variant: 'warning',
                 description: '最小行不能大于最大行'
             })
+            return true
         }
+
+        // 切分长度与重叠长度校验
+        const chunkSizeNum = Number((rules as any)?.chunkSize ?? (rules as any)?.chunk_size ?? 0)
+        const chunkOverlapNum = Number((rules as any)?.chunkOverlap ?? (rules as any)?.chunk_overlap ?? 0)
+        if (!Number.isNaN(chunkSizeNum) && !Number.isNaN(chunkOverlapNum) && chunkOverlapNum > chunkSizeNum) {
+            toast({
+                variant: 'warning',
+                description: '重叠区长度不能大于预期切分长度'
+            })
+            return true
+        }
+
         return false
     }
 
     const { toast } = useToast()
   const internalHandleNext = () => {
         console.log(step, displayStep,'previewCount11');
+        // 全局校验：无论在哪个分支，都先校验参数
+        if (vildateCell()) return;
+        // 规则校验：过滤后若为空或存在空regex，阻止继续
+        const hasEmptyCustomRule = (strategies || []).some(s => String(s?.regex ?? '') === '');
+        if (hasEmptyCustomRule) {
+            toast({ variant: 'warning', description: '自定义规则不能为空' });
+            return;
+        }
+        if (!rules.separator || rules.separator.length === 0) {
+            toast({ variant: 'warning', description: '请至少添加一个分割规则' });
+            return;
+        }
         const nextStep = step + 1;
         if (step === 2 || displayStep === 2) {
-            if (vildateCell()) return;
-
             const config = {
                 applyEachCell,
                 cellGeneralConfig,
@@ -153,6 +178,15 @@ useEffect(() => {
 }, [applyEachCell, cellGeneralConfig, rules]);
     const handlePreview = () => {
         if (vildateCell()) return
+        const hasEmptyCustomRule = (strategies || []).some(s => String(s?.regex ?? '') === '');
+        if (hasEmptyCustomRule) {
+            toast({ variant: 'warning', description: '自定义规则不能为空' });
+            return;
+        }
+        if (!rules.separator || rules.separator.length === 0) {
+            toast({ variant: 'warning', description: '请至少添加一个分割规则' });
+            return;
+        }
         setShowPreview(true)
           setPreviewLoading(true); 
         setPreviewCount(c => c + 1) // 刷新分段
@@ -197,7 +231,7 @@ useEffect(() => {
                                     rules={rules}
                                     setRules={setRules}
                                     strategies={strategies}
-                                    setStrategies={setStrategies}
+                                    setStrategies={(next) => setStrategies(next)}
                                     showPreview={showPreview}
                                 />
                             </TabsContent>
@@ -231,7 +265,7 @@ useEffect(() => {
 
             {/* 原文预览 & 分段预览：预览时占50% */}
             {
-                (showPreview || step === 3) ? (
+                (showPreview || (step === 3&&!isAdjustMode)) ? (
                     <div className={cn(
                         "relative",
                         // 预览时占50%宽度
@@ -272,7 +306,7 @@ useEffect(() => {
             <Button
                 className="h-8"
                 // disabled={strategies.length === 0}
-                 disabled={previewFailed || isSubmitting}
+                 disabled={previewFailed || isSubmitting||strategies.length === 0}
                   onClick={internalHandleNext}
             >
                 {isSubmitting ? (
@@ -290,17 +324,34 @@ export default FileUploadStep2;
 
 
 const useFileProcessingRules = (initialStrategies, resultFiles, kid, splitRule) => {
+    // 统一解析 splitRule：可能是字符串或对象
+    const parsedSplitRule = useMemo(() => {
+        if (!splitRule) return {} as any;
+        if (typeof splitRule === 'string') {
+            try {
+                const obj = JSON.parse(splitRule);
+                return obj && typeof obj === 'object' ? obj : {};
+            } catch (e) {
+                console.error('splitRule 解析失败:', e);
+                return {} as any;
+            }
+        }
+        return splitRule || {};
+    }, [splitRule]);
     const [rules, setRules] = useState({
         knowledgeId: kid,
         fileList: [],
-        separator: splitRule?.separator || ['\\n\\n', '\\n'],
-        separatorRule: splitRule?.separator_rule || ['after', 'after'],
-        chunkSize: splitRule?.chunk_size?.toString() || "1000",
-        chunkOverlap: splitRule?.chunk_overlap?.toString() || "0",
-        retainImages: splitRule?.retain_images ?? true,
-        enableFormula: splitRule?.enable_formula ?? true,
-        forceOcr: splitRule?.force_ocr ?? true,
-        pageHeaderFooter: splitRule?.filter_page_header_footer ?? true
+        // 统一显示：将真实换行转为可见的转义形式
+        separator: (parsedSplitRule?.separator || ['\\n\\n', '\\n']).map((s) =>
+            typeof s === 'string' ? s.replace(/\n/g, '\\n') : s
+        ),
+        separatorRule: parsedSplitRule?.separator_rule || ['after', 'after'],
+        chunkSize: parsedSplitRule?.chunk_size?.toString() || "1000",
+        chunkOverlap: parsedSplitRule?.chunk_overlap?.toString() || "0",
+        retainImages: parsedSplitRule?.retain_images ?? true,
+        enableFormula: parsedSplitRule?.enable_formula ?? true,
+        forceOcr: parsedSplitRule?.force_ocr ?? true,
+        pageHeaderFooter: parsedSplitRule?.filter_page_header_footer ?? true
     });
     
     const [applyEachCell, setApplyEachCell] = useState(false);
@@ -316,8 +367,12 @@ const useFileProcessingRules = (initialStrategies, resultFiles, kid, splitRule) 
     // 根据正则表达式生成策略描述
     const getStrategyRuleDescription = (regex) => {
         const ruleMap = {
+            // 转义形式
             '\\n\\n': '双换行后切分,用于分隔段落',
             '\\n': '单换行后切分，用于分隔普通换行',
+            // 真实换行字符形式
+            '\n\n': '双换行后切分,用于分隔段落',
+            '\n': '单换行后切分，用于分隔普通换行',
             '第.{1,3}章': '"第X章"前切分，切分章节等',
             '第.{1,3}条': '"第X条"前切分，切分条目等',
             '。': '中文句号后切分，中文断句',
@@ -326,21 +381,24 @@ const useFileProcessingRules = (initialStrategies, resultFiles, kid, splitRule) 
         return ruleMap[regex] || `自定义规则: ${regex}`;
     };
   const [strategies, setStrategies] = useState(() => {
-        if (splitRule?.separator && splitRule?.separator_rule) {
-            // 从 splitRule 初始化策略
-            return splitRule.separator.map((regex, index) => ({
+        if (parsedSplitRule?.separator && parsedSplitRule?.separator_rule) {
+            // 从 parsedSplitRule 初始化策略（将真实换行标准化为可见的转义形式）
+            return parsedSplitRule.separator.map((regex, index) => ({
                 id: `strategy-${index}`,
-                regex,
-                position: splitRule.separator_rule[index] || 'after',
+                regex: typeof regex === 'string' ? regex.replace(/\n/g, '\\n') : regex,
+                position: parsedSplitRule.separator_rule[index] || 'after',
                 rule: getStrategyRuleDescription(regex) // 根据正则生成描述
             }));
         }
         return initialStrategies;
     });
-    // Update rules when strategies change
+    // Update rules when strategies change（不过滤只含换行的规则）
     useEffect(() => {
-        const [separator, separatorRule] = strategies.reduce(([_separator, _separatorRule], strategy) => {
-            const { regex, position } = strategy;
+        const cleaned = (strategies || []).filter(s => String(s?.regex ?? '') !== '');
+        const [separator, separatorRule] = cleaned.reduce(([_separator, _separatorRule], strategy) => {
+            // 统一显示：确保换行以可见转义“\\n”存在，避免 UI 为空
+            const regex = String(strategy.regex).replace(/\n/g, '\\n');
+            const position = strategy.position || 'after';
             return [[..._separator, regex], [..._separatorRule, position]];
         }, [[], []]);
 

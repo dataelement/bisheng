@@ -148,6 +148,7 @@ export const useAreaText = () => {
                 showStop: true,
                 showUpload: false,
                 inputForm: false,
+                showReRun: false,
             },
         }))
     }

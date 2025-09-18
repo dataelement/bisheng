@@ -129,7 +129,7 @@ export default function AgentCenter() {
                     const result = await getChatOnlineApi(
                         currentPage,
                         query,
-                        categoryIdRef.current,
+                        -1,
                         pageSize // 禁用默认限制，或根据接口逻辑调整
                     );
 

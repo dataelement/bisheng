@@ -8,7 +8,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import { useTranslation } from "react-i18next";
 import { getSourceChunksApi, splitWordApi } from "../../../controllers/API";
 import { downloadFile } from "../../../util/utils";
-import FileViewPanne from "./ FileViewPanne";
+import FileViewPanne from "./FileViewPanne";
 
 // 顶部答案区
 const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {

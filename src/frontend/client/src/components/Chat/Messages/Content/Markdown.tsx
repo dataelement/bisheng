@@ -206,7 +206,13 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent }
     if (isInitializing) {
       return '';
     }
-    return LaTeXParsing ? preprocessLaTeX(content) : content;
+    const message = LaTeXParsing ? preprocessLaTeX(content) : content;
+
+    return message
+      // .replaceAll(/(\n\s{4,})/g, '\n   ') // 禁止4空格转代码
+      .replace(/(?<![\n\|])\n(?!\n)/g, '\n\n') // 单个换行符 处理不换行情况，例如：`Hello|There\nFriend
+    // .replaceAll('(bisheng/', '(/bisheng/') // TODO 临时处理方案,以后需要改为markdown插件方式处理
+    // .replace(/\\[\[\]]/g, '$$') // 处理`\[...\]`包裹的公式
   }, [content, LaTeXParsing, isInitializing]);
 
   const rehypePlugins = useMemo(

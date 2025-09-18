@@ -32,6 +32,17 @@ const getStrategyId = (regexStr, position) => {
   return `strategy-${Math.abs(hash)}`;
 };
 
+interface RuleFileProps {
+  rules: any;
+  setRules: (updater: any) => void;
+  strategies?: any[];
+  setStrategies?: (newStrategies: any[]) => void;
+  originalSplitRule?: any;
+  setOriginalSplitRule?: (updater: any) => void;
+  isAdjustMode?: boolean;
+  showPreview?: boolean;
+}
+
 export default function RuleFile({
   rules,
   setRules,
@@ -41,7 +52,7 @@ export default function RuleFile({
   setOriginalSplitRule = () => {},
   isAdjustMode = false,
   showPreview =false
-}) {
+}: RuleFileProps) {
   console.log(showPreview,199);
   
   const { appConfig } = useContext(locationContext);

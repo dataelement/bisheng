@@ -361,7 +361,7 @@ export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = 8) 
         keyword,
         limit: disableLimit
     }
-    if (tag_id !== -1 && tag_id != null && !['favorites', 'uncategorized'].includes(tag_id)) {
+    if (tag_id !== -1 && tag_id != null) {
         params.tag_id = tag_id
     }
 

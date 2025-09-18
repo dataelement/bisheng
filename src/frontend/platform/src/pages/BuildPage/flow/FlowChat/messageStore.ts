@@ -75,7 +75,7 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
                 if ('input' in message) {
                     chatKey = 'input'
                 } else {
-                    Object.keys(message)[0]
+                    chatKey = Object.keys(message)[0]
                 }
             }
 

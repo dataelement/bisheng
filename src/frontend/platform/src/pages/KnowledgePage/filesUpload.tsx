@@ -111,10 +111,18 @@ export default function FilesUpload() {
     submittingRef.current = true;
     setIsSubmitting(true);
 
+    /**
+     * 将 UI 可见的换行转义("\\n")还原为真实换行("\n")
+     */
+    const normalizeSeparators = (arr) =>
+      (arr || []).map((s) =>
+        typeof s === 'string' ? s.replace(/\\n/g, '\n') : s
+      );
+
     // 正常模式API参数格式
     const apiConfig = {
       knowledge_id: Number(_config.rules.knowledgeId || knowledgeId),
-      separator: _config.rules.separator,
+      separator: normalizeSeparators(_config.rules.separator),
       separator_rule: _config.rules.separatorRule,
       chunk_size: _config.rules.chunkSize,
       chunk_overlap: _config.rules.chunkOverlap,

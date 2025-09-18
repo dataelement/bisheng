@@ -24,7 +24,7 @@ customAxios.interceptors.response.use(function (response) {
     if (response.data.status_code === 200) {
         return response.data.data;
     }
-      if (response.data.status_code === 11010) {
+    if (response.data.status_code === 11010) {
         return response.data;
     }
     const i18Msg = i18next.t(`errors.${response.data.status_code}`)
@@ -34,6 +34,7 @@ customAxios.interceptors.response.use(function (response) {
     if (response.data.status_code === 403) {
         // 修改不跳转
         if (response.config.method === 'get') {
+            console.error('无权访问 :>> ', response.request.responseURL);
             location.href = __APP_ENV__.BASE_URL + '/403'
         }
         return Promise.reject(errorMessage);

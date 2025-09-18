@@ -91,6 +91,8 @@ export interface RunningStatus {
   showStop: boolean;
   /** 引导词 */
   guideWord?: string[];
+  /** 重新运行展示 */
+  showReRun?: boolean;
 }
 
 // 毕昇配置
