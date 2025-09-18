@@ -337,7 +337,7 @@ class LinsightWorkbenchImpl:
             session_version = await cls._get_session_version(linsight_session_version_id)
 
             if login_user.user_id != session_version.user_id:
-                yield UnAuthorizedError.to_sse_event()
+                yield UnAuthorizedError().to_sse_event_instance()
                 return
             try:
                 # 创建LLM和工具

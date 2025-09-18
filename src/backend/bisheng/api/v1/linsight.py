@@ -124,7 +124,7 @@ async def submit_linsight_workbench(
 
             if linsight_invitation_code:
                 if await InviteCodeService.use_invite_code(user_id=login_user.user_id) is False:
-                    yield LinsightUseUpError.to_sse_event()
+                    yield LinsightUseUpError().to_sse_event_instance()
                     return
 
             message_session_model, linsight_session_version_model = await LinsightWorkbenchImpl.submit_user_question(
@@ -136,7 +136,7 @@ async def submit_linsight_workbench(
                 "linsight_session_version": linsight_session_version_model.model_dump()
             }
         except Exception as e:
-            yield LinsightQuestionError.to_sse_event(data=str(e))
+            yield LinsightQuestionError(exception=e).to_sse_event_instance()
             return
 
         yield {

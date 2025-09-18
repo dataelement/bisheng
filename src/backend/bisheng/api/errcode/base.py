@@ -34,7 +34,8 @@ class BaseErrorCode(Exception):
         return HTTPException(status_code=cls.Code, detail=msg or cls.Msg)
 
     @classmethod
-    def to_sse_event(cls, msg: str = None, data: any = None, event: str = "error") -> dict:
+    def to_sse_event(cls, msg: str = None, data: any = None, event: str = "error", **kwargs) -> dict:
+        data = data if data is not None else {"exception": cls.Msg, **kwargs}
         return {
             "event": event,
             "data": {
