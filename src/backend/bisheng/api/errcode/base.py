@@ -41,22 +41,22 @@ class BaseErrorCode(Exception):
         data = data if data is not None else {"exception": cls.Msg, **kwargs}
         return {
             "event": event,
-            "data": {
+            "data": json.dumps({
                 "status_code": cls.Code,
                 "status_message": msg or cls.Msg,
                 "data": data
-            }
+            })
         }
 
     def to_sse_event_instance(self, event: str = "error", data: any = None) -> dict:
         data = data if data is not None else {"exception": str(self), **self.kwargs}
         return {
             "event": event,
-            "data": {
+            "data": json.dumps({
                 "status_code": self.code,
                 "status_message": self.message,
                 "data": data
-            }
+            })
         }
 
     def to_dict(self, data: any = None) -> dict:
