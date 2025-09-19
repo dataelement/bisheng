@@ -10,9 +10,15 @@ from langchain_core.embeddings import Embeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from loguru import logger
 
-from bisheng.api.errcode.base import NotFoundError, ServerError
-from bisheng.api.errcode.linsight import *
-from bisheng.api.errcode.server import *
+from bisheng.api.errcode import BaseErrorCode
+from bisheng.api.errcode.http_error import NotFoundError
+from bisheng.api.errcode.linsight import (
+    LinsightAddSopError, LinsightUpdateSopError, LinsightDeleteSopError,
+    LinsightVectorModelError, LinsightDocSearchError, LinsightDocNotFoundError, SopFileError
+)
+from bisheng.api.errcode.server import (
+    NoEmbeddingModelError, EmbeddingModelNotExistError, EmbeddingModelTypeError
+)
 from bisheng.api.services.knowledge_imp import decide_vectorstores, extract_code_blocks
 from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload

@@ -9,7 +9,8 @@ from urllib import parse
 from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks, Request, HTTPException, Form
 from pydantic import BaseModel, ValidationError
 
-from bisheng.api.errcode.linsight import *
+from bisheng.api.errcode.linsight import LinsightQuestionError, LinsightUseUpError, LinsightModifySopError, \
+    LinsightStartTaskError, LinsightSessionVersionRunningError, LinsightQueueStatusError, FileUploadError
 from bisheng.api.errcode.server import InvalidOperationError, ResourceDownloadError
 from bisheng.utils.minio_client import minio_client
 from fastapi_jwt_auth import AuthJWT
@@ -18,7 +19,7 @@ from sse_starlette import EventSourceResponse
 from starlette.responses import StreamingResponse
 from starlette.websockets import WebSocket
 
-from bisheng.api.errcode.base import UnAuthorizedError, NotFoundError
+from bisheng.api.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.linsight.message_stream_handle import MessageStreamHandle

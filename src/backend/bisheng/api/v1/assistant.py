@@ -6,8 +6,7 @@ from fastapi import (APIRouter, Body, Depends, HTTPException, Query, Request, We
 from fastapi import status as http_status
 from fastapi.responses import StreamingResponse
 
-from bisheng.api.errcode.base import NotFoundError
-from fastapi_jwt_auth import AuthJWT
+from bisheng.api.errcode.http_error import NotFoundError
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.openapi import OpenApiSchema

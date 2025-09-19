@@ -5,7 +5,7 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from bisheng.api.errcode.base import ServerError
+from bisheng.api.errcode.http_error import ServerError
 from bisheng.api.v1.schemas import resp_500
 from bisheng.database.base import session_getter
 from bisheng.database.models.message import ChatMessage

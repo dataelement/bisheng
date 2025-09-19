@@ -5,7 +5,7 @@ from typing import Any, List, Optional
 
 from loguru import logger
 
-from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.http_error import UnAuthorizedError
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType

@@ -8,8 +8,8 @@ from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
 from sqlmodel import select
 
-from bisheng.api.errcode.base import NotFoundError, UnAuthorizedError, ServerError
-from bisheng.api.errcode.chat import *
+from bisheng.api.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
+from bisheng.api.errcode.chat import ChatServiceError, SkillDeletedError, SkillNotBuildError, SkillNotOnlineError
 from bisheng.api.services import chat_imp
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService

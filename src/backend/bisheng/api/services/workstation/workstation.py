@@ -9,7 +9,6 @@ from loguru import logger
 from openai import BaseModel
 from pydantic import field_validator
 
-from bisheng.api.errcode.base import ServerError
 from bisheng.api.errcode.server import EmbeddingModelStatusError
 from bisheng.api.services import llm
 from bisheng.api.services.base import BaseService

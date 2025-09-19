@@ -12,7 +12,8 @@ from langchain_core.runnables import RunnableConfig
 from loguru import logger
 from sse_starlette import EventSourceResponse
 
-from bisheng.api.errcode.base import ServerError, BaseErrorCode
+from bisheng.api.errcode import BaseErrorCode
+from bisheng.api.errcode.http_error import ServerError
 from bisheng.api.errcode.workstation import WebSearchToolNotFoundError, ConversationNotFoundError, \
     AgentAlreadyExistsError
 from bisheng.api.services import knowledge_imp

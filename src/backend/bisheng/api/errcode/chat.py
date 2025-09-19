@@ -1,5 +1,5 @@
 # Chat 相关的返回错误码 130开头
-from bisheng.api.errcode.base import BaseErrorCode
+from .base import BaseErrorCode
 
 
 # 该技能已被删除
