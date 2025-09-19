@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { Button, SendIcon, Textarea } from "~/components";
+import { useLocalize } from "~/hooks";
 import InputFiles from "./components/InputFiles";
 import { bishengConfState, currentRunningState } from "./store/atoms";
 import { useAreaText } from "./useAreaText";
-import { useLocalize } from "~/hooks";
+import { getErrorI18nKey } from "./store/constants";
 
 export default function ChatInput({ v }) {
     const [bishengConfig] = useRecoilState(bishengConfState)
@@ -14,8 +15,9 @@ export default function ChatInput({ v }) {
     const localize = useLocalize()
 
     const placholder = useMemo(() => {
-        const reason = inputMsg || ' '
-        return inputDisabled ? reason : localize('com_ui_please_enter_question')
+        return inputDisabled ?
+            (inputMsg ? localize(getErrorI18nKey(inputMsg)) : ' ')
+            : localize('com_ui_please_enter_question')
     }, [inputDisabled, inputMsg, localize])
 
     // auto focus
@@ -60,7 +62,7 @@ export default function ChatInput({ v }) {
             */}
             <div className="absolute w-full flex justify-center left-0 -top-14">
                 {/* {!showStop && chatState?.flow?.flow_type === 10 && !inputMsg  */}
-                { showReRun && !inputMsg && <Button
+                {showReRun && !inputMsg && <Button
                     className="rounded-full bg-primary/10 bg-blue-50 text-primary"
                     variant="ghost"
                     onClick={handleRestart}>

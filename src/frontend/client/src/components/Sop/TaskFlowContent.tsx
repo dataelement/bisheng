@@ -35,7 +35,7 @@ const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
 const Tool = ({ data, setCurrentDirectFile }) => {
     const { name, step_type, params, extra_info } = data;
     const localize = useLocalize();
-    
+
     // 过滤尾部hash值
     const toolName = useMemo(() => {
         const lastUnderscoreIndex = name.lastIndexOf('_');
@@ -343,9 +343,9 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
 
         let timeText;
         if (hours > 0) {
-            timeText = `${hours} 小时 ${minutes} 分钟`;
+            timeText = `${hours} ${localize('com_sop_hours')} ${minutes} ${localize('com_sop_minutes')}`;
         } else {
-            timeText = `${minutes} 分钟`;
+            timeText = `${minutes} ${localize('com_sop_minutes')}`;
         }
 
         return (

@@ -15,11 +15,13 @@ import MessageUser from "./components/MessageUser";
 import ResouceModal from "./components/ResouceModal";
 import { currentChatState, currentRunningState } from "./store/atoms";
 import { useMessage } from "./useMessages";
+import { useLocalize } from "~/hooks";
 
 export default function ChatMessages({ useName, title, logo, disabledSearch = false }) {
     const { messageScrollRef, chatId, messages } = useMessage()
     const { inputForm, guideWord, inputDisabled } = useRecoilValue(currentRunningState)
     const chatState = useRecoilValue(currentChatState)
+    const localize = useLocalize()
 
     console.log('messages :>> ', chatState, messages, guideWord);
     // 反馈
@@ -83,7 +85,7 @@ export default function ChatMessages({ useName, title, logo, disabledSearch = fa
                         />;
                     case 'divider':
                         return <div key={msg.id} className={'flex items-center justify-center py-4 text-gray-400 text-sm'}>
-                            ----------- {msg.message} -----------
+                            ----------- {localize(msg.message)} -----------
                         </div>
                     case 'output_with_choose_msg':
                         return <MessageBsChoose key={msg.id} data={msg} logo={logo} flow={chatState.flow} />;
