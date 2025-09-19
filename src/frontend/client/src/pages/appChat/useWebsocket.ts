@@ -95,9 +95,7 @@ export const useWebSocket = (helpers) => {
         ws.onclose = (event) => {
             console.log('close chatId:>> ', helpers.chatId);
             console.error('ws close :>> ', event);
-            // helpers.handleMsgError(event.reason)
-            const reason = localize(getErrorI18nKey(String(event.code)))
-            helpers.handleMsgError(reason)
+            helpers.handleMsgError('', true)
             // todo 错误消息写入消息下面
         }
 
@@ -121,16 +119,24 @@ export const useWebSocket = (helpers) => {
 
         // messages
         if (data.category === 'error') {
-            const { status_code, status_message, data: _data } = JSON.parse(data.message || '{}')
-            const errorMsg = status_code == 500 ? status_message : localize(getErrorI18nKey(status_code))
-            helpers.handleMsgError(errorMsg)
-            if (![10421, 13002].includes(status_code)) {
+            let code = 0, message = ''
+            if (typeof data.message === 'string') {
+                // 兼容助手错误信息
+                const _data = JSON.parse(data.message)
+                code = _data.status_code
+                message = _data.status_message
+            } else {
+                code = data.message.status_code
+                message = data.message.status_message
+            }
+            helpers.handleMsgError(code)
+            if (![10421, 13002].includes(code)) {
                 showToast({
-                    message: errorMsg,
+                    message: code === 500 ? message : localize(getErrorI18nKey(String(code))),
                     severity: NotificationSeverity.ERROR,
                 })
             }
-            return
+            return helpers.message.closeAllMsg(helpers.chatId)
         } else if (data.category === 'node_run') {
             return helpers.message.createNodeMsg(helpers.chatId, data)
         } else if (data.category === 'guide_word') {
@@ -175,7 +181,7 @@ export const useWebSocket = (helpers) => {
         }
         /***** 技能 end******/
         if (data.type === 'close' && data.category === 'processing') {
-            helpers.message.insetSeparator(helpers.chatId, localize('com_chat_round_finished'))
+            helpers.message.insetSeparator(helpers.chatId, 'com_chat_round_finished')
             // helpers.handleMsgError('')
             // 重启会话按钮,接收close确认后端处理结束后重启会话
             if (restartCallBack.current) {

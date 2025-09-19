@@ -47,10 +47,10 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
         if (shouldClose) {
             setIsLabelModalOpen(false)
         } else {
-            await fetchCategoryTags()
             setIsLabelModalOpen(shouldClose)
-            // onRefresh();
         }
+        await fetchCategoryTags()
+        onRefresh();
     }
 
     return (

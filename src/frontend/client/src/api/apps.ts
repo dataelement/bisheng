@@ -320,12 +320,11 @@ export async function getFrequently(page, limit) {
 export async function addToFrequentlyUsed(user_link_type, type_detail) {
     return await request.post('/api/v1/workstation/app/frequently_used', {
         user_link_type, type_detail
-    });
+    }, { showError: true });
 }
 
 // 从常用列表移除
 export async function removeFromFrequentlyUsed(user_id, type, type_detail) {
-    console.log(user_id, type, type_detail, 881);
 
     const url = `/api/v1/workstation/app/frequently_used?user_id=${user_id}&user_link_type=${type}&type_detail=${type_detail}`;
     return await request.delete(url);

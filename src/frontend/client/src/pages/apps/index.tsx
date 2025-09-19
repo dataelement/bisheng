@@ -184,12 +184,7 @@ export default function AgentCenter() {
         }
 
         const res = await addToFrequentlyUsed(mappedType, id);
-        // 根据业务状态码处理提示
-        if (res?.status_code === 12042) {
-            showToast({ status: 'error', message: res?.status_message || localize('com_common_duplicate') });
-        } else if (res?.status_code && res?.status_code !== 200) {
-            showToast({ status: 'error', message: res?.status_message || localize('com_error_unknown') });
-        }
+        console.log(res);
         // 成功时更新收藏列表
         setFavorites(res.data);
         return res;
