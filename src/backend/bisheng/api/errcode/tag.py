@@ -1,4 +1,4 @@
-from bisheng.api.errcode.base import BaseErrorCode
+from .base import BaseErrorCode
 
 
 # 标签模块相关的返回错误码，功能模块代码：107

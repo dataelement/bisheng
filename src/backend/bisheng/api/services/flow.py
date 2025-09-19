@@ -6,7 +6,7 @@ from fastapi import Request
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
 
-from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.http_error import UnAuthorizedError
 from bisheng.api.errcode.flow import NotFoundVersionError, CurVersionDelError, VersionNameExistsError, \
     NotFoundFlowError, \
     FlowOnlineEditError, WorkFlowOnlineEditError

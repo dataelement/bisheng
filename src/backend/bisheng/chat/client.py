@@ -6,7 +6,9 @@ from fastapi import WebSocket, status, Request
 from langchain_core.messages import AIMessage, HumanMessage, BaseMessage, ToolMessage
 from loguru import logger
 
-from bisheng.api.errcode.assistant import *
+from bisheng.api.errcode import BaseErrorCode
+from bisheng.api.errcode.assistant import (AssistantDeletedError, AssistantNotOnlineError,
+                                             AssistantOtherError)
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload

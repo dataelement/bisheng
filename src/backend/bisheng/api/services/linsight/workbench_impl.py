@@ -12,7 +12,8 @@ from fastapi import UploadFile
 from langchain_core.tools import BaseTool
 from loguru import logger
 
-from bisheng.api.errcode.base import UnAuthorizedError, BaseErrorCode
+from bisheng.api.errcode import BaseErrorCode
+from bisheng.api.errcode.http_error import UnAuthorizedError
 from bisheng.api.errcode.linsight import LinsightToolInitError, LinsightBishengLLMError, LinsightGenerateSopError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.knowledge_imp import read_chunk_text, decide_vectorstores

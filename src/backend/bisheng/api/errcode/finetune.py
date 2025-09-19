@@ -1,4 +1,4 @@
-from bisheng.api.errcode.base import BaseErrorCode
+from .base import BaseErrorCode
 
 
 # finetune训练模块 返回错误码，业务代码101

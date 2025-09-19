@@ -6,6 +6,8 @@ import { useLocalize } from '~/hooks';
 import { LinsightInfo } from "~/store/linsight";
 import { SopStatus } from "./SOPEditor";
 import SopToolsDown from "./SopToolsDown";
+import { useRecoilValue } from 'recoil';
+import store from '~/store';
 
 // 错误工具toolip提示
 const ToolErrorTip = () => {
@@ -118,6 +120,17 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
     const { nameToValueRef, valueToNameRef, buildTreeData: toolOptions } = useSopTools(linsight)
     const [RenderingCompleted, setRenderingCompleted] = useState(false);
 
+    const currentLang = useRecoilValue(store.lang);
+
+    // 将应用语言映射为 Vditor 支持的语言
+    const mapLangToVditor = (lang: string) => {
+        const lower = (lang || 'en').toLowerCase();
+        if (lower.startsWith('zh')) return 'zh_CN';
+        if (lower.startsWith('ja')) return 'ja_JP';
+        if (lower.startsWith('ko')) return 'ko_KR';
+        return 'en_US';
+    };
+
     useEffect(() => {
         const vditorDom = document.getElementById('vditor');
         if (!vditorDom) return
@@ -132,6 +145,7 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
             height: boxRef.current.clientHeight,
             mode: "wysiwyg",
             placeholder: "",
+            lang: mapLangToVditor(currentLang),
             after() {
                 setRenderingCompleted(true);
                 veditorRef.current = vditor;
@@ -185,7 +199,7 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
             veditorRef.current?.destroy();
             veditorRef.current = null
         };
-    }, []);
+    }, [currentLang]);
 
     useEffect(() => {
         // 用户手动输入不再更新setValue markdown
@@ -251,6 +265,7 @@ const useSopTools = (linsight) => {
     const { id, files, file_list, tools, org_knowledge_enabled, personal_knowledge_enabled } = linsight
     const { data: bsConfig } = useGetBsConfig()
     const localize = useLocalize()
+    const lang = useRecoilValue(store.lang);
 
     const { data: linsightTools } = useGetLinsightToolList();
     const { data: personalTool } = useGetPersonalToolList();
@@ -330,7 +345,8 @@ const useSopTools = (linsight) => {
         // 3. 转换PersonalTool数据（单对象转数组）
         if (personal_knowledge_enabled && personalTool && personalTool[0]) {
             tree.push({
-                label: personalTool[0].name,
+                // label: personalTool[0].name,
+                label: localize('com_sop_personal_knowledge_base'),
                 value: personalTool[0].id,
                 desc: '',
                 children: [] // 个人知识库没有子节点
@@ -387,7 +403,7 @@ const useSopTools = (linsight) => {
         }
 
         return tree;
-    }, [linsightTools, personalTool, orgTools, files, tools]);
+    }, [linsightTools, personalTool, orgTools, files, tools,lang]);
 
     console.log('整合后的树结构:', buildTreeData);
     return { nameToValueRef, valueToNameRef, buildTreeData };

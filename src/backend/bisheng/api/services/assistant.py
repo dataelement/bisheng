@@ -8,7 +8,7 @@ from loguru import logger
 from bisheng.api.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
                                            AssistantNotEditError, AssistantNotExistsError, ToolTypeRepeatError,
                                            ToolTypeIsPresetError)
-from bisheng.api.errcode.base import UnAuthorizedError, NotFoundError
+from bisheng.api.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService

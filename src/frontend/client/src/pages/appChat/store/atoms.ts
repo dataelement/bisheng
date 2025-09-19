@@ -1,7 +1,7 @@
 import { atom, selector } from "recoil"
 import type { BishengConfig, Chat, RunningStatus, SubmitData, WebSocketStatus } from "~/@types/chat"
 
-// 所有会话数据的Map存储  (key: chatId+vid)  全存
+// 所有会话数据的Map存储  (key: chatId) 
 /**
  * map
  */

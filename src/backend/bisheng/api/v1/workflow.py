@@ -8,7 +8,7 @@ from fastapi_jwt_auth import AuthJWT
 from loguru import logger
 from sqlmodel import select
 
-from bisheng.api.errcode.base import UnAuthorizedError, NotFoundError
+from bisheng.api.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.api.errcode.flow import WorkflowNameExistsError, WorkFlowOnlineEditError
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload, get_login_user

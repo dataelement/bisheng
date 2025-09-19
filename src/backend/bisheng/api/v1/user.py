@@ -16,7 +16,7 @@ from sqlmodel import delete, select, func
 from captcha.image import ImageCaptcha
 
 from bisheng.utils import generate_uuid
-from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.http_error import UnAuthorizedError
 from bisheng.api.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
                                       UserValidateError, UserPasswordError)
 from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME

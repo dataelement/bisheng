@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional
 
 from pydantic import BaseModel, Field
 
-from bisheng.api.errcode.base import ServerError
+from bisheng.api.errcode.http_error import ServerError
 from bisheng.cache.redis import redis_client
 from bisheng.database.models import LinsightExecuteTask
 from bisheng.database.models.linsight_execute_task import ExecuteTaskStatusEnum, LinsightExecuteTaskDao

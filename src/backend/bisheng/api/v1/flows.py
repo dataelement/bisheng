@@ -6,7 +6,7 @@ from fastapi_jwt_auth import AuthJWT
 from sqlmodel import select
 from starlette.responses import StreamingResponse
 
-from bisheng.api.errcode.base import UnAuthorizedError, ServerError, NotFoundError
+from bisheng.api.errcode.http_error import UnAuthorizedError, ServerError, NotFoundError
 from bisheng.api.errcode.flow import FlowOnlineEditError, FlowNameExistsError
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload, get_login_user

@@ -15,7 +15,7 @@ interface Category {
 
 interface AgentNavigationProps {
     onCategoryChange: (categoryId: string) => void
-        onRefresh: () => void
+    onRefresh: () => void
 }
 
 export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigationProps) {
@@ -45,11 +45,11 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
 
     const handleCloseLabelModal = async (shouldClose) => {
         if (shouldClose) {
-            await fetchCategoryTags()
             setIsLabelModalOpen(false)
-             onRefresh();
         } else {
+            await fetchCategoryTags()
             setIsLabelModalOpen(shouldClose)
+            // onRefresh();
         }
     }
 
@@ -75,7 +75,7 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
                 >
                     {category.label}
                 </Button>
-                
+
             ))}
             <Button
                 variant={activeCategory === 'uncategorized' ? "default" : "outline"}

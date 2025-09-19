@@ -9,7 +9,9 @@ from typing import Any, Dict, List
 from fastapi import Request, WebSocket, WebSocketDisconnect, status
 from loguru import logger
 
-from bisheng.api.errcode.chat import *
+from bisheng.api.errcode.chat import (DocumentParseError, InputDataParseError,
+                                      LLMExecutionError, SkillDeletedError,
+                                      SkillNotOnlineError)
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import build_flow_no_yield, get_request_ip

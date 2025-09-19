@@ -39,8 +39,7 @@ export default function index() {
 
         setChatId(cid!) // 切换会话
 
-        // 无缓存，从新加载
-        if (currentData) return;
+        if (currentData) return; // 有缓存不重复加载
 
         const numericType = Number(type);
 

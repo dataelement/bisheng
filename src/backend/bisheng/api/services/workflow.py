@@ -4,7 +4,7 @@ from bisheng.utils import generate_uuid
 from fastapi.encoders import jsonable_encoder
 from langchain.memory import ConversationBufferWindowMemory
 
-from bisheng.api.errcode.base import NotFoundError, UnAuthorizedError
+from bisheng.api.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.api.errcode.flow import WorkFlowInitError
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.user_service import UserPayload

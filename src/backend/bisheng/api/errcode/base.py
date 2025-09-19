@@ -2,7 +2,6 @@ import json
 
 from fastapi.exceptions import HTTPException
 from fastapi import WebSocket
-
 from bisheng.api.v1.schemas import UnifiedResponseModel
 
 
@@ -41,22 +40,22 @@ class BaseErrorCode(Exception):
         data = data if data is not None else {"exception": cls.Msg, **kwargs}
         return {
             "event": event,
-            "data": {
+            "data": json.dumps({
                 "status_code": cls.Code,
                 "status_message": msg or cls.Msg,
                 "data": data
-            }
+            })
         }
 
     def to_sse_event_instance(self, event: str = "error", data: any = None) -> dict:
         data = data if data is not None else {"exception": str(self), **self.kwargs}
         return {
             "event": event,
-            "data": {
+            "data": json.dumps({
                 "status_code": self.code,
                 "status_message": self.message,
                 "data": data
-            }
+            })
         }
 
     def to_dict(self, data: any = None) -> dict:
@@ -78,16 +77,3 @@ class BaseErrorCode(Exception):
         await websocket.close(code=self.code, reason=json.dumps(reason))
 
 
-class UnAuthorizedError(BaseErrorCode):
-    Code: int = 403
-    Msg: str = '暂无操作权限'
-
-
-class NotFoundError(BaseErrorCode):
-    Code: int = 404
-    Msg: str = '资源不存在'
-
-
-class ServerError(BaseErrorCode):
-    Code: int = 500
-    Msg: str = '服务器错误'

@@ -2,23 +2,18 @@
 import json
 from typing import Annotated, List, Optional
 
-from bisheng.database.models.assistant import AssistantDao
-from bisheng.database.models.flow import FlowDao
-from bisheng.database.models.gpts_tools import GptsToolsDao
-from bisheng.database.models.knowledge import KnowledgeDao
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi_jwt_auth import AuthJWT
 
-from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.http_error import UnAuthorizedError
 from bisheng.api.services.role_group_service import RoleGroupService
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.utils import check_permissions
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
-from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
+from bisheng.api.v1.schemas import  resp_200
+from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role import RoleDao
-from bisheng.database.models.group import Group, GroupCreate, GroupRead
-from bisheng.database.models.user import User
-from bisheng.database.models.user_group import UserGroupDao, UserGroupRead
+from bisheng.database.models.group import Group, GroupCreate
+from bisheng.database.models.user_group import UserGroupDao
 
 router = APIRouter(prefix='/group', tags=['User'], dependencies=[Depends(get_login_user)])
 

@@ -4,7 +4,6 @@ from typing import List
 from fastapi import APIRouter, Body, Depends
 from fastapi_jwt_auth import AuthJWT
 
-from bisheng import __version__
 from bisheng.api.services.component import ComponentService
 from bisheng.api.services.user_service import get_login_user
 from bisheng.api.utils import update_frontend_node_with_template_values
@@ -28,6 +27,7 @@ def get_all_components(*, Authorize: AuthJWT = Depends()):
 
 @router.post('')
 def save_components(*, data: CreateComponentReq, Authorize: AuthJWT = Depends()):
+    from bisheng import __version__
     # get login user
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
@@ -40,6 +40,7 @@ def save_components(*, data: CreateComponentReq, Authorize: AuthJWT = Depends())
 
 @router.patch('')
 def update_component(*, data: CreateComponentReq, Authorize: AuthJWT = Depends()):
+    from bisheng import __version__
     # get login user
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())

@@ -3,7 +3,6 @@ from typing import List
 
 from loguru import logger
 from pymilvus import Collection, MilvusException
-
 from bisheng.api.services.knowledge_imp import decide_vectorstores, process_file_task, delete_knowledge_file_vectors, \
     KnowledgeUtils, delete_vector_files
 from bisheng.api.v1.schemas import FileProcessBase

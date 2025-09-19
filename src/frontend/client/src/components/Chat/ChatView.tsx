@@ -112,6 +112,8 @@ const ChatView = ({ index = 0 }: { index?: number }) => {
     content = <Landing lingsi={isLingsi} setLingsi={setIsLingsi} isNew={isNew} />;
   }
 
+  const selfHost = window.location.host === 'bisheng.dataelem.com'
+
   return (
     <ChatFormProvider {...methods}>
       <ChatContext.Provider value={chatHelpers}>
@@ -134,7 +136,8 @@ const ChatView = ({ index = 0 }: { index?: number }) => {
                 <img src={`${__APP_ENV__.BASE_URL}/assets/lingsi-bg.png`} alt="" />
               </video>
               <div ref={chatContainerRef} className='relative z-10 h-full overflow-y-auto'>
-                <div className={showCode ? "hidden" : "flex flex-col justify-center relative h-[calc(100vh-200px)]"}>
+                {/* <div className={showCode ? "hidden" : "flex flex-col justify-center relative h-[calc(100vh-200px)]"}> */}
+                <div className={showCode ? "hidden" : "flex flex-col justify-center relative h-full"}>
                   {content}
                   <div
                     id="floatPanne"
@@ -174,7 +177,7 @@ const Cases = ({ t }) => {
   }
 
   return (
-    <div className='absolute bottom-8 w-full mt-20'>
+    <div className='absolute -bottom-8 w-full mt-20'>
       <p className='text-sm text-center text-gray-400'>{t('com_case_featured')}</p>
       <div className='flex pt-4 justify-center mx-auto gap-2 px-12'>
         {casesData.map((caseItem) => (

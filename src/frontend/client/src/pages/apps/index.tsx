@@ -183,14 +183,12 @@ export default function AgentCenter() {
             mappedType = 'workflow';
         }
 
-
         const res = await addToFrequentlyUsed(mappedType, id);
-        console.log(res);
-        if (res.status_code === 500) {
-            showToast({
-                status: 'success',
-                message: localize('com_agent_added_success'),
-            });
+        // 根据业务状态码处理提示
+        if (res?.status_code === 12042) {
+            showToast({ status: 'error', message: res?.status_message || localize('com_common_duplicate') });
+        } else if (res?.status_code && res?.status_code !== 200) {
+            showToast({ status: 'error', message: res?.status_message || localize('com_error_unknown') });
         }
         // 成功时更新收藏列表
         setFavorites(res.data);
