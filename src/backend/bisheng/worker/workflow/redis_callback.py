@@ -182,7 +182,7 @@ class RedisCallback(BaseCallback):
             status_info = self.get_workflow_status()
             if not status_info:
                 yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
-                                               {'code': 500, 'message': 'workflow status not found'})
+                                               {'status_code': 500, 'status_message': 'workflow status not found'})
                 break
             elif status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
                 while True:
@@ -207,12 +207,13 @@ class RedisCallback(BaseCallback):
                 # 10秒内没有收到状态更新，说明workflow没有启动，可能是celery worker线程数已满
                 self.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow task execute busy')
                 yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
-                                               {'code': WorkFlowTaskBusyError.Code,
-                                                'message': WorkFlowTaskBusyError.Msg})
+                                               {'status_code': WorkFlowTaskBusyError.Code,
+                                                'status_message': WorkFlowTaskBusyError.Msg})
                 break
             elif time.time() - status_info['time'] > 86400:
                 yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
-                                               {'code': 500, 'message': 'workflow status not update over 1 day'})
+                                               {'status_code': 500,
+                                                'status_message': 'workflow status not update over 1 day'})
                 self.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow status not update over 1 day')
                 self.set_workflow_stop()
                 break

@@ -74,5 +74,6 @@ class BaseErrorCode(Exception):
             "status_message": self.message,
             "data": {"exception": str(self), **self.kwargs}
         }
+        await websocket.send_json({"category": "error", "type": "end", "message": reason})
 
-        await websocket.close(reason=json.dumps(reason))
+        await websocket.close(reason=self.message[:10])
