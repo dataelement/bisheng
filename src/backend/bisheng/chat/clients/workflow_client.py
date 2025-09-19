@@ -3,9 +3,10 @@ import json
 import threading
 from typing import Dict, Optional
 
-from fastapi import Request, WebSocket, status
+from fastapi import Request, WebSocket
 from loguru import logger
 
+from bisheng.api.errcode.chat import SkillNotOnlineError
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
@@ -91,8 +92,8 @@ class WorkflowClient(BaseClient):
         if workflow_db.status != FlowStatus.ONLINE.value and self.chat_id:
             self.workflow.set_workflow_stop()
             try:
+                await SkillNotOnlineError().websocket_close_message(websocket=self.websocket)
                 await self.send_response('processing', 'close', '')
-                await self.websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason='当前工作流未上线，无法直接对话')
             except:
                 logger.warning('websocket is closed')
                 pass
