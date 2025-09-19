@@ -348,10 +348,10 @@ async def chat_completions(
             user_id=login_user.user_id,
         )
     except BaseErrorCode as e:
-        return EventSourceResponse(iter([e.to_sse_event_instance()]))
+        return EventSourceResponse(iter([json.dumps(e.to_sse_event_instance())]))
     except Exception as e:
         logger.exception(f'Error in chat completions: {e}')
-        return EventSourceResponse(iter([ServerError(exception=e).to_sse_event_instance()]))
+        return EventSourceResponse(iter([json.dumps(ServerError(exception=e).to_sse_event_instance())]))
 
     # 处理流式输出
     async def event_stream():
