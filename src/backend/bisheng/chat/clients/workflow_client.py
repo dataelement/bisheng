@@ -147,7 +147,7 @@ class WorkflowClient(BaseClient):
         except Exception as e:
             logger.exception('init_workflow_error')
             self.workflow = None
-            await self.send_response('error', 'over', {'code': 500, 'message': str(e)})
+            await self.send_response('error', 'over', {'status_code': 500, 'message': str(e)})
             return
 
     async def workflow_run(self):
