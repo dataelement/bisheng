@@ -13,7 +13,7 @@ from bisheng_langchain.linsight.const import TaskMode, ExecConfig
 from bisheng_langchain.linsight.event import BaseEvent
 from bisheng_langchain.linsight.manage import TaskManage
 from bisheng_langchain.linsight.prompt import SopPrompt, FeedBackSopPrompt, GenerateTaskPrompt
-from bisheng_langchain.linsight.utils import record_llm_prompt, extract_json_from_markdown
+from bisheng_langchain.linsight.utils import record_llm_prompt, extract_json_from_markdown, record_linsight_event
 
 
 class LinsightAgent(BaseModel):
@@ -155,6 +155,7 @@ class LinsightAgent(BaseModel):
         :param file_list: Optional list of files uploaded by the user.
         """
         file_list_str = await self.parse_file_list_str(file_list)
+        start_time = time.time()
         # Add main functionality logic here
         if not self.task_manager:
             self.task_manager = TaskManage(tasks=tasks, tools=self.tools, task_mode=self.task_mode)
@@ -164,6 +165,8 @@ class LinsightAgent(BaseModel):
 
         async for one in self.task_manager.ainvoke_task():
             yield one
+        if self.exec_config.debug:
+            record_linsight_event(self.exec_config.debug_id, "agent_over", "", time.time() - start_time)
 
     async def continue_task(self, task_id: str, user_input: str) -> None:
         """

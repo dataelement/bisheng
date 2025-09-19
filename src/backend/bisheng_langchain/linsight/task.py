@@ -18,7 +18,7 @@ from bisheng_langchain.linsight.event import ExecStep, GenerateSubTask, BaseEven
 from bisheng_langchain.linsight.prompt import SingleAgentPrompt, SummarizeHistoryPrompt, LoopAgentSplitPrompt, \
     LoopAgentPrompt, SummarizeAnswerPrompt, SplitEvent
 from bisheng_langchain.linsight.utils import encode_str_tokens, generate_uuid_str, \
-    record_llm_prompt, extract_json_from_markdown, get_model_name_from_llm
+    record_llm_prompt, extract_json_from_markdown, get_model_name_from_llm, record_linsight_event
 
 
 class BaseTask(BaseModel):
@@ -113,6 +113,13 @@ class BaseTask(BaseModel):
         if input_str:
             input_str = f"输入：\n{input_str}"
         return input_str
+
+    async def _base_ainvoke_tool(self, tool_name: str, tool_params: Any) -> (str, bool):
+        start_time = time.time()
+        observation, flag = await self.task_manager.ainvoke_tool(tool_name, copy.deepcopy(tool_params))
+        if self.exec_config.debug:
+            record_linsight_event(self.exec_config.debug_id, "tool_invoke", tool_params, time.time() - start_time)
+        return observation, flag
 
     async def _base_invoke_llm(self, llm: BaseLanguageModel, tools: Optional[list[dict]], messages: list[BaseMessage],
                                **kwargs) -> BaseMessage:
@@ -518,7 +525,7 @@ class Task(BaseTask):
                                                   name=tool_name,
                                                   params=tool_args,
                                                   status="start"))
-                    tool_result, _ = await self.task_manager.ainvoke_tool(tool_name, copy.deepcopy(tool_args))
+                    tool_result, _ = await self._base_ainvoke_tool(tool_name, tool_args)
                     await self.put_event(ExecStep(task_id=self.id,
                                                   call_id=one.get('id'),
                                                   call_reason=call_reason,
