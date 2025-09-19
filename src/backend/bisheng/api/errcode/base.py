@@ -1,7 +1,8 @@
 import json
 
-from fastapi.exceptions import HTTPException
 from fastapi import WebSocket
+from fastapi.exceptions import HTTPException
+
 from bisheng.api.v1.schemas import UnifiedResponseModel
 
 
@@ -74,6 +75,4 @@ class BaseErrorCode(Exception):
             "data": {"exception": str(self), **self.kwargs}
         }
 
-        await websocket.close(code=self.code, reason=json.dumps(reason))
-
-
+        await websocket.close(reason=json.dumps(reason))
