@@ -671,7 +671,7 @@
   "com_segment_daily_mode": "日常モード",
   "com_segment_linsight": "Linsight",
   "com_linsight_input_placeholder": "タスク目標を入力して BISHENG Linsight にお任せください",
-  "com_linsight_tagline": "大規模モデルと業務ガイドを組み合わせ、自律的に複雑なタスクを計画・完了",
+  "com_linsight_tagline": "大規模モデルと業務ガイドで、複雑なタスクを自律的に実行",
   "com_linsight_remaining_times": "残りタスク回数：{{count}} 回",
   "com_linsight_activate": "有効化へ",
   "com_tools_title": "ツール",

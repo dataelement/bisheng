@@ -717,7 +717,7 @@
   "com_segment_daily_mode": "Daily",
   "com_segment_linsight": "Linsight",
   "com_linsight_input_placeholder": "Enter your task goal, then leave it to BISHENG Linsight",
-  "com_linsight_tagline": "The LLM plans and completes complex tasks using your business playbook",
+  "com_linsight_tagline": "The LLM uses your business playbook to plan and complete tasks.",
   "com_linsight_remaining_times": "Remaining tasks: {{count}}",
   "com_linsight_activate": "Activate",
   "com_tools_title": "Tools",
