@@ -9,7 +9,7 @@ from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPExcept
                      UploadFile)
 from fastapi.encoders import jsonable_encoder
 
-from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.http_error import UnAuthorizedError
 from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService

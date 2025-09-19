@@ -8,7 +8,7 @@ from fastapi.responses import ORJSONResponse
 from loguru import logger
 from starlette.responses import StreamingResponse
 
-from bisheng.api.errcode.base import NotFoundError
+from bisheng.api.errcode.http_error import NotFoundError
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schema.workflow import WorkflowStream, WorkflowEvent, WorkflowEventType

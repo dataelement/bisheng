@@ -8,7 +8,8 @@ from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
 from sqlmodel import select
 
-from bisheng.api.errcode.base import NotFoundError
+from bisheng.api.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
+from bisheng.api.errcode.chat import ChatServiceError, SkillDeletedError, SkillNotBuildError, SkillNotOnlineError
 from bisheng.api.services import chat_imp
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
@@ -90,7 +91,7 @@ def get_app_chat_list(*,
         if not login_user.is_admin():
             task = MarkTaskDao.get_task_byid(task_id)
             if str(login_user.user_id) not in task.process_users.split(','):
-                raise HTTPException(status_code=403, detail='没有权限')
+                raise UnAuthorizedError()
             # 判断下是否是用户组管理员
             if user_groups:
                 task = MarkTaskDao.get_task_byid(task_id)
@@ -101,7 +102,7 @@ def get_app_chat_list(*,
             else:
                 task = MarkTaskDao.get_task_byid(task_id)
                 if str(login_user.user_id) not in task.process_users.split(','):
-                    raise HTTPException(status_code=403, detail='没有权限')
+                    raise UnAuthorizedError()
                 # 普通用户
                 # user_ids = [login_user.user_id]
                 group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(',')
@@ -180,7 +181,7 @@ def get_chatmessage(*,
                     page_size: Optional[int] = 20,
                     login_user: UserPayload = Depends(get_login_user)):
     if not chat_id or not flow_id:
-        return {'code': 500, 'message': 'chat_id 和 flow_id 必传参数'}
+        return ServerError()
     where = select(ChatMessage).where(ChatMessage.flow_id == flow_id,
                                       ChatMessage.chat_id == chat_id)
     if id:
@@ -231,7 +232,7 @@ def get_chatmessage(*,
                     page_size: Optional[int] = 20,
                     login_user: UserPayload = Depends(get_login_user)):
     if not chat_id or not flow_id:
-        return {'code': 500, 'message': 'chat_id 和 flow_id 必传参数'}
+        return ServerError.return_resp()
     where = select(ChatMessage).where(ChatMessage.flow_id == flow_id,
                                       ChatMessage.chat_id == chat_id)
     if id:
@@ -286,7 +287,7 @@ def add_chat_messages(*,
     flow_id = data.flow_id
     chat_id = data.chat_id
     if not chat_id or not flow_id:
-        raise HTTPException(status_code=500, detail='chat_id 和 flow_id 必传参数')
+        raise ServerError.http_exception()
     save_human_message = data.human_message
     flow_info = FlowDao.get_flow_by_id(flow_id)
     if flow_info and flow_info.flow_type == FlowType.WORKFLOW.value:
@@ -365,9 +366,9 @@ def update_chat_message(*,
     )
     chat_message = ChatMessageDao.get_message_by_id(message_id)
     if not chat_message:
-        return resp_200(message='消息不存在')
+        return NotFoundError.return_resp()
     if chat_message.user_id != login_user.user_id:
-        return resp_200(message='用户不一致')
+        return UnAuthorizedError.return_resp()
 
     chat_message.message = message
     if category:
@@ -516,12 +517,10 @@ async def chat(
                 db_flow = session.get(Flow, flow_id)
             if not db_flow:
                 await websocket.accept()
-                message = '该技能已被删除'
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=message)
+                await SkillDeletedError().websocket_close_message(websocket=websocket)
             if db_flow.status != 2:
                 await websocket.accept()
-                message = '当前技能未上线，无法直接对话'
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=message)
+                await SkillNotOnlineError().websocket_close_message(websocket=websocket)
             graph_data = db_flow.data
         else:
             flow_data_key = 'flow_data_' + flow_id
@@ -531,8 +530,7 @@ async def chat(
                     flow_data_store.hget(flow_data_key, 'status'),
                     'utf-8') != BuildStatus.SUCCESS.value:
                 await websocket.accept()
-                message = '当前编译没通过'
-                await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER, reason=message)
+                await SkillNotBuildError().websocket_close_message(websocket=websocket)
                 return
             graph_data = json.loads(flow_data_store.hget(flow_data_key, 'graph_data'))
 
@@ -548,15 +546,11 @@ async def chat(
                                                 user_id,
                                                 gragh_data=graph_data)
     except WebSocketException as exc:
-        logger.error(f'Websocket exrror: {str(exc)}')
-        await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=str(exc))
+        await ChatServiceError(exception=exc).websocket_close_message(websocket=websocket)
     except Exception as exc:
         logger.exception(f'Error in chat websocket: {str(exc)}')
         messsage = exc.detail if isinstance(exc, HTTPException) else str(exc)
-        if 'Could not validate credentials' in str(exc):
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason='Unauthorized')
-        else:
-            await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=messsage)
+        await ChatServiceError(exception=Exception(messsage)).websocket_close_message(websocket=websocket)
 
 
 @router.post('/build/init/{flow_id}')

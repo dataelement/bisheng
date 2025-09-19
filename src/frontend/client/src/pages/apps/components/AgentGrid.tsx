@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useRecoilState } from "recoil"
 import { getChatOnlineApi, getFrequently, getHomeLabelApi, getUncategorized } from "~/api/apps"
 import { Button } from "~/components"
+import { useLocalize } from "~/hooks"
 import { addCommonlyAppState } from ".."
 import { AgentCard } from "./AgentCard"
 
@@ -57,6 +58,7 @@ export function AgentGrid({
   onCardClick,
   onSectionMounted // 新增回调函数
 }: AgentGridProps) {
+  const localize = useLocalize()
   const pageSize = 8 // 固定单页容量
   const [categories, setCategories] = useState<Category[]>([])
   const [agentsByCategory, setAgentsByCategory] = useState<Record<string, Agent[]>>({})
@@ -409,7 +411,7 @@ export function AgentGrid({
     // 常用智能体
     {
       id: "frequently_used",
-      name: "常用智能体",
+      name: localize('com_app_frequently_used'),
       agents: allAgents,
       isFavoriteSection: true,
       pagination: frequentlyUsedPagination,
@@ -427,7 +429,7 @@ export function AgentGrid({
     // 未分类智能体
     {
       id: "uncategorized",
-      name: "未分类",
+      name: localize('com_app_uncategorized'),
       agents: uncategorizedAgents,
       isFavoriteSection: false,
       pagination: uncategorizedPagination,
@@ -436,7 +438,7 @@ export function AgentGrid({
   ].filter(section => {
     return section.id !== "frequently_used" || section.id !== "uncategorized" || true;
   }), [allAgents, agentsByCategory, categories, frequentlyUsedLoading, frequentlyUsedPagination,
-    loading, pagination, uncategorizedAgents, uncategorizedLoading, uncategorizedPagination])
+    loading, pagination, uncategorizedAgents, uncategorizedLoading, uncategorizedPagination, localize])
 
   return (
     <div className="space-y-8">
@@ -489,7 +491,7 @@ export function AgentGrid({
                       ) : (
                         <ChevronDown size={14} className="mr-1" />
                       )}
-                      展示更多
+                      {localize('com_show_more')}
                     </Button>
                   </div>
                 )}

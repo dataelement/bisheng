@@ -193,8 +193,17 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             setLoading(false);
         }
     };
+    // 简单深比较（JSON序列化），用于避免父子相互 set 导致的循环刷新
+    const isDeepEqual = (a: any, b: any) => {
+        try {
+            return JSON.stringify(a) === JSON.stringify(b);
+        } catch {
+            return a === b;
+        }
+    };
+
     useEffect(() => {
-        if (parentFormData) {
+        if (parentFormData && !isDeepEqual(formData, parentFormData)) {
             setFormData(parentFormData);
         }
         if (parentFormData?.linsightConfig?.tools) {
@@ -203,8 +212,10 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     }, [parentFormData]);
 
     useEffect(() => {
-        parentSetFormData?.(formData);
-    }, [formData]);
+        if (parentSetFormData && !isDeepEqual(formData, parentFormData)) {
+            parentSetFormData(formData);
+        }
+    }, [formData, parentFormData]);
     useEffect(() => {
         setFormData(prev => ({
             ...prev,

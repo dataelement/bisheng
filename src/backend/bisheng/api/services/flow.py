@@ -6,7 +6,7 @@ from fastapi import Request
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
 
-from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.http_error import UnAuthorizedError
 from bisheng.api.errcode.flow import NotFoundVersionError, CurVersionDelError, VersionNameExistsError, \
     NotFoundFlowError, \
     FlowOnlineEditError, WorkFlowOnlineEditError
@@ -206,12 +206,12 @@ class FlowService(BaseService):
         """
         flow_info = FlowDao.get_flow_by_id(flow_id)
         if not flow_info:
-            raise NotFoundFlowError.http_exception()
+            raise NotFoundFlowError()
         atype = AccessType.FLOW
         if flow_info.flow_type == FlowType.WORKFLOW.value:
             atype = AccessType.WORK_FLOW
         if not login_user.access_check(flow_info.user_id, flow_info.id, atype):
-            raise UnAuthorizedError.http_exception()
+            raise UnAuthorizedError()
         flow_info.logo = cls.get_logo_share_link(flow_info.logo)
 
         return resp_200(data=flow_info)

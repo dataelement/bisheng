@@ -2,12 +2,13 @@ import json
 import time
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException, Request, status as http_status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException, Request, \
+    status as http_status
 from fastapi_jwt_auth import AuthJWT
 from loguru import logger
 from sqlmodel import select
 
-from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.api.errcode.flow import WorkflowNameExistsError, WorkFlowOnlineEditError
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload, get_login_user
@@ -23,7 +24,6 @@ from bisheng.database.models.role_access import AccessType
 from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.utils.requests import Requests
 from bisheng.utils import generate_uuid
-
 
 router = APIRouter(prefix='/workflow', tags=['Workflow'])
 
@@ -231,7 +231,7 @@ async def update_flow(*,
     """online offline"""
     db_flow = FlowDao.get_flow_by_id(flow_id)
     if not db_flow:
-        raise HTTPException(status_code=404, detail='Flow not found')
+        raise NotFoundError()
 
     if not login_user.access_check(db_flow.user_id, flow_id, AccessType.WORK_FLOW_WRITE):
         return UnAuthorizedError.return_resp()

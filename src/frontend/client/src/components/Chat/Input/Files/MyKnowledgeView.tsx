@@ -71,7 +71,7 @@ export default function MyKnowledgeView({ open, onOpenChange }) {
   const { showToast } = useToast()
   const backToast = () => {
     showToast({
-      message: '正在重建知识库，请稍后再试',
+      message: localize('com_tools_knowledge_rebuilding'),
       severity: NotificationSeverity.WARNING,
     })
   }
@@ -81,7 +81,7 @@ export default function MyKnowledgeView({ open, onOpenChange }) {
   return (
     <OGDialog open={open} onOpenChange={onOpenChange}>
       <OGDialogContent
-        title={localize('com_nav_my_knowledge_files')}
+        // title={localize('com_nav_my_knowledge_files')}
         className="w-11/12 bg-background text-text-primary shadow-2xl"
       >
         <OGDialogHeader>

@@ -1,4 +1,4 @@
-from bisheng.api.errcode.base import BaseErrorCode
+from .base import BaseErrorCode
 
 
 #  知识库模块相关的返回错误码，功能模块代码：109
@@ -31,7 +31,11 @@ class KnowledgeCPError(BaseErrorCode):
     Code: int = 10940
     Msg: str = '当前有文件正在解析，不可复制'
 
+# 不支持多个知识库的文件同时删除
+class KnowledgeFileDeleteError(BaseErrorCode):
+    Code: int = 10950
+    Msg: str = '不支持多个知识库的文件同时删除'
 
 class KnowledgeRebuildingError(BaseErrorCode):
-    Code: int = 10950
+    Code: int = 10951
     Msg: str = '知识库重新构建中，不允许修改embedding模型'

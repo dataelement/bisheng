@@ -164,7 +164,7 @@ export default function SopToolsDown({
 
                             return (
                                 <div
-                                    key={index}
+                                    key={option.label}
                                     className={`
                                         relative flex items-center justify-between px-3 py-2 cursor-pointer
                                         transition-colors

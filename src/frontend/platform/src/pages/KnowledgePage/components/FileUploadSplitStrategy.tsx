@@ -43,13 +43,14 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
         position,
         rule: `自定义规则: ${customRegex.trim()}`
       };
-      
+      setStrategies([...strategies, newStrategy]);
+      setCustomRegex('');
       // 检查是否已存在相同策略
-      const exists = strategies.some(s => s.id === newStrategy.id);
-      if (!exists) {
-        setStrategies([...strategies, newStrategy]);
-        setCustomRegex('');
-      }
+      // const exists = strategies.some(s => s.id === newStrategy.id);
+      // if (!exists) {
+      //   setStrategies([...strategies, newStrategy]);
+      //   setCustomRegex('');
+      // }
     }
   };
 
@@ -60,12 +61,12 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
       position: pos,
       rule
     };
-
+    setStrategies([...strategies, newStrategy]);
     // 检查是否已存在相同策略
-    const exists = strategies.some(s => s.id === newStrategy.id);
-    if (!exists) {
-      setStrategies([...strategies, newStrategy]);
-    }
+    // const exists = strategies.some(s => s.id === newStrategy.id);
+    // if (!exists) {
+    //   setStrategies([...strategies, newStrategy]);
+    // }
   };
 
   const handleDelete = (id) => {

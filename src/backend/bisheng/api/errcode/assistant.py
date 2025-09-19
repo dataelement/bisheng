@@ -1,4 +1,4 @@
-from bisheng.api.errcode.base import BaseErrorCode
+from .base import BaseErrorCode
 
 
 # 组件模块 返回错误码，业务代码104
@@ -40,3 +40,30 @@ class ToolTypeNotExistsError(BaseErrorCode):
 class ToolTypeIsPresetError(BaseErrorCode):
     Code: int = 10413
     Msg: str = '预置工具类别不可删除'
+
+
+# 该助手已被删除
+class AssistantDeletedError(BaseErrorCode):
+    Code: int = 10420
+    Msg: str = '该助手已被删除'
+
+# 当前助手未上线，无法直接对话
+class AssistantNotOnlineError(BaseErrorCode):
+    Code: int = 10421
+    Msg: str = '当前助手未上线，无法直接对话'
+
+# 助手推理模型列表为空
+class AssistantModelEmptyError(BaseErrorCode):
+    Code: int = 10422
+    Msg: str = '助手推理模型列表为空'
+
+# 未配置助手推理模型
+class AssistantModelNotConfigError(BaseErrorCode):
+    Code: int = 10423
+    Msg: str = '未配置助手推理模型'
+
+# 其它错误
+class AssistantOtherError(BaseErrorCode):
+    Code: int = 10499
+    Msg: str = '助手服务异常'
+
