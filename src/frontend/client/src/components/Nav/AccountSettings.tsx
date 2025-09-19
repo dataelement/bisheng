@@ -104,12 +104,16 @@ function AccountSettings() {
             <DropdownMenuSubContent className='w-40 rounded-2xl'>
               <span className='text-xs text-gray-400 pl-2'>{localize('com_nav_language_label')}</span>
               <DropdownMenuItem className='font-normal justify-between' onClick={() => changeLang('zh-Hans')}>
-                {localize('com_nav_simplified_chinese')}
+                {localize('com_nav_lang_chinese')}
                 {langcode === 'zh-Hans' && <Check size={16} />}
               </DropdownMenuItem>
               <DropdownMenuItem className='font-normal justify-between' onClick={() => changeLang('en-US')}>
-                {localize('com_nav_english')}
+                {localize('com_nav_lang_english')}
                 {langcode === 'en-US' && <Check size={16} />}
+              </DropdownMenuItem>
+              <DropdownMenuItem className='font-normal justify-between' onClick={() => changeLang('ja')}>
+                {localize('com_nav_lang_japanese')}
+                {langcode === 'ja' && <Check size={16} />}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
