@@ -3,10 +3,31 @@ import * as mammoth from "mammoth";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
 const DocxPreview = ({ filePath }) => {
+    console.log(filePath, 445);
+    
+    // 检查文件路径是否以.doc结尾（不区分大小写）
+    const isDocFile = filePath.toLowerCase().endsWith('.doc');
+    
     const [htmlContent, setHtmlContent] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const previewRef = useRef(null);
+
+    // 如果是.doc文件，直接返回不支持预览提示，不执行后续逻辑
+    if (isDocFile) {
+        return (
+            <div className="flex justify-center items-center h-full text-gray-400">
+                <div className="text-center">
+                    <img
+                        className="size-52 block"
+                        src={__APP_ENV__.BASE_URL + "/assets/knowledge/damage.svg"} 
+                        alt="文件不支持预览" 
+                    />
+                    <p>此文件类型不支持预览</p>
+                </div>
+            </div>
+        );
+    }
 
     useEffect(() => {
         const fetchAndConvertDocx = async () => {
@@ -62,9 +83,11 @@ const DocxPreview = ({ filePath }) => {
   `;
 
     if (loading) {
-        return <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <LoadingIcon />
-        </div>
+        return (
+            <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+                <LoadingIcon />
+            </div>
+        );
     }
 
     return (
@@ -90,3 +113,4 @@ const DocxPreview = ({ filePath }) => {
 };
 
 export default DocxPreview;
+    

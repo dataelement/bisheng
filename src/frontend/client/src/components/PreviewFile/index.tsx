@@ -30,6 +30,7 @@ export default function FileViewPanne({ file }) {
         })
         console.log('file.chunks[0].box[0].page :>> ', file.chunks);
         setPositon([file.chunks[0].box[0].page, file.chunks[0].box[0].bbox[1] || 0])
+        setCurrentIndex(0)
         return map
     }, [file.chunks])
 
@@ -40,21 +41,16 @@ export default function FileViewPanne({ file }) {
         setPositon([chunk.box[0].page, chunk.box[0].bbox[1] || 0 + random])
     }
 
-    const suffix = useMemo(() => {
-        return file.fileName.split('.').pop().toLowerCase()
-    }, [file.fileName])
-
     const fileView = () => {
         const previewFileUrl = file.fileUrl
-        const newVersion = ['etl4lm', 'un_etl4lm'].includes(file.parse_type)
-        if (!newVersion) {
-            if (suffix === 'pdf' || file.parse_type === 'uns') {
+        if (!file.isNew) {
+            if (file.suffix === 'pdf' || file.parse_type === 'uns') {
                 return previewFileUrl && <MemoizedFileView scrollTo={postion} fileUrl={file.fileUrl} labels={labels} />
             } else {
                 return <div className="flex justify-center items-center h-full text-gray-400">旧版文件格式暂不支持预览</div>
             }
         }
-        switch (suffix) {
+        switch (file.suffix) {
             case 'ppt':
             case 'pptx':
             case 'pdf':

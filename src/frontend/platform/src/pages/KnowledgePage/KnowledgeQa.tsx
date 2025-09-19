@@ -1,12 +1,16 @@
+import { QaIcon } from "@/components/bs-icons/knowledge";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button, LoadButton } from "@/components/bs-ui/button";
+import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, SearchInput, Textarea } from "@/components/bs-ui/input";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import Cascader from "@/components/bs-ui/select/cascader";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { QuestionTooltip, TooltipContent } from "@/components/bs-ui/tooltip";
+import Tip from "@/components/bs-ui/tooltip/tip";
 import { userContext } from "@/contexts/userContext";
 import { createFileLib, deleteFileLib, readFileLibDatabase } from "@/controllers/API";
 import { getKnowledgeModelConfig, getModelListApi } from "@/controllers/API/finetune";
@@ -16,10 +20,7 @@ import { t } from "i18next";
 import { Ellipsis, Trash2 } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router-dom";
-import index from "../BuildPage/bench/LingSiWork";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
-import { QuestionTooltip, TooltipContent, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { useNavigate } from "react-router-dom";
 
 function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
     const { t } = useTranslation()
@@ -167,6 +168,8 @@ export default function KnowledgeQa(params) {
     const navigate = useNavigate()
     const [copyLoadingId, setCopyLoadingId] = useState<string | null>(null);
     const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
+    const [selectOpenId, setSelectOpenId] = useState<string | null>(null);
+    const [modalKey, setModalKey] = useState(0);
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) => {
         return readFileLibDatabase({ ...param, name: param.keyword, type: 1 })
@@ -228,17 +231,17 @@ export default function KnowledgeQa(params) {
 
             <Table>
                 <TableHeader>
-                    <TableRow className="w-full">
-                        <TableHead className="flex: 1 text-left pr-6">
+                    <TableRow>
+                        <TableHead>
                             {t('lib.libraryName')}
                         </TableHead>
-                        <TableHead className="flex: 1 text-left pl-2">
+                        <TableHead>
                             {t('updateTime')}
                         </TableHead>
-                        <TableHead className="flex: 1 text-left pl-2">
+                        <TableHead>
                             {t('lib.createUser')}
                         </TableHead>
-                        <TableHead className="flex: 1 text-right pl-2">
+                        <TableHead className="text-right">
                             {t('operations')}
                         </TableHead>
                     </TableRow>
@@ -248,8 +251,6 @@ export default function KnowledgeQa(params) {
                     {datalist.map((el: any) => (
                         <TableRow
                             key={el.id}
-                            // 行hover样式：仅非按钮区域生效
-                            className="hover:bg-gray-50 transition-colors"
                             onClick={() => {
                                 window.libname = [el.name, el.description];
                                 navigate(`/filelib/qalib/${el.id}`);
@@ -257,17 +258,15 @@ export default function KnowledgeQa(params) {
                             }}
                         >
                             {/* 名称+描述单元格：恢复原有气泡结构，确保蓝色生效 */}
-                            <TableCell className="flex: 1 font-medium max-w-[200px] overflow-visible">
-                                <div className="flex items-center gap-2 py-1">
-                                    <img
-                                        src={__APP_ENV__.BASE_URL + "/assets/qa-logo.svg"}
-                                        alt="知识库图标"
-                                        className="w-[50px] h-[50px] mt-1 flex-shrink-0"
-                                    />
+                            <TableCell className="font-medium max-w-[280px]">
+                                <div className="flex items-center gap-2">
+                                    <div className="flex items-center justify-center size-[40px] min-w-[40px] text-white rounded-[4px] ">
+                                        <QaIcon className="text-primary" />
+                                    </div>
 
                                     <div className="min-w-0 overflow-visible">
                                         {/* 知识库名称（不变） */}
-                                        <div className="truncate max-w-[500px] text-[18px] font-medium mb-0 mt-3">
+                                        <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">
                                             {el.name}
                                         </div>
                                         <QuestionTooltip
@@ -275,7 +274,7 @@ export default function KnowledgeQa(params) {
                                             error={false}
                                             className="w-full text-start" // 触发区域铺满，确保hover描述文字就触发
                                         >
-                                            <div className="truncate max-w-[500px] text-[14px] text-[#5A5A5A] font-semibold">
+                                            <div className="truncate max-w-[500px] text-[12px] text-[#5A5A5A]">
                                                 {el.description || ''}
                                             </div>
                                             <TooltipContent
@@ -292,51 +291,63 @@ export default function KnowledgeQa(params) {
                                 </div>
                             </TableCell>
 
-                            <TableCell className="text-[#5A5A5A] flex: 1">{el.update_time.replace('T', ' ')}</TableCell>
+                            <TableCell className="text-[#5A5A5A]  min-w-[220px]">{el.update_time.replace('T', ' ')}</TableCell>
 
-                            <TableCell className="max-w-[300px] break-all text-[#5A5A5A] flex: 1">
-                                <div className="truncate-multiline">{el.user_name || '--'}</div>
+                            <TableCell className="max-w-[300px] break-all">
+                                <div className="truncate-multiline text-[#5A5A5A]">{el.user_name || '--'}</div>
                             </TableCell>
 
                             {/* 操作列：修复「按钮移入行不高亮」 */}
-                            <TableCell className="flex: 1 text-right hover:bg-transparent">
-                                {/* 关键：hover:bg-transparent覆盖行的hover:bg-gray-50 */}
+                            <TableCell className="text-right">
                                 <div className="flex items-center justify-end gap-2">
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <button
-                                                className="size-10 px-2 bg-transparent border-none shadow-none hover:bg-gray-300 flex items-center justify-center duration-200 relative"
-                                                onClick={(e) => e.stopPropagation()}
-                                            // 关键：stopPropagation防止触发父行onClick
-                                            >
-                                                <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
-                                            </button>
-                                        </DropdownMenuTrigger>
+                                    <Select
+                                        key={`${el.id}-${modalKey}`}
+                                        // open={selectOpenId === el.id}
+                                        onOpenChange={(isOpen) => {
+                                            setSelectOpenId(isOpen ? el.id : null);
+                                        }}
+                                        onValueChange={(selectedValue) => {
+                                            setSelectOpenId(null);
+                                            console.log("Selected value:", selectedValue, "for qa:", el.id);
 
-                                        <DropdownMenuContent
-                                            align="end"
-                                            className="rounded-md shadow-lg py-1 border-gray-200 z-[100] border border-transparent"
-                                            style={{ backgroundColor: 'white', opacity: 1 }}
-                                            onInteractOutside={() => setOpenMenus({})}
-                                        >
-                                            <DropdownMenuItem
-                                                className={`flex items-center gap-2 px-4 py-2 ${(el.copiable || user.role === 'admin')
-                                                    ? 'hover:bg-gray-100 cursor-pointer'
-                                                    : 'text-gray-400 cursor-not-allowed'
-                                                    }`}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
+                                            switch (selectedValue) {
+                                                case 'delete':
                                                     if (el.copiable || user.role === 'admin') {
                                                         handleDelete(el.id);
                                                     }
-                                                }}
-                                                disabled={!(el.copiable || user.role === 'admin')}
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                                {t('delete')}
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
+                                                    break;
+                                            }
+                                        }}
+                                    >
+                                        <SelectTrigger
+                                            showIcon={false}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                            }}
+                                            className="size-10 px-2 bg-transparent border-none shadow-none hover:bg-gray-300 flex items-center justify-center duration-200 relative"
+                                        >
+                                            <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
+                                        </SelectTrigger>
+                                        <SelectContent
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                            }}
+                                            className="z-50 overflow-visible"
+                                        >
+                                            <Tip content={!el.copiable && '暂无操作权限'} side='bottom'>
+                                                <SelectItem
+                                                    value="delete"
+                                                    className="data-[disabled]:pointer-events-auto"
+                                                    disabled={!(el.copiable || user.role === 'admin')}
+                                                >
+                                                    <div className="flex gap-2 items-center">
+                                                        <Trash2 className="w-4 h-4" />
+                                                        {t('delete')}
+                                                    </div>
+                                                </SelectItem>
+                                            </Tip>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                             </TableCell>
                         </TableRow>

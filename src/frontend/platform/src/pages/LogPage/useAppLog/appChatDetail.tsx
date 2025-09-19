@@ -22,7 +22,7 @@ export default function AppChatDetail() {
 
     const loading = false;
     const title = t('log.detailedSession');
-    const { loadAssistantState, destroy } = useAssistantStore()
+    const { assistantState, loadAssistantState, destroy } = useAssistantStore()
     const { loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore()
     const {
         loadHistoryMsg: loadFlowHistoryMsg,
@@ -49,7 +49,7 @@ export default function AppChatDetail() {
         }
     }, [])
 
-    const logo = useAppAvatar(cid, type)
+    const logo = useAppAvatar(cid, type, assistantState)
 
     return <div>
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
@@ -81,7 +81,7 @@ export default function AppChatDetail() {
 };
 
 
-const useAppAvatar = (cid, flowType) => {
+const useAppAvatar = (cid, flowType, assistantState) => {
     const [logo, setLogo] = useState('')
     const [title, setTitle] = useState('')
     const loadAppDetail = async () => {
@@ -89,9 +89,14 @@ const useAppAvatar = (cid, flowType) => {
         setLogo(lostflow.flow_logo)
         setTitle(lostflow.flow_name)
     }
+
     useEffect(() => {
-        loadAppDetail()
+        if (flowType !== AppNumType.ASSISTANT) {
+            loadAppDetail()
+        }
     }, [])
 
-    return <AppAvator id={title} flowType={flowType} url={logo} className="size-5 min-w-5"></AppAvator>
+    return flowType === AppNumType.ASSISTANT ?
+        <AppAvator id={assistantState.name} flowType={flowType} url={assistantState.logo} className="size-5 min-w-5"></AppAvator> :
+        <AppAvator id={title} flowType={flowType} url={logo} className="size-5 min-w-5"></AppAvator>
 }

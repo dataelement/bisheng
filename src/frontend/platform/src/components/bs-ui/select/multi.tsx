@@ -256,7 +256,7 @@ const MultiSelect = ({
             }
             footerNode={children}
         >
-            <div className="mt-2">
+            <div className="mt-2 max-w-96">
                 {
                     optionFilter.map((item) => (
                         <MultiItem

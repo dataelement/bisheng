@@ -1,13 +1,13 @@
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { LoadIcon } from "@/components/bs-icons";
-import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Switch } from "@/components/bs-ui/switch";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import Tip from "@/components/bs-ui/tooltip/tip";
 import { downloadFile, formatDate } from "@/util/utils";
-import { ArrowLeft, Ban, CheckCircle, Square, SquareCheckBig, SquareX, Trash2 } from "lucide-react";
+import { ArrowLeft, SquareCheckBig, SquareX, Trash2 } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
@@ -251,129 +251,129 @@ export default function QasPage() {
         }
     }, [datalist])
 
-// 修改 useEffect 中处理标题的部分
-useEffect(() => {
-    // 处理 window.libname 可能的格式问题
-    let libName = '';
-    // 检查 window.libname 是否存在且有效
-    if (window.libname) {
-        // 处理数组格式（[名称, 描述]）
-        if (Array.isArray(window.libname) && window.libname.length > 0) {
-            libName = window.libname[0];
-        } 
-        // 处理字符串格式
-        else if (typeof window.libname === 'string') {
-            libName = window.libname;
+    // 修改 useEffect 中处理标题的部分
+    useEffect(() => {
+        // 处理 window.libname 可能的格式问题
+        let libName = '';
+        // 检查 window.libname 是否存在且有效
+        if (window.libname) {
+            // 处理数组格式（[名称, 描述]）
+            if (Array.isArray(window.libname) && window.libname.length > 0) {
+                libName = window.libname[0];
+            }
+            // 处理字符串格式
+            else if (typeof window.libname === 'string') {
+                libName = window.libname;
+            }
+            // 存储到 localStorage 时只存名称
+            localStorage.setItem('libname', libName);
         }
-        // 存储到 localStorage 时只存名称
-        localStorage.setItem('libname', libName);
-    } 
-    // 从 localStorage 获取备份
-    else {
-        libName = localStorage.getItem('libname') || '';
-    }
-    setTitle(libName || t('unknownKnowledgeBase')); // 提供默认文本
-}, []);
-const handleEnableSelected = async () => {
-  if (!selectedItems.length) return;
+        // 从 localStorage 获取备份
+        else {
+            libName = localStorage.getItem('libname') || '';
+        }
+        setTitle(libName || t('unknownKnowledgeBase')); // 提供默认文本
+    }, []);
+    const handleEnableSelected = async () => {
+        if (!selectedItems.length) return;
 
-  try {
-    const itemsToEnable = selectedItems.filter(id => {
-      const item = datalist.find(el => el.id === id);
-      return !item || item.status !== 1;
-    });
+        try {
+            const itemsToEnable = selectedItems.filter(id => {
+                const item = datalist.find(el => el.id === id);
+                return !item || item.status !== 1;
+            });
 
-    if (itemsToEnable.length === 0) {
-      toast({ variant: 'info', description: '所选项目已经是启用状态' });
-      return;
-    }
+            if (itemsToEnable.length === 0) {
+                toast({ variant: 'info', description: '所选项目已经是启用状态' });
+                return;
+            }
 
-    refreshData(
-      item => itemsToEnable.includes(item.id), 
-      { status: 2 } // 处理中状态
-    );
+            refreshData(
+                item => itemsToEnable.includes(item.id),
+                { status: 2 } // 处理中状态
+            );
 
-    // 优化：使用Promise.allSettled，避免单个ID失败导致整体中断
-    const results = await Promise.allSettled(
-      itemsToEnable.map(id => updateQaStatus(id, 1)) // 1 = 启用
-    );
+            // 优化：使用Promise.allSettled，避免单个ID失败导致整体中断
+            const results = await Promise.allSettled(
+                itemsToEnable.map(id => updateQaStatus(id, 1)) // 1 = 启用
+            );
 
-    // 4. 统计结果（成功/失败）
-    const successCount = results.filter(res => res.status === 'fulfilled').length;
-    const failedIds = results
-      .filter(res => res.status === 'rejected')
-      .map((res, idx) => itemsToEnable[idx]); // 匹配失败的ID
+            // 4. 统计结果（成功/失败）
+            const successCount = results.filter(res => res.status === 'fulfilled').length;
+            const failedIds = results
+                .filter(res => res.status === 'rejected')
+                .map((res, idx) => itemsToEnable[idx]); // 匹配失败的ID
 
-    // 5. 关键：刷新所有分页数据，同步第二页及以后的状态
-    await reload();
+            // 5. 关键：刷新所有分页数据，同步第二页及以后的状态
+            await reload();
 
-    // 6. 操作完成：清空选中项（可选，根据业务需求决定是否保留）
-    setSelectedItems([]);
-    setSelectAll(false);
+            // 6. 操作完成：清空选中项（可选，根据业务需求决定是否保留）
+            setSelectedItems([]);
+            setSelectAll(false);
 
-    // 7. 结果提示
-    if (successCount > 0) {
-      toast({ variant: 'success', description: `成功启用 ${successCount} 个项目` });
-    }
-    if (failedIds.length > 0) {
-      toast({
-        variant: 'warning',
-        description: `部分项目启用失败，ID: ${failedIds.join(', ')}`
-      });
-    }
-  } catch (error) {
-    toast({ variant: 'error', description: '批量启用操作异常，请重试' });
-  }
-};
+            // 7. 结果提示
+            if (successCount > 0) {
+                toast({ variant: 'success', description: `成功启用 ${successCount} 个项目` });
+            }
+            if (failedIds.length > 0) {
+                toast({
+                    variant: 'warning',
+                    description: `部分项目启用失败，ID: ${failedIds.join(', ')}`
+                });
+            }
+        } catch (error) {
+            toast({ variant: 'error', description: '批量启用操作异常，请重试' });
+        }
+    };
 
     // 批量禁用勾选的 QA 项
-const handleDisableSelected = async () => {
-  if (!selectedItems.length) return;
+    const handleDisableSelected = async () => {
+        if (!selectedItems.length) return;
 
-  try {
-    // 1. 筛选所有跨页选中项中“未禁用”的ID
-    const itemsToDisable = selectedItems.filter(id => {
-      const item = datalist.find(el => el.id === id);
-      return !item || item.status !== 0; // 0 = 禁用
-    });
+        try {
+            // 1. 筛选所有跨页选中项中“未禁用”的ID
+            const itemsToDisable = selectedItems.filter(id => {
+                const item = datalist.find(el => el.id === id);
+                return !item || item.status !== 0; // 0 = 禁用
+            });
 
-    if (itemsToDisable.length === 0) {
-      toast({ variant: 'info', description: '所选项目已经是禁用状态' });
-      return;
-    }
+            if (itemsToDisable.length === 0) {
+                toast({ variant: 'info', description: '所选项目已经是禁用状态' });
+                return;
+            }
 
-    // 2. 跨页批量调用API
-    const results = await Promise.allSettled(
-      itemsToDisable.map(id => updateQaStatus(id, 0))
-    );
+            // 2. 跨页批量调用API
+            const results = await Promise.allSettled(
+                itemsToDisable.map(id => updateQaStatus(id, 0))
+            );
 
-    // 3. 统计结果
-    const successCount = results.filter(res => res.status === 'fulfilled').length;
-    const failedIds = results
-      .filter(res => res.status === 'rejected')
-      .map((res, idx) => itemsToDisable[idx]);
+            // 3. 统计结果
+            const successCount = results.filter(res => res.status === 'fulfilled').length;
+            const failedIds = results
+                .filter(res => res.status === 'rejected')
+                .map((res, idx) => itemsToDisable[idx]);
 
-    // 4. 关键：刷新所有数据，同步第二页状态
-    await reload();
+            // 4. 关键：刷新所有数据，同步第二页状态
+            await reload();
 
-    // 5. 清空选中项
-    setSelectedItems([]);
-    setSelectAll(false);
+            // 5. 清空选中项
+            setSelectedItems([]);
+            setSelectAll(false);
 
-    // 6. 提示
-    if (successCount > 0) {
-      toast({ variant: 'success', description: `成功禁用 ${successCount} 个项目` });
-    }
-    if (failedIds.length > 0) {
-      toast({
-        variant: 'warning',
-        description: `部分项目禁用失败，ID: ${failedIds.join(', ')}`
-      });
-    }
-  } catch (error) {
-    toast({ variant: 'error', description: '批量禁用操作异常，请重试' });
-  }
-};
+            // 6. 提示
+            if (successCount > 0) {
+                toast({ variant: 'success', description: `成功禁用 ${successCount} 个项目` });
+            }
+            if (failedIds.length > 0) {
+                toast({
+                    variant: 'warning',
+                    description: `部分项目禁用失败，ID: ${failedIds.join(', ')}`
+                });
+            }
+        } catch (error) {
+            toast({ variant: 'error', description: '批量禁用操作异常，请重试' });
+        }
+    };
     const handleCheckboxChange = (id) => {
         setSelectedItems((prevSelectedItems) => {
             if (prevSelectedItems.includes(id)) {
@@ -390,30 +390,30 @@ const handleDisableSelected = async () => {
             currentPageIds.every(id => selectedItems.includes(id));
         setSelectAll(isAllSelected);
     }, [datalist, selectedItems]);
-   // 1. 全选/取消全选当前页（支持跨页累加）
-const handleSelectAll = () => {
-  const currentPageIds = datalist.map(item => item.id);
-  setSelectedItems(prev => {
-    const newSelected = new Set(prev);
-    if (selectAll) {
-      // 取消当前页全选：移除当前页所有ID
-      currentPageIds.forEach(id => newSelected.delete(id));
-    } else {
-      // 全选当前页：添加当前页所有ID（去重）
-      currentPageIds.forEach(id => newSelected.add(id));
-    }
-    return Array.from(newSelected);
-  });
-};
+    // 1. 全选/取消全选当前页（支持跨页累加）
+    const handleSelectAll = () => {
+        const currentPageIds = datalist.map(item => item.id);
+        setSelectedItems(prev => {
+            const newSelected = new Set(prev);
+            if (selectAll) {
+                // 取消当前页全选：移除当前页所有ID
+                currentPageIds.forEach(id => newSelected.delete(id));
+            } else {
+                // 全选当前页：添加当前页所有ID（去重）
+                currentPageIds.forEach(id => newSelected.add(id));
+            }
+            return Array.from(newSelected);
+        });
+    };
 
-// 2. 计算当前页全选状态（仅判断当前页是否全部被选中）
-useEffect(() => {
-  const currentPageIds = datalist.map(item => item.id);
-  // 条件：1. 当前页有数据；2. 当前页所有ID都在跨页选中列表中
-  const isCurrentPageAllSelected = currentPageIds.length > 0 && 
-    currentPageIds.every(id => selectedItems.includes(id));
-  setSelectAll(isCurrentPageAllSelected); // 仅控制当前页全选框状态
-}, [datalist, selectedItems]); // 依赖当前页数据和跨页选中列表
+    // 2. 计算当前页全选状态（仅判断当前页是否全部被选中）
+    useEffect(() => {
+        const currentPageIds = datalist.map(item => item.id);
+        // 条件：1. 当前页有数据；2. 当前页所有ID都在跨页选中列表中
+        const isCurrentPageAllSelected = currentPageIds.length > 0 &&
+            currentPageIds.every(id => selectedItems.includes(id));
+        setSelectAll(isCurrentPageAllSelected); // 仅控制当前页全选框状态
+    }, [datalist, selectedItems]); // 依赖当前页数据和跨页选中列表
 
     const handleDelete = (id) => {
         bsConfirm({
@@ -427,24 +427,24 @@ useEffect(() => {
         })
     }
 
-const handleDeleteSelected = () => {
-  if (!selectedItems.length) return;
+    const handleDeleteSelected = () => {
+        if (!selectedItems.length) return;
 
-  bsConfirm({
-    desc: t('confirmDeleteSelectedQaData', { count: selectedItems.length }), // 显示跨页选中总数
-    onOk(next) {
-      captureAndAlertRequestErrorHoc(
-        deleteQa(selectedItems) // 传入所有跨页选中ID
-          .then(res => {
-            reload(); // 刷新所有数据，同步第二页
-            setSelectedItems([]); // 清空选中
-            setSelectAll(false);
-          })
-      );
-      next();
-    },
-  });
-};
+        bsConfirm({
+            desc: t('confirmDeleteSelectedQaData', { count: selectedItems.length }), // 显示跨页选中总数
+            onOk(next) {
+                captureAndAlertRequestErrorHoc(
+                    deleteQa(selectedItems) // 传入所有跨页选中ID
+                        .then(res => {
+                            reload(); // 刷新所有数据，同步第二页
+                            setSelectedItems([]); // 清空选中
+                            setSelectAll(false);
+                        })
+                );
+                next();
+            },
+        });
+    };
     const handleStatusClick = async (id: number, checked: boolean) => {
         const targetStatus = checked ? 1 : 0;
         const item = datalist.find(el => el.id === id);
@@ -487,29 +487,37 @@ const handleDeleteSelected = () => {
                         </div>
                     </div>
                     <div className={selectedItems.length ? 'visible' : 'invisible'}>
-                        <Button variant="outline" className=" ml-2" onClick={handleDeleteSelected}>
-                            <Trash2 className="mr-2 h-4 w-4" ></Trash2>  {t('delete')}
-                        </Button>
-                        <Button variant="outline" className="ml-2" onClick={handleDisableSelected}>
-                            <SquareX className="mr-2 h-4 w-4" /> 禁用
-                        </Button>
-                        <Button variant="outline" className="ml-2" onClick={handleEnableSelected}>
-                            <SquareCheckBig className="mr-2 h-4 w-4" /> 启用
-                        </Button>
-
+                        <Tip content={!hasPermission && '暂无操作权限'} side='top'>
+                            <Button variant="outline" className="disabled:pointer-events-auto ml-2" disabled={!hasPermission} onClick={handleDeleteSelected}>
+                                <Trash2 className="mr-2 h-4 w-4" ></Trash2>  {t('delete')}
+                            </Button>
+                        </Tip>
+                        <Tip content={!hasPermission && '暂无操作权限'} side='top'>
+                            <Button variant="outline" className="disabled:pointer-events-auto ml-2" disabled={!hasPermission} onClick={handleDisableSelected}>
+                                <SquareX className="mr-2 h-4 w-4" /> 禁用
+                            </Button>
+                        </Tip>
+                        <Tip content={!hasPermission && '暂无操作权限'} side='top'>
+                            <Button variant="outline" className="disabled:pointer-events-auto ml-2" disabled={!hasPermission} onClick={handleEnableSelected}>
+                                <SquareCheckBig className="mr-2 h-4 w-4" /> 启用
+                            </Button>
+                        </Tip>
                     </div>
                     <div className="flex justify-between items-center mb-4">
-
                         <div className="flex gap-4 items-center">
                             <SearchInput placeholder={t('qaContent')} onChange={(e) => search(e.target.value)}></SearchInput>
-                            <Button variant="outline" className="px-8" onClick={() => importRef.current.open()}>导入</Button>
+                            <Tip content={!hasPermission && '暂无操作权限'} side='top'>
+                                <Button variant="outline" disabled={!hasPermission} className="disabled:pointer-events-auto px-8" onClick={() => importRef.current.open()}>导入</Button>
+                            </Tip>
                             <Button variant="outline" className="px-8" onClick={() => {
                                 getQaFile(id).then(res => {
                                     const fileUrl = res.file_list[0];
                                     downloadFile(checkSassUrl(fileUrl), `${title} ${formatDate(new Date(), 'yyyy-MM-dd')}.xlsx`);
                                 })
                             }}>导出</Button>
-                            <Button className="px-8" onClick={() => editRef.current.open()}>{t('createQA')}</Button>
+                            <Tip content={!hasPermission && '暂无操作权限'} side='top'>
+                                <Button className="disabled:pointer-events-auto px-8" disabled={!hasPermission} onClick={() => editRef.current.open()}>{t('createQA')}</Button>
+                            </Tip>
                         </div>
                     </div>
                 </div>
@@ -575,10 +583,18 @@ const handleDeleteSelected = () => {
                                         <div className="flex items-center justify-end gap-2">
                                             <div className="flex items-center">
                                                 {el.status !== 2 && (
-                                                    <Switch
-                                                        checked={el.status === 1}
-                                                        onCheckedChange={(bln) => handleStatusClick(el.id, bln)}
-                                                    />
+                                                    <Tip
+                                                        content={!hasPermission && '暂无操作权限'}
+                                                        side='top'>
+                                                        <div>
+                                                            <Switch
+                                                                checked={el.status === 1}
+                                                                disabled={!hasPermission}
+                                                                className="disabled:pointer-events-auto"
+                                                                onCheckedChange={(bln) => handleStatusClick(el.id, bln)}
+                                                            />
+                                                        </div>
+                                                    </Tip>
                                                 )}
                                                 {el.status === 2 && (
                                                     <span className="text-sm">处理中</span>
@@ -587,28 +603,23 @@ const handleDeleteSelected = () => {
                                                     <span className="text-sm">未启用，请重试</span>
                                                 )}
                                             </div>
-                                            {hasPermission ? (
+                                            <Tip
+                                                content={!hasPermission && '暂无操作权限'}
+                                                styleClasses="-translate-x-6"
+                                                side='top'>
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
+                                                    className="disabled:pointer-events-auto"
+                                                    disabled={!hasPermission}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleDelete(el.id);
                                                     }}
-                                                    className=""
                                                 >
                                                     <Trash2 size={16} />
                                                 </Button>
-                                            ) : (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="text-gray-400 cursor-not-allowed"
-                                                    disabled
-                                                >
-                                                    <Trash2 size={16} />
-                                                </Button>
-                                            )}
+                                            </Tip>
                                         </div>
                                     </TableCell>
                                 </TableRow>
@@ -629,6 +640,6 @@ const handleDeleteSelected = () => {
             </div>
             <EditQa ref={editRef} knowlageId={id} onChange={reload} />
             <ImportQa ref={importRef} knowlageId={id} onChange={reload} />
-        </div>
+        </div >
     );
 }

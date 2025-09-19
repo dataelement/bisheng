@@ -10,7 +10,7 @@ from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPExcept
 from fastapi.encoders import jsonable_encoder
 
 from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError
+from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import add_qa
@@ -354,6 +354,10 @@ async def qa_add(*, QACreate: QAKnowledgeUpsert,
     db_knowledge = KnowledgeDao.query_by_id(QACreate.knowledge_id)
     if db_knowledge.type != KnowledgeTypeEnum.QA.value:
         raise HTTPException(status_code=404, detail='知识库类型错误')
+    if not login_user.access_check(
+            db_knowledge.user_id, str(db_knowledge.id), AccessType.KNOWLEDGE_WRITE
+    ):
+        raise UnAuthorizedError.http_exception()
 
     db_q = QAKnoweldgeDao.get_qa_knowledge_by_name(QACreate.questions, QACreate.knowledge_id, exclude_id=QACreate.id)
     # create repeat question or update
@@ -370,7 +374,16 @@ def qa_status_switch(*,
                      id: int = Body(embed=True),
                      login_user: UserPayload = Depends(get_login_user)):
     """ 修改知识库信息. """
-    new_qa_db = knowledge_imp.qa_status_change(id, status)
+    qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
+    if qa_db.status == status:
+        return resp_200()
+    db_knowledge = KnowledgeDao.query_by_id(qa_db.knowledge_id)
+    if not login_user.access_check(
+            db_knowledge.user_id, str(db_knowledge.id), AccessType.KNOWLEDGE_WRITE
+    ):
+        raise UnAuthorizedError.http_exception()
+
+    new_qa_db = knowledge_imp.qa_status_change(qa_db, status, db_knowledge)
     if not new_qa_db:
         return resp_200()
     if new_qa_db.status != status:
@@ -397,6 +410,12 @@ def qa_append(
     """ 增加知识库信息. """
     QA_list = QAKnoweldgeDao.select_list(ids)
     knowledge = KnowledgeDao.query_by_id(QA_list[0].knowledge_id)
+    # check knowledge access
+    if not login_user.access_check(
+            knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
+    ):
+        raise UnAuthorizedError.http_exception()
+
     for q in QA_list:
         if question in q.questions:
             raise KnowledgeQAError.http_exception()
@@ -706,6 +725,11 @@ def update_knowledge_model(*,
         if not knowledge:
             return resp_501(message="指定的知识库不存在")
 
+        if not login_user.access_check(
+                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
+        ):
+            raise UnAuthorizedError.http_exception()
+
         old_model_id = knowledge.model
 
         # 更新知识库状态和模型
@@ -713,16 +737,16 @@ def update_knowledge_model(*,
         knowledge.name = req_data.knowledge_name
         knowledge.description = req_data.description
 
-        if old_model_id == req_data.model_id:
+        if int(old_model_id) == int(req_data.model_id):
             # 如果模型没有变化，不需要重建
-            knowledge.state = KnowledgeState.PUBLISHED.value
             KnowledgeDao.update_one(knowledge)
             return resp_200(
                 message="知识库模型未更改，无需重建"
             )
-        else:
-            knowledge.state = KnowledgeState.REBUILDING.value
-            KnowledgeDao.update_one(knowledge)
+        if knowledge.state == KnowledgeState.REBUILDING.value:
+            raise KnowledgeRebuildingError.http_exception()
+        knowledge.state = KnowledgeState.REBUILDING.value
+        KnowledgeDao.update_one(knowledge)
 
         # 发起异步任务
         # 延迟导入以避免循环导入

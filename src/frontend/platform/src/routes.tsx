@@ -38,6 +38,7 @@ import SystemPage from "./pages/SystemPage";
 import ResoucePage from "./pages/resoucePage";
 import { AppNumType } from "./types/app";
 import AdjustFilesUpload from "./pages/KnowledgePage/AdjustFilesUpload";
+import { useEffect } from "react";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
@@ -61,18 +62,25 @@ const baseConfig = {
   basename: __APP_ENV__.BASE_URL
 }
 
+const RedirectToExternalLink = () => {
+  useEffect(() => {
+    window.location.href = window.location.origin + '/workspace/'; // 替换为你想跳转的外部链接
+  }, []);
+
+  return null;
+};
 
 const privateRouter = [
+  { path: "/", element: <RedirectToExternalLink /> },
   {
     path: "/",
     element: <MainLayout />,
     children: [
       // { path: "", element: <SkillChatPage />, },
-      { path: "", element: <Navigate to="/build/apps" replace /> }, 
       { path: "filelib", element: <KnowledgePage />, permission: 'knowledge', },
       { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
       { path: "filelib/upload/:id", element: <FilesUpload />, permission: 'knowledge', },
-       { path: "filelib/adjust/:fileId", element: <AdjustFilesUpload />, permission: 'knowledge', },
+      { path: "filelib/adjust/:fileId", element: <AdjustFilesUpload />, permission: 'knowledge', },
       { path: "filelib/qalib/:id", element: <QasPage />, permission: 'knowledge', },
       { path: "build/apps", element: <Apps />, permission: 'build', },
       // { path: "build/assist", element: <SkillAssisPage />, permission: 'build', },

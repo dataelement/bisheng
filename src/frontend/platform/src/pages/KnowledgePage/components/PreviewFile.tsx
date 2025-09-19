@@ -1,5 +1,6 @@
 import FileView from "@/components/bs-comp/FileView";
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import { cn } from "@/utils";
 import { Info } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -20,7 +21,7 @@ export default function PreviewFile({
   edit = false,
   previewUrl
 }: {
-  urlState: { load: false; url: '' };
+  urlState: { load: boolean; url: string };
   file: any;
   partitions: Partition;
   chunks: any;
@@ -28,8 +29,8 @@ export default function PreviewFile({
   setChunks: any;
   edit?: boolean;
 }) {
-  console.log(urlState,file,rawFiles,67);
-  
+  console.log(urlState, file, rawFiles, previewUrl, 67);
+
   const { t } = useTranslation('knowledge')
   const MemoizedFileView = React.memo(FileView);
   const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
@@ -62,25 +63,27 @@ export default function PreviewFile({
   const labelsMapTempRef = useRef({})
   const [labelChange, setLabelChange] = useState(false)
   const [showPos, setShowPos] = useState(false)
-  const [random, setRandom] = useState(0)
   const labelTextRef = useRef<any>(partitions);
+  const [rePostion, setRePostion] = useState(false)
 
   // 4. 初始化标签数据（完全对齐ParagraphEdit的initData逻辑）
   useEffect(() => {
+    if (selectedChunkIndex === -1) return
     setLabelChange(false);
     // 仅对非uns类型的非PDF文件清空标签
     if (suffix !== 'pdf' && !isUnsType) {
       setSelectedBbox([]);
       labelsMapRef.current = new Map();
+      setRePostion(!rePostion);
       return setLabelsMap(new Map());
     }
-
     let setPostioned = false;
     const labelsMap = new Map();
 
     // 优先使用缓存的标签数据
     const cachedLabels = labelsMapTempRef.current[selectedChunkIndex];
     if (cachedLabels) {
+      setRePostion(!rePostion);
       setLabelsMap(cachedLabels);
       labelsMapRef.current = cachedLabels;
       return;
@@ -115,6 +118,7 @@ export default function PreviewFile({
     });
 
     if (labelsMap.size) {
+      setRePostion(!rePostion);
       setLabelsMap(labelsMap);
       labelsMapRef.current = labelsMap;
     }
@@ -127,11 +131,10 @@ export default function PreviewFile({
 
   // 计算定位位置（与ParagraphEdit一致）
   const calculatedPostion = useMemo(() => {
-    console.log('1111 :>> ', 1111);
     const labelsArray = Array.from(labelsMap.values());
     const target = labelsArray.find(el => el.active);
-    return target ? [target.page, target.label[1] + random] : [0, 0];
-  }, [labelsMap, random]);
+    return target ? [target.page, postion[1]] : [0, 0];
+  }, [rePostion, postion]);
 
   // 6. 页面标签分组（与ParagraphEdit的labels计算一致）
   const pageLabels = useMemo(() => {
@@ -142,7 +145,7 @@ export default function PreviewFile({
     }, {});
   }, [labelsMap]);
 
-  // 7. 标签选择逻辑（完全对齐ParagraphEdit的handleSelectLabels）
+  // 7. 标签选择逻辑（完全对齐ParagraphEdit的handleSelectLabels
   const handleSelectLabels = (lbs) => {
     if (selectedChunkIndex === -1) return;
 
@@ -198,7 +201,7 @@ export default function PreviewFile({
     const previewFileUrl = targetFile.url;
 
     // 强制uns类型的Excel文件使用pdf预览
-    const renderType = fileParseType === 'etl4lm' && ['ppt', 'pptx'].includes(suffix)
+    const renderType = (fileParseType === 'etl4lm' || fileParseType === 'un_etl4lm') && ['ppt', 'pptx'].includes(suffix)
       ? 'pdf'
       : suffix;
     // 加载状态处理
@@ -232,7 +235,7 @@ export default function PreviewFile({
       case 'md': return <TxtFileViewer markdown filePath={url} />;
       case 'html': return <TxtFileViewer html filePath={url} />;
       case 'doc':
-      case 'docx': return <DocxPreview filePath={previewUrl||url} />;
+      case 'docx': return <DocxPreview filePath={previewUrl || url} />;
       case 'png':
       case 'jpg':
       case 'jpeg':
@@ -287,11 +290,17 @@ export default function PreviewFile({
     labelsMapTempRef.current[selectedChunkIndex] = labelsMap;
   };
 
+  useEffect(() => {
+    return () => {
+      setNeedCoverData({ index: -1, txt: '' });
+    }
+  }, [])
+
   // 2. 调整Excel文件过滤逻辑
   if (['xlsx', 'xls', 'csv'].includes(file.suffix)) return null
 
 
-  return <div className="relative w-1/2" onClick={e => {
+  return <div className={cn('relative', step === 3 ? "w-full" : "w-1/2", step === 2 ? "-mt-9 w-full" : "")} onClick={e => {
     e.stopPropagation()
   }}>
     <div className={`${edit ? 'absolute -top-8 right-0 z-10' : 'relative'} flex justify-center items-center mb-2 text-sm h-10`}>

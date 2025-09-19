@@ -16,7 +16,7 @@ import ResouceModal from "./components/ResouceModal";
 import { currentChatState, currentRunningState } from "./store/atoms";
 import { useMessage } from "./useMessages";
 
-export default function ChatMessages({ useName, title, logo }) {
+export default function ChatMessages({ useName, title, logo, disabledSearch = false }) {
     const { messageScrollRef, chatId, messages } = useMessage()
     const { inputForm, guideWord, inputDisabled } = useRecoilValue(currentRunningState)
     const chatState = useRecoilValue(currentChatState)
@@ -30,7 +30,7 @@ export default function ChatMessages({ useName, title, logo }) {
     const remark = chatState?.flow?.guide_word
 
 
-    return <div id="messageScrollPanne" ref={messageScrollRef} className="h-full overflow-y-auto scrollbar-hide pt-12 pb-96 px-4">
+    return <div id="messageScrollPanne" ref={messageScrollRef} className="h-full overflow-y-auto scrollbar-hide pt-2 pb-96 px-4">
         {/* 助手开场白 */}
         {remark && <MessageRemark
             logo={logo}
@@ -45,7 +45,7 @@ export default function ChatMessages({ useName, title, logo }) {
                 if (msg.files?.length) {
                     return <MessageFile key={msg.id} title={title} data={msg} logo={logo} />
                 } else if (['tool', 'flow', 'knowledge'].includes(msg.category)) {
-                    return <MessageRunlog key={msg.id} data={msg} />
+                    return <MessageRunlog key={msg.id || msg.extra} data={msg} />
                 } else if (msg.thought) {
                     return <MessageSystem
                         logo={logo} title={title} key={msg.id} data={msg} />;
@@ -60,6 +60,7 @@ export default function ChatMessages({ useName, title, logo }) {
                             key={msg.id}
                             useName={useName}
                             data={msg}
+                            disabledSearch={disabledSearch}
                             showButton={!inputDisabled && chatState?.flow.flow_type !== 10}
                         />;
                     case 'guide_word':

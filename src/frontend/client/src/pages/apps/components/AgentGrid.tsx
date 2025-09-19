@@ -46,6 +46,8 @@ interface Pagination {
   isPreloading: boolean // 是否正在预请求下一页（防重复）
 }
 
+const uncategorizedPageSize = 24
+
 export function AgentGrid({
   favorites,
   onAddToFavorites,
@@ -116,7 +118,7 @@ export function AgentGrid({
         const res = await getFrequently(nextPageNum, pageSize)
         nextPageData = res.data || []
       } else if (categoryType === "uncategorized") {
-        const res = await getUncategorized(nextPageNum, pageSize)
+        const res = await getUncategorized(nextPageNum, uncategorizedPageSize)
         nextPageData = res.data || []
       } else if (categoryType === "category" && categoryId) {
         const res = await getChatOnlineApi(nextPageNum, "", parseInt(categoryId))
@@ -282,7 +284,7 @@ export function AgentGrid({
   const fetchUncategorizedAgents = async (pageNum: number = 1) => {
     setUncategorizedLoading(true)
     try {
-      const res = await getUncategorized(pageNum, pageSize)
+      const res = await getUncategorized(pageNum, uncategorizedPageSize)
       const agents = res.data || []
 
       // 首次加载第1页后，预请求第2页

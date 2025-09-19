@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketException
 from fastapi import status as http_status
 from fastapi.responses import ORJSONResponse, StreamingResponse
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, AIMessageChunk
 from loguru import logger
 
 from bisheng.api.services.assistant import AssistantService
@@ -77,18 +77,14 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
     # 判断模型是否支持流式调用
     model_supports_streaming = _check_model_supports_streaming(agent)
 
-    logger.info(
+    logger.debug(
         f'act=assistant_chat_completions model_supports_streaming={model_supports_streaming}, stream={req_data.stream}, llm_type={type(agent.llm)}')
-    logger.info(
-        f'[调试] 即将判断分支: not req_data.stream={not req_data.stream}, not model_supports_streaming={not model_supports_streaming}')
-
     # 非流式调用或模型不支持流式
     if not req_data.stream or not model_supports_streaming:
         answer = await agent.run(question, chat_history)
         answer = answer[-1].content
 
         openai_resp_id = generate_uuid()
-        logger.info(f'act=assistant_chat_completions_non_streaming openai_resp_id={openai_resp_id}')
 
         # 将结果包装成openai的数据格式
         openai_resp = OpenAIChatCompletionResp(
@@ -122,65 +118,41 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
 
     async def _streaming_event_generator():
         """真实的流式事件生成器"""
-        logger.info(f'[API流式] _streaming_event_generator开始执行')
+        logger.debug(f'[API流式] _streaming_event_generator开始执行')
         try:
-            collected_content = ""
 
             # 使用真正的流式调用
-            logger.info(f'act = assistant chat completions streaming question={question}, chat_history={chat_history}')
-            logger.info(f'[API流式] 即将调用agent.astream()')
             chunk_counter = 0
             try:
                 async for message_chunk in agent.astream(question, chat_history):
-                    logger.info(f'[API流式] 进入astream循环，收到数据')
                     chunk_counter += 1
-                    logger.info(f'[API流式] 收到第{chunk_counter}个chunk: {type(message_chunk)}')
 
                     if not message_chunk:
                         logger.debug(f'Empty message_chunk received')
                         continue
-
-                    logger.debug(
-                        f'Received message_chunk: {type(message_chunk)}, content preview: {str(message_chunk)[:200]}')
-
                     # 获取最新的消息
                     latest_message = message_chunk[-1] if isinstance(message_chunk, list) else message_chunk
-                    logger.info(
-                        f'[API流式] 第{chunk_counter}个chunk - latest_message类型: {type(latest_message)}, 有content: {hasattr(latest_message, "content")}')
+                    if not isinstance(latest_message, AIMessageChunk):
+                        continue
+                    reasoning_content = latest_message.additional_kwargs.get("reasoning_content", "")
+                    content = latest_message.content
 
-                    if hasattr(latest_message, 'content') and latest_message.content:
-                        # stream_mode="messages"返回独立chunk，直接使用内容作为delta
-                        delta_content = latest_message.content
-                        logger.info(
-                            f'[API流式] 第{chunk_counter}个chunk内容: "{delta_content[:50]}..." (长度: {len(delta_content)})')
-
-                        # 累积完整内容用于历史记录
-                        collected_content += delta_content
-
-                        # 每个独立chunk都直接作为delta输出
-                        if delta_content:
-                            chunk_data = {
-                                "id": openai_resp_id,
-                                "object": "chat.completion.chunk",
-                                "created": int(time.time()),
-                                "model": req_data.model,
-                                "choices": [{
-                                    "index": 0,
-                                    "delta": {"content": delta_content},
-                                    "finish_reason": None
-                                }]
-                            }
-                            # 使用更安全的JSON序列化，避免传输截断
-                            try:
-                                json_str = json.dumps(chunk_data, ensure_ascii=False, separators=(',', ':'))
-                                logger.info(f'[API流式] 生成独立chunk: "{delta_content}" (长度: {len(delta_content)})')
-                                yield f'data: {json_str}\n\n'
-                                logger.info(f'[API流式] 成功yield第{chunk_counter}个独立chunk')
-                            except Exception as e:
-                                logger.error(f'JSON serialization error: {e}')
-                                continue
+                    chunk_data = {
+                        "id": openai_resp_id,
+                        "object": "chat.completion.chunk",
+                        "created": int(time.time()),
+                        "model": req_data.model,
+                        "choices": [{
+                            "index": 0,
+                            "delta": {"content": content, "reasoning_content": reasoning_content},
+                            "finish_reason": None
+                        }]
+                    }
+                    # 使用更安全的JSON序列化，避免传输截断
+                    json_str = json.dumps(chunk_data, ensure_ascii=False, separators=(',', ':'))
+                    yield f'data: {json_str}\n\n'
             except Exception as astream_error:
-                logger.error(f'[API流式] agent.astream()调用出错: {str(astream_error)}')
+                logger.exception('[API流式] agent.astream()调用出错')
                 raise astream_error
 
             logger.info(f'[API流式] astream循环结束，总共处理了{chunk_counter}个chunk')

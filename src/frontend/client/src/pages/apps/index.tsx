@@ -31,6 +31,7 @@ export default function AgentCenter() {
     }
 
     const { showToast } = useToast()
+    const categoryIdRef = useRef<string>("")
 
     const handleCategoryChange = (categoryId: string) => {
         console.log("点击的标签ID:", categoryId, "当前搜索状态:", isSearching);
@@ -41,6 +42,7 @@ export default function AgentCenter() {
             setSearchQuery("");
             setIsSearching(false);
         }
+        categoryIdRef.current = categoryId;
 
         // 2. 定义核心滚动逻辑
         const performScroll = () => {
@@ -118,7 +120,7 @@ export default function AgentCenter() {
             setSearchLoading(true);
             let allResults: any[] = []; // 存储所有页的结果
             let currentPage = 1;
-            const pageSize = 8; // 每页条数（和接口保持一致）
+            const pageSize = 80; // 每页条数（和接口保持一致）
 
             try {
                 // 循环加载所有页数据
@@ -128,7 +130,7 @@ export default function AgentCenter() {
                         currentPage,
                         query,
                         -1,
-                        true // 禁用默认限制，或根据接口逻辑调整
+                        pageSize // 禁用默认限制，或根据接口逻辑调整
                     );
 
                     const pageData = result.data || [];
