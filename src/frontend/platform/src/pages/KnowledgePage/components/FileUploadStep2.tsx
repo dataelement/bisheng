@@ -41,21 +41,18 @@ const initialStrategies = [
     { id: '2', regex: '\\n', position: 'after', rule: '单换行后切分，用于分隔普通换行' }
 ];
 
-const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode,kId }: IProps, ref) => {
-    console.log(resultFiles,778,kId);
+const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode, kId }: IProps, ref) => {
     const [previewLoading, setPreviewLoading] = useState(false);
     const { id: kid } = useParams()
-    console.log('FileUploadStep2 props:', { step, resultFiles, isAdjustMode,kId });
     const { t } = useTranslation('knowledge')
     const setSelectedChunkIndex = useKnowledgeStore((state) => state.setSelectedChunkIndex);
-  const [previewFailed, setPreviewFailed] = useState(false);
+    const [previewFailed, setPreviewFailed] = useState(false);
     const displayStep = isAdjustMode ? step + 1 : step;
-    const [step2Config, setStep2Config] = useState(null); 
-      const splitRule = resultFiles[0]?.split_rule;
-      console.log("子组件接收的布尔值：", {
-    retain_images: splitRule?.retain_images,
-    force_ocr: splitRule?.force_ocr
-  });
+    const splitRule = resultFiles[0]?.split_rule;
+    console.log("子组件接收的布尔值：", {
+        retain_images: splitRule?.retain_images,
+        force_ocr: splitRule?.force_ocr
+    });
     const displayMode: DisplayModeType | null = useMemo(() => {
         if (!resultFiles || resultFiles.length === 0) return null;
 
@@ -79,9 +76,8 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
         setCellGeneralConfig,
         strategies,
         setStrategies
-    } = useFileProcessingRules(initialStrategies, resultFiles, kid || kId,resultFiles[0].split_rule);
-    console.log(rules,strategies,resultFiles,887);
-    
+    } = useFileProcessingRules(initialStrategies, resultFiles, kid || kId, resultFiles[0].split_rule);
+
     const [applyRule, setApplyRule] = useState<any>({}) // 应用规则
     const applyRuleRef = useRef(applyRule);
     useEffect(() => {
@@ -115,8 +111,7 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
     }
 
     const { toast } = useToast()
-  const internalHandleNext = () => {
-        console.log(step, displayStep,'previewCount11');
+    const internalHandleNext = () => {
         // 全局校验：无论在哪个分支，都先校验参数
         if (vildateCell()) return;
         // 规则校验：过滤后若为空或存在空regex，阻止继续
@@ -137,7 +132,6 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
                 rules
             };
             setApplyRule(config);
-            console.log(applyRuleRef.current, 111);
 
             setSelectedChunkIndex(-1); // 清空选中块
             return onNext(nextStep, config);
@@ -169,13 +163,13 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
         handleNext: internalHandleNext
     }));
     // 预览
-useEffect(() => {
-  setApplyRule({
-    applyEachCell,
-    cellGeneralConfig,
-    rules
-  });
-}, [applyEachCell, cellGeneralConfig, rules]);
+    useEffect(() => {
+        setApplyRule({
+            applyEachCell,
+            cellGeneralConfig,
+            rules
+        });
+    }, [applyEachCell, cellGeneralConfig, rules]);
     const handlePreview = () => {
         if (vildateCell()) return
         const hasEmptyCustomRule = (strategies || []).some(s => String(s?.regex ?? '') === '');
@@ -188,7 +182,7 @@ useEffect(() => {
             return;
         }
         setShowPreview(true)
-          setPreviewLoading(true); 
+        setPreviewLoading(true);
         setPreviewCount(c => c + 1) // 刷新分段
 
 
@@ -244,7 +238,7 @@ useEffect(() => {
                                     setApplyEachCell={setApplyEachCell}
                                     cellGeneralConfig={cellGeneralConfig}
                                     setCellGeneralConfig={setCellGeneralConfig}
-                                     showPreview={showPreview}
+                                    showPreview={showPreview}
                                 />
                             </TabsContent>
                             {/* 预览分段按钮 */}
@@ -265,13 +259,13 @@ useEffect(() => {
 
             {/* 原文预览 & 分段预览：预览时占50% */}
             {
-                (showPreview || (step === 3&&!isAdjustMode)) ? (
+                (showPreview || (step === 3 && !isAdjustMode)) ? (
                     <div className={cn(
                         "relative",
                         // 预览时占50%宽度
                         showPreview ? "w-full" : ""
                     )}>
-                        
+
                         {/* 预览组件 - 始终渲染以保证Hook稳定性 */}
                         <PreviewResult
                             showPreview={showPreview}
@@ -306,8 +300,8 @@ useEffect(() => {
             <Button
                 className="h-8"
                 // disabled={strategies.length === 0}
-                 disabled={previewFailed || isSubmitting||strategies.length === 0}
-                  onClick={internalHandleNext}
+                disabled={previewFailed || isSubmitting || strategies.length === 0}
+                onClick={internalHandleNext}
             >
                 {isSubmitting ? (
                     <LoadingIcon className="h-12 w-12" />
@@ -353,7 +347,7 @@ const useFileProcessingRules = (initialStrategies, resultFiles, kid, splitRule) 
         forceOcr: parsedSplitRule?.force_ocr ?? true,
         pageHeaderFooter: parsedSplitRule?.filter_page_header_footer ?? true
     });
-    
+
     const [applyEachCell, setApplyEachCell] = useState(false);
     const [cellGeneralConfig, setCellGeneralConfig] = useState({
         slice_length: splitRule?.excel_rule?.slice_length || 10,
@@ -361,8 +355,8 @@ const useFileProcessingRules = (initialStrategies, resultFiles, kid, splitRule) 
         header_start_row: splitRule?.excel_rule?.header_start_row || 1,
         header_end_row: splitRule?.excel_rule?.header_end_row || 1
     });
-    
-  
+
+
 
     // 根据正则表达式生成策略描述
     const getStrategyRuleDescription = (regex) => {
@@ -380,7 +374,7 @@ const useFileProcessingRules = (initialStrategies, resultFiles, kid, splitRule) 
         };
         return ruleMap[regex] || `自定义规则: ${regex}`;
     };
-  const [strategies, setStrategies] = useState(() => {
+    const [strategies, setStrategies] = useState(() => {
         if (parsedSplitRule?.separator && parsedSplitRule?.separator_rule) {
             // 从 parsedSplitRule 初始化策略（将真实换行标准化为可见的转义形式）
             return parsedSplitRule.separator.map((regex, index) => ({
@@ -418,7 +412,7 @@ const useFileProcessingRules = (initialStrategies, resultFiles, kid, splitRule) 
                     id: file.id,
                     filePath: file.file_path,
                     fileName: file.fileName,
-                    previewUrl:file.previewUrl,
+                    previewUrl: file.previewUrl,
                     suffix: file.suffix,
                     fileType: file.fileType,
                     excelRule: file.fileType === 'table' ? {
@@ -440,4 +434,3 @@ const useFileProcessingRules = (initialStrategies, resultFiles, kid, splitRule) 
         setStrategies
     };
 };
-    

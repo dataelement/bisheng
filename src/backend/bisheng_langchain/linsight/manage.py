@@ -173,7 +173,7 @@ class TaskManage(BaseModel):
             return res, True
         except Exception as e:
             traceback.print_exc()
-            return f"tool {name} exec error, something went wrong: {str(e)[:50]}", False
+            return f"tool {name} exec error, something went wrong: {str(e)}", False
 
     @classmethod
     def completion_task_tree_info(cls, original_task: list[dict]) -> list[dict]:

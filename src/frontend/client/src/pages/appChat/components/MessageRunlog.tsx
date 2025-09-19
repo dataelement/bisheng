@@ -3,9 +3,11 @@ import { useRecoilState } from "recoil";
 import { useMemo, useState } from "react";
 import { chatsState } from "../store/atoms";
 import { cn } from "~/utils";
+import useLocalize from "~/hooks/useLocalize";
 
 export default function MessageRunlog({ data }) {
     const [open, setOpen] = useState(false)
+    const t = useLocalize()
 
     // 该组件只有在助手测试页面用到，临时使用耦合方案，取 toollist来匹配 name
     const [_chatsState] = useRecoilState(chatsState)
@@ -16,35 +18,38 @@ export default function MessageRunlog({ data }) {
     const [title, lost] = useMemo(() => {
         let lost = false
         let title = ''
-        const status = data.end ? '已使用' : '正在使用'
+        const status = data.end ? t('com_runlog_used') : t('com_runlog_using')
+        const assistant: any = assistantState as any
         if (data.category === 'flow') {
-            const flow = assistantState.flow_list?.find(flow => flow.id === data.message.tool_key)
+            const flow = assistant?.flow_list?.find((flow: any) => flow.id === data.message.tool_key)
             // if (!flow) throw new Error('调试日志无法匹配到使用的技能详情，id:' + data.message.tool_key)
             if (flow) {
                 lost = flow.status === 1
-                title = lost ? `${flow.name} 已下线` : `${status} ${flow.name}`
+                title = lost ? `${flow.name} ${t('com_runlog_offline')}` : `${status} ${flow.name}`
             } else {
-                title = '技能已被删除，无法获取技能名'
+                title = t('com_runlog_flow_deleted')
             }
         } else if (data.category === 'tool') {
-            const tool = assistantState.tool_list?.find(tool => tool.tool_key === data.message.tool_key)
+            const tool = assistant?.tool_list?.find((tool: any) => tool.tool_key === data.message.tool_key)
             // if (!tool) throw new Error('调试日志无法匹配到使用的工具详情，id:' + data.message.tool_key)
 
-            title = tool ? `${status} ${tool.name}` : '工具已被删除，无法获取工具名'
+            title = tool ? `${status} ${tool.name}` : t('com_runlog_tool_deleted')
         } else if (data.category === 'knowledge') {
-            const knowledge = assistantState.knowledge_list?.find(knowledge => knowledge.id === parseInt(data.message.tool_key))
+            const knowledge = assistant?.knowledge_list?.find((knowledge: any) => knowledge.id === parseInt(data.message.tool_key))
             // if (!knowledge) throw new Error('调试日志无法匹配到使用的知识库详情，id:' + data.message.tool_key)
 
-            title = knowledge ? `${data.end ? '已搜索' : '正在搜索'} ${knowledge.name}` : '知识库已被删除，无法获取知识库名'
+            title = knowledge ? `${data.end ? t('com_runlog_searched') : t('com_runlog_searching')} ${knowledge.name}` : t('com_runlog_knowledge_deleted')
         } else {
-            title = data.end ? '完成' : '思考中'
+            title = data.end ? t('com_runlog_done') : t('com_runlog_thinking')
         }
         return [title, lost]
     }, [assistantState, data])
 
     // 没任何匹配的工具，隐藏
-    if (assistantState.tool_list.length + assistantState.knowledge_list.length
-        + assistantState.flow_list.length === 0) return null
+    const listsLen = ((assistantState as any)?.tool_list?.length ?? 0)
+        + ((assistantState as any)?.knowledge_list?.length ?? 0)
+        + ((assistantState as any)?.flow_list?.length ?? 0)
+    if (listsLen === 0) return null
 
     return <div className="py-1">
         <div className="rounded-sm border max-w-[90%]">
@@ -60,7 +65,7 @@ export default function MessageRunlog({ data }) {
                     }
                     <span>{title}</span>
                 </div>
-                <ChevronDown className={open && 'rotate-180'} />
+                <ChevronDown className={open ? 'rotate-180' : undefined} />
             </div>
             <div className={cn('bg-[#F5F6F8] dark:bg-[#313336] px-4 py-2 overflow-hidden text-sm ', open ? 'h-auto' : 'h-0 p-0')}>
                 {data.thought.split('\n').map((line, index) => (

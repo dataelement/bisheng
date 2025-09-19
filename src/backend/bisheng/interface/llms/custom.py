@@ -11,6 +11,8 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from loguru import logger
 from pydantic import Field
 
+from bisheng.api.errcode.server import NoLlmModelConfigError, LlmModelConfigDeletedError, LlmProviderDeletedError, \
+    LlmModelTypeError, LlmModelOfflineError, InitLlmError
 from bisheng.database.models.llm_server import LLMDao, LLMModelType, LLMServerType, LLMModel, LLMServer
 from bisheng.interface.importing import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm
@@ -169,18 +171,20 @@ class BishengLLM(BaseChatModel):
         ignore_online = kwargs.get('ignore_online', False)
 
         if not self.model_id:
-            raise Exception('没有找到llm模型配置')
+            raise NoLlmModelConfigError()
         model_info = LLMDao.get_model_by_id(self.model_id)
         if not model_info:
-            raise Exception('llm模型配置已被删除，请重新配置模型')
+            raise LlmModelConfigDeletedError()
         self.model_name = model_info.model_name
         server_info = LLMDao.get_server_by_id(model_info.server_id)
         if not server_info:
-            raise Exception('服务提供方配置已被删除，请重新配置llm模型')
+            raise LlmProviderDeletedError()
         if model_info.model_type != LLMModelType.LLM.value:
-            raise Exception(f'只支持LLM类型的模型，不支持{model_info.model_type}类型的模型')
+            raise LlmModelTypeError(model_type=model_info.model_type)
         if not ignore_online and not model_info.online:
-            raise Exception(f'{server_info.name}下的{model_info.model_name}模型已下线，请联系管理员上线对应的模型')
+            # raise Exception(f'{server_info.name}下的{model_info.model_name}模型已下线，请联系管理员上线对应的模型')
+            raise LlmModelOfflineError(server_name=server_info.name, model_name=model_info.model_name)
+
         logger.debug(f'init_bisheng_llm: server_id: {server_info.id}, model_id: {model_info.id}')
         self.model_info = model_info
         self.server_info = server_info
@@ -191,7 +195,7 @@ class BishengLLM(BaseChatModel):
             self.llm = instantiate_llm(class_name, class_object, params)
         except Exception as e:
             logger.exception('init bisheng llm error')
-            raise Exception(f'初始化llm失败，请检查配置或联系管理员。错误信息：{e}')
+            raise InitLlmError(exception=e)
 
     def _get_llm_class(self, server_type: str) -> (BaseLanguageModel, str):
         if server_type not in _llm_node_type:

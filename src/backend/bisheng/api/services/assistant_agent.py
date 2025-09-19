@@ -15,6 +15,7 @@ from langchain_core.vectorstores import VectorStoreRetriever
 from langgraph.prebuilt import create_react_agent
 from loguru import logger
 
+from bisheng.api.errcode.assistant import AssistantModelEmptyError, AssistantModelNotConfigError
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.knowledge_imp import decide_vectorstores
 from bisheng.api.services.llm import LLMService
@@ -86,7 +87,7 @@ class AssistantAgent(AssistantUtils):
         # 获取配置的助手模型列表
         assistant_llm = LLMService.get_assistant_llm()
         if not assistant_llm.llm_list:
-            raise Exception('助手推理模型列表为空')
+            raise AssistantModelEmptyError()
         default_llm = None
         for one in assistant_llm.llm_list:
             if str(one.model_id) == self.assistant.model_name:
@@ -95,7 +96,7 @@ class AssistantAgent(AssistantUtils):
             elif not default_llm and one.default:
                 default_llm = one
         if not default_llm:
-            raise Exception('未配置助手推理模型')
+            raise AssistantModelNotConfigError()
 
         self.llm_agent_executor = default_llm.agent_executor_type
         self.knowledge_retriever = {

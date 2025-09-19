@@ -14,6 +14,7 @@ import { useFileHandling } from '~/hooks';
 import AttachFile from './AttachFile';
 import FileRow from './FileRow';
 import store from '~/store';
+import useLocalize from '~/hooks/useLocalize';
 
 function FileFormWrapper({
   children,
@@ -30,6 +31,7 @@ function FileFormWrapper({
   accept?: string;
   noUpload: boolean;
 }) {
+  const t = useLocalize();
   const [fileTotalTokens, setFileTotalTokens] = useState(0);
   const chatDirection = useRecoilValue(store.chatDirection).toLowerCase();
   const { files, setFiles, conversation, setFilesLoading } = useChatContext();
@@ -89,8 +91,8 @@ function FileFormWrapper({
 
   return (
     <>
-      {fileTip && files.size > 0 && <span className="pl-6 pt-2 text-sm">仅识别附件中的文字</span>}
-      {fileTotalTokens > 0 && <span className="pl-6 pt-2 text-sm">文件内容超出3万token</span>}
+      {fileTip && files.size > 0 && <span className="pl-6 pt-2 text-sm">{t('com_file_tip_text_only')}</span>}
+      {fileTotalTokens > 0 && <span className="pl-6 pt-2 text-sm">{t('com_file_content_exceed_tokens')}</span>}
       <FileRow
         files={files}
         setFiles={setFiles}

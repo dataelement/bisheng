@@ -5,7 +5,8 @@ import { NotificationSeverity } from "~/common"
 import { useToast } from "~/hooks"
 import { SkillMethod } from "./appUtils/skillMethod"
 import { submitDataState } from "./store/atoms"
-import { ERROR_CODES } from "./store/constants"
+import { getErrorI18nKey } from "./store/constants"
+import { useLocalize } from "~/hooks"
 
 export const AppLostMessage = '当前应用已被删除'
 const wsMap = new Map<string, WebSocket>()
@@ -29,6 +30,7 @@ const restartCallBack: any = { current: null } // 用于存储重启回调函数
 export const useWebSocket = (helpers) => {
     const { showToast } = useToast();
     const [submitData, setSubmitData] = useRecoilState(submitDataState)
+    const localize = useLocalize()
 
     const websocket = wsMap.get(helpers.chatId)
     const currentChatId = useCurrentChatId(helpers.chatId)
@@ -93,7 +95,9 @@ export const useWebSocket = (helpers) => {
         ws.onclose = (event) => {
             console.log('close chatId:>> ', helpers.chatId);
             console.error('ws close :>> ', event);
-            helpers.handleMsgError(event.reason)
+            // helpers.handleMsgError(event.reason)
+            const reason = localize(getErrorI18nKey(String(event.code)))
+            helpers.handleMsgError(reason)
             // todo 错误消息写入消息下面
         }
 
@@ -117,14 +121,15 @@ export const useWebSocket = (helpers) => {
 
         // messages
         if (data.category === 'error') {
-            const { code, message } = data.message
-            helpers.handleMsgError(data.intermediate_steps || '')
-
-            const errorMsg = code == 500 ? message : ERROR_CODES[code]
-            showToast({
-                message: errorMsg,
-                severity: NotificationSeverity.ERROR,
-            })
+            const { status_code, status_message, data: _data } = JSON.parse(data.message || '{}')
+            const errorMsg = status_code == 500 ? status_message : localize(getErrorI18nKey(status_code))
+            helpers.handleMsgError(errorMsg)
+            if (![10421, 13002].includes(status_code)) {
+                showToast({
+                    message: errorMsg,
+                    severity: NotificationSeverity.ERROR,
+                })
+            }
             return
         } else if (data.category === 'node_run') {
             return helpers.message.createNodeMsg(helpers.chatId, data)
@@ -170,7 +175,7 @@ export const useWebSocket = (helpers) => {
         }
         /***** 技能 end******/
         if (data.type === 'close' && data.category === 'processing') {
-            helpers.message.insetSeparator(helpers.chatId, '本轮会话已结束')
+            helpers.message.insetSeparator(helpers.chatId, localize('com_chat_round_finished'))
             // helpers.handleMsgError('')
             // 重启会话按钮,接收close确认后端处理结束后重启会话
             if (restartCallBack.current) {

@@ -1,13 +1,13 @@
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { LoadIcon } from "@/components/bs-icons";
-import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Switch } from "@/components/bs-ui/switch";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import Tip from "@/components/bs-ui/tooltip/tip";
 import { downloadFile, formatDate } from "@/util/utils";
-import { ArrowLeft, Ban, CheckCircle, Square, SquareCheckBig, SquareX, Trash2 } from "lucide-react";
+import { ArrowLeft, SquareCheckBig, SquareX, Trash2 } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
@@ -27,7 +27,6 @@ import { deleteQa, generateSimilarQa, getQaDetail, getQaFile, getQaList, updateQ
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useTable } from "../../util/hook";
 import { ImportQa } from "./components/ImportQa";
-import Tip from "@/components/bs-ui/tooltip/tip";
 
 const defaultQa = {
     question: '',
@@ -584,11 +583,18 @@ export default function QasPage() {
                                         <div className="flex items-center justify-end gap-2">
                                             <div className="flex items-center">
                                                 {el.status !== 2 && (
-                                                    <Switch
-                                                        checked={el.status === 1}
-                                                        disabled={!hasPermission}
-                                                        onCheckedChange={(bln) => handleStatusClick(el.id, bln)}
-                                                    />
+                                                    <Tip
+                                                        content={!hasPermission && '暂无操作权限'}
+                                                        side='top'>
+                                                        <div>
+                                                            <Switch
+                                                                checked={el.status === 1}
+                                                                disabled={!hasPermission}
+                                                                className="disabled:pointer-events-auto"
+                                                                onCheckedChange={(bln) => handleStatusClick(el.id, bln)}
+                                                            />
+                                                        </div>
+                                                    </Tip>
                                                 )}
                                                 {el.status === 2 && (
                                                     <span className="text-sm">处理中</span>
@@ -597,7 +603,10 @@ export default function QasPage() {
                                                     <span className="text-sm">未启用，请重试</span>
                                                 )}
                                             </div>
-                                            <Tip content={!hasPermission && '暂无操作权限'} side='top'>
+                                            <Tip
+                                                content={!hasPermission && '暂无操作权限'}
+                                                styleClasses="-translate-x-6"
+                                                side='top'>
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"

@@ -1,5 +1,6 @@
 import FileView from "@/components/bs-comp/FileView";
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import { cn } from "@/utils";
 import { Info } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -8,7 +9,6 @@ import DocxPreview from "./DocxFileViewer";
 import { convertJsonData } from "./ParagraphEdit";
 import { Partition } from "./PreviewResult";
 import TxtFileViewer from "./TxtFileViewer";
-import { cn } from "@/utils";
 
 export default function PreviewFile({
   urlState,
@@ -63,7 +63,6 @@ export default function PreviewFile({
   const labelsMapTempRef = useRef({})
   const [labelChange, setLabelChange] = useState(false)
   const [showPos, setShowPos] = useState(false)
-  const [random, setRandom] = useState(0)
   const labelTextRef = useRef<any>(partitions);
   const [rePostion, setRePostion] = useState(false)
 
@@ -78,7 +77,6 @@ export default function PreviewFile({
       setRePostion(!rePostion);
       return setLabelsMap(new Map());
     }
-
     let setPostioned = false;
     const labelsMap = new Map();
 
@@ -203,7 +201,7 @@ export default function PreviewFile({
     const previewFileUrl = targetFile.url;
 
     // 强制uns类型的Excel文件使用pdf预览
-    const renderType = (fileParseType === 'etl4lm'||fileParseType === 'un_etl4lm') && ['ppt', 'pptx'].includes(suffix)
+    const renderType = (fileParseType === 'etl4lm' || fileParseType === 'un_etl4lm') && ['ppt', 'pptx'].includes(suffix)
       ? 'pdf'
       : suffix;
     // 加载状态处理

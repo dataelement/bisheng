@@ -2,15 +2,17 @@ import { Copy } from "lucide-react";
 import { useMemo } from "react";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
 import { useToastContext } from "~/Providers";
+import { useLocalize } from "~/hooks";
 import { copyText } from "~/utils";
 
 export default function MessageSystem({ title, logo, data }) {
     const { showToast } = useToastContext();
+    const localize = useLocalize();
 
     const handleCopy = (dom) => {
         copyText(dom)
 
-        showToast({ message: '内容已复制', status: 'success' });
+        showToast({ message: localize('com_message_content_copied'), status: 'success' });
     }
 
     // 日志markdown

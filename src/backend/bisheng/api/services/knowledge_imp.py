@@ -21,7 +21,7 @@ from pymilvus import Collection
 from sqlalchemy import func, or_
 from sqlmodel import select
 
-from bisheng.api.errcode.knowledge import KnowledgeSimilarError
+from bisheng.api.errcode.knowledge import KnowledgeSimilarError, KnowledgeFileDeleteError
 from bisheng.api.services.etl4lm_loader import Etl4lmLoader
 from bisheng.api.services.handler.impl.xls_split_handle import XlsSplitHandle
 from bisheng.api.services.handler.impl.xlsx_split_handle import XlsxSplitHandle
@@ -319,7 +319,7 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
     knowledge_ids = [file.knowledge_id for file in knowledge_files]
     knowledges = KnowledgeDao.get_list_by_ids(knowledge_ids)
     if len(knowledges) > 1:
-        raise ValueError("不支持多个知识库的文件同时删除")
+        raise KnowledgeFileDeleteError()
     knowledge = knowledges[0]
     delete_vector_files(file_ids, knowledge)
 

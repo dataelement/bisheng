@@ -9,6 +9,7 @@ import { useAuthContext } from '~/hooks/AuthContext';
 import useChatFunctions from '~/hooks/Chat/useChatFunctions';
 import useNewConvo from '~/hooks/useNewConvo';
 import { useToastContext } from '~/Providers';
+import { useLocalize } from '~/hooks';
 import store from '~/store';
 import { filesByIndex } from '~/store/linsight';
 
@@ -188,6 +189,7 @@ const useLinsighFiles = (index) => {
   const filesRef = useRef(new Map()); // 用于跟踪文件状态
 
   const { showToast } = useToastContext();
+  const localize = useLocalize();
 
   const newFiles = useMemo(() => {
     const newFiles = new Map(files);
@@ -237,9 +239,9 @@ const useLinsighFiles = (index) => {
                   parsing_status: 'completed',
                   // 可添加其他解析完成后的元数据
                 });
-              } else if (status === 'failed') {
+          } else if (status === 'failed') {
                 updatedFiles.delete(key);
-                showToast({ message: `文件 ${file.filename} 解析失败, 自动移除`, status: 'error' });
+            showToast({ message: localize('com_file_parse_failed_auto_removed', { 0: file.filename }), status: 'error' });
               }
             }
           });

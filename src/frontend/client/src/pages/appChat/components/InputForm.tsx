@@ -4,6 +4,7 @@ import { Button } from "~/components";
 import MultiSelect from "~/components/ui/MultiSelect";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/Select";
 import { useToastContext } from "~/Providers";
+import { useLocalize } from "~/hooks";
 import { emitAreaTextEvent, EVENT_TYPE, FileTypes } from "../useAreaText";
 import InputComponent from "./InputComponent";
 import InputFileComponent from "./InputFileComponent";
@@ -41,6 +42,7 @@ interface WorkflowNodeParam {
 }
 
 const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any }) => {
+    const localize = useLocalize()
     const formDataRef = useRef(data.value.reduce((map, item) => {
         map[item.key] = { key: item.key, type: item.type, label: item.value, fileName: '', value: '' }
         return map
@@ -68,7 +70,7 @@ const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any })
             const fieldData = formDataRef.current[key]
             const required = data.value.find(item => item.key === key).required
             if (required && !fieldData.value) {
-                errors.push(`${fieldData.label} 为必填项，不能为空。`);
+                errors.push(localize('com_ui_required_field', { field: fieldData.label }));
             }
             valuesObject[key] = fieldData.value
             stringObject += `${fieldData.label}:${fieldData.type === FormItemType.File ? fieldData.fileName : fieldData.value}\n`
@@ -120,7 +122,7 @@ const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any })
                                                             value: el.text
                                                         }))
                                                     }
-                                                    placeholder={'请选择'}
+                                                    placeholder={localize('com_ui_please_select')}
                                                     onChange={(v) => {
                                                         setMultiVal(prev => ({ ...prev, [item.key]: v }));
                                                         handleChange(item, v.join(','))
@@ -148,7 +150,7 @@ const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any })
                                             <InputFileComponent
                                                 isSSO
                                                 disabled={false}
-                                                placeholder="当前文件为空"
+                                                placeholder={localize('com_file_current_empty')}
                                                 value={''}
                                                 multiple={item.multiple}
                                                 onChange={(name) => updataFileName(item, name)}
@@ -166,7 +168,7 @@ const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any })
                 ))
             }
             <div className="flex justify-end">
-                <Button size="sm" className="h-8 px-4" onClick={submit}>开始</Button>
+                <Button size="sm" className="h-8 px-4" onClick={submit}>{localize('com_ui_start')}</Button>
             </div>
         </div>
     </MessageWarper>

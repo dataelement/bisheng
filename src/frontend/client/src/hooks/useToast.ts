@@ -50,6 +50,11 @@ export default function useToast(showDelay = 100) {
     }, showDelay);
   };
 
+  // 快捷方式在全局调用 toast
+  useEffect(() => {
+    window.showToast = showToast;
+  }, [])
+
   return {
     toast,
     onOpenChange: (open: boolean) => setToast({ ...toast, open }),

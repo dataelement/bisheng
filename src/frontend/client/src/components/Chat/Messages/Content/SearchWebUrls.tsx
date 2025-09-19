@@ -2,6 +2,7 @@ import { Atom, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ThinkingButton } from "~/components/Artifacts/Thinking";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "~/components/ui";
+import useLocalize from "~/hooks/useLocalize";
 
 const BUTTON_STYLES = {
     base: 'group mt-3 flex w-fit items-center justify-center rounded-xl bg-surface-tertiary px-3 py-2 text-xs leading-[18px] animate-thinking-appear',
@@ -10,6 +11,7 @@ const BUTTON_STYLES = {
 
 export default function SearchWebUrls({ webs }) {
     const [isOpen, setIsOpen] = useState(false);
+    const t = useLocalize()
 
     return <div className="mb-4">
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -20,14 +22,14 @@ export default function SearchWebUrls({ webs }) {
                     onClick={() => setIsOpen(true)}
                 >
                     <Atom size={14} className="mr-1.5 text-text-secondary" />
-                    已搜到 {webs.length} 个网页
+                    {t('com_search_found_webs', { 0: webs.length })}
                     <ChevronRight className="rotate-0 size-4" />
                 </button>
             </DialogTrigger>
 
             <DialogContent className="absolute flex flex-col bottom-4 right-4 w-[440px] px-6 bg-white shadow-lg rounded-lg h-[92vh]">
                 <DialogHeader className="text-md px-0">
-                    <DialogTitle>搜索结果</DialogTitle>
+                    <DialogTitle>{t('com_search_results')}</DialogTitle>
                 </DialogHeader>
                 <div className="flex-1 pb-10 overflow-hidden flex flex-col">
                     <div className="flex-1 overflow-y-auto dark:text-gray-300">

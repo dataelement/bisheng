@@ -1,8 +1,11 @@
 
 
 import { Loader2 } from "lucide-react";
+import useLocalize from "~/hooks/useLocalize";
 
 export default function MessageNodeRun({ data }) {
+
+    const t = useLocalize()
 
     return <div className="py-1">
         <div className="rounded-sm">
@@ -11,7 +14,7 @@ export default function MessageNodeRun({ data }) {
                     {
                         <Loader2 className="text-primary animate-spin duration-300" />
                     }
-                    <span>正在运行 {data.message.name} 节点</span>
+                    <span>{t('com_node_run_running')} {data.message.name} {t('com_node_run_node')}</span>
                 </div>
             </div>
         </div>

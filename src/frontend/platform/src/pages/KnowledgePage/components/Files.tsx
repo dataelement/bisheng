@@ -512,7 +512,11 @@ export default function Files({ onPreview }) {
                                                 </Button>
                                             </Tip>
                                         )}
-                                        <Tip content={!isEditable && '暂无操作权限'} side='top'>
+                                        <Tip
+                                            content={!isEditable && '暂无操作权限'}
+                                            side='top'
+                                            styleClasses="-translate-x-6"
+                                        >
                                             <Button
                                                 variant="ghost"
                                                 size="icon"

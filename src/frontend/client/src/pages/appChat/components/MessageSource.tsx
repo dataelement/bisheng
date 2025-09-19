@@ -1,4 +1,5 @@
 import { Info } from "lucide-react";
+import useLocalize from "~/hooks/useLocalize";
 import { Badge } from "~/components/ui/Badge";
 
 const enum SourceType {
@@ -16,6 +17,8 @@ const enum SourceType {
 
 export default function MessageSource({ extra, end, source, className = '', onSource }) {
 
+    const t = useLocalize()
+
     if (source === SourceType.NONE || !end) return <div className={className}></div>
     const extraObj = extra ? (typeof extra === 'string' ? JSON.parse(extra) : extra) : null
 
@@ -23,9 +26,9 @@ export default function MessageSource({ extra, end, source, className = '', onSo
         {(() => {
             switch (source) {
                 case SourceType.FILE:
-                    return <Badge className="cursor-pointer" onClick={onSource}>参考来源</Badge>;
+                    return <Badge className="cursor-pointer" onClick={onSource}>{t('com_msg_source_reference')}</Badge>;
                 case SourceType.NO_PERMISSION:
-                    return <p className="flex text-xs text-gray-400 gap-1 items-center"><Info className="text-red-300" />因权限不足，该答案剔除了无权查看的内容</p>;
+                    return <p className="flex text-xs text-gray-400 gap-1 items-center"><Info className="text-red-300" />{t('com_msg_source_no_permission')}</p>;
                 case SourceType.LINK:
                     return (
                         <div className="flex flex-col text-blue-500 text-xs">

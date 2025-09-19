@@ -13,7 +13,6 @@ import WebView from '~/components/WebView';
 import { AuthContextProvider } from '~/hooks/AuthContext';
 import AgentCenter from '~/pages/apps';
 import AppChat from '~/pages/appChat';
-import Zombie from '~/pages/zombie';
 import ChatRoute from './ChatRoute';
 import LoginLayout from './Layouts/Login';
 import StartupLayout from './Layouts/Startup';
@@ -106,10 +105,6 @@ export const router = createBrowserRouter([
           {
             path: 'chat/:conversationId/:fid/:type',
             element: <AppChat />,
-          },
-          {
-            path: 'zombie',
-            element: <Zombie />,
           },
         ],
       },

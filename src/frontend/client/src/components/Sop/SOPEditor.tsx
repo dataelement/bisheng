@@ -3,6 +3,7 @@ import { PencilLineIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { saveSop, startLinsight } from '~/api/linsight';
 import { useLinsightManager, useLinsightSessionManager } from '~/hooks/useLinsightManager';
+import { useLocalize } from '~/hooks';
 import { Button, Textarea } from '../ui';
 import SopMarkdown from './SopMarkdown';
 import ErrorDisplay from './components/ErrorDisplay';
@@ -34,6 +35,7 @@ const slideDownAnimation = {
 // 重新规划
 const SOPEditorArea = ({ setOpenAreaText, onsubmit }) => {
     const [value, setValue] = useState('');
+    const localize = useLocalize();
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -55,13 +57,13 @@ const SOPEditorArea = ({ setOpenAreaText, onsubmit }) => {
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder='请在此提出 SOP 重新规划方向的建议'
+            placeholder={localize('com_sop_replan_placeholder')}
             className='border-none ![box-shadow:initial]' />
         <div className='flex justify-end gap-2'>
             <Button variant="outline" className="px-6" onClick={() => setOpenAreaText(false)}>
-                取消
+                {localize('com_ui_cancel')}
             </Button>
-            <Button disabled={value === ''} className="px-6" onClick={submit}>确认重新规划</Button>
+            <Button disabled={value === ''} className="px-6" onClick={submit}>{localize('com_sop_confirm_replan')}</Button>
         </div>
     </div>
 }
@@ -70,6 +72,7 @@ export const SOPEditor = ({ versionId, sopError, onRun }) => {
     const [openAreaText, setOpenAreaText] = useState(false)
     const { getLinsight, updateLinsight } = useLinsightManager()
     const markdownRef = useRef(null)
+    const localize = useLocalize()
 
     const linsight = useMemo(() => {
         const linsight = getLinsight(versionId)
@@ -160,7 +163,7 @@ export const SOPEditor = ({ versionId, sopError, onRun }) => {
             <div className='flex items-center justify-between border-b border-b-[#E8E9ED] bg-[#FDFEFF] p-2 px-4 text-[13px] text-[#737780] rounded-t-2xl'>
                 <div className='flex items-center gap-2'>
                     <PencilLineIcon size={14} />
-                    指导手册编辑器
+                    {localize('com_sop_editor_title')}
                 </div>
                 {/* <CopyButton text={linsight.sop} /> */}
             </div>
@@ -170,7 +173,7 @@ export const SOPEditor = ({ versionId, sopError, onRun }) => {
             </p>}
             {linsight.sopError &&
                 <div className='p-2 m-2'>
-                    <ErrorDisplay title="SOP生成失败" taskError={linsight.sopError} />
+                    <ErrorDisplay title={localize('com_sop_sop_generation_failed')} taskError={linsight.sopError} />
                 </div>
             }
             <div className={`p-8 linsight-markdown flex-1 min-h-0 ${linsight.sopError && 'hidden'}`}>
@@ -188,17 +191,17 @@ export const SOPEditor = ({ versionId, sopError, onRun }) => {
                                 {/* <span className='text-lg'>SOP</span> */}
                                 <p className='mt-0.5 text-sm flex gap-2'>
                                     <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/load.webp'} alt="" />
-                                    确认是否可以按照指导手册执⾏任务
+                                    {localize('com_sop_confirm_execution')}
                                 </p>
                                 <div className='absolute right-4 bottom-3 flex gap-2'>
                                     <Button variant="outline" className="px-3" onClick={() => {
                                         const sop = markdownRef.current.getValue()
                                         sop?.trim() === '' ? handleReExcute('') : setOpenAreaText(true)
                                     }}>
-                                        重新生成指导手册
+                                        {localize('com_sop_regenerate_manual')}
                                     </Button>
                                     <Button className="px-6" disabled={sopError || disabled} onClick={handleRun}>
-                                        开始执行
+                                        {localize('com_sop_start_execution')}
                                     </Button>
                                 </div>
                             </div>
