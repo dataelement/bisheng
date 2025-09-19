@@ -527,15 +527,26 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
 {question}`,
         },
     });
-    useEffect(() => {
-        if (parentFormData) {
-            setFormData(parentFormData);
-        }
-    }, [parentFormData]);
+  // 简单深比较，避免父子相互 set 导致的循环刷新
+  const isDeepEqual = (a: any, b: any) => {
+      try {
+          return JSON.stringify(a) === JSON.stringify(b);
+      } catch {
+          return a === b;
+      }
+  };
 
-    useEffect(() => {
-        parentSetFormData?.(formData);
-    }, [formData]);
+  useEffect(() => {
+      if (parentFormData && !isDeepEqual(formData, parentFormData)) {
+          setFormData(parentFormData);
+      }
+  }, [parentFormData]);
+
+  useEffect(() => {
+      if (parentSetFormData && !isDeepEqual(formData, parentFormData)) {
+          parentSetFormData(formData);
+      }
+  }, [formData, parentFormData]);
 
     //         const sidebarSloganRef = useRef<HTMLDivElement>(null);
     // const welcomeMessageRef = useRef<HTMLDivElement>(null);
@@ -580,7 +591,7 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
         applicationCenterWelcomeMessage: '',
         applicationCenterDescription: '',
     });
-    console.log('errors :>> ', errors);
+  // console.log('errors :>> ', errors);
 
     const handleInputChange = (field: keyof ChatConfigForm, value: string, maxLength: number) => {
         setFormData(prev => ({ ...prev, [field]: value }));

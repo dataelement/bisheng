@@ -27,7 +27,8 @@ interface ModelManagementProps {
 export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps>(
     ({ models, errors, error, onAdd, onRemove, onModelChange, onNameChange }, ref) => {
         const { llmOptions } = useAssistantLLmModel();
-
+        console.log(models,5621);
+        
         // 将 ref 绑定到每个模型项
         const setItemRef = (el: HTMLDivElement | null, index: number) => {
             const refs = ref as React.MutableRefObject<(HTMLDivElement | null)[]>;
