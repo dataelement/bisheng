@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 import traceback
 from asyncio.queues import Queue
 from functools import cached_property
@@ -166,6 +167,7 @@ class TaskManage(BaseModel):
         if not params.get("call_reason"):
             return f"tool {name} exec error, because call_reason field is required.", False
         params.pop("call_reason")
+        start_time = time.time()
         try:
             res = await self.tool_map[name].ainvoke(input=params)
             if not isinstance(res, str):
@@ -174,6 +176,9 @@ class TaskManage(BaseModel):
         except Exception as e:
             traceback.print_exc()
             return f"tool {name} exec error, something went wrong: {str(e)}", False
+        finally:
+            end_time = time.time()
+            print(f"tool {name} exec time: {end_time - start_time:.2f} seconds")
 
     @classmethod
     def completion_task_tree_info(cls, original_task: list[dict]) -> list[dict]:

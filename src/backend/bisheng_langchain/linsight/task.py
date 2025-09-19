@@ -130,6 +130,9 @@ class BaseTask(BaseModel):
                                       self.exec_config.debug_id)
                 return res
             except Exception as e:
+                record_llm_prompt(llm, "\n".join([one.text() for one in messages]), str(e),
+                                  None, time.time() - start_time,
+                                  self.exec_config.debug_id)
                 if i == self.exec_config.retry_num - 1:
                     raise e
                 else:

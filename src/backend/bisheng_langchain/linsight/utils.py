@@ -105,7 +105,8 @@ def record_llm_prompt(llm: BaseLanguageModel, prompt: str, answer: str, token_us
     prompt_tokens_num = 0
     cached_tokens_num = 0
     try:
-        token_usage = token_usage.response_metadata.get('token_usage', {}) or token_usage.usage_metadata
+        if token_usage:
+            token_usage = token_usage.response_metadata.get('token_usage', {}) or token_usage.usage_metadata
 
         if token_usage:
             generate_tokens_num = token_usage.get('output_tokens', 0) or token_usage.get('completion_tokens', 0)
@@ -132,3 +133,18 @@ def record_llm_prompt(llm: BaseLanguageModel, prompt: str, answer: str, token_us
                 "time": cost_time
             }, ensure_ascii=False) + "\n"
         )
+
+
+def record_linsight_event(debug_id: str, event: str, data: Any, cost_time: float):
+    if not debug_id:
+        return
+    debug_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "linsightdebug"))
+    os.makedirs(debug_path, exist_ok=True)
+    file_path = os.path.join(debug_path, f"{debug_id}_event.jsonl")
+    event_info = {
+        "event": event,
+        "data": data,
+        "time": cost_time
+    }
+    with open(f'{file_path}', 'a') as f:
+        f.write(json.dumps(event_info, ensure_ascii=False) + "\n")
