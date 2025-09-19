@@ -413,15 +413,7 @@ async def chat_completions(
                 extra['prompt'] = prompt
                 message.extra = json.dumps(extra, ensure_ascii=False)
                 ChatMessageDao.insert_one(message)
-        except MessageException as e:
-            error = True
-            final_res = str(e)
-        except Exception as e:
-            logger.exception(f'Error in processing the prompt')
-            error = True
-            final_res = f'Error in processing the prompt: {str(e)[-100:]}'
 
-        if not error:
             messages = WorkStationService.get_chat_history(conversationId, 8)[:-1]
             inputs = [*messages, HumanMessage(content=prompt)]
             if wsConfig.systemPrompt:
@@ -480,14 +472,25 @@ async def chat_completions(
                 except Exception as e:
                     logger.error(f'Error in task: {e}')
                     break
-        # 结束流式输出
-        if resoning_res:
-            final_res = ''':::thinking\n''' + resoning_res + '''\n:::''' + final_result.content
-        elif web_list:
-            final_res = ''':::web\n''' + json.dumps(
-                web_list, ensure_ascii=False) + '''\n:::''' + final_result.content
-        else:
-            final_res = final_result.content if final_result else final_res
+            # 结束流式输出
+            if resoning_res:
+                final_res = ''':::thinking\n''' + resoning_res + '''\n:::''' + final_result.content
+            elif web_list:
+                final_res = ''':::web\n''' + json.dumps(
+                    web_list, ensure_ascii=False) + '''\n:::''' + final_result.content
+            else:
+                final_res = final_result.content if final_result else final_res
+
+        except BaseErrorCode as e:
+            error = True
+            final_res = json.dumps(e.to_dict())
+            yield e.to_sse_event_instance()
+        except Exception as e:
+            e = ServerError(exception=e)
+            logger.exception(f'Error in processing the prompt')
+            error = True
+            final_res = json.dumps(e.to_dict())
+            yield e.to_sse_event_instance()
 
         yield final_message(conversaiton, conversaiton.flow_name, message, final_res, error,
                             modelName)
