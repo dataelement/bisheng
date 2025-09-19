@@ -41,8 +41,8 @@ export default function useChatHelpers() {
         return runState?.error
     }, [runState])
 
-    // handleMsgError
-    const handleMsgError = (errorMsg: string) => {
+    // handleMsgError close只关闭运行状态不报错
+    const handleMsgError = (errorMsg: string, close: boolean = false) => {
         setRunningState((prev) => ({
             ...prev,
             [chatId]: {
@@ -50,8 +50,9 @@ export default function useChatHelpers() {
                 running: false,
                 showStop: false,
                 showUpload: false,
-                inputDisabled: !!errorMsg, //chatState?.flow.flow_type !== 1, // 技能不禁止输入
-                error: errorMsg,
+                inputDisabled: close || !!errorMsg, //chatState?.flow.flow_type !== 1, // 技能不禁止输入
+                // showReRun: chatState?.flow.flow_type === 10, // 错误时工作流展示重试按钮
+                error: close ? prev[chatId].error : errorMsg,
             },
         }))
     }
@@ -269,6 +270,18 @@ export default function useChatHelpers() {
                         return updatedMessages
                     }
                 }),
+            )
+        },
+        closeAllMsg: (chatid: string) => {
+            setChats((prev) =>
+                updateChatMessages(prev, chatid, (messages) => {
+                    return messages.reduce((acc, msg) => {
+                        if (msg.message || msg.reasoning_log || msg.files?.length) {
+                            acc.push({ ...msg, end: true })
+                        }
+                        return acc
+                    }, [] as any[])
+                })
             )
         },
         skillStreamMsg: (chatid: string, data: any) => {

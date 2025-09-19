@@ -265,7 +265,6 @@ const useSopTools = (linsight) => {
     const { id, files, file_list, tools, org_knowledge_enabled, personal_knowledge_enabled } = linsight
     const { data: bsConfig } = useGetBsConfig()
     const localize = useLocalize()
-    const lang = useRecoilValue(store.lang);
 
     const { data: linsightTools } = useGetLinsightToolList();
     const { data: personalTool } = useGetPersonalToolList();
@@ -403,7 +402,7 @@ const useSopTools = (linsight) => {
         }
 
         return tree;
-    }, [linsightTools, personalTool, orgTools, files, tools,lang]);
+    }, [linsightTools, personalTool, orgTools, files, tools, localize]);
 
     console.log('整合后的树结构:', buildTreeData);
     return { nameToValueRef, valueToNameRef, buildTreeData };

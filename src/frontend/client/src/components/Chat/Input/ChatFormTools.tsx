@@ -1,10 +1,12 @@
 import { FileText, GlobeIcon, Hammer, KeyRound, Pencil, Settings2Icon } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
+import { useRecoilValue } from 'recoil';
 import { Switch } from '~/components/ui';
 import { Select, SelectContent, SelectTrigger } from '~/components/ui/Select';
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip2";
 import { useGetBsConfig, useModelBuilding } from '~/data-provider';
 import { useLocalize } from '~/hooks';
+import store from '~/store';
 
 import {
     BsConfig
@@ -91,6 +93,7 @@ export const ChatToolDown = ({ linsi, tools, setTools, config, searchType, setSe
 const LinsiTools = ({ tools, setTools }) => {
     const { data: bsConfig } = useGetBsConfig()
     const localize = useLocalize()
+    const lang = useRecoilValue(store.lang);
 
     useEffect(() => {
         const defaultTools = [{
@@ -117,7 +120,7 @@ const LinsiTools = ({ tools, setTools }) => {
             setTools((tools) => [...defaultTools, ...newTools])
         }
 
-    }, [bsConfig])
+    }, [bsConfig, lang])
 
 
     const active = useMemo(() => tools.some(tool => tool.checked), [tools])
