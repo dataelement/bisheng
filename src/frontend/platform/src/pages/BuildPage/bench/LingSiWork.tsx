@@ -1180,6 +1180,9 @@ const useChatConfig = (
 
         const dataToSave = {
             ...formData,
+            // 应用中心欢迎语/描述：若未提供，使用多语言占位默认值
+            applicationCenterWelcomeMessage: (formData.applicationCenterWelcomeMessage?.trim?.() || t('chatConfig.appCenterWelcomePlaceholder')),
+            applicationCenterDescription: (formData.applicationCenterDescription?.trim?.() || t('chatConfig.appCenterDescriptionPlaceholder')),
             linsightConfig: {
                 input_placeholder: formData.linsightConfig?.input_placeholder || '',
                 tools: processedTools
