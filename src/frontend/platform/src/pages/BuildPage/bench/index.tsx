@@ -123,7 +123,6 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const appCenterWelcomeRef = useRef<HTMLDivElement>(null);
     const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
     const { t } = useTranslation()
-    const { config: webSearchData, setConfig: setWebSearchData } = useWebSearchStore()
     const {
         formData,
         errors,
@@ -157,17 +156,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             navigate('/build/apps')
         }
     }, [user])
-    useEffect(() => {
-        if (!parentFormData) {
-            console.log("parentFormData is null", parentFormData);
 
-            getWorkstationConfigApi().then(res => {
-                setWebSearchData(res.webSearch)
-                setFormData(res)
-            })
-        }
-
-    }, [])
     const uploadAvator = (fileUrl: string, type: 'sidebar' | 'assistant', relativePath?: string) => {
         setFormData(prev => ({
             ...prev,
@@ -184,7 +173,6 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             return;
         }
         const toolId = webSearchTool.id;
-        setWebSearchData(config);
         setFormData(prev => ({ ...prev, webSearch: config }));
         await updateAssistantToolApi(toolId, config);
         setWebSearchDialogOpen(false)
@@ -223,12 +211,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             }
         }));
 
-        // 同时更新全局状态 (zustand)
-        setWebSearchData(prev => ({
-            ...prev,
-            [field]: value
-        }));
-    }, [setFormData, setWebSearchData]); // 添加依赖项
+    }, [setFormData]); // 添加依赖项
     return (
         <div className=" h-full overflow-y-scroll scrollbar-hide relative border-t">
             <div className="pt-4 relative">
@@ -591,7 +574,6 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
         applicationCenterWelcomeMessage: '',
         applicationCenterDescription: '',
     });
-  // console.log('errors :>> ', errors);
 
     const handleInputChange = (field: keyof ChatConfigForm, value: string, maxLength: number) => {
         setFormData(prev => ({ ...prev, [field]: value }));
