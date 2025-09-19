@@ -151,7 +151,7 @@ const ChatView = ({ index = 0 }: { index?: number }) => {
                     {!inputFloat && <div className="h-[2vh]"></div>}
                   </div>
                 </div>
-                {isLingsi && <Cases t={t} />}
+                {/* {isLingsi && <Cases t={t} />} */}
               </div>
               {/* <Footer /> */}
               {isLingsi && selfHost && <Cases t={t} />}
