@@ -5,6 +5,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import Compressor from "compressorjs";
 import { Plus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 const MaxFileSize = 999 * 1024 * 1024; // 999MB
 export const IconUploadSection = ({
@@ -22,6 +23,7 @@ export const IconUploadSection = ({
 }) => {
 
     const { toast } = useToast();
+    const { t } = useTranslation();
 
     const handleFileChange = async (file: File | null) => {
         if (!file) return onUpload('');
@@ -40,7 +42,7 @@ export const IconUploadSection = ({
             error(err) {
                 console.error("压缩失败:", err);
                 toast({
-                    title: '上传失败,请检查文件格式',
+                    title: t('chat.uploadFailedCheckFormat'),
                     description: err.message,
                     variant: 'error'
                 })

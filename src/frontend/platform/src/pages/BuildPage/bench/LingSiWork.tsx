@@ -393,7 +393,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     }))
                 }
             } catch (error) {
-                toast({ variant: 'error', description: '初始化数据加载失败' });
+                toast({ variant: 'error', description: t('chatConfig.initLoadFailed') });
             } finally {
                 setInitialized(true);
             }
@@ -498,8 +498,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                 setPageInputValue('1');
             })
             .catch(error => {
-                console.error('排序请求失败:', error);
-                toast({ variant: 'error', description: '排序失败，请稍后重试' });
+                console.error('sort failed:', error);
+                toast({ variant: 'error', description: t('chatConfig.sortFailed') });
             })
             .finally(() => {
                 setLoading(false);
@@ -575,13 +575,10 @@ export default function index({ formData: parentFormData, setFormData: parentSet
 
             toast({
                 variant: 'success',
-                description: `成功删除 ${selectedItems.length} 个 SOP`
+                description: t('chatConfig.batchDeleteSuccess', { count: selectedItems.length })
             });
         } catch (error) {
-            toast({
-                variant: 'error',
-                description: '删除失败，请稍后重试'
-            });
+            toast({ variant: 'error', description: '删除失败，请稍后重试' });
         } finally {
             setBatchDeleting(false);
         }
@@ -628,11 +625,11 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     id: sopForm.id,
                     ...requestData
                 });
-                toast({ variant: 'success', description: 'SOP更新成功' });
+                toast({ variant: 'success', description: t('chatConfig.sopUpdated') });
             } else {
                 // 新建操作
                 await sopApi.addSop(requestData);
-                toast({ variant: 'success', description: 'SOP创建成功' });
+                toast({ variant: 'success', description: t('chatConfig.sopCreated') });
             }
 
             setIsDrawerOpen(false);
@@ -649,7 +646,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const handleEdit = (id: string) => {
         const sopToEdit = datalist.find(item => item.id === id);
         if (!sopToEdit) {
-            toast({ variant: 'warning', description: '未找到要编辑的SOP' });
+            toast({ variant: 'warning', description: t('chatConfig.notFoundSop') });
             return;
         }
 
@@ -667,17 +664,17 @@ export default function index({ formData: parentFormData, setFormData: parentSet
 
     const handleDelete = (id: string) => {
         bsConfirm({
-            title: '删除确认',
-            desc: '确认删除该SOP吗？',
+            title: t('chatConfig.deleteConfirmTitle'),
+            desc: t('chatConfig.deleteConfirmDesc'),
             showClose: true,
-            okTxt: '确认删除',
-            canelTxt: '取消',
+            okTxt: t('chatConfig.confirmDelete'),
+            canelTxt: t('cancel'),
             onOk(next) {
                 sopApi.deleteSop(id)
                     .then(() => {
                         toast({
                             variant: 'success',
-                            description: 'SOP删除成功'
+                            description: t('chatConfig.deleteSuccess')
                         });
 
                         setSelectedItems(prevItems => prevItems.filter(itemId => itemId !== id));
@@ -700,11 +697,11 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                         next();
                     })
                     .catch(error => {
-                        console.error('删除SOP失败:', error);
+                        console.error('delete sop failed:', error);
                         toast({
                             variant: 'error',
-                            description: '删除失败',
-                            details: error.message || '请稍后重试'
+                            description: t('chatConfig.deleteFailed'),
+                            details: error.message || t('chatConfig.requestFailed')
                         });
                     });
             },
@@ -734,7 +731,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         onDrop: (acceptedFiles, rejectedFiles) => {
             // 1. 如果用户上传了不支持的文件（如 .pdf、.docx）
             if (rejectedFiles.length > 0) {
-                message({ variant: 'warning', description: '请上传 .xlsx 格式的文件！' });
+                message({ variant: 'warning', description: t('chatConfig.uploadXlsxTip') });
                 return;
             }
 
@@ -742,7 +739,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             const file = acceptedFiles[0];
             const ext = file.name.split('.').pop().toLowerCase();
             if (ext !== 'xlsx') {
-                message({ variant: 'warning', description: '文件扩展名必须是 .xlsx！' });
+                message({ variant: 'warning', description: t('chatConfig.fileExtMustBeXlsx') });
                 return;
             }
             setImportFiles(acceptedFiles);
@@ -783,7 +780,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     setDuplicateDialogOpen(true);
                     setImportFormData(formData);
                 } else {
-                    toast({ variant: 'success', description: '提交成功' });
+                    toast({ variant: 'success', description: t('chatConfig.submitSuccess') });
                     fetchData({
                         page: page,
                         pageSize: pageSize,
@@ -823,7 +820,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                 pageSize: pageSize,
                 keyword: keywords
             });
-            toast({ variant: 'success', description: '提交成功' });
+            toast({ variant: 'success', description: t('chatConfig.submitSuccess') });
         }
     };
     return (
@@ -839,7 +836,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                         <FormInput
                                label={t('chatConfig.inputPlaceholder')}
                             value={formData.linsightConfig?.input_placeholder}
-                            placeholder="灵思是一位擅长完成复杂任务的Agent助理，除了描述任务目标外，您还可以用通俗的语言描述希望如何实现，这将有助于得到符合您预期的结果~"
+                            placeholder={t('chatConfig.linsightPlaceholder')}
                             maxLength={100}
                             onChange={(v) => {
                                 setFormData(prev => ({
@@ -1031,7 +1028,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             </div>
                             <button
                                 className="flex items-center gap-1"
-                                onClick={() => downloadFile(__APP_ENV__.BASE_URL + "/sopexample.xlsx", '用户指导手册格式示例.xlsx')}
+                                onClick={() => downloadFile(__APP_ENV__.BASE_URL + "/sopexample.xlsx", t('chatConfig.exampleFileName'))}
                             >
                                 <span className="text-black">{t('chatConfig.exampleFile')}:</span>
                                 <span className="text-blue-600 hover:underline">{t('chatConfig.exampleFileName')}</span>
@@ -1077,7 +1074,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 setImportFiles([]);
                             }}
                         >
-                            取消
+                            {t('cancel')}
                         </Button>
                         <Button
                             onClick={async () => {
@@ -1200,11 +1197,11 @@ const useChatConfig = (
             const res = await setWorkstationConfigApi(dataToSave);
             if (res) {
                 setFormData(dataToSave);
-                toast({ variant: 'success', description: '配置保存成功' });
+                toast({ variant: 'success', description: t('chatConfig.saveSuccess') });
                 return true;
             }
         } catch (error) {
-            toast({ variant: 'error', description: '保存失败' });
+            toast({ variant: 'error', description: t('chatConfig.saveFailed') });
             return false;
         }
     };

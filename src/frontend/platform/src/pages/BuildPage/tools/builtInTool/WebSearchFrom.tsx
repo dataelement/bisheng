@@ -156,13 +156,13 @@ const WebSearchForm = ({ formData, onSubmit, errors = {},enabled,prompt }) => {
             console.log('提交的数据:', newConfig);
             console.log("webSearchData 是否更新?", webSearchData);
             toast({
-                title: "保存成功",
+                title: t('skills.saveSuccessful'),
                 variant: "success",
             });
             onSubmit?.(newConfig);
         } catch (error) {
             toast({
-                title: "保存失败",
+                title: t('failed'),
                 description: error.message,
                 variant: "error",
             });
@@ -282,13 +282,13 @@ const WebSearchForm = ({ formData, onSubmit, errors = {},enabled,prompt }) => {
                 return (
                     <InputField
                         required
-                        label="服务器地址"
+                        label={t('chatConfig.webSearch.serverUrl')}
                         name="server_url"
                         value={currentTool.server_url || ''}
                         onChange={handleParamChange}
                         error={formErrors.server_url}
                         id="searxng-server-url"
-                        placeholder="填写您部署 searXNG 的访问地址，例如：http://localhost:8080"
+                        placeholder={t('chatConfig.webSearch.serverUrlPlaceholder')}
                     />
                 );
             default:
@@ -301,24 +301,24 @@ const WebSearchForm = ({ formData, onSubmit, errors = {},enabled,prompt }) => {
            {/* {loading? <LoadingIcon />: */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <SelectField
-                label="联网搜索引擎"
+                label={t('chatConfig.webSearch.engine')}
                 value={selectedTool}
                 onChange={handleToolChange}
                 options={[
-                    { value: 'bing', label: 'Bing 搜索' },
-                    { value: 'bocha', label: '博查websearch' },
-                    { value: 'jina', label: 'Jina 深度搜索' },
-                    { value: 'serp', label: 'Serp API' },
-                    { value: 'tavily', label: 'Tavily' },
-                    { value: 'cloudsway', label: 'cloudsway' },
-                    { value: 'searXNG', label: 'searXNG' },
+                    { value: 'bing', label: t('chatConfig.webSearch.bing') },
+                    { value: 'bocha', label: t('chatConfig.webSearch.bocha') },
+                    { value: 'jina', label: t('chatConfig.webSearch.jina') },
+                    { value: 'serp', label: t('chatConfig.webSearch.serp') },
+                    { value: 'tavily', label: t('chatConfig.webSearch.tavily') },
+                    { value: 'cloudsway', label: t('chatConfig.webSearch.cloudsway') },
+                    { value: 'searXNG', label: t('chatConfig.webSearch.searXNG') },
                 ]}
                 id="search-tool-selector"
                 name="search_tool"
             />
 
             <div className="space-y-4">
-                <Label className="bisheng-label">联网搜索工具配置</Label>
+                <Label className="bisheng-label">{t('chatConfig.webSearch.config')}</Label>
                 {renderParams()}
             </div>
 
