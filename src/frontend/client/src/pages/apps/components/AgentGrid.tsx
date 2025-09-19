@@ -438,7 +438,7 @@ export function AgentGrid({
   ].filter(section => {
     return section.id !== "frequently_used" || section.id !== "uncategorized" || true;
   }), [allAgents, agentsByCategory, categories, frequentlyUsedLoading, frequentlyUsedPagination,
-    loading, pagination, uncategorizedAgents, uncategorizedLoading, uncategorizedPagination])
+    loading, pagination, uncategorizedAgents, uncategorizedLoading, uncategorizedPagination, localize])
 
   return (
     <div className="space-y-8">

@@ -643,6 +643,7 @@
   "com_sop_confirm_execution": "Execute or not",
   "com_sop_regenerate_manual": "Regenerate Manual",
   "com_sop_start_execution": "Start Execution",
+  "com_sop_personal_knowledge_base": "Personal Knowledge Base",
   "com_sop_task_description": "Task Description",
   "com_sop_task_version": "Task Version",
   "com_sop_submit_success": "Submitted successfully",
