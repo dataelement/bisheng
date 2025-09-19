@@ -53,7 +53,9 @@ class SearchTool(ABC):
             'bocha': BoChaSearch,
             'jina': JinaDeepSearch,
             'serp': SerpSearch,
-            'tavily': TavilySearch
+            'tavily': TavilySearch,
+            'cloudsway': CloudswaySearch,
+            'searXNG': SearXNGSearch,
         }
         if name not in tool_class:
             raise ValueError(f"Tool {name} not found.")
@@ -201,6 +203,56 @@ class TavilySearch(SearchTool):
 
     def invoke(self, query: str, **kwargs) -> (str, list):
         result = self._requests(self.base_url, method='POST', json={'query': query}, headers=self.headers)
+
+        answers = result.get('results', [])
+
+        # parse result
+        search_res = ''
+        web_list = []
+        for index, item in enumerate(answers):
+            search_res += f'[webpage ${index} begin]\n${item.get("content")}\n[webpage ${index} end]\n\n'
+            web_list.append({
+                'title': item.get('title'),
+                'url': item.get('url'),
+                'snippet': item.get('content')
+            })
+        return search_res, web_list
+
+
+class CloudswaySearch(SearchTool):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.api_key = kwargs.get('api_key')
+        self.endpoint = kwargs.get('endpoint')
+        self.base_url = f'https://searchapi.cloudsway.net/search/{self.endpoint}/smart'
+        self.headers = {'Authorization': f'Bearer {self.api_key}'}
+
+    def invoke(self, query: str, **kwargs) -> (str, list):
+        result = self._requests(self.base_url, method='get', params={'a': query}, headers=self.headers)
+
+        answers = result.get('webPages', {}).get('value', [])
+
+        # parse result
+        search_res = ''
+        web_list = []
+        for index, item in enumerate(answers):
+            search_res += f'[webpage ${index} begin]\n${item.get("snippet")}\n[webpage ${index} end]\n\n'
+            web_list.append({
+                'title': item.get('name'),
+                'url': item.get('url'),
+                'snippet': item.get('snippet')
+            })
+        return search_res, web_list
+
+
+class SearXNGSearch(SearchTool):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.base_url = kwargs.get('server_url').rstrip('/')
+
+    def invoke(self, query: str, **kwargs) -> (str, list):
+        result = self._requests(f'{self.base_url}/search', method='GET',
+                                params={'q': query, 'format': 'json'})
 
         answers = result.get('results', [])
 
