@@ -4,13 +4,13 @@ from .base import BaseErrorCode
 
 # 该技能已被删除
 class SkillDeletedError(BaseErrorCode):
-    code = 13001
+    Code = 13001
     Msg = "该技能已被删除"
 
 
 # 当前技能未上线，无法直接对话
 class SkillNotOnlineError(BaseErrorCode):
-    code = 13002
+    Code = 13002
     Msg = "当前技能未上线，无法直接对话"
 
 
