@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 from fastapi import Request, WebSocket, WebSocketDisconnect, status
 from loguru import logger
 
+from bisheng.api.errcode.base import BaseErrorCode
 from bisheng.api.errcode.chat import (DocumentParseError, InputDataParseError,
                                       LLMExecutionError, SkillDeletedError,
                                       SkillNotOnlineError)
