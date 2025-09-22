@@ -49,12 +49,14 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
     const [options, setOptions] = useState([])
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isModelChanged, setIsModelChanged] = useState(false)
+    const [isLoadingModels, setIsLoadingModels] = useState(false)
 
     // 统一处理模型数据获取
     useEffect(() => {
         if (!open) return;
 
         const fetchModelData = async () => {
+            setIsLoadingModels(true);
             try {
                 const [config, data] = await Promise.all([getKnowledgeModelConfig(), getModelListApi()]);
                 const { embedding_model_id } = config;
@@ -96,17 +98,19 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                     if (_model) {
                         setModal(_model);
                     } else {
-                        // try {
-                        //     const res = await getLLmServerDetail(currentLib.model);
-                        //     if (res.data) {
-                        //         setModal(res.data);
-                        //     }
-                        // } catch (error) {
-                        //     console.warn('Failed to get server detail, using fallback');
-                        //     if (embeddings.length > 0 && embeddings[0].children.length > 0) {
-                        //         setModal([embeddings[0], embeddings[0].children[0]]);
-                        //     }
-                        // }
+                        // 如果找不到对应的模型，尝试从服务器获取详情
+                        try {
+                            const res = await getLLmServerDetail(currentLib.model);
+                            if (res.data) {
+                                setModal(res.data);
+                            }
+                        } catch (error) {
+                            console.warn('error');
+                            // 如果获取失败，使用第一个可用的模型作为备选
+                            if (embeddings.length > 0 && embeddings[0].children.length > 0) {
+                                setModal([embeddings[0], embeddings[0].children[0]]);
+                            }
+                        }
                     }
                 } else if (mode === 'create' && _model) {
                     setModal(_model);
@@ -117,6 +121,8 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                     variant: "error",
                     description: '加载模型出错'
                 });
+            } finally {
+                setIsLoadingModels(false);
             }
         };
 
@@ -129,6 +135,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
             setModal(null);
             setIsSubmitting(false);
             setIsModelChanged(false);
+            setIsLoadingModels(false);
             setError({ name: false, desc: false });
         }
     }, [open]);
@@ -169,10 +176,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
             handleError('知识库名称不能超过200字');
             return;
         }
-        if (!modal) {
-            handleError(t('lib.selectModel'));
-            return;
-        }
+ 
 
         // 修复：名称重复校验逻辑
         // 编辑模式且名称未变更时，不进行重复校验
@@ -282,8 +286,15 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                 </div>
                 <div className="">
                     <label htmlFor="model" className="bisheng-label">知识库embedding模型选择</label>
-                    {options.length > 0 && (
+                    {isLoadingModels ? (
+                        <div className="flex items-center gap-2 p-3 border rounded-md bg-gray-50">
+                            <LoadIcon className="w-4 h-4 animate-spin" />
+                            <span className="text-sm text-gray-600">正在加载模型列表...</span>
+                        </div>
+                    ) : options.length > 0 ? (
                         <ModelSelect
+                            key={`model-select-${modal ? modal[1]?.value : 'default'}-${options.length}`}
+                            label=""
                             close
                             value={modal ? modal[1]?.value : (mode === 'edit' && currentLib ? currentLib.model : null)}
                             options={options}
@@ -304,6 +315,10 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                                 }
                             }}
                         />
+                    ) : (
+                        <div className="p-3 border rounded-md bg-gray-50 text-sm text-gray-600">
+                            暂无可用模型
+                        </div>
                     )}
                     {mode === 'edit' && isModelChanged && (
                         <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
@@ -605,7 +620,6 @@ export default function KnowledgeFile() {
                                             }}
                                         >
                                             <SelectTrigger
-                                                showIcon={false}
                                                 disabled={copyLoadingId === el.id}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
