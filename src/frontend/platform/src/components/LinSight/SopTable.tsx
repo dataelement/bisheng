@@ -269,7 +269,6 @@ const SopTable = ({
                                         <Tooltip>
                                             <TooltipTrigger asChild>
                                                 <div className="text-sm font-medium text-gray-500 truncate">
-                                                    精选
                                                     {item.showcase ? '精选' : '非精选'}
                                                 </div>
                                             </TooltipTrigger>

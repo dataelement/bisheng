@@ -118,6 +118,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const [importFilesData, setImportFilesData] = useState<File[]>([]);
     const [duplicateNames, setDuplicateNames] = useState<string[]>([]);
     const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
+    const [sopShowcase, setSopShowcase] = useState(false);
     const [deleteConfirmModal, setDeleteConfirmModal] = useState({
         open: false,
         title: '确认删除',
@@ -654,8 +655,12 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         }
     };
 
-    const handleEdit = (id: string) => {
+    const handleEdit = async (id: string) => {
         const sopToEdit = datalist.find(item => item.id === id);
+        const res =  await sopApi.getSopShowcase({ sop_id: id });
+        if(res.version_info === null){
+            setSopShowcase(true);
+        }
         if (!sopToEdit) {
             toast({ variant: 'warning', description: t('chatConfig.notFoundSop') });
             return;
@@ -1016,6 +1021,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 setSopForm={setSopForm}
                                 handleSaveSOP={handleSaveSOP}
                                 tools={selectedTools}
+                                sopShowcase={sopShowcase}
+                                importDialogOpen={importDialogOpen}
                             />
                         </div>
                     </div>

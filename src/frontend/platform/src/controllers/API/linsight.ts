@@ -51,4 +51,7 @@ export const sopApi = {
   setSopShowcase: (data: { sop_id: string; showcase: boolean }) => {
     return axios.post(`/api/v1/linsight/sop/showcase`, data);
   },
+  getSopShowcase: (data: { sop_id: string }) => {
+    return axios.get(`/api/v1/linsight/sop/showcase/result`, { params: data });
+  },
 }

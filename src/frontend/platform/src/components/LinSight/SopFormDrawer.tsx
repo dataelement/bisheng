@@ -11,6 +11,7 @@ import { t } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsList, TabsTrigger } from "../bs-ui/tabs";
 import { Star } from "lucide-react";
+import Tip from "@/components/bs-ui/tooltip/tip";
 
 const SopFormDrawer = ({
   isDrawerOpen,
@@ -19,8 +20,11 @@ const SopFormDrawer = ({
   sopForm,
   setSopForm,
   tools,
-  handleSaveSOP
+  handleSaveSOP,
+  sopShowcase,
+  importDialogOpen
 }) => {
+  console.log(sopShowcase, 22255);
   const { t } = useTranslation()
   const [errors, setErrors] = useState({
     name: '',
@@ -145,34 +149,73 @@ const SopFormDrawer = ({
                 <Tabs defaultValue="manual">
                   <TabsList>
                     <TabsTrigger value="manual">指导手册</TabsTrigger>
-                    <TabsTrigger value="result">运行结果</TabsTrigger>
+                    {!importDialogOpen ? (
+                      <Tip content="仅从运行记录导入的手册可查看运行结果" side="bottom">
+                        <div className="inline-block">
+                          <TabsTrigger
+                            value="result"
+                            onMouseDown={(e) => e.preventDefault()}
+                            className="opacity-50 cursor-not-allowed pointer-events-none"
+                            aria-disabled
+                          >
+                            运行结果
+                          </TabsTrigger>
+                        </div>
+                      </Tip>
+                    ) : (
+                      <TabsTrigger value="result">运行结果</TabsTrigger>
+                    )}
                   </TabsList>
                 </Tabs>
-                <Button
-                  type="button"
-                  variant='outline'
-                  onClick={async () => {
-                    try {
-                      const next = !isFeatured;
-                      await sopApi.setSopShowcase({ sop_id: sopForm.id, showcase: next });
-                      setIsFeatured(next);
-                    } catch (e) {
-                      toast({ variant: 'error', description: '操作失败，请稍后重试' });
-                    }
-                  }}
-                  className={`${isFeatured ? 'border-yellow-500 bg-yellow-50 text-yellow-700' : ''}`}
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-sm ">
-                      {isFeatured ? (
-                        <Star className="w-3 h-3 text-yellow-500" fill="currentColor" />
-                      ) : (
-                        <Star className="w-3 h-3 text-gray-400" />
-                      )}
+                {sopShowcase ? (
+                  <Tip content="仅可精选包含运行结果的案例" side="bottom">
+                    <div className="inline-block">
+                      <Button
+                        type="button"
+                        variant='outline'
+                        disabled
+                        className={`${isFeatured ? 'border-yellow-500 bg-yellow-50 text-yellow-700' : ''}`}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-sm ">
+                            {isFeatured ? (
+                              <Star className="w-3 h-3 text-yellow-500" fill="currentColor" />
+                            ) : (
+                              <Star className="w-3 h-3 text-gray-400" />
+                            )}
+                          </span>
+                          {isFeatured ? '精选案例' : '设为精选案例'}
+                        </span>
+                      </Button>
+                    </div>
+                  </Tip>
+                ) : (
+                  <Button
+                    type="button"
+                    variant='outline'
+                    onClick={async () => {
+                      try {
+                        const next = !isFeatured;
+                        await sopApi.setSopShowcase({ sop_id: sopForm.id, showcase: next });
+                        setIsFeatured(next);
+                      } catch (e) {
+                        toast({ variant: 'error', description: '操作失败，请稍后重试' });
+                      }
+                    }}
+                    className={`${isFeatured ? 'border-yellow-500 bg-yellow-50 text-yellow-700' : ''}`}
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <span className="inline-flex items-center justify-center w-4 h-4 rounded-sm ">
+                        {isFeatured ? (
+                          <Star className="w-3 h-3 text-yellow-500" fill="currentColor" />
+                        ) : (
+                          <Star className="w-3 h-3 text-gray-400" />
+                        )}
+                      </span>
+                      {isFeatured ? '精选案例' : '设为精选案例'}
                     </span>
-                    {isFeatured ? '精选案例' : '设为精选案例'}
-                  </span>
-                </Button>
+                  </Button>
+                )}
               </div>
             )}
           </div>
