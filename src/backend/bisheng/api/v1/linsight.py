@@ -760,7 +760,7 @@ async def set_sop_banner(
 
 @router.get("/sop/showcase/result", summary="获取灵思精选案例的执行结果", response_model=UnifiedResponseModel)
 async def get_sop_showcase_result(
-        sop_id: int = Query(..., description="SOP唯一ID"),
+        sop_id: int = Query(None, description="SOP唯一ID"),
         linsight_version_id: str = Query(None, description="灵思会话版本ID，优先使用该参数"),
         login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
     if not linsight_version_id:
