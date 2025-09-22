@@ -16,7 +16,7 @@ from starlette.websockets import WebSocket
 from bisheng.api.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.api.errcode.linsight import LinsightQuestionError, LinsightUseUpError, LinsightModifySopError, \
     LinsightStartTaskError, LinsightSessionVersionRunningError, LinsightQueueStatusError, FileUploadError, \
-    SopShowcaseError, SopNotShowcaseError
+    SopShowcaseError
 from bisheng.api.errcode.server import InvalidOperationError, ResourceDownloadError
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.api.services.knowledge import KnowledgeService
