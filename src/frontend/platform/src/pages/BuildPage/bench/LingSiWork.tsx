@@ -1022,7 +1022,6 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 handleSaveSOP={handleSaveSOP}
                                 tools={selectedTools}
                                 sopShowcase={sopShowcase}
-                                importDialogOpen={importDialogOpen}
                             />
                         </div>
                     </div>

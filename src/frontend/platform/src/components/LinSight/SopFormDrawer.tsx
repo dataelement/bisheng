@@ -21,8 +21,7 @@ const SopFormDrawer = ({
   setSopForm,
   tools,
   handleSaveSOP,
-  sopShowcase,
-  importDialogOpen
+  sopShowcase
 }) => {
   console.log(sopShowcase, 22255);
   const { t } = useTranslation()
@@ -149,7 +148,7 @@ const SopFormDrawer = ({
                 <Tabs defaultValue="manual">
                   <TabsList>
                     <TabsTrigger value="manual">指导手册</TabsTrigger>
-                    {!importDialogOpen ? (
+                    {sopShowcase ? (
                       <Tip content="仅从运行记录导入的手册可查看运行结果" side="bottom">
                         <div className="inline-block">
                           <TabsTrigger
