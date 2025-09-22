@@ -3,12 +3,9 @@ from typing import Any, Dict
 
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
-from pydantic import BaseModel
-
-from bisheng_langchain.gpts.assistant import ConfigurableAssistant
-from bisheng_langchain.gpts.load_tools import load_tools
 from langgraph.prebuilt import create_react_agent
 from loguru import logger
+from pydantic import BaseModel, field_validator
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.llm import LLMService
@@ -20,6 +17,8 @@ from bisheng.workflow.callback.event import StreamMsgOverData
 from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
+from bisheng_langchain.gpts.assistant import ConfigurableAssistant
+from bisheng_langchain.gpts.load_tools import load_tools
 
 agent_executor_dict = {
     'ReAct': 'get_react_agent_executor',
@@ -29,12 +28,23 @@ agent_executor_dict = {
 
 class SqlAgentParams(BaseModel):
     """ SQL Agent 参数模型 """
-    database_engine: typing.Literal['mysql', 'db2', 'postgres', 'gaussdb', 'oracle']
+    database_engine: str
     db_username: str
     db_password: str
     db_address: str
     db_name: str
     open: bool = False
+
+    @field_validator("database_engine")
+    @classmethod
+    def validate_database_engine(cls, v):
+        # 转换为小写
+        if v:
+            v = v.lower()
+            if v not in ['mysql', 'db2', 'postgres', 'gaussdb', 'oracle']:
+                raise ValueError(
+                    "Unsupported database engine. Supported engines are: MySQL, DB2, Postgres, GaussDB, Oracle.")
+        return v
 
 
 class AgentNode(BaseNode):
@@ -82,8 +92,9 @@ class AgentNode(BaseNode):
         ]
 
         # 是否支持nl2sql
-        self._sql_agent = SqlAgentParams.model_validate(self.node_params['sql_agent']) if self.node_params.get(
-            'sql_agent', None) else None
+        self._sql_agent_params = self.node_params.get('sql_agent', None)
+        self._sql_agent = SqlAgentParams.model_validate(self.node_params['sql_agent']) if (
+                self._sql_agent_params and self._sql_agent_params.get("open", False)) else None
         self._sql_address = ''
         if self._sql_agent and self._sql_agent.open:
             self._sql_address = self._init_sql_address()
