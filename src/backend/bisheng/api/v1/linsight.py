@@ -719,7 +719,7 @@ async def remove_sop(
 
 
 @router.get("/sop/showcase", summary="灵思sop库的精选案例", response_model=UnifiedResponseModel)
-async def set_sop_banner(
+async def get_sop_banner(
         page: int = Query(1, ge=1, description="页码"),
         page_size: int = Query(10, ge=1, le=100, description="每页数量"),
         sort: Literal["asc", "desc"] = Query("desc", description="排序方式，asc或desc"),
@@ -761,19 +761,24 @@ async def set_sop_banner(
 @router.get("/sop/showcase/result", summary="获取灵思精选案例的执行结果", response_model=UnifiedResponseModel)
 async def get_sop_showcase_result(
         sop_id: int = Query(..., description="SOP唯一ID"),
+        linsight_version_id: str = Query(None, description="灵思会话版本ID，优先使用该参数"),
         login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
-    # 校验SOP是否存在
-    existing_sop = await LinsightSOPDao.get_sops_by_ids([sop_id])
-    if not existing_sop:
-        raise NotFoundError.http_exception(msg="sop not found")
-    existing_sop = existing_sop[0]
-    if not existing_sop.linsight_version_id:
+    if not linsight_version_id:
+        # 校验SOP是否存在
+        existing_sop = await LinsightSOPDao.get_sops_by_ids([sop_id])
+        if not existing_sop:
+            raise NotFoundError.http_exception(msg="sop not found")
+        linsight_version_id = existing_sop[0].linsight_version_id
+    if not linsight_version_id:
+        return resp_200(data={"version_info": None, "execute_tasks": []})
+    version_info = await LinsightSessionVersionDao.get_by_id(linsight_version_id)
+    # 未完成的会话不返回执行结果
+    if not version_info or version_info.status != SessionVersionStatusEnum.COMPLETED:
         return resp_200(data={
             "version_info": None,
             "execute_tasks": []
         })
-    version_info = await LinsightSessionVersionDao.get_by_id(existing_sop.linsight_version_id)
-    execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(existing_sop.linsight_version_id)
+    execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(linsight_version_id)
     return resp_200(data={
         "version_info": version_info,
         "execute_tasks": execute_task_models

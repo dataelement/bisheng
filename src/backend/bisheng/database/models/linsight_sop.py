@@ -115,10 +115,10 @@ class LinsightSOPDao(LinsightSOPBase):
 
         # 根据 rating 和 create_time 排序
         if sort == "asc":
-            statement = statement.order_by(col(LinsightSOP.rating).asc(), col(LinsightSOP.create_time).asc())
+            statement = statement.order_by(col(LinsightSOP.rating).asc(), col(LinsightSOP.update_time).asc())
         else:
-            statement = statement.order_by(col(LinsightSOP.rating).desc(), col(LinsightSOP.create_time).desc())
-
+            statement = statement.order_by(col(LinsightSOP.rating).desc(), col(LinsightSOP.update_time).desc())
+            
         if showcase is not None:
             statement = statement.where(LinsightSOP.showcase == showcase)
 
