@@ -88,8 +88,6 @@ export interface ChatConfigForm {
 }
 
 export default function index({ formData: parentFormData, setFormData: parentSetFormData }) {
-
-
     const [keywords, setKeywords] = useState('');
     const [datalist, setDatalist] = useState([]);
     const [total, setTotal] = useState(1);
@@ -104,11 +102,9 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const [toolSearchTerm, setToolSearchTerm] = useState('');
     const [pageInputValue, setPageInputValue] = useState('1');
     const [activeToolTab, setActiveToolTab] = useState<'builtin' | 'api' | 'mcp'>('builtin');
-    const [manuallyExpandedItems, setManuallyExpandedItems] = useState<string[]>([]);
     const [initialized, setInitialized] = useState(false);
     const [importDialogOpen, setImportDialogOpen] = useState(false);
     const [localFileDialogOpen, setLocalFileDialogOpen] = useState(false);
-    const [importFile, setImportFile] = useState<File | null>(null);
     const [importFiles, setImportFiles] = useState<File[]>([]);
     const [isImporting, setIsImporting] = useState(false);
     const [validationDialog, setValidationDialog] = useState({
@@ -655,12 +651,15 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         }
     };
 
+    const [linsight, setLinsight] = useState({});
     const handleEdit = async (id: string) => {
         const sopToEdit = datalist.find(item => item.id === id);
-        const res =  await sopApi.getSopShowcase({ sop_id: id });
-        if(res.version_info === null){
-            setSopShowcase(true);
+        const res = await sopApi.getSopShowcaseDetail({ sop_id: id });
+        if (res.version_info === null) {
+            // setSopShowcase(true);
         }
+
+        setLinsight({ ...res.version_info, tasks: res.execute_tasks });
         if (!sopToEdit) {
             toast({ variant: 'warning', description: t('chatConfig.notFoundSop') });
             return;
@@ -850,7 +849,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                 <CardContent className="pt-4 relative  ">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
                         <FormInput
-                               label={t('chatConfig.inputPlaceholder')}
+                            label={t('chatConfig.inputPlaceholder')}
                             value={formData.linsightConfig?.input_placeholder}
                             placeholder={t('chatConfig.linsightPlaceholder')}
                             maxLength={100}
@@ -865,7 +864,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 }));
                             }} error={""} />
                         <div className="mb-6">
-                             <p className="text-lg font-bold mb-2">{t('chatConfig.linsightTools')}</p>
+                            <p className="text-lg font-bold mb-2">{t('chatConfig.linsightTools')}</p>
                             <ToolSelectorContainer
                                 toolsData={toolsData}
                                 selectedTools={selectedTools}
@@ -890,7 +889,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                     <div className="relative">
                                         <input
                                             type="text"
-                                             placeholder={t('chatConfig.searchManual')}
+                                            placeholder={t('chatConfig.searchManual')}
                                             className="w-full pl-10 pr-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                             value={keywords}
                                             onChange={(e) => {
@@ -948,11 +947,11 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                         disabled={selectedItems.length === 0 || batchDeleting}
                                         onClick={() => {
                                             bsConfirm({
-                                               title: t('chatConfig.batchDeleteConfirm'),
-                                            desc: t('chatConfig.batchDeleteDesc'),
-                                            showClose: true,
-                                            okTxt: t('chatConfig.confirmDelete'),
-                                            canelTxt: t('cancel'),
+                                                title: t('chatConfig.batchDeleteConfirm'),
+                                                desc: t('chatConfig.batchDeleteDesc'),
+                                                showClose: true,
+                                                okTxt: t('chatConfig.confirmDelete'),
+                                                canelTxt: t('cancel'),
                                                 onOk(next) {
                                                     handleBatchDelete();
                                                     next();
@@ -963,8 +962,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                         }}
                                     >
                                         {batchDeleting && <LoadIcon className=" mr-2 text-gray-600" />}
-                                       {t('chatConfig.batchDelete')}
-
+                                        {t('chatConfig.batchDelete')}
                                     </Button>
                                 </div>
                             </div>
@@ -996,7 +994,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                                 variant="ghost"
                                                 onClick={() => setDeleteConfirmModal(prev => ({ ...prev, open: false }))}
                                             >
-                                            { t('cancel')}
+                                                {t('cancel')}
                                             </Button>
                                             <Button
                                                 type="button"
@@ -1005,19 +1003,18 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                                     setDeleteConfirmModal(prev => ({ ...prev, open: false }));
                                                 }}
                                             >
-                                               { t('chatConfig.confirmDelete')}
+                                                {t('chatConfig.confirmDelete')}
                                             </Button>
                                         </div>
                                     </div>
                                 </div>
                             )}
-
-
                             <SopFormDrawer
                                 isDrawerOpen={isDrawerOpen}
                                 setIsDrawerOpen={setIsDrawerOpen}
                                 isEditing={isEditing}
                                 sopForm={sopForm}
+                                linsight={linsight}
                                 setSopForm={setSopForm}
                                 handleSaveSOP={handleSaveSOP}
                                 tools={selectedTools}
@@ -1041,7 +1038,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                         <div className="flex justify-between items-center w-full">
                             <div className="flex items-center gap-2">
                                 <span className="text-red-500">*</span>
-                                 <span>{t('chatConfig.uploadFile')}</span>
+                                <span>{t('chatConfig.uploadFile')}</span>
                             </div>
                             <button
                                 className="flex items-center gap-1"
@@ -1101,7 +1098,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             }}
                             disabled={isImporting || importFiles.length === 0}
                         >
-                              {isImporting ? t('chatConfig.importing') : t('submit')}
+                            {isImporting ? t('chatConfig.importing') : t('submit')}
                         </Button>
                     </div>
                 </DialogContent>
@@ -1162,7 +1159,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
 
                         <div className="flex justify-end">
                             <Button onClick={handleValidationDialogConfirm}>
-                                 {t('chatConfig.gotIt')}
+                                {t('chatConfig.gotIt')}
                             </Button>
                         </div>
                     </div>
@@ -1176,11 +1173,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
 
 
 const useChatConfig = (
-    assistantState: { model_name: string; task_model: string; summary_model: string },
     selectedTools: Array<{ id: string | number; name: string }>,
-    toolsData: { builtin: any[]; api: any[]; mcp: any[] },
     setFormData: React.Dispatch<React.SetStateAction<ChatConfigForm>>,
-    activeToolTab: 'builtin' | 'api' | 'mcp'
 ) => {
     const { toast } = useToast();
 
@@ -1228,7 +1222,3 @@ const useChatConfig = (
 
     return { handleSave };
 };
-
-function setTotal(arg0: any) {
-    throw new Error("Function not implemented.");
-}

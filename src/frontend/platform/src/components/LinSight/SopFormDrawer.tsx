@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { Tabs, TabsList, TabsTrigger } from "../bs-ui/tabs";
 import { Star } from "lucide-react";
 import Tip from "@/components/bs-ui/tooltip/tip";
+import { TaskFlowContent } from "./SopTasks";
 
 const SopFormDrawer = ({
   isDrawerOpen,
@@ -20,6 +21,7 @@ const SopFormDrawer = ({
   sopForm,
   setSopForm,
   tools,
+  linsight,
   handleSaveSOP,
   sopShowcase
 }) => {
@@ -87,7 +89,7 @@ const SopFormDrawer = ({
     if (length > MAX_LENGTHS[field]) {
       setErrors(prev => ({
         ...prev,
-        [field]: field === 'content' 
+        [field]: field === 'content'
           ? t('sopForm.contentMaxLength', { max: MAX_LENGTHS[field] })
           : t('sopForm.nameMaxLength', { max: MAX_LENGTHS[field] })
       }));
@@ -165,6 +167,7 @@ const SopFormDrawer = ({
                       <TabsTrigger value="result">运行结果</TabsTrigger>
                     )}
                   </TabsList>
+                  <TaskFlowContent linsight={linsight} />
                 </Tabs>
                 {sopShowcase ? (
                   <Tip content="仅可精选包含运行结果的案例" side="bottom">
@@ -195,7 +198,7 @@ const SopFormDrawer = ({
                     onClick={async () => {
                       try {
                         const next = !isFeatured;
-                        await sopApi.setSopShowcase({ sop_id: sopForm.id, showcase: next });
+                        await sopApi.switchShowcase({ sop_id: sopForm.id, showcase: next });
                         setIsFeatured(next);
                       } catch (e) {
                         toast({ variant: 'error', description: '操作失败，请稍后重试' });
