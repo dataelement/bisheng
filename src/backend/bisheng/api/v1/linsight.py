@@ -3,23 +3,21 @@ import json
 import os
 import time
 from datetime import datetime
-from typing import List, Literal, Optional, Annotated
+from typing import List, Literal, Optional
 from urllib import parse
 
 from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks, Request, HTTPException, Form
-from pydantic import BaseModel, ValidationError
-
-from bisheng.api.errcode.linsight import LinsightQuestionError, LinsightUseUpError, LinsightModifySopError, \
-    LinsightStartTaskError, LinsightSessionVersionRunningError, LinsightQueueStatusError, FileUploadError
-from bisheng.api.errcode.server import InvalidOperationError, ResourceDownloadError
-from bisheng.utils.minio_client import minio_client
-from fastapi_jwt_auth import AuthJWT
 from loguru import logger
+from pydantic import BaseModel, ValidationError
 from sse_starlette import EventSourceResponse
 from starlette.responses import StreamingResponse
 from starlette.websockets import WebSocket
 
 from bisheng.api.errcode.http_error import UnAuthorizedError, NotFoundError
+from bisheng.api.errcode.linsight import LinsightQuestionError, LinsightUseUpError, LinsightModifySopError, \
+    LinsightStartTaskError, LinsightSessionVersionRunningError, LinsightQueueStatusError, FileUploadError, \
+    SopShowcaseError
+from bisheng.api.errcode.server import InvalidOperationError, ResourceDownloadError
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.linsight.message_stream_handle import MessageStreamHandle
@@ -38,6 +36,8 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
 from bisheng.database.models.linsight_sop import LinsightSOPDao, LinsightSOPRecord
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 from bisheng.settings import settings
+from bisheng.utils.minio_client import minio_client
+from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(prefix="/linsight", tags=["灵思"])
 
@@ -169,6 +169,7 @@ async def generate_sop(
         previous_session_version_id: str = Body(None, description="上一个灵思会话版本ID"),
         feedback_content: str = Body(None, description="用户反馈内容"),
         reexecute: bool = Body(False, description="是否重新执行生成SOP"),
+        sop_id: int = Body(None, description="精选案例的ID"),
         login_user: UserPayload = Depends(get_login_user)) -> EventSourceResponse:
     """
     生成与重新规划灵思SOP
@@ -211,7 +212,8 @@ async def generate_sop(
             feedback_content=feedback_content,
             reexecute=reexecute,
             login_user=login_user,
-            knowledge_list=res
+            knowledge_list=res,
+            sop_id=sop_id
         )
 
         async for event in sop_generate:
