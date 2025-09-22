@@ -1,10 +1,11 @@
+import typing
 from typing import Any, Dict
 
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.prebuilt import create_react_agent
 from loguru import logger
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, Field
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.llm import LLMService
@@ -27,7 +28,8 @@ agent_executor_dict = {
 
 class SqlAgentParams(BaseModel):
     """ SQL Agent 参数模型 """
-    database_engine: str
+    database_engine: typing.Optional[str] = Field("mysql",
+                                                  description="数据库类型，支持mysql, db2, postgres, gaussdb, oracle")
     db_username: str
     db_password: str
     db_address: str
