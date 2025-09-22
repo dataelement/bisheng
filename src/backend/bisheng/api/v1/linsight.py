@@ -16,7 +16,7 @@ from starlette.websockets import WebSocket
 from bisheng.api.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.api.errcode.linsight import LinsightQuestionError, LinsightUseUpError, LinsightModifySopError, \
     LinsightStartTaskError, LinsightSessionVersionRunningError, LinsightQueueStatusError, FileUploadError, \
-    SopShowcaseError
+    SopShowcaseError, SopNotShowcaseError
 from bisheng.api.errcode.server import InvalidOperationError, ResourceDownloadError
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.api.services.knowledge import KnowledgeService
@@ -756,6 +756,28 @@ async def set_sop_banner(
 
     await LinsightSOPDao.set_sop_showcase(sop_id, showcase)
     return resp_200()
+
+
+@router.get("/sop/showcase/result", summary="获取灵思精选案例的执行结果", response_model=UnifiedResponseModel)
+async def get_sop_showcase_result(
+        sop_id: int = Query(..., description="SOP唯一ID"),
+        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+    # 校验SOP是否存在
+    existing_sop = await LinsightSOPDao.get_sops_by_ids([sop_id])
+    if not existing_sop:
+        raise NotFoundError.http_exception(msg="sop not found")
+    existing_sop = existing_sop[0]
+    if not existing_sop.linsight_version_id:
+        return resp_200(data={
+            "version_info": None,
+            "execute_tasks": []
+        })
+    version_info = await LinsightSessionVersionDao.get_by_id(existing_sop.linsight_version_id)
+    execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(existing_sop.linsight_version_id)
+    return resp_200(data={
+        "version_info": version_info,
+        "execute_tasks": execute_task_models
+    })
 
 
 class IntegratedExecuteRequestBody(BaseModel):
