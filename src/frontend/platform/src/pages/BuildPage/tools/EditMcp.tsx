@@ -98,7 +98,7 @@ const TestDialog = forwardRef((props, ref) => {
                                         </TableCell>
                                         <TableCell>
                                             <Input
-                                                placeholder={t('test.parameter')}
+                                                placeholder={`输入${schema.type || 'string'}类型值`}
                                                 onChange={(e) => setParams(prev => ({
                                                     ...prev,
                                                     [name]: e.target.value
@@ -153,16 +153,27 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
 
     // 示例配置
     const exampleConfigs = {
-         gaode: JSON.stringify({
-             "mcpServers": {
-                 "amap-sse": {
+        gaode1: JSON.stringify({
+            "mcpServers": {
+                "amap-sse": {
+                    "type": "sse",
                     "name": "高德地图",
                     "description": "提供全场景覆盖的地图服务，包括地理编码、逆地理编码、IP 定位、天气查询、骑行路径规划、步行路径规划、驾车路径规划、公交路径规划、距离测量、关键词搜索、周边搜索、详情搜索等。",
-                     "url": "https://mcp.amap.com/sse?key=yourapikey"
-                 }
-             }
-         }, null, 2)
-     };
+                    "url": "https://mcp.amap.com/sse?key=yourapikey"
+                }
+            }
+        }, null, 2),
+        gaode2: JSON.stringify({
+            "mcpServers": {
+                "amap-streamable": {
+                    "type": "streamable",
+                    "name": "高德地图",
+                    "description": "提供全场景覆盖的地图服务，包括地理编码、逆地理编码、IP 定位、天气查询、骑行路径规划、步行路径规划、驾车路径规划、公交路径规划、距离测量、关键词搜索、周边搜索、详情搜索等。",
+                    "url": "https://mcp.amap.com/mcp?key=yourapikey"
+                }
+            }
+        }, null, 2)
+    };
 
     // 暴露方法给父组件
     useImperativeHandle(ref, () => ({
@@ -361,7 +372,8 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectGroup>
-                                            <SelectItem value="gaode">{t('tools.exampleGaode')}</SelectItem>
+                                            <SelectItem value="gaode1">高德地图（SSE 协议）</SelectItem>
+                                            <SelectItem value="gaode2">高德地图（streamable 协议）</SelectItem>
                                         </SelectGroup>
                                     </SelectContent>
                                 </Select>

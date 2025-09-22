@@ -5,7 +5,8 @@ from fastapi import (APIRouter, Body, Depends, HTTPException, Query, Request, We
                      WebSocketException)
 from fastapi import status as http_status
 from fastapi.responses import StreamingResponse
-from fastapi_jwt_auth import AuthJWT
+
+from bisheng.api.errcode.http_error import NotFoundError
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.openapi import OpenApiSchema
@@ -20,10 +21,12 @@ from bisheng.chat.types import WorkType
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.gpts_tools import GptsToolsTypeRead
+from bisheng.mcp_manage.langchain.tool import McpTool
 from bisheng.mcp_manage.manager import ClientManager
 from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
+from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(prefix='/assistant', tags=['Assistant'])
 chat_manager = ChatManager()
@@ -108,7 +111,7 @@ async def auto_update_assistant_task(*, request: Request, login_user: UserPayloa
 async def auto_update_assistant(*, task_id: str = Query(description='优化任务唯一ID')):
     task = redis_client.get(f'auto_update_task:{task_id}')
     if not task:
-        raise HTTPException(status_code=404, detail='task info not found')
+        raise NotFoundError()
     assistant_id = task['assistant_id']
     prompt = task['prompt']
 
@@ -236,7 +239,9 @@ async def mcp_tool_run(login_user: UserPayload = Depends(get_login_user),
         client = await ClientManager.connect_mcp_from_json(req.openapi_schema)
         extra = json.loads(req.extra)
         tool_name = extra.get('name')
-        resp = await client.call_tool(tool_name, req.request_params)
+        mcp_tool = McpTool.get_mcp_tool(name=tool_name, description=extra.get("description"), mcp_client=client,
+                                        mcp_tool_name=tool_name, arg_schema=extra.get('inputSchema', {}))
+        resp = await mcp_tool.arun(req.request_params)
         return resp_200(data=resp)
     except Exception as e:
         logger.exception('mcp_tool_run error')

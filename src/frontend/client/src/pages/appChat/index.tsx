@@ -39,8 +39,7 @@ export default function index() {
 
         setChatId(cid!) // 切换会话
 
-        // 无缓存，从新加载
-        if (currentData) return;
+        if (currentData) return; // 有缓存不重复加载
 
         const numericType = Number(type);
 
@@ -128,7 +127,8 @@ export default function index() {
                     inputForm: numericType !== FLOW_TYPES.WORK_FLOW || null,
                     showUpload: numericType === FLOW_TYPES.WORK_FLOW,
                     showStop: false,
-                    guideWord: flowData?.guide_question
+                    guideWord: flowData?.guide_question,
+                    showReRun: false
                 }
             }
         })

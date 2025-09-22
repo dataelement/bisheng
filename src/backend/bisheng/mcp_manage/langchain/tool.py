@@ -46,7 +46,7 @@ class McpTool(BaseModel):
                      mcp_tool_name: str, arg_schema: Any, **kwargs) -> StructuredTool:
         """Get a tool from the class."""
         c = cls(name=name, description=description, mcp_client=mcp_client,
-                mcp_tool_name=mcp_tool_name)
+                mcp_tool_name=mcp_tool_name, arg_schema=arg_schema)
         return StructuredTool(name=c.name,
                               description=c.description,
                               func=c.run,

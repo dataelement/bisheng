@@ -7,9 +7,11 @@ import { cn, copyText, formatStrTime } from "~/utils";
 import ChatFile from "./ChatFile";
 import MessageButtons from "./MessageButtons";
 import MessageSource from "./MessageSource";
+import useLocalize from "~/hooks/useLocalize";
 
 
 export const ReasoningLog = ({ loading, msg = '' }) => {
+    const t = useLocalize()
     const [open, setOpen] = useState(true)
 
     if (!msg) return null
@@ -19,13 +21,13 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
             <div className="flex justify-between items-center px-4 py-2 cursor-pointer" onClick={() => setOpen(!open)}>
                 {loading ? <div className="flex items-center font-bold gap-2 text-sm">
                     <Loader2 className="text-primary duration-300 animate-spin" />
-                    <span>思考中</span>
+                    <span>{t('com_bs_reasoning_thinking')}</span>
                 </div>
                     : <div className="flex items-center font-bold gap-2 text-sm">
                         <div className="w-5 h-5 bg-[#05B353] rounded-full p-1" >
                             <CheckIcon size={14} className='text-white' />
                         </div>
-                        <span>已深度思考</span>
+                        <span>{t('com_bs_reasoning_done')}</span>
                     </div>
                 }
                 <ChevronDown className={open && 'rotate-180'} />
@@ -43,6 +45,7 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
 export default function MessageBs({ logo, title, data, onUnlike = () => { }, onSource }:
     { logo: React.ReactNode, title: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
 
+    const t = useLocalize()
     const [message, reasoningLog] = useMemo(() => {
         const msg = typeof data.message === 'string' ? data.message : data.message.msg
         const regex = /<think>(.*?)<\/think>/s;
@@ -60,17 +63,17 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { }, onS
         copyText(messageRef.current)
     }
 
-    return <div className="flex w-full">
+    return <div className="flex w-full py-2">
         <div className="w-fit group max-w-[90%]">
             <ReasoningLog loading={!data.end && (data.reasoning_log || reasoningLog)} msg={data.reasoning_log || reasoningLog} />
             {!(data.reasoning_log && !message && !data.files.length) && <>
-                <div className="flex gap-2 items-center mb-1 ml-2">
-                    {data.sender ? <p className="text-gray-600 text-xs">{data.sender}</p> : <p />}
-                    <div className={`group-hover:opacity-100 opacity-0`}>
+                <div className="flex gap-2 items-center">
+                    {data.sender ? <p className="text-gray-600 text-xs mb-1 ml-2">{data.sender}</p> : <p />}
+                    {/* <div className={`group-hover:opacity-100 opacity-0`}>
                         <span className="text-slate-400 text-sm">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
-                    </div>
+                    </div> */}
                 </div>
-                <div className="min-h-8 px-4 py-2 rounded-2xl">
+                <div className="min-h-8 px-4 rounded-2xl">
                     <div className="flex gap-3">
                         {logo}
                         <div className="">
@@ -108,7 +111,9 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { }, onS
                         data={data.liked}
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
-                    ></MessageButtons>
+                    >
+                        <span className="text-slate-400 text-sm pt-0.5">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
+                    </MessageButtons>
                 </div>
             }
         </div>

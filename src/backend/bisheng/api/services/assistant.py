@@ -8,7 +8,7 @@ from loguru import logger
 from bisheng.api.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
                                            AssistantNotEditError, AssistantNotExistsError, ToolTypeRepeatError,
                                            ToolTypeIsPresetError)
-from bisheng.api.errcode.base import UnAuthorizedError, NotFoundError
+from bisheng.api.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
@@ -459,6 +459,8 @@ class AssistantService(BaseService, AssistantUtils):
             one.is_delete = 0
             one.is_preset = req.is_preset
 
+        tool_extra = {"api_location": req.api_location, "parameter_name": req.parameter_name}
+        req.extra = json.dumps(tool_extra, ensure_ascii=False)
         # 添加工具类别和对应的 工具列表
         res = GptsToolsDao.insert_tool_type(req)
 

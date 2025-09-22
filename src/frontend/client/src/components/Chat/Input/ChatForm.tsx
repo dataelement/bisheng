@@ -76,7 +76,7 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
     submitButtonRef,
     setIsScrollable,
     disabled: !!(requiresKey ?? false),
-    placeholder: isLingsi ? (bsConfig?.linsightConfig?.input_placeholder || '请输入你的任务目标，然后交给 BISHENG 灵思') : bsConfig?.inputPlaceholder
+    placeholder: isLingsi ? (bsConfig?.inputPlaceholder || localize('com_linsight_input_placeholder')) : bsConfig?.inputPlaceholder
   });
 
   const {
@@ -343,12 +343,12 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
               <div className='w-0.5 h-3 bg-[#4A5AA1] absolute -rotate-45'></div>
               <div className='size-1.5 rounded-full bg-[#4A5AA1] absolute bottom-0 left-0.5'></div>
             </div>
-            大模型结合业务指导手册自主规划并完成复杂任务
+            {localize('com_linsight_tagline')}
           </p>
           {bsConfig?.linsight_invitation_code &&
             <div className='flex gap-4 items-center pr-6'>
-              <span className='text-xs text-gray-500'>剩余任务次数： {count}次</span>
-              {!count && <Button size="sm" className='h-6 text-xs' onClick={() => setShowCode(true)}>去激活</Button>}
+              <span className='text-xs text-gray-500'>{localize('com_linsight_remaining_times', { count })}</span>
+              {!count && <Button size="sm" className='h-6 text-xs' onClick={() => setShowCode(true)}>{localize('com_linsight_activate')}</Button>}
             </div>
           }
         </div>
@@ -372,7 +372,7 @@ const ModelSelect = ({ options, value, onChange }: { options?: BsConfig['models'
     }
   }, [options, value])
 
-  return <Select onValueChange={onChange}>
+  return <Select value={useMemo(() => value + '', [value])} onValueChange={onChange}>
     <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent">
       <div
         className='flex gap-2'

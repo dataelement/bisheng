@@ -129,8 +129,18 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
             },
         });
 
-        return () => {
-            vditorRef.current?.destroy();
+         return () => {
+            // 1. 校验实例存在 + 初始化完成 + DOM节点存在
+            if (vditorRef.current && readyRef.current && domRef.current) {
+                try {
+                    vditorRef.current.destroy(); // 仅在安全状态下执行销毁
+                } catch (error) {
+                    console.warn('Vditor销毁时发生异常:', error); // 捕获异常避免阻断流程
+                }
+            }
+            // 2. 清空引用，释放内存
+            vditorRef.current = null;
+            readyRef.current = false;
         };
     }, []);
 
@@ -138,6 +148,8 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
 });
 
 const EditMarkdown = ({ data, active, fileSuffix, onClick, onDel, onChange, onPositionClick }) => {
+    console.log(data, active, fileSuffix ,5555555555555555);
+    
     const [edit, setEdit] = useState(false); // 编辑原始格式
     const { appConfig } = useContext(locationContext)
 
@@ -226,7 +238,7 @@ const EditMarkdown = ({ data, active, fileSuffix, onClick, onDel, onChange, onPo
 }
 
 // 分段结果列表
-export default function PreviewParagraph({ fileId, previewCount, edit, fileSuffix, loading, chunks, onDel, onChange }) {
+export default function PreviewParagraph({ fileId, previewCount, edit, fileSuffix, loading, chunks, className, onDel, onChange }) {
     const containerRef = useRef(null);
     const [visibleItems, setVisibleItems] = useState(10); // 初始加载数量
     const loadingRef = useRef(false);
@@ -269,13 +281,13 @@ export default function PreviewParagraph({ fileId, previewCount, edit, fileSuffi
         return () => container.removeEventListener('scroll', handleScroll);
     }, [chunks.length]);
 
-    return <div className=" pt-3 pb-10 relative ">
+    return <div className="pt-3 relative w-full">
         {loading && (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <LoadingIcon />
             </div>
         )}
-        <div ref={containerRef} className={`${edit ? 'h-[calc(100vh-206px)]' : 'h-[calc(100vh-284px)] mt-9'} overflow-y-auto`}
+        <div ref={containerRef} className={`${className} overflow-y-auto`}
             style={{ scrollbarWidth: 'thin' }}
         >
             <div className="space-y-6">

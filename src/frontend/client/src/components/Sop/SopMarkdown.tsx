@@ -2,15 +2,19 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import Vditor from "vditor";
 import "vditor/dist/index.css";
 import { useGetBsConfig, useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/data-provider';
+import { useLocalize } from '~/hooks';
 import { LinsightInfo } from "~/store/linsight";
 import { SopStatus } from "./SOPEditor";
 import SopToolsDown from "./SopToolsDown";
+import { useRecoilValue } from 'recoil';
+import store from '~/store';
 
 // 错误工具toolip提示
 const ToolErrorTip = () => {
+    const localize = useLocalize();
     const [tooltipState, setTooltipState] = useState({
         show: false,
-        message: '错误变量',
+        message: localize('com_sop_tool_error'),
         position: { left: 0, top: 0 }
     });
     const currentElementRef = useRef<HTMLElement | null>(null);
@@ -25,7 +29,7 @@ const ToolErrorTip = () => {
         const rect = target.getBoundingClientRect();
         setTooltipState({
             show: true,
-            message: '⚠️ 工具或资源不存在，请重新选择',
+            message: localize('com_sop_tool_not_found'),
             position: {
                 left: rect.left + rect.width / 2,
                 top: rect.top - 4
@@ -105,6 +109,7 @@ interface MarkdownRef {
 const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
     const { linsight, edit, onChange } = props;
     const { sop: value = '', inputSop, files, tools } = linsight
+    const localize = useLocalize()
 
     const veditorRef = useRef<any>(null);
     const inserRef = useRef<any>(null);
@@ -114,6 +119,17 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
 
     const { nameToValueRef, valueToNameRef, buildTreeData: toolOptions } = useSopTools(linsight)
     const [RenderingCompleted, setRenderingCompleted] = useState(false);
+
+    const currentLang = useRecoilValue(store.lang);
+
+    // 将应用语言映射为 Vditor 支持的语言
+    const mapLangToVditor = (lang: string) => {
+        const lower = (lang || 'en').toLowerCase();
+        if (lower.startsWith('zh')) return 'zh_CN';
+        if (lower.startsWith('ja')) return 'ja_JP';
+        if (lower.startsWith('ko')) return 'ko_KR';
+        return 'en_US';
+    };
 
     useEffect(() => {
         const vditorDom = document.getElementById('vditor');
@@ -129,6 +145,7 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
             height: boxRef.current.clientHeight,
             mode: "wysiwyg",
             placeholder: "",
+            lang: mapLangToVditor(currentLang),
             after() {
                 setRenderingCompleted(true);
                 veditorRef.current = vditor;
@@ -148,7 +165,7 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
                 parse: false, // 必须
                 placeholder: {
                     delay: 2000,
-                    text: "输入 @ 添加知识库、文件或工具",
+                    text: localize('com_agent_input_knowledge_tool'),
                 },
                 extend: [{
                     key: '@',
@@ -182,7 +199,7 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
             veditorRef.current?.destroy();
             veditorRef.current = null
         };
-    }, []);
+    }, [currentLang]);
 
     useEffect(() => {
         // 用户手动输入不再更新setValue markdown
@@ -247,6 +264,7 @@ export default SopMarkdown;
 const useSopTools = (linsight) => {
     const { id, files, file_list, tools, org_knowledge_enabled, personal_knowledge_enabled } = linsight
     const { data: bsConfig } = useGetBsConfig()
+    const localize = useLocalize()
 
     const { data: linsightTools } = useGetLinsightToolList();
     const { data: personalTool } = useGetPersonalToolList();
@@ -263,13 +281,13 @@ const useSopTools = (linsight) => {
         // 1. 转换files数据
         if (files?.length > 0) {
             const fileNode: any = {
-                label: "上传文件",
+                label: localize('com_sop_upload_file'),
                 value: "",
                 desc: '',
                 children: []
             };
-            const _name = "上传文件所在目录";
-            const _value = `上传文件所在目录:${bsConfig?.linsight_cache_dir}/${id?.substring(0, 8)}`;
+            const _name = localize('com_sop_upload_file_directory');
+            const _value = `${localize('com_sop_upload_file_directory')}:${bsConfig?.linsight_cache_dir}/${id?.substring(0, 8)}`;
             nameToValueRef.current[_name] = _value;
             valueToNameRef.current[_value] = _name;
 
@@ -305,7 +323,7 @@ const useSopTools = (linsight) => {
         // 2. 转换orgTools数据
         if (org_knowledge_enabled && orgTools && orgTools.length > 0) {
             tree.push({
-                label: "组织知识库",
+                label: localize('com_sop_organize_knowledge_base'),
                 value: "org_knowledge_base", // 使用特殊标识避免ID冲突
                 desc: '',
                 children: orgTools.map(tool => {
@@ -326,7 +344,8 @@ const useSopTools = (linsight) => {
         // 3. 转换PersonalTool数据（单对象转数组）
         if (personal_knowledge_enabled && personalTool && personalTool[0]) {
             tree.push({
-                label: personalTool[0].name,
+                // label: personalTool[0].name,
+                label: localize('com_sop_personal_knowledge_base'),
                 value: personalTool[0].id,
                 desc: '',
                 children: [] // 个人知识库没有子节点
@@ -383,7 +402,7 @@ const useSopTools = (linsight) => {
         }
 
         return tree;
-    }, [linsightTools, personalTool, orgTools, files, tools]);
+    }, [linsightTools, personalTool, orgTools, files, tools, localize]);
 
     console.log('整合后的树结构:', buildTreeData);
     return { nameToValueRef, valueToNameRef, buildTreeData };

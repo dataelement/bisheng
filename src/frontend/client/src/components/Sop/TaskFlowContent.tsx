@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { SendIcon } from '~/components/svg';
+import { useLocalize } from '~/hooks';
 import { playDing } from '~/utils';
 import Markdown from '../Chat/Messages/Content/Markdown';
 import DownIcon from '../svg/DownIcon';
@@ -33,6 +34,8 @@ const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
 
 const Tool = ({ data, setCurrentDirectFile }) => {
     const { name, step_type, params, extra_info } = data;
+    const localize = useLocalize();
+
     // 过滤尾部hash值
     const toolName = useMemo(() => {
         const lastUnderscoreIndex = name.lastIndexOf('_');
@@ -49,15 +52,15 @@ const Tool = ({ data, setCurrentDirectFile }) => {
 
     // 工具名称映射
     const nameMap = {
-        web_search: "正在联网搜索",
-        search_knowledge_base: "正在检索知识库",
-        list_files: "正在查询目录",
-        get_file_details: "正在获取文件详细信息",
-        search_files: "正在搜索文件",
-        read_text_file: "正在阅读文件",
-        add_text_to_file: "正在向文件添加内容",
-        replace_file_lines: "正在编辑文件",
-        default: `正在使用 ${toolName} 工具`
+        web_search: localize('com_sop_web_search'),
+        search_knowledge_base: localize('com_sop_search_knowledge_base'),
+        list_files: localize('com_sop_list_files'),
+        get_file_details: localize('com_sop_get_file_details'),
+        search_files: localize('com_sop_search_files'),
+        read_text_file: localize('com_sop_read_text_file'),
+        add_text_to_file: localize('com_sop_add_text_to_file'),
+        replace_file_lines: localize('com_sop_replace_file_lines'),
+        default: localize('com_sop_using_tool', { 0: toolName })
     };
 
     // 参数键名映射
@@ -125,6 +128,8 @@ const Task = ({
 }) => {
     const [isExpanded, setIsExpanded] = useState(true);
     const [inputValue, setInputValue] = useState('');
+    const localize = useLocalize();
+
     // 根据状态选择对应的图标
     const renderStatusIcon = () => {
         const status = (task.children?.some(child => child.status === 'user_input') && 'user_input') || task.status;
@@ -251,14 +256,14 @@ const Task = ({
             {task.event_type === "user_input" && (
                 <div className='bg-[#F3F4F6] border border-[#dfdede] rounded-2xl px-5 py-4 my-2 relative'>
                     <div>
-                        <span className='bg-[#D5E3FF] p-1 px-2 text-xs text-primary rounded-md'>等待输入</span>
+                        <span className='bg-[#D5E3FF] p-1 px-2 text-xs text-primary rounded-md'>{localize('com_sop_waiting_input')}</span>
                         <span className='pl-3 text-sm'>{task.call_reason}</span>
                     </div>
                     <div>
                         <Textarea
                             id={task.id}
-                            placeholder="请输入"
-                            className='border-none ![box-shadow:initial] pl-0 pr-10 pt-4 h-auto'
+                            placeholder={localize('com_sop_please_input')}
+                            className='border-none bg-transparent ![box-shadow:initial] pl-0 pr-10 pt-4 h-auto'
                             rows={1}
                             value={inputValue}
                             maxLength={10000}
@@ -284,7 +289,7 @@ const Task = ({
                 </div>}
             </div>
             {/* error */}
-            {task.status === 'failed' && task.errorMsg && <ErrorDisplay title="任务执行中断" taskError={task.errorMsg} />}
+            {task.status === 'failed' && task.errorMsg && <ErrorDisplay title={localize('com_sop_task_execution_interrupted')} taskError={task.errorMsg} />}
         </div>
     );
 };
@@ -298,6 +303,8 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
     const [currentPreviewFileId, setCurrentPreviewFileId] = useState<string>("")
     const [currentDirectFile, setCurrentDirectFile] = useState<any>(null)
+    const localize = useLocalize();
+
     // 由卡片触发抽屉展开
     const [triggerDrawerFromCard, setTriggerDrawerFromCard] = useState(false)
     useFoucsInput(tasks);
@@ -336,35 +343,36 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
 
         let timeText;
         if (hours > 0) {
-            timeText = `${hours} 小时 ${minutes} 分钟`;
+            timeText = `${hours} ${localize('com_sop_hours')} ${minutes} ${localize('com_sop_minutes')}`;
         } else {
-            timeText = `${minutes} 分钟`;
+            timeText = `${minutes} ${localize('com_sop_minutes')}`;
         }
 
         return (
             <div className='size-full flex flex-col items-center justify-center text-sm'>
                 <img src={__APP_ENV__.BASE_URL + '/assets/queue.png'} alt="" />
-                <p className='mt-9'>目前使用人数较多，正在排队中...</p>
-                <p className='mt-4 font-bold'>预计等待 {timeText}</p>
+                <p className='mt-9'>{localize('com_sop_queue_message')}</p>
+                <p className='mt-4 font-bold'>{localize('com_sop_estimated_wait')} {timeText}</p>
             </div>
         );
     }
 
+    console.log('tasks :>> ', tasks);
     return (
         <div className="w-[80%] mx-auto p-5 text-gray-800 leading-relaxed">
             {/* load */}
             {!tasks?.length && status === SopStatus.Running && <p className='mt-0.5 text-sm flex gap-2'>
                 <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/load.webp'} alt="" />
-                正在整理内容...
+                {localize('com_sop_organizing_content')}
             </p>}
             {/* {!tasks?.length && <PlaySop content={sop} />} */}
             {/* 任务 */}
             {!!tasks?.length && <div className='pl-6'>
-                <p className='text-sm text-gray-400 mt-6 mb-4'>规划任务执行路径：</p>
+                <p className='text-sm text-gray-400 mt-6 mb-4'>{localize('com_sop_plan_task_path')}</p>
                 {tasks.map((task, i) => (
                     <p key={task.id} className='leading-7'>{i + 1}. {task.name}</p>
                 ))}
-                <p className='text-sm text-gray-400 mt-6 mb-4'>接下来为你执行对应任务：</p>
+                <p className='text-sm text-gray-400 mt-6 mb-4'>{localize('com_sop_execute_tasks')}</p>
             </div>}
             {
                 tasks?.map((task, i) => <Task
@@ -394,7 +402,7 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                 )
             }
             {/* error */}
-            {taskError && <ErrorDisplay title="任务执行中断" taskError={taskError} />}
+            {taskError && <ErrorDisplay title={localize('com_sop_task_execution_interrupted')} taskError={taskError} />}
             {/* 总结 */}
             {
                 summary && <div className='relative mb-6 text-sm px-4 py-3 rounded-lg bg-[#F8F9FB] text-[#303133] leading-6 break-all'>
@@ -449,7 +457,7 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                                 </div>
                                 <div className='relative flex pt-3 gap-2 items-center'>
                                     <FileIcon type="dir" className='size-4 min-w-4' />
-                                    <span className='text-sm truncate pr-6'>查看此任务中的所有文件</span>
+                                    <span className='text-sm truncate pr-6'>{localize('com_sop_view_all_files')}</span>
                                     <Button variant="ghost" className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
                                         <ArrowRight size={16} />
                                     </Button>

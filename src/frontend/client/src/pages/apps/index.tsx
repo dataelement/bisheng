@@ -10,11 +10,13 @@ import { useDebounce } from '~/components/ui/MultiSelect'
 import { useGetBsConfig } from '~/data-provider'
 import { ConversationData, QueryKeys } from "~/data-provider/data-provider/src"
 import useToast from '~/hooks/useToast'
+import { useLocalize } from '~/hooks'
 import store from "~/store"
 import { addConversation, generateUUID } from "~/utils"
 import { AgentGrid } from "./components/AgentGrid"
 import { AgentNavigation } from "./components/AgentNavigation"
 import { SearchOverlay } from "./components/SearchOverlay"
+import { atom } from 'recoil'
 
 export default function AgentCenter() {
     const [searchQuery, setSearchQuery] = useState("")
@@ -30,6 +32,8 @@ export default function AgentCenter() {
     }
 
     const { showToast } = useToast()
+    const localize = useLocalize()
+    const categoryIdRef = useRef<string>("")
 
     const handleCategoryChange = (categoryId: string) => {
         console.log("点击的标签ID:", categoryId, "当前搜索状态:", isSearching);
@@ -40,6 +44,7 @@ export default function AgentCenter() {
             setSearchQuery("");
             setIsSearching(false);
         }
+        categoryIdRef.current = categoryId;
 
         // 2. 定义核心滚动逻辑
         const performScroll = () => {
@@ -110,55 +115,55 @@ export default function AgentCenter() {
         }
     };
 
-// 修改handleSearchChange函数，实现多页数据加载
-const handleSearchChange = async (query: string) => {
-    if (query.trim()) {
-        setIsSearching(true);
-        setSearchLoading(true);
-        let allResults: any[] = []; // 存储所有页的结果
-        let currentPage = 1;
-        const pageSize = 8; // 每页条数（和接口保持一致）
+    // 修改handleSearchChange函数，实现多页数据加载
+    const handleSearchChange = async (query: string) => {
+        if (query.trim()) {
+            setIsSearching(true);
+            setSearchLoading(true);
+            let allResults: any[] = []; // 存储所有页的结果
+            let currentPage = 1;
+            const pageSize = 80; // 每页条数（和接口保持一致）
 
-        try {
-            // 循环加载所有页数据
-            while (true) {
-                // 调用接口，禁用默认限制（或按实际需要调整）
-                const result = await getChatOnlineApi(
-                    currentPage, 
-                    query, 
-                    -1, 
-                    true // 禁用默认限制，或根据接口逻辑调整
-                );
-                
-                const pageData = result.data || [];
-                allResults = [...allResults, ...pageData];
+            try {
+                // 循环加载所有页数据
+                while (true) {
+                    // 调用接口，禁用默认限制（或按实际需要调整）
+                    const result = await getChatOnlineApi(
+                        currentPage,
+                        query,
+                        -1,
+                        pageSize // 禁用默认限制，或根据接口逻辑调整
+                    );
 
-                // 终止条件：当前页数据不足一页，说明已加载完所有数据
-                if (pageData.length < pageSize) {
-                    break;
+                    const pageData = result.data || [];
+                    allResults = [...allResults, ...pageData];
+
+                    // 终止条件：当前页数据不足一页，说明已加载完所有数据
+                    if (pageData.length < pageSize) {
+                        break;
+                    }
+
+                    currentPage++; // 加载下一页
                 }
 
-                currentPage++; // 加载下一页
+                // 处理可能的id字段映射（确保id存在）
+                const formattedResults = allResults.map(item => ({
+                    ...item,
+                    id: item.id || item.agentId || item.flowId // 兼容不同字段名
+                }));
+
+                setSearchResults(formattedResults);
+            } catch (error) {
+                console.error("搜索失败:", error);
+                setSearchResults([]);
+            } finally {
+                setSearchLoading(false);
             }
-
-            // 处理可能的id字段映射（确保id存在）
-            const formattedResults = allResults.map(item => ({
-                ...item,
-                id: item.id || item.agentId || item.flowId // 兼容不同字段名
-            }));
-
-            setSearchResults(formattedResults);
-        } catch (error) {
-            console.error("搜索失败:", error);
+        } else {
+            setIsSearching(false);
             setSearchResults([]);
-        } finally {
-            setSearchLoading(false);
         }
-    } else {
-        setIsSearching(false);
-        setSearchResults([]);
-    }
-};
+    };
 
     const handleSearch = useDebounce(handleSearchChange, 360, false)
 
@@ -178,15 +183,8 @@ const handleSearchChange = async (query: string) => {
             mappedType = 'workflow';
         }
 
-
         const res = await addToFrequentlyUsed(mappedType, id);
         console.log(res);
-        if (res.status_code === 500) {
-            showToast({
-                status: 'error',
-                message: '该智能体已被添加',
-            });
-        }
         // 成功时更新收藏列表
         setFavorites(res.data);
         return res;
@@ -252,8 +250,8 @@ const handleSearchChange = async (query: string) => {
             <div className="sticky top-0 z-40 bg-background">
                 <div className="container mx-auto px-6 py-6">
                     <div className="mt-2">
-                        <h1 className="text-blue-600 text-[32px] truncate max-w-[600px] font-medium mb-2">{bsConfig?.applicationCenterWelcomeMessage || '探索BISHENG的智能体'}</h1>
-                        <p className="text-muted-foreground text-base truncate max-w-[600px]">{bsConfig?.applicationCenterDescription || '您可以在这里选择需要的智能体来进行生产与工作～'}</p>
+                        <h1 className="text-blue-600 text-[32px] truncate max-w-[600px] font-medium mb-2">{bsConfig?.applicationCenterWelcomeMessage || localize('com_app_center_welcome')}</h1>
+                        <p className="text-muted-foreground text-base truncate max-w-[600px]">{bsConfig?.applicationCenterDescription || localize('com_app_center_description')}</p>
                     </div>
                     <div className="mt-12 flex items-start justify-between">
                         <AgentNavigation onCategoryChange={handleCategoryChange} onRefresh={refreshAgentData} />
@@ -261,7 +259,7 @@ const handleSearchChange = async (query: string) => {
                             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-500 w-4 h-4" />
                             <Input
                                 type="text"
-                                placeholder="搜索您需要的智能体"
+                                placeholder={localize('com_agent_search_placeholder')}
                                 value={searchQuery}
                                 onChange={(e) => {
                                     setSearchQuery(e.target.value)
@@ -285,16 +283,16 @@ const handleSearchChange = async (query: string) => {
             {/* Scrollable Content */}
             <div className="relative" style={{ height: "calc(100vh - 200px)" }}>
                 <div ref={scrollContainerRef} className="container mx-auto px-6 py-6 pb-96 h-full overflow-y-auto scrollbar-hide">
-                    
-                        <AgentGrid
-                            favorites={favorites}
-                            onAddToFavorites={addToFavorites}
-                            onRemoveFromFavorites={removeFromFavorites}
-                            sectionRefs={sectionRefs}
-                            refreshTrigger={refreshTrigger}
-                            onCardClick={handleCardClick}
-                        />
-                     {isSearching &&(
+
+                    <AgentGrid
+                        favorites={favorites}
+                        onAddToFavorites={addToFavorites}
+                        onRemoveFromFavorites={removeFromFavorites}
+                        sectionRefs={sectionRefs}
+                        refreshTrigger={refreshTrigger}
+                        onCardClick={handleCardClick}
+                    />
+                    {isSearching && (
                         <SearchOverlay
                             query={searchQuery}
                             results={searchResults}
@@ -311,3 +309,9 @@ const handleSearchChange = async (query: string) => {
         </div>
     )
 }
+
+/* 添加常用应用 */
+export const addCommonlyAppState = atom<Record<string, { id: string, type: number }>>({
+    key: "addCommonlyAppState",
+    default: null,
+})

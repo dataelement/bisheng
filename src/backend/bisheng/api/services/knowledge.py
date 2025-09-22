@@ -10,7 +10,7 @@ from fastapi import BackgroundTasks, Request
 from loguru import logger
 from pymilvus import Collection
 
-from bisheng.api.errcode.base import NotFoundError, UnAuthorizedError, ServerError
+from bisheng.api.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
 from bisheng.api.errcode.knowledge import (
     KnowledgeChunkError,
     KnowledgeExistError,
@@ -612,7 +612,9 @@ class KnowledgeService(KnowledgeUtils):
         db_file.status = KnowledgeFileStatus.PROCESSING.value  # 解析中
         db_file = await KnowledgeFileDao.async_update(db_file)
 
-        preview_cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path="", md5_value=db_file.md5)
+        file_path, _ = cls.get_file_share_url(db_file.id)
+
+        preview_cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path=file_path)
         file_worker.retry_knowledge_file_celery.delay(db_file.id, preview_cache_key, req_data.callback_url)
 
         return db_file.model_dump()

@@ -5,7 +5,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { retryKnowledgeFileApi, subUploadLibFile } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ChevronLeft } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import FileUploadStep1 from "./components/FileUploadStep1";
@@ -60,10 +60,10 @@ export default function FilesUpload() {
 
   // 步骤3：原文对比回调，控制下一步按钮禁用状态
   const handlePreviewResult = (isSuccess) => {
-     if (currentStep === 3) {
-    console.log("更新按钮状态：", { isSuccess, currentStep });
-    setIsNextDisabled(!isSuccess);
-  }
+    if (currentStep === 3) {
+      console.log("更新按钮状态：", { isSuccess, currentStep });
+      setIsNextDisabled(!isSuccess);
+    }
   };
 
   // 下一步：按当前步骤跳转
@@ -111,10 +111,18 @@ export default function FilesUpload() {
     submittingRef.current = true;
     setIsSubmitting(true);
 
+    /**
+     * 将 UI 可见的换行转义("\\n")还原为真实换行("\n")
+     */
+    const normalizeSeparators = (arr) =>
+      (arr || []).map((s) =>
+        typeof s === 'string' ? s.replace(/\\n/g, '\n') : s
+      );
+
     // 正常模式API参数格式
     const apiConfig = {
       knowledge_id: Number(_config.rules.knowledgeId || knowledgeId),
-      separator: _config.rules.separator,
+      separator: normalizeSeparators(_config.rules.separator),
       separator_rule: _config.rules.separatorRule,
       chunk_size: _config.rules.chunkSize,
       chunk_overlap: _config.rules.chunkOverlap,
@@ -183,7 +191,6 @@ export default function FilesUpload() {
       repeatCallBackRef.current();
     }));
   };
-
   return (
     <div className="relative h-full flex flex-col">
       {/* 顶部返回栏 */}
@@ -193,7 +200,7 @@ export default function FilesUpload() {
             variant="outline"
             size="icon"
             className="bg-[#fff] size-8"
-            onClick={handleBack}
+            onClick={() => navigate(-1)}
           >
             <ChevronLeft />
           </Button>
@@ -211,66 +218,65 @@ export default function FilesUpload() {
       {/* 步骤内容区域（正常模式专属步骤） */}
       <div className="flex flex-1 overflow-hidden px-4">
         <div className="w-full overflow-y-auto">
-          <div className="h-full py-4">
+          <div className="h-full">
             {/* 步骤1：文件上传（正常模式独有） */}
             {currentStep === 1 && (
               <FileUploadStep1
                 onNext={handleStep1Next}
                 onSave={handleSaveByDefaultConfig}
                 kId={knowledgeId} // 传递知识库ID
+                initialFiles={resultFiles}
               />
             )}
             {/* 步骤2：分段策略 */}
-            {currentStep === 2 && (
-              <FileUploadStep2
-                ref={fileUploadStep2Ref}
-                step={currentStep}
-                resultFiles={resultFiles}
-                isSubmitting={isSubmitting}
-                onNext={handleStep2Next}
-                onPrev={handleBack}
-                kId={knowledgeId}
-              />
-            )}
+           {currentStep >= 2 && ( // 步骤2或3时，第二步始终挂载（仅控制显示）
+        <div className={currentStep === 2 ? "block" : "hidden"}>
+          <FileUploadStep2
+            ref={fileUploadStep2Ref}
+            step={currentStep}
+            resultFiles={resultFiles}
+            isSubmitting={isSubmitting}
+            onNext={handleStep2Next}
+            onPrev={handleBack}
+            kId={knowledgeId}
+          />
+        </div>
+      )}
+
 
             {/* 步骤3：原文对比 */}
-            {currentStep === 3 && segmentRules && (
-              <>
-                <PreviewResult
-                  rules={segmentRules.rules}
-                  resultFiles={resultFiles}
-                  handlePreviewResult={handlePreviewResult }
-                  onPrev={handleBack}
-                  onNext={() => {
-                    setCurrentStep(4);
-                    handleSave(segmentRules);
-                  }}
-                  step={currentStep}
-                  previewCount={0}
-                  applyEachCell={segmentRules.applyEachCell}
-                  cellGeneralConfig={segmentRules.cellGeneralConfig}
-                />
+                {currentStep === 3 && segmentRules && (
+        <div className="block"> {/* 第三步显示时，第二步被隐藏但不卸载 */}
+          <PreviewResult
+            rules={segmentRules.rules}
+            resultFiles={resultFiles}
+            handlePreviewResult={handlePreviewResult}
+            onPrev={handleBack}
+            onNext={() => {
+              setCurrentStep(4);
+              handleSave(segmentRules);
+            }}
+            step={currentStep}
+            previewCount={0}
+            applyEachCell={segmentRules.applyEachCell}
+            cellGeneralConfig={segmentRules.cellGeneralConfig}
+            kId={knowledgeId}
+            showPreview={true}
+          />
 
-                {/* 步骤3底部按钮（固定） */}
-                <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
-                  <Button
-                    className="h-8"
-                    variant="outline"
-                    onClick={handleBack}
-                  >
-                    {t('previousStep')}
-                  </Button>
-                  <Button
-                    className="h-8"
-                    onClick={handleNext}
-                    disabled={isNextDisabled || isSubmitting}
-                  >
-                    {isSubmitting ? <LoadingIcon className="h-4 w-4 mr-1" /> : null}
-                    {t('nextStep')}
-                  </Button>
-                </div>
-              </>
-            )}
+          {/* 步骤3底部按钮 */}
+          <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
+            <Button variant="outline" onClick={handleBack}>
+              {t('previousStep')}
+            </Button>
+            <Button onClick={handleNext} disabled={isNextDisabled || isSubmitting}>
+              {isSubmitting ? <LoadingIcon className="h-4 w-4 mr-1" /> : null}
+              {t('nextStep')}
+            </Button>
+          </div>
+        </div>
+      )}
+
 
             {/* 步骤4：数据处理 */}
             {currentStep === 4 && (

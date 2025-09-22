@@ -17,6 +17,8 @@ import { useGenTitleMutation, useGetStartupConfig, useGetUserBalance } from '~/d
 import { useAuthContext } from '~/hooks/AuthContext';
 import useEventHandlers from './useEventHandlers';
 import store from '~/store';
+import useLocalize from '../useLocalize';
+import { getErrorI18nKey } from '~/pages/appChat/store/constants';
 
 type ChatHelpers = Pick<
   EventHandlerParams,
@@ -78,6 +80,7 @@ export default function useSSE(
   const balanceQuery = useGetUserBalance({
     enabled: !!isAuthenticated && startupConfig?.checkBalance,
   });
+  const localize = useLocalize();
 
   useEffect(() => {
     if (submission == null || Object.keys(submission).length === 0) {
@@ -223,7 +226,11 @@ export default function useSSE(
         setIsSubmitting(false);
       }
 
-      errorHandler({ data, submission: { ...submission, userMessage } as EventSubmission });
+      // localize
+      const _data = {
+        text: localize(getErrorI18nKey(data?.status_code), data?.data),
+      }
+      errorHandler({ data: _data, submission: { ...submission, userMessage } as EventSubmission });
     });
 
     setIsSubmitting(true);

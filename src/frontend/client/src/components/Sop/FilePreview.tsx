@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import '../../markdown.css';
 import Markdown from '../Chat/Messages/Content/Markdown';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui";
+import { useLocalize } from "~/hooks";
 
 interface FilePreviewProps {
     // 原有方式：通过 fileId 查找文件
@@ -12,6 +13,7 @@ interface FilePreviewProps {
 }
 
 export default function FilePreview({ files, fileId, currentDisplayFile }: FilePreviewProps) {
+    const localize = useLocalize();
     // 获取当前文件信息
     const currentFile = useMemo(() => {
         if (currentDisplayFile) {
@@ -34,7 +36,7 @@ export default function FilePreview({ files, fileId, currentDisplayFile }: FileP
 
     const render = () => {
         if (!currentFile && !currentFile?.file_url) {
-            return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>
+            return <div className="flex justify-center items-center h-full text-gray-400">{localize('com_sop_preview_failed')}</div>
         }
 
         const { file_url, file_name } = currentFile
@@ -75,7 +77,7 @@ export default function FilePreview({ files, fileId, currentDisplayFile }: FileP
                     alt={file_name}
                 />
             default:
-                return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>
+                return <div className="flex justify-center items-center h-full text-gray-400">{localize('com_sop_preview_failed')}</div>
         }
     }
 
@@ -94,6 +96,7 @@ const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath }
     const [content, setContent] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const localize = useLocalize();
 
     useEffect(() => {
         if (!filePath) {
@@ -135,7 +138,7 @@ const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath }
     if (error) {
         return (
             <div className="p-4 text-sm text-red-500">
-                Error loading file: {error}
+                {localize('com_sop_file_load_error')}: {error}
             </div>
         );
     }
@@ -154,7 +157,7 @@ const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath }
 
     return (
         <div className="p-4 text-sm whitespace-pre-wrap bg-gray-50 rounded border border-gray-200 h-full overflow-y-auto">
-            {content || <span className="text-gray-400">(Empty file)</span>}
+            {content || <span className="text-gray-400">({localize('com_sop_empty_file')})</span>}
         </div>
     );
 };

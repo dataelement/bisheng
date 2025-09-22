@@ -3,9 +3,12 @@ from typing import Any, Dict
 
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
+from pydantic import BaseModel
+
+from bisheng_langchain.gpts.assistant import ConfigurableAssistant
+from bisheng_langchain.gpts.load_tools import load_tools
 from langgraph.prebuilt import create_react_agent
 from loguru import logger
-from pydantic import BaseModel, field_validator
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.llm import LLMService

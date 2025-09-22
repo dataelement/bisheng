@@ -135,7 +135,7 @@ export default function ChatFiles({ v, accepts, onChange }) {
 
         if (remainingUploadsRef.current === 0) {
             // If no files remain, trigger onChange immediately
-            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ id: f.id, name: f.name }));
+            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
             onChange(uploadedFileIds); // Trigger onChange with uploaded file IDs
         }
     };

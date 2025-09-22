@@ -117,10 +117,13 @@ export async function getChatHistoryApi(flowId: string, chatId: string, flowType
                 }
             })
 
+            let chatKey = Number(flowType) === 5 ? 'input' : (typeof message === 'string' ? undefined : Object.keys(message)[0]);
+            chatKey = chatKey === 'data' ? 'query' : chatKey // 排除data
+
             return {
                 ...other,
                 category: _category,
-                chatKey: Number(flowType) === 5 ? 'input' : (typeof message === 'string' ? undefined : Object.keys(message)[0]),
+                chatKey,
                 end: true,
                 files: _files,
                 isSend: _isSend,
@@ -159,7 +162,7 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
         });
 
         return Object.keys(fileMap).map(fileId => {
-            const { file_id: id, source: fileName, source_url: fileUrl, original_url: originUrl, ...other } = fileMap[fileId][0]
+            const { file_id: id, source: fileName, source_url, original_url: originUrl, ...other } = fileMap[fileId][0]
 
             const chunks = fileMap[fileId].sort((a, b) => b.score - a.score)
                 .map(chunk => ({
@@ -168,7 +171,20 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
                 }))
             const score = chunks[0].score
 
-            return { id, fileName, fileUrl, originUrl, chunks, ...other, score }
+            // 兼容后端历史逻辑
+            let fileUrl = ''
+            let suffix = fileName.split('.').pop().toLowerCase()
+            let isNew = false
+            if (['uns', 'local'].includes(other.parse_type)) {
+                fileUrl = other.chunk_bboxes ? source_url : originUrl;
+                if (other.chunk_bboxes) {
+                    suffix = 'pdf'
+                }
+            } else if (['etl4lm', 'un_etl4lm'].includes(other.parse_type)) {
+                fileUrl = source_url || originUrl
+                isNew = true
+            }
+            return { id, fileName, suffix, isNew, fileUrl, originUrl, chunks, ...other, score }
         }).sort((a, b) => b.score - a.score)
     } catch (error) {
         console.error(error);
@@ -304,12 +320,11 @@ export async function getFrequently(page, limit) {
 export async function addToFrequentlyUsed(user_link_type, type_detail) {
     return await request.post('/api/v1/workstation/app/frequently_used', {
         user_link_type, type_detail
-    });
+    }, { showError: true });
 }
 
 // 从常用列表移除
 export async function removeFromFrequentlyUsed(user_id, type, type_detail) {
-    console.log(user_id, type, type_detail, 881);
 
     const url = `/api/v1/workstation/app/frequently_used?user_id=${user_id}&user_link_type=${type}&type_detail=${type_detail}`;
     return await request.delete(url);
@@ -339,13 +354,11 @@ export async function getAppsApi({ page = 1, pageSize = 8, keyword, tag_id = -1,
 }
 
 
-export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = false) => {
-    console.log(disableLimit, 2);
-
+export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = 8) => {
     const params = {
         page,
         keyword,
-        ...(disableLimit ? {} : { limit: 8 }),
+        limit: disableLimit
     }
     if (tag_id !== -1 && tag_id != null) {
         params.tag_id = tag_id

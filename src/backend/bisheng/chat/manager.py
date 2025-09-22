@@ -6,11 +6,13 @@ from collections import defaultdict
 from queue import Queue
 from typing import Any, Dict, List
 
-from bisheng.utils import generate_uuid
-from bisheng_langchain.input_output.output import Report
 from fastapi import Request, WebSocket, WebSocketDisconnect, status
 from loguru import logger
 
+from bisheng.api.errcode.base import BaseErrorCode
+from bisheng.api.errcode.chat import (DocumentParseError, InputDataParseError,
+                                      LLMExecutionError, SkillDeletedError,
+                                      SkillNotOnlineError)
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import build_flow_no_yield, get_request_ip
@@ -24,14 +26,14 @@ from bisheng.chat.types import IgnoreException, WorkType
 from bisheng.chat.utils import process_node_data
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow, FlowType, FlowDao
-from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.graph.utils import find_next_node
 from bisheng.processing.process import process_tweaks
+from bisheng.utils import generate_uuid
 from bisheng.utils.threadpool import ThreadPoolManager, thread_pool
 from bisheng.utils.util import get_cache_key
-
+from bisheng_langchain.input_output.output import Report
 
 
 class ChatHistory(Subject):
@@ -316,11 +318,11 @@ class ChatManager:
                             }
                         })
                         if message:
-                            logger.info('act=new_chat message={}', message)
-                            erro_resp = ChatResponse(intermediate_steps=message, **base_param)
+                            logger.info('act=new_chat message={}', str(message))
+                            erro_resp = ChatResponse(intermediate_steps=str(message), **base_param)
                             erro_resp.category = 'error'
-                            await self.send_json(flow_id, chat_id, erro_resp, add=False)
-                            continue
+                            await message.websocket_close_message(websocket=websocket)
+                            break
                         logger.info('act=new_chat_init_success key={}', key)
                         key_list.add(key)
                     if not payload.get('inputs'):
@@ -359,11 +361,12 @@ class ChatManager:
                             erro_resp = ChatResponse(**base_param)
                             context = context_dict.get(future_key)
                             if context.get('status') == 'init':
-                                erro_resp.intermediate_steps = f'LLM 技能执行错误. error={str(e)}'
+                                raise LLMExecutionError(exception=e, error=str(e))
                             elif context.get('has_file'):
-                                erro_resp.intermediate_steps = f'文档解析失败，点击输入框上传按钮重新上传\n\n{str(e)}'
+                                raise DocumentParseError(exception=e, error=str(e))
                             else:
-                                erro_resp.intermediate_steps = f'Input data is parsed fail. error={str(e)}'
+                                raise InputDataParseError(exception=e, error=str(e))
+
                             context['status'] = 'init'
                             await self.send_json(context.get('flow_id'), context.get('chat_id'),
                                                  erro_resp)
@@ -372,6 +375,14 @@ class ChatManager:
                                                  erro_resp)
         except WebSocketDisconnect as e:
             logger.info(f'act=rcv_client_disconnect {str(e)}')
+        except BaseErrorCode as e:
+            # 业务异常
+            logger.error(str(e))
+            erro_resp = ChatResponse(intermediate_steps=str(e), **base_param, message=json.dumps(e.to_dict()))
+            erro_resp.category = 'error'
+            await self.send_json(flow_id, chat_id, erro_resp)
+            erro_resp.type = 'close'
+            await self.send_json(flow_id, chat_id, erro_resp)
         except Exception as e:
             # Handle any exceptions that might occur
             logger.exception(str(e))
@@ -500,13 +511,13 @@ class ChatManager:
 
     def preper_reuse_connection(self, flow_id: str, chat_id: str, websocket: WebSocket):
         # 设置复用的映射关系
-        message = ''
+        message = None
         with session_getter() as session:
             gragh_data = session.get(Flow, flow_id)
             if not gragh_data:
-                message = '该技能已被删除'
+                message = SkillDeletedError()
             if gragh_data.status != 2:
-                message = '当前技能未上线，无法直接对话'
+                message = SkillNotOnlineError()
         gragh_data = gragh_data.data
         self.reuse_connect(flow_id, chat_id, websocket)
         return gragh_data, message

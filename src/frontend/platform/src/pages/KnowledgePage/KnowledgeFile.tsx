@@ -1,6 +1,5 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/bs-ui/button";
-import TipPng from "@/assets/Vector.svg";
 import { Input, SearchInput } from "../../components/bs-ui/input";
 import {
     Table,
@@ -11,23 +10,34 @@ import {
     TableRow
 } from "../../components/bs-ui/table";
 
-import { useContext, useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { Textarea } from "../../components/bs-ui/input";
-import { userContext } from "../../contexts/userContext";
-import { copyLibDatabase, createFileLib, deleteFileLib, readFileLibDatabase, updateKnowledge } from "../../controllers/API";
-import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { toast, useToast } from "@/components/bs-ui/toast/use-toast";
+import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { getKnowledgeModelConfig, getLLmServerDetail, getModelListApi } from "@/controllers/API/finetune";
 import { BookCopy, CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Trash2 } from "lucide-react";
+import { useContext, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Textarea } from "../../components/bs-ui/input";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
+import { userContext } from "../../contexts/userContext";
+import { copyLibDatabase, createFileLib, deleteFileLib, readFileLibDatabase, updateKnowledge } from "../../controllers/API";
+import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useTable } from "../../util/hook";
 import { ModelSelect } from "../ModelPage/manage/tabs/WorkbenchModel";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { BookIcon } from "@/components/bs-icons/knowledge";
+import Tip from "@/components/bs-ui/tooltip/tip";
+
+// 知识库状态
+const enum KnowledgeBaseStatus {
+    Unpublished = 0,
+    Published = 1,   // 文档知识库构建成功的状态
+    Copying = 2,
+    Rebuilding = 3,  // 文档知识库重建中的状态
+    Failed = 4       // 文档知识库重建失败的状态
+}
 
 function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create', currentLib = null }) {
     const { t } = useTranslation()
@@ -59,7 +69,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                         const modelItem = { value: model.id, label: model.model_name };
                         models[model.id] = server.name + '/' + model.model_name;
 
-                        if (mode === 'edit' && currentLib && model.id === currentLib.model) {
+                        if (mode === 'edit' && currentLib && model.id === Number(currentLib.model)) {
                             _model = [serverItem, modelItem];
                         } else if (mode === 'create' && model.id === embedding_model_id && !_model) {
                             _model = [serverItem, modelItem];
@@ -86,17 +96,17 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                     if (_model) {
                         setModal(_model);
                     } else {
-                        try {
-                            const res = await getLLmServerDetail(currentLib.model);
-                            if (res.data) {
-                                setModal(res.data);
-                            }
-                        } catch (error) {
-                            console.warn('Failed to get server detail, using fallback');
-                            if (embeddings.length > 0 && embeddings[0].children.length > 0) {
-                                setModal([embeddings[0], embeddings[0].children[0]]);
-                            }
-                        }
+                        // try {
+                        //     const res = await getLLmServerDetail(currentLib.model);
+                        //     if (res.data) {
+                        //         setModal(res.data);
+                        //     }
+                        // } catch (error) {
+                        //     console.warn('Failed to get server detail, using fallback');
+                        //     if (embeddings.length > 0 && embeddings[0].children.length > 0) {
+                        //         setModal([embeddings[0], embeddings[0].children[0]]);
+                        //     }
+                        // }
                     }
                 } else if (mode === 'create' && _model) {
                     setModal(_model);
@@ -146,15 +156,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
             }
             // 情况2：名称长度 > 可占用最大长度 → 截断名称后再拼接
             else {
-                // 截断名称（保留前 maxNameLengthForDefaultDesc 个字，避免总长度超200）
-                const truncatedName = name.slice(0, maxNameLengthForDefaultDesc);
-                // 生成截断截断后的默认描述
-                desc = `${defaultDescPrefix}${truncatedName}${defaultDescSuffix}`;
-                // 提示用户：名称过长已被截断（提升体验，避免用户困惑）
-                toast({
-                    variant: "info",
-                    description: `知识库名称过长，已自动截断为${maxNameLengthForDefaultDesc}字，确保默认描述不超过200字限制`
-                });
+                desc = '';
             }
         }
 
@@ -372,7 +374,7 @@ export default function KnowledgeFile() {
     // 复制中开启轮询
     useEffect(() => {
         const todos = datalist.reduce((prev, curr) => {
-            if (curr.state === 1) {
+            if (curr.state === KnowledgeBaseStatus.Copying) {
                 prev.push({ id: curr.id, name: curr.name })
             }
             return prev
@@ -381,7 +383,7 @@ export default function KnowledgeFile() {
         todos.map(todo => {
             if (doing[todo.id]) {
                 const lib = datalist.find(item => item.id === todo.id);
-                if (lib && lib.state !== 1) {
+                if (lib && lib.state !== KnowledgeBaseStatus.Copying) {
                     message({
                         variant: 'success',
                         description: `${todo.name} 复制完成`
@@ -391,10 +393,15 @@ export default function KnowledgeFile() {
             }
         })
 
+        let timer = null
         if (todos.length > 0) {
-            setTimeout(() => {
+            timer = setTimeout(() => {
                 reload()
             }, 5000);
+        }
+
+        return () => {
+            clearTimeout(timer)
         }
     }, [datalist])
 
@@ -459,14 +466,24 @@ export default function KnowledgeFile() {
     const handleCopy = async (elem) => {
         const newName = `${elem.name}的副本`;
         if (newName.length > 200) {
-            message({
+            toast({
+                title: '操作失败',
                 variant: 'error',
-                description: '复制失败：复制后的知识库名称超过200字限制'
+                description: '复制后的知识库名称超过字数限制'
             });
+
+            // 重置所有相关状态
+            setSelectOpenId(null);
+            setCopyLoadingId(null);
+
+            // 强制重新渲染 Select 组件
+            setModalKey(prev => prev + 1);
             return;
         }
+
         setCopyLoadingId(elem.id);
         doing[elem.id] = true;
+
         try {
             await captureAndAlertRequestErrorHoc(copyLibDatabase(elem.id));
             reload();
@@ -477,6 +494,9 @@ export default function KnowledgeFile() {
             });
         } finally {
             setCopyLoadingId(null);
+            setSelectOpenId(null);
+            // 确保 Select 组件重置
+            setModalKey(prev => prev + 1);
         }
     }
 
@@ -509,22 +529,24 @@ export default function KnowledgeFile() {
                         {datalist.map((el: any) => (
                             <TableRow
                                 key={el.id}
-                                className=" h-[70px]"
+                                className=""
+                                onClick={() => {
+                                    if ([KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state)) return;
+                                    window.libname = [el.name, el.description];
+                                    navigate(`/filelib/${el.id}`);
+                                    handleCachePage();
+                                }}
                             >
                                 <TableCell
                                     className="font-medium max-w-[200px]"
-                                    onClick={() => {
-                                        window.libname = [el.name, el.description];
-                                        navigate(`/filelib/${el.id}`);
-                                        handleCachePage();
-                                    }}
                                 >
-                                    <div className="flex items-center gap-2 py-2">
-                                        <div className="flex items-center justify-center w-[50px] h-[50px] bg-primary text-white rounded-[10px]">
-                                            <BookCopy />
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex items-center justify-center size-12 text-white rounded-[4px]  w-[40px] h-[40px]">
+                                            {/* <BookCopy  className="size-5"/> */}
+                                            <BookIcon className="text-primary" />
                                         </div>
                                         <div>
-                                            <div className="truncate max-w-[500px] w-[264px] text-[18px] font-medium pt-2 flex items-center gap-2">
+                                            <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">
                                                 {el.name}
                                             </div>
                                             <QuestionTooltip
@@ -532,7 +554,7 @@ export default function KnowledgeFile() {
                                                 error={false}
                                                 className="w-full text-start"
                                             >
-                                                <div className="truncate max-w-[300px] text-[14px] text-[#5A5A5A] pt-1">
+                                                <div className="truncate max-w-[500px] text-[12px] text-[#5A5A5A] pt-1">
                                                     {el.description || ''}
                                                 </div>
                                             </QuestionTooltip>
@@ -542,22 +564,12 @@ export default function KnowledgeFile() {
 
                                 <TableCell
                                     className="text-[#5A5A5A]"
-                                    onClick={() => {
-                                        window.libname = [el.name, el.description];
-                                        navigate(`/filelib/${el.id}`);
-                                        handleCachePage();
-                                    }}
                                 >
                                     {el.update_time.replace('T', ' ')}
                                 </TableCell>
 
                                 <TableCell
                                     className="max-w-[300px] break-all"
-                                    onClick={() => {
-                                        window.libname = [el.name, el.description];
-                                        navigate(`/filelib/${el.id}`);
-                                        handleCachePage();
-                                    }}
                                 >
                                     <div className="truncate-multiline text-[#5A5A5A]">{el.user_name || '--'}</div>
                                 </TableCell>
@@ -568,7 +580,12 @@ export default function KnowledgeFile() {
                                             key={`${el.id}-${modalKey}`}
                                             open={selectOpenId === el.id}
                                             onOpenChange={(isOpen) => {
-                                                setSelectOpenId(isOpen ? el.id : null);
+                                                if (copyLoadingId !== el.id) {
+                                                    setSelectOpenId(isOpen ? el.id : null);
+                                                } else if (!isOpen) {
+                                                    // 如果是复制中状态且要关闭，允许关闭
+                                                    setSelectOpenId(null);
+                                                }
                                             }}
                                             onValueChange={(selectedValue) => {
                                                 setSelectOpenId(null);
@@ -576,7 +593,7 @@ export default function KnowledgeFile() {
 
                                                 switch (selectedValue) {
                                                     case 'copy':
-                                                        el.state === 1 && handleCopy(el);
+                                                        el.state === KnowledgeBaseStatus.Published && handleCopy(el);
                                                         break;
                                                     case 'set':
                                                         handleOpenSettings(el);
@@ -595,7 +612,7 @@ export default function KnowledgeFile() {
                                                 }}
                                                 className="size-10 px-2 bg-transparent border-none shadow-none hover:bg-gray-300 flex items-center justify-center duration-200 relative"
                                             >
-                                                {copyLoadingId === el.id ? (
+                                                {[KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state) ? (
                                                     <>
                                                         <LoaderCircle className="animate-spin" />
                                                         <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white text-gray-800 text-xs px-2 py-1 rounded whitespace-nowrap border border-gray-300 shadow-sm">
@@ -610,39 +627,47 @@ export default function KnowledgeFile() {
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                 }}
-                                                className="z-50"
+                                                className="z-50 overflow-visible"
                                             >
-                                                {(el.copiable || user.role === 'admin') && (
+                                                <Tip content={!el.copiable && '暂无操作权限'} side='top'>
                                                     <SelectItem
                                                         showIcon={false}
                                                         value="copy"
-                                                        disabled={el.state !== 1 || copyLoadingId === el.id}
+                                                        className="data-[disabled]:pointer-events-auto"
+                                                        disabled={!(el.copiable || user.role === 'admin') || el.state !== KnowledgeBaseStatus.Published || copyLoadingId === el.id}
                                                     >
-                                                        <div className="flex gap-2 items-center">
+                                                        <div className="flex gap-2 items-center" >
                                                             <Copy className="w-4 h-4" />
                                                             {t('lib.copy')}
                                                         </div>
                                                     </SelectItem>
-                                                )}
-                                                <SelectItem
-                                                    value="set"
-                                                    showIcon={false}
-                                                >
-                                                    <div className="flex gap-2 items-center">
-                                                        <Settings className="w-4 h-4" />
-                                                        {t('设置')}
-                                                    </div>
-                                                </SelectItem>
-                                                <SelectItem
-                                                    value="delete"
-                                                    showIcon={false}
-                                                    disabled={!el.copiable}
-                                                >
-                                                    <div className="flex gap-2 items-center">
-                                                        <Trash2 className="w-4 h-4" />
-                                                        {t('delete')}
-                                                    </div>
-                                                </SelectItem>
+                                                </Tip>
+                                                <Tip content={!el.copiable && '暂无操作权限'} side='top'>
+                                                    <SelectItem
+                                                        value="set"
+                                                        disabled={!el.copiable}
+                                                        className="data-[disabled]:pointer-events-auto"
+                                                        showIcon={false}
+                                                    >
+                                                        <div className="flex gap-2 items-center">
+                                                            <Settings className="w-4 h-4" />
+                                                            {t('设置')}
+                                                        </div>
+                                                    </SelectItem>
+                                                </Tip>
+                                                <Tip content={!el.copiable && '暂无操作权限'} side='top'>
+                                                    <SelectItem
+                                                        value="delete"
+                                                        showIcon={false}
+                                                        className="data-[disabled]:pointer-events-auto"
+                                                        disabled={!el.copiable}
+                                                    >
+                                                        <div className="flex gap-2 items-center">
+                                                            <Trash2 className="w-4 h-4" />
+                                                            {t('delete')}
+                                                        </div>
+                                                    </SelectItem>
+                                                </Tip>
                                             </SelectContent>
                                         </Select>
                                     </div>

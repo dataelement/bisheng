@@ -87,8 +87,14 @@ export default function DataTableKnowledge<TData, TValue>({
         const formData = new FormData();
         formData.append('filename', file.name);
         formData.append('file', file);
-        await dataService.knowledgeUpload(formData); // 等待每个文件上传完成
-        console.log(`File ${file.name} uploaded successfully`);
+        const res = await dataService.knowledgeUpload(formData); // 等待每个文件上传完成
+        console.log(`File ${file.name} uploaded successfully`, res);
+        if (res.status_code === 500) {
+          showToast({
+            message: res.status_message,
+            severity: NotificationSeverity.ERROR,
+          })
+        }
       }
     } catch (error) {
       showToast({
@@ -138,10 +144,10 @@ export default function DataTableKnowledge<TData, TValue>({
         <div>
           {building ? <Button onClick={() => {
             showToast({
-              message: '个人知识库 embedding 模型已更换，正在重建知识库，请稍后再试',
+              message: localize('com_tools_knowledge_rebuilding'),
               severity: NotificationSeverity.WARNING,
             })
-          }}>添加文件</Button> :
+          }}>{localize('com_knowledge_add_file')}</Button> :
             <AttachFileButton disabled={loading} handleFileChange={handleUpload} />}
         </div>
       </div>

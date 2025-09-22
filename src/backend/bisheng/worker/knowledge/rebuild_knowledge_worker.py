@@ -1,7 +1,6 @@
 from typing import List
 
 from loguru import logger
-from pymilvus import Collection
 
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import (
@@ -50,6 +49,11 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: str) -> str:
             if not files:
                 logger.info(f"knowledge_id={knowledge_id} has no success files")
                 # 直接更新知识库状态为成功
+                embedding = knowledge.model
+                suffix_id = settings.get_vectors_conf().milvus.partition_suffix
+                knowledge.collection_name = (
+                    f"partition_{embedding}_knowledge_{suffix_id}"
+                )
                 knowledge.state = KnowledgeState.PUBLISHED.value
                 KnowledgeDao.update_one(knowledge)
                 return f"knowledge {knowledge_id} rebuild completed (no files)"
@@ -86,6 +90,10 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: str) -> str:
 
             # 5. 更新knowledge状态
             if failed_files:
+
+                # 删除es索引和milvus集合，避免数据不一致
+                _delete_es_files(knowledge, failed_files)
+
                 knowledge.state = KnowledgeState.FAILED.value
                 logger.error(f"knowledge_id={knowledge_id} rebuild failed, failed_files={failed_files}")
             else:
@@ -110,24 +118,31 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: str) -> str:
             raise e
 
 
-def _delete_milvus_collection(knowledge: Knowledge):
-    """删除Milvus集合"""
+def _delete_es_files(knowledge: Knowledge, file_ids: List[int]):
+    """删除ES中的文件数据"""
     try:
+        index_name = knowledge.index_name or knowledge.collection_name
         embeddings = FakeEmbedding()
-        vector_client = decide_vectorstores(knowledge.collection_name, "Milvus", embeddings)
+        es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
 
-        if isinstance(vector_client.col, Collection):
-            logger.info(f"Deleting milvus collection: {knowledge.collection_name}")
-            vector_client.col.drop(timeout=10)
-            logger.info(f"Successfully deleted milvus collection: {knowledge.collection_name}")
-        else:
-            logger.warning(f"Milvus collection not found: {knowledge.collection_name}")
+        if not es_client.client.indices.exists(index=index_name):
+            logger.warning(f"ES index {index_name} does not exist, skipping deletion")
+            return
 
-        vector_client.close_connection(vector_client.alias)
+        for file_id in file_ids:
+            delete_query = {
+                "query": {
+                    "match": {
+                        "metadata.file_id": file_id
+                    }
+                }
+            }
+            response = es_client.client.delete_by_query(index=index_name, body=delete_query)
+            deleted = response.get("deleted", 0)
+            logger.info(f"Deleted {deleted} documents from ES for file_id={file_id}")
 
     except Exception as e:
-        logger.warning(f"Failed to delete milvus collection {knowledge.collection_name}: {str(e)}")
-        # 即使删除失败也继续执行，因为可能集合本来就不存在
+        logger.exception(f"Failed to delete ES files for knowledge_id={knowledge.id}: {str(e)}")
 
 
 def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_model_id: str) -> tuple[

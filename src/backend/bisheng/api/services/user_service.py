@@ -4,7 +4,7 @@ from base64 import b64decode
 from typing import List, Dict
 
 import rsa
-from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.http_error import UnAuthorizedError
 from bisheng.api.errcode.user import (UserLoginOfflineError, UserNameAlreadyExistError,
                                       UserNeedGroupAndRoleError)
 from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME

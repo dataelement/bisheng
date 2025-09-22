@@ -10,7 +10,12 @@ from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
+from sse_starlette import EventSourceResponse
 
+from bisheng.api.errcode import BaseErrorCode
+from bisheng.api.errcode.http_error import ServerError
+from bisheng.api.errcode.workstation import WebSearchToolNotFoundError, ConversationNotFoundError, \
+    AgentAlreadyExistsError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.knowledge import KnowledgeService
@@ -226,8 +231,8 @@ async def gen_title(conversationId: str = Body(..., description='', embed=True),
         return resp_200({'title': title})
     else:
         # 如果标题不存在，则返回空值
-        return resp_500(
-            data="Title not found or method not implemented for the conversation\'s endpoint")
+        raise ServerError(
+            exception=Exception("Title not found or method not implemented for the conversation's endpoint"))
 
 
 @router.get('/messages/{conversationId}')
@@ -261,10 +266,10 @@ async def webSearch(query: str, web_search_config: WSPrompt):
     """
     web_search_info = GptsToolsDao.get_tool_by_tool_key("web_search")
     if not web_search_info:
-        raise Exception("No web_search tool found in database")
+        raise WebSearchToolNotFoundError(exception=Exception("No web_search tool found in database"))
     web_search_tool = await AssistantAgent.init_tools_by_tool_ids([web_search_info.id], None)
     if not web_search_tool:
-        raise Exception("No web_search tool found in gpts tools")
+        raise WebSearchToolNotFoundError(exception=Exception("No web_search tool found in gpts tools"))
     return web_search_tool[0].invoke(input={"query": query})
 
 
@@ -290,56 +295,64 @@ async def chat_completions(
         data: APIChatCompletion,
         login_user: UserPayload = Depends(get_login_user),
 ):
-    wsConfig = WorkStationService.get_config()
-    conversationId = data.conversationId
-    model = [model for model in wsConfig.models if model.id == data.model][0]
-    modelName = model.displayName
+    try:
+        wsConfig = WorkStationService.get_config()
+        conversationId = data.conversationId
+        model = [model for model in wsConfig.models if model.id == data.model][0]
+        modelName = model.displayName
 
-    # 如果没有传入会话ID，则使用默认的会话ID
-    if not conversationId:
-        conversationId = uuid4().hex
-        MessageSessionDao.insert_one(
-            MessageSession(
-                chat_id=conversationId,
-                flow_id='',
-                flow_name='New Chat',
-                flow_type=FlowType.WORKSTATION.value,
-                user_id=login_user.user_id,
-            ))
+        # 如果没有传入会话ID，则使用默认的会话ID
+        if not conversationId:
+            conversationId = uuid4().hex
+            MessageSessionDao.insert_one(
+                MessageSession(
+                    chat_id=conversationId,
+                    flow_id='',
+                    flow_name='New Chat',
+                    flow_type=FlowType.WORKSTATION.value,
+                    user_id=login_user.user_id,
+                ))
 
-    conversaiton = MessageSessionDao.get_one(conversationId)
-    if conversaiton is None:
-        return resp_500('会话不存在')
+        conversaiton = MessageSessionDao.get_one(conversationId)
+        if conversaiton is None:
+            return EventSourceResponse(
+                iter([ConversationNotFoundError().to_sse_event_instance()])
+            )
+        # 存储用户消息
+        if data.overrideParentMessageId:
+            message = ChatMessageDao.get_message_by_id(data.overrideParentMessageId)
+        else:
+            message = ChatMessageDao.insert_one(
+                ChatMessage(
+                    user_id=login_user.user_id,
+                    chat_id=conversationId,
+                    flow_id='',
+                    type='human',
+                    is_bot=False,
+                    sender='User',
+                    files=json.dumps(data.files) if data.files else None,
+                    extra=json.dumps({'parentMessageId': data.parentMessageId}),
+                    message=data.text,
+                    category='question',
+                    source=0,
+                ))
 
-    if data.overrideParentMessageId:
-        message = ChatMessageDao.get_message_by_id(data.overrideParentMessageId)
-    else:
-        message = ChatMessageDao.insert_one(
-            ChatMessage(
-                user_id=login_user.user_id,
-                chat_id=conversationId,
-                flow_id='',
-                type='human',
-                is_bot=False,
-                sender='User',
-                files=json.dumps(data.files) if data.files else None,
-                extra=json.dumps({'parentMessageId': data.parentMessageId}),
-                message=data.text,
-                category='question',
-                source=0,
-            ))
+        # 掉用bishengllm 实现sse 返回
+        bishengllm = BishengLLM(model_id=data.model)
 
-    # 掉用bishengllm 实现sse 返回
-    bishengllm = BishengLLM(model_id=data.model)
-
-    # 模型掉用实现流式输出
-    SSEClient = SSECallbackClient()
-    callbackHandler = AsyncStreamingLLMCallbackHandler(
-        websocket=SSEClient,
-        flow_id='',
-        chat_id=data.conversationId,
-        user_id=login_user.user_id,
-    )
+        # 模型掉用实现流式输出
+        SSEClient = SSECallbackClient()
+        callbackHandler = AsyncStreamingLLMCallbackHandler(
+            websocket=SSEClient,
+            flow_id='',
+            chat_id=data.conversationId,
+            user_id=login_user.user_id,
+        )
+    except BaseErrorCode as e:
+        return EventSourceResponse(iter([e.to_sse_event_instance()]))
+    except Exception as e:
+        logger.exception(f'Error in chat completions: {e}')
+        return EventSourceResponse(iter([ServerError(exception=e).to_sse_event_instance()]))
 
     # 处理流式输出
     async def event_stream():
@@ -401,15 +414,7 @@ async def chat_completions(
                 extra['prompt'] = prompt
                 message.extra = json.dumps(extra, ensure_ascii=False)
                 ChatMessageDao.insert_one(message)
-        except MessageException as e:
-            error = True
-            final_res = str(e)
-        except Exception as e:
-            logger.exception(f'Error in processing the prompt')
-            error = True
-            final_res = f'Error in processing the prompt: {str(e)[-100:]}'
 
-        if not error:
             messages = WorkStationService.get_chat_history(conversationId, 8)[:-1]
             inputs = [*messages, HumanMessage(content=prompt)]
             if wsConfig.systemPrompt:
@@ -468,14 +473,25 @@ async def chat_completions(
                 except Exception as e:
                     logger.error(f'Error in task: {e}')
                     break
-        # 结束流式输出
-        if resoning_res:
-            final_res = ''':::thinking\n''' + resoning_res + '''\n:::''' + final_result.content
-        elif web_list:
-            final_res = ''':::web\n''' + json.dumps(
-                web_list, ensure_ascii=False) + '''\n:::''' + final_result.content
-        else:
-            final_res = final_result.content if final_result else final_res
+            # 结束流式输出
+            if resoning_res:
+                final_res = ''':::thinking\n''' + resoning_res + '''\n:::''' + final_result.content
+            elif web_list:
+                final_res = ''':::web\n''' + json.dumps(
+                    web_list, ensure_ascii=False) + '''\n:::''' + final_result.content
+            else:
+                final_res = final_result.content if final_result else final_res
+
+        except BaseErrorCode as e:
+            error = True
+            final_res = json.dumps(e.to_dict())
+            yield e.to_sse_event_instance()
+        except Exception as e:
+            e = ServerError(exception=e)
+            logger.exception(f'Error in processing the prompt')
+            error = True
+            final_res = json.dumps(e.to_dict())
+            yield e.to_sse_event_instance()
 
         yield final_message(conversaiton, conversaiton.flow_name, message, final_res, error,
                             modelName)
@@ -506,7 +522,7 @@ def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
     if is_new:
         return resp_200(message='添加成功')
     else:
-        return resp_500(message='该智能体已被添加')
+        return AgentAlreadyExistsError.return_resp()
 
 
 @router.delete('/app/frequently_used')

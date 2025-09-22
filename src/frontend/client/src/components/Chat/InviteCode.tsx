@@ -2,6 +2,7 @@ import { useState } from "react";
 import { bindInviteCode } from "~/api/linsight";
 import { useGetBsConfig, useGetUserLinsightCountQuery } from "~/data-provider";
 import { useToastContext } from "~/Providers";
+import { useLocalize } from "~/hooks";
 import { Button, Dialog, DialogContent, Input } from "../ui";
 
 export default function InvitationCodeForm({ showCode, setShowCode }) {
@@ -11,12 +12,13 @@ export default function InvitationCodeForm({ showCode, setShowCode }) {
     const { refetch } = useGetUserLinsightCountQuery()
     const { showToast } = useToastContext();
     const { data: bsConfig } = useGetBsConfig()
+    const localize = useLocalize()
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
 
         if (!invitationCode.trim()) {
-            setError("请输入邀请码")
+            setError(localize('com_invite_please_input_code'))
             return
         }
 
@@ -27,7 +29,7 @@ export default function InvitationCodeForm({ showCode, setShowCode }) {
             const result = await bindInviteCode(invitationCode.trim())
             console.log('result :>> ', result);
             if (result.status_code === 500) {
-                setError(result.status_message || "提交失败")
+                setError(result.status_message || localize('com_invite_submit_failed'))
                 // setError("您输入的邀请码无效")
                 // setError("已绑定其他邀请码")
             } else {
@@ -52,9 +54,9 @@ export default function InvitationCodeForm({ showCode, setShowCode }) {
                 <div className="p-2">
                     {/* BISHENG Logo */}
                     <div className="" style={{ backgroundImage: `url('${__APP_ENV__.BASE_URL}/assets/diandian.png')` }}>
-                        <div className="text-2xl font-bold text-primary pt-20 pl-8">Linsight 邀请码</div>
+                        <div className="text-2xl font-bold text-primary pt-20 pl-8">{localize('com_invite_title')}</div>
                         {/* Description */}
-                        <p className="text-sm mt-3 pl-8">输入 BISHENG 提供的邀请码，开启你的灵思之旅。</p>
+                        <p className="text-sm mt-3 pl-8">{localize('com_invite_desc')}</p>
                     </div>
 
                     {/* Form */}
@@ -65,7 +67,7 @@ export default function InvitationCodeForm({ showCode, setShowCode }) {
                                 type="text"
                                 value={invitationCode}
                                 onChange={(e) => setInvitationCode(e.target.value)}
-                                placeholder="请输入"
+                                placeholder={localize('com_invite_placeholder')}
                                 maxLength={50}
                                 className=""
                                 disabled={isLoading}
@@ -76,12 +78,12 @@ export default function InvitationCodeForm({ showCode, setShowCode }) {
                                 disabled={isLoading || !invitationCode.trim()}
                                 className="px-8 h-10"
                             >
-                                {isLoading ? "提交中..." : "提交"}
+                                {isLoading ? localize('com_invite_submitting') : localize('com_invite_submit')}
                             </Button>
                         </div>
                         {/* Error Message */}
                         <p className="text-red-500 text-sm mt-3 px-2 h-6">{error}</p>
-                        {bsConfig?.waiting_list_url && <p className="text-xs mt-3 px-2 h-6">没有邀请码？<a className="text-primary" href={bsConfig.waiting_list_url} target="_blank" rel="noreferrer">点击这里申请体验资格</a></p>}
+                        {bsConfig?.waiting_list_url && <p className="text-xs mt-3 px-2 h-6">{localize('com_invite_no_code_tip')}<a className="text-primary" href={bsConfig.waiting_list_url} target="_blank" rel="noreferrer">{localize('com_invite_apply_access')}</a></p>}
                     </form>
                 </div>
             </DialogContent>
