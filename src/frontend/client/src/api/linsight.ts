@@ -146,3 +146,17 @@ export function checkSopQueueStatus(id: string) {
     }
   })
 }
+
+// Selected Cases
+export function getFeaturedCases(): Promise<any> {
+  return request.get('/api/v1/linsight/sop/showcase');
+}
+
+// Get case details based on SOP ID
+export function getCaseDetail(sop_id: string): Promise<any> {
+  return request.get('/api/v1/linsight/sop/showcase/result', {
+    params: {
+      sop_id
+    }
+  })
+}

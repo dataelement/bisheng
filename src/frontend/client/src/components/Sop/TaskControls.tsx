@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { CheckIcon } from 'lucide-react';
+import { CheckIcon, MousePointerClick } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { useLocalize } from '~/hooks';
 import { Button, Switch, Textarea } from '../ui';
 import StarIcon from '../ui/icon/Star';
@@ -40,6 +41,7 @@ export const TaskControls = ({
 }: TaskControlsProps) => {
     const [showOverview, setShowOverview] = useState(false);
     const localize = useLocalize();
+    const { sopId } = useParams();
 
     const isRunning = status === SopStatus.Running;
     const isCompleted = [SopStatus.completed, SopStatus.Stoped].includes(status);
@@ -58,6 +60,7 @@ export const TaskControls = ({
         onFeedback(rating, comment, restart, cancel)
     }
 
+    if (sopId) return <SameSopControls sopId={sopId} />;
     if (queueCount) return null
 
     return (
@@ -127,7 +130,6 @@ export default function FeedbackComponent({ stop, onFeedback }: FeedbackComponen
     const [comment, setComment] = useState("")
     const [loading, setLoading] = useState(false)
     const localize = useLocalize();
-
 
     const handleStarClick = useCallback((star: number) => {
         setRating(star)
@@ -213,4 +215,26 @@ export default function FeedbackComponent({ stop, onFeedback }: FeedbackComponen
             </div>
         </div>
     )
+}
+
+
+
+const SameSopControls = ({ sopId }: { sopId: string }) => {
+    const localize = useLocalize();
+
+
+    return <div className="px-4 pb-6">
+        <div className="flex gap-3 p-4 px-6 justify-between items-center bg-white rounded-3xl border border-gray-100 relative">
+            <div className="flex items-center gap-2">
+                <div className="w-5 h-5 bg-[#05B353] rounded-full p-1" >
+                    <CheckIcon size={14} className='text-white' />
+                </div>
+                <span className="text-sm font-medium text-gray-700">{localize('com_sop_task')}{localize('com_sop_terminated')}</span>
+            </div>
+            <Button className="px-6" onClick={() => window.open(`${__APP_ENV__.BASE_URL}/c/new?sopid=${sopId}`)}>
+                <MousePointerClick className="w-3.5 h-3.5" />
+                做同款
+            </Button>
+        </div>
+    </div>
 }
