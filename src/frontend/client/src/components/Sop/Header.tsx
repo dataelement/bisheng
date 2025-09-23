@@ -51,7 +51,11 @@ export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
                             </div>
                             {localize('com_sop_task_description')}
                         </p>
-                        <p className='text-sm max-h-96 overflow-y-auto'>{linsight?.question}</p>
+                        <p className='text-sm overflow-hidden'
+                           style={{ display: '-webkit-box', WebkitLineClamp: 8, WebkitBoxOrient: 'vertical' }}
+                        >
+                            {linsight?.question}
+                        </p>
                     </PopoverContent>
                 </Popover>
 
