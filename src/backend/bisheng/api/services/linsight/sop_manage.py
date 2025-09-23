@@ -176,7 +176,7 @@ class SOPManageService:
                         description=one_record.description,
                         content=one_record.content,
                         rating=one_record.rating,
-                        linsight_version_id=one.linsight_version_id,
+                        linsight_version_id=one_record.linsight_version_id,
                     ))
                     override_name_dict[one.name] = True
             # 再新增剩下的sop记录
@@ -434,7 +434,7 @@ class SOPManageService:
         if not sop_models:
             return None
         return sop_models[0]
-    
+
     # sop 库检索
     @classmethod
     async def search_sop(cls, query: str, k: int = 3) -> (List[Document], BaseErrorCode | None):
