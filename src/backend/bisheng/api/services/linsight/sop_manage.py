@@ -1,7 +1,7 @@
 import io
 import json
 import uuid
-from typing import List, Dict
+from typing import List, Dict, Literal
 
 import openpyxl
 from fastapi import UploadFile
@@ -288,6 +288,28 @@ class SOPManageService:
             return None
         records = [LinsightSOPRecord(**one, user_id=login_user.user_id) for one in success_rows]
         return await cls._sync_sop_record(records, override=override, save_new=save_new)
+
+    @classmethod
+    async def get_sop_list(cls, keywords: str = None, sort: Literal["asc", "desc"] = "desc", showcase: bool = False,
+                           page: int = 1, page_size: int = 10) -> dict:
+        """
+        获取SOP列表
+        :param keywords: 关键词
+        :param sort: 排序方式
+        :param page: 页码
+        :param page_size: 每页数量
+        :param showcase: 是否仅展示精选案例的SOP
+        :return: SOP列表和总数
+        """
+        sop_pages = await LinsightSOPDao.get_sop_page(keywords=keywords, showcase=showcase, page=page,
+                                                      page_size=page_size,
+                                                      sort=sort)
+        user_ids = list(set([one["user_id"] for one in sop_pages["items"]]))
+        user_map = UserDao.aget_user_by_ids(user_ids=user_ids)
+        user_map = {one.user_id: one.user_name for one in await user_map}
+        for one in sop_pages["items"]:
+            one["user_name"] = user_map.get(one["user_id"], str(one["user_id"]))
+        return sop_pages
 
     @staticmethod
     async def add_sop(sop_obj: SOPManagementSchema, user_id) -> UnifiedResponseModel | None:

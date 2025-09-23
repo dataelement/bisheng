@@ -643,8 +643,9 @@ async def get_sop_list(
     :return:
     """
 
-    sop_pages = await LinsightSOPDao.get_sop_page(keywords=keywords, showcase=showcase, page=page, page_size=page_size,
-                                                  sort=sort)
+    sop_pages = await SOPManageService.get_sop_list(keywords=keywords, showcase=showcase, page=page,
+                                                    page_size=page_size,
+                                                    sort=sort)
     return resp_200(data=sop_pages)
 
 
@@ -728,7 +729,7 @@ async def get_sop_banner(
     设置或取消灵思SOP库的精选案例
     :return:
     """
-    sop_pages = await LinsightSOPDao.get_sop_page(showcase=True, page=page, page_size=page_size, sort=sort)
+    sop_pages = await SOPManageService.get_sop_list(showcase=True, page=page, page_size=page_size, sort=sort)
     return resp_200(data=sop_pages)
 
 
