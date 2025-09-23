@@ -980,6 +980,14 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 handleSaveSOP={handleSaveSOP}
                                 tools={selectedTools}
                                 sopShowcase={sopShowcase}
+                                onShowcaseToggled={() =>
+                                    fetchData({
+                                        page: page,
+                                        pageSize: pageSize,
+                                        keyword: keywords,
+                                        showcase: showcaseFilter
+                                    })
+                                }
                             />
                         </div>
                     </div>

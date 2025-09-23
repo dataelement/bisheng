@@ -14,17 +14,23 @@ import { Star } from "lucide-react";
 import Tip from "@/components/bs-ui/tooltip/tip";
 import { TaskFlowContent } from "./SopTasks";
 
-const SopFormDrawer = ({
-  isDrawerOpen,
-  setIsDrawerOpen,
-  isEditing,
-  sopForm,
-  setSopForm,
-  tools,
-  linsight,
-  handleSaveSOP,
-  sopShowcase
-}) => {
+/**
+ * SopFormDrawer
+ * @param {any} props
+ */
+const SopFormDrawer: any = (props) => {
+  const {
+    isDrawerOpen,
+    setIsDrawerOpen,
+    isEditing,
+    sopForm,
+    setSopForm,
+    tools,
+    linsight,
+    handleSaveSOP,
+    sopShowcase,
+    onShowcaseToggled
+  } = props;
   console.log(sopShowcase, sopForm,22255);
   const { t } = useTranslation()
   const [errors, setErrors] = useState({
@@ -214,6 +220,8 @@ const SopFormDrawer = ({
                         const next = !isFeatured;
                         await sopApi.switchShowcase({ sop_id: sopForm.id, showcase: next });
                         setIsFeatured(next);
+                        // 切换成功后通知父组件刷新列表
+                        onShowcaseToggled && onShowcaseToggled();
                       } catch (e) {
                         toast({ variant: 'error', description: '操作失败，请稍后重试' });
                       }

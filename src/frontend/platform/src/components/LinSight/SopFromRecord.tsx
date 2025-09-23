@@ -470,11 +470,11 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, onS
                   <h3 className="text-lg font-semibold truncate">{currentRecord.name}</h3>
                   <TabsList className='mr-4'>
                     <TabsTrigger value="manual">指导手册</TabsTrigger>
-                    <Tip content="无运行结果" side="bottom">
+                    {sopShowcase? <Tip content="无运行结果" side="bottom">
                       <span className="inline-block">
                         <TabsTrigger value="result" disabled={sopShowcase}>运行结果</TabsTrigger>
                       </span>
-                    </Tip>
+                    </Tip> : <TabsTrigger value="result" disabled={sopShowcase}>运行结果</TabsTrigger>}
                   </TabsList>
                 </div>
 
