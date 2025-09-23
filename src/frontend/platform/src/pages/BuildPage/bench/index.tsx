@@ -366,7 +366,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             </div>
                         </ToggleSection> */}
                         <ToggleSection
-                            title={t('chatConfig.webSearch')}
+                            title={t('chatConfig.webSea')}
                             enabled={formData.webSearch.enabled}
                             onToggle={(enabled) => toggleFeature('webSearch', enabled)}
                             extra={

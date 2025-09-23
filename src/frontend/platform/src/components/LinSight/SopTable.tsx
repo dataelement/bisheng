@@ -244,7 +244,7 @@ const SopTable = ({
                                         <Tooltip>
                                             <TooltipTrigger asChild>
                                                 <div className="text-sm font-medium text-gray-900 truncate">
-                                                    admin
+                                                    {item.user_id}
                                                 </div>
                                             </TooltipTrigger>
                                         </Tooltip>

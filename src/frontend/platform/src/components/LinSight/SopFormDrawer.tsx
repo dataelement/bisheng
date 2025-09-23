@@ -166,7 +166,7 @@ const SopFormDrawer = ({
                   <TabsList>
                     <TabsTrigger value="manual">指导手册</TabsTrigger>
                     {sopShowcase ? (
-                      <Tip content="仅从运行记录导入的手册可查看运行结果" side="bottom">
+                      <Tip content="无运行结果" side="bottom">
                         <div className="inline-block">
                           <TabsTrigger
                             value="result"
