@@ -3,7 +3,6 @@ import {
     ArrowRight,
     BookOpen,
     Check, ChevronDown,
-    Download,
     FileIcon,
     FileText,
     LucideLoaderCircle, Pause,
@@ -16,6 +15,7 @@ import { Button } from '../bs-ui/button';
 import { useTranslation } from 'react-i18next';
 import { Textarea } from '../bs-ui/input';
 import Markdown from '@/pages/KnowledgePage/components/Markdown';
+import DownIcon from '../bs-icons/DownIcon';
 
 const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
     if (!params) return null
@@ -205,7 +205,7 @@ const Task = ({
             <div className={`flex items-start relative`}>
                 <div className={`absolute right-full flex gap-2 pr-2 items-center top-0 h-6`}>
                     {/* 折叠 */}
-                    {lvl1 ? (history.length > 0 || hasSubTask) && <Download
+                    {lvl1 ? (history.length > 0 || hasSubTask) && <DownIcon
                         className={`text-gray-500 mt-0.5 cursor-pointer size-3 transition-transform 
                                 ${isExpanded ? 'rotate-180' : ''}
                             `}
@@ -422,7 +422,7 @@ export const TaskFlowContent = ({ linsight }) => {
                                     <FileIcon type={file.file_name.split('.').pop().toLowerCase()} className='size-4 min-w-4' />
                                     <span className='text-sm truncate pr-6'>{file.file_name}</span>
                                     <Button variant="ghost" className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
-                                        <Download size={16} onClick={(e) => {
+                                        <DownIcon size={16} onClick={(e) => {
                                             e.stopPropagation();
                                             downloadFile(file)
                                         }} />
