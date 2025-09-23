@@ -208,7 +208,7 @@ class PatternMatcher:
             MatchPattern(
                 name="markdown_table",
                 resource_type=ResourceType.TABLE,
-                pattern=r"(\|[^\r\n]*\|(?:\r?\n\|[^\r\n]*\|)+)",
+                pattern=r"(\|[^\r\n]*\|[^\r\n]*(?:\r?\n\|[^\r\n]*\|[^\r\n]*)+)",
                 flags=re.MULTILINE,
                 priority=2,
                 handler_method="_handle_markdown_table",
@@ -462,7 +462,7 @@ class ContentParser:
         """
         try:
             # 查找所有Markdown表格
-            table_pattern = r"(\|[^\r\n]*\|(?:\r?\n\|[^\r\n]*\|)+)"
+            table_pattern = r"(\|[^\r\n]*\|[^\r\n]*(?:\r?\n\|[^\r\n]*\|[^\r\n]*)+)"
             tables = re.findall(table_pattern, content, re.MULTILINE)
 
             if not tables:
