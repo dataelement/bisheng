@@ -21,7 +21,8 @@ import FilePreviewDrawer from './FilePreviewDrawer';
 import { SopStatus } from './SOPEditor';
 import FileDrawer from './TaskFiles';
 import ErrorDisplay from './components/ErrorDisplay';
-import { PlaySop } from './components/SopLoading';
+import { SearchKnowledgeSheet } from './components/SearchKnowledgeSheet';
+import { WebSearchSheet } from './components/WebSearchSheet';
 
 const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
     if (!params) return null
@@ -32,8 +33,8 @@ const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
     >{params.file_info?.file_name}</Button>
 }
 
-const Tool = ({ data, setCurrentDirectFile }) => {
-    const { name, step_type, params, extra_info } = data;
+const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) => {
+    const { name, step_type, params, extra_info, output } = data;
     const localize = useLocalize();
 
     // 过滤尾部hash值
@@ -63,10 +64,71 @@ const Tool = ({ data, setCurrentDirectFile }) => {
         default: localize('com_sop_using_tool', { 0: toolName })
     };
 
+    // search knowledge
+    const handleKnowledgeClick = () => {
+        if (!output || !output.length) return
+        try {
+            const upRes = JSON.parse(output)['结果']
+            const resData = upRes.map(res => {
+                let titleRegex, contentRegex;
+                if (res.startsWith('{')) {
+                    titleRegex = /<file_title>(.*?)<\/file_title>/;
+                    contentRegex = /<paragraph_content>(.*?)<\/paragraph_content>/s;
+                } else {
+                    // 兼容旧格式
+                    titleRegex = /^(.*?)\\n/;
+                    contentRegex = /\\n--------\\n(.*?)$/;
+                }
+                const titleMatch = res.match(titleRegex);
+                const contentMatch = res.match(contentRegex);
+                const title = titleMatch ? titleMatch[1] : '';
+
+                return {
+                    title,
+                    suffix: title.split('.').pop().toLowerCase(),
+                    content: contentMatch ? contentMatch[1] : ''
+                };
+            })
+            onSearchKnowledge({
+                query: params.query,
+                data: resData
+            })
+        } catch (error) {
+            console.log('knowledge parse error :>> ', error);
+        }
+    }
+
+    const handleWebSearchClick = () => {
+        if (!output || !output.length) return
+        try {
+            const text = JSON.parse(output)['content'][0].text
+            const resData = JSON.parse(text)
+            onWebSearch({
+                query: params.query,
+                data: resData['搜索结果'].map(item => ({
+                    title: item['标题'],
+                    content: item['摘要'],
+                    url: item['链接'],
+                    thumbnail: item['缩略图'],
+                }))
+            })
+        } catch (error) {
+            console.log('websearch parse error :>> ', error);
+        }
+    }
+
     // 参数键名映射
     const paramKeyMap = {
-        web_search: () => params.query,
-        search_knowledge_base: () => params.query,
+        web_search: () => <Button
+            variant="link"
+            className='text-xs p-0 h-4 text-blue-400 underline underline-offset-2'
+            onClick={handleWebSearchClick}
+        >{params.query}</Button>,
+        search_knowledge_base: () => <Button
+            variant="link"
+            className='text-xs p-0 h-4 text-blue-400 underline underline-offset-2'
+            onClick={handleKnowledgeClick}
+        >{params.query}</Button>,
         list_files: () => params.directory_path,
         get_file_details: () => params.file_path.split('/').pop(),
         search_files: () => params.pattern,
@@ -124,6 +186,8 @@ const Task = ({
     hasSubTask,
     sendInput,
     setCurrentDirectFile,
+    onSearchKnowledge,
+    onWebSearch,
     children = null
 }) => {
     const [isExpanded, setIsExpanded] = useState(true);
@@ -243,7 +307,12 @@ const Task = ({
                                 {history.map((_history, index) => (
                                     <div>
                                         <p key={index}>{_history.call_reason}</p>
-                                        <Tool data={_history} setCurrentDirectFile={setCurrentDirectFile} />
+                                        <Tool
+                                            data={_history}
+                                            setCurrentDirectFile={setCurrentDirectFile}
+                                            onSearchKnowledge={onSearchKnowledge}
+                                            onWebSearch={onWebSearch}
+                                        />
                                     </div>
                                 ))}
                             </div> : null
@@ -295,7 +364,7 @@ const Task = ({
 };
 
 
-export const TaskFlowContent = ({ linsight, sendInput }) => {
+export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
     const { status, sop, title, tasks, taskError, summary, file_list: files, queueCount = 0 } = linsight
     const allFiles = linsight?.output_result?.all_from_session_files || []
 
@@ -305,6 +374,10 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
     const [currentDirectFile, setCurrentDirectFile] = useState<any>(null)
     const localize = useLocalize();
 
+    // knowledge search
+    const [knowledgeInfo, setKnowledgeInfo] = useState(null)
+    // web search
+    const [webSearchInfo, setWebSearchInfo] = useState(null)
     // 由卡片触发抽屉展开
     const [triggerDrawerFromCard, setTriggerDrawerFromCard] = useState(false)
     useFoucsInput(tasks);
@@ -385,6 +458,8 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                         setIsPreviewOpen(true);
                         setCurrentDirectFile(file)
                     }}
+                    onSearchKnowledge={setKnowledgeInfo}
+                    onWebSearch={setWebSearchInfo}
                     sendInput={sendInput} >
                     {
                         task.children?.map((_task, i) => <Task
@@ -396,6 +471,8 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                                 setIsPreviewOpen(true);
                                 setCurrentDirectFile(file)
                             }}
+                            onSearchKnowledge={setKnowledgeInfo}
+                            onWebSearch={setWebSearchInfo}
                         />)
                     }
                 </Task>
@@ -474,6 +551,18 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                 </p>
             }
 
+            {/* search knowledge */}
+            <SearchKnowledgeSheet
+                isOpen={!!knowledgeInfo}
+                onClose={() => setKnowledgeInfo(null)}
+                data={knowledgeInfo?.data}
+                searchQuery={knowledgeInfo?.query} />
+            {/* web search */}
+            <WebSearchSheet
+                isOpen={!!webSearchInfo}
+                onClose={() => setWebSearchInfo(null)}
+                data={webSearchInfo?.data}
+                searchQuery={webSearchInfo?.query} />
             {/* 文件列表抽屉 */}
             <FileDrawer
                 title={title}

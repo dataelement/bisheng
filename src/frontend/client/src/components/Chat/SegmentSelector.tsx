@@ -13,7 +13,7 @@ const SegmentSelector = ({ lingsi, onChange }) => {
                         : '0'
                         }`}
                     onClick={() => {
-                        onChange(true);
+                        onChange(false);
                         window.isLinsight = false
                     }}
                 >
@@ -25,7 +25,7 @@ const SegmentSelector = ({ lingsi, onChange }) => {
                         : ''
                         }`}
                     onClick={() => {
-                        onChange(false);
+                        onChange(true);
                         window.isLinsight = true
                     }}
                 >
