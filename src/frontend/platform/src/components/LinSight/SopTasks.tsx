@@ -299,7 +299,7 @@ export const TaskFlowContent = ({ linsight }) => {
 
     // 由卡片触发抽屉展开
     const [triggerDrawerFromCard, setTriggerDrawerFromCard] = useState(false)
-    useFoucsInput(tasks);
+    // useFoucsInput(tasks);
 
     const mergeFiles = useMemo(() => {
         const mergedFiles = [...files, ...allFiles];
@@ -350,12 +350,7 @@ export const TaskFlowContent = ({ linsight }) => {
     }
 
     return (
-        <div className="w-[80%] mx-auto p-5 text-gray-800 leading-relaxed">
-            {/* load */}
-            {!tasks?.length && status === SopStatus.Running && <p className='mt-0.5 text-sm flex gap-2'>
-                <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/load.webp'} alt="" />
-                {localize('com_sop_organizing_content')}
-            </p>}
+        <div className="w-[100%] mx-auto p-5 text-gray-800 leading-relaxed overflow-y-auto h-[calc(100vh-200px)]">
             {/* {!tasks?.length && <PlaySop content={sop} />} */}
             {/* 任务 */}
             {!!tasks?.length && <div className='pl-6'>

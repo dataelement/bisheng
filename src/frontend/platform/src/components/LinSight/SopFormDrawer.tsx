@@ -25,7 +25,7 @@ const SopFormDrawer = ({
   handleSaveSOP,
   sopShowcase
 }) => {
-  console.log(sopShowcase, 22255);
+  console.log(sopShowcase, sopForm,22255);
   const { t } = useTranslation()
   const [errors, setErrors] = useState({
     name: '',
@@ -40,6 +40,7 @@ const SopFormDrawer = ({
   const contentInputRef = useRef(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFeatured, setIsFeatured] = useState(false);
+  const [activeTab, setActiveTab] = useState('manual');
   // 各字段的最大字数限制
   const MAX_LENGTHS = {
     name: 500,      // 名称不超过500字
@@ -134,6 +135,20 @@ const SopFormDrawer = ({
     }
   }, [isDrawerOpen]);
 
+  // 监听sopForm的showcase状态变化，同步更新isFeatured
+  useEffect(() => {
+    if (sopForm.showcase !== undefined) {
+      setIsFeatured(sopForm.showcase);
+    }
+  }, [sopForm.showcase]);
+
+  // 当弹窗打开时，重置Tab为"指导手册"
+  useEffect(() => {
+    if (isDrawerOpen) {
+      setActiveTab('manual');
+    }
+  }, [isDrawerOpen]);
+
   return (
     <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
       <SheetContent
@@ -147,7 +162,7 @@ const SopFormDrawer = ({
             </SheetTitle>
             {isEditing && (
               <div className="flex items-center gap-3 mr-6">
-                <Tabs defaultValue="manual">
+                <Tabs value={activeTab} onValueChange={setActiveTab}>
                   <TabsList>
                     <TabsTrigger value="manual">指导手册</TabsTrigger>
                     {sopShowcase ? (
@@ -167,7 +182,6 @@ const SopFormDrawer = ({
                       <TabsTrigger value="result">运行结果</TabsTrigger>
                     )}
                   </TabsList>
-                  <TaskFlowContent linsight={linsight} />
                 </Tabs>
                 {sopShowcase ? (
                   <Tip content="仅可精选包含运行结果的案例" side="bottom">
@@ -222,7 +236,18 @@ const SopFormDrawer = ({
             )}
           </div>
           <div className="flex-1 px-4 pb-4 pt-3">
-            <form onSubmit={handleSubmit} className="space-y-4">
+            
+           {activeTab === 'result'&& (
+                     <div className="mt-4 overflow-y-auto scrollbar-hide taskflow-scroll" style={{
+                       scrollbarWidth: 'thin',
+                       scrollbarColor: '#d1d5db transparent',
+                       height: 'calc(100vh - 200px)'
+                     }}>
+                       <TaskFlowContent linsight={linsight} />
+                     </div>
+           )}
+            {activeTab === 'manual' && (
+              <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label htmlFor="sop-name" className="block text-sm font-medium pb-1 text-gray-700">
                   {t('sopForm.manualName')}<span className="text-red-500">*</span>
@@ -313,6 +338,7 @@ const SopFormDrawer = ({
                 </Button>
               </div>
             </form>
+            )}
           </div>
         </div>
       </SheetContent>

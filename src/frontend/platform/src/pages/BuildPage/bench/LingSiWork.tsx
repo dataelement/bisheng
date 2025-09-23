@@ -604,7 +604,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         name: '',
         description: '',
         content: '',
-        rating: 0
+        rating: 0,
+        showcase: false
     });
 
     const resetSopForm = () => {
@@ -613,7 +614,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             name: '',
             description: '',
             content: '',
-            rating: 0
+            rating: 0,
+            showcase: false
         });
         setIsEditing(false);
         setCurrentSopId(null);
@@ -654,10 +656,9 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const [linsight, setLinsight] = useState({});
     const handleEdit = async (id: string) => {
         const sopToEdit = datalist.find(item => item.id === id);
-        const res = await sopApi.getSopShowcaseDetail({ sop_id: id });
-        if (res.version_info === null) {
-            // setSopShowcase(true);
-        }
+        const res =  await sopApi.getSopShowcaseDetail({ sop_id: id });
+        // 根据是否有运行结果设置sopShowcase状态
+        setSopShowcase(res.execute_tasks.length === 0);
 
         setLinsight({ ...res.version_info, tasks: res.execute_tasks });
         if (!sopToEdit) {
@@ -672,7 +673,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             name: sopToEdit.name || '',
             description: sopToEdit.description || '',
             content: sopToEdit.content || '',
-            rating: sopToEdit.rating || 0
+            rating: sopToEdit.rating || 0,
+            showcase: sopToEdit.showcase || false  // 添加精选状态
         });
         setIsDrawerOpen(true);
     };
@@ -929,12 +931,14 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                         onClick={() => {
                                             setIsEditing(false);
                                             setCurrentSopId(null);
+                                            setSopShowcase(true); // 新创建的SOP默认没有运行结果
                                             setSopForm({
                                                 id: '',
                                                 name: '',
                                                 description: '',
                                                 content: '',
-                                                rating: 0
+                                                rating: 0,
+                                                showcase: false
                                             });
                                             setIsDrawerOpen(true);
                                         }}
@@ -976,6 +980,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 duplicateDialogOpen={duplicateDialogOpen}
                                 setDuplicateDialogOpen={setDuplicateDialogOpen}
                                 importFormData={importFormData}
+                                linsight={linsight}
                             />
                             {/* 表格区域 */}
                             <SopTable datalist={datalist} selectedItems={selectedItems} handleSelectItem={handleSelectItem} handleSelectAll={handleSelectAll} handleSort={handleSort} handleEdit={handleEdit} handleDelete={handleDelete} page={page} pageSize={pageSize} total={total} loading={loading} pageInputValue={pageInputValue} handlePageChange={handlePageChange} handlePageInputChange={handlePageInputChange} handlePageInputConfirm={handlePageInputConfirm} handleKeyDown={handleKeyDown} onShowcaseFilterChange={handleShowcaseFilterChange} />
