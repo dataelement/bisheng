@@ -51,6 +51,7 @@ const SopTable = ({
         const empty: number[] = [];
         setFeaturedTempFilters(empty);
         setFeaturedSelectedFilters(empty);
+        onShowcaseFilterChange?.(undefined);
         setIsFeaturedFilterOpen(false);
     };
 

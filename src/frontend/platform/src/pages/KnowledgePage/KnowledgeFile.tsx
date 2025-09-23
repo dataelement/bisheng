@@ -98,19 +98,17 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                     if (_model) {
                         setModal(_model);
                     } else {
-                        // 如果找不到对应的模型，尝试从服务器获取详情
-                        try {
-                            const res = await getLLmServerDetail(currentLib.model);
-                            if (res.data) {
-                                setModal(res.data);
-                            }
-                        } catch (error) {
-                            console.warn('error');
-                            // 如果获取失败，使用第一个可用的模型作为备选
-                            if (embeddings.length > 0 && embeddings[0].children.length > 0) {
-                                setModal([embeddings[0], embeddings[0].children[0]]);
-                            }
-                        }
+                        // try {
+                        //     const res = await getLLmServerDetail(currentLib.model);
+                        //     if (res.data) {
+                        //         setModal(res.data);
+                        //     }
+                        // } catch (error) {
+                        //     console.warn('Failed to get server detail, using fallback');
+                        //     if (embeddings.length > 0 && embeddings[0].children.length > 0) {
+                        //         setModal([embeddings[0], embeddings[0].children[0]]);
+                        //     }
+                        // }
                     }
                 } else if (mode === 'create' && _model) {
                     setModal(_model);
@@ -620,6 +618,7 @@ export default function KnowledgeFile() {
                                             }}
                                         >
                                             <SelectTrigger
+                                                showIcon={false}
                                                 disabled={copyLoadingId === el.id}
                                                 onClick={(e) => {
                                                     e.stopPropagation();

@@ -330,9 +330,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     };
     let { assistantState, dispatchAssistant } = useAssistantStore();
     const { handleSave } = useChatConfig(
-        assistantState,
         selectedTools,
-        toolsData,
         setFormData
     );
 
