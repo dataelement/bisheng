@@ -28,6 +28,7 @@ import { FormInput } from "./FormInput";
 import { Model } from "./ModelManagement";
 import Preview from "./Preview";
 import { t } from "i18next";
+import { useDebounce } from "@/util/hook";
 
 export interface FormErrors {
     sidebarSlogan: string;
@@ -289,7 +290,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         }
     };
     useEffect(() => {
-        fetchData({ page: 1, pageSize: 10, keyword: '' });
+        fetchData({ page: 1, pageSize: 10, keyword: '', showcase: showcaseFilter });
     }, []);
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(false); // 标记当前是否为编辑模式
@@ -427,7 +428,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         fetchData({
             keyword: newKeywords,
             page: newPage,
-            pageSize
+            pageSize,
+            showcase: showcaseFilter
         });
 
         // 更新状态
@@ -444,7 +446,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             fetchData({
                 keyword: '',
                 page,
-                pageSize
+                pageSize,
+                showcase: showcaseFilter
             });
         }
     }, [importDialogOpen])
@@ -468,7 +471,9 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             setPage(pageNum);
             fetchData({
                 page: pageNum,
-                keyword: keywords
+                keyword: keywords,
+                pageSize,
+                showcase: showcaseFilter
             });
         }
 
@@ -498,6 +503,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             page: 1,
             keywords: keywords,
             sort: direction,
+            showcase: showcaseFilter,
         })
             .then(res => {
                 setDatalist(res.items || []);
@@ -544,6 +550,18 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         setPage(1);
         setPageInputValue('1');
     };
+      // 使用自定义防抖 hook（500ms，非立即）
+      const debouncedCallback = useCallback((value: string) => {
+        handleSearch(value, true);
+    }, [showcaseFilter]);
+    const debouncedSearch = useDebounce(debouncedCallback, 500, false);
+    // 仅在卸载时取消，避免因依赖变化反复取消
+    useEffect(() => {
+        return () => {
+            (debouncedSearch as any)?.cancel?.();
+        }
+    }, []);
+
     const handleBatchDelete = async () => {
         setBatchDeleting(true);
         try {
@@ -579,6 +597,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                 page: newPage,
                 pageSize: pageSize,
                 keyword: keywords,
+                showcase: showcaseFilter,
             });
 
             toast({
@@ -646,7 +665,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             fetchData({
                 page: page,
                 pageSize: 10,
-                keyword: keywords
+                keyword: keywords,
+                showcase: showcaseFilter
             }); // 刷新列表
             resetSopForm(); // 重置表单
         } catch (error) {
@@ -703,12 +723,14 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 page: page - 1,
                                 pageSize: pageSize,
                                 keyword: keywords,
+                                showcase: showcaseFilter,
                             });
                         } else {
                             fetchData({
                                 page: page,
                                 pageSize: pageSize,
                                 keyword: keywords,
+                                showcase: showcaseFilter,
                             });
                         }
                         next();
@@ -801,7 +823,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     fetchData({
                         page: page,
                         pageSize: pageSize,
-                        keyword: keywords
+                        keyword: keywords,
+                        showcase: showcaseFilter
                     });
                 }
             }
@@ -835,7 +858,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             fetchData({
                 page: page,
                 pageSize: pageSize,
-                keyword: keywords
+                keyword: keywords,
+                showcase: showcaseFilter
             });
             toast({ variant: 'success', description: t('chatConfig.submitSuccess') });
         }
@@ -897,10 +921,11 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                             onChange={(e) => {
                                                 const newValue = e.target.value;
                                                 setKeywords(newValue);
-                                                handleSearch(newValue);
+                                                debouncedSearch(newValue);
                                             }}
                                             onKeyDown={(e) => {
                                                 if (e.key === 'Enter') {
+                                                    (debouncedSearch as any)?.cancel?.();
                                                     handleSearch(keywords);
                                                 }
                                             }}
