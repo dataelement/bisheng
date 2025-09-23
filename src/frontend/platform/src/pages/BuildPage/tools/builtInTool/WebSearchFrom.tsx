@@ -310,8 +310,8 @@ const WebSearchForm = ({ formData, onSubmit, errors = {},enabled,prompt }) => {
                     { value: 'jina', label: t('chatConfig.webSearch.jina') },
                     { value: 'serp', label: t('chatConfig.webSearch.serp') },
                     { value: 'tavily', label: t('chatConfig.webSearch.tavily') },
-                    { value: 'cloudsway', label: t('chatConfig.webSearch.cloudsway') },
                     { value: 'searXNG', label: t('chatConfig.webSearch.searXNG') },
+                    { value: 'cloudsway', label: t('chatConfig.webSearch.cloudsway') },
                 ]}
                 id="search-tool-selector"
                 name="search_tool"
