@@ -624,12 +624,12 @@ class DocxTemplateRender(object):
                     lines = f.readlines()
                     table_data = [[line.strip()] for line in lines if line.strip()]
 
-            # 清理数据
+            # 清理数据 - 完全保留原始表格结构，包括空行
             cleaned_data = []
             for row in table_data:
                 cleaned_row = [str(cell).strip() if cell is not None else "" for cell in row]
-                if any(cleaned_row):  # 只添加非空行
-                    cleaned_data.append(cleaned_row)
+                # 移除空行过滤，完全保留原始表格结构
+                cleaned_data.append(cleaned_row)
 
             logger.info(f"成功解析CSV文件: {csv_path}, 行数: {len(cleaned_data)}")
             return cleaned_data
@@ -1111,7 +1111,8 @@ class DocxTemplateRender(object):
             table_data: 表格数据
         """
         rows = len(table_data)
-        cols = max(len(row) for row in table_data) if table_data else 1
+        # 计算最大列数，考虑到可能有空行的情况
+        cols = max((len(row) for row in table_data if row), default=1)
 
         # 设置更专业的表格样式
         try:
@@ -1125,20 +1126,28 @@ class DocxTemplateRender(object):
 
         # 填充表格数据
         for i, row_data in enumerate(table_data):
-            for j, cell_data in enumerate(row_data):
-                if j < cols:  # 确保不超出列数
-                    cell = table.cell(i, j)
-                    cell.text = str(cell_data)
+            # 确保空行也能被正确处理
+            current_row = row_data if row_data else []
+            
+            # 填充该行的所有列
+            for j in range(cols):
+                cell = table.cell(i, j)
+                if j < len(current_row):
+                    cell_data = current_row[j]
+                else:
+                    cell_data = ""  # 空单元格
+                
+                cell.text = str(cell_data)
 
-                    # 设置单元格对齐方式
-                    cell_paragraphs = cell.paragraphs
-                    if cell_paragraphs:
-                        # 数字右对齐，文本左对齐
-                        cell_text = str(cell_data).strip()
-                        if self._is_number(cell_text):
-                            cell_paragraphs[0].alignment = 2  # 右对齐
-                        else:
-                            cell_paragraphs[0].alignment = 0  # 左对齐
+                # 设置单元格对齐方式
+                cell_paragraphs = cell.paragraphs
+                if cell_paragraphs:
+                    # 数字右对齐，文本左对齐
+                    cell_text = str(cell_data).strip()
+                    if self._is_number(cell_text):
+                        cell_paragraphs[0].alignment = 2  # 右对齐
+                    else:
+                        cell_paragraphs[0].alignment = 0  # 左对齐
 
         # 设置表头样式（第一行）
         if rows > 0:
@@ -1197,13 +1206,26 @@ class DocxTemplateRender(object):
         Returns:
             表格元素
         """
-        if not table_data or not table_data[0]:
-            return None
-
         try:
-            # 创建表格
+            # 处理完全无数据的情况：创建最小表格
+            if not table_data:
+                logger.info("表格数据为None或空列表，创建最小表格：1x1")
+                table = self.doc.add_table(rows=1, cols=1)
+                table.cell(0, 0).text = ""  # 空单元格
+                return table._tbl
+
+            # 计算表格尺寸：即使所有行都是空的，也要保持原始结构
             rows = len(table_data)
-            cols = len(table_data[0])
+            if rows == 0:
+                logger.info("表格行数为0，创建最小表格：1x1")
+                table = self.doc.add_table(rows=1, cols=1)
+                table.cell(0, 0).text = ""
+                return table._tbl
+            
+            # 计算最大列数，如果所有行都为空，默认为1列
+            cols = max((len(row) for row in table_data if row), default=1)
+            
+            logger.info(f"创建表格：{rows}行 x {cols}列")
             table = self.doc.add_table(rows=rows, cols=cols)
 
             # 填充表格数据并设置样式

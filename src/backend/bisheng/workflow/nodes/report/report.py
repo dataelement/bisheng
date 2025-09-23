@@ -210,11 +210,11 @@ class PatternMatcher:
                 priority=1,
                 handler_method="_handle_markdown_image",
             ),
-            # 优先级2: 独立的Markdown表格
+            # 优先级2: 独立的Markdown表格（支持行首空格缩进）
             MatchPattern(
                 name="markdown_table",
                 resource_type=ResourceType.TABLE,
-                pattern=r"(\|[^\r\n]*\|[^\r\n]*(?:\r?\n\|[^\r\n]*\|[^\r\n]*)+)",
+                pattern=r"(\s*\|[^\r\n]*\|[^\r\n]*(?:\r?\n\s*\|[^\r\n]*\|[^\r\n]*)+)",
                 flags=re.MULTILINE,
                 priority=2,
                 handler_method="_handle_markdown_table",
@@ -537,8 +537,8 @@ class ContentParser:
             tuple: (表格数据, 对齐信息列表)
         """
         try:
-            # 查找所有Markdown表格
-            table_pattern = r"(\|[^\r\n]*\|[^\r\n]*(?:\r?\n\|[^\r\n]*\|[^\r\n]*)+)"
+            # 查找所有Markdown表格（支持行首缩进）
+            table_pattern = r"(\s*\|[^\r\n]*\|[^\r\n]*(?:\r?\n\s*\|[^\r\n]*\|[^\r\n]*)+)"
             tables = re.findall(table_pattern, content, re.MULTILINE)
 
             if not tables:
@@ -550,7 +550,8 @@ class ContentParser:
             alignments = []
 
             for i, table_content in enumerate(tables):
-                lines = [line.strip() for line in table_content.strip().split("\n") if line.strip()]
+                # 保留所有行，包括空行 - 完全保留原始表格结构
+                lines = [line.strip() for line in table_content.strip().split("\n")]
 
                 if len(lines) < 2:
                     continue
@@ -560,20 +561,24 @@ class ContentParser:
                 separator_found = False
 
                 for line in lines:
+                    # 跳过完全空的行，但保留只有竖线的空表格行
+                    if not line:
+                        continue
+                        
                     # 检查是否是分隔符行
                     if self._is_separator_line(line):
                         table_alignments = self._parse_alignments(line)
                         separator_found = True
                         continue
 
-                    # 解析数据行
+                    # 解析数据行 - 保留所有表格行，包括空行
                     cells = self._parse_table_row(line)
-                    if cells:
-                        cleaned_cells = []
-                        for cell in cells:
-                            cleaned_cell = self._clean_cell_content(cell)
-                            cleaned_cells.append(cleaned_cell)
-                        table_rows.append(cleaned_cells)
+                    # 移除 if cells 条件，保留空表格行
+                    cleaned_cells = []
+                    for cell in cells:
+                        cleaned_cell = self._clean_cell_content(cell)
+                        cleaned_cells.append(cleaned_cell)
+                    table_rows.append(cleaned_cells)
 
                 # 如果没有找到分隔符，使用默认对齐
                 if not separator_found and table_rows:
@@ -611,13 +616,22 @@ class ContentParser:
             return False
 
         cells = [cell.strip() for cell in content.split("|")]
+        
+        # 必须至少有一个单元格包含分隔符字符（-或:）
+        has_separator_chars = False
         for cell in cells:
             if not cell:
                 continue
+            # 检查是否包含分隔符字符
+            if '-' in cell or ':' in cell:
+                has_separator_chars = True
+            # 移除分隔符字符后检查是否还有其他内容
             clean_cell = cell.replace("-", "").replace(":", "").strip()
             if clean_cell:
                 return False
-        return True
+        
+        # 只有包含分隔符字符的行才能被认为是分隔符行
+        return has_separator_chars
 
     def _parse_alignments(self, separator_line: str) -> list:
         """从分隔符行解析列对齐方式"""
@@ -664,8 +678,8 @@ class ContentParser:
             else:
                 current_cell += char
 
-        if current_cell or cells:
-            cells.append(current_cell.strip())
+        # 总是添加最后一个单元格，确保空表格行也能正确解析
+        cells.append(current_cell.strip())
 
         return cells
 
@@ -1104,8 +1118,9 @@ class ResourceDownloadManager:
 
     def _validate_table_resource(self, resource: ResourceData):
         """验证表格资源"""
-        if not resource.table_data or not resource.table_data:
-            raise ValueError("表格数据为空")
+        # 允许空表格存在，不再抛出"表格数据为空"错误
+        if not resource.table_data:
+            resource.table_data = []  # 确保table_data是空列表而不是None
 
         # 验证表格数据一致性
         if len(resource.table_data) > 0:
