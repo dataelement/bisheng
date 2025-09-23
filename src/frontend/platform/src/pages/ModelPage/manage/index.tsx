@@ -88,12 +88,13 @@ export default function Management() {
     const [modelId, setModelId] = useState(null)
     const [systemModel, setSystemModel] = useState(false)
     const [loading, setLoading] = useState(false)
-    const { refetch } = useAssistantLLmModel()
+    const { refetch } = useModel()
 
     const reload = async () => {
         setLoading(true)
         setData(await getModelListApi())
         setLoading(false)
+        refetch()
     }
     useEffect(() => { reload() }, [])
 
@@ -112,7 +113,7 @@ export default function Management() {
     }
     const { message } = useToast()
 
-    // off&online
+    // off & online
     const handleCheck = (index, bool, id) => {
         captureAndAlertRequestErrorHoc(changeLLmServerStatus(id, bool).then(res => {
             refetch()
@@ -176,9 +177,8 @@ export default function Management() {
 
 }
 
-
-export function useAssistantLLmModel() {
-
+// model list（embeddings llm）
+export function useModel() {
     const { data, refetch } = useQuery({
         queryKey: "QueryModelsKey",
         queryFn: () => getModelListApi(),
