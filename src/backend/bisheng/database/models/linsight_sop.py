@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, List, Literal
 from loguru import logger
 from sqlalchemy import update
 from sqlalchemy.dialects.mysql import LONGTEXT
-from sqlmodel import Field, select, delete, col, or_, func, Column, Text, DateTime, text, CHAR, ForeignKey
+from sqlmodel import Field, select, delete, col, or_, func, Column, Text, DateTime, text, CHAR
 
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema
 from bisheng.database.base import async_session_getter, async_get_count
@@ -22,14 +22,13 @@ class LinsightSOPBase(SQLModelSerializable):
                          sa_column=Column(LONGTEXT, nullable=False, comment="SOP内容"))
 
     rating: Optional[int] = Field(default=0, ge=0, le=5, description='SOP评分，范围0-5')
-
+    showcase: Optional[bool] = Field(default=False, index=True, description='是否作为精选案例在首页展示')
     vector_store_id: Optional[str] = Field(..., description='向量存储ID',
                                            sa_column=Column(CHAR(36), nullable=False, comment="向量存储ID"))
 
-    linsight_session_id: Optional[str] = Field(default=None, description='灵思会话ID',
-                                               sa_column=Column(CHAR(36),
-                                                                ForeignKey("message_session.chat_id"),
-                                                                nullable=True))
+    linsight_version_id: Optional[str] = Field(default=None,
+                                               description='灵思会话版本ID，用来查询精选案例的运行结果',
+                                               sa_column=Column(CHAR(36), nullable=True))
     create_time: datetime = Field(default_factory=datetime.now, description='创建时间',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -99,7 +98,8 @@ class LinsightSOPDao(LinsightSOPBase):
             return sop
 
     @classmethod
-    async def get_sop_page(cls, keywords: Optional[str] = None, sort: Literal["asc", "desc"] = "desc", page: int = 1,
+    async def get_sop_page(cls, keywords: Optional[str] = None, showcase: bool = None,
+                           sort: Literal["asc", "desc"] = "desc", page: int = 1,
                            page_size: int = 10) -> Dict[str, Any]:
         """
         获取SOP分页列表
@@ -115,9 +115,12 @@ class LinsightSOPDao(LinsightSOPBase):
 
         # 根据 rating 和 create_time 排序
         if sort == "asc":
-            statement = statement.order_by(col(LinsightSOP.rating).asc(), col(LinsightSOP.create_time).asc())
+            statement = statement.order_by(col(LinsightSOP.rating).asc(), col(LinsightSOP.update_time).asc())
         else:
-            statement = statement.order_by(col(LinsightSOP.rating).desc(), col(LinsightSOP.create_time).desc())
+            statement = statement.order_by(col(LinsightSOP.rating).desc(), col(LinsightSOP.update_time).desc())
+            
+        if showcase is not None:
+            statement = statement.where(LinsightSOP.showcase == showcase)
 
         async with async_session_getter() as session:
             total_count = await async_get_count(session, statement)
@@ -275,6 +278,18 @@ class LinsightSOPDao(LinsightSOPBase):
         """
         statement = update(LinsightSOPRecord).where(
             col(LinsightSOPRecord.linsight_version_id) == linsight_version_id).values(rating=rating)
+        async with async_session_getter() as session:
+            await session.exec(statement)
+            await session.commit()
+            return True
+
+    @classmethod
+    async def set_sop_showcase(cls, sop_id: int, showcase: bool) -> bool:
+        """
+        设置SOP是否作为精选案例在首页展示
+        """
+        statement = update(LinsightSOP).where(
+            col(LinsightSOP.id) == sop_id).values(showcase=showcase)
         async with async_session_getter() as session:
             await session.exec(statement)
             await session.commit()

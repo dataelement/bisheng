@@ -6,18 +6,32 @@ import { LoadIcon } from "../bs-icons/loading";
 import { Input, Textarea } from "../bs-ui/input";
 import SopMarkdown from "./SopMarkdown";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { sopApi } from "@/controllers/API/linsight";
 import { t } from "i18next";
 import { useTranslation } from "react-i18next";
+import { Tabs, TabsList, TabsTrigger } from "../bs-ui/tabs";
+import { Star } from "lucide-react";
+import Tip from "@/components/bs-ui/tooltip/tip";
+import { TaskFlowContent } from "./SopTasks";
 
-const SopFormDrawer = ({
-  isDrawerOpen,
-  setIsDrawerOpen,
-  isEditing,
-  sopForm,
-  setSopForm,
-  tools,
-  handleSaveSOP
-}) => {
+/**
+ * SopFormDrawer
+ * @param {any} props
+ */
+const SopFormDrawer: any = (props) => {
+  const {
+    isDrawerOpen,
+    setIsDrawerOpen,
+    isEditing,
+    sopForm,
+    setSopForm,
+    tools,
+    linsight,
+    handleSaveSOP,
+    sopShowcase,
+    onShowcaseToggled
+  } = props;
+  console.log(sopShowcase, sopForm,22255);
   const { t } = useTranslation()
   const [errors, setErrors] = useState({
     name: '',
@@ -31,6 +45,8 @@ const SopFormDrawer = ({
   const nameInputRef = useRef(null);
   const contentInputRef = useRef(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFeatured, setIsFeatured] = useState(false);
+  const [activeTab, setActiveTab] = useState('manual');
   // 各字段的最大字数限制
   const MAX_LENGTHS = {
     name: 500,      // 名称不超过500字
@@ -80,7 +96,7 @@ const SopFormDrawer = ({
     if (length > MAX_LENGTHS[field]) {
       setErrors(prev => ({
         ...prev,
-        [field]: field === 'content' 
+        [field]: field === 'content'
           ? t('sopForm.contentMaxLength', { max: MAX_LENGTHS[field] })
           : t('sopForm.nameMaxLength', { max: MAX_LENGTHS[field] })
       }));
@@ -125,6 +141,20 @@ const SopFormDrawer = ({
     }
   }, [isDrawerOpen]);
 
+  // 监听sopForm的showcase状态变化，同步更新isFeatured
+  useEffect(() => {
+    if (sopForm.showcase !== undefined) {
+      setIsFeatured(sopForm.showcase);
+    }
+  }, [sopForm.showcase]);
+
+  // 当弹窗打开时，重置Tab为"指导手册"
+  useEffect(() => {
+    if (isDrawerOpen) {
+      setActiveTab('manual');
+    }
+  }, [isDrawerOpen]);
+
   return (
     <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
       <SheetContent
@@ -134,11 +164,98 @@ const SopFormDrawer = ({
         <div className="flex flex-col ">
           <div className="flex items-center justify-between px-4 pt-5 border-gray-200">
             <SheetTitle className="text-lg font-medium text-gray-900">
-              {isEditing ? t('sopForm.editManual') : t('components.sopForm.createManual')}
+              {isEditing ? t('sopForm.editManual') : t('sopForm.createManual')}
             </SheetTitle>
+            {isEditing && (
+              <div className="flex items-center gap-3 mr-6">
+                <Tabs value={activeTab} onValueChange={setActiveTab}>
+                  <TabsList>
+                    <TabsTrigger value="manual">指导手册</TabsTrigger>
+                    {sopShowcase ? (
+                      <Tip content="无运行结果" side="bottom">
+                        <div className="inline-block">
+                          <TabsTrigger
+                            value="result"
+                            onMouseDown={(e) => e.preventDefault()}
+                            className="opacity-50 cursor-not-allowed pointer-events-none"
+                            aria-disabled
+                          >
+                            运行结果
+                          </TabsTrigger>
+                        </div>
+                      </Tip>
+                    ) : (
+                      <TabsTrigger value="result">运行结果</TabsTrigger>
+                    )}
+                  </TabsList>
+                </Tabs>
+                {sopShowcase ? (
+                  <Tip content="仅可精选包含运行结果的案例" side="bottom">
+                    <div className="inline-block">
+                      <Button
+                        type="button"
+                        variant='outline'
+                        disabled
+                        className={`${isFeatured ? 'border-yellow-500 bg-yellow-50 text-yellow-700' : ''}`}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-sm ">
+                            {isFeatured ? (
+                              <Star className="w-3 h-3 text-yellow-500" fill="currentColor" />
+                            ) : (
+                              <Star className="w-3 h-3 text-gray-400" />
+                            )}
+                          </span>
+                          {isFeatured ? '精选案例' : '设为精选案例'}
+                        </span>
+                      </Button>
+                    </div>
+                  </Tip>
+                ) : (
+                  <Button
+                    type="button"
+                    variant='outline'
+                    onClick={async () => {
+                      try {
+                        const next = !isFeatured;
+                        await sopApi.switchShowcase({ sop_id: sopForm.id, showcase: next });
+                        setIsFeatured(next);
+                        // 切换成功后通知父组件刷新列表
+                        onShowcaseToggled && onShowcaseToggled();
+                      } catch (e) {
+                        toast({ variant: 'error', description: '操作失败，请稍后重试' });
+                      }
+                    }}
+                    className={`${isFeatured ? 'border-yellow-500 bg-yellow-50 text-yellow-700' : ''}`}
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <span className="inline-flex items-center justify-center w-4 h-4 rounded-sm ">
+                        {isFeatured ? (
+                          <Star className="w-3 h-3 text-yellow-500" fill="currentColor" />
+                        ) : (
+                          <Star className="w-3 h-3 text-gray-400" />
+                        )}
+                      </span>
+                      {isFeatured ? '精选案例' : '设为精选案例'}
+                    </span>
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex-1 px-4 pb-4 pt-3">
-            <form onSubmit={handleSubmit} className="space-y-4">
+            
+           {activeTab === 'result'&& (
+                     <div className="mt-4 overflow-y-auto scrollbar-hide taskflow-scroll" style={{
+                       scrollbarWidth: 'thin',
+                       scrollbarColor: '#d1d5db transparent',
+                       height: 'calc(100vh - 200px)'
+                     }}>
+                       <TaskFlowContent linsight={linsight} />
+                     </div>
+           )}
+            {activeTab === 'manual' && (
+              <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label htmlFor="sop-name" className="block text-sm font-medium pb-1 text-gray-700">
                   {t('sopForm.manualName')}<span className="text-red-500">*</span>
@@ -229,6 +346,7 @@ const SopFormDrawer = ({
                 </Button>
               </div>
             </form>
+            )}
           </div>
         </div>
       </SheetContent>

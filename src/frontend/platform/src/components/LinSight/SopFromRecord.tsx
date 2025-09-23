@@ -11,7 +11,10 @@ import { LoadIcon } from '../bs-icons/loading';
 import AutoPagination from '../bs-ui/pagination/autoPagination';
 import SopMarkdown from './SopMarkdown';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../bs-ui/tooltip';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../bs-ui/tabs';
 import { useTranslation } from 'react-i18next';
+import { TaskFlowContent } from './SopTasks';
+import Tip from '../bs-ui/tooltip/tip';
 
 interface SopRecord {
   id: number;
@@ -40,7 +43,9 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, onS
     key: 'create_time',
     direction: 'desc' as 'asc' | 'desc'
   });
-
+  const [linsight, setLinsight] = useState({});
+  const [sopShowcase, setSopShowcase] = useState(false);
+  const [activeTab, setActiveTab] = useState('manual');
   const [pageInputValue, setPageInputValue] = useState(page.toString());
   const [selectedRecordIds, setSelectedRecordIds] = useState<number[]>([]);
   const [allRecords, setAllRecords] = useState<SopRecord[]>([]);
@@ -249,7 +254,27 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, onS
   useEffect(() => {
     markdownRef.current?.setValue(currentRecord?.content || '');
   }, [currentRecord])
+  useEffect( () => {
+    console.log(currentRecord?.linsight_version_id, 22266);
+    const fetchSopShowcase = async () => {
+      const res =  await sopApi.getSopShowcaseDetail({ linsight_version_id: currentRecord?.linsight_version_id });
+      if(res.execute_tasks.length === 0){
+          setSopShowcase(true);
+          setLinsight({});
+          return;
+      }
+      setLinsight({ ...res.version_info, tasks: res.execute_tasks });
+      setSopShowcase(false);
+    }
+    fetchSopShowcase();
+  }, [currentRecord])
 
+  // 当切换记录时，重置Tab为"指导手册"
+  useEffect(() => {
+    if (currentRecord) {
+      setActiveTab('manual');
+    }
+  }, [currentRecord]);
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-[87.5vw] min-w-[87.5vw]">
@@ -260,7 +285,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, onS
               <SheetTitle>{t('ImportFromRecordsDialog.title')}</SheetTitle>
             </SheetHeader>
 
-            <div className="relative mt-6 mb-6 w-[80%]">
+            <div className="relative mt-6 mb-6 w-[100%]">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
@@ -440,49 +465,88 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, onS
           {/* 右侧预览区域 */}
           <div className="flex-1 bg-[#fff] p-6 h-full flex flex-col w-[50%]">
             {currentRecord ? (
-              <>
-                <div className="mb-4">
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
+                <div className=" flex items-center justify-between gap-4">
                   <h3 className="text-lg font-semibold truncate">{currentRecord.name}</h3>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <p className="text-muted-foreground truncate max-w-[460px]">
-                        {currentRecord.description}
-                      </p>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-[300px] break-words">{currentRecord.description}</p>
-                    </TooltipContent>
-                  </Tooltip>
+                  <TabsList className='mr-4'>
+                    <TabsTrigger value="manual">指导手册</TabsTrigger>
+                    {sopShowcase? <Tip content="无运行结果" side="bottom">
+                      <span className="inline-block">
+                        <TabsTrigger value="result" disabled={sopShowcase}>运行结果</TabsTrigger>
+                      </span>
+                    </Tip> : <TabsTrigger value="result" disabled={sopShowcase}>运行结果</TabsTrigger>}
+                  </TabsList>
                 </div>
-                <div className="flex-1 overflow-y-auto bg-gray-50 rounded-md">
-                  <SopMarkdown
-                    ref={markdownRef}
-                    defaultValue={currentRecord?.content}
-                    tools={tools}
-                    height='h-[calc(100vh-170px)]'
-                    className="h-full"
-                    disabled={true}
-                  />
-                </div>
-                <div className="flex justify-start gap-2 pt-4">
-                  <Button
-                    onClick={() => {
-                      if (!currentRecord) return;
-                      setSelectedRecordIds([]);
-                      setSelectedRecords([]);
-                      // 直接尝试导入当前SOP
-                      importSops([currentRecord]).then((hasDuplicate) => {
-                        if (hasDuplicate === false) {
-                          setDuplicateDialogOpen(true);
-                        }
-                      });
-                    }}
-                    disabled={!currentRecord || loading}
-                  >
-                    {loading ? t('ImportFromRecordsDialog.loading') : t('ImportFromRecordsDialog.importCurrent')}
-                  </Button>
-                </div>
-              </>
+
+                {activeTab === 'manual' && (
+                  <div className="flex-1 flex flex-col">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <p className="text-muted-foreground truncate">
+                          {currentRecord.description}
+                        </p>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-[300px] break-words">{currentRecord.description}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <div className="flex-1 overflow-y-auto bg-gray-50 rounded-md mt-2">
+                      <SopMarkdown
+                        ref={markdownRef}
+                        defaultValue={currentRecord?.content}
+                        tools={tools}
+                        height='h-[calc(100vh-170px)]'
+                        className="h-full"
+                        disabled={true}
+                      />
+                    </div>
+                    <div className="flex justify-start gap-2 pt-4">
+                      <Button
+                        onClick={() => {
+                          if (!currentRecord) return;
+                          setSelectedRecordIds([]);
+                          setSelectedRecords([]);
+                          // 直接尝试导入当前SOP
+                          importSops([currentRecord]).then((hasDuplicate) => {
+                            if (hasDuplicate === false) {
+                              setDuplicateDialogOpen(true);
+                            }
+                          });
+                        }}
+                        disabled={!currentRecord || loading}
+                      >
+                        {loading ? t('ImportFromRecordsDialog.loading') : t('ImportFromRecordsDialog.importCurrent')}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'result' && (
+                  <div className="flex-1 flex flex-col">
+                    <div className="flex-1 overflow-y-auto bg-gray-50 rounded-md p-4 text-sm text-gray-500">
+                    <TaskFlowContent linsight={linsight} />
+                    </div>
+                    <div className="flex justify-start gap-2 pt-4">
+                      <Button
+                        onClick={() => {
+                          if (!currentRecord) return;
+                          setSelectedRecordIds([]);
+                          setSelectedRecords([]);
+                          // 直接尝试导入当前SOP
+                          importSops([currentRecord]).then((hasDuplicate) => {
+                            if (hasDuplicate === false) {
+                              setDuplicateDialogOpen(true);
+                            }
+                          });
+                        }}
+                        disabled={!currentRecord || loading}
+                      >
+                        {loading ? t('ImportFromRecordsDialog.loading') : t('ImportFromRecordsDialog.importCurrent')}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </Tabs>
             ) : (
               <div className="flex justify-center items-center h-full text-muted-foreground">
                 {t('ImportFromRecordsDialog.preview.noSelection')}

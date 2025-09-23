@@ -1,17 +1,19 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useMemo } from "react";
 import { cn } from "~/utils";
+import { useLocalize } from "~/hooks";
 
 // LoadingBox组件
 export const LoadingBox = () => {
+    const localize = useLocalize();
     return (
         <div className='h-full bg-white border border-[#E8E9ED] rounded-xl flex flex-col justify-center text-center'>
             <div className="lingsi-border-box mx-auto">
                 <div className='w-[194px] h-[102px] bg-no-repeat mx-auto rounded-md bg-white'
                     style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/linsi-load.png)` }}></div>
             </div>
-            <h1 className='text-2xl mt-10'>为您提供详细指导手册，以确保任务精准</h1>
-            <p className='mt-5'>灵思正在为您规划指导手册...</p>
+            <h1 className='text-2xl mt-10'>{localize('com_sop_loading_title')}</h1>
+            <p className='mt-5'>{localize('com_sop_loading_desc')}</p>
         </div>
     );
 };

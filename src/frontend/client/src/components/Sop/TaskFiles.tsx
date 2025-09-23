@@ -6,6 +6,7 @@ import { Button, Checkbox } from "../ui"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../ui/Sheet"
 import FileIcon from "../ui/icon/File"
 import { batchDownload } from "~/api/linsight"
+import { useLocalize } from "~/hooks"
 
 interface FileItem {
     file_id: string
@@ -28,6 +29,7 @@ interface FileDrawerProps {
 export default function TaskFiles({ title, files, isOpen, onOpenChange, downloadFile, onPreview }: FileDrawerProps) {
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
     const [isDownloading, setIsDownloading] = useState(false)
+    const localize = useLocalize()
 
     // 获取文件扩展名
     const getFileExtension = (fileName: string): string => {
@@ -79,7 +81,7 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
             <SheetContent className="w-[600px] sm:max-w-[600px] px-2">
                 <SheetHeader className="">
                     <div className="flex items-center justify-between">
-                        <SheetTitle>查看此任务中的所有文件</SheetTitle>
+                        <SheetTitle>{localize('com_sop_view_all_files')}</SheetTitle>
                     </div>
 
                     {/* 全选和批量下载控制栏 */}
@@ -97,7 +99,7 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
                                 }}
                             />
                             <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
-                                全选
+                                {localize('com_sop_select_all')}
                             </label>
                         </div>
 
@@ -108,7 +110,7 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
                                 disabled={isDownloading}
                                 className="h-8 px-3 text-xs"
                             >
-                                批量下载 ↓
+                                {localize('com_sop_batch_download')} ↓
                             </Button>
                         )}
                     </div>

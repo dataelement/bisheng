@@ -3,11 +3,13 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
+import { getFeaturedCases } from '~/api/linsight';
 import type { ChatFormValues } from '~/common';
 import { Spinner } from '~/components/svg';
 import type { TMessage } from '~/data-provider/data-provider/src';
 import { useGetMessagesByConvoId } from '~/data-provider/data-provider/src/react-query';
 import { useAddedResponse, useChatHelpers, useSSE } from '~/hooks';
+import useLocalize from '~/hooks/useLocalize';
 import { AddedChatContext, ChatContext, ChatFormProvider, useFileMapContext } from '~/Providers';
 import store from '~/store';
 import { buildTree, cn } from '~/utils';
@@ -15,6 +17,7 @@ import { Button } from '../ui';
 import { Card, CardContent } from '../ui/Card';
 import HeaderTitle from './HeaderTitle';
 import ChatForm from './Input/ChatForm';
+import { sameSopLabelState } from './Input/SameSopSpan';
 import InvitationCodeForm from './InviteCode';
 import Landing from './Landing';
 import MessagesView from './Messages/MessagesView';
@@ -22,6 +25,7 @@ import Presentation from './Presentation';
 
 
 const ChatView = ({ index = 0 }: { index?: number }) => {
+  const t = useLocalize();
   const { conversationId } = useParams();
   const rootSubmission = useRecoilValue(store.submissionByIndex(index));
   const addedSubmission = useRecoilValue(store.submissionByIndex(index + 1));
@@ -133,6 +137,7 @@ const ChatView = ({ index = 0 }: { index?: number }) => {
               </video>
               <div ref={chatContainerRef} className='relative z-10 h-full overflow-y-auto'>
                 <div className={showCode ? "hidden" : "flex flex-col justify-center relative h-[calc(100vh-200px)]"}>
+                  {/* <div className={showCode ? "hidden" : "flex flex-col justify-center relative h-full"}> */}
                   {content}
                   <div
                     id="floatPanne"
@@ -146,47 +151,83 @@ const ChatView = ({ index = 0 }: { index?: number }) => {
                     {!inputFloat && <div className="h-[2vh]"></div>}
                   </div>
                 </div>
-                {isLingsi && <Cases />}
+                <Cases t={t} isLingsi={isLingsi} setIsLingsi={setIsLingsi} />
               </div>
+              {/*   邀请码 */}
               <InvitationCodeForm showCode={showCode} setShowCode={setShowCode} />
-            </div>
-          </Presentation>
-        </AddedChatContext.Provider>
-      </ChatContext.Provider>
-    </ChatFormProvider>
+            </div >
+          </Presentation >
+        </AddedChatContext.Provider >
+      </ChatContext.Provider >
+    </ChatFormProvider >
   );
 };
 
 export default memo(ChatView);
 
 
-const Cases = () => {
+const Cases = ({ t, isLingsi, setIsLingsi }) => {
+  const [_, setSameSopLabel] = useRecoilState(sameSopLabelState)
+  const [casesData, setCasesData] = useState<any[]>([])
 
-  const casesData = window.SopCase.list;
+  const queryParams = new URLSearchParams(location.search);
+  const sopid = queryParams.get('sopid'); // 获取 id 参数
 
-  const handleCardClick = (caseId: string) => {
-    window.open(`${__APP_ENV__.BASE_URL}/linsight/${caseId}`)
+  const handleCardClick = (sopId: string) => {
+    window.open(`${__APP_ENV__.BASE_URL}/linsight/case/${sopId}`)
   }
 
+  useEffect(() => {
+    getFeaturedCases().then(res => {
+      setCasesData(res.data.items)
+      // If sopid exists, find and set the sameSopLabel
+      if (sopid) {
+        const caseItem = res.data.items.find((item: any) => item.id === Number(sopid));
+        if (caseItem) {
+          setSameSopLabel({ ...caseItem })
+          setIsLingsi(true);
+        }
+      }
+    })
+  }, [sopid])
+
+  if (!isLingsi) return null;
+  if (casesData.length === 0) return null;
+
   return (
-    <div className='absolute -bottom-6 w-full mt-20'>
-      <p className='text-sm max-w-[1728px] pl-16 text-primary'>灵思精选案例</p>
-      <div className='flex pt-4 justify-center mx-auto gap-2 px-12'>
+    <div className='relative w-full mt-8 pb-20'>
+      <p className='text-sm text-center text-gray-400'>{t('com_case_featured')}</p>
+      <div className='flex flex-wrap pt-4 justify-center mx-auto gap-2 w-[782px]'>
         {casesData.map((caseItem) => (
-          <div
-            key={caseItem.id}
-            className='group w-72 relative border border-gray-50 rounded-xl py-4 pb-12 p-5 text-sm hover:shadow-xl cursor-pointer bg-white/50 hover:-translate-y-10 transition-transform ease-out'
-            onClick={() => handleCardClick(caseItem.id)}
-          >
-            <Button
-              className='absolute bottom-2 right-3 p-0 h-6 w-6 shadow-md border-none hidden group-hover:inline-flex'
-              variant="outline"
-              size="icon"
-            >
-              <ArrowRight size="14" />
-            </Button>
-            <p className='text-gray-600'>{caseItem.title}</p>
-          </div>
+          <Card className="w-[254px] py-0 rounded-2xl shadow-none hover:shadow-xl group relative overflow-hidden">
+            <CardContent className="flex flex-col justify-between h-[98px] p-4">
+              {/* 信息位：标题 */}
+              <div className="text-sm font-medium text-gray-800 line-clamp-2">
+                {caseItem.name}
+              </div>
+
+              {/* 动作位：按钮组（右下角，hover 时显示） */}
+              <div className="absolute bottom-4 right-4 flex justify-end space-x-2 mt-2 opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
+                <Button
+                  variant="default"
+                  className="bg-primary text-white rounded-full h-8 px-3 text-xs flex items-center space-x-0"
+                  onClick={() => setSameSopLabel({ ...caseItem })}
+                >
+                  <MousePointerClick className="w-3.5 h-3.5" />
+                  <span>做同款</span>
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size={"icon"}
+                  className="rounded-full w-8 h-8 p-0 text-xs flex items-center space-x-1"
+                  onClick={() => handleCardClick(caseItem.id)}
+                >
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
     </div>

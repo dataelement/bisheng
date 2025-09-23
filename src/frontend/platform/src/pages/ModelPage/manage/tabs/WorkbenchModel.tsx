@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange }) => {
     const defaultValue = useMemo(() => {
         let _defaultValue = []
-        if (!value) return _defaultValue
+        if (!value || !options || options.length === 0) return _defaultValue
 
         const found = options.some(option => {
             const model = option.children?.find(el => el.value == value)
@@ -39,6 +39,7 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
                 {tooltipText && <QuestionTooltip className="relative top-0.5 ml-1" content={tooltipText} />}
             </Label>
             <Cascader
+                key={`model-select-${value}-${options.length}`}
                 defaultValue={defaultValue}
                 options={options}
                 close={close}

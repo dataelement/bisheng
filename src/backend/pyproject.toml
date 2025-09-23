@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "bisheng"
-version = "2.1.0"
+version = "2.2.0-beta1"
 description = "A Python package with a built-in web application"
 authors = ["Dataelement <hanfeng@dataelem.com>"]
 maintainers = [

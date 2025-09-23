@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { resources } from '~/locales/i18n';
 import store from '~/store';
 
-export type TranslationKeys = keyof typeof resources.en.translation;
+export type TranslationKeys = keyof typeof resources.en.translation | any;
 
 export default function useLocalize() {
   const lang = useRecoilValue(store.lang);

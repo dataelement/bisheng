@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Body, HTTPException
 from sqlmodel import select
 
+from bisheng.api.errcode.qa import BackendProcessingError
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.v1.schemas import resp_200
 from bisheng.database.base import session_getter
@@ -34,7 +35,7 @@ async def get_answer_keyword(message_id: int):
                 break
             await asyncio.sleep(1)
             conter -= 1
-    raise HTTPException(status_code=500, detail='后台处理中，稍后再试')
+    raise BackendProcessingError()
 
 
 @router.post('/chunk', status_code=200)

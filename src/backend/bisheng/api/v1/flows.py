@@ -6,7 +6,7 @@ from fastapi_jwt_auth import AuthJWT
 from sqlmodel import select
 from starlette.responses import StreamingResponse
 
-from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.http_error import UnAuthorizedError, ServerError, NotFoundError
 from bisheng.api.errcode.flow import FlowOnlineEditError, FlowNameExistsError
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload, get_login_user
@@ -20,7 +20,6 @@ from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
-
 
 # build router
 router = APIRouter(prefix='/flows', tags=['Flows'], dependencies=[Depends(get_login_user)])
@@ -38,7 +37,7 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
     flow.user_id = login_user.user_id
     db_flow = Flow.model_validate(flow)
     # 创建新的技能
-    db_flow = FlowDao.create_flow(db_flow,FlowType.FLOW.value)
+    db_flow = FlowDao.create_flow(db_flow, FlowType.FLOW.value)
 
     current_version = FlowVersionDao.get_version_by_flow(db_flow.id)
     ret = FlowRead.model_validate(db_flow)
@@ -134,7 +133,7 @@ def read_flows(*,
         return FlowService.get_all_flows(user, name, status, tag_id, page_num, page_size)
     except Exception as e:
         logger.exception(e)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise ServerError(exception=e)
 
 
 @router.get('/{flow_id}')
@@ -169,7 +168,7 @@ async def update_flow(*,
                                       flow_id=flow_id)
         except Exception as exc:
             logger.exception(exc)
-            raise HTTPException(status_code=500, detail=f'Flow build error, {str(exc)}')
+            raise ServerError(exception=exc)
 
     if db_flow.status == 2 and ('status' not in flow_data or flow_data['status'] != 1):
         raise FlowOnlineEditError.http_exception()
@@ -197,7 +196,7 @@ def delete_flow(*,
 
     db_flow = FlowDao.get_flow_by_id(flow_id)
     if not db_flow:
-        raise HTTPException(status_code=404, detail='Flow not found')
+        raise NotFoundError()
     if not login_user.access_check(db_flow.user_id, flow_id, AccessType.FLOW_WRITE):
         return UnAuthorizedError.return_resp()
     FlowDao.delete_flow(db_flow)
@@ -239,10 +238,10 @@ async def compare_flow_node_stream(*,
             yield str(StreamData(event='message', data={'type': 'end', 'data': ''}))
         except Exception as e:
             logger.exception('compare flow stream error')
-            yield str(StreamData(event='message', data={'type': 'end', 'message': str(e)}))
+            yield ServerError(exception=e).to_sse_event_instance()
 
     try:
         return StreamingResponse(event_stream(item), media_type='text/event-stream')
     except Exception as exc:
         logger.error(exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise ServerError()

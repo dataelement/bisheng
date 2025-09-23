@@ -1,7 +1,7 @@
 import io
 import json
 import uuid
-from typing import List, Dict
+from typing import List, Dict, Literal
 
 import openpyxl
 from fastapi import UploadFile
@@ -10,8 +10,15 @@ from langchain_core.embeddings import Embeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from loguru import logger
 
-from bisheng.api.errcode.base import NotFoundError, ServerError
-from bisheng.api.errcode.linsight import SopFileError
+from bisheng.api.errcode import BaseErrorCode
+from bisheng.api.errcode.http_error import NotFoundError
+from bisheng.api.errcode.linsight import (
+    LinsightAddSopError, LinsightUpdateSopError, LinsightDeleteSopError,
+    LinsightVectorModelError, LinsightDocSearchError, LinsightDocNotFoundError, SopFileError
+)
+from bisheng.api.errcode.server import (
+    NoEmbeddingModelError, EmbeddingModelNotExistError, EmbeddingModelTypeError
+)
 from bisheng.api.services.knowledge_imp import decide_vectorstores, extract_code_blocks
 from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
@@ -169,6 +176,7 @@ class SOPManageService:
                         description=one_record.description,
                         content=one_record.content,
                         rating=one_record.rating,
+                        linsight_version_id=one_record.linsight_version_id,
                     ))
                     override_name_dict[one.name] = True
             # 再新增剩下的sop记录
@@ -180,6 +188,7 @@ class SOPManageService:
                     description=one.description,
                     content=one.content,
                     rating=one.rating,
+                    linsight_version_id=one.linsight_version_id,
                 ), one.user_id)
         elif save_new:
             for one in sop_records:
@@ -192,6 +201,7 @@ class SOPManageService:
                     description=one.description,
                     content=one.content,
                     rating=one.rating,
+                    linsight_version_id=one.linsight_version_id,
                 ), one.user_id)
         else:
             # 说明有重复的记录，需要用户确认
@@ -204,6 +214,7 @@ class SOPManageService:
                     description=one.description,
                     content=one.content,
                     rating=one.rating,
+                    linsight_version_id=one.linsight_version_id,
                 ), one.user_id)
         if oversize_records:
             raise ValueError(f"{'、'.join(oversize_records)}内容超长")
@@ -278,6 +289,28 @@ class SOPManageService:
         records = [LinsightSOPRecord(**one, user_id=login_user.user_id) for one in success_rows]
         return await cls._sync_sop_record(records, override=override, save_new=save_new)
 
+    @classmethod
+    async def get_sop_list(cls, keywords: str = None, sort: Literal["asc", "desc"] = "desc", showcase: bool = False,
+                           page: int = 1, page_size: int = 10) -> dict:
+        """
+        获取SOP列表
+        :param keywords: 关键词
+        :param sort: 排序方式
+        :param page: 页码
+        :param page_size: 每页数量
+        :param showcase: 是否仅展示精选案例的SOP
+        :return: SOP列表和总数
+        """
+        sop_pages = await LinsightSOPDao.get_sop_page(keywords=keywords, showcase=showcase, page=page,
+                                                      page_size=page_size,
+                                                      sort=sort)
+        user_ids = list(set([one["user_id"] for one in sop_pages["items"]]))
+        user_map = UserDao.aget_user_by_ids(user_ids=user_ids)
+        user_map = {one.user_id: one.user_name for one in await user_map}
+        for one in sop_pages["items"]:
+            one["user_name"] = user_map.get(one["user_id"], str(one["user_id"]))
+        return sop_pages
+
     @staticmethod
     async def add_sop(sop_obj: SOPManagementSchema, user_id) -> UnifiedResponseModel | None:
         """
@@ -292,16 +325,16 @@ class SOPManageService:
         try:
             emb_model_id = workbench_conf.embedding_model.id
             if not emb_model_id:
-                raise ServerError.http_exception(msg="未配置知识库embedding模型，请从工作台配置中设置")
+                return NoEmbeddingModelError.return_resp()
         except AttributeError:
-            raise ServerError.http_exception(msg="工作台配置中未找到指导手册 embedding模型，请从工作台配置中设置")
+            return NoEmbeddingModelError.return_resp()
 
         # 校验embedding模型
         embed_info = LLMDao.get_model_by_id(int(emb_model_id))
         if not embed_info:
-            raise ServerError.http_exception(msg="知识库embedding模型不存在，请从工作台配置中设置")
+            return EmbeddingModelNotExistError.return_resp()
         if embed_info.model_type != LLMModelType.EMBEDDING.value:
-            raise ValueError("知识库embedding模型类型错误，请从工作台配置中设置")
+            return EmbeddingModelTypeError.return_resp()
 
         vector_store_id = uuid.uuid4().hex
 
@@ -318,7 +351,7 @@ class SOPManageService:
             vector_client.add_texts([sop_obj.content[0:10000]], metadatas=metadatas)
             es_client.add_texts([sop_obj.content], ids=[vector_store_id], metadatas=metadatas)
         except Exception as e:
-            raise ServerError.http_exception(msg=f"添加指导手册失败，向向量存储添加数据失败: {str(e)}")
+            return LinsightAddSopError.return_resp(data=str(e))
 
         sop_dict = sop_obj.model_dump(exclude_unset=True)
         sop_dict["vector_store_id"] = vector_store_id  # 设置向量存储ID
@@ -326,22 +359,23 @@ class SOPManageService:
         sop_model = LinsightSOP(**sop_dict)
         sop_model.user_id = user_id
         sop_model = await LinsightSOPDao.create_sop(sop_model)
-        if not sop_model:
-            raise ServerError.http_exception(msg="添加指导手册失败")
-
         return resp_200(data=sop_model)
 
     @staticmethod
-    async def update_sop(sop_obj: SOPManagementUpdateSchema) -> UnifiedResponseModel | None:
+    async def update_sop(sop_obj: SOPManagementUpdateSchema,
+                         update_version_id: bool = True) -> UnifiedResponseModel | None:
         """
         更新SOP
         :param sop_obj:
+        :param update_version_id: 是否更新版本ID
         :return: 更新后的SOP对象
         """
         # 校验SOP是否存在
         existing_sop = await LinsightSOPDao.get_sops_by_ids([sop_obj.id])
         if not existing_sop:
-            raise NotFoundError.http_exception(msg="指导手册不存在")
+            return NotFoundError.return_resp()
+        if not update_version_id:
+            sop_obj.linsight_version_id = existing_sop[0].linsight_version_id
 
         if sop_obj.content != existing_sop[0].content:
 
@@ -350,9 +384,9 @@ class SOPManageService:
             try:
                 emb_model_id = workbench_conf.embedding_model.id
                 if not emb_model_id:
-                    raise ServerError.http_exception(msg="未配置知识库embedding模型，请从工作台配置中设置")
+                    return NoEmbeddingModelError.return_resp()
             except AttributeError:
-                raise ServerError.http_exception(msg="工作台配置中未找到指导手册 embedding模型，请从工作台配置中设置")
+                return NoEmbeddingModelError.return_resp()
 
             vector_store_id = existing_sop[0].vector_store_id
             embeddings = decide_embeddings(emb_model_id)
@@ -373,7 +407,7 @@ class SOPManageService:
                 es_client.add_texts([sop_obj.content], ids=[vector_store_id], metadatas=metadatas)
 
             except Exception as e:
-                raise ServerError.http_exception(msg=f"更新指导手册失败，向向量存储更新数据失败: {str(e)}")
+                return LinsightUpdateSopError.return_resp(data=str(e))
 
         # 更新数据库中的SOP
         sop_model = await LinsightSOPDao.update_sop(sop_obj)
@@ -388,13 +422,11 @@ class SOPManageService:
         :param sop_ids: SOP唯一ID列表
         :return: 删除结果
         """
-        if not sop_ids:
-            raise NotFoundError.http_exception(msg="指导手册 ID列表不能为空")
 
         # 校验SOP是否存在
         existing_sops = await LinsightSOPDao.get_sops_by_ids(sop_ids)
         if not existing_sops:
-            return resp_200(data=True)
+            return NotFoundError.return_resp()
 
         # 删除向量存储中的数据
         try:
@@ -410,16 +442,28 @@ class SOPManageService:
             es_client.delete(vector_store_ids)
 
         except Exception as e:
-            raise ServerError.http_exception(msg=f"删除指导手册失败，向向量存储删除数据失败: {str(e)}")
+            return LinsightDeleteSopError.return_resp(data=str(e))
 
         # 删除数据库中的SOP
         await LinsightSOPDao.remove_sop(sop_ids=sop_ids)
 
         return resp_200(data=True)
 
+    @classmethod
+    async def get_sop_by_id(cls, sop_id: int) -> LinsightSOP | None:
+        """
+        根据ID获取SOP
+        :param sop_id: SOP唯一ID
+        :return: SOP对象
+        """
+        sop_models = await LinsightSOPDao.get_sops_by_ids([sop_id])
+        if not sop_models:
+            return None
+        return sop_models[0]
+
     # sop 库检索
     @classmethod
-    async def search_sop(cls, query: str, k: int = 3) -> (List[Document], str | None):
+    async def search_sop(cls, query: str, k: int = 3) -> (List[Document], BaseErrorCode | None):
         """
         搜索SOP
         :param k:
@@ -434,7 +478,7 @@ class SOPManageService:
             workbench_conf = await LLMService.get_workbench_llm()
             if workbench_conf.embedding_model is None or not workbench_conf.embedding_model.id:
                 vector_search = False
-                error_msg = "请联系管理员检查工作台向量检索模型状态"
+                error_msg = LinsightVectorModelError
             else:
                 try:
                     emb_model_id = workbench_conf.embedding_model.id
@@ -443,7 +487,7 @@ class SOPManageService:
                 except Exception as e:
                     logger.error(f"向量检索模型初始化失败: {str(e)}")
                     vector_search = False
-                    error_msg = "请联系管理员检查工作台向量检索模型状态"
+                    error_msg = LinsightVectorModelError
 
             # 创建文本分割器
             text_splitter = RecursiveCharacterTextSplitter()
@@ -491,7 +535,7 @@ class SOPManageService:
                                                                     text_splitter=text_splitter)
                 retrievers = [baseline_vector_retriever]
             else:
-                error_msg = "指导手册检索失败，向量检索与关键词检索均不可用"
+                error_msg = LinsightDocSearchError
                 return [], error_msg
 
             retriever = EnsembleRetriever(retrievers=retrievers, weights=[0.5, 0.5] if len(retrievers) > 1 else [1.0])
@@ -518,7 +562,7 @@ class SOPManageService:
             return results, error_msg
         except Exception as e:
             logger.error(f"搜索指导手册失败: {str(e)}")
-            return [], f"指导手册检索失败: {str(e)}"
+            return [], LinsightDocNotFoundError
 
     # 重建SOP VectorStore
     @classmethod

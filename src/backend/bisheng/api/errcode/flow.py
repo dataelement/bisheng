@@ -1,4 +1,4 @@
-from bisheng.api.errcode.base import BaseErrorCode
+from .base import BaseErrorCode
 
 
 # 技能服务相关的返回错误码，功能模块代码：105
@@ -75,3 +75,8 @@ class WorkFlowVersionUpdateError(BaseErrorCode):
 class WorkFlowTaskBusyError(BaseErrorCode):
     Code: int = 10540
     Msg: str = '服务器线程数已满，请稍候再试'
+
+# 工作流任务其它错误
+class WorkFlowTaskOtherError(BaseErrorCode):
+    Code: int = 10541
+    Msg: str = '工作流任务执行失败'

@@ -2,6 +2,7 @@
 import { ChevronLeft, Download } from 'lucide-react'
 import type React from "react"
 import { useMemo } from "react"
+import { useLocalize } from "~/hooks"
 import { Button, TooltipAnchor } from "../ui"
 import FileIcon from "../ui/icon/File"
 import { Sheet, SheetContent, SheetHeader } from "../ui/Sheet"
@@ -42,6 +43,7 @@ export default function FilePreviewDrawer({
     directFile,
     onBack,
 }: FilePreviewDrawerProps) {
+    const localize = useLocalize()
     // const [selectedFileId, setSelectedFileId] = useState(currentFileId || files?.[0]?.file_id || "")
 
     // 获取文件扩展名
@@ -96,15 +98,15 @@ export default function FilePreviewDrawer({
                                             className="w-4 h-4"
                                         />
                                     )}
-                                    <TooltipAnchor side="bottom" description={currentDisplayFile?.file_name || "选择文件"}>
+                                    <TooltipAnchor side="bottom" description={currentDisplayFile?.file_name || localize('com_sop_select_file')}>
                                         <p className="font-medium text-gray-900 truncate max-w-96">
-                                            {currentDisplayFile?.file_name || "选择文件"}
+                                            {currentDisplayFile?.file_name || localize('com_sop_select_file')}
                                         </p>
                                     </TooltipAnchor>
                                 </div>
 
                                 {/* 下载按钮 */}
-                                <TooltipAnchor side="bottom" description='下载'>
+                                <TooltipAnchor side="bottom" description={localize('com_ui_download')}>
                                     <Button
                                         variant="ghost"
                                         size="icon"

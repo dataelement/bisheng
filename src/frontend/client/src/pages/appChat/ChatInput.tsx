@@ -1,20 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { Button, SendIcon, Textarea } from "~/components";
+import { useLocalize } from "~/hooks";
 import InputFiles from "./components/InputFiles";
 import { bishengConfState, currentRunningState } from "./store/atoms";
 import { useAreaText } from "./useAreaText";
+import { getErrorI18nKey } from "./store/constants";
 
 export default function ChatInput({ v }) {
     const [bishengConfig] = useRecoilState(bishengConfState)
     const { inputDisabled, error: inputMsg, showUpload, showStop, showReRun } = useRecoilValue(currentRunningState)
     const { accepts, chatState, inputRef, setChatFiles, handleInput, handleRestart, handleSendClick, handleStopClick } = useAreaText()
     const [fileUploading, setFileUploading] = useState(false)
+    const localize = useLocalize()
 
     const placholder = useMemo(() => {
-        const reason = inputMsg || ' '
-        return inputDisabled ? reason : '请输入问题'
-    }, [inputDisabled, inputMsg])
+        return inputDisabled ?
+            (inputMsg ? localize(getErrorI18nKey(inputMsg)) : ' ')
+            : localize('com_ui_please_enter_question')
+    }, [inputDisabled, inputMsg, localize])
 
     // auto focus
     useEffect(() => {
@@ -58,11 +62,11 @@ export default function ChatInput({ v }) {
             */}
             <div className="absolute w-full flex justify-center left-0 -top-14">
                 {/* {!showStop && chatState?.flow?.flow_type === 10 && !inputMsg  */}
-                { showReRun && !inputMsg && <Button
+                {showReRun && !inputMsg && <Button
                     className="rounded-full bg-primary/10 bg-blue-50 text-primary"
                     variant="ghost"
                     onClick={handleRestart}>
-                    <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/chat.png'} alt="" />重新运行
+                    <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/chat.png'} alt="" />{localize('com_ui_restart')}
                 </Button>
                 }
             </div>

@@ -3,7 +3,7 @@ import axios from "../request";
 // src/controllers/API.ts
 export const sopApi = {
   // 获取SOP列表
-  getSopList: (params: { keywords?: string; page?: number; page_size?: number; sort?: string }) => {
+  getSopList: (params: { keywords?: string; page?: number; page_size?: number; showcase?: 0 | 1 }) => {
     return axios.get('/api/v1/linsight/sop/list', { params });
   },
 
@@ -35,16 +35,23 @@ export const sopApi = {
   getToolList: () => {
     return axios.get('/api/v1/workstation/config');
   },
-  setToolList:(data) => {
-     return axios.post(`api/v1/workstation/config`, data);
+  setToolList: (data) => {
+    return axios.post(`api/v1/workstation/config`, data);
   },
-   GetSopRecord(params: { keyword?: string; page?: number; page_size?: number;sort?: string }) {
+  GetSopRecord(params: { keyword?: string; page?: number; page_size?: number; sort?: string }) {
     return axios.get('/api/v1/linsight/sop/record', { params });
   },
-   SyncSopRecord:(data) => {
-     return axios.post(`/api/v1/linsight/sop/record/sync`, data);
+  SyncSopRecord: (data) => {
+    return axios.post(`/api/v1/linsight/sop/record/sync`, data);
   },
-  UploadSopRecord:(data) => {
-     return axios.post(`/api/v1/linsight/sop/upload`, data);
+  UploadSopRecord: (data) => {
+    return axios.post(`/api/v1/linsight/sop/upload`, data);
+  },
+  // 设为/取消精选
+  switchShowcase: (data: { sop_id: string; showcase: boolean }) => {
+    return axios.post(`/api/v1/linsight/sop/showcase`, data);
+  },
+  getSopShowcaseDetail: (data: { sop_id: string; linsight_version_id: string }) => {
+    return axios.get(`/api/v1/linsight/sop/showcase/result`, { params: data });
   },
 }

@@ -32,7 +32,7 @@ const FileIcon: React.FC<FileIconProps> = ({ className = '', type }) => {
         ),
         dir: (
             <svg t="1753254956028" className={className} viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="6260" width="200" height="200"><path d="M529.664 213.333333H896a42.666667 42.666667 0 0 1 42.666667 42.666667v597.333333a42.666667 42.666667 0 0 1-42.666667 42.666667H128a42.666667 42.666667 0 0 1-42.666667-42.666667V170.666667a42.666667 42.666667 0 0 1 42.666667-42.666667h316.330667l85.333333 85.333333z" fill="#bfbfbf" p-id="6261"></path></svg>
-        )
+        ),
     };
 
     const findIcon = (type: string) => {
@@ -52,7 +52,7 @@ const FileIcon: React.FC<FileIconProps> = ({ className = '', type }) => {
             case 'dir':
                 return icons.dir;
             default:
-                return null;
+                return icons.txt;
         }
     }
 
