@@ -31,7 +31,6 @@ export type Partition = {
 }
 export default function PreviewResult({ showPreview, previewCount, rules, step, applyEachCell, cellGeneralConfig, kId, handlePreviewResult }: IProps) {
     const { fileId: id } = useParams()
-console.log(showPreview, previewCount, rules, step, applyEachCell, cellGeneralConfig, kId,handlePreviewResult,676786);
 
     const [chunks, setChunks] = useState([]) // 当前文件分块
     const [partitions, setPartitions] = useState<Partition>(null) // 当前文件分区
@@ -57,7 +56,7 @@ console.log(showPreview, previewCount, rules, step, applyEachCell, cellGeneralCo
             dom && dom.dispatchEvent(keydownEvent);
         }
         return _currentFile
-    }, [selectId, rules])
+    }, [selectId])
     const [fileViewUrl, setFileViewUrl] = useState<{ load: boolean; url: string }>({ load: true, url: '' }) // 当前选择文件预览url
 
     const [loading, setLoading] = useState(false)
@@ -75,8 +74,7 @@ console.log(showPreview, previewCount, rules, step, applyEachCell, cellGeneralCo
         const currentFile = fileList.find(file => file.id === selectId)
 
         let preview_url
-        console.log(currentFile,789);
-        
+
         if (showPreview) {
             preview_url = currentFile.previewUrl || currentFile?.filePath
         } else {
@@ -152,26 +150,25 @@ console.log(showPreview, previewCount, rules, step, applyEachCell, cellGeneralCo
     // 更新分段
     const selectedBbox = useKnowledgeStore((state) => state.selectedBbox);
     const handleChunkChange = (chunkIndex, text) => {
-       
-        
-         const existingBbox = chunks[chunkIndex]?.bbox ? JSON.parse(chunks[chunkIndex].bbox) : { chunk_bboxes: [] };
-          const targetChunkBboxes = selectedBbox && selectedBbox.length > 0 
-        ? selectedBbox 
-        : existingBbox.chunk_bboxes;
-    const bbox = { 
-        chunk_bboxes: targetChunkBboxes 
-    };
-    console.log( bbox,existingBbox,98999898);
-    
+
+
+        const existingBbox = chunks[chunkIndex]?.bbox ? JSON.parse(chunks[chunkIndex].bbox) : { chunk_bboxes: [] };
+        const targetChunkBboxes = selectedBbox && selectedBbox.length > 0
+            ? selectedBbox
+            : existingBbox.chunk_bboxes;
+        const bbox = {
+            chunk_bboxes: targetChunkBboxes
+        };
+
         updatePreviewChunkApi({
-            knowledge_id: Number(id)||kId, file_path: currentFile.filePath, chunk_index: chunkIndex, text, bbox: JSON.stringify(bbox)
+            knowledge_id: Number(id) || kId, file_path: currentFile.filePath, chunk_index: chunkIndex, text, bbox: JSON.stringify(bbox)
         })
         setChunks(chunks => chunks.map(chunk => chunk.chunkIndex === chunkIndex ? { ...chunk, text } : chunk))
     }
 
     return (<div className={cn("h-full flex gap-2 justify-center", "w-full")}>
-        
-        {(step === 3 || step === 2 && !previewCount) && currentFile && !loading  && <PreviewFile
+
+        {(step === 3 || step === 2 && !previewCount) && currentFile && !loading && <PreviewFile
             urlState={fileViewUrl}
             file={currentFile}
             step={step}
@@ -179,7 +176,7 @@ console.log(showPreview, previewCount, rules, step, applyEachCell, cellGeneralCo
             setChunks={setChunks}
             partitions={partitions}
         />}
-         <div className={cn('relative',  "w-full")}>
+        <div className={cn('relative', "w-full")}>
             {/* 下拉框 - 右上角 */}
             {(step === 3 || (step === 2 && showPreview)) && (
                 <div className="flex justify-end">
