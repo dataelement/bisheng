@@ -788,11 +788,12 @@ class KnowledgeService(KnowledgeUtils):
             knowledge_id, file_name, status, page, page_size, file_ids
         )
         total = KnowledgeFileDao.count_file_by_filters(knowledge_id, file_name, status)
+        success_ids = [one.id for one in res if one.status == KnowledgeFileStatus.SUCCESS.value]
 
         # get file title from es
         finally_res = []
         file_title_map = {}
-        if res:
+        if success_ids:
             try:
                 embeddings = FakeEmbedding()
                 es_client = decide_vectorstores(
@@ -810,7 +811,7 @@ class KnowledgeService(KnowledgeUtils):
                         }
                     ],
                     "post_filter": {
-                        "terms": {"metadata.file_id": [one.id for one in res]}
+                        "terms": {"metadata.file_id": success_ids}
                     },
                     "collapse": {"field": "metadata.file_id"},
                 }
@@ -835,7 +836,7 @@ class KnowledgeService(KnowledgeUtils):
             finally_res[index].title = file_title_map.get(one.id, "")
         if timeout_files:
             KnowledgeFileDao.update_file_status(timeout_files, KnowledgeFileStatus.FAILED,
-                                                '文件处理时间超过24小时')
+                                                'Parsing time exceeds 24 hours')
 
         return (
             finally_res,
