@@ -627,7 +627,7 @@ async def update_sop(
     :return:
     """
 
-    return await SOPManageService.update_sop(sop_obj)
+    return await SOPManageService.update_sop(sop_obj, update_version_id=False)
 
 
 @router.get("/sop/list", summary="获取灵思SOP列表", response_model=UnifiedResponseModel)

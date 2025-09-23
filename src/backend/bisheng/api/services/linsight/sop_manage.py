@@ -340,16 +340,20 @@ class SOPManageService:
         return resp_200(data=sop_model)
 
     @staticmethod
-    async def update_sop(sop_obj: SOPManagementUpdateSchema) -> UnifiedResponseModel | None:
+    async def update_sop(sop_obj: SOPManagementUpdateSchema,
+                         update_version_id: bool = True) -> UnifiedResponseModel | None:
         """
         更新SOP
         :param sop_obj:
+        :param update_version_id: 是否更新版本ID
         :return: 更新后的SOP对象
         """
         # 校验SOP是否存在
         existing_sop = await LinsightSOPDao.get_sops_by_ids([sop_obj.id])
         if not existing_sop:
             return NotFoundError.return_resp()
+        if not update_version_id:
+            sop_obj.linsight_version_id = existing_sop[0].linsight_version_id
 
         if sop_obj.content != existing_sop[0].content:
 
