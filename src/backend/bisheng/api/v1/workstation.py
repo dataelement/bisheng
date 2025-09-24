@@ -26,7 +26,7 @@ from bisheng.api.services.workstation import (SSECallbackClient, WorkstationConv
 from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import FrequentlyUsedChat
-from bisheng.api.v1.schemas import WorkstationConfig, resp_200, resp_500, WSPrompt, ExcelRule, UnifiedResponseModel
+from bisheng.api.v1.schemas import WorkstationConfig, resp_200, WSPrompt, ExcelRule, UnifiedResponseModel
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download, save_download_file, save_uploaded_file
 from bisheng.core.app_context import app_ctx
@@ -36,7 +36,6 @@ from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.interface.llms.custom import BishengLLM
 from bisheng.settings import settings as bisheng_settings
-from bisheng.utils.exceptions import MessageException
 
 router = APIRouter(prefix='/workstation', tags=['WorkStation'])
 
@@ -271,6 +270,7 @@ async def webSearch(query: str, web_search_config: WSPrompt):
     if not web_search_tool:
         raise WebSearchToolNotFoundError(exception=Exception("No web_search tool found in gpts tools"))
     search_list = web_search_tool[0].invoke(input={"query": query})
+    search_list = json.loads(search_list)
     search_res = ""
     for index, one in enumerate(search_list):
         search_res += f'[webpage ${index} begin]\n${one.get("snippet")}\n[webpage ${index} end]\n\n'

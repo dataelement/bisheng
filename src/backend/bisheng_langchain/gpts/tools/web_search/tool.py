@@ -1,3 +1,4 @@
+import json
 from abc import abstractmethod, ABC
 from typing import Type
 
@@ -34,6 +35,9 @@ class SearchTool(ABC):
 
     # 抽象类
     @abstractmethod
+    def _invoke(self, query: str, **kwargs) -> (str, list):
+        raise NotImplementedError()
+
     def invoke(self, query: str, **kwargs) -> (str, list):
         """
         Invoke the search tool with the given query.
@@ -44,7 +48,8 @@ class SearchTool(ABC):
 
         # Here you would implement the actual search logic
         # For demonstration purposes, we'll just return a dummy response
-        raise NotImplementedError()
+        result = self._invoke(query, **kwargs)
+        return json.dumps(result, ensure_ascii=False)
 
     @classmethod
     def get_host_from_url(cls, url: str) -> str:
@@ -89,7 +94,7 @@ class BingSearch(SearchTool):
         self.api_key = kwargs.get('api_key')
         self.base_url = kwargs.get('base_url')
 
-    def invoke(self, query: str, **kwargs) -> (str, list):
+    def _invoke(self, query: str, **kwargs) -> (str, list):
         bingtool = BingSearchResults(api_wrapper=BingSearchAPIWrapper(bing_subscription_key=self.api_key,
                                                                       bing_search_url=self.base_url),
                                      num_results=10)
@@ -117,7 +122,7 @@ class BoChaSearch(SearchTool):
         self.base_url = 'https://api.bochaai.com/v1/web-search'
         self.headers = {'Authorization': f'Bearer {self.api_key}'}
 
-    def invoke(self, query: str, **kwargs) -> (str, list):
+    def _invoke(self, query: str, **kwargs) -> (str, list):
         # Implement the search logic for BoCha here
         # For demonstration purposes, we'll just return a dummy response
         result = self._requests(self.base_url, method='POST', json={'query': query, 'summary': True},
@@ -147,7 +152,7 @@ class JinaDeepSearch(SearchTool):
             "Authorization": f"Bearer {self.api_key}"
         }
 
-    def invoke(self, query: str, **kwargs) -> (str, list):
+    def _invoke(self, query: str, **kwargs) -> (str, list):
         req_data = {
             "model": "jina-deepsearch-v1",
             "messages": [
@@ -186,7 +191,7 @@ class SerpSearch(SearchTool):
         self.engine = kwargs.get('engine')
         self.base_url = 'https://serpapi.com/search.json'
 
-    def invoke(self, query: str, **kwargs) -> (str, list):
+    def _invoke(self, query: str, **kwargs) -> (str, list):
         result = self._requests(self.base_url, method='GET', params={'q': query, 'api_key': self.api_key,
                                                                      'engine': self.engine})
 
@@ -210,7 +215,7 @@ class TavilySearch(SearchTool):
         self.base_url = 'https://api.tavily.com/search'
         self.headers = {'Authorization': f'Bearer {self.api_key}'}
 
-    def invoke(self, query: str, **kwargs) -> (str, list):
+    def _invoke(self, query: str, **kwargs) -> (str, list):
         result = self._requests(self.base_url, method='POST', json={'query': query}, headers=self.headers)
 
         answers = result.get('results', [])
@@ -235,7 +240,7 @@ class CloudswaySearch(SearchTool):
         self.base_url = f'https://searchapi.cloudsway.net/search/{self.endpoint}/smart'
         self.headers = {'Authorization': f'Bearer {self.api_key}'}
 
-    def invoke(self, query: str, **kwargs) -> (str, list):
+    def _invoke(self, query: str, **kwargs) -> (str, list):
         result = self._requests(self.base_url, method='GET', params={'q': query}, headers=self.headers)
 
         answers = result.get('webPages', {}).get('value', [])
@@ -258,7 +263,7 @@ class SearXNGSearch(SearchTool):
         super().__init__(*args, **kwargs)
         self.base_url = kwargs.get('server_url').rstrip('/')
 
-    def invoke(self, query: str, **kwargs) -> (str, list):
+    def _invoke(self, query: str, **kwargs) -> (str, list):
         result = self._requests(f'{self.base_url}/search', method='GET',
                                 params={'q': query, 'format': 'json'})
 
