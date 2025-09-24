@@ -177,6 +177,8 @@ class SOPManageService:
                         content=one_record.content,
                         rating=one_record.rating,
                         linsight_version_id=one_record.linsight_version_id,
+                        showcase=False,
+                        user_id=one_record.user_id,
                     ))
                     override_name_dict[one.name] = True
             # 再新增剩下的sop记录

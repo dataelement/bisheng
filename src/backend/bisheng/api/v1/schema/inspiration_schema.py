@@ -21,3 +21,5 @@ class SOPManagementSchema(BaseModel):
 class SOPManagementUpdateSchema(SOPManagementSchema):
     """SOP管理更新 Schema"""
     id: int = Field(..., description="SOP唯一ID")
+    user_id: Optional[int] = Field(None, description="用户ID")
+    showcase: Optional[bool] = Field(None, description="是否展示")
