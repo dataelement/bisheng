@@ -5,6 +5,7 @@ import Markdown from "~/components/Chat/Messages/Content/Markdown"
 import MarkdownLite from "~/components/Chat/Messages/Content/MarkdownLite"
 import FileIcon from "~/components/ui/icon/File"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "~/components/ui/Sheet"
+import { useLocalize } from "~/hooks"
 
 interface SearchResultItem {
     content: string
@@ -20,6 +21,7 @@ interface SearchResultsSheetProps {
 }
 
 export function SearchKnowledgeSheet({ isOpen, onClose, data = [], searchQuery }: SearchResultsSheetProps) {
+    const localize = useLocalize();
 
     return (
         <Sheet open={isOpen} onOpenChange={onClose}>
@@ -27,11 +29,11 @@ export function SearchKnowledgeSheet({ isOpen, onClose, data = [], searchQuery }
                 <SheetHeader className="p-4 border-b border-border">
                     <div className="flex items-center gap-3">
                         <FileSearchIcon className="w-5 h-5 text-muted-foreground" />
-                        <SheetTitle className="text-lg font-semibold text-foreground">检索结果</SheetTitle>
+                        <SheetTitle className="text-lg font-semibold text-foreground">{localize('com_searchResults')}</SheetTitle>
                     </div>
                     <SheetDescription className="text-left">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
-                            <span>🔍检索问题:</span>
+                            <span>🔍{localize('com_searchQueryLabel')}</span>
                             <span className="font-medium text-foreground">"{searchQuery}"</span>
                         </div>
                     </SheetDescription>

@@ -13,7 +13,7 @@ import SopMarkdown from './SopMarkdown';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../bs-ui/tooltip';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../bs-ui/tabs';
 import { useTranslation } from 'react-i18next';
-import { TaskFlowContent } from './SopTasks';
+import { TaskFlowContent } from "@/workspace/SopTasks";
 import Tip from '../bs-ui/tooltip/tip';
 
 interface SopRecord {
@@ -29,7 +29,7 @@ interface SopRecord {
   user_name: string;
 }
 
-export default function ImportFromRecordsDialog({ open, tools, onOpenChange, onSuccess, setDuplicateNames, duplicateNames, duplicateDialogOpen, setDuplicateDialogOpen, importFormData }) {
+export default function ImportFromRecordsDialog({ open, tools, onOpenChange, setDuplicateNames, duplicateNames, duplicateDialogOpen, setDuplicateDialogOpen, importFormData }) {
   const { toast } = useToast();
   const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
@@ -263,7 +263,11 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, onS
           setLinsight({});
           return;
       }
-      setLinsight({ ...res.version_info, tasks: res.execute_tasks });
+      setLinsight({ 
+        ...res.version_info,
+         tasks: res.execute_tasks,
+        summary: '' 
+      });
       setSopShowcase(false);
     }
     fetchSopShowcase();

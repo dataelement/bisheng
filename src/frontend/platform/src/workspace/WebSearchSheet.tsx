@@ -1,8 +1,8 @@
 "use client"
 
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet"
 import { Earth } from "lucide-react"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "~/components/ui/Sheet"
-import { useLocalize } from "~/hooks"
+import { useTranslation } from "react-i18next"
 
 interface SearchResultItem {
     content: string
@@ -18,7 +18,7 @@ interface SearchResultsSheetProps {
 }
 
 export function WebSearchSheet({ isOpen, onClose, data = [], searchQuery }: SearchResultsSheetProps) {
-    const localize = useLocalize();
+    const { t: localize } = useTranslation();
 
     return (
         <Sheet open={isOpen} onOpenChange={onClose}>
@@ -48,7 +48,7 @@ export function WebSearchSheet({ isOpen, onClose, data = [], searchQuery }: Sear
                                 <div className="p-4 bg-card">
                                     <div className="mb-3 flex items-center gap-2">
                                         <div className="">
-                                            <img src={item.thumbnail} className="max-w-12 max-h-12 size-6 border object-contain p-0" alt="" />
+                                            <img src={item.thumbnail} className="max-w-12 max-h-12" alt="" />
                                         </div>
                                         <h4 className="text-sm font-medium text-foreground">{item.title}</h4>
                                     </div>

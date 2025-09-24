@@ -1,21 +1,26 @@
+import DownIcon from '@/components/bs-icons/DownIcon';
+import { Button } from '@/components/bs-ui/button';
+import { Textarea } from '@/components/bs-ui/input';
+import MessageMarkDown from '@/pages/BuildPage/flow/FlowChat/MessageMarkDown';
 import axios from 'axios';
 import {
     ArrowRight,
     BookOpen,
     Check, ChevronDown,
-    FileIcon,
     FileText,
     LucideLoaderCircle, Pause,
     Search,
     SendIcon,
+    Download,
     WrenchIcon
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Button } from '../bs-ui/button';
 import { useTranslation } from 'react-i18next';
-import { Textarea } from '../bs-ui/input';
-import Markdown from '@/pages/KnowledgePage/components/Markdown';
-import DownIcon from '../bs-icons/DownIcon';
+import FilePreviewDrawer from './FilePreviewDrawer';
+import FileIcon from './FileIcon';
+import { useToast } from '@/components/bs-ui/toast/use-toast';
+import { SearchKnowledgeSheet } from './SearchKnowledgeSheet';
+import { WebSearchSheet } from './WebSearchSheet';
 
 const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
     if (!params) return null
@@ -26,9 +31,10 @@ const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
     >{params.file_info?.file_name}</Button>
 }
 
-const Tool = ({ data, setCurrentDirectFile }) => {
-    const { name, step_type, params, extra_info } = data;
+const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) => {
+    const { name, step_type, params, extra_info, output } = data;
     const { t: localize } = useTranslation();
+    const { toast } = useToast();
 
     // 过滤尾部hash值
     const toolName = useMemo(() => {
@@ -57,10 +63,94 @@ const Tool = ({ data, setCurrentDirectFile }) => {
         default: localize('com_sop_using_tool', { 0: toolName })
     };
 
+    // search knowledge
+    const handleKnowledgeClick = () => {
+        if (!output || !output.length) return
+        try {
+            const upRes = JSON.parse(output)['结果']
+            const resData = upRes.map(res => {
+                let titleRegex, contentRegex;
+                if (res.startsWith('{')) {
+                    titleRegex = /<file_title>(.*?)<\/file_title>/;
+                    contentRegex = /<paragraph_content>(.*?)<\/paragraph_content>/s;
+                } else {
+                    // 兼容旧格式
+                    titleRegex = /^(.*?)\\n/;
+                    contentRegex = /\\n--------\\n(.*?)$/;
+                }
+                const titleMatch = res.match(titleRegex);
+                const contentMatch = res.match(contentRegex);
+                const title = titleMatch ? titleMatch[1] : '';
+
+                return {
+                    title,
+                    suffix: title.split('.').pop().toLowerCase(),
+                    content: contentMatch ? contentMatch[1] : ''
+                };
+            })
+            onSearchKnowledge({
+                query: params.query,
+                data: resData
+            })
+        } catch (error) {
+            console.log('knowledge parse error :>> ', error);
+            toast({ description: output, variant: 'error' });
+        }
+    }
+
+    const handleWebSearchClick = () => {
+        if (!output || !output.length) return
+        try {
+            const res = JSON.parse(output)
+            if (Array.isArray(res)) {
+                onWebSearch({
+                    query: params.query,
+                    data: res.map(item => ({
+                        ...item,
+                        title: item.title || item.url.replace(/^https?:\/\/([^\/]+).*$/, '$1'),
+                        content: item.snippet,
+                        thumbnail: item.thumbnail || ''
+                    }))
+                })
+            } else {
+                const text = JSON.parse(output)['content'][0].text
+                const resData = JSON.parse(text)
+                onWebSearch({
+                    query: params.query,
+                    data: resData['搜索结果'].map(item => ({
+                        title: item['标题'] || item['链接'].replace(/^https?:\/\/([^\/]+).*$/, '$1'),
+                        content: item['摘要'],
+                        url: item['链接'],
+                        thumbnail: item['缩略图'] || '',
+                    }))
+                })
+            }
+        } catch (error) {
+            console.log('websearch parse error :>> ', error);
+            onWebSearch({
+                query: params.query,
+                data: [{
+                    title: '',
+                    content: output,
+                    thumbnail: '',
+                    url: ''
+                }]
+            })
+        }
+    }
+
     // 参数键名映射
     const paramKeyMap = {
-        web_search: () => params.query,
-        search_knowledge_base: () => params.query,
+        web_search: () => <Button
+            variant="link"
+            className='text-xs p-0 h-4 text-blue-400 underline underline-offset-2'
+            onClick={handleWebSearchClick}
+        >{params.query}</Button>,
+        search_knowledge_base: () => <Button
+            variant="link"
+            className='text-xs p-0 h-4 text-blue-400 underline underline-offset-2'
+            onClick={handleKnowledgeClick}
+        >{params.query}</Button>,
         list_files: () => params.directory_path,
         get_file_details: () => params.file_path.split('/').pop(),
         search_files: () => params.pattern,
@@ -118,6 +208,8 @@ const Task = ({
     hasSubTask,
     sendInput,
     setCurrentDirectFile,
+    onSearchKnowledge,
+    onWebSearch,
     children = null
 }) => {
     const [isExpanded, setIsExpanded] = useState(true);
@@ -236,7 +328,12 @@ const Task = ({
                                 {history.map((_history, index) => (
                                     <div>
                                         <p key={index}>{_history.call_reason}</p>
-                                        <Tool data={_history} setCurrentDirectFile={setCurrentDirectFile} />
+                                        <Tool
+                                            data={_history}
+                                            setCurrentDirectFile={setCurrentDirectFile}
+                                            onSearchKnowledge={onSearchKnowledge}
+                                            onWebSearch={onWebSearch}
+                                        />
                                     </div>
                                 ))}
                             </div> : null
@@ -277,7 +374,7 @@ const Task = ({
                 {children}
                 {/* 任务总结 */}
                 {task.status !== 'failed' && task.errorMsg && <div className='bs-mkdown relative mb-6 text-sm px-4 py-3 rounded-lg bg-[#F8F9FB] text-[#303133] leading-6 break-all'>
-                    <Markdown value={task.errorMsg} isLatestMessage={true} webContent={false} />
+                    <MessageMarkDown message={task.errorMsg} />
                     <div className='bg-gradient-to-t w-full h-10 from-[#F8F9FB] from-0% to-transparent to-100% absolute bottom-0'></div>
                 </div>}
             </div>
@@ -287,8 +384,10 @@ const Task = ({
 
 
 export const TaskFlowContent = ({ linsight }) => {
-    const { status, sop, title, tasks, taskError, summary, queueCount = 0 } = linsight
-    const files = linsight.files || []
+    const { status, sop, title, tasks, taskError, queueCount = 0 } = linsight
+    console.log('linsight :>> ', linsight);
+    const summary = linsight.output_result.answer;
+    const files = linsight.output_result.final_files || []
     const allFiles = linsight?.output_result?.all_from_session_files || []
 
     const [isDrawerOpen, setIsDrawerOpen] = useState(false)
@@ -297,6 +396,10 @@ export const TaskFlowContent = ({ linsight }) => {
     const [currentDirectFile, setCurrentDirectFile] = useState<any>(null)
     const { t: localize } = useTranslation();
 
+    // knowledge search
+    const [knowledgeInfo, setKnowledgeInfo] = useState(null)
+    // web search
+    const [webSearchInfo, setWebSearchInfo] = useState(null)
     // 由卡片触发抽屉展开
     const [triggerDrawerFromCard, setTriggerDrawerFromCard] = useState(false)
     // useFoucsInput(tasks);
@@ -371,6 +474,8 @@ export const TaskFlowContent = ({ linsight }) => {
                         setIsPreviewOpen(true);
                         setCurrentDirectFile(file)
                     }}
+                    onSearchKnowledge={setKnowledgeInfo}
+                    onWebSearch={setWebSearchInfo}
                     sendInput={() => { }} >
                     {
                         task.children?.map((_task, i) => <Task
@@ -382,6 +487,8 @@ export const TaskFlowContent = ({ linsight }) => {
                                 setIsPreviewOpen(true);
                                 setCurrentDirectFile(file)
                             }}
+                            onSearchKnowledge={setKnowledgeInfo}
+                            onWebSearch={setWebSearchInfo}
                         />)
                     }
                 </Task>
@@ -392,7 +499,7 @@ export const TaskFlowContent = ({ linsight }) => {
             {/* 总结 */}
             {
                 summary && <div className='relative mb-6 text-sm px-4 py-3 rounded-lg bg-[#F8F9FB] text-[#303133] leading-6 break-all'>
-                    <Markdown value={summary} isLatestMessage={true} webContent={false} />
+                    <MessageMarkDown message={summary} />
                     <div className='bg-gradient-to-t w-full h-10 from-[#F8F9FB] from-0% to-transparent to-100% absolute bottom-0'></div>
                 </div>
             }
@@ -422,7 +529,7 @@ export const TaskFlowContent = ({ linsight }) => {
                                     <FileIcon type={file.file_name.split('.').pop().toLowerCase()} className='size-4 min-w-4' />
                                     <span className='text-sm truncate pr-6'>{file.file_name}</span>
                                     <Button variant="ghost" className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
-                                        <DownIcon size={16} onClick={(e) => {
+                                        <Download size={16} onClick={(e) => {
                                             e.stopPropagation();
                                             downloadFile(file)
                                         }} />
@@ -454,6 +561,18 @@ export const TaskFlowContent = ({ linsight }) => {
                 </div>
             }
 
+            {/* search knowledge */}
+            <SearchKnowledgeSheet
+                isOpen={!!knowledgeInfo}
+                onClose={() => setKnowledgeInfo(null)}
+                data={knowledgeInfo?.data}
+                searchQuery={knowledgeInfo?.query} />
+            {/* web search */}
+            <WebSearchSheet
+                isOpen={!!webSearchInfo}
+                onClose={() => setWebSearchInfo(null)}
+                data={webSearchInfo?.data}
+                searchQuery={webSearchInfo?.query} />
             {/* 文件列表抽屉 */}
             {/* <FileDrawer
                 title={title}
@@ -470,7 +589,7 @@ export const TaskFlowContent = ({ linsight }) => {
                 }}
             /> */}
             {/* 文件预览抽屉 */}
-            {/* <FilePreviewDrawer
+            <FilePreviewDrawer
                 files={mergeFiles}
                 isOpen={isPreviewOpen}
                 onOpenChange={setIsPreviewOpen}
@@ -483,7 +602,7 @@ export const TaskFlowContent = ({ linsight }) => {
                     setIsPreviewOpen(false);
                 })}
             >
-            </FilePreviewDrawer> */}
+            </FilePreviewDrawer>
         </div >
     );
 };

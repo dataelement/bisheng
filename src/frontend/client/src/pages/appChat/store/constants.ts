@@ -57,6 +57,7 @@ export const ERROR_CODES = {
     "10531": "error_function_upgraded_need_recreate",
     "10532": "error_workflow_version_upgraded",
     "10540": "error_server_threads_full",
+    "10541": "error_workflow_task_execution_failed",
 
     "10001": "error_sft_service_not_found",
     "10002": "error_invalid_operation",

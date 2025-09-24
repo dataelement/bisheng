@@ -14,7 +14,7 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message }) {
             .replace(/\\[\[\]]/g, '$$') // 处理`\[...\]`包裹的公式
     }, [message]);
 
-    console.log('message :>> ', processedMessage);
+    // console.log('message :>> ', processedMessage);
 
     return (
         <div className="bs-mkdown inline-block break-all max-w-full text-sm text-text-answer">

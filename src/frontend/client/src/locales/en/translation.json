@@ -1133,5 +1133,9 @@
   "error_backend_processing_try_later": "Backend processing, please try again later",
   "com_sop_minutes": "min",
   "com_sop_hours": "hr",
-  "com_make_samestyle": "Make similar"
+  "com_make_samestyle": "Make similar",
+  "com_searchResults": "Search Results",
+  "com_webSearch": "Web Search",
+  "com_searchQueryLabel": "Search Query:",
+  "error_workflow_task_execution_failed": "Workflow task execution failed"
 }

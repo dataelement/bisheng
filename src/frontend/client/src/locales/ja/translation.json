@@ -1053,5 +1053,9 @@
   "error_backend_processing_try_later": "バックエンド処理中です。後でもう一度お試しください",
   "com_sop_minutes": "分",
   "com_sop_hours": "時間",
-  "com_make_samestyle": "同じスタイルを作成"
+  "com_make_samestyle": "同じスタイルを作成",
+  "com_searchResults": "検索結果",
+  "com_webSearch": "ウェブ検索",
+  "com_searchQueryLabel": "検索クエリ:",
+  "error_workflow_task_execution_failed": "ワークフロータスクの実行に失敗しました"
 }

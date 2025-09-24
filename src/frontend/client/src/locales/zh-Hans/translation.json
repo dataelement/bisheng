@@ -1054,5 +1054,9 @@
   "error_backend_processing_try_later": "后台处理中，稍后再试",
   "com_sop_minutes": "分钟",
   "com_sop_hours": "小时",
-  "com_make_samestyle": "做同款"
+  "com_make_samestyle": "做同款",
+  "com_searchResults": "检索结果",
+  "com_webSearch": "网页搜索",
+  "com_searchQueryLabel": "检索问题:",
+  "error_workflow_task_execution_failed": "工作流任务执行失败"
 }

@@ -956,7 +956,6 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 duplicateDialogOpen={duplicateDialogOpen}
                                 setDuplicateDialogOpen={setDuplicateDialogOpen}
                                 importFormData={importFormData}
-                                linsight={linsight}
                             />
                             {/* 表格区域 */}
                             <SopTable datalist={datalist} selectedItems={selectedItems} handleSelectItem={handleSelectItem} handleSelectAll={handleSelectAll} handleSort={handleSort} handleEdit={handleEdit} handleDelete={handleDelete} page={page} pageSize={pageSize} total={total} loading={loading} pageInputValue={pageInputValue} handlePageChange={handlePageChange} handlePageInputChange={handlePageInputChange} handlePageInputConfirm={handlePageInputConfirm} handleKeyDown={handleKeyDown} onShowcaseFilterChange={handleShowcaseFilterChange} />

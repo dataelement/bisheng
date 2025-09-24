@@ -10,6 +10,7 @@ import {
     WrenchIcon
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useToastContext } from '~/Providers';
 import { SendIcon } from '~/components/svg';
 import { useLocalize } from '~/hooks';
 import { playDing } from '~/utils';
@@ -36,7 +37,7 @@ const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
 const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) => {
     const { name, step_type, params, extra_info, output } = data;
     const localize = useLocalize();
-
+    const { showToast } = useToastContext();
     // 过滤尾部hash值
     const toolName = useMemo(() => {
         const lastUnderscoreIndex = name.lastIndexOf('_');
@@ -95,25 +96,48 @@ const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) =>
             })
         } catch (error) {
             console.log('knowledge parse error :>> ', error);
+            showToast({ message: output, status: 'error' });
         }
     }
 
     const handleWebSearchClick = () => {
         if (!output || !output.length) return
         try {
-            const text = JSON.parse(output)['content'][0].text
-            const resData = JSON.parse(text)
-            onWebSearch({
-                query: params.query,
-                data: resData['搜索结果'].map(item => ({
-                    title: item['标题'],
-                    content: item['摘要'],
-                    url: item['链接'],
-                    thumbnail: item['缩略图'],
-                }))
-            })
+            const res = JSON.parse(output)
+            if (Array.isArray(res)) {
+                onWebSearch({
+                    query: params.query,
+                    data: res.map(item => ({
+                        ...item,
+                        title: item.title || item.url.replace(/^https?:\/\/([^\/]+).*$/, '$1'),
+                        content: item.snippet,
+                        thumbnail: item.thumbnail || ''
+                    }))
+                })
+            } else {
+                const text = JSON.parse(output)['content'][0].text
+                const resData = JSON.parse(text)
+                onWebSearch({
+                    query: params.query,
+                    data: resData['搜索结果'].map(item => ({
+                        title: item['标题'] || item['链接'].replace(/^https?:\/\/([^\/]+).*$/, '$1'),
+                        content: item['摘要'],
+                        url: item['链接'],
+                        thumbnail: item['缩略图'] || '',
+                    }))
+                })
+            }
         } catch (error) {
             console.log('websearch parse error :>> ', error);
+            onWebSearch({
+                query: params.query,
+                data: [{
+                    title: '',
+                    content: output,
+                    thumbnail: '',
+                    url: ''
+                }]
+            })
         }
     }
 
