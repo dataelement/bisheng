@@ -270,7 +270,11 @@ async def webSearch(query: str, web_search_config: WSPrompt):
     web_search_tool = await AssistantAgent.init_tools_by_tool_ids([web_search_info.id], None)
     if not web_search_tool:
         raise WebSearchToolNotFoundError(exception=Exception("No web_search tool found in gpts tools"))
-    return web_search_tool[0].invoke(input={"query": query})
+    search_list = web_search_tool[0].invoke(input={"query": query})
+    search_res = ""
+    for index, one in enumerate(search_list):
+        search_res += f'[webpage ${index} begin]\n${one.get("snippet")}\n[webpage ${index} end]\n\n'
+    return search_res, search_list
 
 
 def getFileContent(filepath):

@@ -5,6 +5,7 @@ import requests
 from langchain_community.utilities import BingSearchAPIWrapper
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
+from urllib3.util.url import parse_url
 
 from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchResults
 
@@ -44,6 +45,13 @@ class SearchTool(ABC):
         # Here you would implement the actual search logic
         # For demonstration purposes, we'll just return a dummy response
         raise NotImplementedError()
+
+    @classmethod
+    def get_host_from_url(cls, url: str) -> str:
+        """Extract the host from a given URL."""
+        if not url:
+            return ""
+        return parse_url(url).host
 
     @classmethod
     def init_search_tool(cls, name: str, *args, **kwargs) -> "SearchTool":
@@ -88,18 +96,18 @@ class BingSearch(SearchTool):
         res = bingtool.invoke({'query': query})
         if isinstance(res, str):
             res = eval(res)
-        search_res = ''
         web_list = []
         for index, result in enumerate(res):
             # 处理搜索结果
             snippet = result.get('snippet')
-            search_res += f'[webpage ${index} begin]\n${snippet}\n[webpage ${index} end]\n\n'
             web_list.append({
                 'title': result.get('title'),
                 'url': result.get('link'),
-                'snippet': snippet
+                'snippet': snippet,
+                'thumbnail': result.get('thumbnail'),
+                'site_name': self.get_host_from_url(result.get('link'))
             })
-        return search_res, web_list
+        return web_list
 
 
 class BoChaSearch(SearchTool):
@@ -117,17 +125,16 @@ class BoChaSearch(SearchTool):
         if result.get('code') != 200:
             raise Exception(f"BoCha Error: {result}")
         web_pages = result.get('data', {}).get('webPages', {}).get('value', [])
-        # parse result
-        search_res = ''
         web_list = []
         for index, item in enumerate(web_pages):
-            search_res += f'[webpage ${index} begin]\n${item.get("snippet")}\n[webpage ${index} end]\n\n'
             web_list.append({
                 'title': item.get('name'),
                 'url': item.get('url'),
-                'snippet': item.get('snippet')
+                'snippet': item.get('snippet'),
+                'thumbnail': item.get('siteIcon'),
+                'site_name': item.get('siteName') or self.get_host_from_url(item.get('url')),
             })
-        return search_res, web_list
+        return web_list
 
 
 class JinaDeepSearch(SearchTool):
@@ -157,41 +164,43 @@ class JinaDeepSearch(SearchTool):
         result = self._requests(self.base_url, method='POST', json=req_data, headers=self.headers)
 
         choices = result.get('choices', [])
-        search_res = ''
         web_list = []
         for index, item in enumerate(choices):
             item_message = item.get('message', {})
-            search_res += f'[webpage ${index} begin]\n${item_message.get("content")}\n[webpage ${index} end]\n\n'
             for one_web in item_message.get('annotations', []):
                 one_web_info = one_web.get('url_citation', {})
                 web_list.append({
                     'title': one_web_info.get('title'),
                     'url': one_web.get('url'),
-                    'snippet': one_web.get('exactQuote')
+                    'snippet': one_web.get('exactQuote'),
+                    'thumbnail': None,
+                    'site_name': self.get_host_from_url(one_web.get('url')),
                 })
-        return search_res, web_list
+        return web_list
 
 
 class SerpSearch(SearchTool):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.api_key = kwargs.get('api_key')
+        self.engine = kwargs.get('engine')
         self.base_url = 'https://serpapi.com/search.json'
 
     def invoke(self, query: str, **kwargs) -> (str, list):
-        result = self._requests(self.base_url, method='GET', params={'q': query, 'api_key': self.api_key})
+        result = self._requests(self.base_url, method='GET', params={'q': query, 'api_key': self.api_key,
+                                                                     'engine': self.engine})
 
         answer_result = result.get('organic_results', [])
-        search_res = ''
         web_list = []
         for index, item in enumerate(answer_result):
-            search_res += f'[webpage ${index} begin]\n${item.get("snippet")}\n[webpage ${index} end]\n\n'
             web_list.append({
                 'title': item.get('title'),
                 'url': item.get('link'),
-                'snippet': item.get('snippet')
+                'snippet': item.get('snippet'),
+                'thumbnail': item.get('source_logo') or item.get('thumbnail'),
+                'site_name': self.get_host_from_url(item.get('link')),
             })
-        return search_res, web_list
+        return web_list
 
 
 class TavilySearch(SearchTool):
@@ -206,17 +215,16 @@ class TavilySearch(SearchTool):
 
         answers = result.get('results', [])
 
-        # parse result
-        search_res = ''
         web_list = []
         for index, item in enumerate(answers):
-            search_res += f'[webpage ${index} begin]\n${item.get("content")}\n[webpage ${index} end]\n\n'
             web_list.append({
                 'title': item.get('title'),
                 'url': item.get('url'),
-                'snippet': item.get('content')
+                'snippet': item.get('content'),
+                'thumbnail': item.get('favicon'),
+                'site_name': self.get_host_from_url(item.get('url')),
             })
-        return search_res, web_list
+        return web_list
 
 
 class CloudswaySearch(SearchTool):
@@ -233,16 +241,16 @@ class CloudswaySearch(SearchTool):
         answers = result.get('webPages', {}).get('value', [])
 
         # parse result
-        search_res = ''
         web_list = []
         for index, item in enumerate(answers):
-            search_res += f'[webpage ${index} begin]\n${item.get("snippet")}\n[webpage ${index} end]\n\n'
             web_list.append({
                 'title': item.get('name'),
                 'url': item.get('url'),
-                'snippet': item.get('snippet')
+                'snippet': item.get('snippet'),
+                'thumbnail': item.get('thumbnailUrl'),
+                'site_name': item.get('siteName') or self.get_host_from_url(item.get('url')),
             })
-        return search_res, web_list
+        return web_list
 
 
 class SearXNGSearch(SearchTool):
@@ -256,14 +264,13 @@ class SearXNGSearch(SearchTool):
 
         answers = result.get('results', [])
 
-        # parse result
-        search_res = ''
         web_list = []
         for index, item in enumerate(answers):
-            search_res += f'[webpage ${index} begin]\n${item.get("content")}\n[webpage ${index} end]\n\n'
             web_list.append({
                 'title': item.get('title'),
                 'url': item.get('url'),
-                'snippet': item.get('content')
+                'snippet': item.get('content'),
+                'thumbnail': item.get('thumbnail'),
+                'site_name': self.get_host_from_url(item.get('url')),
             })
-        return search_res, web_list
+        return web_list
