@@ -118,7 +118,7 @@ const ChatView = ({ index = 0 }: { index?: number }) => {
     <ChatFormProvider {...methods}>
       <ChatContext.Provider value={chatHelpers}>
         <AddedChatContext.Provider value={addedChatHelpers}>
-          <Presentation>
+          <Presentation isLingsi={isLingsi}>
             <div className={cn(`h-full`)}>
               <video
                 autoPlay
@@ -136,8 +136,9 @@ const ChatView = ({ index = 0 }: { index?: number }) => {
                 <img src={`${__APP_ENV__.BASE_URL}/assets/lingsi-bg.png`} alt="" />
               </video>
               <div ref={chatContainerRef} className='relative z-10 h-full overflow-y-auto'>
-                <div className={showCode ? "hidden" : "flex flex-col justify-center relative h-[calc(100vh-200px)]"}>
-                  {/* <div className={showCode ? "hidden" : "flex flex-col justify-center relative h-full"}> */}
+                <div className={cn(showCode ? "hidden" : "flex flex-col justify-center relative",
+                  messagesTree ? ' h-full' : 'h-[calc(100vh-200px)]'
+                )}>
                   {content}
                   <div
                     id="floatPanne"
@@ -207,14 +208,14 @@ const Cases = ({ t, isLingsi, setIsLingsi }) => {
               </div>
 
               {/* 动作位：按钮组（右下角，hover 时显示） */}
-              <div className="absolute bottom-4 right-4 flex justify-end space-x-2 mt-2 opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
+              <div className="absolute bottom-2 right-4 flex justify-end space-x-2 mt-2 opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
                 <Button
                   variant="default"
                   className="bg-primary text-white rounded-full h-8 px-3 text-xs flex items-center space-x-0"
                   onClick={() => setSameSopLabel({ ...caseItem })}
                 >
                   <MousePointerClick className="w-3.5 h-3.5" />
-                  <span>做同款</span>
+                  <span>{t('com_make_samestyle')}</span>
                 </Button>
 
                 <Button

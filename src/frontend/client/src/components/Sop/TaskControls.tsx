@@ -222,7 +222,6 @@ export default function FeedbackComponent({ stop, onFeedback }: FeedbackComponen
 const SameSopControls = ({ sopId }: { sopId: string }) => {
     const localize = useLocalize();
 
-
     return <div className="px-4 pb-6">
         <div className="flex gap-3 p-4 px-6 justify-between items-center bg-white rounded-3xl border border-gray-100 relative">
             <div className="flex items-center gap-2">
@@ -233,7 +232,7 @@ const SameSopControls = ({ sopId }: { sopId: string }) => {
             </div>
             <Button className="px-6" onClick={() => window.open(`${__APP_ENV__.BASE_URL}/c/new?sopid=${sopId}`)}>
                 <MousePointerClick className="w-3.5 h-3.5" />
-                做同款
+                {localize('com_make_samestyle')}
             </Button>
         </div>
     </div>

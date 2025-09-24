@@ -1,20 +1,20 @@
-import { useState, useMemo } from 'react';
-import { useDrop } from 'react-dnd';
-import { useRecoilValue } from 'recoil';
-import { NativeTypes } from 'react-dnd-html5-backend';
 import { useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import type { DropTargetMonitor } from 'react-dnd';
+import { useDrop } from 'react-dnd';
+import { NativeTypes } from 'react-dnd-html5-backend';
+import { useRecoilValue } from 'recoil';
+import type * as t from '~/data-provider/data-provider/src';
 import {
-  isAgentsEndpoint,
-  EModelEndpoint,
   AgentCapabilities,
+  EModelEndpoint,
+  isAgentsEndpoint,
   QueryKeys,
 } from '~/data-provider/data-provider/src';
-import type * as t from '~/data-provider/data-provider/src';
-import type { DropTargetMonitor } from 'react-dnd';
-import useFileHandling from './useFileHandling';
 import store from '~/store';
+import useFileHandling from './useFileHandling';
 
-export default function useDragHelpers() {
+export default function useDragHelpers(isLingsi) {
   const queryClient = useQueryClient();
   const { handleFiles } = useFileHandling();
   const [showModal, setShowModal] = useState(false);
@@ -61,7 +61,7 @@ export default function useDragHelpers() {
         canDrop: monitor.canDrop(),
       }),
     }),
-    [],
+    [isLingsi],
   );
 
   return {
