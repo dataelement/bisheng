@@ -435,12 +435,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     <DialogHeader>
                         <DialogTitle>{t('chatConfig.webSearchConfig')}</DialogTitle>
                     </DialogHeader>
-                    <WebSearchForm
-                        prompt={formData.webSearch.prompt}
-                        enabled={formData.webSearch.enabled}
-                        formData={formData}
-                        onSubmit={handleWebSearchSave}
-                    />
+                    <WebSearchForm isApi={true}/>
                 </DialogContent>
             </Dialog>
         </div>
