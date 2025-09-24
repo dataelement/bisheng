@@ -250,13 +250,13 @@ async def genTitle(human: str, assistant: str, llm: BishengLLM, conversationId: 
     convo = f'||>User:\n"{human}"\n ||>Response:\n"{assistant}"'
     prompt = f'Please generate {titleInstruction} \n{convo} \n||>Title:'
     logger.info(f'convo: {convo}')
-    res = llm.invoke(prompt)
+    res = await llm.ainvoke(prompt)
     title = res.content
     redis_client.set(f'workstation_title_{conversationId}', title)
-    session = MessageSessionDao.get_one(conversationId)
+    session = await MessageSessionDao.async_get_one(conversationId)
     if session:
-        session.flow_name = title
-        MessageSessionDao.insert_one(session)
+        session.flow_name = title[:200]
+        await MessageSessionDao.async_insert_one(session)
 
 
 async def webSearch(query: str, web_search_config: WSPrompt):
@@ -269,7 +269,7 @@ async def webSearch(query: str, web_search_config: WSPrompt):
     web_search_tool = await AssistantAgent.init_tools_by_tool_ids([web_search_info.id], None)
     if not web_search_tool:
         raise WebSearchToolNotFoundError(exception=Exception("No web_search tool found in gpts tools"))
-    search_list = web_search_tool[0].invoke(input={"query": query})
+    search_list = await web_search_tool[0].ainvoke(input={"query": query})
     search_list = json.loads(search_list)
     search_res = ""
     for index, one in enumerate(search_list):
@@ -489,13 +489,13 @@ async def chat_completions(
         except BaseErrorCode as e:
             error = True
             final_res = json.dumps(e.to_dict())
-            yield e.to_sse_event_instance()
+            yield e.to_sse_event_instance_str()
         except Exception as e:
             e = ServerError(exception=e)
             logger.exception(f'Error in processing the prompt')
             error = True
             final_res = json.dumps(e.to_dict())
-            yield e.to_sse_event_instance()
+            yield e.to_sse_event_instance_str()
 
         yield final_message(conversaiton, conversaiton.flow_name, message, final_res, error,
                             modelName)
