@@ -143,7 +143,7 @@ class ChatManager:
                                reason: str,
                                key_list: List[str] = None):
         """close and clean ws"""
-        if websocket := self.active_connections[get_cache_key(flow_id, chat_id)]:
+        if websocket := self.active_connections.get(get_cache_key(flow_id, chat_id)):
             try:
                 await websocket.close(code=code, reason=reason)
                 self.disconnect(flow_id, chat_id)
