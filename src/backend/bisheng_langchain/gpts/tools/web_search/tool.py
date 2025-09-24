@@ -228,7 +228,7 @@ class CloudswaySearch(SearchTool):
         self.headers = {'Authorization': f'Bearer {self.api_key}'}
 
     def invoke(self, query: str, **kwargs) -> (str, list):
-        result = self._requests(self.base_url, method='get', params={'a': query}, headers=self.headers)
+        result = self._requests(self.base_url, method='GET', params={'q': query}, headers=self.headers)
 
         answers = result.get('webPages', {}).get('value', [])
 
