@@ -440,7 +440,7 @@ export default function Files({ onPreview }) {
                                     {el.strategy[0] ? (
                                         <TooltipProvider delayDuration={100}>
                                             <Tooltip>
-                                                <TooltipTrigger>{el.strategy[0]}...</TooltipTrigger>
+                                                <TooltipTrigger className="truncate max-w-[106px]">{el.strategy[1].replace(/\n/g, '\\n')}</TooltipTrigger>
                                                 <TooltipContent>
                                                     <div className="max-w-96 text-left break-all whitespace-normal">{el.strategy[1].replace(/\n/g, '\\n')}</div>
                                                 </TooltipContent>

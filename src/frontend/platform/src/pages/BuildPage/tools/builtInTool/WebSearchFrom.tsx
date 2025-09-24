@@ -28,7 +28,8 @@ const defaultToolParams = {
         api_key: ''
     },
     cloudsway: {
-        api_key: ''
+        api_key: '',
+        endpoint: ''
     },
     searXNG: {
         server_url: ''
@@ -100,7 +101,8 @@ const WebSearchForm = ({ formData, onSubmit, errors = {},enabled,prompt }) => {
             api_key: (value) => !value && 'API Key 不能为空'
         },
         cloudsway: {
-            api_key: (value) => !value && 'API Key 不能为空'
+            api_key: (value) => !value && 'API Key 不能为空',
+            endpoint: (value) => !value && 'endpoint 不能为空'
         },
         searXNG: {
             server_url: (value) => !value && '服务器地址不能为空'
@@ -267,6 +269,7 @@ const WebSearchForm = ({ formData, onSubmit, errors = {},enabled,prompt }) => {
                 );
             case 'cloudsway':
                     return (
+                        <>
                         <InputField
                             required
                             label="API Key"
@@ -277,6 +280,16 @@ const WebSearchForm = ({ formData, onSubmit, errors = {},enabled,prompt }) => {
                             error={formErrors.api_key}
                             id="cloudsway-api-key"
                         />
+                        <InputField
+                            required
+                            label="endpoint"
+                            name="endpoint"
+                            value={currentTool.endpoint || ''}
+                            onChange={handleParamChange}
+                            error={formErrors.endpoint}
+                            id="cloudsway-endpoint"
+                        />
+                        </>
                     );
             case 'searXNG':
                 return (
