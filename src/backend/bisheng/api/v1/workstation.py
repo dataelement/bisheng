@@ -250,13 +250,13 @@ async def genTitle(human: str, assistant: str, llm: BishengLLM, conversationId: 
     convo = f'||>User:\n"{human}"\n ||>Response:\n"{assistant}"'
     prompt = f'Please generate {titleInstruction} \n{convo} \n||>Title:'
     logger.info(f'convo: {convo}')
-    res = llm.invoke(prompt)
+    res = await llm.ainvoke(prompt)
     title = res.content
     redis_client.set(f'workstation_title_{conversationId}', title)
-    session = MessageSessionDao.get_one(conversationId)
+    session = await MessageSessionDao.async_get_one(conversationId)
     if session:
         session.flow_name = title[:200]
-        MessageSessionDao.insert_one(session)
+        await MessageSessionDao.async_insert_one(session)
 
 
 async def webSearch(query: str, web_search_config: WSPrompt):
@@ -291,6 +291,7 @@ def getFileContent(filepath):
 
 @router.post('/chat/completions')
 async def chat_completions(
+        background_tasks: BackgroundTasks,
         data: APIChatCompletion,
         login_user: UserPayload = Depends(get_login_user),
 ):
@@ -497,7 +498,7 @@ async def chat_completions(
 
         if not data.conversationId:
             # 生成title
-            asyncio.create_task(genTitle(data.text, final_res, bishengllm, conversationId))
+            background_tasks.add_task(genTitle, data.text, final_res, bishengllm, conversationId)
 
     return StreamingResponse(event_stream(), media_type='text/event-stream')
 
