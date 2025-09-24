@@ -45,7 +45,7 @@ const SopFormDrawer: any = (props) => {
   const nameInputRef = useRef(null);
   const contentInputRef = useRef(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isFeatured, setIsFeatured] = useState(false);
+  const isFeatured = !!sopForm.showcase;
   const [activeTab, setActiveTab] = useState('manual');
   // 各字段的最大字数限制
   const MAX_LENGTHS = {
@@ -141,12 +141,7 @@ const SopFormDrawer: any = (props) => {
     }
   }, [isDrawerOpen]);
 
-  // 监听sopForm的showcase状态变化，同步更新isFeatured
-  useEffect(() => {
-    if (sopForm.showcase !== undefined) {
-      setIsFeatured(sopForm.showcase);
-    }
-  }, [sopForm.showcase]);
+  // 移除 isFeatured 派生状态的同步副作用，统一使用 sopForm.showcase
 
   // 当弹窗打开时，重置Tab为"指导手册"
   useEffect(() => {
@@ -219,8 +214,9 @@ const SopFormDrawer: any = (props) => {
                       try {
                         const next = !isFeatured;
                         await sopApi.switchShowcase({ sop_id: sopForm.id, showcase: next });
-                        setIsFeatured(next);
-                        // 切换成功后通知父组件刷新列表
+                        // 同步父级表单，避免状态串扰
+                        setSopForm((prev) => ({ ...prev, showcase: next }));
+                        // 刷新列表
                         onShowcaseToggled && onShowcaseToggled();
                       } catch (e) {
                         toast({ variant: 'error', description: '操作失败，请稍后重试' });
