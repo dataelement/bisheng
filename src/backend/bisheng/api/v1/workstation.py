@@ -502,7 +502,8 @@ async def chat_completions(
 
         if not data.conversationId:
             # 生成title
-            asyncio.create_task(genTitle(data.text, final_res, bishengllm, conversationId))
+            asyncio.create_task(
+                genTitle(data.text, final_result.content if final_result else final_res, bishengllm, conversationId))
 
     return StreamingResponse(event_stream(), media_type='text/event-stream')
 
