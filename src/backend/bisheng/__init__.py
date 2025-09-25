@@ -7,7 +7,7 @@ from bisheng.processing.process import load_flow_from_json  # noqa: E402
 
 try:
     # 通过ci去自动修改
-    __version__ = '2.2.0-beta1'
+    __version__ = '2.2.0-beta2'
 except metadata.PackageNotFoundError:
     # Case where package metadata is not available.
     __version__ = ''
