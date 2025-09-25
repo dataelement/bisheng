@@ -109,9 +109,10 @@ const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) =>
                     query: params.query,
                     data: res.map(item => ({
                         ...item,
-                        title: item.title || item.url.replace(/^https?:\/\/([^\/]+).*$/, '$1'),
-                        content: item.snippet,
-                        thumbnail: item.thumbnail || ''
+                        thumbnail: item.thumbnail || '',
+                        host: item.url.replace(/^https?:\/\/([^\/]+).*$/, '$1'),
+                        title: item.title,
+                        content: item.snippet
                     }))
                 })
             } else {
@@ -120,21 +121,24 @@ const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) =>
                 onWebSearch({
                     query: params.query,
                     data: resData['搜索结果'].map(item => ({
-                        title: item['标题'] || item['链接'].replace(/^https?:\/\/([^\/]+).*$/, '$1'),
-                        content: item['摘要'],
-                        url: item['链接'] || '#',
                         thumbnail: item['缩略图'] || '',
+                        host: item['链接'].replace(/^https?:\/\/([^\/]+).*$/, '$1'),
+                        title: item['标题'],
+                        content: item['摘要'],
+                        url: item['链接'],
                     }))
                 })
             }
         } catch (error) {
             console.log('websearch parse error :>> ', error);
+
             onWebSearch({
                 query: params.query,
                 data: [{
-                    title: '',
-                    content: output,
                     thumbnail: '',
+                    host: '',
+                    title: output.split(/[.!?，。,！？；：]/)[0] + '...',
+                    content: output,
                     url: ''
                 }]
             })
@@ -513,7 +517,7 @@ export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
                 </div>
             }
             {/* 结果文件 */}
-            {files && 
+            {files &&
                 <div>
                     {/* <p className='text-sm text-gray-500'></p> */}
                     <div className='mt-5 flex flex-wrap gap-3'>

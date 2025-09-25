@@ -31,7 +31,7 @@ export function WebSearchSheet({ isOpen, onClose, data = [], searchQuery }: Sear
                     <SheetDescription className="text-left">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
                             <span>🔍{localize('com_searchQueryLabel')}</span>
-                            <span className="font-medium text-foreground">"{searchQuery}"</span>
+                            <span className="font-medium text-foreground">”{searchQuery}“</span>
                         </div>
                     </SheetDescription>
                 </SheetHeader>
@@ -44,19 +44,20 @@ export function WebSearchSheet({ isOpen, onClose, data = [], searchQuery }: Sear
                                 key={index}
                                 className="border-b overflow-hidden hover:border-blue-500 transition-colors duration-200 cursor-pointer"
                             >
-                                <a href={item.url} target="_blank" rel="noopener noreferrer">
+                                <a href={item.url || '#'} target={item.url ? "_blank" : undefined} rel="noopener noreferrer">
                                     {/* Content - always expanded as per design */}
                                     <div className="p-4 bg-card">
                                         <div className="mb-3 flex items-center gap-2">
                                             <div className="">
                                                 {
                                                     item.thumbnail
-                                                        ? <img src={item.thumbnail} className="max-w-12 max-h-12 size-6 border object-contain p-0" alt="" />
+                                                        ? <img src={item.thumbnail} className="max-w-12 max-h-12" alt="" />
                                                         : <Chromium size={20} />
                                                 }
                                             </div>
-                                            <h4 className="text-sm font-medium text-foreground">{item.title}</h4>
+                                            <p>{item.host}</p>
                                         </div>
+                                        <h4 className="text-base font-medium text-foreground">{item.title}</h4>
                                         <div className="font-normal text-sm text-[#303133] leading-6 break-all">
                                             <p className="line-clamp-2 overflow-hidden text-ellipsis">{item.content}</p>
                                         </div>

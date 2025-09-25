@@ -1137,5 +1137,5 @@
   "com_searchResults": "Search Results",
   "com_webSearch": "Web Search",
   "com_searchQueryLabel": "Search Query:",
-  "error_workflow_task_execution_failed": "Workflow task execution failed"
+  "error_workflow_task_execution_failed": "Workflow task execution failed：{{exception}}"
 }

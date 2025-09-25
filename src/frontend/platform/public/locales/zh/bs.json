@@ -1100,7 +1100,7 @@
     "10531": "{{type}}功能已升级,需删除后重新拖入",
     "10532": "工作流版本已升级,请联系创建者重新编排",
     "10540": "服务器线程数已满，请稍候再试",
-    "10541": "工作流任务执行失败"
+    "10541": "工作流任务执行失败：{{exception}}"
   },
   "all": "全部",
   "confirmButton": "确定",
@@ -1160,9 +1160,9 @@
   "com_sop_execute_tasks": "接下来为你执行对应任务：",
   "com_sop_task_execution_interrupted": "任务执行中断",
   "com_sop_view_all_files": "查看此任务中的所有文件",
-  "com_webSearch": "联网搜索",
-  "com_searchQueryLabel": "搜索查询",
-  "com_searchResults": "搜索结果",
+  "com_webSearch": "网页搜索",
+  "com_searchQueryLabel": "检索问题",
+  "com_searchResults": "检索结果",
   "com_sop_select_all": "全选",
   "com_sop_batch_download": "批量下载",
   "com_sop_preview_failed": "预览失败",

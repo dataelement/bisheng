@@ -1058,5 +1058,5 @@
   "com_searchResults": "检索结果",
   "com_webSearch": "网页搜索",
   "com_searchQueryLabel": "检索问题:",
-  "error_workflow_task_execution_failed": "工作流任务执行失败"
+  "error_workflow_task_execution_failed": "工作流任务执行失败：{{exception}}"
 }

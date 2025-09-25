@@ -108,9 +108,10 @@ const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) =>
                     query: params.query,
                     data: res.map(item => ({
                         ...item,
-                        title: item.title || item.url.replace(/^https?:\/\/([^\/]+).*$/, '$1'),
-                        content: item.snippet,
-                        thumbnail: item.thumbnail || ''
+                        thumbnail: item.thumbnail || '',
+                        host: item.url.replace(/^https?:\/\/([^\/]+).*$/, '$1'),
+                        title: item.title,
+                        content: item.snippet
                     }))
                 })
             } else {
@@ -119,21 +120,24 @@ const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) =>
                 onWebSearch({
                     query: params.query,
                     data: resData['搜索结果'].map(item => ({
-                        title: item['标题'] || item['链接'].replace(/^https?:\/\/([^\/]+).*$/, '$1'),
-                        content: item['摘要'],
-                        url: item['链接'] || '#',
                         thumbnail: item['缩略图'] || '',
+                        host: item['链接'].replace(/^https?:\/\/([^\/]+).*$/, '$1'),
+                        title: item['标题'],
+                        content: item['摘要'],
+                        url: item['链接'],
                     }))
                 })
             }
         } catch (error) {
             console.log('websearch parse error :>> ', error);
+
             onWebSearch({
                 query: params.query,
                 data: [{
-                    title: '',
-                    content: output,
                     thumbnail: '',
+                    host: '',
+                    title: output.split(/[.!?，。,！？；：]/)[0] + '...',
+                    content: output,
                     url: ''
                 }]
             })
@@ -374,8 +378,8 @@ const Task = ({
             <div className={isExpanded ? 'block' : 'hidden'}>
                 {children}
                 {/* 任务总结 */}
-                {task.status !== 'failed' && task.errorMsg && <div className='bs-mkdown relative mb-6 text-sm px-4 py-3 rounded-lg bg-[#F8F9FB] text-[#303133] leading-6 break-all'>
-                    <MessageMarkDown message={task.errorMsg} />
+                {task.status !== 'failed' && task.result.answer && <div className='bs-mkdown relative mb-6 text-sm px-4 py-3 rounded-lg bg-[#F8F9FB] text-[#303133] leading-6 break-all'>
+                    <MessageMarkDown message={task.result.answer} />
                     <div className='bg-gradient-to-t w-full h-10 from-[#F8F9FB] from-0% to-transparent to-100% absolute bottom-0'></div>
                 </div>}
             </div>
@@ -498,12 +502,12 @@ export const TaskFlowContent = ({ linsight }) => {
             {/* error */}
             {/* {taskError && <ErrorDisplay title={localize('com_sop_task_execution_interrupted')} taskError={taskError} />} */}
             {/* 总结 */}
-            {
+            {/* {
                 summary && <div className='relative mb-6 text-sm px-4 py-3 rounded-lg bg-[#F8F9FB] text-[#303133] leading-6 break-all'>
                     <MessageMarkDown message={summary} />
                     <div className='bg-gradient-to-t w-full h-10 from-[#F8F9FB] from-0% to-transparent to-100% absolute bottom-0'></div>
                 </div>
-            }
+            } */}
             {/* 结果文件 */}
             {files &&
                 <div>

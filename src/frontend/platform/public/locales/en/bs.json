@@ -1100,7 +1100,7 @@
     "10531": "{{type}} has been upgraded. You need to delete it and drag it in again.",
     "10532": "The workflow version has been upgraded, please contact the creator to rearrange it",
     "10540": "Server thread pool is full, please try again later",
-    "10541": "Workflow task execution failed"
+    "10541": "Workflow task execution failed：{{exception}}"
   },
   "all": "All",
   "confirmButton": "Confirm",
