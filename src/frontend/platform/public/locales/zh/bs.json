@@ -586,7 +586,6 @@
       "required": "不能为空"
     }
   },
-  "save": "保存",
 
   "build": {
     "create": "创建",
@@ -1119,8 +1118,6 @@
   "disable": "禁用",
   "close": "关闭",
   "cancel": "取消",
-  "save": "保存",
-  "submit": "提交",
   "operations": "操作",
   "previousPage": "上一页",
   "nextPage": "下一页",
@@ -1160,5 +1157,8 @@
   "com_sop_plan_task_path": "规划任务执行路径：",
   "com_sop_execute_tasks": "接下来为你执行对应任务：",
   "com_sop_task_execution_interrupted": "任务执行中断",
-  "com_sop_view_all_files": "查看此任务中的所有文件"
+  "com_sop_view_all_files": "查看此任务中的所有文件",
+  "com_webSearch": "联网搜索",
+  "com_searchQueryLabel": "搜索查询",
+  "com_searchResults": "搜索结果"
 }

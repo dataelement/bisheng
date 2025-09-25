@@ -360,7 +360,6 @@
     "maxTokensPlaceholder": "Maximum characters supported by the model",
     "systemPrompt": "System Prompt",
     "systemPromptPlaceholder": "You are BISHENG intelligent Q&A assistant, your task is to answer user questions.\nWhen answering, please note the following:\n- Current time is {cur_date}.\n- Do not disclose any sensitive information, answers should be based on general knowledge and logic.\n- Ensure answers do not violate laws, regulations, moral standards and public order.",
-    "webSearch": "Web Search",
     "knowledgeBase": "Personal Knowledge",
     "knowledgeBasePrompt": "Personal Knowledge Base Search Prompt",
     "fileUpload": "File Upload",
@@ -405,7 +404,6 @@
       "required": "Cannot be empty"
     }
   },
-  "save": "Save",
 
   "model": {
     "modelManagement": "Model Management",
@@ -1119,8 +1117,6 @@
   "disable": "Disable",
   "close": "Close",
   "cancel": "Cancel",
-  "save": "Save",
-  "submit": "Submit",
   "operations": "Operations",
   "previousPage": "Previous Page",
   "nextPage": "Next Page",
@@ -1157,5 +1153,8 @@
   "com_sop_plan_task_path": "Planning task execution path:",
   "com_sop_execute_tasks": "Next, execute the corresponding tasks for you:",
   "com_sop_task_execution_interrupted": "Task execution interrupted",
-  "com_sop_view_all_files": "View all files in this task"
+  "com_sop_view_all_files": "View all files in this task",
+  "com_webSearch": "Web Search",
+  "com_searchQueryLabel": "Search Query",
+  "com_searchResults": "Search Results"
 }
