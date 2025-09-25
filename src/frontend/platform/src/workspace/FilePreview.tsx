@@ -149,7 +149,7 @@ const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath }
         sandbox="allow-scripts"
     />
 
-    if (markdown) return <div className="bs-mkdown p-10">
+    if (markdown) return <div className="bs-mkdown p-10 max-w-full">
         <MessageMarkDown message={content} />
     </div>
 

@@ -1159,5 +1159,8 @@
   "com_searchResults": "Search Results",
   "com_sop_select_all": "Select All",
   "com_sop_batch_download": "Batch Download",
-  "com_sop_preview_failed": "Preview failed"
+  "com_sop_preview_failed": "Preview failed",
+  "com_sop_file_load_error": "File load error",
+  "com_sop_empty_file": "Empty file",
+  "com_sop_select_file": "Select file"
 }

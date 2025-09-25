@@ -175,6 +175,13 @@ export default function Files({ onPreview }) {
     // 策略解析（原有逻辑不变）
     const dataSouce = useMemo(() => {
         return datalist.map(el => {
+            if(el.file_name.includes('xlsx','xls','csv')) {
+                const excel_rule = JSON.parse(el.split_rule).excel_rule
+                return {
+                    ...el,
+                    strategy: ['', `每 ${excel_rule.slice_length} 行作为一个分段`]
+                }
+            }
             if (!el.split_rule) return {
                 ...el,
                 strategy: ['', '']
@@ -437,6 +444,7 @@ export default function Files({ onPreview }) {
                                     </div>
                                 </TableCell>
                                 <TableCell>
+                                    {console.log(el, 33)}
                                     {el.strategy[0] ? (
                                         <TooltipProvider delayDuration={100}>
                                             <Tooltip>

@@ -1163,5 +1163,8 @@
   "com_searchResults": "搜索结果",
   "com_sop_select_all": "全选",
   "com_sop_batch_download": "批量下载",
-  "com_sop_preview_failed": "预览失败"
+  "com_sop_preview_failed": "预览失败",
+  "com_sop_file_load_error": "文件加载错误",
+  "com_sop_empty_file": "空文件",
+  "com_sop_select_file": "选择文件"
 }
