@@ -32,7 +32,7 @@ export function SearchKnowledgeSheet({ isOpen, onClose, data = [], searchQuery }
                     </div>
                     <SheetDescription className="text-left">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
-                            <span>🔍{localize('com_searchQueryLabel')}</span>
+                            <span className="whitespace-nowrap">🔍{localize('com_searchQueryLabel')}</span>
                             <span className="font-medium text-foreground">”{searchQuery}“</span>
                         </div>
                     </SheetDescription>

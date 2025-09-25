@@ -1,6 +1,7 @@
 "use client"
 
 import { Chromium, Earth } from "lucide-react"
+import { useState } from "react"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "~/components/ui/Sheet"
 import { useLocalize } from "~/hooks"
 
@@ -30,8 +31,8 @@ export function WebSearchSheet({ isOpen, onClose, data = [], searchQuery }: Sear
                     </div>
                     <SheetDescription className="text-left">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
-                            <span>🔍{localize('com_searchQueryLabel')}</span>
-                            <span className="font-medium text-foreground">”{searchQuery}“</span>
+                            <span className="whitespace-nowrap">🔍{localize('com_searchQueryLabel')}</span>
+                            <span className="font-medium text-foreground">“{searchQuery}”</span>
                         </div>
                     </SheetDescription>
                 </SheetHeader>
@@ -48,13 +49,11 @@ export function WebSearchSheet({ isOpen, onClose, data = [], searchQuery }: Sear
                                     {/* Content - always expanded as per design */}
                                     <div className="p-4 bg-card">
                                         <div className="mb-3 flex items-center gap-2">
-                                            <div className="">
-                                                {
-                                                    item.thumbnail
-                                                        ? <img src={item.thumbnail} className="max-w-12 max-h-12" alt="" />
-                                                        : <Chromium size={20} />
-                                                }
-                                            </div>
+                                            <ImageWithFallback
+                                                src={item.thumbnail}
+                                                alt=""
+                                                className=""
+                                            />
                                             <p>{item.host}</p>
                                         </div>
                                         <h4 className="text-base font-medium text-foreground">{item.title}</h4>
@@ -71,3 +70,28 @@ export function WebSearchSheet({ isOpen, onClose, data = [], searchQuery }: Sear
         </Sheet>
     )
 }
+
+
+
+const ImageWithFallback = ({ src, alt, className }) => {
+    const [hasError, setHasError] = useState(false);
+
+    const handleError = () => {
+        setHasError(true);
+    };
+
+    return (
+        <div className={className}>
+            {!hasError && src ? (
+                <img
+                    src={src}
+                    alt={alt}
+                    className="max-w-12 max-h-12"
+                    onError={handleError}
+                />
+            ) : (
+                <Chromium size={20} />
+            )}
+        </div>
+    );
+};

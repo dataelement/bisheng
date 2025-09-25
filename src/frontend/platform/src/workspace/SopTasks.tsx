@@ -319,8 +319,8 @@ const Task = ({
                 </div>
                 {lvl1 && <div className='mt-[5px]'>{renderStatusIcon()}</div>}
                 {
-                    lvl1 ? <h2 className="font-semibold mb-4">{que}.{task.task_data.target}</h2> :
-                        <span className='text-sm mb-3'>{task.task_data.target}</span>
+                    lvl1 ? <h2 className="font-semibold mb-4 text-base">{que}.{task.task_data.display_target}</h2> :
+                        <span className='text-sm mb-3'>{task.task_data.display_target}</span>
                 }
             </div>
 
@@ -378,7 +378,7 @@ const Task = ({
             <div className={isExpanded ? 'block' : 'hidden'}>
                 {children}
                 {/* 任务总结 */}
-                {task.status !== 'failed' && task.result.answer && <div className='bs-mkdown relative mb-6 text-sm px-4 py-3 rounded-lg bg-[#F8F9FB] text-[#303133] leading-6 break-all'>
+                {lvl1 && task.status !== 'failed' && task.result.answer && <div className='bs-mkdown max-w-full relative mb-6 text-sm px-4 py-3 rounded-lg bg-[#F8F9FB] text-[#303133] leading-6 break-all'>
                     <MessageMarkDown message={task.result.answer} />
                     <div className='bg-gradient-to-t w-full h-10 from-[#F8F9FB] from-0% to-transparent to-100% absolute bottom-0'></div>
                 </div>}

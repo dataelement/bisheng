@@ -145,6 +145,11 @@ const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) =>
         }
     }
 
+    function extractAllUrls(text) {
+        const urlRegex = /https?:\/\/[a-zA-Z0-9-._~:/?#[\]@!$&'()*+,;=]+/g;
+        return text.match(urlRegex) || [];
+    }
+
     // 参数键名映射
     const paramKeyMap = {
         web_search: () => <Button
@@ -163,7 +168,7 @@ const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) =>
         read_text_file: () => <ToolButtonLink params={extra_info} setCurrentDirectFile={setCurrentDirectFile} />,
         add_text_to_file: () => <ToolButtonLink params={extra_info} setCurrentDirectFile={setCurrentDirectFile} />,
         replace_file_lines: () => <ToolButtonLink params={extra_info} setCurrentDirectFile={setCurrentDirectFile} />,
-        web_content_to_markdown_llm: () => <a href={params.url} target='_blank'><Button
+        web_content_to_markdown_llm: () => <a href={extractAllUrls(params.url)[0]} target='_blank'><Button
             variant="link"
             className='text-xs p-0 h-4 text-blue-400 underline underline-offset-2'
         >{params.url}</Button></a>,
