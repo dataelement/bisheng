@@ -404,7 +404,7 @@
       "required": "Cannot be empty"
     }
   },
-
+"save": "Save",
   "model": {
     "modelManagement": "Model Management",
     "modelFineTune": "Model Finetune",
@@ -1120,6 +1120,7 @@
   "operations": "Operations",
   "previousPage": "Previous Page",
   "nextPage": "Next Page",
+  "submit": "Submit",
   "formatError": "Format Error",
   "port": "PORT",
   "cancle": "Cancle",

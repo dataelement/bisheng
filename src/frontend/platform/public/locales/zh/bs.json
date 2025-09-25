@@ -586,7 +586,7 @@
       "required": "不能为空"
     }
   },
-
+  "save": "保存",
   "build": {
     "create": "创建",
     "assistant": "助手",
@@ -1119,7 +1119,9 @@
   "close": "关闭",
   "cancel": "取消",
   "operations": "操作",
+  "save": "保存",
   "previousPage": "上一页",
+  "submit": "提交",
   "nextPage": "下一页",
   "formatError": "格式错误",
   "port": "服务端口",

@@ -439,7 +439,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     useEffect(() => {
         if (!importDialogOpen) {
             fetchData({
-                keyword: '',
+                keyword: keywords,
                 page,
                 pageSize,
                 showcase: showcaseFilter
