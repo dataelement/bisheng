@@ -1156,5 +1156,8 @@
   "com_sop_view_all_files": "View all files in this task",
   "com_webSearch": "Web Search",
   "com_searchQueryLabel": "Search Query",
-  "com_searchResults": "Search Results"
+  "com_searchResults": "Search Results",
+  "com_sop_select_all": "Select All",
+  "com_sop_batch_download": "Batch Download",
+  "com_sop_preview_failed": "Preview failed"
 }

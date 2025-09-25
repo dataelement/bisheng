@@ -1,6 +1,6 @@
 "use client"
 
-import { Earth } from "lucide-react"
+import { Chromium, Earth } from "lucide-react"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "~/components/ui/Sheet"
 import { useLocalize } from "~/hooks"
 
@@ -44,20 +44,24 @@ export function WebSearchSheet({ isOpen, onClose, data = [], searchQuery }: Sear
                                 key={index}
                                 className="border-b overflow-hidden hover:border-blue-500 transition-colors duration-200 cursor-pointer"
                             >
-                                {/* Content - always expanded as per design */}
-                                <div className="p-4 bg-card">
-                                    <div className="mb-3 flex items-center gap-2">
-                                        <div className="">
-                                            <img src={item.thumbnail} className="max-w-12 max-h-12 size-6 border object-contain p-0" alt="" />
+                                <a href={item.url} target="_blank" rel="noopener noreferrer">
+                                    {/* Content - always expanded as per design */}
+                                    <div className="p-4 bg-card">
+                                        <div className="mb-3 flex items-center gap-2">
+                                            <div className="">
+                                                {
+                                                    item.thumbnail
+                                                        ? <img src={item.thumbnail} className="max-w-12 max-h-12 size-6 border object-contain p-0" alt="" />
+                                                        : <Chromium size={20} />
+                                                }
+                                            </div>
+                                            <h4 className="text-sm font-medium text-foreground">{item.title}</h4>
                                         </div>
-                                        <h4 className="text-sm font-medium text-foreground">{item.title}</h4>
-                                    </div>
-                                    <div className="font-normal text-sm text-[#303133] leading-6 break-all">
-                                        <a href={item.url} target="_blank" rel="noopener noreferrer">
+                                        <div className="font-normal text-sm text-[#303133] leading-6 break-all">
                                             <p className="line-clamp-2 overflow-hidden text-ellipsis">{item.content}</p>
-                                        </a>
+                                        </div>
                                     </div>
-                                </div>
+                                </a>
                             </div>
                         ))}
                     </div>

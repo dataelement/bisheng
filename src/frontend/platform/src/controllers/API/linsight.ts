@@ -54,4 +54,25 @@ export const sopApi = {
   getSopShowcaseDetail: (data: { sop_id: string; linsight_version_id: string }) => {
     return axios.get(`/api/v1/linsight/sop/showcase/result`, { params: data });
   },
+  batchDownload: async (data: {
+    fileName: string,
+    files: { file_name: string, file_url: string }[]
+  }) => {
+    const res = await axios.post('/api/v1/linsight/workbench/batch-download-files', {
+      zip_name: data.fileName,
+      file_info_list: data.files
+    }, {
+      responseType: 'blob'
+    })
+
+    console.log('res :>> ', res);
+    const url = window.URL.createObjectURL(new Blob([res]));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = data.fileName || 'downloadFile.zip';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  }
 }

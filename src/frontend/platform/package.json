@@ -41,7 +41,7 @@
     "i18next-http-backend": "^2.5.2",
     "jsencrypt": "^3.3.2",
     "lodash-es": "^4.17.21",
-    "lucide-react": "^0.446.0",
+    "lucide-react": "^0.544.0",
     "mammoth": "^1.9.0",
     "pdfjs-dist": "3.10.111",
     "react": "^18.3.1",

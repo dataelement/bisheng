@@ -1,24 +1,25 @@
 import DownIcon from '@/components/bs-icons/DownIcon';
 import { Button } from '@/components/bs-ui/button';
 import { Textarea } from '@/components/bs-ui/input';
+import { useToast } from '@/components/bs-ui/toast/use-toast';
 import MessageMarkDown from '@/pages/BuildPage/flow/FlowChat/MessageMarkDown';
 import axios from 'axios';
 import {
     ArrowRight,
     BookOpen,
     Check, ChevronDown,
+    Download,
     FileText,
     LucideLoaderCircle, Pause,
     Search,
     SendIcon,
-    Download,
     WrenchIcon
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import FilePreviewDrawer from './FilePreviewDrawer';
+import FileDrawer from './FileDrawer';
 import FileIcon from './FileIcon';
-import { useToast } from '@/components/bs-ui/toast/use-toast';
+import FilePreviewDrawer from './FilePreviewDrawer';
 import { SearchKnowledgeSheet } from './SearchKnowledgeSheet';
 import { WebSearchSheet } from './WebSearchSheet';
 
@@ -120,7 +121,7 @@ const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) =>
                     data: resData['搜索结果'].map(item => ({
                         title: item['标题'] || item['链接'].replace(/^https?:\/\/([^\/]+).*$/, '$1'),
                         content: item['摘要'],
-                        url: item['链接'],
+                        url: item['链接'] || '#',
                         thumbnail: item['缩略图'] || '',
                     }))
                 })
@@ -504,7 +505,7 @@ export const TaskFlowContent = ({ linsight }) => {
                 </div>
             }
             {/* 结果文件 */}
-            {files && files.length > 0 &&
+            {files &&
                 <div>
                     {/* <p className='text-sm text-gray-500'></p> */}
                     <div className='mt-5 flex flex-wrap gap-3'>
@@ -574,7 +575,7 @@ export const TaskFlowContent = ({ linsight }) => {
                 data={webSearchInfo?.data}
                 searchQuery={webSearchInfo?.query} />
             {/* 文件列表抽屉 */}
-            {/* <FileDrawer
+            <FileDrawer
                 title={title}
                 files={allFiles}
                 isOpen={isDrawerOpen}
@@ -587,7 +588,7 @@ export const TaskFlowContent = ({ linsight }) => {
                     setIsPreviewOpen(true)
                     setTriggerDrawerFromCard(false)
                 }}
-            /> */}
+            />
             {/* 文件预览抽屉 */}
             <FilePreviewDrawer
                 files={mergeFiles}

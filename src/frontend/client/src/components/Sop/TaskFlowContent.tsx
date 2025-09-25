@@ -122,7 +122,7 @@ const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) =>
                     data: resData['搜索结果'].map(item => ({
                         title: item['标题'] || item['链接'].replace(/^https?:\/\/([^\/]+).*$/, '$1'),
                         content: item['摘要'],
-                        url: item['链接'],
+                        url: item['链接'] || '#',
                         thumbnail: item['缩略图'] || '',
                     }))
                 })
@@ -410,6 +410,7 @@ export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
         const mergedFiles = [...files, ...allFiles];
         return mergedFiles;
     }, [files, allFiles]);
+    console.log('files xx:>> ', files, allFiles);
 
     const downloadFile = (file) => {
         const { file_name, file_url } = file;
@@ -512,7 +513,7 @@ export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
                 </div>
             }
             {/* 结果文件 */}
-            {files && files.length > 0 &&
+            {files && 
                 <div>
                     {/* <p className='text-sm text-gray-500'></p> */}
                     <div className='mt-5 flex flex-wrap gap-3'>
