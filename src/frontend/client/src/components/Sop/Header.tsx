@@ -51,7 +51,7 @@ export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
                             </div>
                             {localize('com_sop_task_description')}
                         </p>
-                        <p className='text-sm overflow-hidden'
+                        <p className='text-sm overflow-y-scroll'
                            style={{ display: '-webkit-box', WebkitLineClamp: 8, WebkitBoxOrient: 'vertical' }}
                         >
                             {linsight?.question}
