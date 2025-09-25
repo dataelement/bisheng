@@ -60,6 +60,7 @@
     "addHeader":"为分段添加表头",
     "pdfAnalysis":"PDF文档解析策略",
     "ocrForce":"强制开启OCR",
+    "ocrForceTip":"启用后将支持识别扫描件、图片中的文字，以及结构化提取表格内容",
     "enableRec":"开启公式识别",
     "hfFilter":"过滤页眉页脚",
     "splitSizePlaceholder": "请输入切分长度",

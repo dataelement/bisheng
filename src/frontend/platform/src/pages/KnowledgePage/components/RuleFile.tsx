@@ -5,8 +5,9 @@ import { locationContext } from "@/contexts/locationContext";
 import { useContext, useMemo, useEffect, useState, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import FileUploadSplitStrategy from "./FileUploadSplitStrategy";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import { cn } from "@/utils";
+import { CircleHelp } from "lucide-react";
 
 // 工具函数：将1/0或布尔值转为标准布尔值
 const toBoolean = (value) => {
@@ -41,6 +42,7 @@ interface RuleFileProps {
   setOriginalSplitRule?: (updater: any) => void;
   isAdjustMode?: boolean;
   showPreview?: boolean;
+  isEtl4lm?: boolean;
 }
 
 export default function RuleFile({
@@ -51,7 +53,8 @@ export default function RuleFile({
   originalSplitRule,
   setOriginalSplitRule = () => {},
   isAdjustMode = false,
-  showPreview =false
+  showPreview =false,
+  isEtl4lm = false
 }: RuleFileProps) {
   console.log(showPreview,199);
   
@@ -259,9 +262,16 @@ export default function RuleFile({
               checked={internalValues.retainImages}
               onCheckedChange={(e) => handleSettingChange('retainImages', e)}
             />
-            <Label htmlFor="retainImages" className="text-sm text-gray-700 flex items-center">
+            <Label htmlFor="retainImages" className="text-sm text-gray-700 flex items-center gap-1">
               {t('keepImages')}
-              <QuestionTooltip content="解析时将保留文档中的图片内容， 以支持问答时图文并茂的回复。" />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <CircleHelp className="w-3.5 h-3.5 text-muted-foreground" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div className="max-w-96 text-left break-all whitespace-normal">解析时将保留文档中的图片内容， 以支持问答时图文并茂的回复。</div>
+                </TooltipContent>
+              </Tooltip>
             </Label>
           </div>
         </div>
@@ -273,7 +283,7 @@ export default function RuleFile({
           <FileUploadSplitStrategy data={strategies} onChange={handleStrategiesChange} />
         </div>
 
-        {appConfig.enableEtl4lm && (
+        {(isEtl4lm || appConfig.enableEtl4lm) && (
           <div className="space-y-4 p-4 border rounded-lg">
             <h3 className="text-md font-bold text-gray-800 text-left ">{t('pdfAnalysis')}</h3>
             <div className="flex items-center gap-2 pt-2">
@@ -282,7 +292,17 @@ export default function RuleFile({
                 checked={internalValues.forceOcr}
                 onCheckedChange={(e) => handleSettingChange('forceOcr', e)}
               />
-              <Label htmlFor="forceOcr" className="text-sm text-gray-700">{t('ocrForce')}</Label>
+              <Label htmlFor="forceOcr" className="text-sm text-gray-700 flex items-center gap-1">
+                {t('ocrForce')}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <CircleHelp className="w-3.5 h-3.5 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div className="max-w-96 text-left break-all whitespace-normal">{t('ocrForceTip')}</div>
+                  </TooltipContent>
+                </Tooltip>
+              </Label>
               <Checkbox
                 id="enableFormula"
                 checked={internalValues.enableFormula}
