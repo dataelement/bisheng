@@ -28,7 +28,8 @@ class ThreadPoolManager:
             if key not in self.async_task:
                 self.async_task[key] = []
             if asyncio.coroutines.iscoroutinefunction(fn):
-                future = self.async_executor.submit(self.acontext_wrapper(fn, *args, **kwargs))
+                future = asyncio.create_task(self.acontext_wrapper(fn, *args, **kwargs))
+                # future = self.async_executor.submit(self.acontext_wrapper(fn, *args, **kwargs))
                 self.async_task[key].append(future)
             else:
                 future = self.executor.submit(self.context_wrapper, fn, *args, **kwargs)
@@ -42,7 +43,7 @@ class ThreadPoolManager:
             result = await func(*args, **kwargs)
             end_wait = time.time()  # Time when the task actually started
             logger.info(
-                f'aTask_waited={end_wait - start_wait:.2f} seconds and executed={time.time() - end_wait:.2f} seconds',
+                f'aTask_waited={end_wait - start_wait:.2f} seconds and {func.__name__} executed={time.time() - end_wait:.2f} seconds',
             )
             return result
 
@@ -75,7 +76,6 @@ class ThreadPoolManager:
                 for f in lf:
                     if f.done():
                         # 获取task
-                        task = f.result()
                         if k in key_list:
                             completed_futures.append((k, f))
                             self.async_task[k].remove(f)

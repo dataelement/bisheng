@@ -2,20 +2,20 @@ import json
 from queue import Queue
 from typing import Dict, Callable, List
 
-from fastapi import WebSocket, status, Request
+from fastapi import WebSocket, Request
 from langchain_core.messages import AIMessage, HumanMessage, BaseMessage, ToolMessage
 from loguru import logger
 
 from bisheng.api.errcode import BaseErrorCode
 from bisheng.api.errcode.assistant import (AssistantDeletedError, AssistantNotOnlineError,
-                                             AssistantOtherError)
+                                           AssistantOtherError)
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
-from bisheng.chat.types import IgnoreException, WorkType
+from bisheng.chat.types import WorkType
 from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessageDao, ChatMessage as ChatMessageModel

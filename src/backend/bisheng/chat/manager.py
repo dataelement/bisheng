@@ -354,6 +354,8 @@ class ChatManager:
                         try:
                             future.result()
                             logger.debug('task_complete key={}', future_key)
+                        except asyncio.exceptions.CancelledError:
+                            continue
                         except Exception as e:
                             if isinstance(e, concurrent.futures.CancelledError):
                                 continue
