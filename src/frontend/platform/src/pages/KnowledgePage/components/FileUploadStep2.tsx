@@ -204,7 +204,7 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
                     <div className={cn(
                         "h-full flex flex-col min-w-[540px]",
                         // 预览时占50%
-                        showPreview ? "w-1/2" : ""
+                        showPreview ? "max-w-1/2" : ""
                     )}>
                         <Tabs
                             defaultValue={displayMode === DisplayModeType.Mixed ? 'file' : displayMode}
@@ -263,7 +263,7 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
                     <div className={cn(
                         "relative",
                         // 预览时占50%宽度
-                        showPreview ? "w-full" : ""
+                        showPreview ? "w-1/2" : ""
                     )}>
 
                         {/* 预览组件 - 始终渲染以保证Hook稳定性 */}

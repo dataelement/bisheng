@@ -59,6 +59,15 @@ class BaseErrorCode(Exception):
             })
         }
 
+    def to_sse_event_instance_str(self, event: str = "error", data: any = None) -> str:
+        data = data if data is not None else {"exception": str(self), **self.kwargs}
+        msg = json.dumps({
+            "status_code": self.code,
+            "status_message": self.message,
+            "data": data
+        }, ensure_ascii=False)
+        return f'event: {event}\ndata: {msg}\n\n'
+
     def to_dict(self, data: any = None) -> dict:
         data = data if data is not None else {"exception": str(self), **self.kwargs}
         return {

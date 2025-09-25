@@ -34,6 +34,7 @@ import CollapseChat from './CollapseChat';
 import FileFormWrapper from './Files/FileFormWrapper';
 import SendButton from './SendButton';
 import StopButton from './StopButton';
+import SameSopSpan, { sameSopLabelState } from './SameSopSpan';
 
 const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
   const submitButtonRef = useRef<HTMLButtonElement>(null);
@@ -71,12 +72,13 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
   });
 
   const { data: bsConfig } = useGetBsConfig()
+  const [sameSopLabel] = useRecoilState(sameSopLabelState)
   const { handlePaste, handleKeyDown, handleCompositionStart, handleCompositionEnd } = useTextarea({
     textAreaRef,
     submitButtonRef,
     setIsScrollable,
     disabled: !!(requiresKey ?? false),
-    placeholder: isLingsi ? (bsConfig?.inputPlaceholder || localize('com_linsight_input_placeholder')) : bsConfig?.inputPlaceholder
+    placeholder: isLingsi ? (sameSopLabel ? '请输入与此案例相似的目标' : bsConfig?.linsightConfig?.input_placeholder || localize('com_linsight_input_placeholder')) : bsConfig?.inputPlaceholder
   });
 
   const {
@@ -205,7 +207,7 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
         isLingsi && navigator('/linsight/new')
       })}
       className={cn(
-        'mx-auto flex flex-row gap-3 pl-2 transition-all duration-200 last:mb-2',
+        'mx-auto flex flex-row gap-3 transition-all duration-200 last:mb-2',
         maximizeChatSpace ? 'w-full max-w-full' : 'md:max-w-2xl xl:max-w-3xl',
       )}
     >
@@ -241,6 +243,9 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
           {/* 操作已添加的对话 */}
           {/* <TextareaHeader addedConvo={addedConvo} setAddedConvo={setAddedConvo} /> */}
           {/* {bsConfig?.fileUpload.enabled && */}
+          {/* 做同款 */}
+          {isLingsi && <SameSopSpan></SameSopSpan>}
+
           <FileFormWrapper
             accept={accept}
             fileTip={!isLingsi}

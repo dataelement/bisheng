@@ -1,10 +1,10 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, List, Tuple, Union
+from typing import Optional, Dict, List
 
-from sqlalchemy import Enum as SQLEnum, Column, JSON, Text, DateTime, text, CHAR, ForeignKey, ColumnExpressionArgument, \
-    update
+from sqlalchemy import Enum as SQLEnum, Column, JSON, Text, DateTime, text, CHAR, ForeignKey, update
 from sqlmodel import Field, select, col
+
 from bisheng.database.base import async_session_getter, uuid_hex
 from bisheng.database.models.base import SQLModelSerializable
 
@@ -69,7 +69,7 @@ class LinsightExecuteTaskBase(SQLModelSerializable):
 
 class LinsightExecuteTask(LinsightExecuteTaskBase, table=True):
     """
-    灵思执行任务模型
+    灵思执行任务模型, sop库也会引用这里的数据
     """
     id: str = Field(default_factory=uuid_hex, description='任务ID',
                     sa_column=Column(CHAR(36), unique=True, nullable=False, primary_key=True))

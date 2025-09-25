@@ -179,7 +179,9 @@ useEffect(() => {
                     {files.map(item => <ProgressItem analysis key={item.id} item={item} />)}
                 </div>
                 <div className="flex justify-end gap-4">
-                    <Button onClick={() => navigate(-1)}>返回知识库</Button>
+                <Button onClick={() => navigate(`/filelib/${finalId}`)}>
+      返回知识库
+    </Button>
                 </div>
             </div>
             {finish && <div className="w-96 pt-24">

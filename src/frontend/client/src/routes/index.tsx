@@ -88,7 +88,7 @@ export const router = createBrowserRouter([
         children: [
           {
             index: true,
-            element: <Navigate to="/c/new" replace={true} />,
+            element: <Navigate to="/c/new?" replace={true} />,
           },
           {
             path: 'c/:conversationId?',
@@ -96,6 +96,10 @@ export const router = createBrowserRouter([
           },
           {
             path: 'linsight/:conversationId?',
+            element: <Sop />,
+          },
+          {
+            path: 'linsight/case/:sopId',
             element: <Sop />,
           },
           {

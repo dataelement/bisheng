@@ -1,10 +1,10 @@
 import { FileText, MessageCircleMoreIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '~/components/ui/Select';
 import { useConversationsInfiniteQuery } from '~/data-provider';
-import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { useLocalize } from '~/hooks';
+import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { Button, Skeleton } from '../ui';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
 
@@ -51,7 +51,11 @@ export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
                             </div>
                             {localize('com_sop_task_description')}
                         </p>
-                        <p className='text-sm'>{linsight?.question}</p>
+                        <p className='text-sm overflow-y-scroll'
+                           style={{ display: '-webkit-box', WebkitLineClamp: 8, WebkitBoxOrient: 'vertical' }}
+                        >
+                            {linsight?.question}
+                        </p>
                     </PopoverContent>
                 </Popover>
 

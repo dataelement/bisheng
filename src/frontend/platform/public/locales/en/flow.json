@@ -166,4 +166,17 @@
     "displayNameTooltip": "Displayed on the user conversation page",
     "variableNameTooltipFile": "Used to store content entered on the user conversation page; can be selected from the temporary session file list",
     "variableNameTooltipOther": "Used to store content entered on the user conversation page; can be referenced in other nodes"
+  ,
+  "allowMultipleSelect": "Allow multiple selection",
+  "allowUploadMultipleFiles": "Allow uploading multiple files",
+  "uploadFileTypes": "Upload file types",
+  "tempKnowledgeBaseName": "Temporary knowledge base name",
+  "tempKnowledgeBaseNameTip": "Files will be uploaded to a temporary knowledge base with this name and can be used in Document QA, Assistant, and other nodes",
+  "fileContentVarName": "File content variable name",
+  "fileContentVarTip": "The full parsed content of the file will be stored in this variable. Note that it may exceed the model context length during usage",
+  "fileContentMaxLength": "Max file content length",
+  "filePathVarName": "File path variable name",
+  "filePathVarTip": "The file path will be stored in this variable and can be used later in the code node",
+  "uploadImageFile": "Upload image file",
+  "uploadImageFileTip": "Extract image files from the uploaded file. When the assistant or LLM node uses a multimodal model, the image can be passed in."
 }
