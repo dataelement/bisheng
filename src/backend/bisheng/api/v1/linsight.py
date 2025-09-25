@@ -3,23 +3,21 @@ import json
 import os
 import time
 from datetime import datetime
-from typing import List, Literal, Optional, Annotated
+from typing import List, Literal, Optional
 from urllib import parse
 
 from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks, Request, HTTPException, Form
-from pydantic import BaseModel, ValidationError
-
-from bisheng.api.errcode.linsight import LinsightQuestionError, LinsightUseUpError, LinsightModifySopError, \
-    LinsightStartTaskError, LinsightSessionVersionRunningError, LinsightQueueStatusError, FileUploadError
-from bisheng.api.errcode.server import InvalidOperationError, ResourceDownloadError
-from bisheng.utils.minio_client import minio_client
-from fastapi_jwt_auth import AuthJWT
 from loguru import logger
+from pydantic import BaseModel, ValidationError
 from sse_starlette import EventSourceResponse
 from starlette.responses import StreamingResponse
 from starlette.websockets import WebSocket
 
 from bisheng.api.errcode.http_error import UnAuthorizedError, NotFoundError
+from bisheng.api.errcode.linsight import LinsightQuestionError, LinsightUseUpError, LinsightModifySopError, \
+    LinsightStartTaskError, LinsightSessionVersionRunningError, LinsightQueueStatusError, FileUploadError, \
+    SopShowcaseError
+from bisheng.api.errcode.server import InvalidOperationError, ResourceDownloadError
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.linsight.message_stream_handle import MessageStreamHandle
@@ -38,6 +36,8 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
 from bisheng.database.models.linsight_sop import LinsightSOPDao, LinsightSOPRecord
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 from bisheng.settings import settings
+from bisheng.utils.minio_client import minio_client
+from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(prefix="/linsight", tags=["灵思"])
 
@@ -169,6 +169,7 @@ async def generate_sop(
         previous_session_version_id: str = Body(None, description="上一个灵思会话版本ID"),
         feedback_content: str = Body(None, description="用户反馈内容"),
         reexecute: bool = Body(False, description="是否重新执行生成SOP"),
+        sop_id: int = Body(None, description="精选案例的ID"),
         login_user: UserPayload = Depends(get_login_user)) -> EventSourceResponse:
     """
     生成与重新规划灵思SOP
@@ -176,6 +177,7 @@ async def generate_sop(
     :param reexecute:
     :param linsight_session_version_id:
     :param feedback_content:
+    :param sop_id:
     :param login_user:
     :return:
     """
@@ -210,7 +212,8 @@ async def generate_sop(
             feedback_content=feedback_content,
             reexecute=reexecute,
             login_user=login_user,
-            knowledge_list=res
+            knowledge_list=res,
+            sop_id=sop_id
         )
 
         async for event in sop_generate:
@@ -624,25 +627,25 @@ async def update_sop(
     :return:
     """
 
-    return await SOPManageService.update_sop(sop_obj)
+    return await SOPManageService.update_sop(sop_obj, update_version_id=False)
 
 
 @router.get("/sop/list", summary="获取灵思SOP列表", response_model=UnifiedResponseModel)
 async def get_sop_list(
         keywords: str = Query(None, description="搜索关键词"),
+        showcase: bool = Query(None, description="是否只获取精选案例"),
         page: int = Query(1, ge=1, description="页码"),
         page_size: int = Query(10, ge=1, le=100, description="每页数量"),
         sort: Literal["asc", "desc"] = Query("desc", description="排序方式，asc或desc"),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(get_admin_user)) -> UnifiedResponseModel:
     """
     获取灵思SOP列表
     :return:
     """
 
-    if not login_user.is_admin():
-        return UnAuthorizedError.return_resp()
-
-    sop_pages = await LinsightSOPDao.get_sop_page(keywords=keywords, page=page, page_size=page_size, sort=sort)
+    sop_pages = await SOPManageService.get_sop_list(keywords=keywords, showcase=showcase, page=page,
+                                                    page_size=page_size,
+                                                    sort=sort)
     return resp_200(data=sop_pages)
 
 
@@ -714,6 +717,73 @@ async def remove_sop(
     """
 
     return await SOPManageService.remove_sop(sop_ids, login_user)
+
+
+@router.get("/sop/showcase", summary="灵思sop库的精选案例", response_model=UnifiedResponseModel)
+async def get_sop_banner(
+        page: int = Query(1, ge=1, description="页码"),
+        page_size: int = Query(10, ge=1, le=100, description="每页数量"),
+        sort: Literal["asc", "desc"] = Query("desc", description="排序方式，asc或desc"),
+        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+    """
+    设置或取消灵思SOP库的精选案例
+    :return:
+    """
+    sop_pages = await SOPManageService.get_sop_list(showcase=True, page=page, page_size=page_size, sort=sort)
+    return resp_200(data=sop_pages)
+
+
+@router.post("/sop/showcase", summary="设置或取消灵思库的精选案例", response_model=UnifiedResponseModel)
+async def set_sop_banner(
+        sop_id: int = Body(..., description="SOP唯一ID"),
+        showcase: bool = Body(..., description="是否设置为精选案例"),
+        login_user: UserPayload = Depends(get_admin_user)) -> UnifiedResponseModel:
+    """
+    设置或取消灵思SOP库的精选案例
+    :return:
+    """
+    # 校验SOP是否存在
+    existing_sop = await LinsightSOPDao.get_sops_by_ids([sop_id])
+    if not existing_sop:
+        raise NotFoundError.http_exception(msg="sop not found")
+    if showcase:
+        # 设置为精选案例需要检查是否有运行结果
+        existing_sop = existing_sop[0]
+        if not existing_sop.linsight_version_id:
+            raise SopShowcaseError.http_exception()
+        execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(existing_sop.linsight_version_id)
+        if not execute_task_models:
+            raise SopShowcaseError.http_exception()
+
+    await LinsightSOPDao.set_sop_showcase(sop_id, showcase)
+    return resp_200()
+
+
+@router.get("/sop/showcase/result", summary="获取灵思精选案例的执行结果", response_model=UnifiedResponseModel)
+async def get_sop_showcase_result(
+        sop_id: int = Query(None, description="SOP唯一ID"),
+        linsight_version_id: str = Query(None, description="灵思会话版本ID，优先使用该参数"),
+        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+    if not linsight_version_id:
+        # 校验SOP是否存在
+        existing_sop = await LinsightSOPDao.get_sops_by_ids([sop_id])
+        if not existing_sop:
+            raise NotFoundError.http_exception(msg="sop not found")
+        linsight_version_id = existing_sop[0].linsight_version_id
+    if not linsight_version_id:
+        return resp_200(data={"version_info": None, "execute_tasks": []})
+    version_info = await LinsightSessionVersionDao.get_by_id(linsight_version_id)
+    # 未完成的会话不返回执行结果
+    if not version_info or version_info.status != SessionVersionStatusEnum.COMPLETED:
+        return resp_200(data={
+            "version_info": None,
+            "execute_tasks": []
+        })
+    execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(linsight_version_id)
+    return resp_200(data={
+        "version_info": version_info,
+        "execute_tasks": execute_task_models
+    })
 
 
 class IntegratedExecuteRequestBody(BaseModel):

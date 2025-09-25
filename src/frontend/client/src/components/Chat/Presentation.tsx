@@ -10,7 +10,7 @@ import { useSetFilesToDelete } from '~/hooks';
 import { EditorProvider } from '~/Providers';
 import store from '~/store';
 
-export default function Presentation({ children }: { children: React.ReactNode }) {
+export default function Presentation({ isLingsi, children }: { isLingsi: boolean, children: React.ReactNode }) {
   const artifacts = useRecoilValue(store.artifactsState);
   const artifactsVisible = useRecoilValue(store.artifactsVisible);
 
@@ -66,7 +66,7 @@ export default function Presentation({ children }: { children: React.ReactNode }
   );
 
   return (
-    <DragDropWrapper className="relative flex w-full grow overflow-hidden bg-presentation">
+    <DragDropWrapper isLingsi={isLingsi} className="relative flex w-full grow overflow-hidden bg-presentation">
       <SidePanelGroup
         defaultLayout={defaultLayout}
         fullPanelCollapse={fullCollapse}

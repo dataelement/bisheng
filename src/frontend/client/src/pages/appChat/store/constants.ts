@@ -9,6 +9,7 @@ export const ERROR_CODES = {
     "10413": "error_preset_tool_category_cannot_delete",
     "403": "error_no_permission",
     "404": "error_resource_not_found",
+    "503": "error_service_busy",
     "10300": "error_component_exists",
     "10301": "error_component_not_found",
     "10100": "error_create_training_task_failed",
@@ -56,6 +57,7 @@ export const ERROR_CODES = {
     "10531": "error_function_upgraded_need_recreate",
     "10532": "error_workflow_version_upgraded",
     "10540": "error_server_threads_full",
+    "10541": "error_workflow_task_execution_failed",
 
     "10001": "error_sft_service_not_found",
     "10002": "error_invalid_operation",

@@ -75,3 +75,8 @@ class WorkFlowVersionUpdateError(BaseErrorCode):
 class WorkFlowTaskBusyError(BaseErrorCode):
     Code: int = 10540
     Msg: str = '服务器线程数已满，请稍候再试'
+
+# 工作流任务其它错误
+class WorkFlowTaskOtherError(BaseErrorCode):
+    Code: int = 10541
+    Msg: str = '工作流任务执行失败'

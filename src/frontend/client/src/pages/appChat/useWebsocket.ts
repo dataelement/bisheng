@@ -118,7 +118,7 @@ export const useWebSocket = (helpers) => {
         }
 
         // messages
-        if (data.category === 'error') {
+        if (data.category === 'error' || data.type === 'error') {
             let code = 0, message = ''
             if (typeof data.message === 'string') {
                 // 兼容助手错误信息

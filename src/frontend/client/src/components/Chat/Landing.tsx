@@ -123,7 +123,7 @@ export default function Landing({ Header, isNew, lingsi, setLingsi }: { Header?:
 
         {/* 模式切换 */}
         <div className='mx-auto mb-6 mt-2'>
-          <SegmentSelector onChange={setLingsi} />
+          <SegmentSelector lingsi={lingsi} onChange={setLingsi} />
         </div>
       </div>
     </div>

@@ -9,6 +9,9 @@ from loguru import logger
 from typing import Dict, Tuple, Any, List, Optional
 from enum import Enum
 from dataclasses import dataclass
+import pandas as pd
+from openpyxl import load_workbook
+from charset_normalizer import detect
 
 from bisheng.utils.minio_client import MinioClient
 from bisheng.utils.docx_temp import DocxTemplateRender
@@ -181,7 +184,10 @@ class OverlapResolver:
             "markdown_image": 2,     # 图片次之
             "minio_image": 3,
             "http_image": 4,
-            "local_image": 5,
+            "minio_excel_csv": 5,    # Excel/CSV文件
+            "http_excel_csv": 6,
+            "local_excel_csv": 7,
+            "local_image": 8,
         }
 
         new_priority = priority_map.get(new_res.pattern_name, 999)
@@ -204,11 +210,11 @@ class PatternMatcher:
                 priority=1,
                 handler_method="_handle_markdown_image",
             ),
-            # 优先级2: 独立的Markdown表格
+            # 优先级2: 独立的Markdown表格（支持行首空格缩进）
             MatchPattern(
                 name="markdown_table",
                 resource_type=ResourceType.TABLE,
-                pattern=r"(\|[^\r\n]*\|(?:\r?\n\|[^\r\n]*\|)+)",
+                pattern=r"(\s*\|[^\r\n]*\|[^\r\n]*(?:\r?\n\s*\|[^\r\n]*\|[^\r\n]*)+)",
                 flags=re.MULTILINE,
                 priority=2,
                 handler_method="_handle_markdown_table",
@@ -231,13 +237,40 @@ class PatternMatcher:
                 priority=4,
                 handler_method="_handle_http_image",
             ),
-            # 优先级5: 本地图片路径 (最宽泛，最后匹配)
+            # 优先级5: Excel/CSV文件 (MinIO路径和HTTP链接)
+            MatchPattern(
+                name="minio_excel_csv",
+                resource_type=ResourceType.TABLE,
+                pattern=r"((?:minio://|/bisheng/|/tmp-dir/|/tmp/)[^\s]*\.(?:xlsx?|csv))",
+                flags=re.IGNORECASE,
+                priority=5,
+                handler_method="_handle_minio_excel_csv",
+            ),
+            # 优先级6: HTTP Excel/CSV文件链接
+            MatchPattern(
+                name="http_excel_csv",
+                resource_type=ResourceType.TABLE,
+                pattern=r"(https?://[^\s\u4e00-\u9fff]*\.(?:xlsx?|csv)(?:\?[^\s\u4e00-\u9fff]*)?)",
+                flags=re.IGNORECASE,
+                priority=6,
+                handler_method="_handle_http_excel_csv",
+            ),
+            # 优先级7: 本地Excel/CSV文件路径
+            MatchPattern(
+                name="local_excel_csv",
+                resource_type=ResourceType.TABLE,
+                pattern=r"([^\s]*[/\\][^\s]*\.(?:xlsx?|csv))",
+                flags=re.IGNORECASE,
+                priority=7,
+                handler_method="_handle_local_excel_csv",
+            ),
+            # 优先级8: 本地图片路径 (最宽泛，最后匹配)
             MatchPattern(
                 name="local_image",
                 resource_type=ResourceType.IMAGE,
                 pattern=r"([^\s]*[/\\][^\s]*\.(?:png|jpg|jpeg|bmp|gif|webp))",
                 flags=re.IGNORECASE,
-                priority=5,
+                priority=8,
                 handler_method="_handle_local_image",
             ),
         ]
@@ -434,7 +467,50 @@ class ContentParser:
 
         self.logger.debug(f"本地图片: path='{img_path}'")
 
-    # 简化后不再需要_determine_table_source方法，因为只有Markdown表格
+    def _handle_minio_excel_csv(self, resource: ResourceData, match: Dict):
+        """处理MinIO Excel/CSV文件"""
+        file_path = match["full_match"]
+        
+        resource.table_source = self._determine_table_source_by_extension(file_path)
+        resource.original_path = file_path
+        resource.file_name = os.path.basename(file_path)
+        
+        self.logger.debug(f"MinIO Excel/CSV文件: path='{file_path}', type='{resource.table_source.value}'")
+
+    def _handle_http_excel_csv(self, resource: ResourceData, match: Dict):
+        """处理HTTP Excel/CSV文件"""
+        file_url = match["full_match"]
+        
+        resource.table_source = self._determine_table_source_by_extension(file_url)
+        resource.original_path = file_url
+        resource.file_name = os.path.basename(urlparse(file_url).path) or "spreadsheet_file"
+        
+        self.logger.debug(f"HTTP Excel/CSV文件: url='{file_url}', type='{resource.table_source.value}'")
+
+    def _handle_local_excel_csv(self, resource: ResourceData, match: Dict):
+        """处理本地Excel/CSV文件"""
+        file_path = match["full_match"]
+        
+        # 清理路径中的多余字符
+        file_path = file_path.strip("[]'\"")
+        
+        resource.table_source = self._determine_table_source_by_extension(file_path)
+        resource.original_path = file_path
+        resource.file_name = os.path.basename(file_path)
+        
+        self.logger.debug(f"本地Excel/CSV文件: path='{file_path}', type='{resource.table_source.value}'")
+
+    def _determine_table_source_by_extension(self, file_path: str) -> TableSource:
+        """根据文件扩展名确定表格源类型"""
+        file_path_lower = file_path.lower()
+        
+        if file_path_lower.endswith('.csv'):
+            return TableSource.CSV_CONTENT
+        elif file_path_lower.endswith(('.xlsx', '.xls')):
+            return TableSource.EXCEL_CONTENT
+        else:
+            # 默认为CSV
+            return TableSource.CSV_CONTENT
 
     def _parse_table_data(self, table_content: str) -> tuple[List[List[str]], List[str]]:
         """解析表格数据，同时处理表格内的图片"""
@@ -461,8 +537,8 @@ class ContentParser:
             tuple: (表格数据, 对齐信息列表)
         """
         try:
-            # 查找所有Markdown表格
-            table_pattern = r"(\|[^\r\n]*\|(?:\r?\n\|[^\r\n]*\|)+)"
+            # 查找所有Markdown表格（支持行首缩进）
+            table_pattern = r"(\s*\|[^\r\n]*\|[^\r\n]*(?:\r?\n\s*\|[^\r\n]*\|[^\r\n]*)+)"
             tables = re.findall(table_pattern, content, re.MULTILINE)
 
             if not tables:
@@ -474,7 +550,8 @@ class ContentParser:
             alignments = []
 
             for i, table_content in enumerate(tables):
-                lines = [line.strip() for line in table_content.strip().split("\n") if line.strip()]
+                # 保留所有行，包括空行 - 完全保留原始表格结构
+                lines = [line.strip() for line in table_content.strip().split("\n")]
 
                 if len(lines) < 2:
                     continue
@@ -484,20 +561,24 @@ class ContentParser:
                 separator_found = False
 
                 for line in lines:
+                    # 跳过完全空的行，但保留只有竖线的空表格行
+                    if not line:
+                        continue
+                        
                     # 检查是否是分隔符行
                     if self._is_separator_line(line):
                         table_alignments = self._parse_alignments(line)
                         separator_found = True
                         continue
 
-                    # 解析数据行
+                    # 解析数据行 - 保留所有表格行，包括空行
                     cells = self._parse_table_row(line)
-                    if cells:
-                        cleaned_cells = []
-                        for cell in cells:
-                            cleaned_cell = self._clean_cell_content(cell)
-                            cleaned_cells.append(cleaned_cell)
-                        table_rows.append(cleaned_cells)
+                    # 移除 if cells 条件，保留空表格行
+                    cleaned_cells = []
+                    for cell in cells:
+                        cleaned_cell = self._clean_cell_content(cell)
+                        cleaned_cells.append(cleaned_cell)
+                    table_rows.append(cleaned_cells)
 
                 # 如果没有找到分隔符，使用默认对齐
                 if not separator_found and table_rows:
@@ -535,13 +616,22 @@ class ContentParser:
             return False
 
         cells = [cell.strip() for cell in content.split("|")]
+        
+        # 必须至少有一个单元格包含分隔符字符（-或:）
+        has_separator_chars = False
         for cell in cells:
             if not cell:
                 continue
+            # 检查是否包含分隔符字符
+            if '-' in cell or ':' in cell:
+                has_separator_chars = True
+            # 移除分隔符字符后检查是否还有其他内容
             clean_cell = cell.replace("-", "").replace(":", "").strip()
             if clean_cell:
                 return False
-        return True
+        
+        # 只有包含分隔符字符的行才能被认为是分隔符行
+        return has_separator_chars
 
     def _parse_alignments(self, separator_line: str) -> list:
         """从分隔符行解析列对齐方式"""
@@ -588,8 +678,8 @@ class ContentParser:
             else:
                 current_cell += char
 
-        if current_cell or cells:
-            cells.append(current_cell.strip())
+        # 总是添加最后一个单元格，确保空表格行也能正确解析
+        cells.append(current_cell.strip())
 
         return cells
 
@@ -699,10 +789,16 @@ class ResourceDownloadManager:
                 stats["errors"].append(f"图片下载失败 {resource.original_path}: {str(e)}")
                 self.logger.error(f"图片下载异常: {str(e)}")
 
-        # 处理表格资源（无需下载，但需要验证数据）
+        # 处理表格资源
         for resource in table_resources:
             try:
-                self._validate_table_resource(resource)
+                if resource.table_source == TableSource.MARKDOWN_TABLE:
+                    # Markdown表格已在解析阶段处理，只需验证
+                    self._validate_table_resource(resource)
+                elif resource.table_source in [TableSource.CSV_CONTENT, TableSource.EXCEL_CONTENT]:
+                    # Excel/CSV文件需要下载和解析
+                    self._download_and_parse_table_file(resource)
+                    self._validate_table_resource(resource)
                 stats["tables_processed"] += 1
             except Exception as e:
                 stats["errors"].append(f"表格处理失败 {resource.file_name}: {str(e)}")
@@ -874,10 +970,157 @@ class ResourceDownloadManager:
             resource.image_source = ImageSource.LOCAL_FILE
             self._handle_smart_local_download(resource)
 
+    def _download_and_parse_table_file(self, resource: ResourceData):
+        """下载并解析Excel/CSV文件"""
+        file_path = resource.original_path
+        
+        # 1. 先尝试下载文件
+        local_file_path = self._download_table_file(file_path)
+        
+        if not local_file_path:
+            raise Exception(f"无法下载表格文件: {file_path}")
+        
+        # 2. 根据文件类型解析
+        try:
+            if resource.table_source == TableSource.CSV_CONTENT:
+                resource.table_data, resource.alignments = self._parse_csv_file(local_file_path)
+            elif resource.table_source == TableSource.EXCEL_CONTENT:
+                resource.table_data, resource.alignments = self._parse_excel_file(local_file_path)
+            
+            # 设置下载路径
+            resource.local_path = local_file_path
+            resource.download_success = True
+            self.logger.info(f"表格文件解析成功: {file_path} -> {len(resource.table_data)}行")
+            
+        except Exception as e:
+            self.logger.error(f"表格文件解析失败: {file_path}, 错误: {str(e)}")
+            # 创建错误表格
+            resource.table_data = [["文件解析失败", str(e)]]
+            resource.alignments = ["left", "left"]
+            resource.local_path = local_file_path if local_file_path else file_path  # 确保有路径
+            resource.download_success = False
+            
+    def _download_table_file(self, file_path: str) -> Optional[str]:
+        """下载表格文件到本地临时文件"""
+        # 1. 优先尝试本地文件
+        if os.path.exists(file_path):
+            self.logger.info(f"本地表格文件存在: {file_path}")
+            return file_path
+        
+        # 2. 尝试HTTP下载
+        if self._is_valid_url(file_path):
+            try:
+                temp_file, success = self._download_file_from_url(file_path)
+                if success and temp_file:
+                    self.temp_files.append(temp_file)
+                    self.logger.info(f"HTTP表格文件下载成功: {file_path} -> {temp_file}")
+                    return temp_file
+            except Exception as e:
+                self.logger.warning(f"HTTP表格文件下载失败: {file_path}, 错误: {str(e)}")
+        
+        # 3. 尝试从MinIO下载
+        bucket_name, object_name = self._parse_path_for_minio(file_path)
+        if bucket_name and object_name:
+            try:
+                if self.minio_client.object_exists(bucket_name, object_name):
+                    file_content = self.minio_client.get_object(bucket_name, object_name)
+                    
+                    # 生成临时文件
+                    file_ext = os.path.splitext(object_name)[1] or ".dat"
+                    filename = f"{uuid4().hex}{file_ext}"
+                    temp_dir = tempfile.gettempdir()
+                    temp_file = os.path.join(temp_dir, filename)
+                    
+                    with open(temp_file, "wb") as f:
+                        f.write(file_content)
+                    
+                    self.temp_files.append(temp_file)
+                    self.logger.info(f"MinIO表格文件下载成功: {bucket_name}/{object_name} -> {temp_file}")
+                    return temp_file
+            except Exception as e:
+                self.logger.warning(f"MinIO表格文件下载失败: {file_path}, 错误: {str(e)}")
+        
+        # 4. 都没有下载成功
+        self.logger.warning(f"表格文件下载失败: {file_path}")
+        return None
+    
+    def _parse_csv_file(self, file_path: str) -> Tuple[List[List[str]], List[str]]:
+        """解析CSV文件"""
+        try:
+            # 自动检测编码
+            with open(file_path, 'rb') as f:
+                raw_data = f.read()
+                encoding_info = detect(raw_data)
+                encoding = encoding_info['encoding'] or 'utf-8'
+            
+            # 使用pandas读取CSV，更好地处理各种格式
+            df = pd.read_csv(file_path, encoding=encoding)
+            
+            # 转换为表格数据格式
+            table_data = []
+            
+            # 添加表头
+            headers = [str(col) for col in df.columns]
+            table_data.append(headers)
+            
+            # 添加数据行
+            for _, row in df.iterrows():
+                row_data = [str(cell) if pd.notna(cell) else "" for cell in row]
+                table_data.append(row_data)
+            
+            # 生成对齐信息（默认左对齐）
+            alignments = ["left"] * len(headers)
+            
+            self.logger.info(f"CSV文件解析成功: {len(table_data)}行 x {len(headers)}列")
+            return table_data, alignments
+            
+        except Exception as e:
+            self.logger.error(f"CSV文件解析失败: {file_path}, 错误: {str(e)}")
+            raise
+    
+    def _parse_excel_file(self, file_path: str) -> Tuple[List[List[str]], List[str]]:
+        """解析Excel文件"""
+        try:
+            # 使用openpyxl读取Excel文件
+            workbook = load_workbook(file_path, data_only=True)  # data_only=True获取计算后的值
+            
+            # 使用第一个工作表
+            worksheet = workbook.active
+            
+            table_data = []
+            max_col = 0
+            
+            # 读取所有行
+            for row in worksheet.iter_rows(values_only=True):
+                # 跳过完全空白的行
+                if all(cell is None or str(cell).strip() == "" for cell in row):
+                    continue
+                    
+                row_data = [str(cell) if cell is not None else "" for cell in row]
+                table_data.append(row_data)
+                max_col = max(max_col, len(row_data))
+            
+            # 确保所有行的列数一致
+            for row in table_data:
+                while len(row) < max_col:
+                    row.append("")
+            
+            # 生成对齐信息（默认左对齐）
+            alignments = ["left"] * max_col
+            
+            self.logger.info(f"Excel文件解析成功: {len(table_data)}行 x {max_col}列")
+            
+            return table_data, alignments
+            
+        except Exception as e:
+            self.logger.error(f"Excel文件解析失败: {file_path}, 错误: {str(e)}")
+            raise
+
     def _validate_table_resource(self, resource: ResourceData):
         """验证表格资源"""
-        if not resource.table_data or not resource.table_data:
-            raise ValueError("表格数据为空")
+        # 允许空表格存在，不再抛出"表格数据为空"错误
+        if not resource.table_data:
+            resource.table_data = []  # 确保table_data是空列表而不是None
 
         # 验证表格数据一致性
         if len(resource.table_data) > 0:
@@ -1093,24 +1336,42 @@ class SmartDocumentRenderer:
                 resource_map["images"].append(image_info)
 
             elif resource.resource_type == ResourceType.TABLE:
-                if resource.table_source in [TableSource.CSV_CONTENT, TableSource.MARKDOWN_TABLE]:
+                if resource.table_source == TableSource.MARKDOWN_TABLE:
+                    # Markdown表格放在csv_files中处理
                     table_info = {
                         "placeholder": resource.placeholder,
                         "table_data": resource.table_data,
                         "alignments": resource.alignments,
                         "file_name": resource.file_name,
-                        "type": "content",
+                        "type": "markdown_table",  # 修复：使用正确的类型标识符
+                    }
+                    resource_map["csv_files"].append(table_info)
+                
+                elif resource.table_source == TableSource.CSV_CONTENT:
+                    # CSV文件
+                    table_info = {
+                        "placeholder": resource.placeholder,
+                        "table_data": resource.table_data,
+                        "alignments": resource.alignments,
+                        "file_name": resource.file_name,
+                        "type": "csv",  # 修复：使用正确的类型标识符
+                        # 添加兼容性字段
+                        "local_path": getattr(resource, 'local_path', resource.original_path),  # 使用下载的本地路径或原始路径
                     }
                     resource_map["csv_files"].append(table_info)
 
                 elif resource.table_source == TableSource.EXCEL_CONTENT:
+                    # Excel文件
                     table_info = {
                         "placeholder": resource.placeholder,
                         "table_data": resource.table_data,
                         "alignments": resource.alignments,
                         "file_name": resource.file_name,
-                        "type": "content",
+                        "type": "excel",  # 修复：使用正确的类型标识符
+                        # 添加docx_temp.py期望的字段
+                        "local_path": getattr(resource, 'local_path', resource.original_path),  # 使用下载的本地路径或原始路径
                     }
+                    
                     resource_map["excel_files"].append(table_info)
 
         # 记录资源统计

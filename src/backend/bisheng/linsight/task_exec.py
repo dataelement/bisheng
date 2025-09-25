@@ -247,7 +247,8 @@ class LinsightWorkflowTask:
         if not session_model.tools:
             return []
 
-        return await LinsightWorkbenchImpl.init_linsight_config_tools(session_version=session_model, llm=llm, need_upload=True, file_dir=self.file_dir)
+        return await LinsightWorkbenchImpl.init_linsight_config_tools(session_version=session_model, llm=llm,
+                                                                      need_upload=True, file_dir=self.file_dir)
 
     async def _create_agent(self, session_model: LinsightSessionVersion, llm: BishengLLM, tools: List) -> LinsightAgent:
 
@@ -271,8 +272,8 @@ class LinsightWorkflowTask:
         """保存任务信息"""
         try:
             tasks = []
-
-            sorted_data = sorted(task_info, key=lambda x: int(x['step_id'].split('_')[1]))
+            # step_id不一定是规律的step_int, 从agent拿到的task_info顺序即为执行顺序
+            sorted_data = task_info
 
             for index, task_info in enumerate(sorted_data):
                 previous_task_id = sorted_data[index - 1]["id"] if index > 0 else None

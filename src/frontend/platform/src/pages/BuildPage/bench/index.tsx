@@ -366,7 +366,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             </div>
                         </ToggleSection> */}
                         <ToggleSection
-                            title={t('chatConfig.webSearch')}
+                            title={t('chatConfig.webSea')}
                             enabled={formData.webSearch.enabled}
                             onToggle={(enabled) => toggleFeature('webSearch', enabled)}
                             extra={
@@ -435,12 +435,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     <DialogHeader>
                         <DialogTitle>{t('chatConfig.webSearchConfig')}</DialogTitle>
                     </DialogHeader>
-                    <WebSearchForm
-                        prompt={formData.webSearch.prompt}
-                        enabled={formData.webSearch.enabled}
-                        formData={formData}
-                        onSubmit={handleWebSearchSave}
-                    />
+                    <WebSearchForm isApi={true}/>
                 </DialogContent>
             </Dialog>
         </div>

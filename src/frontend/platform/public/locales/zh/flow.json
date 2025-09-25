@@ -167,4 +167,17 @@
     "displayNameTooltip": "用户会话页面展示此名称",
     "variableNameTooltipFile": "用于存储用户会话页面填写的内容，可在临时会话文件列表中选择此变量",
     "variableNameTooltipOther": "用于存储用户会话页面填写的内容，可在其他节点中引用此变量"
+  ,
+  "allowMultipleSelect": "允许多选",
+  "allowUploadMultipleFiles": "允许上传多个文件",
+  "uploadFileTypes": "上传文件类型",
+  "tempKnowledgeBaseName": "临时知识库名称",
+  "tempKnowledgeBaseNameTip": "文件将会上传到以此命名的临时知识库中，可在文档知识库问答、助手等节点中使用",
+  "fileContentVarName": "文件内容变量名称",
+  "fileContentVarTip": "文件解析结果全文将会存储在此变量中，使用时请注意可能会超出模型上下文长度",
+  "fileContentMaxLength": "文件内容长度上限",
+  "filePathVarName": "文件路径变量名称",
+  "filePathVarTip": "文件路径将会存储在此变量中，后续可在代码节点中使用",
+  "uploadImageFile": "上传图片文件",
+  "uploadImageFileTip": "提取上传文件中的图片文件，当助手或大模型节点使用多模态大模型时，可传入此图片。"
 }
