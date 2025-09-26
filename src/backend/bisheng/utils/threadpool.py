@@ -6,8 +6,6 @@ from typing import Dict, List, Set, Tuple
 
 from loguru import logger
 
-from bisheng.utils.async_thread import AsyncTaskRunner
-
 
 class ThreadPoolManager:
 
@@ -15,7 +13,6 @@ class ThreadPoolManager:
         self.thread_group = thread_name_prefix
         self.executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=max_workers, thread_name_prefix=thread_name_prefix)
-        self.async_executor = AsyncTaskRunner()
         # 设计每个同步线程配备一个协程
         self.future_dict: Dict[str, List[concurrent.futures.Future]] = {}
         self.async_task: Dict[str, List[concurrent.futures.Future]] = {}
@@ -29,7 +26,6 @@ class ThreadPoolManager:
                 self.async_task[key] = []
             if asyncio.coroutines.iscoroutinefunction(fn):
                 future = asyncio.create_task(self.acontext_wrapper(fn, *args, **kwargs))
-                # future = self.async_executor.submit(self.acontext_wrapper(fn, *args, **kwargs))
                 self.async_task[key].append(future)
             else:
                 future = self.executor.submit(self.context_wrapper, fn, *args, **kwargs)
@@ -109,7 +105,6 @@ class ThreadPoolManager:
         key_list = list(self.async_task.keys())
         self.cancel_task(key_list)
         self.executor.shutdown(cancel_futures=True)
-        self.async_executor.shutdown()
 
 
 # 创建一个线程池管理器
