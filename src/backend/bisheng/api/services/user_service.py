@@ -4,10 +4,12 @@ from base64 import b64decode
 from typing import List, Dict
 
 import rsa
+from fastapi import Depends, HTTPException, Request
+
+from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
 from bisheng.api.errcode.http_error import UnAuthorizedError
 from bisheng.api.errcode.user import (UserLoginOfflineError, UserNameAlreadyExistError,
                                       UserNeedGroupAndRoleError)
-from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
 from bisheng.api.utils import md5_hash
 from bisheng.api.v1.schemas import CreateUserReq
 from bisheng.cache.redis import redis_client
@@ -22,7 +24,6 @@ from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.settings import settings
 from bisheng.utils.constants import RSA_KEY, USER_CURRENT_SESSION
-from fastapi import Depends, HTTPException, Request
 from fastapi_jwt_auth import AuthJWT
 
 
@@ -58,6 +59,21 @@ class UserPayload:
             if args[0].is_admin():
                 return True
             return func(*args, **kwargs)
+
+        return wrapper
+
+    @staticmethod
+    def async_wrapper_access_check(func):
+        """
+        异步权限检查的装饰器
+        如果是admin用户则不执行后续具体的检查逻辑
+        """
+
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            if args[0].is_admin():
+                return True
+            return await func(*args, **kwargs)
 
         return wrapper
 
@@ -98,6 +114,20 @@ class UserPayload:
                 return True
         return False
 
+    @async_wrapper_access_check
+    async def async_check_group_admin(self, group_id: int) -> bool:
+        """
+            异步检查用户是否是某个组的管理员
+        """
+        # 判断是否是用户组的管理员
+        user_group = await UserGroupDao.aget_user_admin_group(self.user_id, group_id)
+        if not user_group:
+            return False
+        for one in user_group:
+            if one.group_id == group_id:
+                return True
+        return False
+
     @wrapper_access_check
     def check_groups_admin(self, group_ids: List[int]) -> bool:
         """
@@ -125,6 +155,14 @@ class UserPayload:
                 self.group_cache[group_info.id] = {'id': group_info.id, 'name': group_info.group_name}
                 res.append(self.group_cache.get(group_info.id))
         return res
+
+    def get_user_access_resource_ids(self, access_types: List[AccessType]) -> List[str]:
+        """ 查询用户有对应权限的资源ID列表 """
+        user_role = UserRoleDao.get_user_roles(self.user_id)
+        role_ids = [role.role_id for role in user_role]
+        role_access = RoleAccessDao.get_role_access_batch(role_ids, access_types)
+        return list(set([one.third_id for one in role_access]))
+
 
 class UserService:
 
@@ -229,7 +267,7 @@ def get_knowledge_list_by_access(role_id: int, name: str, page_num: int, page_si
             }) for access in db_role_access
         ],
         'total':
-        total_count
+            total_count
     }
 
 
@@ -256,7 +294,7 @@ def get_flow_list_by_access(role_id: int, name: str, page_num: int, page_size: i
             }) for access in db_role_access
         ],
         'total':
-        total_count
+            total_count
     }
 
 
@@ -281,7 +319,7 @@ def get_assistant_list_by_access(role_id: int, name: str, page_num: int, page_si
             'id': access[0].id
         } for access in db_role_access],
         'total':
-        total_count
+            total_count
     }
 
 
