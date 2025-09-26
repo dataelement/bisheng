@@ -4,7 +4,7 @@ from typing import List, Optional
 from sqlalchemy import Column, DateTime, text, func, delete, and_, UniqueConstraint
 from sqlmodel import Field, select
 
-from bisheng.core.database import get_sync_db_session
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.role_access import RoleAccess
@@ -100,6 +100,12 @@ class RoleDao(RoleBase):
     def get_role_by_id(cls, role_id: int) -> Role:
         with get_sync_db_session() as session:
             return session.query(Role).filter(Role.id == role_id).first()
+
+    @classmethod
+    async def aget_role_by_id(cls, role_id: int) -> Role:
+        async with get_async_db_session() as session:
+            result = await session.execute(select(Role).where(Role.id == role_id))
+            return result.scalars().first()
 
     @classmethod
     def delete_role_by_group_id(cls, group_id: int):

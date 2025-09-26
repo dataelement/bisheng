@@ -4,7 +4,7 @@ from typing import List, Optional
 from sqlalchemy import Column, DateTime, delete, text
 from sqlmodel import Field, select
 
-from bisheng.core.database import get_sync_db_session
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.group import DefaultGroup
 
@@ -58,6 +58,18 @@ class UserGroupDao(UserGroupBase):
         with get_sync_db_session() as session:
             statement = select(UserGroup).where(UserGroup.user_id == user_id).where(UserGroup.is_group_admin == 1)
             return session.exec(statement).all()
+
+    @classmethod
+    async def aget_user_admin_group(cls, user_id: int, group_id: int = None) -> List[UserGroup]:
+        """
+        获取用户是管理员的用户组, 如果传了group_id则只获取该组的管理员信息
+        """
+        statement = select(UserGroup).where(UserGroup.user_id == user_id).where(UserGroup.is_group_admin == 1)
+        if group_id:
+            statement = statement.where(UserGroup.group_id == group_id)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
 
     @classmethod
     def insert_user_group(cls, user_group: UserGroupCreate) -> UserGroup:
