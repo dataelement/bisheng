@@ -84,10 +84,10 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                 <div>
                     <Label className="bisheng-label">
                         <span>{t('model.modelName')}</span>
-                        <QuestionTooltip
+                    <QuestionTooltip
                             className="relative top-0.5 ml-1"
                             content={t('model.modelNameTooltip')}
-                        />
+                        ><span /></QuestionTooltip>
                     </Label>
                     <Label className="bisheng-label"></Label>
                     <Input value={model.model_name} onChange={handleInput} className="h-8"></Input>
@@ -104,6 +104,8 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                                 <SelectItem value="llm">LLM</SelectItem>
                                 <SelectItem value="embedding">Embedding</SelectItem>
                                 <SelectItem value="rerank">Rerank</SelectItem>
+                                <SelectItem value="ASR">ASR</SelectItem>
+                                <SelectItem value="TTS">TTS</SelectItem>
                             </SelectGroup>
                         </SelectContent>
                     </Select>
@@ -158,6 +160,7 @@ const bishengModelProvider = { "name": "bishengRT", "value": "bisheng_rt" }
 
 // 默认表单项
 const defaultForm = {
+    id: null as any,
     type: '',
     name: '',
     limit_flag: false,
@@ -348,7 +351,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
             <div className="mb-2">
                 <Label className="bisheng-label">
                     <span>{t('model.serviceProviderName')}</span>
-                    <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.serviceProviderNameTooltip')} />
+                    <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.serviceProviderNameTooltip')}><span /></QuestionTooltip>
                 </Label>
                 <Input value={formData.name} onChange={(e) => {
                     const name = e.target.value
@@ -421,7 +424,7 @@ const useSelectModel = () => {
 
     const loadData = async () => {
         try {
-            const response = await fetch(__APP_ENV__.BASE_URL + '/models/data.json');
+            const response = await fetch((window as any).__APP_ENV__?.BASE_URL + '/models/data.json');
             if (!response.ok) {
                 throw new Error('Failed to fetch data');
             }
