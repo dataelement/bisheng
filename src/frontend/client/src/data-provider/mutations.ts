@@ -34,6 +34,7 @@ export const useGenTitleMutation = (): TGenTitleMutation => {
   const queryClient = useQueryClient();
   return useMutation((payload: t.TGenTitleRequest) => dataService.genTitle(payload), {
     onSuccess: (response, vars) => {
+      if (!response.title) return
       queryClient.setQueryData(
         [QueryKeys.conversation, vars.conversationId],
         (convo: t.TConversation | undefined) => {

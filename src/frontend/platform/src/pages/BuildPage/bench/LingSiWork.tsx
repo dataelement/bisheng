@@ -28,6 +28,12 @@ import { FormInput } from "./FormInput";
 import { Model } from "./ModelManagement";
 import Preview from "./Preview";
 import { t } from "i18next";
+import { useDebounce } from "@/util/hook";
+import SopSearchBar from "@/components/LinSight/SopSearchBar";
+import SopActionsBar from "@/components/LinSight/SopActionsBar";
+import DeleteConfirmModal from "@/components/LinSight/DeleteConfirmModal";
+import LocalFileImportDialog from "@/components/LinSight/LocalFileImportDialog";
+import ValidationDialog from "@/components/LinSight/ValidationDialog";
 
 export interface FormErrors {
     sidebarSlogan: string;
@@ -251,14 +257,6 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             })
             .filter(Boolean);
     }, [toolsData, activeToolTab, toolSearchTerm]);
-
-    //     const refreshSopList = () => {
-    //   fetchData({
-    //     page: page,
-    //     pageSize: 10,
-    //     keyword: keywords
-    //   });
-    // };
     const fetchData = async (params: {
         page: number;
         pageSize: number;
@@ -289,7 +287,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         }
     };
     useEffect(() => {
-        fetchData({ page: 1, pageSize: 10, keyword: '' });
+        fetchData({ page: 1, pageSize: 10, keyword: '', showcase: showcaseFilter });
     }, []);
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(false); // 标记当前是否为编辑模式
@@ -332,9 +330,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     };
     let { assistantState, dispatchAssistant } = useAssistantStore();
     const { handleSave } = useChatConfig(
-        assistantState,
         selectedTools,
-        toolsData,
         setFormData
     );
 
@@ -427,7 +423,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         fetchData({
             keyword: newKeywords,
             page: newPage,
-            pageSize
+            pageSize,
+            showcase: showcaseFilter
         });
 
         // 更新状态
@@ -442,9 +439,10 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     useEffect(() => {
         if (!importDialogOpen) {
             fetchData({
-                keyword: '',
+                keyword: keywords,
                 page,
-                pageSize
+                pageSize,
+                showcase: showcaseFilter
             });
         }
     }, [importDialogOpen])
@@ -468,7 +466,9 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             setPage(pageNum);
             fetchData({
                 page: pageNum,
-                keyword: keywords
+                keyword: keywords,
+                pageSize,
+                showcase: showcaseFilter
             });
         }
 
@@ -498,6 +498,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             page: 1,
             keywords: keywords,
             sort: direction,
+            showcase: showcaseFilter,
         })
             .then(res => {
                 setDatalist(res.items || []);
@@ -544,6 +545,18 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         setPage(1);
         setPageInputValue('1');
     };
+      // 使用自定义防抖 hook（500ms，非立即）
+      const debouncedCallback = useCallback((value: string) => {
+        handleSearch(value, true);
+    }, [showcaseFilter]);
+    const debouncedSearch = useDebounce(debouncedCallback, 500, false);
+    // 仅在卸载时取消，避免因依赖变化反复取消
+    useEffect(() => {
+        return () => {
+            (debouncedSearch as any)?.cancel?.();
+        }
+    }, []);
+
     const handleBatchDelete = async () => {
         setBatchDeleting(true);
         try {
@@ -579,6 +592,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                 page: newPage,
                 pageSize: pageSize,
                 keyword: keywords,
+                showcase: showcaseFilter,
             });
 
             toast({
@@ -646,7 +660,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             fetchData({
                 page: page,
                 pageSize: 10,
-                keyword: keywords
+                keyword: keywords,
+                showcase: showcaseFilter
             }); // 刷新列表
             resetSopForm(); // 重置表单
         } catch (error) {
@@ -703,12 +718,14 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 page: page - 1,
                                 pageSize: pageSize,
                                 keyword: keywords,
+                                showcase: showcaseFilter,
                             });
                         } else {
                             fetchData({
                                 page: page,
                                 pageSize: pageSize,
                                 keyword: keywords,
+                                showcase: showcaseFilter,
                             });
                         }
                         next();
@@ -801,7 +818,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     fetchData({
                         page: page,
                         pageSize: pageSize,
-                        keyword: keywords
+                        keyword: keywords,
+                        showcase: showcaseFilter
                     });
                 }
             }
@@ -835,7 +853,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             fetchData({
                 page: page,
                 pageSize: pageSize,
-                keyword: keywords
+                keyword: keywords,
+                showcase: showcaseFilter
             });
             toast({ variant: 'success', description: t('chatConfig.submitSuccess') });
         }
@@ -887,88 +906,45 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                         <div className="mb-6">
                             <p className="text-lg font-bold mb-2">{t('chatConfig.linsightManual')}</p>
                             <div className="flex items-center gap-2 mb-2">
-                                <div className="relative flex-1 max-w-xs">
-                                    <div className="relative">
-                                        <input
-                                            type="text"
-                                            placeholder={t('chatConfig.searchManual')}
-                                            className="w-full pl-10 pr-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            value={keywords}
-                                            onChange={(e) => {
-                                                const newValue = e.target.value;
-                                                setKeywords(newValue);
-                                                handleSearch(newValue);
-                                            }}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    handleSearch(keywords);
-                                                }
-                                            }}
-                                        />
-                                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-2">
-                                    <Button
-                                        variant="default"
-                                        size="sm"
-                                        onClick={() => { setImportDialogOpen(true); setImportFilesData(null) }}
-                                    >
-                                        {t('chatConfig.importFromRecord')}
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setLocalFileDialogOpen(true)}
-                                    >
-                                        {t('chatConfig.importFromLocal')}
-                                    </Button>
-
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => {
-                                            setIsEditing(false);
-                                            setCurrentSopId(null);
-                                            setSopShowcase(true); // 新创建的SOP默认没有运行结果
-                                            setSopForm({
-                                                id: '',
-                                                name: '',
-                                                description: '',
-                                                content: '',
-                                                rating: 0,
-                                                showcase: false
-                                            });
-                                            setIsDrawerOpen(true);
-                                        }}
-                                    >
-                                        {t('chatConfig.createManual')}
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={selectedItems.length === 0 || batchDeleting}
-                                        onClick={() => {
-                                            bsConfirm({
-                                                title: t('chatConfig.batchDeleteConfirm'),
-                                                desc: t('chatConfig.batchDeleteDesc'),
-                                                showClose: true,
-                                                okTxt: t('chatConfig.confirmDelete'),
-                                                canelTxt: t('cancel'),
-                                                onOk(next) {
-                                                    handleBatchDelete();
-                                                    next();
-                                                },
-                                                onCancel() {
-                                                }
-                                            });
-                                        }}
-                                    >
-                                        {batchDeleting && <LoadIcon className=" mr-2 text-gray-600" />}
-                                        {t('chatConfig.batchDelete')}
-                                    </Button>
-                                </div>
+                                <SopSearchBar
+                                    value={keywords}
+                                    placeholder={t('chatConfig.searchManual')}
+                                    onChangeValue={setKeywords}
+                                    onSearch={(v) => handleSearch(v)}
+                                    debounceMs={500}
+                                    debounceKey={showcaseFilter}
+                                />
+                                <SopActionsBar
+                                    importFromRecord={() => { setImportDialogOpen(true); setImportFilesData(null) }}
+                                    importFromLocal={() => setLocalFileDialogOpen(true)}
+                                    createManual={() => {
+                                        setIsEditing(false);
+                                        setCurrentSopId(null);
+                                        setSopShowcase(true);
+                                        setSopForm({ id: '', name: '', description: '', content: '', rating: 0, showcase: false });
+                                        setIsDrawerOpen(true);
+                                    }}
+                                    batchDelete={() => {
+                                        bsConfirm({
+                                            title: t('chatConfig.batchDeleteConfirm'),
+                                            desc: t('chatConfig.batchDeleteDesc'),
+                                            showClose: true,
+                                            okTxt: t('chatConfig.confirmDelete'),
+                                            canelTxt: t('cancel'),
+                                            onOk(next) {
+                                                handleBatchDelete();
+                                                next();
+                                            },
+                                            onCancel() { }
+                                        });
+                                    }}
+                                    batchDeleting={batchDeleting}
+                                    disableBatchDelete={selectedItems.length === 0}
+                                    importText={t('chatConfig.importFromRecord')}
+                                    importLocalText={t('chatConfig.importFromLocal')}
+                                    createText={t('chatConfig.createManual')}
+                                    batchDeleteText={t('chatConfig.batchDelete')}
+                                />
                             </div>
                             <ImportFromRecordsDialog
                                 open={importDialogOpen}
@@ -980,40 +956,17 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 duplicateDialogOpen={duplicateDialogOpen}
                                 setDuplicateDialogOpen={setDuplicateDialogOpen}
                                 importFormData={importFormData}
-                                linsight={linsight}
                             />
                             {/* 表格区域 */}
                             <SopTable datalist={datalist} selectedItems={selectedItems} handleSelectItem={handleSelectItem} handleSelectAll={handleSelectAll} handleSort={handleSort} handleEdit={handleEdit} handleDelete={handleDelete} page={page} pageSize={pageSize} total={total} loading={loading} pageInputValue={pageInputValue} handlePageChange={handlePageChange} handlePageInputChange={handlePageInputChange} handlePageInputConfirm={handlePageInputConfirm} handleKeyDown={handleKeyDown} onShowcaseFilterChange={handleShowcaseFilterChange} />
-                            {deleteConfirmModal.open && (
-                                <div className="fixed inset-0 z-[1000] bg-opacity-50 flex items-center justify-center">
-                                    <div className="relative rounded-lg p-6 w-[500px]  h-[150px]" style={{ background: 'white', opacity: 1, border: '1px solid #e5e7eb' }}>
-                                        <button
-                                            className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
-                                            onClick={() => setDeleteConfirmModal(prev => ({ ...prev, open: false }))}
-                                        >
-                                            ×
-                                        </button>
-                                        <p className="text-gray-600 text-center mb-6">{deleteConfirmModal.content}</p>
-                                        <div className="flex justify-between space-x-3">
-                                            <Button
-                                                variant="ghost"
-                                                onClick={() => setDeleteConfirmModal(prev => ({ ...prev, open: false }))}
-                                            >
-                                                {t('cancel')}
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                onClick={() => {
-                                                    deleteConfirmModal.onConfirm();
-                                                    setDeleteConfirmModal(prev => ({ ...prev, open: false }));
-                                                }}
-                                            >
-                                                {t('chatConfig.confirmDelete')}
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
+                            <DeleteConfirmModal
+                                open={deleteConfirmModal.open}
+                                content={deleteConfirmModal.content}
+                                cancelText={t('cancel')}
+                                okText={t('chatConfig.confirmDelete')}
+                                onClose={() => setDeleteConfirmModal(prev => ({ ...prev, open: false }))}
+                                onConfirm={() => { deleteConfirmModal.onConfirm(); setDeleteConfirmModal(prev => ({ ...prev, open: false })); }}
+                            />
                             <SopFormDrawer
                                 isDrawerOpen={isDrawerOpen}
                                 setIsDrawerOpen={setIsDrawerOpen}
@@ -1024,6 +977,14 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 handleSaveSOP={handleSaveSOP}
                                 tools={selectedTools}
                                 sopShowcase={sopShowcase}
+                                onShowcaseToggled={() =>
+                                    fetchData({
+                                        page: page,
+                                        pageSize: pageSize,
+                                        keyword: keywords,
+                                        showcase: showcaseFilter
+                                    })
+                                }
                             />
                         </div>
                     </div>
@@ -1033,143 +994,25 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     </div>
                 </CardContent>
             </Card>
-            <Dialog open={localFileDialogOpen} onOpenChange={setLocalFileDialogOpen}>
-                <DialogContent className="sm:max-w-[1200px]">
-                    <DialogHeader>
-                        <DialogTitle>{t('chatConfig.importManual')}</DialogTitle>
-                    </DialogHeader>
-
-                    <div className="grid gap-4 py-4">
-                        <div className="flex justify-between items-center w-full">
-                            <div className="flex items-center gap-2">
-                                <span className="text-red-500">*</span>
-                                <span>{t('chatConfig.uploadFile')}</span>
-                            </div>
-                            <button
-                                className="flex items-center gap-1"
-                                onClick={() => downloadFile(__APP_ENV__.BASE_URL + "/sopexample.xlsx", t('chatConfig.exampleFileName'))}
-                            >
-                                <span className="text-black">{t('chatConfig.exampleFile')}:</span>
-                                <span className="text-blue-600 hover:underline">{t('chatConfig.exampleFileName')}</span>
-                            </button>
-                        </div>
-
-                        <div
-                            {...getLocalFileRootProps()}
-                            className="group h-40 border border-dashed rounded-md flex flex-col justify-center items-center cursor-pointer gap-3 hover:border-primary"
-                        >
-                            <input {...getLocalFileInputProps()} />
-                            <UploadIcon className="group-hover:text-primary size-5" />
-                            <p className="text-sm">{t('code.clickOrDragHere')}</p>
-
-                        </div>
-                        {importFiles.length > 0 && (
-                            <div className="text-sm text-start text-green-500 mt-2">
-                                {importFiles.slice(0, 1).map((file, index) => (
-                                    <div key={index}>
-                                        <span>
-                                            {file.name}
-                                        </span>
-                                        {/* <button 
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            setImportFiles([]); 
-                        }}
-                        className="text-red-500 hover:text-red-700"
-                    >
-                        ×
-                    </button> */}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="flex justify-end gap-2">
-                        <Button
-                            variant="outline"
-                            onClick={() => {
-                                setLocalFileDialogOpen(false);
-                                setImportFiles([]);
-                            }}
-                        >
-                            {t('cancel')}
-                        </Button>
-                        <Button
-                            onClick={async () => {
-                                await handleLocalFileImport(); // 等待导入完成
-                                setImportFiles([])
-                                setLocalFileDialogOpen(false); // 关闭弹窗
-                            }}
-                            disabled={isImporting || importFiles.length === 0}
-                        >
-                            {isImporting ? t('chatConfig.importing') : t('submit')}
-                        </Button>
-                    </div>
-                </DialogContent>
-            </Dialog>
-            <Dialog open={validationDialog.open} onOpenChange={(open) => setValidationDialog(prev => ({ ...prev, open }))}>
-                <DialogContent className="sm:max-w-[500px] max-h-[80vh]" close={false}>
-                    {/* 静态蓝色竖条 - 始终显示 */}
-                    <div className="absolute left-0 top-0 h-full w-1.5 bg-blue-500"></div>
-
-                    {/* 可滚动区域 - 仅在内容溢出时显示滚动条 */}
-                    <div
-                        className="pl-4 overflow-y-auto"
-                        style={{
-                            maxHeight: 'calc(80vh - 2rem)', // 减去padding等空间
-                            scrollbarWidth: 'thin',
-                            scrollbarColor: '#3b82f6 transparent' // blue-500
-                        }}
-                    >
-                        {/* 自定义滚动条样式 (Webkit浏览器) */}
-                        <style jsx>{`
-        .overflow-y-auto::-webkit-scrollbar {
-          width: 8px;
-        }
-        .overflow-y-auto::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .overflow-y-auto::-webkit-scrollbar-thumb {
-          background: #3b82f6; /* blue-500 */
-          border-radius: 4px;
-        }
-      `}</style>
-
-                        <DialogHeader>
-                            <div className="flex items-center gap-4">
-                                <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
-                                    <span className="text-white font-bold text-lg">i</span>
-                                </div>
-                                <DialogTitle>{t('chatConfig.fileFormatError')}</DialogTitle>
-                            </div>
-                        </DialogHeader>
-
-                        <div className="py-4">
-                            {validationDialog.status_message && (
-                                <div className="space-y-2">
-                                    <p className="font-medium">
-                                        {validationDialog.status_message.split("：")[0]}：
-                                    </p>
-                                    {validationDialog.status_message.includes("：") && (
-                                        <div className="text-sm text-gray-600">
-                                            {validationDialog.status_message.split("：")[1].split("\n").map((line, index) => (
-                                                <p key={index}>{line.trim()}</p>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="flex justify-end">
-                            <Button onClick={handleValidationDialogConfirm}>
-                                {t('chatConfig.gotIt')}
-                            </Button>
-                        </div>
-                    </div>
-                </DialogContent>
-            </Dialog>
+            <LocalFileImportDialog
+                open={localFileDialogOpen}
+                onOpenChange={setLocalFileDialogOpen}
+                t={t}
+                getRootProps={getLocalFileRootProps}
+                getInputProps={getLocalFileInputProps}
+                importFiles={importFiles}
+                isImporting={isImporting}
+                onImport={async () => { await handleLocalFileImport(); setImportFiles([]); setLocalFileDialogOpen(false); }}
+                onCancel={() => { setLocalFileDialogOpen(false); setImportFiles([]); }}
+                downloadExample={() => downloadFile(__APP_ENV__.BASE_URL + "/sopexample.xlsx", t('chatConfig.exampleFileName'))}
+            />
+            <ValidationDialog
+                open={validationDialog.open}
+                statusMessage={validationDialog.status_message}
+                t={t}
+                onConfirm={handleValidationDialogConfirm}
+                onOpenChange={(open) => setValidationDialog(prev => ({ ...prev, open }))}
+            />
         </div>
     );
 }

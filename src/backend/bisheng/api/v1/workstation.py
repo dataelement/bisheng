@@ -26,7 +26,7 @@ from bisheng.api.services.workstation import (SSECallbackClient, WorkstationConv
 from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import FrequentlyUsedChat
-from bisheng.api.v1.schemas import WorkstationConfig, resp_200, WSPrompt, ExcelRule, UnifiedResponseModel
+from bisheng.api.v1.schemas import WorkstationConfig, resp_200, resp_500, WSPrompt, ExcelRule, UnifiedResponseModel
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download, save_download_file, save_uploaded_file
 from bisheng.core.app_context import app_ctx
@@ -36,6 +36,7 @@ from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.interface.llms.custom import BishengLLM
 from bisheng.settings import settings as bisheng_settings
+from bisheng.utils.exceptions import MessageException
 
 router = APIRouter(prefix='/workstation', tags=['WorkStation'])
 
@@ -269,7 +270,12 @@ async def webSearch(query: str, web_search_config: WSPrompt):
     web_search_tool = await AssistantAgent.init_tools_by_tool_ids([web_search_info.id], None)
     if not web_search_tool:
         raise WebSearchToolNotFoundError(exception=Exception("No web_search tool found in gpts tools"))
-    return web_search_tool[0].invoke(input={"query": query})
+    search_list = await web_search_tool[0].ainvoke(input={"query": query})
+    search_list = json.loads(search_list)
+    search_res = ""
+    for index, one in enumerate(search_list):
+        search_res += f'[webpage ${index} begin]\n${one.get("snippet")}\n[webpage ${index} end]\n\n'
+    return search_res, search_list
 
 
 def getFileContent(filepath):
@@ -291,7 +297,6 @@ def getFileContent(filepath):
 
 @router.post('/chat/completions')
 async def chat_completions(
-        background_tasks: BackgroundTasks,
         data: APIChatCompletion,
         login_user: UserPayload = Depends(get_login_user),
 ):
@@ -485,20 +490,21 @@ async def chat_completions(
         except BaseErrorCode as e:
             error = True
             final_res = json.dumps(e.to_dict())
-            yield e.to_sse_event_instance()
+            yield e.to_sse_event_instance_str()
         except Exception as e:
             e = ServerError(exception=e)
             logger.exception(f'Error in processing the prompt')
             error = True
             final_res = json.dumps(e.to_dict())
-            yield e.to_sse_event_instance()
+            yield e.to_sse_event_instance_str()
 
         yield final_message(conversaiton, conversaiton.flow_name, message, final_res, error,
                             modelName)
 
         if not data.conversationId:
             # 生成title
-            background_tasks.add_task(genTitle, data.text, final_res, bishengllm, conversationId)
+            asyncio.create_task(
+                genTitle(data.text, final_result.content if final_result else final_res, bishengllm, conversationId))
 
     return StreamingResponse(event_stream(), media_type='text/event-stream')
 

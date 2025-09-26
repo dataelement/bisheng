@@ -78,7 +78,7 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
     submitButtonRef,
     setIsScrollable,
     disabled: !!(requiresKey ?? false),
-    placeholder: sameSopLabel ? '请输入与此案例相似的目标' : isLingsi ? (bsConfig?.linsightConfig?.input_placeholder || localize('com_linsight_input_placeholder')) : bsConfig?.inputPlaceholder
+    placeholder: isLingsi ? (sameSopLabel ? '请输入与此案例相似的目标' : bsConfig?.linsightConfig?.input_placeholder || localize('com_linsight_input_placeholder')) : bsConfig?.inputPlaceholder
   });
 
   const {

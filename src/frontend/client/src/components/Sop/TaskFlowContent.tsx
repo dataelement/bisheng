@@ -10,6 +10,7 @@ import {
     WrenchIcon
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useToastContext } from '~/Providers';
 import { SendIcon } from '~/components/svg';
 import { useLocalize } from '~/hooks';
 import { playDing } from '~/utils';
@@ -36,7 +37,7 @@ const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
 const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) => {
     const { name, step_type, params, extra_info, output } = data;
     const localize = useLocalize();
-
+    const { showToast } = useToastContext();
     // 过滤尾部hash值
     const toolName = useMemo(() => {
         const lastUnderscoreIndex = name.lastIndexOf('_');
@@ -95,26 +96,58 @@ const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) =>
             })
         } catch (error) {
             console.log('knowledge parse error :>> ', error);
+            showToast({ message: output, status: 'error' });
         }
     }
 
     const handleWebSearchClick = () => {
         if (!output || !output.length) return
         try {
-            const text = JSON.parse(output)['content'][0].text
-            const resData = JSON.parse(text)
-            onWebSearch({
-                query: params.query,
-                data: resData['搜索结果'].map(item => ({
-                    title: item['标题'],
-                    content: item['摘要'],
-                    url: item['链接'],
-                    thumbnail: item['缩略图'],
-                }))
-            })
+            const res = JSON.parse(output)
+            if (Array.isArray(res)) {
+                onWebSearch({
+                    query: params.query,
+                    data: res.map(item => ({
+                        ...item,
+                        thumbnail: item.thumbnail || '',
+                        host: item.url.replace(/^https?:\/\/([^\/]+).*$/, '$1'),
+                        title: item.title,
+                        content: item.snippet
+                    }))
+                })
+            } else {
+                const text = JSON.parse(output)['content'][0].text
+                const resData = JSON.parse(text)
+                onWebSearch({
+                    query: params.query,
+                    data: resData['搜索结果'].map(item => ({
+                        thumbnail: item['缩略图'] || '',
+                        host: item['链接'].replace(/^https?:\/\/([^\/]+).*$/, '$1'),
+                        title: item['标题'],
+                        content: item['摘要'],
+                        url: item['链接'],
+                    }))
+                })
+            }
         } catch (error) {
             console.log('websearch parse error :>> ', error);
+
+            onWebSearch({
+                query: params.query,
+                data: [{
+                    thumbnail: '',
+                    host: '',
+                    title: output.split(/[.!?，。,！？；：]/)[0] + '...',
+                    content: output,
+                    url: ''
+                }]
+            })
         }
+    }
+
+    function extractAllUrls(text) {
+        const urlRegex = /https?:\/\/[a-zA-Z0-9-._~:/?#[\]@!$&'()*+,;=]+/g;
+        return text.match(urlRegex) || [];
     }
 
     // 参数键名映射
@@ -135,7 +168,7 @@ const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) =>
         read_text_file: () => <ToolButtonLink params={extra_info} setCurrentDirectFile={setCurrentDirectFile} />,
         add_text_to_file: () => <ToolButtonLink params={extra_info} setCurrentDirectFile={setCurrentDirectFile} />,
         replace_file_lines: () => <ToolButtonLink params={extra_info} setCurrentDirectFile={setCurrentDirectFile} />,
-        web_content_to_markdown_llm: () => <a href={params.url} target='_blank'><Button
+        web_content_to_markdown_llm: () => <a href={extractAllUrls(params.url)[0]} target='_blank'><Button
             variant="link"
             className='text-xs p-0 h-4 text-blue-400 underline underline-offset-2'
         >{params.url}</Button></a>,
@@ -386,6 +419,7 @@ export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
         const mergedFiles = [...files, ...allFiles];
         return mergedFiles;
     }, [files, allFiles]);
+    console.log('files xx:>> ', files, allFiles);
 
     const downloadFile = (file) => {
         const { file_name, file_url } = file;
@@ -488,7 +522,7 @@ export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
                 </div>
             }
             {/* 结果文件 */}
-            {files && files.length > 0 &&
+            {files &&
                 <div>
                     {/* <p className='text-sm text-gray-500'></p> */}
                     <div className='mt-5 flex flex-wrap gap-3'>

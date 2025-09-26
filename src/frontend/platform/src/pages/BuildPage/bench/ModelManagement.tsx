@@ -3,7 +3,7 @@ import { TrashIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
 import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
-import { useAssistantLLmModel } from "@/pages/ModelPage/manage";
+import { useModel } from "@/pages/ModelPage/manage";
 import { ModelSelect } from "@/pages/ModelPage/manage/tabs/KnowledgeModel";
 import { Plus } from "lucide-react";
 import { useEffect } from "react";
@@ -26,9 +26,8 @@ interface ModelManagementProps {
 }
 export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps>(
     ({ models, errors, error, onAdd, onRemove, onModelChange, onNameChange }, ref) => {
-        const { llmOptions } = useAssistantLLmModel();
-        console.log(models,5621);
-        
+        const { llmOptions } = useModel();
+
         // 将 ref 绑定到每个模型项
         const setItemRef = (el: HTMLDivElement | null, index: number) => {
             const refs = ref as React.MutableRefObject<(HTMLDivElement | null)[]>;

@@ -51,13 +51,11 @@ const SopTable = ({
         const empty: number[] = [];
         setFeaturedTempFilters(empty);
         setFeaturedSelectedFilters(empty);
+        onShowcaseFilterChange?.(undefined);
         setIsFeaturedFilterOpen(false);
     };
 
     const handleFeaturedOpenChange = (open: boolean) => {
-        if (!open && isFeaturedFilterOpen) {
-            applyFeaturedFilters();
-        }
         if (open) {
             setFeaturedTempFilters([...featuredSelectedFilters]);
         }
@@ -244,7 +242,7 @@ const SopTable = ({
                                         <Tooltip>
                                             <TooltipTrigger asChild>
                                                 <div className="text-sm font-medium text-gray-900 truncate">
-                                                    admin
+                                                    {item.user_name}
                                                 </div>
                                             </TooltipTrigger>
                                         </Tooltip>

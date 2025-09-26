@@ -98,19 +98,17 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                     if (_model) {
                         setModal(_model);
                     } else {
-                        // 如果找不到对应的模型，尝试从服务器获取详情
-                        try {
-                            const res = await getLLmServerDetail(currentLib.model);
-                            if (res.data) {
-                                setModal(res.data);
-                            }
-                        } catch (error) {
-                            console.warn('error');
-                            // 如果获取失败，使用第一个可用的模型作为备选
-                            if (embeddings.length > 0 && embeddings[0].children.length > 0) {
-                                setModal([embeddings[0], embeddings[0].children[0]]);
-                            }
-                        }
+                        // try {
+                        //     const res = await getLLmServerDetail(currentLib.model);
+                        //     if (res.data) {
+                        //         setModal(res.data);
+                        //     }
+                        // } catch (error) {
+                        //     console.warn('Failed to get server detail, using fallback');
+                        //     if (embeddings.length > 0 && embeddings[0].children.length > 0) {
+                        //         setModal([embeddings[0], embeddings[0].children[0]]);
+                        //     }
+                        // }
                     }
                 } else if (mode === 'create' && _model) {
                     setModal(_model);
@@ -531,7 +529,7 @@ export default function KnowledgeFile() {
                     <SearchInput placeholder={t('lib.searchPlaceholder')} onChange={(e) => search(e.target.value)} />
                     <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create')}</Button>
                 </div>
-                <Table>
+                <Table noScroll>
                     <TableHeader>
                         <TableRow>
                             <TableHead>{t('lib.libraryName')}</TableHead>
@@ -558,7 +556,7 @@ export default function KnowledgeFile() {
                                     <div className="flex items-center gap-2">
                                         <div className="flex items-center justify-center size-12 text-white rounded-[4px]  w-[40px] h-[40px]">
                                             {/* <BookCopy  className="size-5"/> */}
-                                            <BookIcon className="text-primary" />
+                                            <BookIcon className="text-primary size-10" />
                                         </div>
                                         <div>
                                             <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">
@@ -620,6 +618,7 @@ export default function KnowledgeFile() {
                                             }}
                                         >
                                             <SelectTrigger
+                                                showIcon={false}
                                                 disabled={copyLoadingId === el.id}
                                                 onClick={(e) => {
                                                     e.stopPropagation();

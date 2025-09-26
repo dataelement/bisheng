@@ -21,6 +21,7 @@ customAxios.interceptors.request.use(function (config) {
 });
 
 customAxios.interceptors.response.use(function (response) {
+    if (response.data instanceof Blob) return response.data;
     if (response.data.status_code === 200) {
         return response.data.data;
     }

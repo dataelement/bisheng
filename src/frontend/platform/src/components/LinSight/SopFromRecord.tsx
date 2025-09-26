@@ -13,7 +13,8 @@ import SopMarkdown from './SopMarkdown';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../bs-ui/tooltip';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../bs-ui/tabs';
 import { useTranslation } from 'react-i18next';
-import { TaskFlowContent } from './SopTasks';
+import { TaskFlowContent } from "@/workspace/SopTasks";
+import Tip from '../bs-ui/tooltip/tip';
 
 interface SopRecord {
   id: number;
@@ -28,7 +29,7 @@ interface SopRecord {
   user_name: string;
 }
 
-export default function ImportFromRecordsDialog({ open, tools, onOpenChange, onSuccess, setDuplicateNames, duplicateNames, duplicateDialogOpen, setDuplicateDialogOpen, importFormData }) {
+export default function ImportFromRecordsDialog({ open, tools, onOpenChange, setDuplicateNames, duplicateNames, duplicateDialogOpen, setDuplicateDialogOpen, importFormData }) {
   const { toast } = useToast();
   const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
@@ -262,7 +263,11 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, onS
           setLinsight({});
           return;
       }
-      setLinsight({ ...res.version_info, tasks: res.execute_tasks });
+      setLinsight({ 
+        ...res.version_info,
+         tasks: res.execute_tasks,
+        summary: '' 
+      });
       setSopShowcase(false);
     }
     fetchSopShowcase();
@@ -469,7 +474,11 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, onS
                   <h3 className="text-lg font-semibold truncate">{currentRecord.name}</h3>
                   <TabsList className='mr-4'>
                     <TabsTrigger value="manual">指导手册</TabsTrigger>
-                    <TabsTrigger value="result" disabled={sopShowcase}>运行结果</TabsTrigger>
+                    {sopShowcase? <Tip content="无运行结果" side="bottom">
+                      <span className="inline-block">
+                        <TabsTrigger value="result" disabled={sopShowcase}>运行结果</TabsTrigger>
+                      </span>
+                    </Tip> : <TabsTrigger value="result" disabled={sopShowcase}>运行结果</TabsTrigger>}
                   </TabsList>
                 </div>
 
@@ -519,8 +528,25 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, onS
                 {activeTab === 'result' && (
                   <div className="flex-1 flex flex-col">
                     <div className="flex-1 overflow-y-auto bg-gray-50 rounded-md p-4 text-sm text-gray-500">
-                      {console.log(linsight, 22266)}
                     <TaskFlowContent linsight={linsight} />
+                    </div>
+                    <div className="flex justify-start gap-2 pt-4">
+                      <Button
+                        onClick={() => {
+                          if (!currentRecord) return;
+                          setSelectedRecordIds([]);
+                          setSelectedRecords([]);
+                          // 直接尝试导入当前SOP
+                          importSops([currentRecord]).then((hasDuplicate) => {
+                            if (hasDuplicate === false) {
+                              setDuplicateDialogOpen(true);
+                            }
+                          });
+                        }}
+                        disabled={!currentRecord || loading}
+                      >
+                        {loading ? t('ImportFromRecordsDialog.loading') : t('ImportFromRecordsDialog.importCurrent')}
+                      </Button>
                     </div>
                   </div>
                 )}

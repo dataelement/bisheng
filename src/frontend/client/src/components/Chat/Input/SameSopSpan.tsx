@@ -1,9 +1,11 @@
 import { ArrowRight, CircleX } from "lucide-react"
 import { atom, useRecoilState } from "recoil"
 import { Button } from "~/components/ui"
+import { useLocalize } from "~/hooks";
 
 export default function SameSopSpan() {
     const [sameSopLabel, setSameSopLabel] = useRecoilState(sameSopLabelState)
+    const t = useLocalize();
 
     const handleClose = () => {
         setSameSopLabel(null)
@@ -20,12 +22,12 @@ export default function SameSopSpan() {
             <div className="flex items-center gap-3">
                 <Button variant="ghost" size="sm" className="h-8 text-xs rounded-sm bg-primary/20 text-blue-600 hover:text-blue-700">
                     <ArrowRight className="h-3 w-3" />
-                    做同款
+                    {t('com_make_samestyle')}
                 </Button>
             </div>
 
             <div className="flex-1 pl-2" onClick={handleCardClick}>
-                <p className="text-sm text-foreground underline">{sameSopLabel.name}</p>
+                <p className="text-sm text-foreground underline truncate max-w-80 sm:max-w-[555px]">{sameSopLabel.name}</p>
             </div>
 
             <div className="flex items-center">

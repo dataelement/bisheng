@@ -88,7 +88,7 @@ class LinsightSOPDao(LinsightSOPBase):
 
             # 将sop_obj的字段值更新到sop实例中
             for key, value in sop_obj.model_dump().items():
-                if hasattr(sop, key):
+                if hasattr(sop, key) and value is not None:
                     setattr(sop, key, value)
 
             sop.update_time = datetime.now()  # 更新修改时间
@@ -118,7 +118,7 @@ class LinsightSOPDao(LinsightSOPBase):
             statement = statement.order_by(col(LinsightSOP.rating).asc(), col(LinsightSOP.update_time).asc())
         else:
             statement = statement.order_by(col(LinsightSOP.rating).desc(), col(LinsightSOP.update_time).desc())
-            
+
         if showcase is not None:
             statement = statement.where(LinsightSOP.showcase == showcase)
 

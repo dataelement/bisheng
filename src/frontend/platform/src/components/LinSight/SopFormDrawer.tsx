@@ -12,20 +12,25 @@ import { useTranslation } from "react-i18next";
 import { Tabs, TabsList, TabsTrigger } from "../bs-ui/tabs";
 import { Star } from "lucide-react";
 import Tip from "@/components/bs-ui/tooltip/tip";
-import { TaskFlowContent } from "./SopTasks";
+import { TaskFlowContent } from "@/workspace/SopTasks";
 
-const SopFormDrawer = ({
-  isDrawerOpen,
-  setIsDrawerOpen,
-  isEditing,
-  sopForm,
-  setSopForm,
-  tools,
-  linsight,
-  handleSaveSOP,
-  sopShowcase
-}) => {
-  console.log(sopShowcase, sopForm,22255);
+/**
+ * SopFormDrawer
+ * @param {any} props
+ */
+const SopFormDrawer: any = (props) => {
+  const {
+    isDrawerOpen,
+    setIsDrawerOpen,
+    isEditing,
+    sopForm,
+    setSopForm,
+    tools,
+    linsight,
+    handleSaveSOP,
+    sopShowcase,
+    onShowcaseToggled
+  } = props;
   const { t } = useTranslation()
   const [errors, setErrors] = useState({
     name: '',
@@ -39,7 +44,7 @@ const SopFormDrawer = ({
   const nameInputRef = useRef(null);
   const contentInputRef = useRef(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isFeatured, setIsFeatured] = useState(false);
+  const isFeatured = !!sopForm.showcase;
   const [activeTab, setActiveTab] = useState('manual');
   // 各字段的最大字数限制
   const MAX_LENGTHS = {
@@ -135,12 +140,7 @@ const SopFormDrawer = ({
     }
   }, [isDrawerOpen]);
 
-  // 监听sopForm的showcase状态变化，同步更新isFeatured
-  useEffect(() => {
-    if (sopForm.showcase !== undefined) {
-      setIsFeatured(sopForm.showcase);
-    }
-  }, [sopForm.showcase]);
+  // 移除 isFeatured 派生状态的同步副作用，统一使用 sopForm.showcase
 
   // 当弹窗打开时，重置Tab为"指导手册"
   useEffect(() => {
@@ -166,7 +166,7 @@ const SopFormDrawer = ({
                   <TabsList>
                     <TabsTrigger value="manual">指导手册</TabsTrigger>
                     {sopShowcase ? (
-                      <Tip content="仅从运行记录导入的手册可查看运行结果" side="bottom">
+                      <Tip content="无运行结果" side="bottom">
                         <div className="inline-block">
                           <TabsTrigger
                             value="result"
@@ -213,9 +213,12 @@ const SopFormDrawer = ({
                       try {
                         const next = !isFeatured;
                         await sopApi.switchShowcase({ sop_id: sopForm.id, showcase: next });
-                        setIsFeatured(next);
+                        // 同步父级表单，避免状态串扰
+                        setSopForm((prev) => ({ ...prev, showcase: next }));
+                        // 刷新列表
+                        onShowcaseToggled && onShowcaseToggled();
                       } catch (e) {
-                        toast({ variant: 'error', description: '操作失败，请稍后重试' });
+                        toast({ variant: 'error', description: 'sop设置精选案例失败' });
                       }
                     }}
                     className={`${isFeatured ? 'border-yellow-500 bg-yellow-50 text-yellow-700' : ''}`}
@@ -236,73 +239,73 @@ const SopFormDrawer = ({
             )}
           </div>
           <div className="flex-1 px-4 pb-4 pt-3">
-            
-           {activeTab === 'result'&& (
-                     <div className="mt-4 overflow-y-auto scrollbar-hide taskflow-scroll" style={{
-                       scrollbarWidth: 'thin',
-                       scrollbarColor: '#d1d5db transparent',
-                       height: 'calc(100vh - 200px)'
-                     }}>
-                       <TaskFlowContent linsight={linsight} />
-                     </div>
-           )}
+
+            {activeTab === 'result' && (
+              <div className="mt-4 overflow-y-auto scrollbar-hide taskflow-scroll" style={{
+                scrollbarWidth: 'thin',
+                scrollbarColor: '#d1d5db transparent',
+                height: 'calc(100vh - 200px)'
+              }}>
+                <TaskFlowContent linsight={linsight} />
+              </div>
+            )}
             {activeTab === 'manual' && (
               <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label htmlFor="sop-name" className="block text-sm font-medium pb-1 text-gray-700">
-                  {t('sopForm.manualName')}<span className="text-red-500">*</span>
-                </label>
-                < Input
-                  type="text"
-                  showCount
-                  maxLength={500}
-                  id="sop-name"
-                  ref={nameInputRef}
-                  value={sopForm.name}
-                  onChange={(e) => handleInputChange('name', e.target.value)}
-                  className={`mt-1 block w-full border ${errors.name ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-[16px]`}
-                  placeholder={t('sopForm.namePlaceholder')}
-                />
-                <div className="flex justify-between">
-                  {errors.name && (
-                    <p className="mt-1 text-sm text-red-600">{errors.name}</p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="sop-description" className="block text-sm pb-1 font-medium text-gray-700">
-                  {t('sopForm.description')}
-                </label>
-                <Textarea
-                  id="sop-description"
-                  maxLength={1000}
-                  rows={3}
-                  value={sopForm.description}
-                  onChange={(e) => handleInputChange('description', e.target.value)}
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-[16px]"
-                  placeholder={t('sopForm.descriptionPlaceholder')}
-                />
-              </div>
-
-              <div>
-                <label htmlFor="sop-content" className="h-full block text-sm pb-1 font-medium text-gray-700">
-                  {t('sopForm.detailedContent')}<span className="text-red-500">*</span>
-                </label>
-                {isDrawerOpen && (
-                  <div className="relative mt-1">
-                    <SopMarkdown
-                      tools={tools}
-                      defaultValue={sopForm.content}
-                      onChange={(val) => handleInputChange('content', val)}
-                      className="h-full text-lg"
-                    />
-                    <div className="absolute bottom-0 right-0 bg-white/80 px-2 py-1 rounded text-xs text-gray-500">
-                      {charCount.content}/{MAX_LENGTHS.content}
-                    </div>
+                <div>
+                  <label htmlFor="sop-name" className="block text-sm font-medium pb-1 text-gray-700">
+                    {t('sopForm.manualName')}<span className="text-red-500">*</span>
+                  </label>
+                  < Input
+                    type="text"
+                    showCount
+                    maxLength={500}
+                    id="sop-name"
+                    ref={nameInputRef}
+                    value={sopForm.name}
+                    onChange={(e) => handleInputChange('name', e.target.value)}
+                    className={`mt-1 block w-full border ${errors.name ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-[16px]`}
+                    placeholder={t('sopForm.namePlaceholder')}
+                  />
+                  <div className="flex justify-between">
+                    {errors.name && (
+                      <p className="mt-1 text-sm text-red-600">{errors.name}</p>
+                    )}
                   </div>
-                )}
-                {/* <Textarea
+                </div>
+
+                <div>
+                  <label htmlFor="sop-description" className="block text-sm pb-1 font-medium text-gray-700">
+                    {t('sopForm.description')}
+                  </label>
+                  <Textarea
+                    id="sop-description"
+                    maxLength={1000}
+                    rows={3}
+                    value={sopForm.description}
+                    onChange={(e) => handleInputChange('description', e.target.value)}
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-[16px]"
+                    placeholder={t('sopForm.descriptionPlaceholder')}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="sop-content" className="h-full block text-sm pb-1 font-medium text-gray-700">
+                    {t('sopForm.detailedContent')}<span className="text-red-500">*</span>
+                  </label>
+                  {isDrawerOpen && (
+                    <div className="relative mt-1">
+                      <SopMarkdown
+                        tools={tools}
+                        defaultValue={sopForm.content}
+                        onChange={(val) => handleInputChange('content', val)}
+                        className="h-full text-lg"
+                      />
+                      <div className="absolute bottom-0 right-0 bg-white/80 px-2 py-1 rounded text-xs text-gray-500">
+                        {charCount.content}/{MAX_LENGTHS.content}
+                      </div>
+                    </div>
+                  )}
+                  {/* <Textarea
                   id="sop-content"
                   maxLength={50000}
                   ref={contentInputRef}
@@ -312,32 +315,32 @@ const SopFormDrawer = ({
                   className={`mt-1 block w-full border ${errors.content ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
                   placeholder={t('sopForm.contentPlaceholder')}
                 /> */}
-                <div className="flex justify-between">
-                  {errors.content && (
-                    <p className="mt-0 text-sm text-red-600">{errors.content}</p>
-                  )}
+                  <div className="flex justify-between">
+                    {errors.content && (
+                      <p className="mt-0 text-sm text-red-600">{errors.content}</p>
+                    )}
 
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex-shrink-0 px-4 py-2 border-t border-gray-200 flex justify-end space-x-3">
-                <Button type="button" variant='outline' onClick={() => setIsDrawerOpen(false)}>{t('sopForm.cancel')}</Button>
-                <Button
-                  type="submit"
-                  onClick={handleSubmit}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <LoadIcon className="animate-spin mr-2" />
-                      {t('sopForm.saving')}
-                    </>
-                  ) : (
-                    t('sopForm.save')
-                  )}
-                </Button>
-              </div>
-            </form>
+                <div className="flex-shrink-0 px-4 py-2 border-t border-gray-200 flex justify-end space-x-3">
+                  <Button type="button" variant='outline' onClick={() => setIsDrawerOpen(false)}>{t('sopForm.cancel')}</Button>
+                  <Button
+                    type="submit"
+                    onClick={handleSubmit}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <LoadIcon className="animate-spin mr-2" />
+                        {t('sopForm.saving')}
+                      </>
+                    ) : (
+                      t('sopForm.save')
+                    )}
+                  </Button>
+                </div>
+              </form>
             )}
           </div>
         </div>

@@ -1,7 +1,7 @@
 import io
 import json
 import uuid
-from typing import List, Dict
+from typing import List, Dict, Literal
 
 import openpyxl
 from fastapi import UploadFile
@@ -176,7 +176,9 @@ class SOPManageService:
                         description=one_record.description,
                         content=one_record.content,
                         rating=one_record.rating,
-                        linsight_version_id=one.linsight_version_id,
+                        linsight_version_id=one_record.linsight_version_id,
+                        showcase=False,
+                        user_id=one_record.user_id,
                     ))
                     override_name_dict[one.name] = True
             # 再新增剩下的sop记录
@@ -289,6 +291,28 @@ class SOPManageService:
         records = [LinsightSOPRecord(**one, user_id=login_user.user_id) for one in success_rows]
         return await cls._sync_sop_record(records, override=override, save_new=save_new)
 
+    @classmethod
+    async def get_sop_list(cls, keywords: str = None, sort: Literal["asc", "desc"] = "desc", showcase: bool = False,
+                           page: int = 1, page_size: int = 10) -> dict:
+        """
+        获取SOP列表
+        :param keywords: 关键词
+        :param sort: 排序方式
+        :param page: 页码
+        :param page_size: 每页数量
+        :param showcase: 是否仅展示精选案例的SOP
+        :return: SOP列表和总数
+        """
+        sop_pages = await LinsightSOPDao.get_sop_page(keywords=keywords, showcase=showcase, page=page,
+                                                      page_size=page_size,
+                                                      sort=sort)
+        user_ids = list(set([one["user_id"] for one in sop_pages["items"]]))
+        user_map = UserDao.aget_user_by_ids(user_ids=user_ids)
+        user_map = {one.user_id: one.user_name for one in await user_map}
+        for one in sop_pages["items"]:
+            one["user_name"] = user_map.get(one["user_id"], str(one["user_id"]))
+        return sop_pages
+
     @staticmethod
     async def add_sop(sop_obj: SOPManagementSchema, user_id) -> UnifiedResponseModel | None:
         """
@@ -340,16 +364,20 @@ class SOPManageService:
         return resp_200(data=sop_model)
 
     @staticmethod
-    async def update_sop(sop_obj: SOPManagementUpdateSchema) -> UnifiedResponseModel | None:
+    async def update_sop(sop_obj: SOPManagementUpdateSchema,
+                         update_version_id: bool = True) -> UnifiedResponseModel | None:
         """
         更新SOP
         :param sop_obj:
+        :param update_version_id: 是否更新版本ID
         :return: 更新后的SOP对象
         """
         # 校验SOP是否存在
         existing_sop = await LinsightSOPDao.get_sops_by_ids([sop_obj.id])
         if not existing_sop:
             return NotFoundError.return_resp()
+        if not update_version_id:
+            sop_obj.linsight_version_id = existing_sop[0].linsight_version_id
 
         if sop_obj.content != existing_sop[0].content:
 
@@ -434,7 +462,7 @@ class SOPManageService:
         if not sop_models:
             return None
         return sop_models[0]
-    
+
     # sop 库检索
     @classmethod
     async def search_sop(cls, query: str, k: int = 3) -> (List[Document], BaseErrorCode | None):

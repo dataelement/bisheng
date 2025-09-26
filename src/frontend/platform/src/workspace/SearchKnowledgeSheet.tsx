@@ -1,11 +1,10 @@
 "use client"
 
+import MessageMarkDown from "@/pages/BuildPage/flow/FlowChat/MessageMarkDown"
 import { FileSearchIcon } from "lucide-react"
-import Markdown from "~/components/Chat/Messages/Content/Markdown"
-import MarkdownLite from "~/components/Chat/Messages/Content/MarkdownLite"
-import FileIcon from "~/components/ui/icon/File"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "~/components/ui/Sheet"
-import { useLocalize } from "~/hooks"
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet"
+import { useTranslation } from "react-i18next"
+import FileIcon from "./FileIcon"
 
 interface SearchResultItem {
     content: string
@@ -21,7 +20,7 @@ interface SearchResultsSheetProps {
 }
 
 export function SearchKnowledgeSheet({ isOpen, onClose, data = [], searchQuery }: SearchResultsSheetProps) {
-    const localize = useLocalize();
+    const { t: localize } = useTranslation();
 
     return (
         <Sheet open={isOpen} onOpenChange={onClose}>
@@ -34,7 +33,7 @@ export function SearchKnowledgeSheet({ isOpen, onClose, data = [], searchQuery }
                     <SheetDescription className="text-left">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
                             <span className="whitespace-nowrap">🔍{localize('com_searchQueryLabel')}</span>
-                            <span className="font-medium text-foreground">“{searchQuery}”</span>
+                            <span className="font-medium text-foreground">”{searchQuery}“</span>
                         </div>
                     </SheetDescription>
                 </SheetHeader>
@@ -54,7 +53,7 @@ export function SearchKnowledgeSheet({ isOpen, onClose, data = [], searchQuery }
                                         <h4 className="text-sm font-medium text-foreground">{item.title}</h4>
                                     </div>
                                     <div className="font-normal text-sm text-[#303133] leading-6 break-all">
-                                        <Markdown content={item.content} isLatestMessage={false} webContent={undefined} />
+                                        <MessageMarkDown message={item.content} />
                                     </div>
                                 </div>
                             </div>

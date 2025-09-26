@@ -26,7 +26,6 @@ type UseFileHandling = {
   fileSetter?: FileSetter;
   fileFilter?: (file: File) => boolean;
   additionalMetadata?: Record<string, string | undefined>;
-  isLinsight?: boolean;
 };
 
 const useFileHandling = (params?: UseFileHandling) => {

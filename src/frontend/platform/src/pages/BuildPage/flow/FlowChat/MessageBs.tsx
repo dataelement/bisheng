@@ -87,7 +87,7 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                     <div className="flex gap-2">
                         {logo}
                         {message || data.files.length ?
-                            <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
+                            <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)] overflow-x-auto">
                                 {message && <MessageMarkDown message={message} />}
                                 {data.files.length > 0 && data.files.map(file => <ChatFile key={file.path} fileName={file.name} filePath={file.path} />)}
                                 {/* @user */}

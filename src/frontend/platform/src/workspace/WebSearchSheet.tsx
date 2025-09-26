@@ -1,9 +1,9 @@
 "use client"
 
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet"
 import { Chromium, Earth } from "lucide-react"
 import { useState } from "react"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "~/components/ui/Sheet"
-import { useLocalize } from "~/hooks"
+import { useTranslation } from "react-i18next"
 
 interface SearchResultItem {
     content: string
@@ -19,7 +19,7 @@ interface SearchResultsSheetProps {
 }
 
 export function WebSearchSheet({ isOpen, onClose, data = [], searchQuery }: SearchResultsSheetProps) {
-    const localize = useLocalize();
+    const { t: localize } = useTranslation();
 
     return (
         <Sheet open={isOpen} onOpenChange={onClose}>
@@ -32,7 +32,7 @@ export function WebSearchSheet({ isOpen, onClose, data = [], searchQuery }: Sear
                     <SheetDescription className="text-left">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
                             <span className="whitespace-nowrap">🔍{localize('com_searchQueryLabel')}</span>
-                            <span className="font-medium text-foreground">“{searchQuery}”</span>
+                            <span className="font-medium text-foreground">”{searchQuery}“</span>
                         </div>
                     </SheetDescription>
                 </SheetHeader>
@@ -70,7 +70,6 @@ export function WebSearchSheet({ isOpen, onClose, data = [], searchQuery }: Sear
         </Sheet>
     )
 }
-
 
 
 const ImageWithFallback = ({ src, alt, className }) => {

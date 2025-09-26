@@ -42,9 +42,9 @@ class SqlAgentParams(BaseModel):
         # 转换为小写
         if v:
             v = v.lower()
-            if v not in ['mysql', 'db2', 'postgres', 'gaussdb', 'oracle']:
+            if v not in ['mysql', 'db2', 'postgres', 'gaussdb', 'oracle', 'postgresql']:
                 raise ValueError(
-                    "Unsupported database engine. Supported engines are: MySQL, DB2, Postgres, GaussDB, Oracle.")
+                    "Unsupported database engine. Supported engines are: MySQL, DB2, PostgreSql, GaussDB, Oracle.")
         return v
 
 
@@ -233,7 +233,7 @@ class AgentNode(BaseNode):
             except ImportError:
                 raise ImportError('Please install ibm_db and ibm_db_sa to use db2 database')
             return f'db2+ibm_db://{self._sql_agent.db_username}:{self._sql_agent.db_password}@{self._sql_agent.db_address}/{self._sql_agent.db_name}'
-        elif self._sql_agent.database_engine == 'postgres':
+        elif self._sql_agent.database_engine in ['postgres', 'postgresql']:
             try:
                 pass
             except ImportError:

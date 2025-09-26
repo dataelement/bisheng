@@ -148,8 +148,13 @@ export function checkSopQueueStatus(id: string) {
 }
 
 // Selected Cases
-export function getFeaturedCases(): Promise<any> {
-  return request.get('/api/v1/linsight/sop/showcase');
+export function getFeaturedCases(page: number): Promise<any> {
+  return request.get('/api/v1/linsight/sop/showcase', {
+    params: {
+      page,
+      page_size: 12
+    }
+  });
 }
 
 // Get case details based on SOP ID
