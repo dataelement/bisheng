@@ -403,7 +403,7 @@ class AssistantService(BaseService, AssistantUtils):
         for one in all_tool_type:
             tool_type_id.append(one.id)
             tool_type_children[one.id] = []
-            res.append(one.model_dump())
+            res.append(one.model_dump(exclude={'extra'}))
 
         # 获取对应类别下的工具列表
         tool_list = GptsToolsDao.get_list_by_type(tool_type_id)
@@ -411,14 +411,7 @@ class AssistantService(BaseService, AssistantUtils):
             tool_type_children[one.type].append(one)
 
         for one in res:
-            one['write'] = one['id'] not in tool_type_ids_extra or one['user_id'] == user.user_id
-            if not user.is_admin():
-                one['extra'] = ''
             one["children"] = tool_type_children.get(one["id"], [])
-            if one['extra']:
-                extra = json.loads(one['extra'])
-                one["parameter_name"] = extra.get("parameter_name")
-                one["api_location"] = extra.get("api_location")
 
         return res
 

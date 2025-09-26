@@ -28,6 +28,52 @@ class ToolServices(BaseModel):
     request: Optional[Request] = None
     login_user: Optional[UserPayload] = None
 
+    async def get_manage_tools(self, is_preset: Optional[ToolPresetType] = None) -> List[GptsToolsTypeRead]:
+        """ 获取有管理权限的工具列表 """
+        tool_type_ids_extra = []
+        if is_preset != ToolPresetType.PRESET:
+            tool_type_ids_extra = self.login_user.get_user_access_resource_ids([AccessType.GPTS_TOOL_WRITE])
+
+        if is_preset is None:
+            # 获取所有的工具列表
+            all_tool_type = await GptsToolsDao.aget_user_tool_type(self.login_user.user_id, tool_type_ids_extra)
+        elif is_preset == ToolPresetType.PRESET:
+            # 获取预置工具列表
+            all_tool_type = await GptsToolsDao.aget_preset_tool_type()
+        else:
+            # 获取用户有管理权限的工具列表
+            all_tool_type = await GptsToolsDao.aget_user_tool_type(self.login_user.user_id, tool_type_ids_extra, False,
+                                                                   is_preset)
+
+        if not all_tool_type:
+            return []
+        tool_type_id = []
+        res = []
+        tool_type_children = {}
+        for one in all_tool_type:
+            tool_type_id.append(one.id)
+            tool_type_children[one.id] = []
+            res.append(one.model_dump())
+        tool_type_id = list(set(tool_type_id))
+        # find all tools by type id
+        tool_list = await GptsToolsDao.aget_list_by_type(tool_type_id)
+        for one in tool_list:
+            if one.is_preset == ToolPresetType.PRESET.value:
+                one.extra = None
+            tool_type_children[one.type].append(one.model_dump())
+
+        # 组装children
+        for one in res:
+            # 预置工具的配置只有管理员可以查看
+            if one["is_preset"] == ToolPresetType.PRESET.value and not self.login_user.is_admin():
+                one["extra"] = None
+            one["children"] = tool_type_children.get(one["id"], [])
+            if one['extra']:
+                extra = json.loads(one['extra'])
+                one["parameter_name"] = extra.get("parameter_name")
+                one["api_location"] = extra.get("api_location")
+        return res
+
     async def parse_openapi_schema(self, download_url: str, file_content: str) -> GptsToolsTypeRead:
         if download_url:
             try:

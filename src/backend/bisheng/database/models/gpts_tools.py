@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 from sqlalchemy import JSON, Column, DateTime, String, text, func
 from sqlmodel import Field, or_, select, Text, update
 
-from bisheng.core.database import get_sync_db_session
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.utils import md5_hash, generate_uuid
@@ -70,8 +70,8 @@ class GptsToolsTypeBase(SQLModelSerializable):
 class GptsTools(GptsToolsBase, table=True):
     __tablename__ = 't_gpts_tools'
     extra: Optional[str | dict] = Field(default=None, sa_column=Column(Text, index=False),
-                                 description='用来存储额外信息，比如参数需求等，包含 &initdb_conf_key 字段'
-                                             '表示配置信息从系统配置里获取,多层级用.隔开')
+                                        description='用来存储额外信息，比如参数需求等，包含 &initdb_conf_key 字段'
+                                                    '表示配置信息从系统配置里获取,多层级用.隔开')
     id: Optional[int] = Field(default=None, primary_key=True)
 
 
@@ -175,6 +175,18 @@ class GptsToolsDao(GptsToolsBase):
             return session.exec(statement).all()
 
     @classmethod
+    async def aget_list_by_type(cls, tool_type_ids: List[int]) -> List[GptsTools]:
+        """
+        异步获得工具类别下的所有的工具
+        """
+        statement = select(GptsTools).where(
+            GptsTools.type.in_(tool_type_ids)).where(
+            GptsTools.is_delete == 0).order_by(GptsTools.create_time.desc())
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
     def get_all_tool_type(cls, tool_type_ids: List[int]) -> List[GptsToolsType]:
         """
         获得所有的工具类别
@@ -198,10 +210,23 @@ class GptsToolsDao(GptsToolsBase):
             return session.exec(statement).all()
 
     @classmethod
-    def get_user_tool_type(cls, user_id: int, extra_tool_type_ids: List[int] = None, include_preset: bool = True,
-                           is_preset: ToolPresetType = None) -> List[GptsToolsType]:
+    async def aget_preset_tool_type(cls) -> List[GptsToolsType]:
         """
-        获取用户可见的所有工具类别
+        异步获得所有的预置工具类别
+        """
+        statement = select(GptsToolsType).where(GptsToolsType.is_preset == ToolPresetType.PRESET.value,
+                                                GptsToolsType.is_delete == 0)
+        statement = statement.order_by(GptsToolsType.update_time.desc())
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
+    def _get_user_tool_type_statement(cls, user_id: int, extra_tool_type_ids: List[int] = None,
+                                      include_preset: bool = True,
+                                      is_preset: ToolPresetType = None):
+        """
+        获取用户可见的所有工具类别的statement
         """
         statement = select(GptsToolsType).where(GptsToolsType.is_delete == 0)
         filters = []
@@ -218,9 +243,30 @@ class GptsToolsDao(GptsToolsBase):
             statement = statement.where(GptsToolsType.is_preset == is_preset.value)
         statement = statement.where(or_(*filters))
         statement = statement.order_by(func.field(GptsToolsType.is_preset,
-                                                  ToolPresetType.PRESET.value).desc(), GptsToolsType.update_time.desc())
+                                                  ToolPresetType.PRESET.value).desc(),
+                                       GptsToolsType.update_time.desc())
+        return statement
+
+    @classmethod
+    def get_user_tool_type(cls, user_id: int, extra_tool_type_ids: List[int] = None, include_preset: bool = True,
+                           is_preset: ToolPresetType = None) -> List[GptsToolsType]:
+        """
+        获取用户可见的所有工具类别
+        """
+        statement = cls._get_user_tool_type_statement(user_id, extra_tool_type_ids, include_preset, is_preset)
         with get_sync_db_session() as session:
             return session.exec(statement).all()
+
+    @classmethod
+    async def aget_user_tool_type(cls, user_id: int, extra_tool_type_ids: List[int] = None, include_preset: bool = True,
+                                  is_preset: ToolPresetType = None) -> List[GptsToolsType]:
+        """
+        获取用户可见的所有工具类别
+        """
+        statement = cls._get_user_tool_type_statement(user_id, extra_tool_type_ids, include_preset, is_preset)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
 
     @classmethod
     def filter_tool_types_by_ids(cls, tool_type_ids: List[int], keyword: Optional[str] = None, page: int = 0,
