@@ -29,7 +29,7 @@ from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, CreateUserReq
 from bisheng.database.models.mark_task import MarkTaskDao
 
 from bisheng.cache.redis import redis_client
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
 from bisheng.database.constants import AdminRole, DefaultRole
@@ -357,7 +357,7 @@ async def update(*,
     # check if user already exist
     if db_user and user.delete is not None:
         # 判断是否是管理员
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             admin = session.exec(
                 select(UserRole).where(UserRole.role_id == 1,
                                        UserRole.user_id == user.user_id)).first()
@@ -369,7 +369,7 @@ async def update(*,
     if db_user.delete == 0:  # 启用用户
         # 清理密码错误次数的计数
         clear_error_password_key(db_user.user_name)
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         session.add(db_user)
         session.commit()
         session.refresh(db_user)
@@ -401,7 +401,7 @@ async def create_role(*,
 
     db_role = Role.model_validate(role)
     try:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(db_role)
             session.commit()
             session.refresh(db_role)
@@ -435,7 +435,7 @@ async def update_role(*,
             db_role.role_name = role.role_name
         if role.remark:
             db_role.remark = role.remark
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(db_role)
             session.commit()
             session.refresh(db_role)
@@ -584,11 +584,11 @@ async def get_user_role(*, user_id: int, Authorize: AuthJWT = Depends()):
     if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
         raise HTTPException(status_code=500, detail='无设置权限')
 
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         db_userroles = session.exec(select(UserRole).where(UserRole.user_id == user_id)).all()
 
     role_ids = [role.role_id for role in db_userroles]
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         db_role = session.exec(select(Role).where(Role.id.in_(role_ids))).all()
     role_name_dict = {role.id: role.role_name for role in db_role}
 
@@ -619,13 +619,13 @@ async def access_refresh(*, request: Request, data: RoleRefresh, login_user: Use
     access_type = data.type
     access_id = data.access_id
     # delete old access
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         session.exec(
             delete(RoleAccess).where(RoleAccess.role_id == role_id,
                                      RoleAccess.type == access_type))
         session.commit()
     # 添加新的权限
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         for third_id in access_id:
             role_access = RoleAccess(role_id=role_id, third_id=str(third_id), type=access_type)
             session.add(role_access)
@@ -649,7 +649,7 @@ async def access_list(*, role_id: int, type: Optional[int] = None, login_user: U
         sql.where(RoleAccess.type == type)
         count_sql.where(RoleAccess.type == type)
 
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         db_role_access = session.exec(sql).all()
         total_count = session.scalar(count_sql)
 

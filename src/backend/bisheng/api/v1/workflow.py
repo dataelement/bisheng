@@ -16,7 +16,7 @@ from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import FlowVersionCreate, UnifiedResponseModel, resp_200
 from bisheng.chat.types import WorkType
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, FlowReadWithStyle, FlowType, FlowUpdate, \
     FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
@@ -124,7 +124,7 @@ async def workflow_ws(*,
 def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload = Depends(get_login_user)):
     """Create a new flow."""
     # 判断用户是否重复技能名
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         if session.exec(
                 select(Flow).where(Flow.name == flow.name, Flow.flow_type == FlowType.WORKFLOW.value,
                                    Flow.user_id == login_user.user_id)).first():

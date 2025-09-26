@@ -3,7 +3,7 @@ from typing import Optional, List
 
 from sqlmodel import Field, Column, text, DateTime, select, update
 
-from bisheng.database.base import async_session_getter
+from bisheng.core.database import get_async_db_session
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -36,7 +36,7 @@ class InviteCodeDao(InviteCodeBase):
 
     @classmethod
     async def insert_invite_code(cls, invite_code: List[InviteCode]) -> List[InviteCode]:
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             session.add_all(invite_code)
             await session.commit()
             return invite_code
@@ -48,7 +48,7 @@ class InviteCodeDao(InviteCodeBase):
         """
         statement = select(InviteCode).where(InviteCode.bind_user == bind_user).where(
             InviteCode.used < InviteCode.limit).order_by(InviteCode.id.asc())
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.all()
 
@@ -58,7 +58,7 @@ class InviteCodeDao(InviteCodeBase):
         获取用户绑定的所有邀请码
         """
         statement = select(InviteCode).where(InviteCode.bind_user == bind_user).order_by(InviteCode.id.desc())
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.all()
 
@@ -70,7 +70,7 @@ class InviteCodeDao(InviteCodeBase):
         statement = update(InviteCode).where(InviteCode.code == code).where(InviteCode.bind_user == 0).values(
             bind_user=user_id
         )
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             result = await session.exec(statement)
             await session.commit()
             if result.rowcount > 0:
@@ -82,7 +82,7 @@ class InviteCodeDao(InviteCodeBase):
         statement = update(InviteCode).where(InviteCode.code == code).where(InviteCode.bind_user == user_id).values(
             used=InviteCode.used + 1
         ).where(InviteCode.used < InviteCode.limit)
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             result = await session.exec(statement)
             await session.commit()
             if result.rowcount > 0:
@@ -97,7 +97,7 @@ class InviteCodeDao(InviteCodeBase):
         statement = update(InviteCode).where(InviteCode.code == code).where(InviteCode.bind_user == user_id).values(
             used=InviteCode.used - 1
         ).where(InviteCode.used > 0)
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             result = await session.exec(statement)
             await session.commit()
             if result.rowcount > 0:

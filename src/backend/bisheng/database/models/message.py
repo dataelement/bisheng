@@ -1,13 +1,12 @@
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
-
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from loguru import logger
 from pydantic import BaseModel
 from sqlmodel import (JSON, Column, DateTime, Field, String, Text, case, delete, func, not_, or_,
                       select, text, update)
 
-from bisheng.database.base import session_getter, async_session_getter
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -86,7 +85,7 @@ class MessageDao(MessageBase):
             base_condition = base_condition.where(ChatMessage.create_time > create_time_begin,
                                                   ChatMessage.create_time < create_time_end)
 
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.scalar(base_condition)
 
     @classmethod
@@ -97,7 +96,7 @@ class MessageDao(MessageBase):
             flow_ids: Optional[list[str]],
             user_ids: Optional[list[int]],
     ) -> Tuple[List[Dict], int]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             count_stat = select(func.count(func.distinct(ChatMessage.chat_id)))
             sql = select(
                 ChatMessage.chat_id,
@@ -148,7 +147,7 @@ class ChatMessageDao(MessageBase):
     def get_latest_message_by_chatid(cls, chat_id: str):
         statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id).order_by(
             ChatMessage.id.desc()).limit(1)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             res = session.exec(statement).all()
             if res:
                 return res[0]
@@ -159,7 +158,7 @@ class ChatMessageDao(MessageBase):
     async def aget_latest_message_by_chatid(cls, chat_id: str):
         statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id).order_by(
             ChatMessage.id.desc()).limit(1)
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             res = await session.exec(statement)
             res = res.all()
             if res:
@@ -182,7 +181,7 @@ class ChatMessageDao(MessageBase):
         if exclude_category:
             statement = statement.where(ChatMessage.category != exclude_category)
         statement = statement.group_by(ChatMessage.chat_id)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             # 获取最新的id列表
             res = session.exec(statement).all()
             ids = [one[1] for one in res]
@@ -195,7 +194,7 @@ class ChatMessageDao(MessageBase):
                                 chat_id: str,
                                 category_list: list = None,
                                 limit: int = 10) -> List[ChatMessage]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
             if category_list:
                 statement = statement.where(ChatMessage.category.in_(category_list))
@@ -204,7 +203,7 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     def get_last_msg_by_flow_id(cls, flow_id: List[str], chat_id: List[str]):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(ChatMessage.chat_id,
                                ChatMessage.flow_id).where(ChatMessage.flow_id.in_(flow_id)).where(
                 not_(ChatMessage.chat_id.in_(chat_id))).group_by(
@@ -213,13 +212,13 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     def get_msg_by_chat_id(cls, chat_id: str):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
             return session.exec(statement).all()
 
     @classmethod
     def get_msg_by_flow(cls, flow_id: str):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             # sql = text("select chat_id,count(*) as chat_count from chatmessage where flow_id=:flow_id group by chat_id") # noqa
             st = select(ChatMessage.chat_id).where(ChatMessage.flow_id == flow_id).group_by(
                 ChatMessage.chat_id)
@@ -227,7 +226,7 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     def get_msg_by_flows(cls, flow_id: List[str]):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             st = select(ChatMessage.chat_id).where(ChatMessage.flow_id.in_(flow_id)).group_by(
                 ChatMessage.chat_id)
             return session.exec(st).all()
@@ -241,7 +240,7 @@ class ChatMessageDao(MessageBase):
         statement = delete(ChatMessage).where(ChatMessage.chat_id == chat_id,
                                               ChatMessage.user_id == user_id)
 
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
         return True
@@ -255,14 +254,14 @@ class ChatMessageDao(MessageBase):
         statement = delete(ChatMessage).where(ChatMessage.id == message_id,
                                               ChatMessage.user_id == user_id)
 
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
         return True
 
     @classmethod
     def insert_one(cls, message: ChatMessage) -> ChatMessage:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(message)
             session.commit()
             session.refresh(message)
@@ -270,7 +269,7 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     def insert_batch(cls, messages: List[ChatMessage]):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add_all(messages)
             session.commit()
             ret = []
@@ -281,18 +280,18 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     def get_message_by_id(cls, message_id: int) -> Optional[ChatMessage]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(select(ChatMessage).where(ChatMessage.id == message_id)).first()
 
     @classmethod
     async def aget_message_by_id(cls, message_id: int) -> Optional[ChatMessage]:
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             result = await session.exec(select(ChatMessage).where(ChatMessage.id == message_id))
             return result.first()
 
     @classmethod
     def update_message(cls, message_id: int, user_id: int, message: str):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = update(ChatMessage).where(ChatMessage.id == message_id).where(
                 ChatMessage.user_id == user_id).values(message=message)
             session.exec(statement)
@@ -300,7 +299,7 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     def update_message_model(cls, message: ChatMessage):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(message)
             session.commit()
             session.refresh(message)
@@ -308,7 +307,7 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     async def aupdate_message_model(cls, message: ChatMessage):
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             session.add(message)
             await session.commit()
             await session.refresh(message)
@@ -316,7 +315,7 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     def update_message_copied(cls, message_id: int, copied: int):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = update(ChatMessage).where(ChatMessage.id == message_id).values(
                 copied=copied)
             session.exec(statement)
@@ -324,7 +323,7 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     def update_message_mark(cls, chat_id: str, status: int):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = update(ChatMessage).where(ChatMessage.chat_id == chat_id).values(
                 mark_status=status)
             session.exec(statement)
@@ -334,5 +333,5 @@ class ChatMessageDao(MessageBase):
     def get_all_message_by_chat_ids(cls, chat_ids: List[str]) -> List[ChatMessage]:
         statement = select(ChatMessage).where(ChatMessage.chat_id.in_(chat_ids)).order_by(
             ChatMessage.create_time.asc())
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()

@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 from sqlalchemy import CHAR, JSON, Column, DateTime, Text, UniqueConstraint, delete, text, update
 from sqlmodel import Field, select
 
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -89,13 +89,13 @@ class LLMDao:
     def get_all_server(cls) -> List[LLMServer]:
         """ 获取所有的服务提供方 """
         statement = select(LLMServer).order_by(LLMServer.update_time.desc())
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
     def insert_server_with_models(cls, server: LLMServer, models: List[LLMModel]):
         """ 插入服务提供方和模型 """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(server)
             session.flush()
             for model in models:
@@ -108,7 +108,7 @@ class LLMDao:
     @classmethod
     def update_server_with_models(cls, server: LLMServer, models: List[LLMModel]):
         """ 更新服务提供方和模型 """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(server)
 
             add_models = []
@@ -142,42 +142,42 @@ class LLMDao:
     def get_all_model(cls) -> List[LLMModel]:
         """ 获取所有的模型 """
         statement = select(LLMModel)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
     def get_server_by_id(cls, server_id: int) -> Optional[LLMServer]:
         """ 根据服务ID获取服务提供方 """
         statement = select(LLMServer).where(LLMServer.id == server_id)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).first()
 
     @classmethod
     def get_server_by_ids(cls, server_ids: List[int]) -> List[LLMServer]:
         """ 根据服务ID获取服务提供方 """
         statement = select(LLMServer).where(LLMServer.id.in_(server_ids))
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
     def get_server_by_name(cls, server_name: str) -> Optional[LLMServer]:
         """ 根据服务名称获取服务提供方 """
         statement = select(LLMServer).where(LLMServer.name == server_name)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).first()
 
     @classmethod
     def get_model_by_id(cls, model_id: int) -> Optional[LLMModel]:
         """ 根据模型ID获取模型 """
         statement = select(LLMModel).where(LLMModel.id == model_id)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).first()
 
     @classmethod
     def get_model_by_ids(cls, model_ids: List[int]) -> List[LLMModel]:
         """ 根据模型ID获取模型 """
         statement = select(LLMModel).where(LLMModel.id.in_(model_ids))
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
@@ -185,7 +185,7 @@ class LLMDao:
         """ 根据模型类型获取第一个创建的模型 """
         statement = select(LLMModel).where(LLMModel.model_type == model_type.value).order_by(
             LLMModel.id.asc())
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).first()
 
     @classmethod
@@ -193,13 +193,13 @@ class LLMDao:
         """ 根据服务ID获取模型 """
         statement = select(LLMModel).where(LLMModel.server_id.in_(server_ids)).order_by(
             LLMModel.update_time.desc())
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
     def update_model_status(cls, model_id: int, status: int, remark: str = ''):
         """ 更新模型状态 """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(
                 update(LLMModel).where(LLMModel.id == model_id).values(status=status,
                                                                        remark=remark))
@@ -208,14 +208,14 @@ class LLMDao:
     @classmethod
     def update_model_online(cls, model_id: int, online: bool):
         """ 更新模型在线状态 """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(update(LLMModel).where(LLMModel.id == model_id).values(online=online))
             session.commit()
 
     @classmethod
     def delete_server_by_id(cls, server_id: int):
         """ 根据服务ID删除服务提供方 """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(delete(LLMServer).where(LLMServer.id == server_id))
             session.exec(delete(LLMModel).where(LLMModel.server_id == server_id))
             session.commit()
@@ -223,6 +223,6 @@ class LLMDao:
     @classmethod
     def delete_model_by_ids(cls, model_ids: List[int]):
         """ 根据模型ID删除模型 """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(delete(LLMModel).where(LLMModel.id.in_(model_ids)))
             session.commit()

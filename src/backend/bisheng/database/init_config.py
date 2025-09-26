@@ -1,8 +1,9 @@
 from typing import Dict, List
 
 import yaml
+
+from bisheng.core.database import get_async_db_session
 from bisheng.database.models.config import Config
-from bisheng.database.base import session_getter, async_session_getter
 from bisheng.settings import parse_key, read_from_conf
 from bisheng.utils.logger import logger
 from sqlmodel import select
@@ -15,7 +16,7 @@ async def init_config():
     config_content = read_from_conf('initdb_config.yaml')
     if not config_content:
         return
-    async with async_session_getter() as session:
+    async with get_async_db_session() as session:
         config = await session.exec(select(Config))
         config = config.all()
         db_keys = {conf.key: conf.value for conf in config}

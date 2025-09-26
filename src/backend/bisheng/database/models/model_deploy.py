@@ -4,7 +4,7 @@ from typing import Optional, List
 from sqlalchemy import Column, DateTime, String, UniqueConstraint, delete, text
 from sqlmodel import Field, select
 
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -32,45 +32,45 @@ class ModelDeployDao(ModelDeployBase):
 
     @classmethod
     def find_model(cls, model_id: int) -> ModelDeploy | None:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(ModelDeploy).where(ModelDeploy.id == model_id)
             return session.exec(statement).first()
 
     @classmethod
     def find_model_by_server(cls, server_id: str) -> List[ModelDeploy]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(ModelDeploy).where(ModelDeploy.server == server_id)
             return session.exec(statement).all()
 
     @classmethod
     def find_model_by_server_and_name(cls, server: str, model: str) -> ModelDeploy | None:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(ModelDeploy).where(ModelDeploy.server == server, ModelDeploy.model == model)
             return session.exec(statement).first()
 
     @classmethod
     def find_model_by_name(cls, model: str) -> ModelDeploy | None:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(ModelDeploy).where(ModelDeploy.model == model)
             return session.exec(statement).first()
 
     @classmethod
     def delete_model(cls, model: ModelDeploy) -> bool:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.delete(model)
             session.commit()
         return True
 
     @classmethod
     def delete_model_by_id(cls, model_id: int):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = delete(ModelDeploy).where(ModelDeploy.id == model_id)
             session.exec(statement)
             session.commit()
 
     @classmethod
     def insert_one(cls, model: ModelDeploy) -> ModelDeploy:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(model)
             session.commit()
             session.refresh(model)
@@ -78,7 +78,7 @@ class ModelDeployDao(ModelDeployBase):
 
     @classmethod
     def update_model(cls, model: ModelDeploy) -> ModelDeploy:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(model)
             session.commit()
             session.refresh(model)

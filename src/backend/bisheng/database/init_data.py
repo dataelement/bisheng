@@ -3,13 +3,13 @@ import json
 import os
 from typing import List
 
+from bisheng.core.database import get_async_db_session, get_database_connection
 from bisheng.database.models.template import Template
 from bisheng.utils.minio_client import MinioClient
 from loguru import logger
 from sqlmodel import select, update, text
 
 from bisheng.database.init_config import init_config
-from bisheng.database.base import db_service, async_session_getter
 from bisheng.settings import settings
 from bisheng.cache.redis import redis_client
 from bisheng.database.constants import AdminRole, DefaultRole
@@ -30,8 +30,9 @@ async def init_default_data():
 
     if await redis_client.asetNx('init_default_data', '1'):
         try:
-            await db_service.create_db_and_tables()
-            async with async_session_getter() as session:
+            db_manager = await get_database_connection()
+            await db_manager.create_db_and_tables()
+            async with get_async_db_session() as session:
                 db_role = await session.exec(select(Role).limit(1))
                 db_role = db_role.all()
                 if not db_role:

@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import Column, DateTime, text
 from sqlmodel import Field, select
 
-from bisheng.database.base import session_getter, async_session_getter
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -60,7 +60,7 @@ class RoleAccessDao(RoleAccessBase):
 
     @classmethod
     def get_role_access(cls, role_ids: List[int], access_type: AccessType) -> List[RoleAccess]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             if access_type:
                 return session.exec(
                     select(RoleAccess).where(RoleAccess.role_id.in_(role_ids),
@@ -69,7 +69,7 @@ class RoleAccessDao(RoleAccessBase):
 
     @classmethod
     async def aget_role_access(cls, role_ids: List[int], access_type: AccessType) -> List[RoleAccess]:
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             if access_type:
                 return (await session.exec(
                     select(RoleAccess).where(RoleAccess.role_id.in_(role_ids),
@@ -78,7 +78,7 @@ class RoleAccessDao(RoleAccessBase):
 
     @classmethod
     def get_role_access_batch(cls, role_ids: List[int], access_type: List[AccessType]) -> List[RoleAccess]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             if access_type:
                 return session.exec(
                     select(RoleAccess).where(RoleAccess.role_id.in_(role_ids),
@@ -86,7 +86,7 @@ class RoleAccessDao(RoleAccessBase):
 
     @classmethod
     def judge_role_access(cls, role_ids: List[int], third_id: str, access_type: AccessType) -> Optional[RoleAccess]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(select(RoleAccess).filter(
                 RoleAccess.role_id.in_(role_ids),
                 RoleAccess.type == access_type.value,
@@ -95,7 +95,7 @@ class RoleAccessDao(RoleAccessBase):
 
     @classmethod
     def find_role_access(cls, role_ids: List[int], third_ids: List[str], access_type: AccessType) -> List[RoleAccess]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             if access_type:
                 return session.exec(
                     select(RoleAccess).where(RoleAccess.role_id.in_(role_ids),

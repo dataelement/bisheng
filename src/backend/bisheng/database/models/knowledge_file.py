@@ -8,7 +8,7 @@ from pydantic import field_validator
 from sqlalchemy import JSON, Column, DateTime, String, or_, text, Text
 from sqlmodel import Field, delete, func, select, update, col
 
-from bisheng.database.base import session_getter, async_session_getter
+from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -124,34 +124,34 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     async def query_by_id(cls, file_id: int) -> Optional[KnowledgeFile]:
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             result = await session.execute(select(KnowledgeFile).where(KnowledgeFile.id == file_id))
             return result.scalars().first()
 
     @classmethod
     def get_file_simple_by_knowledge_id(cls, knowledge_id: int, page: int, page_size: int):
         offset = (page - 1) * page_size
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.query(KnowledgeFile.id, KnowledgeFile.object_name).filter(
                 KnowledgeFile.knowledge_id == knowledge_id).order_by(
                 KnowledgeFile.id.asc()).offset(offset).limit(page_size).all()
 
     @classmethod
     def count_file_by_knowledge_id(cls, knowledge_id: int):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.query(func.count(
                 KnowledgeFile.id)).filter(KnowledgeFile.knowledge_id == knowledge_id).scalar()
 
     @classmethod
     def delete_batch(cls, file_ids: List[int]) -> bool:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(delete(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)))
             session.commit()
             return True
 
     @classmethod
     def add_file(cls, knowledge_file: KnowledgeFile) -> KnowledgeFile:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(knowledge_file)
             session.commit()
             session.refresh(knowledge_file)
@@ -159,7 +159,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     def update(cls, knowledge_file):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(knowledge_file)
             session.commit()
             session.refresh(knowledge_file)
@@ -167,7 +167,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     async def async_update(cls, knowledge_file):
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             session.add(knowledge_file)
             await session.commit()
             await session.refresh(knowledge_file)
@@ -178,13 +178,13 @@ class KnowledgeFileDao(KnowledgeFileBase):
         """ 批量更新文件状态 """
         statement = update(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)).values(status=status.value,
                                                                                        remark=reason)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
 
     @classmethod
     def get_file_by_condition(cls, knowledge_id: int, md5_: str = None, file_name: str = None):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             sql = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
             if md5_:
                 sql = sql.where(KnowledgeFile.md5 == md5_)
@@ -196,7 +196,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def select_list(cls, file_ids: List[int]):
         if not file_ids:
             return []
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             knowledge_files = session.exec(
                 select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
         if not knowledge_files:
@@ -207,7 +207,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def get_file_by_ids(cls, file_ids: List[int]):
         if not file_ids:
             return []
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
 
     @classmethod
@@ -228,7 +228,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
         if page and page_size:
             statement = statement.offset((page - 1) * page_size).limit(page_size)
         statement = statement.order_by(KnowledgeFile.update_time.desc())
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
@@ -248,7 +248,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
             KnowledgeFile.status.in_(status_list)
         )
 
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
@@ -265,7 +265,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
             statement = statement.where(KnowledgeFile.status.in_(status))
         if file_ids:
             statement = statement.where(KnowledgeFile.id.in_(file_ids))
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.scalar(statement)
 
     @classmethod
@@ -282,7 +282,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
             statement = statement.where(KnowledgeFile.status.in_(status))
         if file_ids:
             statement = statement.where(KnowledgeFile.id.in_(file_ids))
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             result = await session.execute(statement)
             return result.scalar_one()
 
@@ -290,7 +290,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def get_knowledge_ids_by_name(cls, file_name: str) -> List[int]:
         statement = select(KnowledgeFile.knowledge_id).where(KnowledgeFile.file_name.like(f'%{file_name}%')).group_by(
             KnowledgeFile.knowledge_id)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
@@ -318,7 +318,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
         if remark:
             statement = statement.values(remark=remark)
 
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
 
@@ -330,23 +330,23 @@ class QAKnoweldgeDao(QAKnowledgeBase):
         offset = (page - 1) * page_size
         state = select(QAKnowledge).where(
             QAKnowledge.knowledge_id == knowledge_id, ).offset(offset).limit(page_size)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(state).all()
 
     @classmethod
     def get_qa_knowledge_by_knowledge_ids(cls, knowledge_ids: List[int]) -> List[QAKnowledge]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(
                 select(QAKnowledge).where(QAKnowledge.knowledge_id.in_(knowledge_ids))).all()
 
     @classmethod
     def get_qa_knowledge_by_primary_id(cls, qa_id: int) -> QAKnowledge:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(select(QAKnowledge).where(QAKnowledge.id == qa_id)).first()
 
     @classmethod
     def get_qa_knowledge_by_name(cls, question: List[str], knowledge_id: int, exclude_id: int = None) -> QAKnowledge:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             group_filters = []
             for one in question:
                 group_filters.append(func.json_contains(QAKnowledge.questions, json.dumps(one)))
@@ -360,7 +360,7 @@ class QAKnoweldgeDao(QAKnowledgeBase):
     def update(cls, qa_knowledge: QAKnowledge):
         if qa_knowledge.id is None:
             raise ValueError('id不能为空')
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(qa_knowledge)
             session.commit()
             session.refresh(qa_knowledge)
@@ -368,14 +368,14 @@ class QAKnoweldgeDao(QAKnowledgeBase):
 
     @classmethod
     def delete_batch(cls, qa_ids: List[int]) -> bool:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(delete(QAKnowledge).where(QAKnowledge.id.in_(qa_ids)))
             session.commit()
             return True
 
     @classmethod
     def select_list(cls, ids: List[int]) -> List[QAKnowledge]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             QAKnowledges = session.exec(select(QAKnowledge).where(QAKnowledge.id.in_(ids))).all()
         if not QAKnowledges:
             raise ValueError('知识库不存在')
@@ -383,7 +383,7 @@ class QAKnoweldgeDao(QAKnowledgeBase):
 
     @classmethod
     def insert_qa(cls, qa_knowledge: QAKnowledgeUpsert):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             qa = QAKnowledge.model_validate(qa_knowledge)
             session.add(qa)
             session.commit()
@@ -392,7 +392,7 @@ class QAKnoweldgeDao(QAKnowledgeBase):
 
     @classmethod
     def batch_insert_qa(cls, qa_knowledges: List[QAKnowledgeUpsert]) -> List[QAKnowledge]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             qas = []
             for qa_knowledge in qa_knowledges:
                 qa = QAKnowledge.model_validate(qa_knowledge)
@@ -405,17 +405,17 @@ class QAKnoweldgeDao(QAKnowledgeBase):
 
     @classmethod
     def total_count(cls, sql):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.scalar(sql)
 
     @classmethod
     def query_by_condition(cls, sql):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(sql).all()
 
     @classmethod
     def query_by_condition_v1(cls, source: List[int], create_start: str, create_end: str):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             sql = select(QAKnowledge).where(QAKnowledge.source.in_(source)).where(
                 QAKnowledge.create_time.between(create_start, create_end))
 

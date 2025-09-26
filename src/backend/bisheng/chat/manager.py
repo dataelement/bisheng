@@ -24,7 +24,7 @@ from bisheng.chat.client import ChatClient
 from bisheng.chat.clients.workflow_client import WorkflowClient
 from bisheng.chat.types import IgnoreException, WorkType
 from bisheng.chat.utils import process_node_data
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.flow import Flow, FlowType, FlowDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.database.models.user import User, UserDao
@@ -62,7 +62,7 @@ class ChatHistory(Subject):
             msg.__dict__.pop('files')
             db_message = ChatMessage(files=files, **msg.__dict__)
             logger.info(f'chat={db_message} time={time.time() - t1}')
-            with session_getter() as seesion:
+            with get_sync_db_session() as seesion:
                 seesion.add(db_message)
                 seesion.commit()
                 seesion.refresh(db_message)
@@ -514,7 +514,7 @@ class ChatManager:
     def preper_reuse_connection(self, flow_id: str, chat_id: str, websocket: WebSocket):
         # 设置复用的映射关系
         message = None
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             gragh_data = session.get(Flow, flow_id)
             if not gragh_data:
                 message = SkillDeletedError()
@@ -627,7 +627,7 @@ class ChatManager:
     async def init_langchain_object_task(self, flow_id, chat_id, user_id, graph_data):
         key_node = get_cache_key(flow_id, chat_id)
         logger.info(f'init_langchain build_begin key={key_node}')
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             db_user = session.get(User, user_id)  # 用来支持节点判断用户权限
         artifacts = {}
         start_time = time.time()

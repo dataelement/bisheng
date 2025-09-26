@@ -6,7 +6,7 @@ from pydantic import field_validator, BaseModel
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import JSON, Column, DateTime, Field, func, select, text, update
 
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.utils import generate_uuid
 
@@ -149,7 +149,7 @@ class FinetuneDao(FinetuneBase):
 
     @classmethod
     def insert_one(cls, data: Finetune) -> Finetune:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(data)
             session.commit()
             session.refresh(data)
@@ -157,7 +157,7 @@ class FinetuneDao(FinetuneBase):
 
     @classmethod
     def update_job(cls, finetune: Finetune) -> Finetune:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(finetune)
             session.commit()
             session.refresh(finetune)
@@ -165,25 +165,25 @@ class FinetuneDao(FinetuneBase):
 
     @classmethod
     def find_job(cls, job_id: str) -> Finetune | None:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(Finetune).where(Finetune.id == job_id)
             return session.exec(statement).first()
 
     @classmethod
     def find_job_by_model_name(cls, model_name: str) -> Finetune | None:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(Finetune).where(Finetune.model_name == model_name)
             return session.exec(statement).first()
 
     @classmethod
     def find_job_by_model_id(cls, model_id: int) -> Finetune | None:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(Finetune).where(Finetune.model_id == model_id)
             return session.exec(statement).first()
 
     @classmethod
     def change_status(cls, job_id: str, old_status: int, status: int) -> bool:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             update_statement = update(Finetune).where(
                 Finetune.id == job_id, Finetune.status == old_status).values(status=status)
             update_ret = session.exec(update_statement)
@@ -192,7 +192,7 @@ class FinetuneDao(FinetuneBase):
 
     @classmethod
     def delete_job(cls, job: Finetune) -> bool:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.delete(job)
             session.commit()
             return True
@@ -200,7 +200,7 @@ class FinetuneDao(FinetuneBase):
     @classmethod
     def find_jobs(cls, finetune_list: FinetuneList) -> (List[Finetune], int):
         offset = (finetune_list.page - 1) * finetune_list.limit
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(Finetune)
             count_statement = session.query(func.count(Finetune.id))
             if finetune_list.server:
@@ -221,7 +221,7 @@ class FinetuneDao(FinetuneBase):
 
     @classmethod
     def get_server_filters(cls) -> List[str]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(Finetune.server_name).distinct()
             result = session.exec(statement).all()
             return result

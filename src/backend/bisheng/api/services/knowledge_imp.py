@@ -39,7 +39,7 @@ from bisheng.api.utils import md5_hash
 from bisheng.api.v1.schemas import ExcelRule
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.database.models.knowledge_file import (
     KnowledgeFile,
@@ -892,7 +892,7 @@ def text_knowledge(
     # 存储 mysql
     file_name = documents[0].metadata.get("source")
     db_file.file_name = file_name
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         session.add(db_file)
         session.commit()
         session.refresh(db_file)
@@ -922,14 +922,14 @@ def text_knowledge(
             )
         db_file.status = 2
         result["status"] = 2
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(db_file)
             session.commit()
     except Exception as e:
         logger.error(e)
         setattr(db_file, "status", 3)
         setattr(db_file, "remark", str(e)[:500])
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(db_file)
             session.commit()
         result["status"] = 3

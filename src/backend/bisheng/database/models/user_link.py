@@ -5,7 +5,7 @@ from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import text, and_, delete
 from sqlalchemy.exc import IntegrityError
 from typing import List
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 
 
 class UserLinkBase(SQLModelSerializable):
@@ -27,7 +27,7 @@ class UserLink(UserLinkBase, table=True):
 class UserLinkDao(UserLinkBase):
     @classmethod
     def get_user_link(cls, user_id: int, types: list) -> List[UserLink]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(UserLink).where(and_(UserLink.user_id == user_id, UserLink.type.in_(types)))
             statement = statement.order_by(UserLink.create_time.desc())  # 按创建时间降序排序，新添加的排在前面
             return session.exec(statement).all()
@@ -40,7 +40,7 @@ class UserLinkDao(UserLinkBase):
         Returns:
             tuple[UserLink, bool]: (用户链接对象, 是否为新添加)
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             try:
                 # 直接尝试插入，利用数据库唯一约束
                 user_link = UserLink(user_id=user_id, type=type, type_detail=type_detail, create_time=datetime.now(), update_time=datetime.now())
@@ -63,7 +63,7 @@ class UserLinkDao(UserLinkBase):
 
     @classmethod
     def delete_user_link(cls, user_id: int, type: str, type_detail: str) -> None:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = delete(UserLink).where(and_(UserLink.user_id == user_id, UserLink.type == type, UserLink.type_detail == type_detail))
             session.exec(statement)
             session.commit()

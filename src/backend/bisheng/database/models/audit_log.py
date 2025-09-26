@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, JSON
 
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.utils import generate_uuid
 
@@ -119,12 +119,12 @@ class AuditLogDao(AuditLogBase):
             count_statement = count_statement.where(AuditLog.event_type == event_type)
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit).order_by(AuditLog.create_time.desc())
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
     def insert_audit_logs(cls, audit_logs: List[AuditLog]):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add_all(audit_logs)
             session.commit()
 
@@ -137,5 +137,5 @@ class AuditLogDao(AuditLogBase):
                 group_filters.append(func.json_contains(AuditLog.group_ids, str(one)))
             statement = statement.where(or_(*group_filters))
 
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()

@@ -5,7 +5,7 @@ from typing import Optional
 from sqlalchemy import Column, DateTime, text, Text
 from sqlmodel import Field, select
 
-from bisheng.database.base import session_getter, async_session_getter
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -53,14 +53,14 @@ class ConfigDao(ConfigBase):
 
     @classmethod
     def get_config(cls, key: ConfigKeyEnum) -> Optional[Config]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(Config).where(Config.key == key.value)
             config = session.exec(statement).first()
             return config
 
     @classmethod
     async def aget_config(cls, key: ConfigKeyEnum) -> Optional[Config]:
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             statement = select(Config).where(Config.key == key.value)
             config = await session.exec(statement)
             config = config.first()
@@ -68,7 +68,7 @@ class ConfigDao(ConfigBase):
 
     @classmethod
     def insert_config(cls, config: Config) -> Config:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(config)
             session.commit()
             session.refresh(config)
@@ -76,7 +76,7 @@ class ConfigDao(ConfigBase):
 
     @classmethod
     async def async_insert_config(cls, config: Config) -> Config:
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             session.add(config)
             await session.commit()
             await session.refresh(config)

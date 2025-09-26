@@ -6,7 +6,7 @@ from typing import Dict, List
 
 import aiohttp
 from bisheng.api.v1.schemas import StreamData
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.variable_value import Variable
 from bisheng.graph.graph.base import Graph
 from bisheng.utils.logger import logger
@@ -254,7 +254,7 @@ def get_L2_param_from_flow(flow_data: dict, flow_id: str, version_id: int = None
         elif node.vertex_type in {'VariableNode'}:
             variable_ids.append(node.id)
 
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         db_variables = session.exec(
             select(Variable).where(Variable.flow_id == flow_id,
                                    Variable.version_id == version_id)).all()

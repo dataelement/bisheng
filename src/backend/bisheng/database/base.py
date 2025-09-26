@@ -1,47 +1,9 @@
 import uuid
-from contextlib import contextmanager, asynccontextmanager
-from typing import Any, AsyncGenerator
-
 from sqlalchemy import func
-from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel.sql.expression import SelectOfScalar
-
-from bisheng.database.service import DatabaseService
-from bisheng.settings import settings
-from bisheng.utils.logger import logger
 from sqlmodel import Session
 
-db_service: 'DatabaseService' = DatabaseService(settings.database_url)
-
-
-@contextmanager
-def session_getter() -> Session:
-    """轻量级session context"""
-    try:
-        session = Session(db_service.engine)
-        yield session
-    except Exception as e:
-        logger.info('Session rollback because of exception:{}', e)
-        session.rollback()
-        raise
-    finally:
-        session.close()
-
-
-@asynccontextmanager
-async def async_session_getter() -> AsyncGenerator[AsyncSession, Any]:
-    """轻量级异步session context"""
-    try:
-        async_session = async_sessionmaker(bind=db_service.async_engine, class_=AsyncSession, expire_on_commit=False)
-        async with async_session() as session:
-            yield session
-    except Exception as e:
-        logger.info('AsyncSession rollback because of exception:{}', e)
-        await session.rollback()
-        raise
-    finally:
-        await session.close()
 
 
 def get_count(session: Session, q: SelectOfScalar) -> int:
