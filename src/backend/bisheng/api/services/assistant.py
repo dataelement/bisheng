@@ -113,9 +113,16 @@ class AssistantService(BaseService, AssistantUtils):
         if not assistant or assistant.is_delete:
             return AssistantNotExistsError.return_resp()
         # 检查是否有权限获取信息
-        if not login_user.access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_READ):
+        # 1) 直接角色授权或本人资源
+        has_access = login_user.access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_READ)
+        # 2) 组管理员放宽读取：若助手归属组中包含当前用户管理的任一组，则允许读取
+        if not has_access:
+            resource_groups = GroupResourceDao.get_resource_group(ResourceTypeEnum.ASSISTANT, assistant_id)
+            group_ids = [int(one.group_id) for one in resource_groups] if resource_groups else []
+            if group_ids and login_user.check_groups_admin(group_ids):
+                has_access = True
+        if not has_access:
             return UnAuthorizedError.return_resp()
-
         tool_list = []
         flow_list = []
         knowledge_list = []
