@@ -1,18 +1,20 @@
 import asyncio
 import io
+from typing import Union, BinaryIO, Optional
+
 import librosa
 import soundfile as sf
 import openai
-from typing import Optional, Union, BinaryIO
-from bisheng.core.ai.base import BaseASRClient
+
+from bisheng.core.ai import BaseASRClient
 
 
-class OpenAIASRClient(BaseASRClient):
-    """OpenAI ASR客户端"""
+class AzureOpenAIASRClient(BaseASRClient):
+    """微软Azure OpenAI ASR客户端"""
 
     def __init__(self, api_key: str, **kwargs):
         self.model = kwargs.pop("model", "whisper-1")
-        self.client = openai.AsyncOpenAI(api_key=api_key, **kwargs)
+        self.client = openai.AsyncAzureOpenAI(api_key=api_key, **kwargs)
 
     def sync_func(self, audio_bytes):
         speech, sr = librosa.load(audio_bytes, sr=16000)
@@ -32,15 +34,11 @@ class OpenAIASRClient(BaseASRClient):
             model: Optional[str] = None
     ) -> str:
         """
-        使用OpenAI Whisper API进行语音识别
-
-        Args:
-            audio: 音频文件路径、音频字节数据或文件对象
-            language: 语言代码，如 'zh', 'en'
-            model: 模型名称，默认为 'whisper-1'
-
-        Returns:
-            识别的文本内容
+        使用Azure OpenAI Whisper API进行语音识别
+        :param audio:
+        :param language:
+        :param model:
+        :return:
         """
 
         if not audio:
@@ -64,10 +62,9 @@ class OpenAIASRClient(BaseASRClient):
         if not audio_file:
             raise ValueError("Failed to process audio input")
 
-        transcript = await self.client.audio.transcriptions.create(
-            model=model or "whisper-1",
+        response = await self.client.audio.transcriptions.create(
             file=audio_file,
-            language=language
+            model=model or self.model,
+            language=language if language != "auto" else None
         )
-
-        return transcript.text
+        return response.text

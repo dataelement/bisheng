@@ -3,7 +3,7 @@ from typing import Optional, Literal
 from ..base import BaseTTSClient
 
 
-class OpenAITTSClient(BaseTTSClient):
+class AzureOpenAITTSClient(BaseTTSClient):
     """OpenAI TTS客户端"""
 
     def __init__(self, api_key: str, **kwargs):
@@ -14,7 +14,7 @@ class OpenAITTSClient(BaseTTSClient):
         """
         self.model = kwargs.pop("model", "tts-1")
         self.voice = kwargs.pop("voice", "alloy")
-        self.client = openai.AsyncOpenAI(api_key=api_key, **kwargs)
+        self.client = openai.AsyncAzureOpenAI(api_key=api_key, **kwargs)
 
     async def synthesize(
             self,
