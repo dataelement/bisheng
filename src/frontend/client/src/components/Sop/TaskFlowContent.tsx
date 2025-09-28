@@ -16,7 +16,7 @@ import { useLocalize } from '~/hooks';
 import { playDing } from '~/utils';
 import Markdown from '../Chat/Messages/Content/Markdown';
 import DownIcon from '../svg/DownIcon';
-import { Button, Textarea } from '../ui';
+import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, Textarea } from '../ui';
 import FileIcon from '../ui/icon/File';
 import FilePreviewDrawer from './FilePreviewDrawer';
 import { SopStatus } from './SOPEditor';
@@ -546,12 +546,37 @@ export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
                                 <div className='relative flex pt-3 gap-2 items-center'>
                                     <FileIcon type={file.file_name.split('.').pop().toLowerCase()} className='size-4 min-w-4' />
                                     <span className='text-sm truncate pr-6'>{file.file_name}</span>
-                                    <Button variant="ghost" className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
+                                    {/* <Button variant="ghost" className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
                                         <Download size={16} onClick={(e) => {
                                             e.stopPropagation();
                                             downloadFile(file)
                                         }} />
-                                    </Button>
+                                    </Button> */}
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
+                                            <Download size={16} />
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent className='w-60 rounded-2xl'>
+                                            <DropdownMenuItem className='select-item text-sm font-normal'>
+                                                <FileIcon type={'md'} className='size-4 min-w-4' />
+                                                <div className='w-full flex gap-2 items-center' >
+                                                    Markdown
+                                                </div>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem className='select-item text-sm font-normal'>
+                                                <FileIcon type={'pdf'} className='size-4 min-w-5' />
+                                                <div className='w-full flex gap-2 items-center' >
+                                                    PDF
+                                                </div>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem className='select-item text-sm font-normal'>
+                                                <FileIcon type={'docx'} className='size-4 min-w-4' />
+                                                <div className='w-full flex gap-2 items-center' >
+                                                    Docx
+                                                </div>
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
                                 </div>
                             </div>
                         ))}
