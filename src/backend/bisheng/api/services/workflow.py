@@ -31,7 +31,7 @@ from bisheng.workflow.nodes.node_manage import NodeFactory
 class WorkFlowService(BaseService):
 
     @classmethod
-    def add_extra_field(cls, user: UserPayload, data: list[dict]) -> list[dict]:
+    def add_extra_field(cls, user: UserPayload, data: list[dict], managed: bool = False) -> list[dict]:
         """ 针对应用列表增加一些额外的字段 """
         # 应用ID列表
         resource_ids = []
@@ -66,12 +66,12 @@ class WorkFlowService(BaseService):
         for one in data:
             access_type = AccessType.FLOW_WRITE
             if one['flow_type'] == FlowType.WORKFLOW.value:
-                access_type = AccessType.WORK_FLOW_WRITE
+                access_type = AccessType.WORKFLOW_WRITE
             elif one['flow_type'] == FlowType.ASSISTANT.value:
                 access_type = AccessType.ASSISTANT_WRITE
 
             one['user_name'] = user_dict.get(one['user_id'], one['user_id'])
-            one['write'] = user.access_check(one['user_id'], one['id'], access_type)
+            one['write'] = True if managed else user.access_check(one['user_id'], one['id'], access_type)
             one['version_list'] = flow_versions.get(one['id'], [])
             one['group_ids'] = resource_group_dict.get(one['id'], [])
             one['tags'] = resource_tag_dict.get(one['id'], [])
@@ -80,8 +80,7 @@ class WorkFlowService(BaseService):
 
     @classmethod
     def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: Optional[int], flow_type: Optional[int],
-                      page: int = 1,
-                      page_size: int = 10) -> (list[dict], int):
+                      page: int = 1, page_size: int = 10, managed: bool = False) -> (list[dict], int):
         """
         获取所有技能
         """
@@ -98,11 +97,13 @@ class WorkFlowService(BaseService):
         if user.is_admin():
             data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, None, None, None, page, page_size)
         else:
-            flow_id_extra = user.get_user_access_resource_ids(
-                [AccessType.FLOW, AccessType.WORK_FLOW, AccessType.ASSISTANT_READ])
+            access_list = [AccessType.FLOW, AccessType.WORKFLOW, AccessType.ASSISTANT_READ]
+            if managed:
+                access_list = [AccessType.FLOW_WRITE, AccessType.WORKFLOW_WRITE, AccessType.ASSISTANT_WRITE]
+            flow_id_extra = user.get_user_access_resource_ids(access_list)
             data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, user.user_id, flow_id_extra, None,
                                                page, page_size)
-        data = cls.add_extra_field(user, data)
+        data = cls.add_extra_field(user, data, managed)
 
         return data, total
 
@@ -176,7 +177,7 @@ class WorkFlowService(BaseService):
         db_flow = FlowDao.get_flow_by_id(flow_id)
         if not db_flow:
             raise NotFoundError()
-        if not login_user.access_check(db_flow.user_id, flow_id, AccessType.WORK_FLOW_WRITE):
+        if not login_user.access_check(db_flow.user_id, flow_id, AccessType.WORKFLOW_WRITE):
             raise UnAuthorizedError()
 
         version_info = FlowVersionDao.get_version_by_id(version_id)
@@ -344,7 +345,7 @@ class WorkFlowService(BaseService):
             data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, page=0, limit=0)
         else:
             flow_id_extra = user.get_user_access_resource_ids(
-                [AccessType.FLOW, AccessType.WORK_FLOW, AccessType.ASSISTANT_READ])
+                [AccessType.FLOW, AccessType.WORKFLOW, AccessType.ASSISTANT_READ])
             data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, user_id=user.user_id,
                                            id_extra=flow_id_extra, page=0, limit=0)
 
@@ -394,7 +395,7 @@ class WorkFlowService(BaseService):
         else:
             user_role = UserRoleDao.get_user_roles(user.user_id)
             role_ids = [role.role_id for role in user_role]
-            role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.FLOW, AccessType.WORK_FLOW,
+            role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.FLOW, AccessType.WORKFLOW,
                                                                          AccessType.ASSISTANT_READ])
             flow_id_extra = []
             if role_access:

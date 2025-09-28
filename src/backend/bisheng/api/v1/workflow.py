@@ -2,28 +2,28 @@ import json
 import time
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException, Request, \
+from fastapi import APIRouter, Body, Depends, Query, WebSocket, WebSocketException, Request, \
     status as http_status
-from fastapi_jwt_auth import AuthJWT
 from loguru import logger
 from sqlmodel import select
 
-from bisheng.api.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.api.errcode.flow import WorkflowNameExistsError, WorkFlowOnlineEditError
+from bisheng.api.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.chat import chat_manager
-from bisheng.api.v1.schemas import FlowVersionCreate, UnifiedResponseModel, resp_200
+from bisheng.api.v1.schemas import FlowVersionCreate, resp_200
 from bisheng.chat.types import WorkType
 from bisheng.core.database import get_sync_db_session
-from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, FlowReadWithStyle, FlowType, FlowUpdate, \
+from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, FlowType, FlowUpdate, \
     FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
+from bisheng.utils import generate_uuid
 from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.utils.requests import Requests
-from bisheng.utils import generate_uuid
+from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(prefix='/workflow', tags=['Workflow'])
 
@@ -233,7 +233,7 @@ async def update_flow(*,
     if not db_flow:
         raise NotFoundError()
 
-    if not login_user.access_check(db_flow.user_id, flow_id, AccessType.WORK_FLOW_WRITE):
+    if not login_user.access_check(db_flow.user_id, flow_id, AccessType.WORKFLOW_WRITE):
         return UnAuthorizedError.return_resp()
 
     flow_data = flow.model_dump(exclude_unset=True)
@@ -270,9 +270,11 @@ def read_flows(*,
                flow_type: int = Query(default=None, description='类型 1 flow 5 assitant 10 workflow '),
                page_size: int = Query(default=10, description='每页数量'),
                page_num: int = Query(default=1, description='页数'),
-               status: int = None):
+               status: int = None,
+               managed: bool = Query(default=False, description='是否查询有管理权限的应用列表')):
     """Read all flows."""
-    data, total = WorkFlowService.get_all_flows(login_user, name, status, tag_id, flow_type, page_num, page_size)
+    data, total = WorkFlowService.get_all_flows(login_user, name, status, tag_id, flow_type, page_num, page_size,
+                                                managed)
     return resp_200(data={
         'data': data,
         'total': total

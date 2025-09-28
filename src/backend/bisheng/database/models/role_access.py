@@ -44,8 +44,8 @@ class AccessType(Enum):
     ASSISTANT_WRITE = 6  # 助手写权限
     GPTS_TOOL_READ = 7  # 工具读权限
     GPTS_TOOL_WRITE = 8  # 工具写权限
-    WORK_FLOW = 9  # 工作流读权限
-    WORK_FLOW_WRITE = 10  # 工作流写权限
+    WORKFLOW = 9  # 工作流读权限
+    WORKFLOW_WRITE = 10  # 工作流写权限
 
     WEB_MENU = 99  # 前端菜单栏权限限制
 
