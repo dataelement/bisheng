@@ -3,7 +3,6 @@ import {
     ArrowRight,
     BookOpen,
     Check, ChevronDown,
-    Download,
     FileText,
     LucideLoaderCircle, Pause,
     Search,
@@ -11,18 +10,19 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useToastContext } from '~/Providers';
-import { SendIcon } from '~/components/svg';
 import { useLocalize } from '~/hooks';
 import { playDing } from '~/utils';
 import Markdown from '../Chat/Messages/Content/Markdown';
 import DownIcon from '../svg/DownIcon';
-import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, Textarea } from '../ui';
+import { Button } from '../ui';
 import FileIcon from '../ui/icon/File';
 import FilePreviewDrawer from './FilePreviewDrawer';
 import { SopStatus } from './SOPEditor';
 import FileDrawer from './TaskFiles';
+import DownloadResultFileBtn from './components/DownloadResultFileBtn';
 import ErrorDisplay from './components/ErrorDisplay';
 import { SearchKnowledgeSheet } from './components/SearchKnowledgeSheet';
+import UserInput from './components/UserInput';
 import { WebSearchSheet } from './components/WebSearchSheet';
 
 const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
@@ -224,7 +224,6 @@ const Task = ({
     children = null
 }) => {
     const [isExpanded, setIsExpanded] = useState(true);
-    const [inputValue, setInputValue] = useState('');
     const localize = useLocalize();
 
     // 根据状态选择对应的图标
@@ -243,25 +242,6 @@ const Task = ({
                 return <Check size={16} className='min-w-4 bg-[#BAC1CD] p-0.5 rounded-full text-white mr-2' />;
             default:
                 return <LucideLoaderCircle size={16} className='min-w-4 text-primary mr-2 animate-spin' />;
-        }
-    };
-
-    // 处理发送输入
-    const handleSendInput = () => {
-        if (inputValue.trim()) {
-            sendInput({
-                task_id: task.id,
-                user_input: inputValue
-            });
-            setInputValue(''); // 清空输入框
-        }
-    };
-
-    // 处理回车键发送
-    const handleKeyDown = (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSendInput();
         }
     };
 
@@ -355,33 +335,7 @@ const Task = ({
             )}
 
             {/* 等待输入部分 */}
-            {task.event_type === "user_input" && (
-                <div className='bg-[#F3F4F6] border border-[#dfdede] rounded-2xl px-5 py-4 my-2 relative'>
-                    <div>
-                        <span className='bg-[#D5E3FF] p-1 px-2 text-xs text-primary rounded-md'>{localize('com_sop_waiting_input')}</span>
-                        <span className='pl-3 text-sm'>{task.call_reason}</span>
-                    </div>
-                    <div>
-                        <Textarea
-                            id={task.id}
-                            placeholder={localize('com_sop_please_input')}
-                            className='border-none bg-transparent ![box-shadow:initial] pl-0 pr-10 pt-4 h-auto'
-                            rows={1}
-                            value={inputValue}
-                            maxLength={10000}
-                            onChange={(e) => setInputValue(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                        />
-                        <Button
-                            className='absolute bottom-4 right-4 size-9 rounded-full p-0 bg-black hover:bg-black/80'
-                            onClick={handleSendInput}
-                            disabled={!inputValue.trim()}
-                        >
-                            <SendIcon size={24} />
-                        </Button>
-                    </div>
-                </div>
-            )}
+            {task.event_type === "user_input" && <UserInput task={task} onSendInput={sendInput} />}
             <div className={isExpanded ? 'block' : 'hidden'}>
                 {children}
                 {/* 任务总结 */}
@@ -419,7 +373,6 @@ export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
         const mergedFiles = [...files, ...allFiles];
         return mergedFiles;
     }, [files, allFiles]);
-    console.log('files xx:>> ', files, allFiles);
 
     const downloadFile = (file) => {
         const { file_name, file_url } = file;
@@ -546,37 +499,8 @@ export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
                                 <div className='relative flex pt-3 gap-2 items-center'>
                                     <FileIcon type={file.file_name.split('.').pop().toLowerCase()} className='size-4 min-w-4' />
                                     <span className='text-sm truncate pr-6'>{file.file_name}</span>
-                                    {/* <Button variant="ghost" className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
-                                        <Download size={16} onClick={(e) => {
-                                            e.stopPropagation();
-                                            downloadFile(file)
-                                        }} />
-                                    </Button> */}
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
-                                            <Download size={16} />
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent className='w-60 rounded-2xl'>
-                                            <DropdownMenuItem className='select-item text-sm font-normal'>
-                                                <FileIcon type={'md'} className='size-4 min-w-4' />
-                                                <div className='w-full flex gap-2 items-center' >
-                                                    Markdown
-                                                </div>
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem className='select-item text-sm font-normal'>
-                                                <FileIcon type={'pdf'} className='size-4 min-w-5' />
-                                                <div className='w-full flex gap-2 items-center' >
-                                                    PDF
-                                                </div>
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem className='select-item text-sm font-normal'>
-                                                <FileIcon type={'docx'} className='size-4 min-w-4' />
-                                                <div className='w-full flex gap-2 items-center' >
-                                                    Docx
-                                                </div>
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
+                                    {/* Multi-file type download */}
+                                    <DownloadResultFileBtn file={file} onDownloadFile={downloadFile} />
                                 </div>
                             </div>
                         ))}

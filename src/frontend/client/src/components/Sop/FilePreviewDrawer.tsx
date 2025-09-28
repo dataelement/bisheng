@@ -1,11 +1,12 @@
 "use client"
-import { ChevronLeft, Download } from 'lucide-react'
+import { ChevronLeft } from 'lucide-react'
 import type React from "react"
 import { useMemo } from "react"
 import { useLocalize } from "~/hooks"
 import { Button, TooltipAnchor } from "../ui"
 import FileIcon from "../ui/icon/File"
 import { Sheet, SheetContent, SheetHeader } from "../ui/Sheet"
+import DownloadResultFileBtn from './components/DownloadResultFileBtn'
 import FilePreview from "./FilePreview"
 
 interface FileItem {
@@ -107,7 +108,8 @@ export default function FilePreviewDrawer({
 
                                 {/* 下载按钮 */}
                                 <TooltipAnchor side="bottom" description={localize('com_ui_download')}>
-                                    <Button
+                                    <DownloadResultFileBtn file={currentDisplayFile} onDownloadFile={downloadFile} />
+                                    {/* <Button
                                         variant="ghost"
                                         size="icon"
                                         onClick={() => downloadFile?.(currentDisplayFile)}
@@ -115,7 +117,7 @@ export default function FilePreviewDrawer({
                                         disabled={!currentDisplayFile}
                                     >
                                         <Download size={14} />
-                                    </Button>
+                                    </Button> */}
                                 </TooltipAnchor>
                             </div>
                         </div>

@@ -1,4 +1,8 @@
+import { useLocalize } from "~/hooks";
+
 export default function DragDropOverlay() {
+  const localize = useLocalize();
+
   return (
     <div
       className="bg-surface-primary/85 fixed inset-0 z-[9999] flex flex-col items-center justify-center
@@ -55,8 +59,8 @@ export default function DragDropOverlay() {
           </clipPath>
         </defs>
       </svg>
-      <h3>Add anything</h3>
-      <h4>Drop any file here to add it to the conversation</h4>
+      <h3>{localize('com_addAnything')}</h3>
+      <h4>{localize('com_dropAnyFileToAdd')}</h4>
     </div>
   );
 }

@@ -1057,5 +1057,7 @@
   "com_searchResults": "検索結果",
   "com_webSearch": "ウェブ検索",
   "com_searchQueryLabel": "検索クエリ:",
-  "error_workflow_task_execution_failed": "ワークフロータスクの実行に失敗しました：{{exception}}"
+  "error_workflow_task_execution_failed": "ワークフロータスクの実行に失敗しました：{{exception}}",
+  "com_addAnything": "何でも追加",
+  "com_dropAnyFileToAdd": "ここにファイルをドロップして会話に追加できます"
 }
