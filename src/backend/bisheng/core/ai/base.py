@@ -7,10 +7,10 @@ class BaseASRClient(ABC):
 
     @abstractmethod
     async def transcribe(
-        self,
-        audio: Union[str, bytes, BinaryIO],
-        language: Optional[str] = None,
-        model: Optional[str] = None
+            self,
+            audio: Union[str, bytes, BinaryIO],
+            language: Optional[str] = None,
+            model: Optional[str] = None
     ) -> str:
         """
         将音频转换为文本
@@ -29,17 +29,13 @@ class BaseASRClient(ABC):
 class BaseTTSClient(ABC):
     """TTS (Text To Speech) 基础接口类"""
 
-    def __init__(self, api_key: str, **kwargs):
-        self.api_key = api_key
-        self.config = kwargs
-
     @abstractmethod
     async def synthesize(
-        self,
-        text: str,
-        voice: Optional[str] = None,
-        language: Optional[str] = None,
-        format: str = "mp3"
+            self,
+            text: str,
+            voice: Optional[str] = None,
+            language: Optional[str] = None,
+            format: str = "mp3"
     ) -> bytes:
         """
         将文本合成为语音

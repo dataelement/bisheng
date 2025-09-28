@@ -20,14 +20,9 @@ class AliyunASRClient(BaseASRClient):
     def __init__(self, api_key: str, model: str, **kwargs):
         """
         初始化阿里云ASR客户端
-
-        Args:
-            access_key_id (str): 阿里云访问密钥ID
-            access_key_secret (str): 阿里云访问密钥Secret
-            region_id (str): 阿里云区域ID，默认值为"cn-shanghai"
         """
-        dashscope.api_key = api_key
 
+        self.api_key = api_key
         self.recognition = Recognition(
             model=model,
             format="wav",
@@ -41,7 +36,7 @@ class AliyunASRClient(BaseASRClient):
 
         sf.write(temp_file, speech, sr, format='WAV')
 
-        result: RecognitionResult = self.recognition.call(temp_file)
+        result: RecognitionResult = self.recognition.call(temp_file, api_key=self.api_key)
 
         return result
 
