@@ -123,6 +123,11 @@ llama-index-core = ">=0.13.0,<0.14"
 llama-index-llms-openai = ">=0.5,<0.6"
 llama-index-embeddings-openai = ">=0.5,<0.6"
 e2b-code-interpreter = "^1.5.2"
+azure-cognitiveservices-speech = "^1.46.0"
+# numba==0.56.4 llvmlite==0.39.1 librosa==0.10.0
+numba = "0.56.4"
+llvmlite = "0.39.1"
+librosa = "0.10.0"
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"
