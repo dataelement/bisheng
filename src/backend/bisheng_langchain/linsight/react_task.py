@@ -1,6 +1,5 @@
 import asyncio
 import json
-import logging
 from datetime import datetime
 
 from langchain_core.messages import ToolMessage, AIMessage, HumanMessage, BaseMessage
@@ -38,7 +37,8 @@ class ReactTask(BaseTask):
 
             history_summary = await self.summarize_history(messages_str)
             # 将总结后的历史记录插入到system_message后面
-            remain_messages.append(AIMessage(content=history_summary))
+            remain_messages.append(HumanMessage(content=history_summary))
+            self.all_history.append(self.history)
             self.history = remain_messages
             return "\n".join([one.content for one in remain_messages])
 
@@ -123,40 +123,6 @@ class ReactTask(BaseTask):
                                           status="end"))
             message = AIMessage(content=json.dumps(result_dict, ensure_ascii=False, indent=2))
         else:
-            _call_reason = params.get("call_reason", "")
-            # 等待用户输入的特殊工具调用
-            if action == CallUserInputToolName:
-                # 等待用户输入
-                self.status = TaskStatus.INPUT.value
-                await self.put_event(NeedUserInput(task_id=self.id, call_reason=_call_reason))
-                # 等待用户输入
-                while self.status != TaskStatus.INPUT_OVER.value:
-                    await asyncio.sleep(0.5)
-
-                # 用户输入结束继续执行
-                self.status = TaskStatus.PROCESSING.value
-                observation = self.user_input
-                self.user_input = None
-            else:
-                # 正常工具调用
-                call_id = generate_uuid_str()
-                await self.put_event(ExecStep(task_id=self.id,
-                                              call_id=call_id,
-                                              call_reason=_call_reason,
-                                              name=action,
-                                              params=params,
-                                              status="start"))
-                observation, flag = await self._base_ainvoke_tool(action, params)
-                # 说明工具调用失败
-                if not flag:
-                    is_end = False
-                await self.put_event(ExecStep(task_id=self.id,
-                                              call_id=call_id,
-                                              call_reason=_call_reason,
-                                              name=action,
-                                              params=params,
-                                              output=observation,
-                                              status="end"))
             result_dict = {
                 "思考": thinking,
                 "结束": "True" if is_end else "False",
@@ -165,12 +131,63 @@ class ReactTask(BaseTask):
                 "参数": params,
                 "观察": observation,
             }
-            try:
-                message = ToolMessage(tool_call_id=generate_uuid_str(),
-                                      content=json.dumps(result_dict, ensure_ascii=False, indent=2))
-            except TypeError as e:
-                logging.error(f"json.dumps failed with result_dict: {result_dict}")
-                raise e
+            message = AIMessage(content=json.dumps(result_dict, ensure_ascii=False, indent=2), additional_kwargs={
+                "tool_calls": [
+                    {"id": generate_uuid_str(), "name": action, "args": params}
+                ]
+            })
+        message.additional_kwargs["is_end"] = is_end
+        return message, is_end
+
+    async def execute_react_tool(self, message: AIMessage) -> (str, bool):
+        """Execute the tool based on the AIMessage."""
+        if "tool_calls" not in message.additional_kwargs:
+            raise Exception("AIMessage does not contain tool_calls")
+        tool_calls = message.additional_kwargs["tool_calls"]
+        if not tool_calls or not isinstance(tool_calls, list):
+            raise Exception("tool_calls is empty or not a list")
+        tool_call = tool_calls[0]
+        action = tool_call.get("name", "")
+        params = tool_call.get("args", {})
+        call_id = tool_call.get("id", "")
+        if not action:
+            raise Exception("tool call name is empty")
+
+        is_end = message.additional_kwargs.get("is_end", False)
+        _call_reason = params.get("call_reason", "")
+        # 等待用户输入的特殊工具调用
+        if action == CallUserInputToolName:
+            # 等待用户输入
+            self.status = TaskStatus.INPUT.value
+            await self.put_event(NeedUserInput(task_id=self.id, call_reason=_call_reason))
+            # 等待用户输入
+            while self.status != TaskStatus.INPUT_OVER.value:
+                await asyncio.sleep(0.5)
+
+            # 用户输入结束继续执行
+            self.status = TaskStatus.PROCESSING.value
+            observation = self.user_input
+            self.user_input = None
+        else:
+            # 正常工具调用
+            await self.put_event(ExecStep(task_id=self.id,
+                                          call_id=call_id,
+                                          call_reason=_call_reason,
+                                          name=action,
+                                          params=params,
+                                          status="start"))
+            observation, flag = await self._base_ainvoke_tool(action, params)
+            # 说明工具调用失败
+            if not flag:
+                is_end = False
+            await self.put_event(ExecStep(task_id=self.id,
+                                          call_id=call_id,
+                                          call_reason=_call_reason,
+                                          name=action,
+                                          params=params,
+                                          output=observation,
+                                          status="end"))
+        message = ToolMessage(content=observation, tool_call_id=call_id, additional_kwargs={"is_end": is_end})
         return message, is_end
 
     async def _ainvoke(self) -> None:
@@ -181,12 +198,28 @@ class ReactTask(BaseTask):
         is_end = False
         # json解析失败重试三次
         json_decode_error = 0
-        for i in range(self.exec_config.max_steps):
+        step_index = 0
+        while step_index < self.exec_config.max_steps:
+            # 根据历史消息判断需要 执行工具、调用模型
+            latest_message = self.history[-1] if self.history else None
+            if latest_message and isinstance(latest_message, AIMessage):
+                if "tool_calls" in latest_message.additional_kwargs:
+                    # 说明需要调用工具
+                    new_message, is_end = await self.execute_react_tool(latest_message)
+                    self.history.append(new_message)
+                    # 执行工具不消耗执行步数
+                    step_index -= 1
+                    continue
+            is_end = self.history[-1].additional_kwargs.get("is_end", False) if self.history else False
+            if is_end:
+                break
+
             messages = await self.build_messages_with_history()
             if json_decode_error > 0:
                 res = await self._ainvoke_llm_without_tools(messages, temperature=self.exec_config.retry_temperature)
             else:
                 res = await self._ainvoke_llm_without_tools(messages)
+
             try:
                 message, is_end = await self.parse_react_result(res.content)
             except Exception as e:
@@ -194,9 +227,14 @@ class ReactTask(BaseTask):
                     raise e
                 json_decode_error += 1
                 continue
+            self.exec_config.prompt_manage.insert_prompt("\n".join([one.text() for one in messages]), "task_exec", {
+                "task_id": self.id,
+                "all_history_index": len(self.all_history),
+                "history_index": len(self.history),
+            })
             self.history.append(message)
-            if is_end:
-                break
+            step_index += 1
+
         if is_end:
             self.status = TaskStatus.SUCCESS.value
         else:
@@ -204,6 +242,7 @@ class ReactTask(BaseTask):
             self.answer.append("task exec over max steps and not generate answer")
         return None
 
-    async def generate_sub_tasks(self) -> list['ReactTask']:
-        sub_tasks_info = await self._get_sub_tasks()
+    async def generate_sub_tasks(self, sub_tasks_info: list[dict] = None) -> list['ReactTask']:
+        if sub_tasks_info is None:
+            sub_tasks_info = await self._get_sub_tasks()
         return [ReactTask(**one) for one in sub_tasks_info]

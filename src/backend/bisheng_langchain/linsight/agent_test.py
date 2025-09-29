@@ -4,16 +4,17 @@ import os
 from langchain_community.chat_models import ChatTongyi
 from pydantic import SecretStr
 
-from bisheng.api.services.assistant_agent import AssistantAgent
-from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
-from bisheng.api.services.tool import ToolServices
-from bisheng.api.services.workstation import WorkStationService
+from bisheng_langchain.gpts.load_tools import load_tools
 from bisheng_langchain.linsight.agent import LinsightAgent
 from bisheng_langchain.linsight.const import TaskMode, ExecConfig
 from bisheng_langchain.linsight.event import NeedUserInput, TaskStart, TaskEnd, ExecStep
 
 
-async def get_linsight_agent():
+async def get_linsight_agent_depend_bisheng():
+    from bisheng.api.services.assistant_agent import AssistantAgent
+    from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
+    from bisheng.api.services.tool import ToolServices
+    from bisheng.api.services.workstation import WorkStationService
     azure_api_key = os.environ.get('azure_api_key')
     qwen_api_key = os.environ.get('qwen_api_key')
     root_path = "/Users/zhangguoqing/works/bisheng/src/backend/bisheng_langchain/linsight/data"
@@ -38,16 +39,56 @@ async def get_linsight_agent():
     used_tools = linsight_tools + tools
 
     # 获取本地文件相关工具
-    query = "分析该目录下的简历文件（仅限txt格式），挑选出符合要求的简历。要求包括：python代码能力强，有大模型相关项目经验，有热情、主动性高"
+    query = "分析该目录下的简历文件，挑选出符合要求的简历。要求包括：python代码能力强，有大模型相关项目经验，有热情、主动性高"
 
     agent = LinsightAgent(llm=chat, query=query, tools=used_tools, file_dir=root_path,
-                          task_mode=TaskMode.FUNCTION.value,
+                          task_mode=TaskMode.REACT.value,
+                          exec_config=ExecConfig(debug=True, debug_id="test"))
+    return agent
+
+
+async def get_linsight_agent_depend_local():
+    azure_api_key = os.environ.get('azure_api_key')
+    qwen_api_key = os.environ.get('qwen_api_key')
+    cloudsway_api_key = os.environ.get('cloudsway_api_key')
+    cloudsway_endpoint = os.environ.get('cloudsway_endpoint')
+    root_path = "/Users/zhangguoqing/works/bisheng/src/backend/bisheng_langchain/linsight/data"
+
+    chat = ChatTongyi(api_key=SecretStr(qwen_api_key), model="qwen-max-latest", streaming=True,
+                      model_kwargs={'incremental_output': True})
+
+    used_tools = load_tools({
+        "web_search": {
+            "type": "cloudsway",  # 使用那个搜索引擎，config字段里配置对应搜索引擎的配置
+            "config": {
+                "bing": {"api_key": "xxx",
+                         "base_url": "https://api.bing.microsoft.com/v7.0/search"},
+                "bocha": {"api_key": "xxx"},
+                "jina": {"api_key": ""},
+                "serp": {"api_key": "1", "engine": "baidu"},
+                "tavily": {"api_key": "1"},
+                "cloudsway": {"api_key": cloudsway_api_key, "endpoint": cloudsway_endpoint},
+                "searXNG": {"server_url": "http://192.168.106.116:8889"}},
+        },
+        "get_current_time": {},
+        "list_files": {"root_path": root_path},
+        "get_file_details": {"root_path": root_path},
+        "search_files": {"root_path": root_path},
+        "search_text_in_file": {"root_path": root_path},
+        "read_text_file": {"root_path": root_path},
+        "write_text_file": {"root_path": root_path},
+        "replace_file_lines": {"root_path": root_path},
+    })
+    query = "分析该目录下的简历文件，挑选出符合要求的简历。要求包括：python代码能力强，有大模型相关项目经验，有热情、主动性高"
+    agent = LinsightAgent(llm=chat, query=query, tools=used_tools, file_dir=root_path,
+                          task_mode=TaskMode.REACT.value,
                           exec_config=ExecConfig(debug=True, debug_id="test"))
     return agent
 
 
 async def async_main():
-    agent = await get_linsight_agent()
+    # agent = await get_linsight_agent_depend_bisheng()
+    agent = await get_linsight_agent_depend_local()
 
     sop_template = ""
     # # 检索sop
@@ -95,7 +136,8 @@ async def async_main():
 
 
 async def only_exec_task():
-    agent = await get_linsight_agent()
+    agent = await get_linsight_agent_depend_local()
+    # agent = await get_linsight_agent_depend_bisheng()
 
     sop = """标准操作流程（SOP）：  
 基于目录简历筛选大模型岗位候选人

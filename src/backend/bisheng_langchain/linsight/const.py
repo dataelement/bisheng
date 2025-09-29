@@ -1,7 +1,20 @@
 from enum import Enum
-from typing import Optional
+from typing import Optional, Any
 
 from pydantic import BaseModel, Field
+
+
+class PromptManage(BaseModel):
+    prompt_dict: dict = Field(default_factory=dict, description='存储prompt映射到任务步骤的信息')
+
+    def insert_prompt(self, prompt: str, step_type: str, step_info: Any):
+        self.prompt_dict[prompt] = {
+            "step_type": step_type,
+            "step_info": step_info
+        }
+
+    def get_prompt_info(self, prompt: str) -> Optional[dict]:
+        return self.prompt_dict.get(prompt, None)
 
 
 class ExecConfig(BaseModel):
@@ -14,6 +27,8 @@ class ExecConfig(BaseModel):
     max_file_num: int = Field(default=5, description='生成SOP时，prompt里放的用户上传文件信息的数量')
     retry_temperature: float = Field(default=1, description='重试时的模型温度')
     file_content_length: int = Field(default=5000, description='拆分子任务时读取文件内容的字符数，超过后会截断')
+    prompt_manage: PromptManage = Field(default_factory=PromptManage,
+                                        description='Prompt管理器, 负责管理任务执行过程中的Prompt')
 
 
 CallUserInputToolName = "call_user_input"

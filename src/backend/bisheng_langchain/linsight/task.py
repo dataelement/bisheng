@@ -35,6 +35,7 @@ class BaseTask(BaseModel):
     finally_sop: str = Field(default="", description="最终的SOP，用于处理任务的最终结果。")
 
     history: List[BaseMessage] = Field(default_factory=list, description='原始聊天记录，包含user、tool、AI消息')
+    all_history: List[List[BaseMessage]] = Field(default_factory=list, description='包含总结消息的所有聊天记录')
     status: str = Field(TaskStatus.WAITING.value, description='任务状态')
     answer: list[Any] = Field(default_factory=list, description='任务答案，最终的结果')
     summarize_answer: Optional[str] = Field(default=None, description='总结后的答案，主要用于其他任务获取最终结果')
@@ -279,6 +280,8 @@ class BaseTask(BaseModel):
         # _ = await asyncio.gather(*[one.ainvoke() for one in self.children])
 
         for one in self.children:
+            if one.status != TaskStatus.WAITING.value:
+                continue
             await one.ainvoke()
             if one.status == TaskStatus.SUCCESS.value:
                 all_failed = False
@@ -303,20 +306,27 @@ class BaseTask(BaseModel):
                                              prompt=self.target,
                                              precautions=self.precautions)
         messages = [HumanMessage(content=prompt)]
-        sub_task = None
         for i in range(self.exec_config.retry_num):
             if i > 0:
                 res = await self._split_task_llm(messages, temperature=self.exec_config.retry_temperature)
             else:
                 res = await self._split_task_llm(messages)
             try:
-                # 解析生成的任务json数据
-                sub_task = extract_json_from_markdown(res.content)
-                break
+                sub_task_list = await self.parse_sub_tasks_info(res.content)
+                self.exec_config.prompt_manage.insert_prompt("\n".join([one.text() for one in messages]),
+                                                             "generate_sub_task", {
+                                                                 "task_id": self.id
+                                                             })
+                return sub_task_list
             except Exception as e:
                 if i == self.exec_config.retry_num - 1:
                     raise e
                 continue
+        raise Exception("Failed to generate sub tasks after retries.")
+
+    async def parse_sub_tasks_info(self, message: str) -> List[dict]:
+        sub_task = extract_json_from_markdown(message)
+
         original_query = sub_task.get("总体任务目标", "")
         original_method = f'{sub_task.get("总体方法", "")}\n{sub_task.get("可用资源", "")}'
         original_done = str(sub_task.get("已经完成的内容", ""))
@@ -324,7 +334,7 @@ class BaseTask(BaseModel):
         res = []
         for one in sub_task_list:
             parent_info = self.model_dump(
-                exclude={"children", "history", "status", "target", "sop", "task_manager", "llm"})
+                exclude={"children", "history", "status", "target", "sop", "task_manager", "llm", "all_history"})
             display_target = one.get("当前目标", "")
             target = f'{one.get("当前目标", "")}\n{one.get("输出方法", "")}'
             if one.get("标题层级", ""):
@@ -544,6 +554,7 @@ class Task(BaseTask):
             self.answer.append("task exec over max steps and not generate answer")
         return None
 
-    async def generate_sub_tasks(self) -> list['Task']:
-        sub_tasks_info = await self._get_sub_tasks()
+    async def generate_sub_tasks(self, sub_tasks_info: list[dict] = None) -> list['Task']:
+        if sub_tasks_info is None:
+            sub_tasks_info = await self._get_sub_tasks()
         return [Task(**one) for one in sub_tasks_info]

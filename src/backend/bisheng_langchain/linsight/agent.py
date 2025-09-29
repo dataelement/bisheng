@@ -31,6 +31,10 @@ class LinsightAgent(BaseModel):
     task_mode: str = Field(default=TaskMode.FUNCTION.value,
                            description="Mode of the task execute")
     exec_config: ExecConfig = Field(default_factory=ExecConfig, description='执行过程中所需的配置')
+    sop: str = Field(default=None, description='Standard Operating Procedure (SOP) to be followed by the agent')
+    file_list: Optional[list[str]] = Field(default=None, description='List of files uploaded by the user')
+    knowledge_list: Optional[list[str]] = Field(default=None, description='List of knowledge bases to be considered')
+    tasks: Optional[list[dict]] = Field(default_factory=list, description='List of tasks to be processed by the agent')
 
     async def parse_file_list_str(self, file_list: list[str]) -> str:
         file_list_str = ""
@@ -74,7 +78,6 @@ class LinsightAgent(BaseModel):
         if not sop_content:
             one.content = answer
             yield one
-
         if self.exec_config.debug and one:
             record_llm_prompt(self.llm, sop_prompt, answer, one,
                               time.time() - start_time, self.exec_config.debug_id)
@@ -96,6 +99,7 @@ class LinsightAgent(BaseModel):
 
         sop_prompt = SopPrompt.format(query=self.query, sop=sop, tools_str=tools_str, file_list_str=file_list_str,
                                       knowledge_list_str=knowledge_list_str)
+        self.exec_config.prompt_manage.insert_prompt(sop_prompt, "generate_sop", None)
         # Add logic to process the SOP string
         async for one in self._parse_sop_content(sop_prompt):
             yield one
@@ -136,6 +140,7 @@ class LinsightAgent(BaseModel):
         prompt = GenerateTaskPrompt.format(query=self.query, sop=sop, file_dir=self.file_dir,
                                            current_time=current_time, tools_str=tools_str)
         start_time = time.time()
+        self.exec_config.prompt_manage.insert_prompt(prompt, "generate_task", None)
         res = await self.llm.ainvoke(prompt)
         if self.exec_config.debug and res:
             record_llm_prompt(self.llm, prompt, res.content, res,
@@ -191,3 +196,67 @@ class LinsightAgent(BaseModel):
         if not self.task_manager:
             return []
         return self.task_manager.get_all_task_info()
+
+    async def ainvoke_to_end(self, sop: str, file_list: list[str] = None, knowledge_list: list[str] = None) \
+            -> AsyncIterator[BaseEvent]:
+        """
+        Run the agent's main functionality without predefined tasks.
+        :param sop: 参考 SOP 用来生成新的sop
+        :param file_list: Optional list of files uploaded by the user.
+        :param knowledge_list: list[str] = None
+        """
+        if not self.file_list:
+            self.file_list = file_list
+        if not self.knowledge_list:
+            self.knowledge_list = knowledge_list
+        # 1、生成sop
+        if not self.sop:
+            sop_content = ""
+            async for one in self.generate_sop(sop, file_list, knowledge_list):
+                sop_content += one.content
+                pass
+            self.sop = sop_content
+
+        # 2、生成任务
+        if not self.tasks:
+            tasks = await self.generate_task(self.sop)
+            self.tasks = tasks
+
+        # 3、执行任务
+        async for one in self.ainvoke(self.tasks, self.sop, file_list):
+            yield one
+
+    async def ainvoke_by_prompt(self, prompt: str, response: str) -> AsyncIterator[BaseEvent]:
+        """
+        从prompt对应的节点开始执行灵思agent
+        """
+        step_info = self.exec_config.prompt_manage.get_prompt_info(prompt)
+        if not step_info:
+            raise Exception("未找到prompt对应的任务节点")
+        # 从生成sop开始
+        if step_info['step_type'] == 'generate_sop':
+            if response.find("<Thought_END>") != -1:
+                response = response.split("<Thought_END>", 1)[-1].strip()
+            elif response.find("</Thought_END>") != -1:
+                response = response.split("</Thought_END>", 1)[-1].strip()
+            self.sop = response
+            self.tasks = []
+            self.task_manager = None
+            async for one in self.ainvoke_to_end(''):
+                yield one
+            return
+        elif step_info['step_type'] == 'generate_task':
+            # 从生成任务开始
+            self.tasks = extract_json_from_markdown(response).get('steps', [])
+            self.task_manager = None
+            async for one in self.ainvoke_to_end(""):
+                yield one
+            return
+
+        # 先修改任务的上下文状态
+        await self.task_manager.remake_task_history(prompt, response, step_info)
+
+        # 从某个任务某个步骤开始执行
+        task_id = step_info['step_info']['task_id']
+        if task_id not in self.task_manager.task_map:
+            raise Exception(f"未找到任务ID对应的任务: {task_id}")
