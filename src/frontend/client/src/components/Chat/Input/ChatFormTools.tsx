@@ -3,7 +3,7 @@ import { useEffect, useMemo } from 'react';
 import { useRecoilValue } from 'recoil';
 import { Switch } from '~/components/ui';
 import { Select, SelectContent, SelectTrigger } from '~/components/ui/Select';
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip2";
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { useGetBsConfig, useModelBuilding } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 import store from '~/store';

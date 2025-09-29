@@ -1,7 +1,7 @@
 
 import React from 'react';
 // 废弃
-type FileType = 'md' | 'txt' | 'html' | 'csv' | 'dir' | 'pdf';
+type FileType = 'md' | 'txt' | 'html' | 'csv' | 'dir' | 'pdf' | 'doc' | 'docx';
 
 interface FileIconProps {
     className?: string;
