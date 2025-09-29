@@ -123,6 +123,14 @@ export default function Cascader({ error = false, selectClass = '', close = fals
 
     const [cols, setCols] = useState(() => resetCols(defaultValue, options))
 
+    // 当defaultValue变化时，同步更新内部状态
+    useEffect(() => {
+        if (defaultValue && defaultValue.length > 0) {
+            setValues(defaultValue)
+            setCols(resetCols(defaultValue, options))
+        }
+    }, [defaultValue, options])
+
     const selectOptionsRef = useRef([...defaultValue])
     const handleHover = (option, isLeaf, colIndex) => {
         setIsHover(true)

@@ -10,7 +10,7 @@ from fastapi import BackgroundTasks, Request
 from loguru import logger
 from pymilvus import Collection
 
-from bisheng.api.errcode.base import NotFoundError, UnAuthorizedError, ServerError
+from bisheng.api.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
 from bisheng.api.errcode.knowledge import (
     KnowledgeChunkError,
     KnowledgeExistError,

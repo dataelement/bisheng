@@ -6,9 +6,11 @@ import { uploadChatFile } from "@/controllers/API/flow";
 import { getFileExtension } from "@/util/utils";
 import { FileIcon, PaperclipIcon, X } from "lucide-react";
 import { useContext, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 // @accepts '.png,.jpg'
 export default function ChatFiles({ v, accepts, onChange }) {
+    const { t } = useTranslation();
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
     const remainingUploadsRef = useRef(0);
@@ -38,7 +40,7 @@ export default function ChatFiles({ v, accepts, onChange }) {
         if (invalidFiles.length > 0) {
             toast({
                 variant: 'info',
-                description: invalidFiles.map(file => `文件：${file.file.name}超过${appConfig.uploadFileMaxSize}M，已移除`),
+                description: invalidFiles.map((file) => t('chat.fileExceedRemoved', { name: file.file.name, size: appConfig.uploadFileMaxSize })),
             });
         }
 
@@ -103,7 +105,7 @@ export default function ChatFiles({ v, accepts, onChange }) {
                 // Handle upload failure
                 toast({
                     variant: 'error',
-                    description: `文件上传失败: ${file.name}`,
+                    description: t('chat.fileUploadFailed', { name: file.name }),
                 });
                 handleFileRemove(file.name);
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
@@ -133,7 +135,7 @@ export default function ChatFiles({ v, accepts, onChange }) {
 
         if (remainingUploadsRef.current === 0) {
             // If no files remain, trigger onChange immediately
-            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ id: f.id, name: f.name }));
+            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
             onChange(uploadedFileIds); // Trigger onChange with uploaded file IDs
         }
     };
@@ -176,8 +178,8 @@ export default function ChatFiles({ v, accepts, onChange }) {
                                 {file.name}
                             </div>
                             {file.isUploading ? file.progress === 100
-                                ? <div className="text-xs text-gray-500">解析中...</div>
-                                : <div className="text-xs text-gray-500">上传中... {file.progress}%</div>
+                                ? <div className="text-xs text-gray-500">{t('chat.fileParsingShort')}</div>
+                                : <div className="text-xs text-gray-500">{t('chat.uploadingShort')} {file.progress}%</div>
                                 : <div className="text-xs text-gray-500">{getFileExtension(file.name)} {formatFileSize(file.size)}</div>}
                         </div>
                     </div>

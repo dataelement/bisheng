@@ -10,7 +10,9 @@ import {
     WrenchIcon
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useToastContext } from '~/Providers';
 import { SendIcon } from '~/components/svg';
+import { useLocalize } from '~/hooks';
 import { playDing } from '~/utils';
 import Markdown from '../Chat/Messages/Content/Markdown';
 import DownIcon from '../svg/DownIcon';
@@ -20,7 +22,8 @@ import FilePreviewDrawer from './FilePreviewDrawer';
 import { SopStatus } from './SOPEditor';
 import FileDrawer from './TaskFiles';
 import ErrorDisplay from './components/ErrorDisplay';
-import { PlaySop } from './components/SopLoading';
+import { SearchKnowledgeSheet } from './components/SearchKnowledgeSheet';
+import { WebSearchSheet } from './components/WebSearchSheet';
 
 const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
     if (!params) return null
@@ -31,8 +34,10 @@ const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
     >{params.file_info?.file_name}</Button>
 }
 
-const Tool = ({ data, setCurrentDirectFile }) => {
-    const { name, step_type, params, extra_info } = data;
+const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) => {
+    const { name, step_type, params, extra_info, output } = data;
+    const localize = useLocalize();
+    const { showToast } = useToastContext();
     // 过滤尾部hash值
     const toolName = useMemo(() => {
         const lastUnderscoreIndex = name.lastIndexOf('_');
@@ -49,28 +54,121 @@ const Tool = ({ data, setCurrentDirectFile }) => {
 
     // 工具名称映射
     const nameMap = {
-        web_search: "正在联网搜索",
-        search_knowledge_base: "正在检索知识库",
-        list_files: "正在查询目录",
-        get_file_details: "正在获取文件详细信息",
-        search_files: "正在搜索文件",
-        read_text_file: "正在阅读文件",
-        add_text_to_file: "正在向文件添加内容",
-        replace_file_lines: "正在编辑文件",
-        default: `正在使用 ${toolName} 工具`
+        web_search: localize('com_sop_web_search'),
+        search_knowledge_base: localize('com_sop_search_knowledge_base'),
+        list_files: localize('com_sop_list_files'),
+        get_file_details: localize('com_sop_get_file_details'),
+        search_files: localize('com_sop_search_files'),
+        read_text_file: localize('com_sop_read_text_file'),
+        add_text_to_file: localize('com_sop_add_text_to_file'),
+        replace_file_lines: localize('com_sop_replace_file_lines'),
+        default: localize('com_sop_using_tool', { 0: toolName })
     };
+
+    // search knowledge
+    const handleKnowledgeClick = () => {
+        if (!output || !output.length) return
+        try {
+            const upRes = JSON.parse(output)['结果']
+            const resData = upRes.map(res => {
+                let titleRegex, contentRegex;
+                if (res.startsWith('{')) {
+                    titleRegex = /<file_title>(.*?)<\/file_title>/;
+                    contentRegex = /<paragraph_content>(.*?)<\/paragraph_content>/s;
+                } else {
+                    // 兼容旧格式
+                    titleRegex = /^(.*?)\\n/;
+                    contentRegex = /\\n--------\\n(.*?)$/;
+                }
+                const titleMatch = res.match(titleRegex);
+                const contentMatch = res.match(contentRegex);
+                const title = titleMatch ? titleMatch[1] : '';
+
+                return {
+                    title,
+                    suffix: title.split('.').pop().toLowerCase(),
+                    content: contentMatch ? contentMatch[1] : ''
+                };
+            })
+            onSearchKnowledge({
+                query: params.query,
+                data: resData
+            })
+        } catch (error) {
+            console.log('knowledge parse error :>> ', error);
+            showToast({ message: output, status: 'error' });
+        }
+    }
+
+    const handleWebSearchClick = () => {
+        if (!output || !output.length) return
+        try {
+            const res = JSON.parse(output)
+            if (Array.isArray(res)) {
+                onWebSearch({
+                    query: params.query,
+                    data: res.map(item => ({
+                        ...item,
+                        thumbnail: item.thumbnail || '',
+                        host: item.url.replace(/^https?:\/\/([^\/]+).*$/, '$1'),
+                        title: item.title,
+                        content: item.snippet
+                    }))
+                })
+            } else {
+                const text = JSON.parse(output)['content'][0].text
+                const resData = JSON.parse(text)
+                onWebSearch({
+                    query: params.query,
+                    data: resData['搜索结果'].map(item => ({
+                        thumbnail: item['缩略图'] || '',
+                        host: item['链接'].replace(/^https?:\/\/([^\/]+).*$/, '$1'),
+                        title: item['标题'],
+                        content: item['摘要'],
+                        url: item['链接'],
+                    }))
+                })
+            }
+        } catch (error) {
+            console.log('websearch parse error :>> ', error);
+
+            onWebSearch({
+                query: params.query,
+                data: [{
+                    thumbnail: '',
+                    host: '',
+                    title: output.split(/[.!?，。,！？；：]/)[0] + '...',
+                    content: output,
+                    url: ''
+                }]
+            })
+        }
+    }
+
+    function extractAllUrls(text) {
+        const urlRegex = /https?:\/\/[a-zA-Z0-9-._~:/?#[\]@!$&'()*+,;=]+/g;
+        return text.match(urlRegex) || [];
+    }
 
     // 参数键名映射
     const paramKeyMap = {
-        web_search: () => params.query,
-        search_knowledge_base: () => params.query,
+        web_search: () => <Button
+            variant="link"
+            className='text-xs p-0 h-4 text-blue-400 underline underline-offset-2'
+            onClick={handleWebSearchClick}
+        >{params.query}</Button>,
+        search_knowledge_base: () => <Button
+            variant="link"
+            className='text-xs p-0 h-4 text-blue-400 underline underline-offset-2'
+            onClick={handleKnowledgeClick}
+        >{params.query}</Button>,
         list_files: () => params.directory_path,
         get_file_details: () => params.file_path.split('/').pop(),
         search_files: () => params.pattern,
         read_text_file: () => <ToolButtonLink params={extra_info} setCurrentDirectFile={setCurrentDirectFile} />,
         add_text_to_file: () => <ToolButtonLink params={extra_info} setCurrentDirectFile={setCurrentDirectFile} />,
         replace_file_lines: () => <ToolButtonLink params={extra_info} setCurrentDirectFile={setCurrentDirectFile} />,
-        web_content_to_markdown_llm: () => <a href={params.url} target='_blank'><Button
+        web_content_to_markdown_llm: () => <a href={extractAllUrls(params.url)[0]} target='_blank'><Button
             variant="link"
             className='text-xs p-0 h-4 text-blue-400 underline underline-offset-2'
         >{params.url}</Button></a>,
@@ -121,10 +219,14 @@ const Task = ({
     hasSubTask,
     sendInput,
     setCurrentDirectFile,
+    onSearchKnowledge,
+    onWebSearch,
     children = null
 }) => {
     const [isExpanded, setIsExpanded] = useState(true);
     const [inputValue, setInputValue] = useState('');
+    const localize = useLocalize();
+
     // 根据状态选择对应的图标
     const renderStatusIcon = () => {
         const status = (task.children?.some(child => child.status === 'user_input') && 'user_input') || task.status;
@@ -238,7 +340,12 @@ const Task = ({
                                 {history.map((_history, index) => (
                                     <div>
                                         <p key={index}>{_history.call_reason}</p>
-                                        <Tool data={_history} setCurrentDirectFile={setCurrentDirectFile} />
+                                        <Tool
+                                            data={_history}
+                                            setCurrentDirectFile={setCurrentDirectFile}
+                                            onSearchKnowledge={onSearchKnowledge}
+                                            onWebSearch={onWebSearch}
+                                        />
                                     </div>
                                 ))}
                             </div> : null
@@ -251,13 +358,13 @@ const Task = ({
             {task.event_type === "user_input" && (
                 <div className='bg-[#F3F4F6] border border-[#dfdede] rounded-2xl px-5 py-4 my-2 relative'>
                     <div>
-                        <span className='bg-[#D5E3FF] p-1 px-2 text-xs text-primary rounded-md'>等待输入</span>
+                        <span className='bg-[#D5E3FF] p-1 px-2 text-xs text-primary rounded-md'>{localize('com_sop_waiting_input')}</span>
                         <span className='pl-3 text-sm'>{task.call_reason}</span>
                     </div>
                     <div>
                         <Textarea
                             id={task.id}
-                            placeholder="请输入"
+                            placeholder={localize('com_sop_please_input')}
                             className='border-none bg-transparent ![box-shadow:initial] pl-0 pr-10 pt-4 h-auto'
                             rows={1}
                             value={inputValue}
@@ -284,13 +391,13 @@ const Task = ({
                 </div>}
             </div>
             {/* error */}
-            {task.status === 'failed' && task.errorMsg && <ErrorDisplay title="任务执行中断" taskError={task.errorMsg} />}
+            {task.status === 'failed' && task.errorMsg && <ErrorDisplay title={localize('com_sop_task_execution_interrupted')} taskError={task.errorMsg} />}
         </div>
     );
 };
 
 
-export const TaskFlowContent = ({ linsight, sendInput }) => {
+export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
     const { status, sop, title, tasks, taskError, summary, file_list: files, queueCount = 0 } = linsight
     const allFiles = linsight?.output_result?.all_from_session_files || []
 
@@ -298,6 +405,12 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
     const [currentPreviewFileId, setCurrentPreviewFileId] = useState<string>("")
     const [currentDirectFile, setCurrentDirectFile] = useState<any>(null)
+    const localize = useLocalize();
+
+    // knowledge search
+    const [knowledgeInfo, setKnowledgeInfo] = useState(null)
+    // web search
+    const [webSearchInfo, setWebSearchInfo] = useState(null)
     // 由卡片触发抽屉展开
     const [triggerDrawerFromCard, setTriggerDrawerFromCard] = useState(false)
     useFoucsInput(tasks);
@@ -306,6 +419,7 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
         const mergedFiles = [...files, ...allFiles];
         return mergedFiles;
     }, [files, allFiles]);
+    console.log('files xx:>> ', files, allFiles);
 
     const downloadFile = (file) => {
         const { file_name, file_url } = file;
@@ -336,16 +450,16 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
 
         let timeText;
         if (hours > 0) {
-            timeText = `${hours} 小时 ${minutes} 分钟`;
+            timeText = `${hours} ${localize('com_sop_hours')} ${minutes} ${localize('com_sop_minutes')}`;
         } else {
-            timeText = `${minutes} 分钟`;
+            timeText = `${minutes} ${localize('com_sop_minutes')}`;
         }
 
         return (
             <div className='size-full flex flex-col items-center justify-center text-sm'>
                 <img src={__APP_ENV__.BASE_URL + '/assets/queue.png'} alt="" />
-                <p className='mt-9'>目前使用人数较多，正在排队中...</p>
-                <p className='mt-4 font-bold'>预计等待 {timeText}</p>
+                <p className='mt-9'>{localize('com_sop_queue_message')}</p>
+                <p className='mt-4 font-bold'>{localize('com_sop_estimated_wait')} {timeText}</p>
             </div>
         );
     }
@@ -356,16 +470,16 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
             {/* load */}
             {!tasks?.length && status === SopStatus.Running && <p className='mt-0.5 text-sm flex gap-2'>
                 <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/load.webp'} alt="" />
-                正在整理内容...
+                {localize('com_sop_organizing_content')}
             </p>}
             {/* {!tasks?.length && <PlaySop content={sop} />} */}
             {/* 任务 */}
             {!!tasks?.length && <div className='pl-6'>
-                <p className='text-sm text-gray-400 mt-6 mb-4'>规划任务执行路径：</p>
+                <p className='text-sm text-gray-400 mt-6 mb-4'>{localize('com_sop_plan_task_path')}</p>
                 {tasks.map((task, i) => (
                     <p key={task.id} className='leading-7'>{i + 1}. {task.name}</p>
                 ))}
-                <p className='text-sm text-gray-400 mt-6 mb-4'>接下来为你执行对应任务：</p>
+                <p className='text-sm text-gray-400 mt-6 mb-4'>{localize('com_sop_execute_tasks')}</p>
             </div>}
             {
                 tasks?.map((task, i) => <Task
@@ -378,6 +492,8 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                         setIsPreviewOpen(true);
                         setCurrentDirectFile(file)
                     }}
+                    onSearchKnowledge={setKnowledgeInfo}
+                    onWebSearch={setWebSearchInfo}
                     sendInput={sendInput} >
                     {
                         task.children?.map((_task, i) => <Task
@@ -389,13 +505,15 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                                 setIsPreviewOpen(true);
                                 setCurrentDirectFile(file)
                             }}
+                            onSearchKnowledge={setKnowledgeInfo}
+                            onWebSearch={setWebSearchInfo}
                         />)
                     }
                 </Task>
                 )
             }
             {/* error */}
-            {taskError && <ErrorDisplay title="任务执行中断" taskError={taskError} />}
+            {taskError && <ErrorDisplay title={localize('com_sop_task_execution_interrupted')} taskError={taskError} />}
             {/* 总结 */}
             {
                 summary && <div className='relative mb-6 text-sm px-4 py-3 rounded-lg bg-[#F8F9FB] text-[#303133] leading-6 break-all'>
@@ -404,7 +522,7 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                 </div>
             }
             {/* 结果文件 */}
-            {files && files.length > 0 &&
+            {files &&
                 <div>
                     {/* <p className='text-sm text-gray-500'></p> */}
                     <div className='mt-5 flex flex-wrap gap-3'>
@@ -450,7 +568,7 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                                 </div>
                                 <div className='relative flex pt-3 gap-2 items-center'>
                                     <FileIcon type="dir" className='size-4 min-w-4' />
-                                    <span className='text-sm truncate pr-6'>查看此任务中的所有文件</span>
+                                    <span className='text-sm truncate pr-6'>{localize('com_sop_view_all_files')}</span>
                                     <Button variant="ghost" className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
                                         <ArrowRight size={16} />
                                     </Button>
@@ -467,6 +585,18 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                 </p>
             }
 
+            {/* search knowledge */}
+            <SearchKnowledgeSheet
+                isOpen={!!knowledgeInfo}
+                onClose={() => setKnowledgeInfo(null)}
+                data={knowledgeInfo?.data}
+                searchQuery={knowledgeInfo?.query} />
+            {/* web search */}
+            <WebSearchSheet
+                isOpen={!!webSearchInfo}
+                onClose={() => setWebSearchInfo(null)}
+                data={webSearchInfo?.data}
+                searchQuery={webSearchInfo?.query} />
             {/* 文件列表抽屉 */}
             <FileDrawer
                 title={title}

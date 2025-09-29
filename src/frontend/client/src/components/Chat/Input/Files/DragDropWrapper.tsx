@@ -1,16 +1,17 @@
-import { useDragHelpers } from '~/hooks';
-import DragDropOverlay from '~/components/Chat/Input/Files/DragDropOverlay';
 import DragDropModal from '~/components/Chat/Input/Files/DragDropModal';
+import DragDropOverlay from '~/components/Chat/Input/Files/DragDropOverlay';
+import { useDragHelpers } from '~/hooks';
 import { cn } from '~/utils';
 
 interface DragDropWrapperProps {
   children: React.ReactNode;
   className?: string;
+  isLingsi: boolean;
 }
 
-export default function DragDropWrapper({ children, className }: DragDropWrapperProps) {
+export default function DragDropWrapper({ isLingsi, children, className }: DragDropWrapperProps) {
   const { isOver, canDrop, drop, showModal, setShowModal, draggedFiles, handleOptionSelect } =
-    useDragHelpers();
+    useDragHelpers(isLingsi);
 
   const isActive = canDrop && isOver;
 

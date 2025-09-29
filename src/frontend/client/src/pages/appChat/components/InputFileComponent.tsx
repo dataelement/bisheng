@@ -6,6 +6,7 @@ import { useRecoilState } from "recoil";
 import { useToastContext } from "~/Providers";
 import { Button } from "~/components";
 import { uploadFile, uploadFileWithProgress } from "~/api/apps";
+import useLocalize from "~/hooks/useLocalize";
 
 export default function InputFileComponent({
     value,
@@ -20,6 +21,7 @@ export default function InputFileComponent({
     multiple = false,
     flow
 }) {
+    const t = useLocalize()
     const [myValue, setMyValue] = useState(value);
     const [loading, setLoading] = useState(false);
     useEffect(() => {
@@ -50,7 +52,7 @@ export default function InputFileComponent({
     const checkFileSize = (file) => {
         const maxSize = (bishengConfig?.uploaded_files_maximum_size || 50) * 1024 * 1024;
         if (file.size > maxSize) {
-            return `文件：${file.name} 超过 ${bishengConfig?.uploaded_files_maximum_size || 50} MB，已移除`
+            return t('com_inputfile_exceed_limit', { 0: file.name, 1: (bishengConfig?.uploaded_files_maximum_size || 50) })
         }
         return ''
     }
@@ -192,7 +194,7 @@ export default function InputFileComponent({
                         setLoading(false); // Hide loading state if an error occurs
                     });
             } else {
-                showToast({ message: '没有选择文件', status: 'error' });
+                showToast({ message: t('com_inputfile_no_file_selected'), status: 'error' });
 
                 setLoading(false); // Hide loading state if no files were selected
             }

@@ -1,6 +1,8 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { CheckIcon } from 'lucide-react';
+import { CheckIcon, MousePointerClick } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { useLocalize } from '~/hooks';
 import { Button, Switch, Textarea } from '../ui';
 import StarIcon from '../ui/icon/Star';
 import { SopStatus } from './SOPEditor';
@@ -38,6 +40,8 @@ export const TaskControls = ({
     feedbackProvided
 }: TaskControlsProps) => {
     const [showOverview, setShowOverview] = useState(false);
+    const localize = useLocalize();
+    const { sopId } = useParams();
 
     const isRunning = status === SopStatus.Running;
     const isCompleted = [SopStatus.completed, SopStatus.Stoped].includes(status);
@@ -56,6 +60,7 @@ export const TaskControls = ({
         onFeedback(rating, comment, restart, cancel)
     }
 
+    if (sopId) return <SameSopControls sopId={sopId} />;
     if (queueCount) return null
 
     return (
@@ -68,7 +73,7 @@ export const TaskControls = ({
                     <div className='relative w-10/12 mx-auto'>
                         {
                             !isCompleted && <div className={`${!showOverview && 'hidden'} absolute bottom-10 p-6 pb-14 w-full border rounded-2xl bg-white transition-all overflow-hidden`}>
-                                <h1 className='font-bold mb-3'>任务规划</h1>
+                                <h1 className='font-bold mb-3'>{localize('com_sop_task_planning')}</h1>
                                 {tasks.map((task, i) => (
                                     <p key={task.id} className='text-sm leading-7'>{i + 1}. {task.name}</p>
                                 ))}
@@ -81,14 +86,14 @@ export const TaskControls = ({
                                     <div className='flex items-center'>
                                         {tasks.length > 0 && (
                                             <span className='whitespace-nowrap bg-[#EEF3FF] border border-[#9EAEFF] px-2 py-1 rounded-md text-primary text-xs'>
-                                                任务阶段 {currentStep}/{tasks.length}
+                                                {localize('com_sop_task_stage')} {currentStep}/{tasks.length}
                                             </span>
                                         )}
                                         <span className="pl-4 text-sm">{current?.name || ''}</span>
                                     </div>
 
                                     <div className='flex gap-2 items-center'>
-                                        <span className='whitespace-nowrap text-sm text-gray-600'>显示概览窗口</span>
+                                        <span className='whitespace-nowrap text-sm text-gray-600'>{localize('com_sop_show_overview')}</span>
                                         <Switch onCheckedChange={setShowOverview} />
                                         {
                                             !userRequestedStop && !userRequestedStop && <Button
@@ -96,7 +101,7 @@ export const TaskControls = ({
                                                 variant="outline"
                                                 onClick={handleStopClick}
                                             >
-                                                终止任务
+                                                {localize('com_sop_stop_task')}
                                             </Button>
                                         }
                                     </div>
@@ -124,6 +129,7 @@ export default function FeedbackComponent({ stop, onFeedback }: FeedbackComponen
     const [hoveredRating, setHoveredRating] = useState(0)
     const [comment, setComment] = useState("")
     const [loading, setLoading] = useState(false)
+    const localize = useLocalize();
 
     const handleStarClick = useCallback((star: number) => {
         setRating(star)
@@ -166,11 +172,11 @@ export default function FeedbackComponent({ stop, onFeedback }: FeedbackComponen
                         <CheckIcon size={14} className='text-white' />
                     </div>
                 }
-                <span className="text-sm font-medium text-gray-700">任务已{stop ? '终止' : '完成'}</span>
+                <span className="text-sm font-medium text-gray-700">{localize('com_sop_task')}{stop ? localize('com_sop_terminated') : localize('com_sop_completed')}</span>
 
                 {/* Star Rating */}
                 <div className="flex items-center gap-1 ml-auto">
-                    <span className="text-xs text-gray-500 mr-2 pt-0.5">评价任务帮助灵思下次做得更好：</span>
+                    <span className="text-xs text-gray-500 mr-2 pt-0.5">{localize('com_sop_rate_task')}</span>
                     <div className="flex gap-1">
                         {[1, 2, 3, 4, 5].map((star) => (
                             <div
@@ -192,7 +198,7 @@ export default function FeedbackComponent({ stop, onFeedback }: FeedbackComponen
             <div className="flex gap-3 bg-white rounded-3xl border border-gray-100 relative -bottom-1 p-4">
                 <div className="flex-1">
                     <Textarea
-                        placeholder="对结果不满意？您还可以输入意见重新发起任务。"
+                        placeholder={localize('com_agent_unsatisfied_feedback')}
                         value={comment}
                         onChange={(e) => setComment(e.target.value)}
                         className="resize-none min-h-[40px] bg-transparenttext-sm border-none shadow-none focus:ring-0 focus:outline-none"
@@ -204,9 +210,30 @@ export default function FeedbackComponent({ stop, onFeedback }: FeedbackComponen
                     disabled={!comment.trim() || loading}
                     className="px-6  self-end"
                 >
-                    {loading ? "运行中..." : "重新运行"}
+                    {loading ? localize('com_sop_running') : localize('com_sop_rerun')}
                 </Button>
             </div>
         </div>
     )
+}
+
+
+
+const SameSopControls = ({ sopId }: { sopId: string }) => {
+    const localize = useLocalize();
+
+    return <div className="px-4 pb-6">
+        <div className="flex gap-3 p-4 px-6 justify-between items-center bg-white rounded-3xl border border-gray-100 relative">
+            <div className="flex items-center gap-2">
+                <div className="w-5 h-5 bg-[#05B353] rounded-full p-1" >
+                    <CheckIcon size={14} className='text-white' />
+                </div>
+                <span className="text-sm font-medium text-gray-700">{localize('com_sop_task')}{localize('com_sop_terminated')}</span>
+            </div>
+            <Button className="px-6" onClick={() => window.open(`${__APP_ENV__.BASE_URL}/c/new?sopid=${sopId}`)}>
+                <MousePointerClick className="w-3.5 h-3.5" />
+                {localize('com_make_samestyle')}
+            </Button>
+        </div>
+    </div>
 }

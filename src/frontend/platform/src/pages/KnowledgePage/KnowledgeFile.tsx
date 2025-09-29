@@ -49,12 +49,14 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
     const [options, setOptions] = useState([])
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isModelChanged, setIsModelChanged] = useState(false)
+    const [isLoadingModels, setIsLoadingModels] = useState(false)
 
     // 统一处理模型数据获取
     useEffect(() => {
         if (!open) return;
 
         const fetchModelData = async () => {
+            setIsLoadingModels(true);
             try {
                 const [config, data] = await Promise.all([getKnowledgeModelConfig(), getModelListApi()]);
                 const { embedding_model_id } = config;
@@ -117,6 +119,8 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                     variant: "error",
                     description: '加载模型出错'
                 });
+            } finally {
+                setIsLoadingModels(false);
             }
         };
 
@@ -129,6 +133,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
             setModal(null);
             setIsSubmitting(false);
             setIsModelChanged(false);
+            setIsLoadingModels(false);
             setError({ name: false, desc: false });
         }
     }, [open]);
@@ -169,10 +174,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
             handleError('知识库名称不能超过200字');
             return;
         }
-        if (!modal) {
-            handleError(t('lib.selectModel'));
-            return;
-        }
+ 
 
         // 修复：名称重复校验逻辑
         // 编辑模式且名称未变更时，不进行重复校验
@@ -282,8 +284,15 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                 </div>
                 <div className="">
                     <label htmlFor="model" className="bisheng-label">知识库embedding模型选择</label>
-                    {options.length > 0 && (
+                    {isLoadingModels ? (
+                        <div className="flex items-center gap-2 p-3 border rounded-md bg-gray-50">
+                            <LoadIcon className="w-4 h-4 animate-spin" />
+                            <span className="text-sm text-gray-600">正在加载模型列表...</span>
+                        </div>
+                    ) : options.length > 0 ? (
                         <ModelSelect
+                            key={`model-select-${modal ? modal[1]?.value : 'default'}-${options.length}`}
+                            label=""
                             close
                             value={modal ? modal[1]?.value : (mode === 'edit' && currentLib ? currentLib.model : null)}
                             options={options}
@@ -304,6 +313,10 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                                 }
                             }}
                         />
+                    ) : (
+                        <div className="p-3 border rounded-md bg-gray-50 text-sm text-gray-600">
+                            暂无可用模型
+                        </div>
                     )}
                     {mode === 'edit' && isModelChanged && (
                         <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
@@ -516,7 +529,7 @@ export default function KnowledgeFile() {
                     <SearchInput placeholder={t('lib.searchPlaceholder')} onChange={(e) => search(e.target.value)} />
                     <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create')}</Button>
                 </div>
-                <Table>
+                <Table noScroll>
                     <TableHeader>
                         <TableRow>
                             <TableHead>{t('lib.libraryName')}</TableHead>
@@ -543,7 +556,7 @@ export default function KnowledgeFile() {
                                     <div className="flex items-center gap-2">
                                         <div className="flex items-center justify-center size-12 text-white rounded-[4px]  w-[40px] h-[40px]">
                                             {/* <BookCopy  className="size-5"/> */}
-                                            <BookIcon className="text-primary" />
+                                            <BookIcon className="text-primary size-10" />
                                         </div>
                                         <div>
                                             <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">

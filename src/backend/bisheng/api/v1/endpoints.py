@@ -6,7 +6,7 @@ from uuid import UUID
 import yaml
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, UploadFile
 
-from bisheng import __version__, settings
+from bisheng import settings
 from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import (ProcessResponse, UploadFileResponse,
@@ -47,6 +47,7 @@ def get_all():
 
 @router.get('/env')
 def get_env():
+    from bisheng import __version__
     """获取环境变量参数"""
     uns_support = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'html', 'pdf', 'csv']
 
@@ -364,4 +365,5 @@ async def get_download_url(object_name: str):
 # get endpoint to return version of bisheng
 @router.get('/version')
 def get_version():
+    from bisheng import __version__
     return resp_200({'version': __version__})

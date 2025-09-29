@@ -1,14 +1,16 @@
 import { FileText, MessageCircleMoreIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '~/components/ui/Select';
 import { useConversationsInfiniteQuery } from '~/data-provider';
+import { useLocalize } from '~/hooks';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { Button, Skeleton } from '../ui';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
 
 export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
     const { getLinsight } = useLinsightManager()
+    const localize = useLocalize()
     const linsight = useMemo(() => {
         return getLinsight(versionId)
     }, [getLinsight, versionId])
@@ -37,7 +39,7 @@ export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
                             className="h-7 px-3 rounded-lg shadow-sm focus-visible:outline-0"
                         >
                             <MessageCircleMoreIcon className="size-4" />
-                            <span className="text-xs">任务描述</span>
+                            <span className="text-xs">{localize('com_sop_task_description')}</span>
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent hideWhenDetached className="w-96 border bg-white rounded-xl">
@@ -47,9 +49,13 @@ export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
                                     <span className='relative -top-1 '>...</span>
                                 </div>
                             </div>
-                            任务描述
+                            {localize('com_sop_task_description')}
                         </p>
-                        <p className='text-sm'>{linsight?.question}</p>
+                        <p className='text-sm overflow-y-scroll'
+                           style={{ display: '-webkit-box', WebkitLineClamp: 8, WebkitBoxOrient: 'vertical' }}
+                        >
+                            {linsight?.question}
+                        </p>
                     </PopoverContent>
                 </Popover>
 
@@ -57,7 +63,7 @@ export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
                     versions.length > 0 && <Select value={versionId} onValueChange={setVersionId}>
                         <SelectTrigger className="h-7 rounded-lg px-3 border bg-white hover:bg-gray-50 data-[state=open]:border-blue-500">
                             <div className="flex items-center gap-2">
-                                <span className="text-xs font-normal text-gray-600">任务版本 {versions.find(task => task.id === versionId)?.name}</span>
+                                <span className="text-xs font-normal text-gray-600">{localize('com_sop_task_version')} {versions.find(task => task.id === versionId)?.name}</span>
                             </div>
                         </SelectTrigger>
                         <SelectContent className="bg-white rounded-lg p-2 w-52 shadow-md">

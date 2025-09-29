@@ -48,7 +48,7 @@ const AttachFileButton = ({
         <div className="flex w-full items-center justify-center gap-2">
           <Button disabled={isUploadDisabled}>
             {disabled && <Loader2 className='animate-spin' />}
-            添加文件</Button>
+            {localize('com_knowledge_add_file')}</Button>
         </div>
       </TooltipAnchor>
     </FileUpload>

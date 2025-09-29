@@ -13,7 +13,6 @@ import WebView from '~/components/WebView';
 import { AuthContextProvider } from '~/hooks/AuthContext';
 import AgentCenter from '~/pages/apps';
 import AppChat from '~/pages/appChat';
-import Zombie from '~/pages/zombie';
 import ChatRoute from './ChatRoute';
 import LoginLayout from './Layouts/Login';
 import StartupLayout from './Layouts/Startup';
@@ -89,7 +88,7 @@ export const router = createBrowserRouter([
         children: [
           {
             index: true,
-            element: <Navigate to="/c/new" replace={true} />,
+            element: <Navigate to="/c/new?" replace={true} />,
           },
           {
             path: 'c/:conversationId?',
@@ -100,16 +99,16 @@ export const router = createBrowserRouter([
             element: <Sop />,
           },
           {
+            path: 'linsight/case/:sopId',
+            element: <Sop />,
+          },
+          {
             path: 'apps',
             element: <AgentCenter />,
           },
           {
             path: 'chat/:conversationId/:fid/:type',
             element: <AppChat />,
-          },
-          {
-            path: 'zombie',
-            element: <Zombie />,
           },
         ],
       },

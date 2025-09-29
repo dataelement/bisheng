@@ -86,6 +86,13 @@ class UserDao(UserBase):
             return session.exec(statement).all()
 
     @classmethod
+    async def aget_user_by_ids(cls, user_ids: List[int]) -> List[User] | None:
+        async with async_session_getter() as session:
+            statement = select(User).where(User.user_id.in_(user_ids))
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
     def get_user_by_username(cls, username: str) -> User | None:
         with session_getter() as session:
             statement = select(User).where(User.user_name == username)

@@ -1,11 +1,6 @@
 import { LinsightInfo } from "~/store/linsight";
 import request from "./request";
 
-// 灵思
-export function getTools(name: string): Promise<any> {
-  return request.get('/api/v1/download?object_name=' + name);
-}
-
 // 保存修改sop
 export function saveSop(data: {
   sop_content: string,
@@ -80,7 +75,9 @@ export function submitLinsightFeedback(versionid, data: {
   is_reexecute: boolean,
   cancel_feedback: boolean
 }): Promise<any> {
-  return request.post('/api/v1/linsight/workbench/submit-feedback', { linsight_session_version_id: versionid, ...data }
+  return request.post('/api/v1/linsight/workbench/submit-feedback',
+    { linsight_session_version_id: versionid, ...data },
+    { showError: true }
   )
 }
 
@@ -146,6 +143,25 @@ export function checkSopQueueStatus(id: string) {
   return request.get('/api/v1/linsight/workbench/queue-status', {
     params: {
       session_version_id: id
+    }
+  })
+}
+
+// Selected Cases
+export function getFeaturedCases(page: number): Promise<any> {
+  return request.get('/api/v1/linsight/sop/showcase', {
+    params: {
+      page,
+      page_size: 12
+    }
+  });
+}
+
+// Get case details based on SOP ID
+export function getCaseDetail(sop_id: string): Promise<any> {
+  return request.get('/api/v1/linsight/sop/showcase/result', {
+    params: {
+      sop_id
     }
   })
 }

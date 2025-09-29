@@ -2,10 +2,12 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "~/components/ui";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip2";
 import { Copy, CopyCheck } from "lucide-react";
+import { useLocalize } from "~/hooks";
 
 export default function CopyButton({ text }: { text: string }) {
     const [copied, setCopied] = useState(false);
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const localize = useLocalize();
 
     // 清理定时器
     useEffect(() => {
@@ -31,7 +33,7 @@ export default function CopyButton({ text }: { text: string }) {
                 fallbackCopyText(text);
             }
         } catch (err) {
-            console.error("复制失败:", err);
+            console.error(localize('com_copy_failed'), err);
         }
     };
 
@@ -53,10 +55,10 @@ export default function CopyButton({ text }: { text: string }) {
             if (successful) {
                 setCopiedState();
             } else {
-                console.error("复制命令失败");
+                console.error(localize('com_copy_command_failed'));
             }
         } catch (err) {
-            console.error("复制失败:", err);
+            console.error(localize('com_copy_failed'), err);
         } finally {
             document.body.removeChild(textArea);
         }
@@ -78,7 +80,7 @@ export default function CopyButton({ text }: { text: string }) {
                     size="icon"
                     className="size-8 p-1.5 hover:bg-accent/50"
                     onClick={handleCopy}
-                    aria-label={copied ? "已复制" : "复制到剪贴板"}
+                    aria-label={copied ? localize('com_copied') : localize('com_copy_to_clipboard')}
                 >
                     {copied ? (
                         <CopyCheck size={16} className="text-primary" />
@@ -88,7 +90,7 @@ export default function CopyButton({ text }: { text: string }) {
                 </Button>
             </TooltipTrigger>
             <TooltipContent side="top" align="center">
-                <p>{copied ? "已复制!" : "复制"}</p>
+                <p>{copied ? localize('com_copied') : localize('com_copy_to_clipboard')}</p>
             </TooltipContent>
         </Tooltip>
     );

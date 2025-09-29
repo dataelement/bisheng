@@ -96,6 +96,9 @@ interface MarkdownProps {
     defaultValue: string,
     onChange?: any;
     disabled?: boolean;
+    tools?: any;
+    className?: string;
+    height?: string;
 }
 
 interface MarkdownRef {
@@ -103,7 +106,7 @@ interface MarkdownRef {
 }
 
 const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
-    const { value, tools, height = 'h-[calc(100vh-420px)]', defaultValue, disabled = false, onChange } = props;
+    const { value, tools, height = 'h-[calc(100vh-420px)]', defaultValue, disabled = false, onChange, className } = props;
 
     const veditorRef = useRef<any>(null);
     const inserRef = useRef<any>(null);

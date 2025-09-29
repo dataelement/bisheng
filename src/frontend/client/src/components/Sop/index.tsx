@@ -1,21 +1,21 @@
-import cloneDeep from 'lodash/cloneDeep';
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { checkSopQueueStatus, getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
+import { checkSopQueueStatus, getCaseDetail, getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
 import { useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/data-provider';
 import { useGenerateSop, useLinsightManager } from '~/hooks/useLinsightManager';
 import { formatTime } from '~/utils';
+import { LoadingIcon } from '../ui/icon/Loading';
 import { LoadingBox } from './components/SopLoading';
 import { Header } from './Header';
 import { SOPEditor, SopStatus } from './SOPEditor';
 import { TaskFlow } from './TaskFlow';
-import { LoadingIcon } from '../ui/icon/Loading';
 
 export default function index() {
     // 获取url参数
-    const { conversationId } = useParams();
+    const { conversationId, sopId: sid } = useParams();
+    const sopId = conversationId ? conversationId.replace('case', '') : sid; // Compatible with historical cases 
 
-    const { loading, versionId, setVersionId, switchVersion, versions, setVersions, checkQueueStatus } = useLinsightData(conversationId);
+    const { loading, versionId, setVersionId, switchVersion, versions, setVersions, checkQueueStatus } = useLinsightData(conversationId, sopId);
     const [isLoading, error] = useGenerateSop(versionId, setVersionId, setVersions)
 
     return (
@@ -43,7 +43,7 @@ export default function index() {
 }
 
 
-export const useLinsightData = (conversationId: string | undefined) => {
+export const useLinsightData = (conversationId: string | undefined, sopId?: string) => {
     // 获取工具列表
     const { data: linsightTools } = useGetLinsightToolList();
     const { data: PersonalTool } = useGetPersonalToolList();
@@ -59,13 +59,6 @@ export const useLinsightData = (conversationId: string | undefined) => {
     const checkQueueStatus = useQueueStatus(versionId, updateLinsight)
 
     const loadSessionVersionsAndTasks = async (_conversationId: string, versionId?: string) => {
-        if (_conversationId.startsWith('case')) {
-            const firstVersion = cloneDeep(window.SopCase[_conversationId])
-            setVersions([{ id: firstVersion.id, name: formatTime(firstVersion.version, true) }]);
-            setVersionId(firstVersion.id);
-            return switchAndUpdateLinsight(firstVersion.id, { ...firstVersion }, true);
-        }
-
         setLoading(true);
         try {
             // 1. 获取会话版本列表
@@ -102,6 +95,17 @@ export const useLinsightData = (conversationId: string | undefined) => {
         loadSessionVersionsAndTasks(conversationId);
     }, [conversationId, linsightTools, PersonalTool, orgTools]);
 
+    // Get details using sop ID
+    useEffect(() => {
+        if (sopId) {
+            getCaseDetail(sopId).then(res => {
+                const { version_info, execute_tasks } = res.data
+                setVersions([])
+                setVersionId(version_info.id);
+                switchAndUpdateLinsight(version_info.id, { ...version_info, tasks: execute_tasks });
+            })
+        }
+    }, [sopId])
 
     const switchVersion = async (versionId: string) => {
         const linsight = getLinsight(versionId)

@@ -22,7 +22,8 @@ const fileServiceTarget = "http://192.168.106.116:9000";
 const commonProxyOptions = {
   changeOrigin: true,
   withCredentials: true,
-  secure: false
+  secure: false,
+  ws: true
 };
 
 // 带重写功能的配置生成器

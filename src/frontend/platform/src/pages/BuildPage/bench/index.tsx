@@ -121,9 +121,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const webSearchRef = useRef<HTMLDivElement>(null);
     const systemPromptRef = useRef<HTMLDivElement>(null);
     const appCenterWelcomeRef = useRef<HTMLDivElement>(null);
-const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
+    const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
     const { t } = useTranslation()
-    const { config: webSearchData, setConfig: setWebSearchData } = useWebSearchStore()
     const {
         formData,
         errors,
@@ -140,8 +139,8 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
         modelRefs,
         webSearchRef,
         systemPromptRef,
-          appCenterWelcomeRef, 
-    appCenterDescriptionRef,
+        appCenterWelcomeRef,
+        appCenterDescriptionRef,
     }, parentFormData, parentSetFormData);
 
     useEffect(() => {
@@ -157,17 +156,7 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
             navigate('/build/apps')
         }
     }, [user])
-    useEffect(() => {
-        if (!parentFormData) {
-            console.log("parentFormData is null", parentFormData);
 
-            getWorkstationConfigApi().then(res => {
-                setWebSearchData(res.webSearch)
-                setFormData(res)
-            })
-        }
-
-    }, [])
     const uploadAvator = (fileUrl: string, type: 'sidebar' | 'assistant', relativePath?: string) => {
         setFormData(prev => ({
             ...prev,
@@ -184,7 +173,6 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
             return;
         }
         const toolId = webSearchTool.id;
-        setWebSearchData(config);
         setFormData(prev => ({ ...prev, webSearch: config }));
         await updateAssistantToolApi(toolId, config);
         setWebSearchDialogOpen(false)
@@ -223,12 +211,7 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
             }
         }));
 
-        // 同时更新全局状态 (zustand)
-        setWebSearchData(prev => ({
-            ...prev,
-            [field]: value
-        }));
-    }, [setFormData, setWebSearchData]); // 添加依赖项
+    }, [setFormData]); // 添加依赖项
     return (
         <div className=" h-full overflow-y-scroll scrollbar-hide relative border-t">
             <div className="pt-4 relative">
@@ -299,7 +282,7 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
                                 onChange={(v) => handleInputChange('inputPlaceholder', v, 1000)}
                             />
                         </div>
-  <div ref={appCenterWelcomeRef}>
+                        <div ref={appCenterWelcomeRef}>
                             <FormInput
                                 label={t('chatConfig.appCenterWelcome')}
                                 value={formData.applicationCenterWelcomeMessage}
@@ -356,7 +339,7 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
                                     error={errors.systemPrompt}
                                     placeholder={`${t('chatConfig.systemPromptPlaceholder')}`}
                                     maxLength={30000}
-                                 onChange={(val) => handleInputChange('systemPrompt', val, 30000)}
+                                    onChange={(val) => handleInputChange('systemPrompt', val, 30000)}
                                 />
                             </div>
                         </div>
@@ -383,7 +366,7 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
                             </div>
                         </ToggleSection> */}
                         <ToggleSection
-                            title={t('chatConfig.webSearch')}
+                            title={t('chatConfig.webSea')}
                             enabled={formData.webSearch.enabled}
                             onToggle={(enabled) => toggleFeature('webSearch', enabled)}
                             extra={
@@ -452,12 +435,7 @@ const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
                     <DialogHeader>
                         <DialogTitle>{t('chatConfig.webSearchConfig')}</DialogTitle>
                     </DialogHeader>
-                    <WebSearchForm
-                        prompt={formData.webSearch.prompt}
-                        enabled={formData.webSearch.enabled}
-                        formData={formData}
-                        onSubmit={handleWebSearchSave}
-                    />
+                    <WebSearchForm isApi={true}/>
                 </DialogContent>
             </Dialog>
         </div>
@@ -481,7 +459,7 @@ interface UseChatConfigProps {
 const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormData) => {
     const [formData, setFormData] = useState<ChatConfigForm>(parentFormData || {
         menuShow: true,
-        
+
         systemPrompt: "你是BISHENG智能问答助手，你的任务是根据用户问题进行回答。在回答时，请注意以下几点：- 当前时间是{cur_date}。- 不要泄露任何敏感信息，回答应基于一般性知识和逻辑。- 确保回答不违反法律法规、道德准则和公序良俗。",
         sidebarIcon: { enabled: true, image: '', relative_path: '' },
         assistantIcon: { enabled: true, image: '', relative_path: '' },
@@ -527,15 +505,26 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
 {question}`,
         },
     });
-    useEffect(() => {
-        if (parentFormData) {
-            setFormData(parentFormData);
-        }
-    }, [parentFormData]);
+  // 简单深比较，避免父子相互 set 导致的循环刷新
+  const isDeepEqual = (a: any, b: any) => {
+      try {
+          return JSON.stringify(a) === JSON.stringify(b);
+      } catch {
+          return a === b;
+      }
+  };
 
-    useEffect(() => {
-        parentSetFormData?.(formData);
-    }, [formData]);
+  useEffect(() => {
+      if (parentFormData && !isDeepEqual(formData, parentFormData)) {
+          setFormData(parentFormData);
+      }
+  }, [parentFormData]);
+
+  useEffect(() => {
+      if (parentSetFormData && !isDeepEqual(formData, parentFormData)) {
+          parentSetFormData(formData);
+      }
+  }, [formData, parentFormData]);
 
     //         const sidebarSloganRef = useRef<HTMLDivElement>(null);
     // const welcomeMessageRef = useRef<HTMLDivElement>(null);
@@ -545,45 +534,44 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
     // const modelRefs = useRef<(HTMLDivElement | null)[]>([]);
     // const webSearchRef = useRef<HTMLDivElement>(null);
     // const systemPromptRef = useRef<HTMLDivElement>(null);
-   useEffect(() => {
-    if (!parentFormData) {
-        console.log('parentFormData :>> ', parentFormData);
+    useEffect(() => {
+        if (!parentFormData) {
+            console.log('parentFormData :>> ', parentFormData);
 
-        getWorkstationConfigApi().then((res) => {
-            if (res) {
-                // 确保 systemPrompt 有值
-                const defaultSystemPrompt = `你是BISHENG智能问答助手，你的任务是根据用户问题进行回答。
+            getWorkstationConfigApi().then((res) => {
+                if (res) {
+                    // 确保 systemPrompt 有值
+                    const defaultSystemPrompt = `你是BISHENG智能问答助手，你的任务是根据用户问题进行回答。
 在回答时，请注意以下几点：
 - 当前时间是{cur_date}。
 - 不要泄露任何敏感信息，回答应基于一般性知识和逻辑。
 - 确保回答不违反法律法规、道德准则和公序良俗。`
-                const systemPrompt = res.systemPrompt || defaultSystemPrompt;
-                
-                setFormData((prev) => {
-                    return 'menuShow' in res ? res : { ...prev, ...res, systemPrompt }
-                })
-            }
-        });
-    }
-}, [parentFormData]);
+                    const systemPrompt = res.systemPrompt || defaultSystemPrompt;
 
-const [errors, setErrors] = useState<FormErrors>({
-    sidebarSlogan: '',
-    welcomeMessage: '',
-    functionDescription: '',
-    inputPlaceholder: '',
-    kownledgeBase: '',
-    model: '',
-    modelNames: [],
-    webSearch: undefined,
-    systemPrompt: '', 
-    applicationCenterWelcomeMessage: '', 
-    applicationCenterDescription: '', 
-});
-    console.log('errors :>> ', errors);
+                    setFormData((prev) => {
+                        return 'menuShow' in res ? res : { ...prev, ...res, systemPrompt }
+                    })
+                }
+            });
+        }
+    }, [parentFormData]);
 
-const handleInputChange = (field: keyof ChatConfigForm, value: string, maxLength: number) => {
-  setFormData(prev => ({ ...prev, [field]: value }));
+    const [errors, setErrors] = useState<FormErrors>({
+        sidebarSlogan: '',
+        welcomeMessage: '',
+        functionDescription: '',
+        inputPlaceholder: '',
+        kownledgeBase: '',
+        model: '',
+        modelNames: [],
+        webSearch: undefined,
+        systemPrompt: '',
+        applicationCenterWelcomeMessage: '',
+        applicationCenterDescription: '',
+    });
+
+    const handleInputChange = (field: keyof ChatConfigForm, value: string, maxLength: number) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
 
         if (value.length >= maxLength) {
             setErrors(prev => ({ ...prev, [field]: `最多${maxLength}个字符` }));
@@ -612,7 +600,7 @@ const handleInputChange = (field: keyof ChatConfigForm, value: string, maxLength
             modelNames: [],
             applicationCenterWelcomeMessage: '',
             applicationCenterDescription: '',
-             systemPrompt: '',
+            systemPrompt: '',
         };
 
         if (formData.sidebarSlogan.length > 15) {
@@ -654,17 +642,17 @@ const handleInputChange = (field: keyof ChatConfigForm, value: string, maxLength
             isValid = false;
         }
         if (formData.applicationCenterWelcomeMessage.length > 1000) {
-                newErrors.applicationCenterWelcomeMessage = t('chatConfig.errors.maxCharacters', { count: 1000 });
-                if (!firstErrorRef) firstErrorRef = refs.appCenterWelcomeRef;
-                isValid = false;
-            }
-            
-            // 验证应用中心描述
-            if (formData.applicationCenterDescription.length > 1000) {
-                newErrors.applicationCenterDescription = t('chatConfig.errors.maxCharacters', { count: 1000 });
-                if (!firstErrorRef) firstErrorRef = refs.appCenterDescriptionRef;
-                isValid = false;
-            }
+            newErrors.applicationCenterWelcomeMessage = t('chatConfig.errors.maxCharacters', { count: 1000 });
+            if (!firstErrorRef) firstErrorRef = refs.appCenterWelcomeRef;
+            isValid = false;
+        }
+
+        // 验证应用中心描述
+        if (formData.applicationCenterDescription.length > 1000) {
+            newErrors.applicationCenterDescription = t('chatConfig.errors.maxCharacters', { count: 1000 });
+            if (!firstErrorRef) firstErrorRef = refs.appCenterDescriptionRef;
+            isValid = false;
+        }
         // Validate models
         if (formData.models.length === 0) {
             newErrors.model = t('chatConfig.errors.atLeastOneModel');
@@ -775,31 +763,31 @@ const handleInputChange = (field: keyof ChatConfigForm, value: string, maxLength
     const { toast } = useToast()
     const { reloadConfig } = useContext(locationContext)
     const handleSave = async () => {
-    const { isValid, firstErrorRef } = validateForm();
-  if (!isValid) {
-    if (firstErrorRef?.current) {
-      firstErrorRef.current.scrollIntoView({
-        behavior: 'smooth', // 平滑滚动
-        block: 'end', // 滚动后文本框底部显示在视图中（下方位置）
-        inline: 'nearest'
-      });
+        const { isValid, firstErrorRef } = validateForm();
+        if (!isValid) {
+            if (firstErrorRef?.current) {
+                firstErrorRef.current.scrollIntoView({
+                    behavior: 'smooth', // 平滑滚动
+                    block: 'end', // 滚动后文本框底部显示在视图中（下方位置）
+                    inline: 'nearest'
+                });
 
-      // 延迟聚焦输入框，确保滚动完成后再聚焦（提升体验）
-      setTimeout(() => {
-        const input = firstErrorRef.current?.querySelector('input, textarea, [role="combobox"]');
-        if (input) input.focus(); // 聚焦到错误输入框
-      }, 300); // 300ms 匹配滚动动画时长
-    }
-    return false;
-  }
+                // 延迟聚焦输入框，确保滚动完成后再聚焦（提升体验）
+                setTimeout(() => {
+                    const input = firstErrorRef.current?.querySelector('input, textarea, [role="combobox"]');
+                    if (input) input.focus(); // 聚焦到错误输入框
+                }, 300); // 300ms 匹配滚动动画时长
+            }
+            return false;
+        }
         const dataToSave = {
             ...formData,
             sidebarSlogan: formData.sidebarSlogan.trim(),
             welcomeMessage: formData.welcomeMessage.trim(),
             functionDescription: formData.functionDescription.trim(),
             inputPlaceholder: formData.inputPlaceholder.trim(),
-            applicationCenterWelcomeMessage: formData.applicationCenterWelcomeMessage.trim()||'探索BISHENG的智能体', 
-            applicationCenterDescription: formData.applicationCenterDescription.trim()||'您可以在这里选择需要的智能体来进行生产与工作~', 
+            applicationCenterWelcomeMessage: formData.applicationCenterWelcomeMessage.trim() || '探索BISHENG的智能体',
+            applicationCenterDescription: formData.applicationCenterDescription.trim() || '您可以在这里选择需要的智能体来进行生产与工作~',
             maxTokens: formData.maxTokens || 15000,
         };
 

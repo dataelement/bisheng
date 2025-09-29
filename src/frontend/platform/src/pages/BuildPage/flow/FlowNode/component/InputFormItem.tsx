@@ -376,7 +376,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             {errors.options && <p className="text-red-500 text-sm">{errors.options}</p>}
         </div>
         <div className="flex items-center space-x-2">
-            <Label className="bisheng-label">允许多选</Label>
+            <Label className="bisheng-label">{t('allowMultipleSelect')}</Label>
             <Switch
                 checked={formData.allowMultiple}
                 onCheckedChange={(checked) => setFormData({ ...formData, allowMultiple: checked })}
@@ -416,20 +416,20 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         </div>
 
         <div className="flex items-center space-x-2">
-            <Label className="bisheng-label">允许上传多个文件</Label>
+            <Label className="bisheng-label">{t('allowUploadMultipleFiles')}</Label>
             <Switch
                 checked={formData.isMultiple}
                 onCheckedChange={(checked) => setFormData({ ...formData, isMultiple: checked })}
             />
         </div>
         <FileTypeSelect data={{
-            label: "上传文件类型",
+            label: t('uploadFileTypes'),
             value: formData.fileType,
         }} onChange={(fileType) => setFormData({ ...formData, fileType })} />
         <div>
             <Label className="flex items-center bisheng-label">
-                临时知识库名称
-                <QuestionTooltip content={'文件将会上传到以此命名的临时知识库中，可在文档知识库问答、助手等节点中使用'} />
+                {t('tempKnowledgeBaseName')}
+                <QuestionTooltip content={t('tempKnowledgeBaseNameTip')} />
             </Label>
             <Input
                 className={`mt-2 ${errors.variableName ? "border-red-500" : ""}`}
@@ -443,8 +443,8 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
 
         <div>
             <Label className="flex items-center bisheng-label">
-                文件内容变量名称
-                <QuestionTooltip content={'文件解析结果全文将会存储在此变量中，使用时请注意可能会超出模型上下文长度'} />
+                {t('fileContentVarName')}
+                <QuestionTooltip content={t('fileContentVarTip')} />
             </Label>
             <Input
                 className={`mt-2 ${errors.filecontent ? "border-red-500" : ""}`}
@@ -462,7 +462,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             data={
                 {
                     min: 0,
-                    label: "文件内容长度上限",
+                    label: t('fileContentMaxLength'),
                     value: formData.fileContentSize,
                 }
             }
@@ -470,8 +470,8 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         />
         <div>
             <Label className="flex items-center bisheng-label">
-                文件路径变量名称
-                <QuestionTooltip content={'文件路径将会存储在此变量中，后续可在代码节点中使用'} />
+                {t('filePathVarName')}
+                <QuestionTooltip content={t('filePathVarTip')} />
             </Label>
             <Input
                 className={`mt-2 ${errors.filepath ? "border-red-500" : ""}`}
@@ -484,8 +484,8 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         </div>
         {formData.fileType !== 'file' && <div>
             <Label className="flex items-center bisheng-label">
-                上传图片文件
-                <QuestionTooltip content={'提取上传文件中的图片文件，当助手或大模型节点使用多模态大模型时，可传入此图片。'} />
+                {t('uploadImageFile')}
+                <QuestionTooltip content={t('uploadImageFileTip')} />
             </Label>
             <Input
                 className={`mt-2 ${errors.imageFile ? "border-red-500" : ""}`}

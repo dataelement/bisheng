@@ -34,6 +34,7 @@ import CollapseChat from './CollapseChat';
 import FileFormWrapper from './Files/FileFormWrapper';
 import SendButton from './SendButton';
 import StopButton from './StopButton';
+import SameSopSpan, { sameSopLabelState } from './SameSopSpan';
 
 const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
   const submitButtonRef = useRef<HTMLButtonElement>(null);
@@ -71,12 +72,13 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
   });
 
   const { data: bsConfig } = useGetBsConfig()
+  const [sameSopLabel] = useRecoilState(sameSopLabelState)
   const { handlePaste, handleKeyDown, handleCompositionStart, handleCompositionEnd } = useTextarea({
     textAreaRef,
     submitButtonRef,
     setIsScrollable,
     disabled: !!(requiresKey ?? false),
-    placeholder: isLingsi ? (bsConfig?.linsightConfig?.input_placeholder || '请输入你的任务目标，然后交给 BISHENG 灵思') : bsConfig?.inputPlaceholder
+    placeholder: isLingsi ? (sameSopLabel ? '请输入与此案例相似的目标' : bsConfig?.linsightConfig?.input_placeholder || localize('com_linsight_input_placeholder')) : bsConfig?.inputPlaceholder
   });
 
   const {
@@ -205,7 +207,7 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
         isLingsi && navigator('/linsight/new')
       })}
       className={cn(
-        'mx-auto flex flex-row gap-3 pl-2 transition-all duration-200 last:mb-2',
+        'mx-auto flex flex-row gap-3 transition-all duration-200 last:mb-2',
         maximizeChatSpace ? 'w-full max-w-full' : 'md:max-w-2xl xl:max-w-3xl',
       )}
     >
@@ -241,6 +243,9 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
           {/* 操作已添加的对话 */}
           {/* <TextareaHeader addedConvo={addedConvo} setAddedConvo={setAddedConvo} /> */}
           {/* {bsConfig?.fileUpload.enabled && */}
+          {/* 做同款 */}
+          {isLingsi && <SameSopSpan></SameSopSpan>}
+
           <FileFormWrapper
             accept={accept}
             fileTip={!isLingsi}
@@ -343,12 +348,12 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
               <div className='w-0.5 h-3 bg-[#4A5AA1] absolute -rotate-45'></div>
               <div className='size-1.5 rounded-full bg-[#4A5AA1] absolute bottom-0 left-0.5'></div>
             </div>
-            大模型结合业务指导手册自主规划并完成复杂任务
+            {localize('com_linsight_tagline')}
           </p>
           {bsConfig?.linsight_invitation_code &&
             <div className='flex gap-4 items-center pr-6'>
-              <span className='text-xs text-gray-500'>剩余任务次数： {count}次</span>
-              {!count && <Button size="sm" className='h-6 text-xs' onClick={() => setShowCode(true)}>去激活</Button>}
+              <span className='text-xs text-gray-500'>{localize('com_linsight_remaining_times', { count })}</span>
+              {!count && <Button size="sm" className='h-6 text-xs' onClick={() => setShowCode(true)}>{localize('com_linsight_activate')}</Button>}
             </div>
           }
         </div>

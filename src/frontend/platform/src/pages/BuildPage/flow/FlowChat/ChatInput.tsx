@@ -259,11 +259,11 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     // 接受 ws 消息
     const handleWsMessage = (data) => {
         if (data.category === 'error') {
-            const { code, message } = data.message
+            const { status_code, status_message, data: params } = data.message
             setInputLock({ locked: true, reason: '' })
 
             // 记录
-            const errorMsg = code == 500 ? message : t(`errors.${code}`, { type: message })
+            const errorMsg = status_code == 500 ? status_message : t(`errors.${status_code}`, params)
             addNotification({
                 type: 'error',
                 title: '运行异常',
