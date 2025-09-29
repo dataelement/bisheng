@@ -1,3 +1,4 @@
+import copy
 import json
 import time
 from datetime import datetime
@@ -8,6 +9,7 @@ from langchain_core.outputs import ChatGenerationChunk
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel, Field
+from typing_extensions import Self
 
 from bisheng_langchain.linsight.const import TaskMode, ExecConfig
 from bisheng_langchain.linsight.event import BaseEvent
@@ -256,7 +258,10 @@ class LinsightAgent(BaseModel):
         # 先修改任务的上下文状态
         await self.task_manager.remake_task_history(prompt, response, step_info)
 
-        # 从某个任务某个步骤开始执行
-        task_id = step_info['step_info']['task_id']
-        if task_id not in self.task_manager.task_map:
-            raise Exception(f"未找到任务ID对应的任务: {task_id}")
+        async for one in self.ainvoke_to_end(""):
+            yield one
+
+    async def copy_agent(self) -> Self:
+        new_agent = copy.deepcopy(self)
+        new_agent.exec_config.debug_id = f"{self.exec_config.debug_id}_{time.time()}"
+        return new_agent

@@ -76,10 +76,10 @@ async def get_linsight_agent_depend_local():
         "search_files": {"root_path": root_path},
         "search_text_in_file": {"root_path": root_path},
         "read_text_file": {"root_path": root_path},
-        "write_text_file": {"root_path": root_path},
+        "add_text_to_file": {"root_path": root_path},
         "replace_file_lines": {"root_path": root_path},
     })
-    query = "分析该目录下的简历文件，挑选出符合要求的简历。要求包括：python代码能力强，有大模型相关项目经验，有热情、主动性高"
+    query = "分析该目录下的简历文件(md或txt)，挑选出符合要求的简历。要求包括：python代码能力强，有大模型相关项目经验，有热情、主动性高"
     agent = LinsightAgent(llm=chat, query=query, tools=used_tools, file_dir=root_path,
                           task_mode=TaskMode.REACT.value,
                           exec_config=ExecConfig(debug=True, debug_id="test"))
@@ -109,12 +109,12 @@ async def async_main():
     print(f"first sop: {sop}")
 
     # 反馈sop
-    feedback = "需要补充更多关于秦始皇兵马俑的历史背景信息"
-    feedback_sop = ""
-    async for one in agent.feedback_sop(sop, feedback, []):
-        feedback_sop += one.content
-    print(f"feedback sop: {feedback_sop}")
-    sop = feedback_sop
+    # feedback = "需要补充更多关于秦始皇兵马俑的历史背景信息"
+    # feedback_sop = ""
+    # async for one in agent.feedback_sop(sop, feedback, []):
+    #     feedback_sop += one.content
+    # print(f"feedback sop: {feedback_sop}")
+    # sop = feedback_sop
 
     task_info = await agent.generate_task(sop)
     print(f"task_info: {task_info}")
@@ -139,87 +139,125 @@ async def only_exec_task():
     agent = await get_linsight_agent_depend_local()
     # agent = await get_linsight_agent_depend_bisheng()
 
-    sop = """标准操作流程（SOP）：  
-基于目录简历筛选大模型岗位候选人
+    sop = """# 指导手册：简历筛选与分析
+
+## 概述
+### 背景和适用场景
+本指导手册适用于从指定目录下的简历文件（md或txt格式）中筛选出符合特定要求的简历。筛选条件包括：Python代码能力强、有大模型相关项目经验、有热情和主动性高。
+
+### 目标
+通过自动化流程，快速筛选出符合条件的简历，并将结果以Markdown格式输出，便于用户查看和进一步处理。
 
 ---
 
-**1. 问题概述**  
-本流程用于在指定目录下，从所有txt格式的简历文件中，自动筛选出满足如下岗位能力要求的候选人：  
-- Python代码能力强  
-- 有大模型相关项目经验  
-- 具备热情、主动性高等软素质  
-适用于批量简历文件筛查，输出筛选结果报告。
+## 所需工具和资源
+- **工具**：
+  - @search_files@：搜索目录下的md或txt文件。
+  - @read_text_file@：读取文件内容。
+  - @search_text_in_file@：在文件中搜索关键词。
+  - @add_text_to_file@：将筛选结果写入输出文件。
+- **文件**：
+  - 用户提供的简历文件存储路径：@简历文件储存信息：{'文件储存在语义检索库中的id':'{id}','文件储存地址':'{文件路径}'}@
+- **知识库**：无。
 
 ---
 
-**2. 所需的工具和资源**  
-- @list_files：用于列出目录下所有txt文件  
-- @read_text_file：用于读取简历内容  
-- @search_text_in_file：辅助定位关键词  
-- @write_text_file：生成和写入筛选结果  
-**最佳实践：**优先批量处理文件，高效检索软硬技能，多维度关键词搜索。
+## 步骤说明
+
+### 步骤概述
+#### 本步骤目标
+筛选出符合要求的简历文件，并将结果记录到输出文件中。
+
+#### 本步骤交付结果
+- 符合条件的简历文件名及其路径。
+- 输出文件：筛选结果的Markdown文件。
+
+#### 依赖前序步骤
+无。
+
+#### 拆解为多个互不影响的子步骤执行
+1. 搜索目录下的md或txt文件。
+2. 逐个读取文件内容并分析是否符合筛选条件。
+3. 将符合条件的文件信息写入输出文件。
 
 ---
 
-**3. 步骤说明**
+### 步骤详情
 
-1. 使用@list_files获取指定目录下所有*.txt简历文件路径。
-2. 对于每个txt简历文件：  
-   a. 利用@read_text_file整段读取简历内容。  
-   b. 分别搜索硬性条件关键词，例如“Python”，“编程”，“大模型”，“LLM”，“NLP”等，判断是否具备技术要求（可通过@search_text_in_file辅助确认）。  
-   c. 搜索软性素质相关关键词如“热情”、“主动”、“自我驱动”、“积极”等。  
-3. 对所有满足上述三项筛选条件的简历，收集关键信息（如文件名、命中条件摘要）。
-4. 结果输出：将筛选通过简历的关键信息，以Markdown格式写入到筛选报告（如筛选结果.md），便于后续查阅。
-5. 最终输出“筛选结果.md”文件即为筛查结果报告。
+#### （1）搜索目录下的md或txt文件
+- **目标**：找到目录下的所有md或txt文件。
+- **操作**：
+  ```python
+  result = search_files(directory_path="简历文件储存信息['文件储存地址']", pattern=".*\.(md|txt)$", max_depth=5)
+  ```
+- **交付结果**：符合条件的文件列表。
+
+#### （2）逐个读取文件内容并分析是否符合筛选条件
+- **目标**：判断文件内容是否符合筛选条件。
+- **操作**：
+  1. 使用`read_text_file`工具读取文件内容：
+     ```python
+     file_content = read_text_file(file_path="文件路径", start_line=1, num_lines=250)
+     ```
+  2. 使用`search_text_in_file`工具搜索关键词：
+     ```python
+     python_result = search_text_in_file(file_path="文件路径", keyword="Python")
+     model_result = search_text_in_file(file_path="文件路径", keyword="大模型")
+     passion_result = search_text_in_file(file_path="文件路径", keyword="热情")
+     ```
+  3. 判断是否同时满足三个条件：
+     ```python
+     if python_result["match_count"] > 0 and model_result["match_count"] > 0 and passion_result["match_count"] > 0:
+         # 符合条件
+     ```
+
+#### （3）将符合条件的文件信息写入输出文件
+- **目标**：将筛选结果写入Markdown文件。
+- **操作**：
+  ```python
+  add_text_to_file(file_path="筛选结果.md", content=f"- {文件名}\n")
+  ```
 
 ---
 
-**示例输出结构（Markdown）**  
-```markdown
-# 简历筛选结果
-
-## 满足条件的候选人列表
-
-### 1. 文件名：resume_zhangsan.txt
-- 技能：Python、NLP、大模型项目
-- 软素质：热情、主动
-
-### 2. 文件名：resume_lisi.txt
-- 技能：Python、LLM开发
-- 软素质：自我驱动、积极
-...
-```
+### 注意事项
+- 文件数量较多时，建议分批处理以提高效率。
+- 关键词匹配可能存在误判，需根据实际情况调整关键词。
+- 输出文件需清晰标注筛选条件和结果。
 
 ---
 
-**注意事项**  
-- 关键词匹配可适当使用同义词扩展，以防遗漏。  
-- 文件处理应确保不会丢失原始简历。  
-- 报告内容简明，利于人工后续甄别。
+## 总结
+通过本指导手册，用户可以快速筛选出符合特定要求的简历文件，并将结果以Markdown格式输出。整个流程自动化程度高，易于扩展和修改，适用于类似的文件筛选任务。"""
+    task_info = [{
+        'thought': '第一步是搜索目录下的md或txt文件，这是后续分析的基础。此步骤使用search_files工具，参数包括目录路径和正则表达式模式。无需前置步骤输入。',
+        'step_id': 'step_1', 'profile': '搜索简历文件', 'target': '找到目录下的所有md或txt文件',
+        'workflow': "使用search_files工具，参数为directory_path='/Users/zhangguoqing/works/bisheng/src/backend/bisheng_langchain/linsight/data'，pattern='.*\\.(md|txt)$'，max_depth=5。",
+        'precautions': '确保目录路径正确，避免遗漏文件。', 'input': ['query'], 'node_loop': False,
+        'id': '22103c72a2094919885c20b38228bcbe', 'next_id': ['ef7093d77f96403dab83dcceb51b41a6'],
+        'display_target': '找到目录下的所有md或txt文件',
+        'sop': "使用search_files工具，参数为directory_path='/Users/zhangguoqing/works/bisheng/src/backend/bisheng_langchain/linsight/data'，pattern='.*\\.(md|txt)$'，max_depth=5。"},
+        {
+            'thought': '第二步是逐个读取文件内容并分析是否符合筛选条件。此步骤需要从step_1获取文件列表，然后使用read_text_file和search_text_in_file工具进行关键词匹配。每个文件需独立处理。',
+            'step_id': 'step_2', 'profile': '分析文件内容', 'target': '判断文件内容是否符合筛选条件',
+            'workflow': "1. 遍历step_1返回的文件列表；2. 使用read_text_file读取文件内容；3. 使用search_text_in_file分别搜索关键词'Python'、'大模型'、'热情'；4. 判断是否同时满足三个条件。",
+            'precautions': '注意文件数量较多时分批处理，避免内存占用过高；关键词匹配可能存在误判，需根据实际情况调整。',
+            'input': ['step_1'], 'node_loop': True, 'id': 'ef7093d77f96403dab83dcceb51b41a6',
+            'next_id': ['26ca8c05841244f19c66f6412569ee05'], 'display_target': '判断文件内容是否符合筛选条件',
+            'sop': "1. 遍历step_1返回的文件列表；2. 使用read_text_file读取文件内容；3. 使用search_text_in_file分别搜索关键词'Python'、'大模型'、'热情'；4. 判断是否同时满足三个条件。"},
+        {
+            'thought': '第三步是将符合条件的文件信息写入输出文件。此步骤需要从step_2获取符合条件的文件名及其路径，并使用add_text_to_file工具将结果追加到Markdown文件中。',
+            'step_id': 'step_3', 'profile': '记录筛选结果', 'target': '将符合条件的文件信息写入Markdown文件',
+            'workflow': "1. 遍历step_2返回的符合条件文件列表；2. 使用add_text_to_file工具，参数为file_path='筛选结果.md'，content='- {文件名}\\n'。",
+            'precautions': '确保输出文件清晰标注筛选条件和结果，避免重复写入。', 'input': ['step_2'],
+            'node_loop': False, 'id': '26ca8c05841244f19c66f6412569ee05',
+            'display_target': '将符合条件的文件信息写入Markdown文件',
+            'sop': "1. 遍历step_2返回的符合条件文件列表；2. 使用add_text_to_file工具，参数为file_path='筛选结果.md'，content='- {文件名}\\n'。"}]
 
-（本SOP适用于批量文本简历基于技术与素质条件的快速筛查任务）"""
-    task_info = [
-        {'step_id': 'step_1', 'description': '获取指定目录下所有txt格式的简历文件路径。', 'profile': '文件检索机器人',
-         'target': '列出/Users/zhangguoqing/works/bisheng/src/backend/bisheng_langchain/linsight/data下的所有txt格式简历文件路径',
-         'sop': '使用@list_files工具，检索所给目录下所有txt文件，返回完整路径列表。',
-         'prompt': '请使用@list_files工具列出/Users/zhangguoqing/works/bisheng/src/backend/bisheng_langchain/linsight/data目录下所有txt后缀简历文件的路径。',
-         'input': ['query'], 'node_loop': False, 'id': 'c984c953e8fd4c4bbee14d6090cf8718',
-         'next_id': ['85e43a1507b94ffabf7195f5559a9209']},
-        {'step_id': 'step_2', 'description': '批量读取每个简历文件内容并筛查是否符合岗位要求，收集通过的简历关键信息。',
-         'profile': '简历筛查机器人',
-         'target': '判断每份简历是否同时符合技术与软素质要求，并汇总关键信息（文件名、命中条件等）',
-         'sop': "对step_1返回的所有txt文件，依次读取原文，划分为：\n1. 检查是否包含Python相关技能与代码经验（如‘Python’、‘编程’、‘开发’等关键词）。\n2. 检查是否有大模型、LLM、NLP、Transformer、深度学习等相关项目或经验描述。\n3. 检查内容中是否有'热情'、'主动'、'自我驱动'、'积极'等软素质词语。\n4. 对三个条件全部满足的简历，提取文件名及命中关键词说明，组织成结构化信息。\n（检索与写作合并，避免大量细节传递）",
-         'prompt': '你需要读取step_1中每个txt简历，判断：\n- 是否包含Python代码能力、NLP、大模型、LLM等关键词，并描述相关项目经验；\n- 是否具备热情、主动、自我驱动等软素质（可扩展同义表达）；\n对全部符合的简历，记录文件名、技能关键词、软素质关键词。\n返回一个用于报告的结构化信息列表。',
-         'input': ['step_1'], 'node_loop': True, 'id': '85e43a1507b94ffabf7195f5559a9209',
-         'next_id': ['380b4b7693c14568a45500c4a77f9413']},
-        {'step_id': 'step_3', 'description': '将筛查通过的简历结构化信息按Markdown格式输出为筛选结果报告。',
-         'profile': '报告生成机器人', 'target': '生成并写入筛查通过简历的报告文件（筛选结果.md）',
-         'sop': '根据step_2输出的信息，整理并生成符合指定模板的Markdown格式报告：\n1. 标题：简历筛选结果。\n2. 下设‘满足条件的候选人列表’，每个候选人包含文件名、技能命中、软素质命中。\n3. 调用@write_text_file将该内容写入‘筛选结果.md’。',
-         'prompt': '将step_2中收集到的通过简历关键信息，按如下Markdown格式生成报告内容，并写入筛选结果.md：\n# 简历筛选结果\n## 满足条件的候选人列表\n### 1. 文件名：xxx\n- 技能：xxx\n- 软素质：xxx\n...',
-         'input': ['step_2'], 'node_loop': False, 'id': '380b4b7693c14568a45500c4a77f9413'}]
-
-    async for event in agent.ainvoke(task_info, sop):
+    example_sop = ""
+    agent.sop = sop
+    agent.tasks = task_info
+    async for event in agent.ainvoke_to_end(sop=example_sop):
         if isinstance(event, NeedUserInput):
             print("============ need user input ============")
             user_input = input(f"需要用户输入，原因：{event.call_reason} (任务ID: {event.task_id}): ")
@@ -230,10 +268,35 @@ async def only_exec_task():
             print(f"============ task end ============ {event}")
         elif isinstance(event, ExecStep):
             print(f"============ exec step ============ {event}")
-    all_task_info = await agent.get_all_task_info()
-    print(all_task_info)
+    while True:
+        user_input = input("输入exit退出：")
+        if user_input == "exit":
+            break
+        else:
+            await dispatch_user_input(agent, user_input)
+
+
+async def dispatch_user_input(agent, user_input):
+    if user_input.startswith("test_copy"):
+        new_agent = await agent.copy_agent()
+        print(new_agent)
+    elif user_input.startswith("test_new_agent"):
+        prompt = input("请输入prompt：")
+        response = input("请输入response：")
+        new_agent = await agent.copy_agent()
+        async for event in new_agent.ainvoke_by_prompt(prompt, response):
+            if isinstance(event, NeedUserInput):
+                print("============ need user input ============")
+                user_input = input(f"需要用户输入，原因：{event.call_reason} (任务ID: {event.task_id}): ")
+                await agent.continue_task(event.task_id, user_input)
+            elif isinstance(event, TaskStart):
+                print(f"============ task start ============ {event}")
+            elif isinstance(event, TaskEnd):
+                print(f"============ task end ============ {event}")
+            elif isinstance(event, ExecStep):
+                print(f"============ exec step ============ {event}")
 
 
 if __name__ == '__main__':
-    asyncio.run(async_main())
-    # asyncio.run(only_exec_task())
+    # asyncio.run(async_main())
+    asyncio.run(only_exec_task())

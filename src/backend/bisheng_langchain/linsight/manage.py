@@ -178,7 +178,7 @@ class TaskManage(BaseModel):
             return f"tool {name} exec error, something went wrong: {str(e)}", False
         finally:
             end_time = time.time()
-            print(f"tool {name} exec time: {end_time - start_time:.2f} seconds")
+            print(f"tool {name} exec time: {end_time - start_time:.5f} seconds")
 
     @classmethod
     def completion_task_tree_info(cls, original_task: list[dict]) -> list[dict]:

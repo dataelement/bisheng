@@ -19,15 +19,31 @@ class ReactTask(BaseTask):
         history_str = ""
         tool_messages = []
         remain_messages = []
-        for one in self.history:
-            history_str += "\n" + one.content
-            if isinstance(one, ToolMessage) or "tool_calls" in one.additional_kwargs:
-                tool_messages.append(one)
+        all_tool_messages = []
+        i = 0
+        while i < len(self.history):
+            message = self.history[i]
+            if isinstance(message, AIMessage) and "tool_calls" in message.additional_kwargs:
+                if i + 1 < len(self.history):
+                    one = self.history[i + 1]
+                    if (isinstance(one, ToolMessage) and
+                            one.tool_call_id == message.additional_kwargs["tool_calls"][0]["id"]):
+                        message = json.loads(message.content)
+                        message["观察"] = one.content
+                        message["结束"] = one.additional_kwargs.get("is_end", False)
+                        all_tool_messages.append(message)
+                        history_str += "\n" + json.dumps(message, ensure_ascii=False, indent=2)
+                        i += 1
+                    else:
+                        raise Exception("AIMessage with tool_calls should be followed by ToolMessage")
+            elif isinstance(message, ToolMessage):
+                raise Exception("ToolMessage should be after AIMessage with tool_calls")
             else:
-                remain_messages.append(one)
+                history_str += "\n" + message.content
+                remain_messages.append(message)
+            i += 1
 
-        all_tool_messages_str = json.dumps([json.loads(one.content) for one in tool_messages], ensure_ascii=False,
-                                           indent=2)
+        all_tool_messages_str = json.dumps(all_tool_messages, ensure_ascii=False, indent=2)
         if len(encode_str_tokens(all_tool_messages_str)) > self.exec_config.tool_buffer:
             messages_str = ''
             for one in self.history:

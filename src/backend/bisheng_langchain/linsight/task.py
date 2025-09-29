@@ -212,7 +212,7 @@ class BaseTask(BaseModel):
                 return file_content
         else:
             # 否则获取中间过程产生的文件内容, 不包含用户上传的文件
-            ignore_files = ";".join(self.file_list)
+            ignore_files = ";".join(self.file_list) if self.file_list else ""
 
         all_files = await self._get_all_files(self.file_dir)
         for one_file in all_files:
