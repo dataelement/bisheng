@@ -14,6 +14,11 @@ export default function DownloadResultFileBtn({ file, onDownloadFile }) {
         })
     }
 
+    const handleDownLoad = (e, type) => {
+        e.stopPropagation();
+        // loading
+    }
+
     if (!isMd) return <Button variant="ghost" className=' w-6 h-6 p-0'>
         <Download size={16} onClick={(e) => {
             e.stopPropagation();
@@ -25,6 +30,7 @@ export default function DownloadResultFileBtn({ file, onDownloadFile }) {
     </Button>
 
     return <DropdownMenu>
+        {/* tooltip */}
         <DropdownMenuTrigger asChild>
             <span>
                 <Download size={16} className='text-gray-500' />
@@ -37,13 +43,13 @@ export default function DownloadResultFileBtn({ file, onDownloadFile }) {
                     Markdown
                 </div>
             </DropdownMenuItem>
-            <DropdownMenuItem className='select-item text-sm font-normal' onClick={(e) => handleClick(e, 'pdf')}>
+            <DropdownMenuItem className='select-item text-sm font-normal' onClick={(e) => handleDownLoad(e, 'pdf')}>
                 <FileIcon type={'pdf'} className='size-5' />
                 <div className='w-full flex gap-2 items-center' >
                     PDF
                 </div>
             </DropdownMenuItem>
-            <DropdownMenuItem className='select-item text-sm font-normal' onClick={(e) => handleClick(e, 'docx')}>
+            <DropdownMenuItem className='select-item text-sm font-normal' onClick={(e) => handleDownLoad(e, 'docx')}>
                 <FileIcon type={'docx'} className='size-5' />
                 <div className='w-full flex gap-2 items-center' >
                     Docx
