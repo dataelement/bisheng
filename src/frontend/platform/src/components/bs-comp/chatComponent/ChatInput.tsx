@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
 import { CirclePause } from "lucide-react";
+import SpeechToTextComponent from "@/components/voiceFunction/speechTotext";
 
 export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend, onClickClear }) {
     const { toast } = useToast()
@@ -279,6 +280,14 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
 
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
         <div className={`relative ${clear && 'pl-9'}`}>
+            {/* 语音转文字 */}
+            <SpeechToTextComponent onChange={(text) => {
+                if (!showWhenLocked && inputLock.locked) return;
+                if (!inputRef.current) return;
+                inputRef.current.value = text || ''
+                const event = new Event('input', { bubbles: true, cancelable: true });
+                inputRef.current.dispatchEvent(event);
+            }} />
             {/* form */}
             {
                 formShow && <div className="relative">

@@ -14,6 +14,8 @@ import useFlowStore from "../flowStore";
 import ChatFiles from "./ChatFiles";
 import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
+const GuideQuestionsAny = GuideQuestions as any;
+import SpeechToTextComponent from "@/components/voiceFunction/speechTotext";
 
 export const FileTypes = {
     ALL: ['.PNG', '.JPEG', '.JPG', '.BMP', '.PDF', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.DOCX', '.PPT', '.PPTX'],
@@ -34,6 +36,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
 
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
 
+    const __store: any = useMessageStore() as any
     const {
         messages,
         hisMessages,
@@ -48,7 +51,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         destory,
         insetNodeRun,
         setShowGuideQuestion
-    } = useMessageStore()
+    } = __store
 
     const currentChatIdRef = useRef(null)
     const inputRef = useRef(null)
@@ -468,9 +471,11 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     const { fileUploading, getFileIds, loadingChange } = useFileLoading(inputLock.locked)
 
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
+        
         <div className={`relative pr-4 ${clear && 'pl-9'}`}>
+       
             {/* 引导问题 */}
-            <GuideQuestions
+            <GuideQuestionsAny
                 ref={questionsRef}
                 locked={inputLock.locked}
                 onClick={handleClickGuideWord}
@@ -481,6 +486,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                     <Button className="rounded-full" disabled={restarted} variant="ghost" size="icon" onClick={handleRestartClick}><RefreshCw size={18} /></Button>
                 </Tip>
             </div>
+        
             {/* form switch */}
             <div className="flex absolute left-3 top-4 z-10">
                 {
@@ -490,6 +496,17 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                     ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}></FormIcon></div>
                 }
             </div>
+            {/* 语音转文字 */}
+            <div className={` ${!inputLock.locked && 'mr-4'}`}>
+            <SpeechToTextComponent onChange={(text) => {
+                if (inputLock.locked) return
+                if (!inputRef.current) return
+                inputRef.current.value = text || ''
+                const event = new Event('input', { bubbles: true, cancelable: true });
+                inputRef.current.dispatchEvent(event);
+            }} />
+            </div>
+          
             {/* 附件 */}
             {!inputLock.locked && <ChatFiles accepts={accepts} v={location.href.indexOf('/chat/flow/') === -1 ? 'v1' : 'v2'} onChange={loadingChange} />}
             {/* send */}

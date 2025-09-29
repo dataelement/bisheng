@@ -4,6 +4,7 @@ import { Button } from "@/components/bs-ui/button";
 import { copyTrackingApi, likeChatApi } from "@/controllers/API";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
 
 const enum ThumbsState {
     Default = 0,
@@ -11,7 +12,7 @@ const enum ThumbsState {
     ThumbsDown
 }
 
-export default function MessageButtons({ mark = false, id, onCopy, data, onUnlike, onMarkClick }) {
+export default function MessageButtons({ mark = false, id, onCopy, data, onUnlike, onMarkClick, text = '' }) {
     const { t } = useTranslation()
     const [state, setState] = useState<ThumbsState>(data)
     const [copied, setCopied] = useState(false)
@@ -43,6 +44,12 @@ export default function MessageButtons({ mark = false, id, onCopy, data, onUnlik
             <FlagIcon width={12} height={12} className="cursor-pointer" />
             <span>{t('addQa')}</span>
         </Button>}
+        {true && (
+            <AudioPlayComponent
+                messageId={String(id)}
+                msg={text}
+            />
+        )}
         <ThunmbIcon
             type='copy'
             className={`cursor-pointer ${copied && 'text-primary hover:text-primary'}`}
