@@ -10,9 +10,10 @@ import {
     Check, ChevronDown,
     Download,
     FileText,
-    LucideLoaderCircle, Pause,
+    LucideLoaderCircle, MessageSquareText, Pause,
     Search,
     SendIcon,
+    Sparkles,
     WrenchIcon
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -388,7 +389,7 @@ const Task = ({
 };
 
 
-export const TaskFlowContent = ({ linsight }) => {
+export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
     const { status, sop, title, tasks, taskError, queueCount = 0 } = linsight
     console.log('linsight :>> ', linsight);
     const summary = linsight.output_result.answer;
@@ -460,6 +461,16 @@ export const TaskFlowContent = ({ linsight }) => {
     return (
         <div className="w-[100%] mx-auto p-5 text-gray-800 leading-relaxed overflow-y-auto h-[calc(100vh-170px)] overflow-x-hidden">
             {/* {!tasks?.length && <PlaySop content={sop} />} */}
+            {/* feedback */}
+            {showFeedBack && <div className='border border-primary/30 rounded-md p-2 bg-white'>
+                <div className='flex items-center gap-2'>
+                    <Sparkles size={18} className=' text-primary/80' />
+                    <span className='font-bold'>用户反馈</span>
+                </div>
+                <div className='max-h-24 overflow-y-auto no-scrollbar mt-2'>
+                    {linsight?.execute_feedback || '暂无用户反馈'}
+                </div>
+            </div>}
             {/* 任务 */}
             {!!tasks?.length && <div className='pl-6'>
                 <p className='text-sm text-gray-400 mt-6 mb-4'>{localize('com_sop_plan_task_path')}</p>

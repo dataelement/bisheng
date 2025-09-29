@@ -588,6 +588,7 @@
   "com_sop_task_execution_interrupted": "任务执行中断",
   "com_sop_running": "运行中...",
   "com_sop_rerun": "重新运行",
+  "com_sop_feedback_only": "仅反馈",
   "com_sop_upload_file": "上传文件",
   "com_sop_upload_file_directory": "上传文件所在目录",
   "com_sop_organize_knowledge_base": "组织知识库",

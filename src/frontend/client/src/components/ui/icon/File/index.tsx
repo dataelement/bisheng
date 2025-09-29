@@ -8,7 +8,8 @@ interface FileIconProps {
     type: FileType;
 }
 
-const FileIcon: React.FC<FileIconProps> = ({ className = '', type }) => {
+const FileIcon: React.FC<FileIconProps> = ({ className = '', type: _type }) => {
+    const type = _type.toLowerCase();
     const icons = {
         md: (
             <svg t="1750996380342" className={className} viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="13662" width="200" height="200">

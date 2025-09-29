@@ -11,7 +11,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { useToastContext } from '~/Providers';
 import { useLocalize } from '~/hooks';
-import { playDing } from '~/utils';
+import { formatStrTime, playDing } from '~/utils';
 import Markdown from '../Chat/Messages/Content/Markdown';
 import DownIcon from '../svg/DownIcon';
 import { Button } from '../ui';
@@ -36,6 +36,7 @@ const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
 
 const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) => {
     const { name, step_type, params, extra_info, output } = data;
+
     const localize = useLocalize();
     const { showToast } = useToastContext();
     // 过滤尾部hash值
@@ -202,12 +203,13 @@ const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) =>
     const Icon = iconMap[toolName] || iconMap.default;
 
     return (
-        <div className='inline-flex items-center gap-2 bg-[#F9FAFD] border rounded-full my-1.5 mb-4 px-3 py-1.5 text-muted-foreground'>
+        <div className='group relative inline-flex items-center gap-2 bg-[#F9FAFD] border rounded-full mt-4 mb-3 px-3 py-1.5 text-muted-foreground'>
             <Icon size={16} />
             <div className='flex gap-4 items-center'>
                 <span className='text-xs text-gray-600 truncate'>{displayName}</span>
                 <span className='text-xs text-[#82868C] truncate max-w-72'>{paramValue()}</span>
             </div>
+            <span className='absolute right-2 -top-4 text-xs text-[#82868C] truncate max-w-72 opacity-0 group-hover:opacity-100 transition-opacity'>{formatStrTime('2025/09/29 15:00:00', 'yy-MM-dd HH:mm')}</span>
         </div>
     )
 }
