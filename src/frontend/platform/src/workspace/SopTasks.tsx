@@ -14,7 +14,10 @@ import {
     Search,
     SendIcon,
     Sparkles,
-    WrenchIcon
+    WrenchIcon,
+    Loader2,
+    CheckCircle,
+    CircleX
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -23,6 +26,7 @@ import FileIcon from './FileIcon';
 import FilePreviewDrawer from './FilePreviewDrawer';
 import { SearchKnowledgeSheet } from './SearchKnowledgeSheet';
 import { WebSearchSheet } from './WebSearchSheet';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/bs-ui/tooltip';
 
 const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
     if (!params) return null
@@ -408,6 +412,8 @@ export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
     const [webSearchInfo, setWebSearchInfo] = useState(null)
     // 由卡片触发抽屉展开
     const [triggerDrawerFromCard, setTriggerDrawerFromCard] = useState(false)
+    // 文件导出提示
+    const [exportState, setExportState] = useState<{ loading: boolean; success: boolean; error: boolean; title: string }>({ loading: false, success: false, error: false, title: 'PDF' })
     // useFoucsInput(tasks);
 
     const mergeFiles = useMemo(() => {
@@ -436,6 +442,21 @@ export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
             URL.revokeObjectURL(link.href);
         }).catch(console.error);
     };
+
+    const handleExportOther = (e, type: 'pdf' | 'docx') => {
+        e.stopPropagation();
+        setExportState({ loading: true, success: false, error: false, title: type.toUpperCase() })
+        // TODO: 接后端导出接口后替换为真实请求
+        setTimeout(() => {
+            setExportState(prev => ({ ...prev, loading: false, success: true }))
+        }, 1500)
+        setTimeout(() => {
+            setExportState(prev => ({ ...prev, success: false, error: true }))
+        }, 3500)
+        setTimeout(() => {
+            setExportState(prev => ({ ...prev, error: false }))
+        }, 5500)
+    }
 
     if (queueCount) {
         const totalMinutes = queueCount * 8;
@@ -545,10 +566,34 @@ export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
                                     <FileIcon type={file.file_name.split('.').pop().toLowerCase()} className='size-4 min-w-4' />
                                     <span className='text-sm truncate pr-6'>{file.file_name}</span>
                                     <Button variant="ghost" className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
-                                        <Download size={16} onClick={(e) => {
-                                            e.stopPropagation();
-                                            downloadFile(file)
-                                        }} />
+                                        {String(file.file_name).toLowerCase().endsWith('.md') ? (
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <span onClick={(e) => e.stopPropagation()}>
+                                                        <Download size={16} />
+                                                    </span>
+                                                </TooltipTrigger>
+                                                <TooltipContent side='bottom' align='center' className='bg-white text-gray-800 border border-gray-200'>
+                                                    <div className='flex flex-col gap-2'>
+                                                        <div className='flex gap-2 items-center cursor-pointer hover:bg-gray-100 rounded-md p-1' onClick={(e) => { e.stopPropagation(); downloadFile(file); }}>
+                                                            <FileIcon type={'md'} className='size-5' />
+                                                            <div className='w-full flex gap-2 items-center'>Markdown</div>
+                                                        </div>
+                                                        <div className='flex gap-2 items-center rounded-md p-1 cursor-pointer hover:bg-gray-100' onClick={(e) => handleExportOther(e, 'pdf')}>
+                                                            <FileIcon type={'pdf'} className='size-5' />
+                                                            <div className='w-full flex gap-2 items-center'>PDF</div>
+                                                        </div>
+                                                        <div className='flex gap-2 items-center rounded-md p-1 cursor-pointer hover:bg-gray-100' onClick={(e) => handleExportOther(e, 'docx')}>
+                                                            <FileIcon type={'docx'} className='size-5' />
+                                                            <div className='w-full flex gap-2 items-center'>Docx</div>
+                                                        </div>
+                                                    </div>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        ) : (
+                                            <Download size={16} onClick={(e) => { e.stopPropagation(); downloadFile(file); }} />
+                                            
+                                        )}
                                     </Button>
                                 </div>
                             </div>
@@ -619,6 +664,24 @@ export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
                 })}
             >
             </FilePreviewDrawer>
+            {exportState.loading && (
+                <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-50">
+                    <Loader2 className="size-5 animate-spin text-blue-500" />
+                    <div className="text-sm text-gray-800">{exportState.title}&nbsp;正在导出，请稍后...&nbsp;&nbsp;</div>
+                </div>
+            )}
+            {exportState.success && (
+                <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-50">
+                    <CheckCircle className="size-5 text-green-500" />
+                    <div className="text-sm text-gray-800">{exportState.title}&nbsp;文件下载成功</div>
+                </div>
+            )}
+            {exportState.error && (
+                <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-50">
+                    <CircleX className="size-5 text-red-500" />
+                    <div className="text-sm text-gray-800">{exportState.title}&nbsp;导出失败</div>
+                </div>
+            )}
         </div >
     );
 };
