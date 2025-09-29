@@ -72,7 +72,7 @@ export function useTable<T extends object>(param, apiFun) {
     const [data, setData] = useState<T[]>([]);
     const [loaded, setLoaded] = useState(false);
 
-    const paramRef = useRef({});
+    const paramRef = useRef({ ...param });
 
     const requestIdRef = useRef(0); // 控制请求响应顺序
     const loadData = () => {
