@@ -3,6 +3,10 @@ import '../../markdown.css';
 import Markdown from '../Chat/Messages/Content/Markdown';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui";
 import { useLocalize } from "~/hooks";
+import { Input, Button, Label } from '~/components';
+import FileIcon from "../ui/icon/File"
+
+
 
 interface FilePreviewProps {
     // 原有方式：通过 fileId 查找文件
@@ -12,7 +16,7 @@ interface FilePreviewProps {
     currentDisplayFile?: any
 }
 
-export default function FilePreview({ files, fileId, currentDisplayFile }: FilePreviewProps) {
+export default function FilePreview({ files, fileId, currentDisplayFile, onDownloadFile }: FilePreviewProps) {
     const localize = useLocalize();
     // 获取当前文件信息
     const currentFile = useMemo(() => {
@@ -44,15 +48,32 @@ export default function FilePreview({ files, fileId, currentDisplayFile }: FileP
 
         // 对于直接文件模式，不需要 URL
         const url = `${location.origin}${file_url}`
-
+        const handleClick = (e, url) => {
+            e.stopPropagation();
+            onDownloadFile({
+                file_name: currentFile.file_name,
+                file_url: url
+            })
+        }
         switch (type) {
+            case 'xls':
+            case 'xlsx':
             case 'doc':
             case 'docx':
-            case 'md':
-                return <TxtFileViewer
-                    markdown
-                    filePath={url}
+                return <div className="flex flex-col items-center justify-center h-full">
+                <FileIcon
+                    type={type}
+                    className="w-20 h-20"
                 />
+                <div className="text-lg font-bold mt-2">{file_name}</div>
+                <div className="text-sm text-gray-500 m-4">{localize('com_preview_type_unsupported')}</div>
+                <Button variant="outline" onClick={(e) => handleClick(e, url)}>{localize('com_ui_download')}</Button>
+            </div>
+            case 'md':
+            return <TxtFileViewer
+                markdown
+                filePath={url}
+            />
             case 'csv':
                 return <TxtFileViewer
                     csv

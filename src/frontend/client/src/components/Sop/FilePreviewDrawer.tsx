@@ -89,10 +89,10 @@ export default function FilePreviewDrawer({
                                     <ChevronLeft className="h-4 w-4" />
                                 </Button>
                             )}
-
                             {/* 文件信息显示 */}
                             <div className="flex items-center space-x-3 flex-1">
                                 <div className="flex items-center space-x-3">
+
                                     {currentDisplayFile && (
                                         <FileIcon
                                             type={getFileExtension(currentDisplayFile.file_name)}
@@ -130,6 +130,7 @@ export default function FilePreviewDrawer({
                         files={files}
                         fileId={currentFileId}
                         currentDisplayFile={currentDisplayFile}
+                        onDownloadFile={downloadFile}
                     />
                 </div>
             </SheetContent>

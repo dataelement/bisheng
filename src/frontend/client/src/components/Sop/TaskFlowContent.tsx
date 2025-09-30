@@ -477,34 +477,77 @@ export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
                 </div>
             }
             {/* 结果文件 */}
+            {files && files.filter(file =>
+                // 匹配常见图片格式，可根据需求补充（如heic、tiff等）
+                /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(file.file_name)
+            ).length > 0 && (
+                    <div className="mb-5"> {/* 与下方普通文件保持间距 */}
+                        {files
+                            .filter(file => /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(file.file_name))
+                            .map(file => (
+                                <div
+                                    key={file.file_id}
+                                    className="mb-3 p-2 rounded-2xl border border-[#ebeef2] cursor-pointer"
+                                    // 点击图片可预览（复用原有预览逻辑）
+                                    onClick={() => {
+                                        setCurrentDirectFile(null);
+                                        setCurrentPreviewFileId(file.file_id);
+                                        setIsPreviewOpen(true);
+                                        setTriggerDrawerFromCard(true);
+                                    }}
+                                >
+                                    {/* 固定图片长宽：这里示例为 300x200px，可根据需求调整 */}
+                                    <div className="w-[300px] h-[200px] overflow-hidden rounded-lg bg-[#F4F6FB]">
+                                        <img
+                                            // src={file.file_url} // 用文件真实URL，替代原固定占位图
+                                            src="https://bpic.588ku.com/element_origin_min_pic/23/07/11/d32dabe266d10da8b21bd640a2e9b611.jpg!r650"
+                                            alt={file.file_name} // 增加可访问性
+                                            className="w-full h-full object-cover" // 图片填充容器，避免拉伸变形
+                                        // 加载失败时显示默认占位（可选）
+                                        // onError={(e) => {
+                                        //   e.target.src = "https://via.placeholder.com/300x200?text=Image+Load+Failed";
+                                        // }}
+                                        />
+                                    </div>
+                                </div>
+                            ))
+                        }
+                    </div>
+                )}
             {files &&
                 <div>
                     {/* <p className='text-sm text-gray-500'></p> */}
                     <div className='mt-5 flex flex-wrap gap-3'>
                         {files?.map((file) => (
-                            <div
-                                key={file.file_id}
-                                onClick={() => {
-                                    if (file.file_name.split('.').pop() === 'html') {
-                                        return window.open(`${__APP_ENV__.BASE_URL}/html?url=${encodeURIComponent(file.file_url)}`, '_blank')
-                                    }
-                                    setCurrentDirectFile(null);
-                                    setCurrentPreviewFileId(file.file_id);
-                                    setIsPreviewOpen(true);
-                                    setTriggerDrawerFromCard(true);
-                                }}
-                                className='w-[calc(50%-6px)] p-2 rounded-2xl border border-[#ebeef2] cursor-pointer'
-                            >
-                                <div className='bg-[#F4F6FB] h-24 p-4 rounded-lg overflow-hidden'>
-                                    <FileIcon type={file.file_name.split('.').pop().toLowerCase()} className='size-24 mx-auto opacity-20' />
+                            <>
+                                <div key={file.file_id} className='max-w-[80%] p-2 rounded-2xl border border-[#ebeef2] cursor-pointer'>
+                                    <img src="https://bpic.588ku.com/element_origin_min_pic/23/07/11/d32dabe266d10da8b21bd640a2e9b611.jpg!r650" alt="" />
                                 </div>
-                                <div className='relative flex pt-3 gap-2 items-center'>
-                                    <FileIcon type={file.file_name.split('.').pop().toLowerCase()} className='size-4 min-w-4' />
-                                    <span className='text-sm truncate pr-6'>{file.file_name}</span>
-                                    {/* Multi-file type download */}
-                                    <DownloadResultFileBtn file={file} onDownloadFile={downloadFile} />
+                                <div
+                                    key={file.file_id}
+                                    onClick={() => {
+                                        if (file.file_name.split('.').pop() === 'html') {
+                                            return window.open(`${__APP_ENV__.BASE_URL}/html?url=${encodeURIComponent(file.file_url)}`, '_blank')
+                                        }
+                                        setCurrentDirectFile(null);
+                                        setCurrentPreviewFileId(file.file_id);
+                                        setIsPreviewOpen(true);
+                                        setTriggerDrawerFromCard(true);
+                                    }}
+                                    className='w-[calc(50%-6px)] p-2 rounded-2xl border border-[#ebeef2] cursor-pointer'
+                                >
+                                    <div className='bg-[#F4F6FB] h-24 p-4 rounded-lg overflow-hidden'>
+                                        <FileIcon type={file.file_name.split('.').pop().toLowerCase()} className='size-24 mx-auto opacity-20' />
+                                    </div>
+                                    <div className='relative flex pt-3 gap-2 items-center'>
+                                        <FileIcon type={file.file_name.split('.').pop().toLowerCase()} className='size-4 min-w-4' />
+                                        <span className='text-sm truncate pr-6'>{file.file_name}</span>
+                                        {/* Multi-file type download */}
+                                        <DownloadResultFileBtn file={file} onDownloadFile={downloadFile} />
+                                    </div>
                                 </div>
-                            </div>
+                            </>
+
                         ))}
                     </div>
                     {/*  预览所有文件列表 */}
