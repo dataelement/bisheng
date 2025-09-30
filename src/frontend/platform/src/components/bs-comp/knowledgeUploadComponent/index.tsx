@@ -25,7 +25,7 @@ const KnowledgeUploadComponent = ({
     progressClassName = '',
     onFileChange,
     onSelectFile,
-    initialFiles = [] 
+    initialFiles = []
 }) => {
     const { t } = useTranslation()
     const { message } = useToast()
@@ -114,11 +114,11 @@ const KnowledgeUploadComponent = ({
                 error: !result.file_path
             } : pros
         )))
-        
+
         // 临时去重方式
         successFilesRef.current = successFilesRef.current.filter((pros) => pros.id !== id)
         failFilesRef.current = failFilesRef.current.filter((pros) => pros.id !== id)
-        
+
         result.file_path
             ? successFilesRef.current.push(result)
             : failFilesRef.current.push(result)
@@ -129,7 +129,7 @@ const KnowledgeUploadComponent = ({
         failFilesRef.current = failFilesRef.current.filter((pros) => pros.id !== id)
         setProgressList((list) => list.filter((pros) => pros.id !== id))
     }
- useEffect(() => {
+    useEffect(() => {
         if (initialFiles.length > 0) {
             // 将初始文件转换为组件需要的Progress格式
             const initialProgress = initialFiles.map(file => ({
@@ -159,11 +159,11 @@ const KnowledgeUploadComponent = ({
             {progressList.map((pros) =>
                 <ProgressItem
                     key={pros.id}
-                        item={{
-                            ...pros,
-                            // 优先使用fileData（回显文件），其次用原始file（新上传文件）
-                            displayFile: pros.fileData || pros.file
-                        }}
+                    item={{
+                        ...pros,
+                        // 优先使用fileData（回显文件），其次用原始file（新上传文件）
+                        displayFile: pros.fileData || pros.file
+                    }}
                     onResulte={handleUploadResult}
                     onDelete={handleDelete}
                 />
