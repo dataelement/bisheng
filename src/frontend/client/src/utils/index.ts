@@ -267,7 +267,9 @@ export const generateUUID = (length: number) => {
 
 // 取后缀名
 export function getFileExtension(filename) {
+  if (!filename) return '';
   const basename = filename.split(/[\\/]/).pop(); // 去除路径
+  if (!basename) return '';
   const match = basename.match(/\.([^.]+)$/);
   return (match ? match[1] : '').toUpperCase();
 }
