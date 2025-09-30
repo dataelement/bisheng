@@ -334,7 +334,8 @@ class BaseTask(BaseModel):
         res = []
         for one in sub_task_list:
             parent_info = self.model_dump(
-                exclude={"children", "history", "status", "target", "sop", "task_manager", "llm", "all_history"})
+                exclude={"children", "history", "status", "target", "sop", "task_manager", "llm", "all_history",
+                         "exec_config"})
             display_target = one.get("当前目标", "")
             target = f'{one.get("当前目标", "")}\n{one.get("输出方法", "")}'
             if one.get("标题层级", ""):
@@ -354,6 +355,7 @@ class BaseTask(BaseModel):
                 "task_manager": self.task_manager,
                 "llm": self.llm,
                 "display_target": display_target,
+                "exec_config": self.exec_config,
             })
             res.append(parent_info)
         return res

@@ -12,7 +12,7 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import Field, BaseModel, model_validator, ConfigDict
 
 from bisheng_langchain.linsight.const import TaskStatus, TaskMode, CallUserInputToolName, ExecConfig
-from bisheng_langchain.linsight.event import BaseEvent, GenerateSubTask
+from bisheng_langchain.linsight.event import BaseEvent
 from bisheng_langchain.linsight.react_task import ReactTask
 from bisheng_langchain.linsight.task import Task
 from bisheng_langchain.linsight.utils import generate_uuid_str
@@ -292,8 +292,6 @@ class TaskManage(BaseModel):
             task_instance.children = await task_instance.generate_sub_tasks(task_list_info)
 
             self.add_tasks(task_instance.children)
-            await self.put_event(GenerateSubTask(task_id=self.id,
-                                                 subtask=[one.get_task_info() for one in self.children]))
             task_instance.status = TaskStatus.WAITING.value
         elif step_type == "task_exec":
             # 则将此任务的状态重置为等待执行，并清理后续任务的 上下文和子任务
@@ -302,10 +300,10 @@ class TaskManage(BaseModel):
             history_index = step_info['step_info']['history_index']
             if all_history_index >= len(task_instance.all_history):
                 # 说明直接截取最新的上下文长度即可
-                task_instance.history = task_instance.history[:min(history_index, 0)]
+                task_instance.history = task_instance.history[:history_index]
             else:
-                task_instance.all_history = task_instance.all_history[:min(all_history_index, 0)]
-                task_instance.history = task_instance.history[all_history_index]
+                task_instance.all_history = task_instance.all_history[:all_history_index]
+                task_instance.history = task_instance.history[:history_index]
             new_message, _ = await task_instance.parse_react_result(response)
             task_instance.history.append(new_message)
             task_instance.status = TaskStatus.WAITING.value

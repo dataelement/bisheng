@@ -1,3 +1,4 @@
+import hashlib
 from enum import Enum
 from typing import Optional, Any
 
@@ -8,13 +9,16 @@ class PromptManage(BaseModel):
     prompt_dict: dict = Field(default_factory=dict, description='存储prompt映射到任务步骤的信息')
 
     def insert_prompt(self, prompt: str, step_type: str, step_info: Any):
-        self.prompt_dict[prompt] = {
+        md5_str = hashlib.md5(prompt.encode()).hexdigest()
+        self.prompt_dict[md5_str] = {
             "step_type": step_type,
-            "step_info": step_info
+            "step_info": step_info,
+            "prompt": prompt
         }
 
     def get_prompt_info(self, prompt: str) -> Optional[dict]:
-        return self.prompt_dict.get(prompt, None)
+        md5_str = hashlib.md5(prompt.encode()).hexdigest()
+        return self.prompt_dict.get(md5_str, None)
 
 
 class ExecConfig(BaseModel):

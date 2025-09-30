@@ -1,13 +1,20 @@
 import asyncio
+import json
+import logging
 import os
+import traceback
+from datetime import datetime
 
 from langchain_community.chat_models import ChatTongyi
+from langchain_openai.chat_models import ChatOpenAI
 from pydantic import SecretStr
 
 from bisheng_langchain.gpts.load_tools import load_tools
 from bisheng_langchain.linsight.agent import LinsightAgent
 from bisheng_langchain.linsight.const import TaskMode, ExecConfig
 from bisheng_langchain.linsight.event import NeedUserInput, TaskStart, TaskEnd, ExecStep
+
+logging.basicConfig(level=logging.DEBUG)
 
 
 async def get_linsight_agent_depend_bisheng():
@@ -19,7 +26,7 @@ async def get_linsight_agent_depend_bisheng():
     qwen_api_key = os.environ.get('qwen_api_key')
     root_path = "/Users/zhangguoqing/works/bisheng/src/backend/bisheng_langchain/linsight/data"
 
-    chat = ChatTongyi(api_key=SecretStr(qwen_api_key), model="qwen-max-latest", streaming=True,
+    chat = ChatTongyi(api_key=SecretStr(qwen_api_key), model="qwen-max", streaming=True,
                       model_kwargs={'incremental_output': True})
 
     # chat = AzureChatOpenAI(azure_endpoint="https://ai-aoai05215744ai338141519445.cognitiveservices.azure.com/",
@@ -54,8 +61,9 @@ async def get_linsight_agent_depend_local():
     cloudsway_endpoint = os.environ.get('cloudsway_endpoint')
     root_path = "/Users/zhangguoqing/works/bisheng/src/backend/bisheng_langchain/linsight/data"
 
-    chat = ChatTongyi(api_key=SecretStr(qwen_api_key), model="qwen-max-latest", streaming=True,
-                      model_kwargs={'incremental_output': True})
+    # chat = ChatTongyi(api_key=SecretStr(qwen_api_key), model="qwen-max-latest", streaming=True,
+    #                   model_kwargs={'incremental_output': True})
+    chat = ChatOpenAI(base_url="http://192.168.106.20:9451/v1", api_key="token-abc123", model="lingisht-32b")
 
     used_tools = load_tools({
         "web_search": {
@@ -74,7 +82,7 @@ async def get_linsight_agent_depend_local():
         "list_files": {"root_path": root_path},
         "get_file_details": {"root_path": root_path},
         "search_files": {"root_path": root_path},
-        "search_text_in_file": {"root_path": root_path},
+        # "search_text_in_file": {"root_path": root_path},
         "read_text_file": {"root_path": root_path},
         "add_text_to_file": {"root_path": root_path},
         "replace_file_lines": {"root_path": root_path},
@@ -86,10 +94,7 @@ async def get_linsight_agent_depend_local():
     return agent
 
 
-async def async_main():
-    # agent = await get_linsight_agent_depend_bisheng()
-    agent = await get_linsight_agent_depend_local()
-
+async def all_step_exec(agent):
     sop_template = ""
     # # 检索sop
     # sop_documents, error_msg = await SOPManageService.search_sop("基于目录简历筛选大模型岗位候选人", 3)
@@ -103,10 +108,10 @@ async def async_main():
     #     for sop in sop_documents if sop.page_content
     # ])
 
-    sop = ""
-    async for one in agent.generate_sop(sop_template):
-        sop += one.content
-    print(f"first sop: {sop}")
+    # sop = ""
+    # async for one in agent.generate_sop(sop_template):
+    #     sop += one.content
+    # print(f"first sop: {sop}")
 
     # 反馈sop
     # feedback = "需要补充更多关于秦始皇兵马俑的历史背景信息"
@@ -116,29 +121,26 @@ async def async_main():
     # print(f"feedback sop: {feedback_sop}")
     # sop = feedback_sop
 
-    task_info = await agent.generate_task(sop)
-    print(f"task_info: {task_info}")
+    # task_info = await agent.generate_task(sop)
+    # print(f"task_info: {task_info}")
 
-    async for event in agent.ainvoke(task_info, sop):
+    async for event in agent.ainvoke_to_end(""):
         if isinstance(event, NeedUserInput):
-            print("============ need user input ============")
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}============ need user input ============")
             user_input = input(f"需要用户输入，原因：{event.call_reason} (任务ID: {event.task_id}): ")
             await agent.continue_task(event.task_id, user_input)
         elif isinstance(event, TaskStart):
-            print(f"============ task start ============ {event}")
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}============ task start ============ {event}")
         elif isinstance(event, TaskEnd):
-            print(f"============ task end ============ {event}")
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}============ task end ============ {event}")
         elif isinstance(event, ExecStep):
-            print(f"============ exec step ============ {event}")
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}============ exec step ============ {event}")
 
     all_task_info = await agent.get_all_task_info()
     print(all_task_info)
 
 
-async def only_exec_task():
-    agent = await get_linsight_agent_depend_local()
-    # agent = await get_linsight_agent_depend_bisheng()
-
+async def only_exec_task(agent):
     sop = """# 指导手册：简历筛选与分析
 
 ## 概述
@@ -259,21 +261,15 @@ async def only_exec_task():
     agent.tasks = task_info
     async for event in agent.ainvoke_to_end(sop=example_sop):
         if isinstance(event, NeedUserInput):
-            print("============ need user input ============")
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}============ need user input ============")
             user_input = input(f"需要用户输入，原因：{event.call_reason} (任务ID: {event.task_id}): ")
             await agent.continue_task(event.task_id, user_input)
         elif isinstance(event, TaskStart):
-            print(f"============ task start ============ {event}")
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}============ task start ============ {event}")
         elif isinstance(event, TaskEnd):
-            print(f"============ task end ============ {event}")
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}============ task end ============ {event}")
         elif isinstance(event, ExecStep):
-            print(f"============ exec step ============ {event}")
-    while True:
-        user_input = input("输入exit退出：")
-        if user_input == "exit":
-            break
-        else:
-            await dispatch_user_input(agent, user_input)
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}============ exec step ============ {event}")
 
 
 async def dispatch_user_input(agent, user_input):
@@ -281,22 +277,42 @@ async def dispatch_user_input(agent, user_input):
         new_agent = await agent.copy_agent()
         print(new_agent)
     elif user_input.startswith("test_new_agent"):
-        prompt = input("请输入prompt：")
-        response = input("请输入response：")
+        with open("./linsightdebug/test_prompt.json", "r") as f:
+            prompt_info = json.load(f)
+            prompt = prompt_info["prompt"]
+            response = prompt_info["response"]
         new_agent = await agent.copy_agent()
         async for event in new_agent.ainvoke_by_prompt(prompt, response):
             if isinstance(event, NeedUserInput):
-                print("============ need user input ============")
+                print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}============ need user input ============")
                 user_input = input(f"需要用户输入，原因：{event.call_reason} (任务ID: {event.task_id}): ")
                 await agent.continue_task(event.task_id, user_input)
             elif isinstance(event, TaskStart):
-                print(f"============ task start ============ {event}")
+                print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}============ task start ============ {event}")
             elif isinstance(event, TaskEnd):
-                print(f"============ task end ============ {event}")
+                print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}============ task end ============ {event}")
             elif isinstance(event, ExecStep):
-                print(f"============ exec step ============ {event}")
+                print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}============ exec step ============ {event}")
+
+
+async def main():
+    agent = await get_linsight_agent_depend_local()
+    # 执行群流程
+    await all_step_exec(agent)
+
+    # 只执行任务
+    # await only_exec_task(agent)
+    while True:
+        user_input = input("输入exit退出：")
+        if user_input == "exit":
+            break
+        else:
+            try:
+                await dispatch_user_input(agent, user_input)
+            except Exception as e:
+                traceback.print_exc()
+                print(f"处理用户输入异常: {e}")
 
 
 if __name__ == '__main__':
-    # asyncio.run(async_main())
-    asyncio.run(only_exec_task())
+    asyncio.run(main())

@@ -1,6 +1,7 @@
 import copy
 import json
 import time
+from asyncio import Queue
 from datetime import datetime
 from typing import Optional, AsyncIterator
 
@@ -24,7 +25,7 @@ class LinsightAgent(BaseModel):
     """
     file_dir: Optional[str] = Field(default="", description='Directory for storing files')
     query: str = Field(..., description='user question')
-    llm: BaseLanguageModel = Field(..., description='Language model to use for processing queries')
+    llm: Optional[BaseLanguageModel] = Field(..., description='Language model to use for processing queries')
 
     tools: Optional[list[BaseTool]] = Field(default_factory=list,
                                             description='List of langchain tools to be used by the agent')
@@ -249,7 +250,7 @@ class LinsightAgent(BaseModel):
             return
         elif step_info['step_type'] == 'generate_task':
             # 从生成任务开始
-            self.tasks = extract_json_from_markdown(response).get('steps', [])
+            self.tasks = TaskManage.completion_task_tree_info(extract_json_from_markdown(response).get('steps', []))
             self.task_manager = None
             async for one in self.ainvoke_to_end(""):
                 yield one
@@ -262,6 +263,21 @@ class LinsightAgent(BaseModel):
             yield one
 
     async def copy_agent(self) -> Self:
+        old_llm = self.llm
+        self.llm = None
+        for task in self.task_manager.task_map.values():
+            task.llm = None
         new_agent = copy.deepcopy(self)
+
+        # 恢复旧的agent的llm引用
+        self.llm = old_llm
+        for task in self.task_manager.task_map.values():
+            task.llm = old_llm
+
         new_agent.exec_config.debug_id = f"{self.exec_config.debug_id}_{time.time()}"
+        new_agent.llm = old_llm
+        for task in new_agent.task_manager.task_map.values():
+            task.llm = old_llm
+
+        new_agent.task_manager.aqueue = Queue(maxsize=50)
         return new_agent
