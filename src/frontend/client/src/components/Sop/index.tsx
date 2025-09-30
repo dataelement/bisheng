@@ -98,11 +98,13 @@ export const useLinsightData = (conversationId: string | undefined, sopId?: stri
     // Get details using sop ID
     useEffect(() => {
         if (sopId) {
+            setLoading(true);
             getCaseDetail(sopId).then(res => {
                 const { version_info, execute_tasks } = res.data
                 setVersions([])
                 setVersionId(version_info.id);
                 switchAndUpdateLinsight(version_info.id, { ...version_info, tasks: execute_tasks });
+                setLoading(false);
             })
         }
     }, [sopId])
