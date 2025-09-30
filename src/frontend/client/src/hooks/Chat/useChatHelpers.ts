@@ -239,9 +239,9 @@ const useLinsighFiles = (index) => {
                   parsing_status: 'completed',
                   // 可添加其他解析完成后的元数据
                 });
-          } else if (status === 'failed') {
+              } else if (status === 'failed') {
                 updatedFiles.delete(key);
-            showToast({ message: localize('com_file_parse_failed_auto_removed', { 0: file.filename }), status: 'error' });
+                showToast({ message: localize('com_file_parse_failed_auto_removed', { 0: file.filename }), status: 'error' });
               }
             }
           });

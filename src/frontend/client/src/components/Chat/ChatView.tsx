@@ -48,6 +48,9 @@ const ChatView = ({ index = 0 }: { index?: number }) => {
   });
 
   const [isLingsi, setIsLingsi] = useState(false);
+  useEffect(() => {
+    window.isLinsight = isLingsi
+  }, [isLingsi])
   const chatHelpers = useChatHelpers(index, conversationId, isLingsi);
   const addedChatHelpers = useAddedResponse({ rootIndex: index });
 
@@ -240,7 +243,7 @@ const Cases = forwardRef(({ t, isLingsi, setIsLingsi }, ref) => {
         if (sopid) {
           const caseItem = res.data.items.find((item: any) => item.id === Number(sopid))
           if (caseItem) {
-            // setSameSopLabel({ ...caseItem }) // Uncomment if you have this state
+            setSameSopLabel({ ...caseItem }) // Uncomment if you have this state
             setIsLingsi(true)
           }
         }

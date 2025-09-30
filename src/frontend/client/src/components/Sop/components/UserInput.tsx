@@ -61,7 +61,6 @@ export default function UserInput({ task, onSendInput }) {
     }
 
     const handleFiles = (files: File[]) => {
-        window.isLinsight = true
         files.forEach((file) => {
             const fileId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
             const abortController = new AbortController()
