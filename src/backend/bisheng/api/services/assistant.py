@@ -13,7 +13,6 @@ from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
-from bisheng.api.services.llm import LLMService
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
@@ -33,6 +32,7 @@ from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
+from bisheng.llm import LLMService
 
 
 class AssistantService(BaseService, AssistantUtils):

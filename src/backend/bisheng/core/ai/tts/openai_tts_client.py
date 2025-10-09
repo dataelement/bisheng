@@ -1,5 +1,7 @@
-import openai
 from typing import Optional, Literal
+
+import openai
+
 from ..base import BaseTTSClient
 
 
@@ -41,6 +43,6 @@ class OpenAITTSClient(BaseTTSClient):
 
         if response.response.status_code != 200:
             raise Exception(
-                f"OpenAI TTS API请求失败，状态码：{response.response.status_code}，错误信息：{response.response.text}")
+                f"OpenAI TTS API ERROR，Code：{response.response.status_code}，Message：{response.response.text}")
 
         return response.content

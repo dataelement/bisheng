@@ -1,14 +1,14 @@
-from bisheng.core.ai.asr import OpenAIASRClient, QianfanASRClient, AliyunASRClient
-from bisheng.core.ai.base import BaseASRClient, BaseTTSClient
-from bisheng.core.ai.tts import OpenAITTSClient, AliyunTTSClient, QianfanTTSClient
+from .asr import OpenAIASRClient, AliyunASRClient, AzureOpenAIASRClient
+from .base import BaseASRClient, BaseTTSClient
+from .tts import OpenAITTSClient, AliyunTTSClient, AzureOpenAITTSClient
 
 __all__ = [
     'BaseASRClient',
     'BaseTTSClient',
     'OpenAIASRClient',
-    'QianfanASRClient',
     'AliyunASRClient',
+    'AzureOpenAIASRClient',
     'OpenAITTSClient',
-    'QianfanTTSClient',
-    'AliyunTTSClient'
+    'AliyunTTSClient',
+    'AzureOpenAITTSClient',
 ]

@@ -1,10 +1,8 @@
-import asyncio
-import io
-import librosa
-import soundfile as sf
-import openai
 from typing import Optional, Union, BinaryIO
-from bisheng.core.ai.base import BaseASRClient
+
+import openai
+
+from ..base import BaseASRClient
 
 
 class OpenAIASRClient(BaseASRClient):
@@ -14,28 +12,18 @@ class OpenAIASRClient(BaseASRClient):
         self.model = kwargs.pop("model", "whisper-1")
         self.client = openai.AsyncOpenAI(api_key=api_key, **kwargs)
 
-    def sync_func(self, audio_bytes):
-        speech, sr = librosa.load(audio_bytes, sr=16000)
-
-        # sr 转成 bytes
-        audio_file = io.BytesIO()
-        sf.write(audio_file, speech, sr, format='WAV')
-
-        audio_file.seek(0)
-
-        return audio_file
-
-    async def transcribe(
+    async def _transcribe(
             self,
             audio: Union[str, bytes, BinaryIO],
             language: str = "auto",
-            model: Optional[str] = None
+            model: Optional[str] = None,
+            **kwargs
     ) -> str:
         """
         使用OpenAI Whisper API进行语音识别
 
         Args:
-            audio: 音频文件路径、音频字节数据或文件对象
+            audio: 音频文件路径、
             language: 语言代码，如 'zh', 'en'
             model: 模型名称，默认为 'whisper-1'
 
@@ -43,31 +31,12 @@ class OpenAIASRClient(BaseASRClient):
             识别的文本内容
         """
 
-        if not audio:
-            raise ValueError("Audio input is required")
-
-        if isinstance(audio, str):
-            with open(audio, 'rb') as audio_file:
-                audio_bytes = audio_file.read()
-
-        elif isinstance(audio, bytes):
-            audio_bytes = audio
-
-        elif hasattr(audio, 'read'):
-            audio_bytes = audio.read()
-
-        else:
-            raise ValueError("Invalid audio input type")
-
-        audio_file = await asyncio.to_thread(self.sync_func, audio_bytes)
-
-        if not audio_file:
-            raise ValueError("Failed to process audio input")
-
-        transcript = await self.client.audio.transcriptions.create(
-            model=model or "whisper-1",
-            file=audio_file,
-            language=language
-        )
+        with open(audio, "rb") as f:
+            transcript = await self.client.audio.transcriptions.create(
+                model=model or self.model,
+                file=f,
+                language=language,
+                **kwargs
+            )
 
         return transcript.text

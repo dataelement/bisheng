@@ -18,7 +18,6 @@ from bisheng.api.errcode.linsight import LinsightToolInitError, LinsightBishengL
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.knowledge_imp import read_chunk_text, decide_vectorstores
 from bisheng.api.services.linsight.sop_manage import SOPManageService
-from bisheng.api.services.llm import LLMService
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.services.workstation import WorkStationService
@@ -37,6 +36,7 @@ from bisheng.database.models.linsight_sop import LinsightSOPRecord
 from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.llms.custom import BishengLLM
+from bisheng.llm import LLMService
 from bisheng.settings import settings
 from bisheng.utils import util
 from bisheng.utils.embedding import decide_embeddings

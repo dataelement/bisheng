@@ -24,7 +24,6 @@ from bisheng.api.services.knowledge_imp import (
     process_file_task,
     read_chunk_text,
 )
-from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schema.knowledge import KnowledgeFileResp
@@ -62,6 +61,7 @@ from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.llm import LLMService
 from bisheng.settings import settings
 from bisheng.utils import generate_uuid
 from bisheng.utils.embedding import decide_embeddings

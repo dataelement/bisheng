@@ -2,20 +2,20 @@ import json
 import time
 from typing import List, Any
 
-from bisheng_langchain.rag.bisheng_rag_chain import BishengRetrievalQA
 from langchain_core.prompts import (ChatPromptTemplate, HumanMessagePromptTemplate,
                                     SystemMessagePromptTemplate)
 
-from bisheng.api.services.llm import LLMService
 from bisheng.chat.types import IgnoreException
 from bisheng.database.models.user import UserDao
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
+from bisheng.llm import LLMService
 from bisheng.utils.minio_client import MinioClient
 from bisheng.workflow.callback.event import OutputMsgData, StreamMsgOverData
 from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
+from bisheng_langchain.rag.bisheng_rag_chain import BishengRetrievalQA
 
 
 class RagNode(BaseNode):

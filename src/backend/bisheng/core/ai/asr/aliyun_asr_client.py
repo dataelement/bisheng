@@ -1,17 +1,9 @@
 import asyncio
-import os
-import tempfile
-import time
-from typing import Optional, Union, BinaryIO
+from typing import Optional
 
-import dashscope
-import librosa
-import soundfile as sf
 from dashscope.audio.asr import Recognition, RecognitionResult
 
 from ..base import BaseASRClient
-
-temp_dir = tempfile.gettempdir()
 
 
 class AliyunASRClient(BaseASRClient):
@@ -27,46 +19,28 @@ class AliyunASRClient(BaseASRClient):
             model=model,
             format="wav",
             sample_rate=16000,
-            callback=None
+            callback=None,
+            **kwargs
         )
 
     # 耗时操作，异步执行
-    def sync_func(self, audio, temp_file, language=None, model=None):
-        speech, sr = librosa.load(audio, sr=16000)
-
-        sf.write(temp_file, speech, sr, format='WAV')
-
-        result: RecognitionResult = self.recognition.call(temp_file, api_key=self.api_key)
-
+    def sync_func(self, temp_file, language=None, model=None):
+        result: RecognitionResult = self.recognition.call(temp_file, api_key=self.api_key, language=language,
+                                                          model=model)
         return result
 
-    async def transcribe(
+    async def _transcribe(
             self,
-            audio: Union[str, bytes, BinaryIO],
+            audio: str,
             language: Optional[str] = None,
-            model: Optional[str] = None):
-        """
-        将音频转换为文本
-        :param audio:
-        :param language:
-        :param model:
-        :return:
-        """
+            model: Optional[str] = None,
+            **kwargs
+    ) -> str:
+        result: RecognitionResult = await asyncio.to_thread(self.sync_func, audio, language, model)
+        if result.status_code != 200:
+            raise RuntimeError(
+                f"ASR request failed with status code {result.code} and message {result.message}"
+            )
 
-        temp_file = os.path.join(temp_dir, str(time.time_ns()) + ".wav")
-
-        try:
-
-            result: RecognitionResult = await asyncio.to_thread(self.sync_func, audio, temp_file, language, model)
-            if result.status_code != 200:
-                raise RuntimeError(
-                    f"ASR request failed with status code {result.code} and message {result.message}"
-                )
-
-            sentence = result.get_sentence()
-            return sentence[0]["text"]
-        except Exception as e:
-            raise e
-        finally:
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
+        sentence = result.get_sentence()
+        return sentence[0]["text"]

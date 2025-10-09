@@ -8,10 +8,10 @@ from loguru import logger
 from pydantic import BaseModel, field_validator, Field
 
 from bisheng.api.services.assistant_agent import AssistantAgent
-from bisheng.api.services.llm import LLMService
 from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
+from bisheng.llm import LLMService
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.workflow.callback.event import StreamMsgOverData
 from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler

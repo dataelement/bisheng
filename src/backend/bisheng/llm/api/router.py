@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Request, Depends, Body, Query, BackgroundTasks
+from fastapi import APIRouter, Request, Depends, Body, Query, BackgroundTasks, UploadFile, Response
 
-from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload, get_login_user, get_admin_user
 from bisheng.api.v1.schemas import resp_200, KnowledgeLLMConfig, \
-    AssistantLLMConfig, EvaluationLLMConfig, LLMServerCreateReq, WorkbenchModelConfig, UnifiedResponseModel, resp_500
+    AssistantLLMConfig, EvaluationLLMConfig, LLMServerCreateReq, WorkbenchModelConfig, UnifiedResponseModel
+from ..domain import LLMService
 
 router = APIRouter(prefix='/llm', tags=['LLM'])
 
@@ -15,9 +15,9 @@ def get_all_llm(request: Request, login_user: UserPayload = Depends(get_login_us
 
 
 @router.post('')
-def add_llm_server(request: Request, login_user: UserPayload = Depends(get_admin_user),
-                   server: LLMServerCreateReq = Body(..., description="服务提供方所有数据")):
-    ret = LLMService.add_llm_server(request, login_user, server)
+async def add_llm_server(request: Request, login_user: UserPayload = Depends(get_admin_user),
+                         server: LLMServerCreateReq = Body(..., description="服务提供方所有数据")):
+    ret = await LLMService.add_llm_server(request, login_user, server)
     return resp_200(data=ret)
 
 
@@ -29,16 +29,16 @@ def delete_llm_server(request: Request, login_user: UserPayload = Depends(get_ad
 
 
 @router.put('')
-def update_llm_server(request: Request, login_user: UserPayload = Depends(get_admin_user),
-                      server: LLMServerCreateReq = Body(..., description="服务提供方所有数据")):
-    ret = LLMService.update_llm_server(request, login_user, server)
+async def update_llm_server(request: Request, login_user: UserPayload = Depends(get_admin_user),
+                            server: LLMServerCreateReq = Body(..., description="服务提供方所有数据")):
+    ret = await LLMService.update_llm_server(request, login_user, server)
     return resp_200(data=ret)
 
 
 @router.get('/info')
-def get_one_llm(request: Request, login_user: UserPayload = Depends(get_admin_user),
-                server_id: int = Query(..., description="服务提供方唯一ID")):
-    ret = LLMService.get_one_llm(request, login_user, server_id)
+async def get_one_llm(request: Request, login_user: UserPayload = Depends(get_admin_user),
+                      server_id: int = Query(..., description="服务提供方唯一ID")):
+    ret = await LLMService.get_one_llm(request, login_user, server_id)
     return resp_200(data=ret)
 
 
@@ -63,11 +63,24 @@ async def update_workbench_llm(
         login_user: UserPayload = Depends(get_admin_user),
         config_obj: WorkbenchModelConfig = Body(..., description="模型配置对象")):
     """ 更新灵思相关的模型配置 """
-    try:
-        ret = await LLMService.update_workbench_llm(config_obj, background_tasks)
-    except Exception as e:
-        return resp_500(message=str(e))
+    ret = await LLMService.update_workbench_llm(config_obj, background_tasks)
     return resp_200(data=ret)
+
+
+@router.post('/workbench/asr')
+async def invoke_workbench_asr(request: Request, login_user: UserPayload = Depends(get_login_user),
+                               file: UploadFile = None):
+    """ 调用工作台的asr模型 将语音转为文字 """
+    text = await LLMService.invoke_workbench_asr(file)
+    return resp_200(data=text)
+
+
+@router.get('/workbench/tts')
+async def invoke_workbench_tts(request: Request, login_user: UserPayload = Depends(get_login_user),
+                               text: str = Query(..., description="需要合成的文本")):
+    """ 调用工作台的tts模型 将文字转为语音 """
+    audio_bytes = await LLMService.invoke_workbench_tts(text)
+    return Response(content=audio_bytes, media_type='audio/mp3')
 
 
 @router.get('/knowledge')

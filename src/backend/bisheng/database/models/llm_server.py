@@ -3,9 +3,9 @@ from enum import Enum
 from typing import Dict, List, Optional
 
 from sqlalchemy import CHAR, JSON, Column, DateTime, Text, UniqueConstraint, delete, text, update
-from sqlmodel import Field, select
+from sqlmodel import Field, select, col
 
-from bisheng.core.database import get_sync_db_session
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -37,6 +37,14 @@ class LLMModelType(Enum):
     LLM = 'llm'
     EMBEDDING = 'embedding'
     RERANK = 'rerank'
+    ASR = 'asr'
+    TTS = 'tts'
+
+
+class LLMModelStatus(Enum):
+    NORMAL = 0  # 正常
+    ERROR = 1  # 异常
+    UNKNOWN = 2  # 未知
 
 
 class LLMServerBase(SQLModelSerializable):
@@ -106,6 +114,19 @@ class LLMDao:
             return server
 
     @classmethod
+    async def ainsert_server_with_models(cls, server: LLMServer, models: List[LLMModel]):
+        """ 异步插入服务提供方和模型 """
+        async with get_async_db_session() as session:
+            session.add(server)
+            await session.flush()
+            for model in models:
+                model.server_id = server.id
+            session.add_all(models)
+            await session.commit()
+            await session.refresh(server)
+            return server
+
+    @classmethod
     def update_server_with_models(cls, server: LLMServer, models: List[LLMModel]):
         """ 更新服务提供方和模型 """
         with get_sync_db_session() as session:
@@ -153,6 +174,14 @@ class LLMDao:
             return session.exec(statement).first()
 
     @classmethod
+    async def aget_server_by_id(cls, server_id: int) -> Optional[LLMServer]:
+        """ 根据服务ID获取服务提供方 """
+        statement = select(LLMServer).where(LLMServer.id == server_id)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.first()
+
+    @classmethod
     def get_server_by_ids(cls, server_ids: List[int]) -> List[LLMServer]:
         """ 根据服务ID获取服务提供方 """
         statement = select(LLMServer).where(LLMServer.id.in_(server_ids))
@@ -167,11 +196,27 @@ class LLMDao:
             return session.exec(statement).first()
 
     @classmethod
+    async def aget_server_by_name(cls, server_name: str) -> Optional[LLMServer]:
+        """ 根据服务名称获取服务提供方 """
+        statement = select(LLMServer).where(LLMServer.name == server_name)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.first()
+
+    @classmethod
     def get_model_by_id(cls, model_id: int) -> Optional[LLMModel]:
         """ 根据模型ID获取模型 """
         statement = select(LLMModel).where(LLMModel.id == model_id)
         with get_sync_db_session() as session:
             return session.exec(statement).first()
+
+    @classmethod
+    async def aget_model_by_id(cls, model_id: int) -> Optional[LLMModel]:
+        """ 根据模型ID获取模型 """
+        statement = select(LLMModel).where(LLMModel.id == model_id)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.first()
 
     @classmethod
     def get_model_by_ids(cls, model_ids: List[int]) -> List[LLMModel]:
@@ -206,6 +251,15 @@ class LLMDao:
             session.commit()
 
     @classmethod
+    async def aupdate_model_status(cls, model_id: int, status: int, remark: str = ''):
+        """ 异步更新模型状态 """
+        async with get_async_db_session() as session:
+            await session.exec(
+                update(LLMModel).where(col(LLMModel.id) == model_id).values(status=status,
+                                                                            remark=remark))
+            await session.commit()
+
+    @classmethod
     def update_model_online(cls, model_id: int, online: bool):
         """ 更新模型在线状态 """
         with get_sync_db_session() as session:
@@ -221,8 +275,23 @@ class LLMDao:
             session.commit()
 
     @classmethod
+    async def adelete_server_by_id(cls, server_id: int):
+        """ 根据服务ID删除服务提供方 """
+        async with get_async_db_session() as session:
+            await session.exec(delete(LLMServer).where(col(LLMServer.id) == server_id))
+            await session.exec(delete(LLMModel).where(col(LLMModel.server_id) == server_id))
+            await session.commit()
+
+    @classmethod
     def delete_model_by_ids(cls, model_ids: List[int]):
         """ 根据模型ID删除模型 """
         with get_sync_db_session() as session:
             session.exec(delete(LLMModel).where(LLMModel.id.in_(model_ids)))
             session.commit()
+
+    @classmethod
+    async def adelete_model_by_ids(cls, model_ids: List[int]):
+        """ 根据模型ID删除模型 """
+        async with get_async_db_session() as session:
+            await session.exec(delete(LLMModel).where(LLMModel.id.in_(model_ids)))
+            await session.commit()

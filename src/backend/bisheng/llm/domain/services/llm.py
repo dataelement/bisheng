@@ -1,23 +1,27 @@
 import json
 from typing import List, Optional
 
-from fastapi import Request, BackgroundTasks
+from fastapi import Request, BackgroundTasks, UploadFile
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from loguru import logger
 
-from bisheng.api.errcode.http_error import NotFoundError
+from bisheng.api.errcode.http_error import NotFoundError, ServerError
 from bisheng.api.errcode.llm import ServerExistError, ModelNameRepeatError, ServerAddError, ServerAddAllError
+from bisheng.api.errcode.server import NoAsrModelConfigError, AsrModelConfigDeletedError, NoTtsModelConfigError, \
+    TtsModelConfigDeletedError
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig, AssistantLLMConfig, \
     EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq, WorkbenchModelConfig
 from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
+from bisheng.database.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+from bisheng.database.models.knowledge import KnowledgeState
 from bisheng.database.models.llm_server import LLMDao, LLMServer, LLMModel, LLMModelType
 from bisheng.interface.importing import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm, instantiate_embedding
+from bisheng.llm.domain.llm.asr import BishengASR
+from bisheng.llm.domain.llm.tts import BishengTTS
 from bisheng.utils.embedding import decide_embeddings
-from bisheng.database.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
-from bisheng.database.models.knowledge import KnowledgeState
 
 
 class LLMService:
@@ -44,7 +48,7 @@ class LLMService:
         return ret
 
     @classmethod
-    def get_one_llm(cls, request: Request, login_user: UserPayload, server_id: int) -> LLMServerInfo:
+    async def get_one_llm(cls, request: Request, login_user: UserPayload, server_id: int) -> LLMServerInfo:
         """ 获取一个服务提供方的详细信息 包含了key等敏感的配置信息 """
         llm = LLMDao.get_server_by_id(server_id)
         if not llm:
@@ -55,25 +59,26 @@ class LLMService:
         return LLMServerInfo(**llm.model_dump(), models=models)
 
     @classmethod
-    def add_llm_server(cls, request: Request, login_user: UserPayload, server: LLMServerCreateReq) -> LLMServerInfo:
+    async def add_llm_server(cls, request: Request, login_user: UserPayload,
+                             server: LLMServerCreateReq) -> LLMServerInfo:
         """ 添加一个服务提供方 """
-        exist_server = LLMDao.get_server_by_name(server.name)
+        exist_server = await LLMDao.aget_server_by_name(server.name)
         if exist_server:
             raise ServerExistError.http_exception()
 
         model_dict = {}
         for one in server.models:
             if one.model_name not in model_dict:
-                model_dict[one.model_name] = LLMModel(**one.dict(), user_id=login_user.user_id)
+                model_dict[one.model_name] = LLMModel(**one.model_dump(), user_id=login_user.user_id)
             else:
                 raise ModelNameRepeatError.http_exception()
 
-        db_server = LLMServer(**server.dict(exclude={'models'}))
+        db_server = LLMServer(**server.model_dump(exclude={'models'}))
         db_server.user_id = login_user.user_id
 
-        db_server = LLMDao.insert_server_with_models(db_server, list(model_dict.values()))
+        db_server = await LLMDao.ainsert_server_with_models(db_server, list(model_dict.values()))
 
-        ret = cls.get_one_llm(request, login_user, db_server.id)
+        ret = await cls.get_one_llm(request, login_user, db_server.id)
         success_models = []
         success_msg = ''
         failed_models = []
@@ -85,6 +90,11 @@ class LLMService:
                     cls.get_bisheng_llm(model_id=one.id, ignore_online=True)
                 elif one.model_type == LLMModelType.EMBEDDING.value:
                     cls.get_bisheng_embedding(model_id=one.id, ignore_online=True)
+                elif one.model_type == LLMModelType.ASR.value:
+                    await cls.get_bisheng_asr(model_id=one.id, ignore_online=True)
+                elif one.model_type == LLMModelType.TTS.value:
+                    await cls.get_bisheng_tts(model_id=one.id, ignore_online=True)
+
                 success_msg += f'{one.model_name},'
                 success_models.append(one)
             except Exception as e:
@@ -95,12 +105,12 @@ class LLMService:
 
         # 说明模型全部添加失败了
         if len(success_models) == 0 and failed_msg:
-            LLMDao.delete_server_by_id(ret.id)
+            await LLMDao.adelete_server_by_id(ret.id)
             raise ServerAddAllError.http_exception(failed_msg)
         elif len(success_models) > 0 and failed_msg:
             # 部分模型添加成功了, 删除失败的模型信息
             ret.models = success_models
-            LLMDao.delete_model_by_ids(model_ids=[one.id for one in failed_models])
+            await LLMDao.adelete_model_by_ids(model_ids=[one.id for one in failed_models])
             cls.add_llm_server_hook(request, login_user, ret)
             raise ServerAddError.http_exception(f"<{success_msg.rstrip(',')}>添加成功，{failed_msg}")
 
@@ -190,7 +200,8 @@ class LLMService:
                 cls.update_knowledge_llm(request, login_user, knowledge_llm)
 
     @classmethod
-    def update_llm_server(cls, request: Request, login_user: UserPayload, server: LLMServerCreateReq) -> LLMServerInfo:
+    async def update_llm_server(cls, request: Request, login_user: UserPayload,
+                                server: LLMServerCreateReq) -> LLMServerInfo:
         """ 更新服务提供方信息 """
         exist_server = LLMDao.get_server_by_id(server.id)
         if not exist_server:
@@ -225,7 +236,7 @@ class LLMService:
         exist_server.config = server.config
 
         db_server = LLMDao.update_server_with_models(exist_server, list(model_dict.values()))
-        new_server_info = cls.get_one_llm(request, login_user, db_server.id)
+        new_server_info = await cls.get_one_llm(request, login_user, db_server.id)
 
         # 判断是否需要重新判断模型状态
         for one in new_server_info.models:
@@ -251,6 +262,15 @@ class LLMService:
         """ 获取知识库相关的默认模型配置 """
         ret = {}
         config = ConfigDao.get_config(ConfigKeyEnum.KNOWLEDGE_LLM)
+        if config:
+            ret = json.loads(config.value)
+        return KnowledgeLLMConfig(**ret)
+
+    @classmethod
+    async def aget_knowledge_llm(cls) -> KnowledgeLLMConfig:
+        """ 获取知识库相关的默认模型配置 """
+        ret = {}
+        config = await ConfigDao.aget_config(ConfigKeyEnum.KNOWLEDGE_LLM)
         if config:
             ret = json.loads(config.value)
         return KnowledgeLLMConfig(**ret)
@@ -333,15 +353,25 @@ class LLMService:
 
     @classmethod
     def get_bisheng_llm(cls, **kwargs) -> BaseChatModel:
-        """ 获取评测功能的默认模型配置 """
+        """ 初始化毕昇llm对话模型 """
         class_object = import_by_type(_type='llms', name='BishengLLM')
         return instantiate_llm('BishengLLM', class_object, kwargs)
 
     @classmethod
     def get_bisheng_embedding(cls, **kwargs) -> Embeddings:
-        """ 获取评测功能的默认模型配置 """
+        """ 初始化毕昇embedding模型 """
         class_object = import_by_type(_type='embeddings', name='BishengEmbedding')
         return instantiate_embedding(class_object, kwargs)
+
+    @classmethod
+    async def get_bisheng_asr(cls, **kwargs):
+        """ 初始化毕昇asr模型 """
+        return await BishengASR.get_bisheng_asr(**kwargs)
+
+    @classmethod
+    async def get_bisheng_tts(cls, **kwargs):
+        """ 初始化毕昇tts模型 """
+        return await BishengTTS.get_bisheng_tts(**kwargs)
 
     @classmethod
     def update_evaluation_llm(cls, request: Request, login_user: UserPayload, data: EvaluationLLMConfig) \
@@ -451,13 +481,14 @@ class LLMService:
                     knowledge.model = str(embeddings.model_id)
                     KnowledgeDao.update_one(knowledge)
                     updated_count += 1
-                    
+
                     # 3. 为每个knowledge发起异步任务
                     rebuild_knowledge_celery.delay(knowledge.id, str(embeddings.model_id))
-                    logger.info(f"Started rebuild task for knowledge_id={knowledge.id} with model_id={embeddings.model_id}")
-            
-                logger.info(f"Updated {updated_count} private knowledge bases to use new embedding model {embeddings.model_id}")                
+                    logger.info(
+                        f"Started rebuild task for knowledge_id={knowledge.id} with model_id={embeddings.model_id}")
 
+                logger.info(
+                    f"Updated {updated_count} private knowledge bases to use new embedding model {embeddings.model_id}")
 
         config.value = json.dumps(config_obj.model_dump(), ensure_ascii=False)
 
@@ -476,3 +507,38 @@ class LLMService:
         if config:
             ret = json.loads(config.value)
         return WorkbenchModelConfig(**ret)
+
+    @classmethod
+    async def invoke_workbench_asr(cls, file: UploadFile) -> str:
+        """
+        调用工作台的asr模型 将语音转为文字
+        :param file:
+        :return:
+        """
+        if not file:
+            raise ServerError.http_exception("no file upload")
+        workbench_llm = await cls.get_workbench_llm()
+        if not workbench_llm.asr_model or not workbench_llm.asr_model.id:
+            raise NoAsrModelConfigError.http_exception()
+        model_info = await cls.get_bisheng_asr(model_id=int(workbench_llm.asr_model.id))
+        if not model_info:
+            raise AsrModelConfigDeletedError.http_exception()
+        asr_client = await cls.get_bisheng_asr(model_id=int(workbench_llm.asr_model.id))
+        return await asr_client.ainvoke(file.file)
+
+    @classmethod
+    async def invoke_workbench_tts(cls, text: str) -> bytes:
+        """
+        调用工作台的tts模型 将文字转为语音
+        :param text:
+        :return:
+        """
+
+        workbench_llm = await cls.get_workbench_llm()
+        if not workbench_llm.tts_model or not workbench_llm.tts_model.id:
+            raise NoTtsModelConfigError.http_exception()
+        model_info = await cls.get_bisheng_tts(model_id=int(workbench_llm.tts_model.id))
+        if not model_info:
+            raise TtsModelConfigDeletedError.http_exception()
+        tts_client = await cls.get_bisheng_tts(model_id=int(workbench_llm.tts_model.id))
+        return await tts_client.ainvoke(text)

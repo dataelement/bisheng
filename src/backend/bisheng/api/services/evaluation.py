@@ -17,7 +17,6 @@ from fastapi.encoders import jsonable_encoder
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.flow import FlowService
-from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import build_flow, build_input_keys_response
 from bisheng.api.v1.schema.workflow import WorkflowEventType
@@ -30,6 +29,7 @@ from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersion
 from bisheng.database.models.user import UserDao
 from bisheng.graph.graph.base import Graph
+from bisheng.llm import LLMService
 from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient

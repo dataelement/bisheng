@@ -9,7 +9,6 @@ from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
-from bisheng.api.services.llm import LLMService
 from bisheng.api.services.tool import ToolServices
 from bisheng.cache.utils import create_cache_folder_async, CACHE_DIR
 from bisheng.core.app_context import app_ctx
@@ -21,6 +20,7 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
 from bisheng.interface.llms.custom import BishengLLM
 from bisheng.linsight import utils as linsight_execute_utils
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
+from bisheng.llm import LLMService
 from bisheng.settings import settings
 from bisheng.utils.minio_client import minio_client
 from bisheng_langchain.linsight.agent import LinsightAgent

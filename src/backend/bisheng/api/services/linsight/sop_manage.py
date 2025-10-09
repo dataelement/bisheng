@@ -20,7 +20,6 @@ from bisheng.api.errcode.server import (
     NoEmbeddingModelError, EmbeddingModelNotExistError, EmbeddingModelTypeError
 )
 from bisheng.api.services.knowledge_imp import decide_vectorstores, extract_code_blocks
-from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
 from bisheng.api.v1.schema.linsight_schema import SopRecordRead
@@ -31,6 +30,7 @@ from bisheng.database.models.llm_server import LLMDao, LLMModelType
 from bisheng.database.models.user import UserDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.llms.custom import BishengLLM
+from bisheng.llm import LLMService
 from bisheng.settings import settings
 from bisheng.utils import util
 from bisheng.utils.embedding import decide_embeddings

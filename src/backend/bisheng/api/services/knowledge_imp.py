@@ -29,7 +29,6 @@ from bisheng.api.services.libreoffice_converter import (
     convert_doc_to_docx,
     convert_ppt_to_pdf,
 )
-from bisheng.api.services.llm import LLMService
 from bisheng.api.services.md_from_pdf import is_pdf_damaged
 from bisheng.api.services.patch_130 import (
     convert_file_to_md,
@@ -54,6 +53,7 @@ from bisheng.database.models.knowledge_file import (
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
+from bisheng.llm import LLMService
 from bisheng.settings import settings
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import minio_client

@@ -1,9 +1,9 @@
-from bisheng.core.ai.tts.aliyun_tts_client import AliyunTTSClient
-from bisheng.core.ai.tts.openai_tts_client import OpenAITTSClient
-from bisheng.core.ai.tts.qianfan_tts_client import QianfanTTSClient
+from .aliyun_tts_client import AliyunTTSClient
+from .azure_openai_tts_client import AzureOpenAITTSClient
+from .openai_tts_client import OpenAITTSClient
 
 __all__ = [
     'OpenAITTSClient',
-    'QianfanTTSClient',
-    'AliyunTTSClient'
+    'AliyunTTSClient',
+    'AzureOpenAITTSClient'
 ]
