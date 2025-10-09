@@ -45,7 +45,7 @@ class LinsightQuestionSubmitSchema(BaseModel):
         return [tool.model_dump() for tool in v]
 
 
-class BatchDownloadFilesSchema(BaseModel):
+class DownloadFilesSchema(BaseModel):
     file_name: str = Field(..., description="文件名称")
     file_url: str = Field(..., description="文件下载链接")
 

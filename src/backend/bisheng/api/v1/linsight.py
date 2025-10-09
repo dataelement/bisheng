@@ -26,7 +26,7 @@ from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
 from bisheng.api.services.user_service import get_login_user, UserPayload, get_admin_user
 from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
-from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, BatchDownloadFilesSchema, \
+from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
     SubmitFileSchema, LinsightToolSchema, ToolChildrenSchema
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
 from bisheng.cache.redis import redis_client
@@ -36,6 +36,7 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
 from bisheng.database.models.linsight_sop import LinsightSOPDao, LinsightSOPRecord
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 from bisheng.settings import settings
+from bisheng.utils import util
 from bisheng.utils.minio_client import minio_client
 from fastapi_jwt_auth import AuthJWT
 
@@ -552,7 +553,7 @@ async def task_message_stream(
 @router.post("/workbench/batch-download-files", summary="批量下载任务文件")
 async def batch_download_files(
         zip_name: str = Body(..., description="压缩包名称"),
-        file_info_list: List[BatchDownloadFilesSchema] = Body(..., description="文件信息列表"),
+        file_info_list: List[DownloadFilesSchema] = Body(..., description="文件信息列表"),
         login_user: UserPayload = Depends(get_login_user)):
     """
     批量下载任务文件
@@ -601,6 +602,51 @@ async def get_queue_status(
     except Exception as e:
         logger.error(f"获取灵思队列排队状态失败: {str(e)}")
         return LinsightQueueStatusError.return_resp(data=str(e))
+
+
+# 灵思md转pdf or docx 下载
+@router.post("/workbench/download-md-to-pdf-or-docx", summary="灵思md转pdf or docx 下载")
+async def download_md_to_pdf_or_docx(
+        file_info: DownloadFilesSchema = Body(..., description="文件信息"),
+        to_type: Literal["pdf", "docx"] = Body(..., description="转换的目标文件类型，pdf或docx"),
+        login_user: UserPayload = Depends(get_login_user)):
+    """
+    灵思md转pdf or docx 下载
+    :param file_info:
+    :param to_type:
+    :param login_user:
+    :return:
+    """
+    try:
+        # 调用实现类处理文件下载
+        file_bytes, file_name = await LinsightWorkbenchImpl.download_file(file_info)
+
+        # 文件名去除扩展名
+        file_name = os.path.splitext(file_name)[0]
+
+        if to_type == "pdf":
+            from bisheng.common.utils.markdown_cmpnt.to_pdf import md_to_pdf_bytes
+            converted_bytes = await util.sync_func_to_async(md_to_pdf_bytes, file_bytes)
+            file_name = f"{file_name}.pdf"
+            content_type = "application/pdf"
+        else:
+            from bisheng.common.utils.markdown_cmpnt.md_to_docx.markdocx import MarkDocx
+            mark_docx = MarkDocx()
+            converted_bytes, _ = await util.sync_func_to_async(mark_docx, file_bytes)
+            file_name = f"{file_name}.docx"
+            content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        # 转成 unicode 字符串
+        file_name = parse.quote(file_name)
+        return StreamingResponse(
+            iter([converted_bytes]),
+            media_type=content_type,
+            headers={
+                "Content-Disposition": f"attachment; filename={file_name}"
+            }
+        )
+    except Exception as e:
+        logger.error(f"文件下载失败: {str(e)}")
+        return ResourceDownloadError.return_resp(data=str(e))
 
 
 @router.post("/sop/add", summary="添加灵思SOP", response_model=UnifiedResponseModel)

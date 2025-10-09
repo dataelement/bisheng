@@ -22,7 +22,7 @@ from bisheng.api.services.llm import LLMService
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.services.workstation import WorkStationService
-from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, BatchDownloadFilesSchema, \
+from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
     SubmitFileSchema
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_file_to_folder, CACHE_DIR
@@ -963,8 +963,28 @@ class LinsightWorkbenchImpl:
 
         return history_summary
 
+    async def download_file(cls, file_info: DownloadFilesSchema) -> Tuple[str, bytes]:
+        """下载单个文件"""
+        object_name = file_info.file_url
+        object_name = object_name.replace(f"/{minio_client.bucket}/", "")
+        try:
+
+            bytes_io = BytesIO()
+
+            file_byte = await util.sync_func_to_async(minio_client.get_object)(bucket_name=minio_client.bucket,
+                                                                               object_name=object_name)
+            bytes_io.write(file_byte)
+
+            bytes_io.seek(0)
+
+            return file_info.file_name, bytes_io.getvalue()
+
+        except Exception as e:
+            logger.error(f"下载文件失败 {object_name}: {e}")
+            return object_name, b''
+
     @classmethod
-    async def batch_download_files(cls, file_info_list: List[BatchDownloadFilesSchema]) -> bytes:
+    async def batch_download_files(cls, file_info_list: List[DownloadFilesSchema]) -> bytes:
         """
         批量下载文件
 
@@ -975,28 +995,8 @@ class LinsightWorkbenchImpl:
             包含文件下载信息的列表
         """
 
-        async def download_file(file_info: BatchDownloadFilesSchema) -> Tuple[str, bytes]:
-            """下载单个文件"""
-            object_name = file_info.file_url
-            object_name = object_name.replace(f"/{minio_client.bucket}/", "")
-            try:
-
-                bytes_io = BytesIO()
-
-                file_byte = await util.sync_func_to_async(minio_client.get_object)(bucket_name=minio_client.bucket,
-                                                                                   object_name=object_name)
-                bytes_io.write(file_byte)
-
-                bytes_io.seek(0)
-
-                return file_info.file_name, bytes_io.getvalue()
-
-            except Exception as e:
-                logger.error(f"下载文件失败 {object_name}: {e}")
-                return object_name, b''
-
         # 批量下载文件
-        download_tasks = [download_file(file_info) for file_info in file_info_list]
+        download_tasks = [cls.download_file(file_info) for file_info in file_info_list]
 
         results = await asyncio.gather(*download_tasks)
 
