@@ -484,6 +484,9 @@ class WorkbenchModelConfig(BaseModel):
     embedding_model: Optional[WSModel] = Field(None, description='embedding模型')
     # 灵思执行模式
     linsight_executor_mode: Optional[TaskMode] = Field(None, description='灵思执行模式')
+    # 语音转文字模型
+    asr_model: Optional[WSModel] = Field(None, description='语音转文字模型')
+    tts_model: Optional[WSModel] = Field(None, description='文字转语音模型')
 
 
 class WorkstationConfig(BaseModel):
