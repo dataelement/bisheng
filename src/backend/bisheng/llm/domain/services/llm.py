@@ -21,7 +21,9 @@ from bisheng.interface.importing import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm, instantiate_embedding
 from bisheng.llm.domain.llm.asr import BishengASR
 from bisheng.llm.domain.llm.tts import BishengTTS
+from bisheng.utils import generate_uuid
 from bisheng.utils.embedding import decide_embeddings
+from bisheng.utils.minio_client import minio_client
 
 
 class LLMService:
@@ -527,11 +529,11 @@ class LLMService:
         return await asr_client.ainvoke(file.file)
 
     @classmethod
-    async def invoke_workbench_tts(cls, text: str) -> bytes:
+    async def invoke_workbench_tts(cls, text: str) -> str:
         """
         调用工作台的tts模型 将文字转为语音
         :param text:
-        :return:
+        :return: minio的路径
         """
 
         workbench_llm = await cls.get_workbench_llm()
@@ -541,4 +543,10 @@ class LLMService:
         if not model_info:
             raise TtsModelConfigDeletedError.http_exception()
         tts_client = await cls.get_bisheng_tts(model_id=int(workbench_llm.tts_model.id))
-        return await tts_client.ainvoke(text)
+        audio_bytes = await tts_client.ainvoke(text)
+        # upload to minio
+        object_name = f"tts/{generate_uuid()}.mp3"
+        minio_client.upload_minio_data(object_name, audio_bytes, len(audio_bytes), "audio/mpeg",
+                                       bucket_name=minio_client.tmp_bucket)
+        return minio_client.clear_minio_share_host(
+            minio_client.get_share_link(object_name, bucket=minio_client.tmp_bucket))

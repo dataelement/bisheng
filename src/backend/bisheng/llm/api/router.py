@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Depends, Body, Query, BackgroundTasks, UploadFile, Response
+from fastapi import APIRouter, Request, Depends, Body, Query, BackgroundTasks, UploadFile
 
 from bisheng.api.services.user_service import UserPayload, get_login_user, get_admin_user
 from bisheng.api.v1.schemas import resp_200, KnowledgeLLMConfig, \
@@ -79,8 +79,8 @@ async def invoke_workbench_asr(request: Request, login_user: UserPayload = Depen
 async def invoke_workbench_tts(request: Request, login_user: UserPayload = Depends(get_login_user),
                                text: str = Query(..., description="需要合成的文本")):
     """ 调用工作台的tts模型 将文字转为语音 """
-    audio_bytes = await LLMService.invoke_workbench_tts(text)
-    return Response(content=audio_bytes, media_type='audio/mp3')
+    audio_url = await LLMService.invoke_workbench_tts(text)
+    return resp_200(data=audio_url)
 
 
 @router.get('/knowledge')
