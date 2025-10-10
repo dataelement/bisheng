@@ -98,6 +98,14 @@ class KnowledgeDao(KnowledgeBase):
             return data
 
     @classmethod
+    async def aupdate_one(cls, data: Knowledge) -> Knowledge:
+        async with get_async_db_session() as session:
+            session.add(data)
+            await session.commit()
+            await session.refresh(data)
+            return data
+
+    @classmethod
     async def async_update_state(cls, knowledge_id: int, state: KnowledgeState, update_time: Optional[datetime] = None):
         async with get_async_db_session() as session:
             statement = update(Knowledge).where(col(Knowledge.id) == knowledge_id)

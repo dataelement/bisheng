@@ -106,7 +106,7 @@ class AgentNode(BaseNode):
 
     def _init_agent(self, system_prompt: str):
         # 获取配置的助手模型列表
-        assistant_llm = LLMService.get_assistant_llm()
+        assistant_llm = LLMService.sync_get_assistant_llm()
         if not assistant_llm.llm_list:
             raise Exception('助手推理模型列表为空')
         default_llm = [

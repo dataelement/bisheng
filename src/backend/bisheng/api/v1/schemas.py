@@ -479,14 +479,14 @@ class WorkbenchModelConfig(BaseModel):
     灵思模型配置
     """
     # 任务执行模型
-    task_model: Optional[WSModel] = Field(None, description='任务执行模型')
+    task_model: Optional[WSModel] = Field(default=None, description='任务执行模型')
     # 检索embedding模型
-    embedding_model: Optional[WSModel] = Field(None, description='embedding模型')
+    embedding_model: Optional[WSModel] = Field(default=None, description='embedding模型')
     # 灵思执行模式
-    linsight_executor_mode: Optional[TaskMode] = Field(None, description='灵思执行模式')
+    linsight_executor_mode: Optional[TaskMode] = Field(default=None, description='灵思执行模式')
     # 语音转文字模型
-    asr_model: Optional[WSModel] = Field(None, description='语音转文字模型')
-    tts_model: Optional[WSModel] = Field(None, description='文字转语音模型')
+    asr_model: Optional[WSModel] = Field(default=None, description='语音转文字模型')
+    tts_model: Optional[WSModel] = Field(default=None, description='文字转语音模型')
 
 
 class WorkstationConfig(BaseModel):

@@ -85,7 +85,7 @@ class AssistantAgent(AssistantUtils):
 
     async def init_llm(self):
         # 获取配置的助手模型列表
-        assistant_llm = LLMService.get_assistant_llm()
+        assistant_llm = await LLMService.get_assistant_llm()
         if not assistant_llm.llm_list:
             raise AssistantModelEmptyError()
         default_llm = None
@@ -111,7 +111,7 @@ class AssistantAgent(AssistantUtils):
 
     async def init_auto_update_llm(self):
         """ 初始化自动优化prompt等信息的llm实例 """
-        assistant_llm = LLMService.get_assistant_llm()
+        assistant_llm = await LLMService.get_assistant_llm()
         if not assistant_llm.auto_llm:
             raise Exception('未配置助手画像自动优化模型')
 

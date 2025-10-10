@@ -150,11 +150,11 @@ class AssistantService(BaseService, AssistantUtils):
         logger.info(f"assistant original prompt id: {assistant.id}, desc: {assistant.prompt}")
 
         # 自动补充默认的模型配置
-        assistant_llm = LLMService.get_assistant_llm()
+        assistant_llm = await LLMService.get_assistant_llm()
         if assistant_llm.llm_list:
             for one in assistant_llm.llm_list:
                 if one.default:
-                    assistant.model_name = one.model_id
+                    assistant.model_name = str(one.model_id)
                     break
 
         # 自动生成描述

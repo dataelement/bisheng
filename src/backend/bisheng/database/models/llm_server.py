@@ -101,6 +101,14 @@ class LLMDao:
             return session.exec(statement).all()
 
     @classmethod
+    async def aget_all_server(cls) -> List[LLMServer]:
+        """ 异步获取所有的服务提供方 """
+        statement = select(LLMServer).order_by(LLMServer.update_time.desc())
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
     def insert_server_with_models(cls, server: LLMServer, models: List[LLMModel]):
         """ 插入服务提供方和模型 """
         with get_sync_db_session() as session:
@@ -127,9 +135,9 @@ class LLMDao:
             return server
 
     @classmethod
-    def update_server_with_models(cls, server: LLMServer, models: List[LLMModel]):
+    async def update_server_with_models(cls, server: LLMServer, models: List[LLMModel]):
         """ 更新服务提供方和模型 """
-        with get_sync_db_session() as session:
+        async with get_async_db_session() as session:
             session.add(server)
 
             add_models = []
@@ -140,14 +148,14 @@ class LLMDao:
                 else:
                     add_models.append(model)
             # 删除模型
-            session.exec(
+            await session.exec(
                 delete(LLMModel).where(LLMModel.server_id == server.id,
                                        LLMModel.id.not_in([model.id for model in update_models])))
             # 添加新增的模型
             session.add_all(add_models)
             # 更新已有模型的数据
             for one in update_models:
-                session.exec(
+                await session.exec(
                     update(LLMModel).where(LLMModel.id == one.id).values(
                         name=one.name,
                         description=one.description,
@@ -155,8 +163,8 @@ class LLMDao:
                         model_type=one.model_type,
                         config=one.config))
 
-            session.commit()
-            session.refresh(server)
+            await session.commit()
+            await session.refresh(server)
             return server
 
     @classmethod
@@ -187,6 +195,14 @@ class LLMDao:
         statement = select(LLMServer).where(LLMServer.id.in_(server_ids))
         with get_sync_db_session() as session:
             return session.exec(statement).all()
+
+    @classmethod
+    async def aget_server_by_ids(cls, server_ids: List[int]) -> List[LLMServer]:
+        """ 根据服务ID获取服务提供方 """
+        statement = select(LLMServer).where(LLMServer.id.in_(server_ids))
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
 
     @classmethod
     def get_server_by_name(cls, server_name: str) -> Optional[LLMServer]:
@@ -226,6 +242,14 @@ class LLMDao:
             return session.exec(statement).all()
 
     @classmethod
+    async def aget_model_by_ids(cls, model_ids: List[int]) -> List[LLMModel]:
+        """ 根据模型ID获取模型 """
+        statement = select(LLMModel).where(LLMModel.id.in_(model_ids))
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
     def get_model_by_type(cls, model_type: LLMModelType) -> Optional[LLMModel]:
         """ 根据模型类型获取第一个创建的模型 """
         statement = select(LLMModel).where(LLMModel.model_type == model_type.value).order_by(
@@ -234,12 +258,30 @@ class LLMDao:
             return session.exec(statement).first()
 
     @classmethod
+    async def aget_model_by_type(cls, model_type: LLMModelType) -> Optional[LLMModel]:
+        """ 根据模型类型获取第一个创建的模型 """
+        statement = select(LLMModel).where(LLMModel.model_type == model_type.value).order_by(
+            LLMModel.id.asc())
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.first()
+
+    @classmethod
     def get_model_by_server_ids(cls, server_ids: List[int]) -> List[LLMModel]:
         """ 根据服务ID获取模型 """
         statement = select(LLMModel).where(LLMModel.server_id.in_(server_ids)).order_by(
             LLMModel.update_time.desc())
         with get_sync_db_session() as session:
             return session.exec(statement).all()
+
+    @classmethod
+    async def aget_model_by_server_ids(cls, server_ids: List[int]) -> List[LLMModel]:
+        """ 根据服务ID获取第一个创建的模型 """
+        statement = select(LLMModel).where(LLMModel.server_id.in_(server_ids)).order_by(
+            LLMModel.update_time.desc())
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
 
     @classmethod
     def update_model_status(cls, model_id: int, status: int, remark: str = ''):
@@ -265,6 +307,13 @@ class LLMDao:
         with get_sync_db_session() as session:
             session.exec(update(LLMModel).where(LLMModel.id == model_id).values(online=online))
             session.commit()
+
+    @classmethod
+    async def aupdate_model_online(cls, model_id: int, online: bool):
+        """ 异步更新模型在线状态 """
+        async with get_async_db_session() as session:
+            await session.exec(update(LLMModel).where(col(LLMModel.id) == model_id).values(online=online))
+            await session.commit()
 
     @classmethod
     def delete_server_by_id(cls, server_id: int):
