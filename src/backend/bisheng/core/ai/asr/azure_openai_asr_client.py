@@ -12,7 +12,7 @@ class AzureOpenAIASRClient(BaseASRClient):
         self.model = kwargs.pop("model", "whisper-1")
         self.client = openai.AsyncAzureOpenAI(api_key=api_key, **kwargs)
 
-    async def transcribe(
+    async def _transcribe(
             self,
             audio: str,
             language: str = "auto",
