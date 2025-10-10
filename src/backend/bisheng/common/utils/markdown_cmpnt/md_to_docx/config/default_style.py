@@ -26,7 +26,7 @@ style_conf = {
                     "east-asia": "黑体",
                     "size": 22
                 },
-            "line-spacing": 0,
+            "line-spacing": 1.2,
             "space":
                 {
                     "before": 11,
@@ -41,6 +41,7 @@ style_conf = {
                     "east-asia": "黑体",
                     "size": 18
                 },
+            "line-spacing": 1.2,
             "space":
                 {
                     "before": 11,
@@ -55,6 +56,7 @@ style_conf = {
                     "east-asia": "黑体",
                     "size": 14
                 },
+            "line-spacing": 1.2,
             "space":
                 {
                     "before": 11,
@@ -73,6 +75,7 @@ style_conf = {
                             "bold"
                         ]
                 },
+            "line-spacing": 1.2,
             "space":
                 {
                     "before": 11,

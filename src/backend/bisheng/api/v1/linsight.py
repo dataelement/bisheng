@@ -619,20 +619,22 @@ async def download_md_to_pdf_or_docx(
     """
     try:
         # 调用实现类处理文件下载
-        file_bytes, file_name = await LinsightWorkbenchImpl.download_file(file_info)
+        file_name, file_bytes = await LinsightWorkbenchImpl.download_file(file_info)
+
+        md_str = file_bytes.decode('utf-8')
 
         # 文件名去除扩展名
         file_name = os.path.splitext(file_name)[0]
 
         if to_type == "pdf":
-            from bisheng.common.utils.markdown_cmpnt.to_pdf import md_to_pdf_bytes
-            converted_bytes = await util.sync_func_to_async(md_to_pdf_bytes, file_bytes)
+            from bisheng.common.utils.markdown_cmpnt.md_to_pdf import md_to_pdf_bytes
+            converted_bytes = await util.sync_func_to_async(md_to_pdf_bytes)(md_str)
             file_name = f"{file_name}.pdf"
             content_type = "application/pdf"
         else:
             from bisheng.common.utils.markdown_cmpnt.md_to_docx.markdocx import MarkDocx
             mark_docx = MarkDocx()
-            converted_bytes, _ = await util.sync_func_to_async(mark_docx, file_bytes)
+            converted_bytes, _ = await util.sync_func_to_async(mark_docx)(md_str)
             file_name = f"{file_name}.docx"
             content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         # 转成 unicode 字符串

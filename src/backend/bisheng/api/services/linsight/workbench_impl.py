@@ -963,6 +963,7 @@ class LinsightWorkbenchImpl:
 
         return history_summary
 
+    @classmethod
     async def download_file(cls, file_info: DownloadFilesSchema) -> Tuple[str, bytes]:
         """下载单个文件"""
         object_name = file_info.file_url

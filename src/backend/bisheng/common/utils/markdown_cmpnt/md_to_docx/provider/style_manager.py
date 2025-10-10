@@ -36,7 +36,7 @@ class StyleManager:
             new_style: _ParagraphStyle = self.styles.add_style(_style.style_name, _style.style_type)
             new_style.base_style = self.styles[_style.base_style_name]
         else:
-            new_style = self.styles[_style.base_style_name]
+            new_style = self.styles[_style.style_name]
 
         new_style.quick_style = True
 
@@ -62,7 +62,12 @@ class StyleManager:
         # ##### 其他 #####
         # 去除段落前面左上角的黑点
         new_style.paragraph_format.keep_together = False
-        new_style.paragraph_format.keep_with_next = False
+        # 标题样式保持 keep_with_next 为 True，避免标题单独分页
+        if not _style.style_name.startswith("Heading"):
+            new_style.paragraph_format.keep_with_next = False
+        # 标题不在前面分页
+        if _style.style_name.startswith("Heading"):
+            new_style.paragraph_format.page_break_before = False
         # 显示在快捷样式窗口上
         new_style.quick_style = True
         return

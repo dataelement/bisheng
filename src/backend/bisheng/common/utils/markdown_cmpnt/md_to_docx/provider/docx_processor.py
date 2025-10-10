@@ -1,53 +1,58 @@
 # noinspection PyProtectedMember
 #
 import io
-import os
 import re
+from socket import socket
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 from bs4 import BeautifulSoup
 from docx import Document
-from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import *
-from docx.oxml import parse_xml, OxmlElement
-from docx.oxml.ns import qn, nsdecls
-from docx.shape import InlineShape
+from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls
 from docx.shared import Inches, RGBColor, Pt
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 from docx.text.run import Run
-from requests import HTTPError
 
 from bisheng.common.utils.markdown_cmpnt.md_to_docx.provider.docx_plus import add_hyperlink
 from bisheng.common.utils.markdown_cmpnt.md_to_docx.provider.style_manager import StyleManager
 from bisheng.common.utils.markdown_cmpnt.md_to_docx.utils.style_enum import MDX_STYLE
 
-debug_state: bool = False
-auto_open: bool = True
-show_image_desc: bool = True  # 是否显示图片的描述，即 `![desc](src/img)` 中 desc的内容
-
-
-def debug(*args):
-    print(*args) if debug_state else None
-
 
 class DocxProcessor:
-    def __init__(self, style_conf: dict):
+    def __init__(self, style_conf: dict, debug_state: bool = False, show_image_desc: bool = True):
+        """
+        初始化DocxProcessor
+        :param style_conf: 样式配置字典
+        :param debug_state: 是否开启调试模式
+        :param show_image_desc: 是否显示图片的描述，即 `![desc](src/img)` 中 desc的内容
+        """
         self.document = Document()
+        self.debug_state = debug_state
+        self.show_image_desc = show_image_desc
         if style_conf is not None:
             StyleManager(self.document, style_conf).init_styles()
+
+    def debug(self, *args):
+        """调试输出"""
+        if self.debug_state:
+            print(*args)
 
     # h1, h2, ...
     def add_heading(self, content: str, tag: str):
         level: int = int(tag.__getitem__(1))
         p = self.document.add_paragraph(content, style="Heading%d" % level)
+        # 强制设置标题不分页
+        p.paragraph_format.page_break_before = False
+        p.paragraph_format.keep_with_next = True
         return p
 
-    # noinspection PyMethodMayBeStatic
     def add_run(self, p: Paragraph, content: str, char_style: str = "plain"):
         # fixme 行内的样式超过一个的句子会被忽略，如：
         # <u>**又加粗又*斜体*又下划线**</u>
-        debug("[%s]:" % char_style, content)
+        self.debug("[%s]:" % char_style, content)
         run = p.add_run(content)
 
         # 不应当使用形如 run.bold = (char_style=="strong") 的方式
@@ -74,8 +79,16 @@ class DocxProcessor:
         # TODO 设置代码块（表格）中的中文字体，似乎只能通过指定 已设置好中文字体的样式 来达到目的
         code_table = self.document.add_table(0, 1, style=MDX_STYLE.TABLE)
         row_cells = code_table.add_row().cells
-        run = row_cells[0].paragraphs[0].add_run(pre_tag.contents[0].string[:-1])  # -1是为了去除行末的换行符
-        run.font.name = "Consolas"
+
+        # 安全检查：确保代码块有内容
+        if pre_tag.contents and len(pre_tag.contents) > 0 and pre_tag.contents[0].string:
+            code_text = pre_tag.contents[0].string.rstrip('\n')
+            run = row_cells[0].paragraphs[0].add_run(code_text)
+            run.font.name = "Consolas"
+        else:
+            # 如果代码块为空，添加空白占位
+            run = row_cells[0].paragraphs[0].add_run("")
+            run.font.name = "Consolas"
 
     def add_picture(self, img_tag):
         p: Paragraph = self.document.add_paragraph()
@@ -112,11 +125,22 @@ class DocxProcessor:
                     image_bytes = urlopen(img_src, timeout=10).read()
                     data_stream = io.BytesIO(image_bytes)
                     run.add_picture(data_stream, width=Inches(5.7 * scale / 100))
+                except HTTPError as e:
+                    print(f"[HTTP ERROR] {e.code}: {img_src}")
+                except socket.timeout:
+                    print(f"[TIMEOUT] Image load timeout: {img_src}")
+                except URLError as e:
+                    print(f"[URL ERROR] Failed to fetch image: {e.reason} - {img_src}")
                 except Exception as e:
-                    print("[RESOURCE ERROR]:", e)
+                    print(f"[RESOURCE ERROR] {type(e).__name__}: {e} - {img_src}")
             else:
                 # 本地图片
-                run.add_picture(img_src, width=Inches(5.7 * scale / 100))
+                try:
+                    run.add_picture(img_src, width=Inches(5.7 * scale / 100))
+                except FileNotFoundError:
+                    print(f"[FILE ERROR] Image not found: {img_src}")
+                except Exception as e:
+                    print(f"[RESOURCE ERROR] Failed to load image: {type(e).__name__}: {e} - {img_src}")
         else:
             # 网络图片
             img_src = img_tag["title"]
@@ -125,11 +149,17 @@ class DocxProcessor:
                 image_bytes = urlopen(img_src, timeout=10).read()
                 data_stream = io.BytesIO(image_bytes)
                 run.add_picture(data_stream, width=Inches(5.7 * scale / 100))
+            except HTTPError as e:
+                print(f"[HTTP ERROR] {e.code}: {img_src}")
+            except socket.timeout:
+                print(f"[TIMEOUT] Image load timeout: {img_src}")
+            except URLError as e:
+                print(f"[URL ERROR] Failed to fetch image: {e.reason} - {img_src}")
             except Exception as e:
-                print("[RESOURCE ERROR]:", e)
+                print(f"[RESOURCE ERROR] {type(e).__name__}: {e} - {img_src}")
 
         # 如果选择展示图片描述，那么描述会在图片下方显示
-        if show_image_desc and img_tag.get("alt"):
+        if self.show_image_desc and img_tag.get("alt"):
             # TODO 图片描述的显示样式
             desc: Paragraph = self.document.add_paragraph(img_tag["alt"], style=MDX_STYLE.CAPTION)
             desc.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
@@ -222,13 +252,18 @@ class DocxProcessor:
                 list_para.add_run("[   ]").font.name = "Consolas"
                 list_para.add_run(text.replace("[ ]", " ", 1))
 
-    # 分割线，转换为 Word 中的分页符
+    # 分割线
     def add_split_line(self):
-        self.document.add_page_break()
+        p = self.document.add_paragraph()
+        p.paragraph_format.space_before = Pt(6)
+        p.paragraph_format.space_after = Pt(6)
+        border_elm = parse_xml(
+            r'<w:pBdr {}><w:bottom w:val="single" w:sz="6" w:space="1" w:color="auto"/></w:pBdr>'.format(nsdecls('w')))
+        p._p.get_or_add_pPr().append(border_elm)
 
     # 超链接
     def add_link(self, p: Paragraph, text: str, href: str):
-        debug("[link]:", text, "[href]:", href)
+        self.debug("[link]:", text, "[href]:", href)
         add_hyperlink(p, href, text)
         # run = p.add_run(text)
 
@@ -281,22 +316,6 @@ class DocxProcessor:
 
         shading_elm_1 = parse_xml(r'<w:shd {} w:fill="efefef"/>'.format(nsdecls('w')))
         table.rows[0].cells[0]._tc.get_or_add_tcPr().append(shading_elm_1)
-        # table_format = table.style.paragraph_format
-
-        # 直接操作 Oxml 的方式设置左侧缩进和表格宽度
-        # noinspection PyProtectedMember
-        tbl_pr = table._element.xpath('w:tblPr')
-        # if tbl_pr:
-        # 左侧缩进
-        # e = OxmlElement('w:tblInd')
-        # e.set(qn('w:w'), "300")
-        # e.set(qn('w:type'), 'dxa')
-        # tbl_pr[0].append(e)
-        # 设置表格宽度
-        # w = OxmlElement('w:tblW')
-        # w.set(qn('w:w'), "4700")
-        # w.set(qn('w:type'), "pct")
-        # tbl_pr[0].append(w)
 
     def html2docx(self, html_str: str):
         # 打开HTML
@@ -323,9 +342,7 @@ class DocxProcessor:
                     self.add_split_line()
                 if root.name == "pre":
                     self.add_code_block(root)
-                if root.name == "h1" or root.name == "h2" or \
-                        root.name == "h3" or root.name == "h4" or root.name == "h5":
-
+                if root.name in ["h1", "h2", "h3", "h4", "h5"]:
                     if title_text == "":
                         title_text = root.string
 
