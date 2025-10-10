@@ -7,6 +7,8 @@ import { useLocalize } from '~/hooks';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { Button, Skeleton } from '../ui';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
+import { getFileExtension } from '~/utils';
+import FileIcon from '../ui/icon/File';
 
 export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
     const { getLinsight } = useLinsightManager()
@@ -52,10 +54,20 @@ export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
                             {localize('com_sop_task_description')}
                         </p>
                         <p className='text-sm overflow-y-scroll'
-                           style={{ display: '-webkit-box', WebkitLineClamp: 8, WebkitBoxOrient: 'vertical' }}
+                            style={{ display: '-webkit-box', WebkitLineClamp: 8, WebkitBoxOrient: 'vertical' }}
                         >
                             {linsight?.question}
                         </p>
+                        <div>
+                            {
+                                linsight?.files.map(file =>
+                                    <div key={file.file_id} className="flex items-center space-x-3 flex-1 mt-4">
+                                        <FileIcon className='size-5 min-w-4' type={getFileExtension(file.file_name)} />
+                                        <span className="text-sm text-gray-900 flex-1">{file.file_name}</span>
+                                    </div>
+                                )
+                            }
+                        </div>
                     </PopoverContent>
                 </Popover>
 

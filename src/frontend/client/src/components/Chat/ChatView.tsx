@@ -48,6 +48,9 @@ const ChatView = ({ index = 0 }: { index?: number }) => {
   });
 
   const [isLingsi, setIsLingsi] = useState(false);
+  useEffect(() => {
+    window.isLinsight = isLingsi
+  }, [isLingsi])
   const chatHelpers = useChatHelpers(index, conversationId, isLingsi);
   const addedChatHelpers = useAddedResponse({ rootIndex: index });
 
@@ -187,6 +190,7 @@ export default memo(ChatView);
 
 
 const Cases = forwardRef(({ t, isLingsi, setIsLingsi }, ref) => {
+  const [_, setSameSopLabel] = useRecoilState(sameSopLabelState)
   const [casesData, setCasesData] = useState<any[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
@@ -196,9 +200,7 @@ const Cases = forwardRef(({ t, isLingsi, setIsLingsi }, ref) => {
   const sopid = queryParams?.get("sopid")
 
   const handleCardClick = (sopId: string) => {
-    if (typeof window !== "undefined") {
-      window.open(`/linsight/case/${sopId}`)
-    }
+    window.open(`${__APP_ENV__.BASE_URL}/linsight/case/${sopId}`)
   }
 
   const loadMore = async (): Promise<boolean> => {
@@ -241,7 +243,7 @@ const Cases = forwardRef(({ t, isLingsi, setIsLingsi }, ref) => {
         if (sopid) {
           const caseItem = res.data.items.find((item: any) => item.id === Number(sopid))
           if (caseItem) {
-            // setSameSopLabel({ ...caseItem }) // Uncomment if you have this state
+            setSameSopLabel({ ...caseItem }) // Uncomment if you have this state
             setIsLingsi(true)
           }
         }
@@ -274,9 +276,7 @@ const Cases = forwardRef(({ t, isLingsi, setIsLingsi }, ref) => {
                 <Button
                   variant="default"
                   className="bg-primary text-white rounded-full h-8 px-3 text-xs flex items-center space-x-0"
-                  onClick={() => {
-                    // setSameSopLabel({ ...caseItem }) // Uncomment if you have this state
-                  }}
+                  onClick={() => setSameSopLabel({ ...caseItem })}
                 >
                   <MousePointerClick className="w-3.5 h-3.5" />
                   <span>{t("com_make_samestyle")}</span>

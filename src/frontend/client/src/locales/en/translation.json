@@ -633,6 +633,7 @@
   "com_sop_task_execution_interrupted": "Task execution interrupted",
   "com_sop_running": "Running...",
   "com_sop_rerun": "Rerun",
+  "com_sop_feedback_only": "Feedback Only",
   "com_sop_upload_file": "Upload File",
   "com_sop_upload_file_directory": "Upload file directory",
   "com_sop_organize_knowledge_base": "Organize Knowledge Base",
@@ -1137,5 +1138,7 @@
   "com_searchResults": "Search Results",
   "com_webSearch": "Web Search",
   "com_searchQueryLabel": "Search Query:",
-  "error_workflow_task_execution_failed": "Workflow task execution failed：{{exception}}"
+  "error_workflow_task_execution_failed": "Workflow task execution failed：{{exception}}",
+  "com_addAnything": "Add anything",
+  "com_dropAnyFileToAdd": "Drop any file here to add it to the conversation"
 }

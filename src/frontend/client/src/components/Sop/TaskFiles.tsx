@@ -1,12 +1,13 @@
 "use client"
 
+import { Eye } from "lucide-react"
 import { useState } from "react"
-import { Download, Eye, X } from "lucide-react"
+import { batchDownload } from "~/api/linsight"
+import { useLocalize } from "~/hooks"
 import { Button, Checkbox } from "../ui"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../ui/Sheet"
 import FileIcon from "../ui/icon/File"
-import { batchDownload } from "~/api/linsight"
-import { useLocalize } from "~/hooks"
+import DownloadResultFileBtn from "./components/DownloadResultFileBtn"
 
 interface FileItem {
     file_id: string
@@ -147,14 +148,7 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
                                     <Eye className="h-4 w-4 text-gray-500" />
                                 </Button>
 
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={() => downloadFile(file)}
-                                >
-                                    <Download className="h-4 w-4 text-gray-500" />
-                                </Button>
+                                <DownloadResultFileBtn file={file} onDownloadFile={downloadFile} />
                             </div>
                         </div>
                     ))}

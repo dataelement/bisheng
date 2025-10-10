@@ -5,7 +5,7 @@ import { getSourceChunksApi, splitWordApi } from "~/api/apps";
 import { Dialog, DialogContent } from "~/components";
 import FileViewPanne from "~/components/PreviewFile";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip2";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { downloadFile } from "~/utils";
 
 // 顶部答案区

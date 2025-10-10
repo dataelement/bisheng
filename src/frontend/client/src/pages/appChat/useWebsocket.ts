@@ -2,11 +2,10 @@
 import { useEffect, useRef } from "react"
 import { useRecoilState } from "recoil"
 import { NotificationSeverity } from "~/common"
-import { useToast } from "~/hooks"
+import { useLocalize, useToast } from "~/hooks"
 import { SkillMethod } from "./appUtils/skillMethod"
 import { submitDataState } from "./store/atoms"
 import { getErrorI18nKey } from "./store/constants"
-import { useLocalize } from "~/hooks"
 
 export const AppLostMessage = '当前应用已被删除'
 const wsMap = new Map<string, WebSocket>()
@@ -37,7 +36,12 @@ export const useWebSocket = (helpers) => {
 
     // 连接WebSocket
     const connect = (callBack) => {
-        if (websocket) return
+        if (websocket) {
+            if (!(callBack && websocket.readyState !== WebSocket.OPEN)) {
+                // 发送消息并链接断开，重新连接
+                return
+            }
+        }
         if (!helpers.wsUrl) return
         if (helpers.appLost === AppLostMessage) return
 
@@ -78,8 +82,6 @@ export const useWebSocket = (helpers) => {
                 }
                 ws?.send(JSON.stringify(msg))
             }
-
-            callBack?.(ws)
         }
 
         ws.onmessage = (event) => {
@@ -87,6 +89,11 @@ export const useWebSocket = (helpers) => {
                 const data = JSON.parse(event.data)
                 console.log('data :>> ', data);
                 handleMessages(data, ws)
+
+                if (data.type === 'begin' && callBack) {
+                    callBack?.(ws)
+                    callBack = null
+                }
             } catch (error) {
                 console.error("WebSocket message parse error:", error)
             }
@@ -212,7 +219,7 @@ export const useWebSocket = (helpers) => {
 
     const sendWsMsg = async (msg) => {
         try {
-            if (websocket) {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
                 websocket.send(JSON.stringify(msg))
             } else {
                 connect((_websocket) => {

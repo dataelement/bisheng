@@ -10,9 +10,9 @@ export default function DropZone({ onDrop }) {
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         accept: {
-            'application/*': appConfig.enableEtl4lm ?
-                ['.PDF', '.TXT', '.DOCX', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.PNG', '.JPG', '.JPEG', '.BMP']
-                : ['.PDF', '.TXT', '.DOCX', '.DOC', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV']
+            '': appConfig.enableEtl4lm ?
+                ['.PDF', '.TXT', '.DOCX', '.PPT', '.PPTX', '.MD', '.HTML', '.SVG', '.XLS', '.XLSX', '.CSV', '.DOC', '.PNG', '.JPG', '.JPEG', '.BMP']
+                : ['.PDF', '.TXT', '.DOCX', '.DOC', '.PPT', '.PPTX', '.MD', '.HTML', '.SVG', '.XLS', '.XLSX', '.CSV']
         },
         useFsAccessApi: false,
         onDrop

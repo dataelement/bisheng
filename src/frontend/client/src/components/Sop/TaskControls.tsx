@@ -145,11 +145,11 @@ export default function FeedbackComponent({ stop, onFeedback }: FeedbackComponen
         setHoveredRating(0)
     }, [])
 
-    const handleRestart = useCallback(() => {
+    const handleRestart = useCallback((restart: boolean) => {
         if (!comment.trim()) return
 
         setLoading(true)
-        onFeedback(rating, comment, true)
+        onFeedback(rating, comment, restart)
 
         // Simulate API call
         setTimeout(() => {
@@ -206,9 +206,17 @@ export default function FeedbackComponent({ stop, onFeedback }: FeedbackComponen
                     />
                 </div>
                 <Button
-                    onClick={handleRestart}
+                    variant={"outline"}
+                    onClick={() => handleRestart(false)}
                     disabled={!comment.trim() || loading}
-                    className="px-6  self-end"
+                    className="px-6 self-end"
+                >
+                    {localize('com_sop_feedback_only')}
+                </Button>
+                <Button
+                    onClick={() => handleRestart(true)}
+                    disabled={!comment.trim() || loading}
+                    className="px-6 self-end"
                 >
                     {loading ? localize('com_sop_running') : localize('com_sop_rerun')}
                 </Button>

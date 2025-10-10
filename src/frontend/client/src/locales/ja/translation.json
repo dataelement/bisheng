@@ -587,6 +587,7 @@
   "com_sop_task_execution_interrupted": "タスクの実行が中断されました",
   "com_sop_running": "実行中…",
   "com_sop_rerun": "再実行",
+  "com_sop_feedback_only": "フィードバックのみ",
   "com_sop_upload_file": "ファイルをアップロード",
   "com_sop_upload_file_directory": "アップロードするファイルのディレクトリ",
   "com_sop_organize_knowledge_base": "ナレッジベースを整理",
@@ -1057,5 +1058,7 @@
   "com_searchResults": "検索結果",
   "com_webSearch": "ウェブ検索",
   "com_searchQueryLabel": "検索クエリ:",
-  "error_workflow_task_execution_failed": "ワークフロータスクの実行に失敗しました：{{exception}}"
+  "error_workflow_task_execution_failed": "ワークフロータスクの実行に失敗しました：{{exception}}",
+  "com_addAnything": "何でも追加",
+  "com_dropAnyFileToAdd": "ここにファイルをドロップして会話に追加できます"
 }
