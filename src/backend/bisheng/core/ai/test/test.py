@@ -3,6 +3,8 @@ import os
 
 import pytest
 
+from bisheng.core.ai import AzureOpenAIASRClient
+
 
 @pytest.mark.asyncio
 async def test_aliyun_asr():
@@ -27,13 +29,30 @@ async def test_aliyun_tts():
     assert os.path.exists("./data/aliyun_result.mp3")
 
 
+@pytest.mark.asyncio
+async def test_azure_openai_asr():
+    api_key = os.environ.get('AZURE_OPENAI_API_KEY')
+    api_version = os.environ.get('AZURE_OPENAI_API_VERSION')
+    azure_endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT')
+    client = AzureOpenAIASRClient(api_key=api_key, model="gpt-4o-transcribe", azure_endpoint=azure_endpoint,
+                                  api_version=api_version)
+    text = await client.transcribe("./data/asr_example.wav")
+    assert text == "Hello word, 这里是阿里巴巴语音实验室。"
+
+
+@pytest.mark.asyncio
 async def test_azure_openai_tts():
     from ..tts import AzureOpenAITTSClient
     api_key = os.environ.get('AZURE_OPENAI_API_KEY')
-    client = AzureOpenAITTSClient(api_key=api_key, model="tts-1", voice="alloy")
+    api_version = os.environ.get('AZURE_OPENAI_API_VERSION')
+    azure_endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT')
+    client = AzureOpenAITTSClient(api_key=api_key, model="gpt-4o-transcribe", azure_endpoint=azure_endpoint,
+                                  api_version=api_version)
     audio_bytes = await client.synthesize("Hello, world!")
     with open("./data/azure_openai_result.mp3", "wb") as f:
         f.write(audio_bytes)
+
+    assert os.path.exists("./data/azure_openai_result.mp3")
 
 
 async def main():
