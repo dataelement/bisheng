@@ -37,7 +37,7 @@ class BaseASRClient(ABC):
         else:
             raise ValueError("Invalid audio input type")
 
-        with tempfile.NamedTemporaryFile(delete=True) as f:
+        with tempfile.NamedTemporaryFile(delete=True, suffix=".wav") as f:
             f.write(audio_bytes)
             f.flush()
             return await self._transcribe(f.name, language=language, model=model, **kwargs)

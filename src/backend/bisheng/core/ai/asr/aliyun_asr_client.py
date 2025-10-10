@@ -43,4 +43,6 @@ class AliyunASRClient(BaseASRClient):
             )
 
         sentence = result.get_sentence()
-        return sentence[0]["text"]
+        if sentence and sentence[0]:
+            return sentence[0]["text"]
+        return ""
