@@ -257,6 +257,7 @@
     "serviceProvider": "模型服务提供方",
     "actions": "操作",
     "modelType": "模型类型",
+    "voiceType": "音色类型",
     "onlineOfflineOperation": "上下线操作",
     "available": "可用",
     "abnormal": "异常",
@@ -582,6 +583,7 @@
       "modelNameRequired": "模型显示名称不能为空",
       "modelRequired": "模型不能为空",
       "modelDuplicate": "模型不能重复",
+      "voiceTypeRequired":"音色类型不可为空",
       "modelNameDuplicate": "显示名称不能重复",
       "required": "不能为空"
     }

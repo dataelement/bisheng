@@ -469,6 +469,20 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
 
     // 文件上传状态
     const { fileUploading, getFileIds, loadingChange } = useFileLoading(inputLock.locked)
+    const handleSpeechRecognition = (text) => {
+        console.log('text', text);
+        
+        if (!showWhenLocked && inputLock.locked) return;
+        if (!inputRef.current) return;
+        
+        // 将识别结果追加到当前输入框内容后
+        const currentValue = inputRef.current.value;
+        inputRef.current.value = currentValue + text;
+        
+        // 触发input事件以更新UI（如自动调整高度）
+        const event = new Event('input', { bubbles: true, cancelable: true });
+        inputRef.current.dispatchEvent(event);
+    };
 
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
         
@@ -498,13 +512,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             </div>
             {/* 语音转文字 */}
             <div className={` ${!inputLock.locked && 'mr-4'}`}>
-            <SpeechToTextComponent onChange={(text) => {
-                if (inputLock.locked) return
-                if (!inputRef.current) return
-                inputRef.current.value = text || ''
-                const event = new Event('input', { bubbles: true, cancelable: true });
-                inputRef.current.dispatchEvent(event);
-            }} />
+            <SpeechToTextComponent onChange={handleSpeechRecognition} />
             </div>
           
             {/* 附件 */}

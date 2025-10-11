@@ -36,7 +36,7 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
             <Label className="bisheng-label">
                 <span>{label}</span>
                 {required && <span className="text-red-500 text-xs">*</span>}
-                {tooltipText && <QuestionTooltip className="relative top-0.5 ml-1" content={tooltipText}><span /></QuestionTooltip>}
+                {tooltipText && <QuestionTooltip className="relative top-0.5 ml-1" content={tooltipText}></QuestionTooltip>}
             </Label>
             <Cascader
                 key={`model-select-${value}-${options.length}`}
@@ -49,7 +49,7 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
     )
 }
 
-export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
+export default function WorkbenchModel({ llmOptions, embeddings,asrModel,ttsModel, onBack }) {
     const { t } = useTranslation('model')
     const { message } = useToast()
 
@@ -221,9 +221,9 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
                         <ModelSelect
                             close
                             label={t('语音转文字（ASR）模型')}
-                            tooltipText={t('用于工作台\\应用的语音转文字场景')}
+                            tooltipText={'用于工作台\\应用的语音转文字场景'}
                             value={form.asrModelId}
-                            options={llmOptions}
+                            options={asrModel}
                             onChange={(val) => setForm({ ...form, asrModelId: val })}
                         />
                  
@@ -233,7 +233,7 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
                             label={t('文字转语音（TTS）模型')}
                             tooltipText={t('用于工作台\\应用的文字转语音场景')}
                             value={form.ttsModelId}
-                            options={llmOptions}
+                            options={ttsModel}
                             onChange={(val) => setForm({ ...form, ttsModelId: val })}
                         />
                  

@@ -33,7 +33,7 @@ export const QuestionTooltip = ({
     className = '',
     content,
     // 新增：支持自定义触发元素，默认保留问号图标
-    children
+    children = null
 }) => (
     <TooltipProvider delayDuration={100}>
         <Tooltip defaultOpen={false}>

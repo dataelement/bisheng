@@ -1,10 +1,8 @@
-      
 // components/AudioPlayButton.tsx
 import { useState } from 'react';
 import { useAudioPlayerStore } from './audioPlayerStore';
 import { Loader, Volume2 } from 'lucide-react';
-// import { textToSpeech } from '@/controllers/API/flow';
-// import { formatTTSText } from '@/util/utils';
+import { textToSpeech } from '@/controllers/API/workbench';
 import { message } from '../bs-ui/toast/use-toast';
 
 interface AudioPlayButtonProps {
@@ -26,49 +24,66 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
     setCurrentPlayingId,
   } = useAudioPlayerStore();
 
-  // 后端联调时改回真实接口
-  // const getAudioUrl = async (text: string) => {
-  //   const res = await textToSpeech({ text: formatTTSText(text) });
-  //   return res.url;
-  // }
+  const API_BASE_URL = ''; 
 
-  // 先使用占位音频保证流程跑通
-  const getAudioUrl = async (_: string) => {
-    return 'https://interactive-examples.mdn.mozilla.org/media/cc0-audio/t-rex-roar.mp3';
-  }
+  const getAudioUrl = async (text: string) => {
+    console.log('请求TTS的文本:', text);
+    
+    // 1. 调用API
+    const response = await textToSpeech(text);
+    console.log('TTS API 原始响应:', response);
 
-  console.log(currentPlayingId, messageId, soundInstance?.playing());
-  
+    // 2. 处理响应
+    let audioPath = '';
+    if (typeof response === 'string') {
+      // 情况A: API直接返回了路径字符串
+      audioPath = response;
+    } else if (response?.data) {
+      // 情况B: API返回了JSON对象
+      if (typeof response.data === 'string') {
+        audioPath = response.data;
+      } else if (response.data?.data) {
+        audioPath = response.data.data;
+      }
+    }
+
+    if (audioPath) {
+      // 3. 将相对路径拼接成完整的URL
+      const audioUrl = `${API_BASE_URL}${audioPath}`;
+      console.log('生成的音频播放链接:', audioUrl);
+      return audioUrl;
+    } else {
+      // 如果无法解析路径，抛出异常
+      throw new Error(`TTS服务失败: 无法解析返回的音频路径`);
+    }
+  };
+
   const isPlaying = currentPlayingId === messageId && soundInstance?.playing();
   const isThisLoading = currentPlayingId === messageId && isLoading;
-  console.log('isPlaying', isPlaying);
-  console.log('soundInstance', soundInstance);
 
   const handlePlay = async () => {
     try {
       setError('');
       
-      // 如果点击的是当前正在播放的音频
       if (currentPlayingId === messageId) {
         if (soundInstance?.playing()) {
-          // 如果正在播放，则暂停
           pauseAudio();
         } else {
-          // 如果已暂停，则继续播放
           resumeAudio();
         }
         return;
       }
 
-      // 如果是新的音频，停止当前播放的音频
       if (currentPlayingId) {
         stopAudio();
       }
-      // 设置当前音频为加载状态
+      
       setLoading(true);
       setCurrentPlayingId(messageId);
-      // 获取新的音频
+      
       const audioUrl = await getAudioUrl(msg);
+      console.log('成功获取音频链接:', audioUrl);
+      
       playAudio({
         id: messageId,
         audioUrl,
@@ -77,13 +92,13 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
         },
       });
     } catch (err) {
+      console.error('播放请求异常详情:', err);
       message({
-          variant: 'warning',
-          description: '文本较长，后台转录中，请稍后再试'
-      })
+          variant: 'error',
+          description: '音频生成或播放失败，请稍后再试'
+      });
       setLoading(false);
       setCurrentPlayingId(null);
-      console.error(err);
     }
   };
 
@@ -95,14 +110,13 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
         aria-label={isPlaying ? 'Pause' : 'Play'}
       >
         {isThisLoading ? (
-          <Loader className={'animate-spin'} />
+          <Loader size={20} strokeWidth={1.8}  color="#9ca3af" className={'mt-0.5 mr-1 animate-spin'} />
         ) : (
-          <Volume2 className={`${'cursor-pointer'} ${isPlaying && 'text-primary hover:text-primary'}`} />
+          <Volume2 size={20} strokeWidth={1.8}  color="#9ca3af"  className={`cursor-pointer mt-0.5 mr-1 text-primary hover:text-primary`} />
+          
         )}
       </button>
       {error && <div className="error-message">{error}</div>}
     </div>
   );
 };
-
-    
