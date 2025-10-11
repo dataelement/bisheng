@@ -1,3 +1,4 @@
+import time
 from typing import Optional, Any
 
 from pydantic import BaseModel, Field
@@ -5,6 +6,8 @@ from pydantic import BaseModel, Field
 
 class BaseEvent(BaseModel):
     task_id: str = Field(..., description='触发事件的任务ID')
+    # 时间戳，单位秒
+    timestamp: int = Field(default_factory=lambda: int(time.time()), description='秒级时间戳')
 
 
 # 任务步骤执行事件

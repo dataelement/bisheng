@@ -314,9 +314,11 @@ async def user_input(
         session_version_id: str = Body(..., description="灵思会话版本ID"),
         linsight_execute_task_id: str = Body(..., description="灵思执行任务ID"),
         input_content: str = Body(..., description="用户输入内容"),
+        files: Optional[List[SubmitFileSchema]] = Body(None, description="用户上传的文件"),
         login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
     """
     用户输入
+    :param files:
     :param session_version_id:
     :param input_content:
     :param linsight_execute_task_id:
@@ -334,7 +336,11 @@ async def user_input(
 
     state_message_manager = LinsightStateMessageManager(session_version_id=session_version_id)
 
-    await state_message_manager.set_user_input(task_id=linsight_execute_task_id, user_input=input_content)
+    # 如果有文件 先处理文件
+    processed_files = await LinsightWorkbenchImpl.human_participate_add_file(session_version_model, files=files)
+
+    await state_message_manager.set_user_input(task_id=linsight_execute_task_id, user_input=input_content,
+                                               files=processed_files)
 
     return resp_200(data=True, message="用户输入已提交")
 
@@ -416,13 +422,15 @@ async def submit_feedback(
     else:
 
         if feedback is not None and feedback.strip() != "":
-            # 重新生成SOP记录到记录表
-            background_tasks.add_task(
-                LinsightWorkbenchImpl.feedback_regenerate_sop_task,
-                session_version_model,
-                feedback
-            )
-            pass
+            await SOPManageService.update_sop_record_feedback(session_version_model.id, feedback)
+
+            # # 重新生成SOP记录到记录表
+            # background_tasks.add_task(
+            #     LinsightWorkbenchImpl.feedback_regenerate_sop_task,
+            #     session_version_model,
+            #     feedback
+            # )
+            # pass
 
         return resp_200(data=True, message="提交成功")
 
