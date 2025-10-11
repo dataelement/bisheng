@@ -422,13 +422,15 @@ async def submit_feedback(
     else:
 
         if feedback is not None and feedback.strip() != "":
-            # 重新生成SOP记录到记录表
-            background_tasks.add_task(
-                LinsightWorkbenchImpl.feedback_regenerate_sop_task,
-                session_version_model,
-                feedback
-            )
-            pass
+            await SOPManageService.update_sop_record_feedback(session_version_model.id, feedback)
+
+            # # 重新生成SOP记录到记录表
+            # background_tasks.add_task(
+            #     LinsightWorkbenchImpl.feedback_regenerate_sop_task,
+            #     session_version_model,
+            #     feedback
+            # )
+            # pass
 
         return resp_200(data=True, message="提交成功")
 
