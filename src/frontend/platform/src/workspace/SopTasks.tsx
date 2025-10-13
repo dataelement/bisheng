@@ -443,19 +443,76 @@ export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
         }).catch(console.error);
     };
 
-    const handleExportOther = (e, type: 'pdf' | 'docx') => {
+    const handleExportOther = async (e, type: 'pdf' | 'docx', file) => {
+        console.log(file);
+        
         e.stopPropagation();
         setExportState({ loading: true, success: false, error: false, title: type.toUpperCase() })
-        // TODO: 接后端导出接口后替换为真实请求
-        setTimeout(() => {
-            setExportState(prev => ({ ...prev, loading: false, success: true }))
-        }, 1500)
-        setTimeout(() => {
-            setExportState(prev => ({ ...prev, success: false, error: true }))
-        }, 3500)
-        setTimeout(() => {
-            setExportState(prev => ({ ...prev, error: false }))
-        }, 5500)
+    
+        try {
+            console.log('开始转换下载，参数:', {
+                file_url: file.file_url,
+                file_name: file.file_name,
+                to_type: type
+            });
+    
+            // 使用 axios.post 获取
+            const response = await axios.post('/api/v1/linsight/workbench/download-md-to-pdf-or-docx', {
+                file_info: {
+                    file_url: file.file_url,
+                    file_name: file.file_name
+                },
+                to_type: type
+            }, {
+                responseType: 'blob' // 重要：设置响应类型为 blob
+            });
+    
+            console.log('转换下载API返回:', response);
+            console.log('返回数据类型:', typeof response.data);
+            
+            // 根据文件类型设置MIME类型和文件扩展名
+            let mimeType, fileExtension;
+            if (type === 'pdf') {
+                mimeType = 'application/pdf';
+                fileExtension = 'pdf';
+            } else if (type === 'docx') {
+                mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+                fileExtension = 'docx';
+            }
+    
+            // 处理返回的 blob 数据
+            const blob = new Blob([response.data], { type: mimeType });
+            console.log('创建的Blob:', blob);
+    
+            // 创建下载链接
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${file.file_name.replace('.md', '')}.${fileExtension}`;
+            document.body.appendChild(a);
+            a.click();
+            
+            // 清理
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            setExportState(prev => ({ ...prev, loading: false, success: true }));
+            console.log(`${type.toUpperCase()}文件转换下载成功`);
+    
+            // 3秒后自动隐藏成功提示
+            setTimeout(() => {
+                setExportState(prev => ({ ...prev, success: false }));
+            }, 3000);
+    
+        } catch (error) {
+            console.error(`${type.toUpperCase()}转换下载失败:`, error);
+            setExportState(prev => ({ ...prev, loading: false, error: true }));
+            
+            // 3秒后自动隐藏错误提示
+            setTimeout(() => {
+                setExportState(prev => ({ ...prev, error: false }));
+            }, 3000);
+        }
     }
 
     if (queueCount) {
@@ -579,11 +636,11 @@ export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
                                                             <FileIcon type={'md'} className='size-5' />
                                                             <div className='w-full flex gap-2 items-center'>Markdown</div>
                                                         </div>
-                                                        <div className='flex gap-2 items-center rounded-md p-1 cursor-pointer hover:bg-gray-100' onClick={(e) => handleExportOther(e, 'pdf')}>
+                                                        <div className='flex gap-2 items-center rounded-md p-1 cursor-pointer hover:bg-gray-100' onClick={(e) => handleExportOther(e, 'pdf',file)}>
                                                             <FileIcon type={'pdf'} className='size-5' />
                                                             <div className='w-full flex gap-2 items-center'>PDF</div>
                                                         </div>
-                                                        <div className='flex gap-2 items-center rounded-md p-1 cursor-pointer hover:bg-gray-100' onClick={(e) => handleExportOther(e, 'docx')}>
+                                                        <div className='flex gap-2 items-center rounded-md p-1 cursor-pointer hover:bg-gray-100' onClick={(e) => handleExportOther(e, 'docx',file)}>
                                                             <FileIcon type={'docx'} className='size-5' />
                                                             <div className='w-full flex gap-2 items-center'>Docx</div>
                                                         </div>
@@ -641,6 +698,7 @@ export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
                 isOpen={isDrawerOpen}
                 onOpenChange={setIsDrawerOpen}
                 downloadFile={downloadFile}
+                handleExportOther={handleExportOther}
                 onPreview={(id) => {
                     setCurrentDirectFile(null);
                     setCurrentPreviewFileId(id);
