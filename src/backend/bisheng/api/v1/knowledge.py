@@ -94,11 +94,11 @@ async def delete_preview_file_chunk(*,
 
 
 @router.post('/process')
-async def process_knowledge_file(*,
-                                 request: Request,
-                                 login_user: UserPayload = Depends(get_login_user),
-                                 background_tasks: BackgroundTasks,
-                                 req_data: KnowledgeFileProcess):
+def process_knowledge_file(*,
+                           request: Request,
+                           login_user: UserPayload = Depends(get_login_user),
+                           background_tasks: BackgroundTasks,
+                           req_data: KnowledgeFileProcess):
     """ 上传文件到知识库内 """
 
     res = KnowledgeService.process_knowledge_file(request, login_user, background_tasks, req_data)
