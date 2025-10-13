@@ -57,7 +57,8 @@ export function userInputLinsightEvent(session_version_id: string, linsight_exec
   return request.post('/api/v1/linsight/workbench/user-input', {
     session_version_id,
     linsight_execute_task_id,
-    input_content
+    input_content,
+    files: []
   });
 }
 
@@ -171,7 +172,7 @@ export function getMdDownload(file_info: { file_url: string; file_name: string }
     file_info: file_info,
     to_type: to_type
   }
-  , {
-    responseType: 'blob' // 确保这里设置了 responseType
-  })
+    , {
+      responseType: 'blob' // 确保这里设置了 responseType
+    })
 }
