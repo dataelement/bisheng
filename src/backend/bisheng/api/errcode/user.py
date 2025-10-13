@@ -40,3 +40,8 @@ class UserNeedGroupAndRoleError(BaseErrorCode):
 class UserGroupNotDeleteError(BaseErrorCode):
     Code: int = 10610
     Msg: str = '用户组内还有用户，不能删除'
+
+
+class UserForbiddenError(BaseErrorCode):
+    Code: int = 10620
+    Msg: str = '该用户被禁用，请联系管理员'
