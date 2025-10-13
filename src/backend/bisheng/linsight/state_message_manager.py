@@ -1,9 +1,9 @@
 import asyncio
 import pickle
 from enum import Enum
-from loguru import logger
 from typing import List, Dict, Any, Optional
 
+from loguru import logger
 from pydantic import BaseModel, Field
 
 from bisheng.api.errcode.http_error import ServerError
@@ -290,7 +290,7 @@ class LinsightStateMessageManager:
             current_human_data = HumanParticipateDataSchema.model_validate(human_data_dict[max_key])
             current_human_data.user_input = user_input
             current_human_data.files = files
-            current_human_data.completed = True
+            current_human_data.is_completed = True
             human_data_dict[max_key] = current_human_data.model_dump()
             task_model.human_participate_data = human_data_dict
 

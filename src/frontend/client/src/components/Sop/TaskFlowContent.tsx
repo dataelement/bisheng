@@ -35,7 +35,7 @@ const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
 }
 
 const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) => {
-    const { name, step_type, params, extra_info, output } = data;
+    const { name, step_type, params, extra_info, output, timestamp } = data;
 
     const localize = useLocalize();
     const { showToast } = useToastContext();
@@ -209,7 +209,7 @@ const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) =>
                 <span className='text-xs text-gray-600 truncate'>{displayName}</span>
                 <span className='text-xs text-[#82868C] truncate max-w-72'>{paramValue()}</span>
             </div>
-            <span className='absolute right-2 -top-4 text-xs text-[#82868C] truncate max-w-72 opacity-0 group-hover:opacity-100 transition-opacity'>{formatStrTime('2025/09/29 15:00:00', 'yy-MM-dd HH:mm')}</span>
+            {timestamp && <span className='absolute right-2 -top-4 text-xs text-[#82868C] truncate max-w-72 opacity-0 group-hover:opacity-100 transition-opacity'>{formatStrTime(timestamp * 1000, 'yy-MM-dd HH:mm')}</span>}
         </div>
     )
 }
