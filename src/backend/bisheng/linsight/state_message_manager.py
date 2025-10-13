@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 
 from bisheng.api.errcode.http_error import ServerError
+from bisheng.api.v1.schema.linsight_schema import HumanParticipateDataSchema
 from bisheng.cache.redis import redis_client
 from bisheng.database.models import LinsightExecuteTask
 from bisheng.database.models.linsight_execute_task import ExecuteTaskStatusEnum, LinsightExecuteTaskDao
@@ -258,13 +259,14 @@ class LinsightStateMessageManager:
             raise
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
-    async def set_user_input(self, task_id: str, user_input: str) -> None:
+    async def set_user_input(self, task_id: str, user_input: str, files: List[Dict[str, str]] = None) -> None:
         """
         设置用户输入
 
         Args:
             task_id: 任务ID
             user_input: 用户输入内容
+            files: 相关文件列表
         """
         task_key = f"{self._keys['execution_tasks']}{task_id}"
 
@@ -275,7 +277,23 @@ class LinsightStateMessageManager:
             if not task_model:
                 raise ValueError(f"Task with ID {task_id} not found in Redis or database.")
 
-            task_model.user_input = user_input
+            if task_model.human_participate_data is None:
+                raise ValueError(f"Task with ID {task_id} does not support user input.")
+
+            # 获取当前的human_participate_data
+            human_data_dict = task_model.human_participate_data
+
+            # 查询最大的key值
+            max_key = max(human_data_dict.keys(), default=0) if human_data_dict else 0
+
+            # 更新对应的HumanParticipateDataSchema
+            current_human_data = HumanParticipateDataSchema.model_validate(human_data_dict[max_key])
+            current_human_data.user_input = user_input
+            current_human_data.files = files
+            current_human_data.completed = True
+            human_data_dict[max_key] = current_human_data.model_dump()
+            task_model.human_participate_data = human_data_dict
+
             task_model.status = ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
 
             # 使用事务确保数据一致性
@@ -286,8 +304,8 @@ class LinsightStateMessageManager:
             # 更新数据库
             await LinsightExecuteTaskDao.update_by_id(
                 task_id,
-                user_input=user_input,
-                status=ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
+                human_participate_data=human_data_dict,
+                status=ExecuteTaskStatusEnum.USER_INPUT_COMPLETED,
             )
 
             self._logger.info(f"Set user input for task {task_id}")
@@ -435,7 +453,6 @@ class LinsightStateMessageManager:
         except Exception as e:
             self._logger.error(f"Failed to get session stats: {e}")
             return {'error': str(e)}
-
 
     # 清理所有会话相关的Redis数据
     @classmethod

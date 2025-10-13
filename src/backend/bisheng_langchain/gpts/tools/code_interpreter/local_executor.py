@@ -1,12 +1,14 @@
 import glob
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from hashlib import md5
+from os import DirEntry
 from pathlib import Path
 from typing import List, Tuple, Optional, Any
 
@@ -224,5 +226,36 @@ class LocalExecutor(BaseExecutor):
                         file_name = os.path.join(root, name)
                         file_ext = os.path.splitext(name)[-1]
                         file_list.append(self.upload_minio(f"{uuid.uuid4().hex}.{file_ext}", file_name))
+                # 同步执行结果文件到本地同步目录
+                if self.local_sync_path and os.path.exists(self.local_sync_path):
+                    files_info = list(os.scandir(temp_dir))
+                    self.sync_files_to_local(files_info, temp_dir)
 
         return {'exitcode': 0, 'log': logs_all, 'file_list': file_list}
+
+    def sync_files_to_local(self, files_info: List[DirEntry], root_path: str):
+        if not files_info:
+            return
+        for file in files_info:
+            # ignore hidden files
+            if file.name.startswith("."):
+                continue
+            if file.is_file():
+                self.download_file(file, root_path)
+            else:
+                new_files_info = os.scandir(file.path)
+                self.sync_files_to_local(list(new_files_info), root_path)
+
+    def download_file(self, file_info: DirEntry, root_path: str):
+        relative_path = file_info.path.replace(root_path, "").lstrip(os.sep)
+        local_path = os.path.join(self.local_sync_path, relative_path)
+        local_dir = os.path.dirname(local_path)
+        os.makedirs(local_dir, exist_ok=True)
+        shutil.move(file_info.path, local_path)
+
+
+if __name__ == '__main__':
+    tmp_executor = LocalExecutor(minio={}, local_sync_path="./e2b_output")
+    result = tmp_executor.run(
+        code="""import os\nwith open("output/test2.txt", "w") as f:\n    f.write("Hello, E2222B!")\nprint("File written to output/test.txt")""")
+    print(result)

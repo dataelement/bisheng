@@ -165,3 +165,13 @@ export function getCaseDetail(sop_id: string): Promise<any> {
     }
   })
 }
+
+export function getMdDownload(file_info: { file_url: string; file_name: string }, to_type: 'pdf' | 'docx'): Promise<any> {
+  return request.post('/api/v1/linsight/workbench/download-md-to-pdf-or-docx', {
+    file_info: file_info,
+    to_type: to_type
+  }
+  , {
+    responseType: 'blob' // 确保这里设置了 responseType
+  })
+}

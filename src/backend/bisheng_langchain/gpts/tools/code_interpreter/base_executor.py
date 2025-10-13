@@ -9,6 +9,8 @@ from minio import Minio
 class BaseExecutor(ABC):
     def __init__(self, minio: dict, **kwargs):
         self.minio = minio
+        # 将代码生成的文件同步到本地的路径
+        self.local_sync_path = kwargs.get('local_sync_path', None)
 
     @abstractmethod
     def run(self, code: str) -> Any:
@@ -18,8 +20,10 @@ class BaseExecutor(ABC):
             self,
             object_name: str,
             file_path,
-    ):
+    ) -> str:
         # 初始化minio
+        if not self.minio:
+            return ""
 
         minio_client = Minio(
             endpoint=self.minio.get('endpoint'),
@@ -37,7 +41,7 @@ class BaseExecutor(ABC):
         )
         bucket = self.minio.get('tmp_bucket', 'tmp-dir')
         logger.debug(
-            'upload_file obj={} bucket={} file_paht={}',
+            'upload_file obj={} bucket={} file_path={}',
             object_name,
             bucket,
             file_path,

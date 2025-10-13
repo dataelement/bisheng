@@ -98,6 +98,29 @@ class LinsightWorkbenchImpl:
         return llm, workbench_conf
 
     @classmethod
+    async def human_participate_add_file(cls, linsight_session_version: LinsightSessionVersion,
+                                         files: List[SubmitFileSchema]) -> Optional[List]:
+        """
+        人工参与时添加文件
+        :param linsight_session_version:
+        :param files:
+        :return:
+        """
+        if not files:
+            return None
+
+        processed_files = await cls._process_submitted_files(files, linsight_session_version.session_id)
+
+        if linsight_session_version.files:
+            linsight_session_version.files.extend(processed_files)
+        else:
+            linsight_session_version.files = processed_files
+
+        await LinsightSessionVersionDao.insert_one(linsight_session_version)
+
+        return processed_files
+
+    @classmethod
     async def submit_user_question(cls, submit_obj: LinsightQuestionSubmitSchema,
                                    login_user: UserPayload) -> tuple[MessageSession, LinsightSessionVersion]:
         """

@@ -3,6 +3,7 @@ import FileIcon from '~/components/ui/icon/File';
 import { AlertDialog, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../ui';
 import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { useState } from "react";
+import { getMdDownload } from '~/api/linsight';
 export default function DownloadResultFileBtn({ file, onDownloadFile }) {
     const isMd = /md$/i.test(file.file_name)
     const [isLoading, setIsLoading] = useState(false)
@@ -17,19 +18,76 @@ export default function DownloadResultFileBtn({ file, onDownloadFile }) {
             file_url: url
         })
     }
-
-    const handleDownLoad = (e, type) => {
+    const handleDownLoad = async (e, type) => {
         e.stopPropagation();
         setIsLoading(true)
-        setTitle(type)
-        // loading
-        setTimeout(() => {
-            setIsLoading(false)
-            setIsSuccess(true)
-        }, 2000)
-        setTimeout(() => {
-            setIsError(true)
-        }, 4000)
+        setTitle(type.toUpperCase())
+        setIsSuccess(false)
+        setIsError(false)
+    
+        try {
+            console.log('开始下载，参数:', {
+                file_url: file.file_url,
+                file_name: file.file_name,
+                to_type: type
+            });
+    
+            const response = await getMdDownload(
+                {
+                    file_url: file.file_url,
+                    file_name: file.file_name
+                },
+                type
+            );
+    
+            console.log('下载API返回数据类型:', typeof response);
+            
+            // 处理PDF二进制数据
+            let blob;
+            if (response instanceof Blob) {
+                blob = response;
+            } else if (typeof response === 'string' && response.startsWith('%PDF-')) {
+                // 如果是PDF二进制字符串，转换为Blob
+                blob = new Blob([response], { type: 'application/pdf' });
+            } else {
+                // 其他情况也尝试创建Blob
+                blob = new Blob([response], { 
+                    type: type === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+                });
+            }
+    
+            console.log('创建的Blob:', blob);
+    
+            // 创建下载链接
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${file.file_name.replace('.md', '')}.${type}`;
+            document.body.appendChild(a);
+            a.click();
+            
+            // 清理
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            setIsSuccess(true);
+            console.log('文件下载成功');
+    
+            // 3秒后自动隐藏成功提示
+            setTimeout(() => {
+                setIsSuccess(false);
+            }, 3000);
+    
+        } catch (error) {
+            console.error('下载失败:', error);
+            setIsError(true);
+            // 3秒后自动隐藏错误提示
+            setTimeout(() => {
+                setIsError(false);
+            }, 3000);
+        } finally {
+            setIsLoading(false);
+        }
     }
 
     if (!isMd) return <Button variant="ghost" className=' w-6 h-6 p-0'>
