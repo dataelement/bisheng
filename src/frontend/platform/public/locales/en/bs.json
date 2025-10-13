@@ -404,7 +404,7 @@
       "required": "Cannot be empty"
     }
   },
-"save": "Save",
+  "save": "Save",
   "model": {
     "modelManagement": "Model Management",
     "modelFineTune": "Model Finetune",
@@ -1100,7 +1100,8 @@
     "10531": "{{type}} has been upgraded. You need to delete it and drag it in again.",
     "10532": "The workflow version has been upgraded, please contact the creator to rearrange it",
     "10540": "Server thread pool is full, please try again later",
-    "10541": "Workflow task execution failed：{{exception}}"
+    "10541": "Workflow task execution failed：{{exception}}",
+    "11111": "The current account has been disabled, please contact the administrator"
   },
   "all": "All",
   "confirmButton": "Confirm",

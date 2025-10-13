@@ -7,7 +7,7 @@ import { Button } from "../../components/bs-ui/button";
 import { Input } from "../../components/bs-ui/input";
 // import { alertContext } from "../contexts/alertContext";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { getCaptchaApi, loginApi, registerApi } from "../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import LoginBridge from './loginBridge';
@@ -29,6 +29,8 @@ export const LoginPage = () => {
 
     // login or register
     const [showLogin, setShowLogin] = useState(true)
+
+    useLoginError()
 
     // captcha
     const captchaRef = useRef(null)
@@ -223,3 +225,23 @@ export const LoginPage = () => {
         </div>
     </div>
 };
+
+
+
+
+export const useLoginError = () => {
+    const location = useLocation();
+    const { toast } = useToast();
+    const { t } = useTranslation();
+
+    useEffect(() => {
+        const queryParams = new URLSearchParams(location.search);
+        const code = queryParams.get('code')
+        if (code) {
+            toast({
+                variant: 'error',
+                description: t('errors.' + code)
+            })
+        }
+    }, [location])
+}
