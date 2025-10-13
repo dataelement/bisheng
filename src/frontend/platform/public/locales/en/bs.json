@@ -59,6 +59,8 @@
     "roleName": "Role Name",
     "skillAuthorization": "Skill Authorization",
     "knowledgeAuthorization": "Knowledge Base Authorization",
+    "flowName":"Flow Name",
+    "flowAuthorization": "Flow Authorization",
     "skillName": "Skill Name",
     "creator": "Creator",
     "usePermission": "Use Permission",

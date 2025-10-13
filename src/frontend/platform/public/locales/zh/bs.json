@@ -61,6 +61,8 @@
     "roleName": "角色名称",
     "skillAuthorization": "技能授权",
     "knowledgeAuthorization": "知识库授权",
+    "flowName":"工作流名称",
+    "flowAuthorization": "工作流授权",
     "skillName": "技能名称",
     "creator": "创建人",
     "usePermission": "使用权限",

@@ -340,7 +340,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
         {/* 工作流 */}
         <div className="">
             <SearchPanne
-                title={'工作流授权'}
+                title={t('system.flowAuthorization')}
                 groupId={groupId}
                 role_id={roleId}
                 type={'flow'}
