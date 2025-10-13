@@ -47,7 +47,10 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { }, onS
 
     const t = useLocalize()
     const [message, reasoningLog] = useMemo(() => {
-        const msg = typeof data.message === 'string' ? data.message : data.message.msg
+        const msg = typeof data.message === 'string' ? data.message : data.message?.msg
+        if (!msg) {
+            return ['', '']
+        }
         const regex = /<think>(.*?)<\/think>/s;
         const match = msg.match(regex);
         if (match) {
