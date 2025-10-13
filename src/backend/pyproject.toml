@@ -34,7 +34,7 @@ loguru = "^0.7.1"
 captcha = "^0.5.0"
 rsa = "4.9"
 pydantic = "^2.7.2"
-numexpr = "^2.8.6"
+numexpr = "2.13.*"
 pypinyin = "0.50.0"
 celery = { extras = ["redis"], version = "^5.3.6" }
 redis = "^5.0.0"
