@@ -153,7 +153,7 @@ def get_filelist(request: Request,
     """ 获取知识库文件信息. """
     login_user = get_default_operator()
     data, total, flag = KnowledgeService.get_knowledge_files(request, login_user, knowledge_id,
-                                                             keyword, status, page_num, page_size)
+                                                             keyword, [status], page_num, page_size)
     return resp_200(data={'data': data, 'total': total, 'writeable': flag})
 
 
