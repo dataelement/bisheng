@@ -852,7 +852,7 @@ class LinsightWorkbenchImpl:
             code_config["config"] = {}
         if "local" not in code_config["config"]:
             code_config["config"]["local"] = {}
-        code_config["config"]["local"] = {"local_path": file_dir}
+        code_config["config"]["local"] = {"local_sync_path": file_dir}
         if "e2b" not in code_config["config"]:
             code_config["config"]["e2b"] = {}
         code_config["config"]["e2b"] = {"local_sync_path": file_dir}
