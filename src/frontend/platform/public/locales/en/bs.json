@@ -1101,7 +1101,7 @@
     "10532": "The workflow version has been upgraded, please contact the creator to rearrange it",
     "10540": "Server thread pool is full, please try again later",
     "10541": "Workflow task execution failed：{{exception}}",
-    "11111": "The current account has been disabled, please contact the administrator"
+    "10620": "The current account has been disabled, please contact the administrator"
   },
   "all": "All",
   "confirmButton": "Confirm",

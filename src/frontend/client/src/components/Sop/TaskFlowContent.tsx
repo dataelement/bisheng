@@ -269,6 +269,8 @@ const Task = ({
                 }
                 // 总是添加 end 消息
                 msg.call_reason && result.push(msg);
+            } else if (msg.step_type === 'call_user_input') {
+                startMap.set(msg.timestamp, msg);
             }
         }
 
@@ -319,25 +321,32 @@ const Task = ({
                     <div className='flex'>
                         {
                             isExpanded ? <div className={`${lvl1 ? 'pl-6' : 'pl-0'} w-full text-sm text-gray-400 leading-6 scroll-hover`}>
-                                {history.map((_history, index) => (
-                                    <div>
-                                        <p key={index}>{_history.call_reason}</p>
-                                        <Tool
-                                            data={_history}
-                                            setCurrentDirectFile={setCurrentDirectFile}
-                                            onSearchKnowledge={onSearchKnowledge}
-                                            onWebSearch={onWebSearch}
-                                        />
-                                    </div>
-                                ))}
+                                {history.map((_history, index) =>
+                                    _history.step_type === "call_user_input"
+                                        ? <UserInput
+                                            disable={_history.is_completed}
+                                            taskId={task.id}
+                                            history={_history}
+                                            onSendInput={sendInput}
+                                        ></UserInput>
+                                        : <div>
+                                            <p key={index}>{_history.call_reason}</p>
+                                            <Tool
+                                                data={_history}
+                                                setCurrentDirectFile={setCurrentDirectFile}
+                                                onSearchKnowledge={onSearchKnowledge}
+                                                onWebSearch={onWebSearch}
+                                            />
+                                        </div>
+                                )}
                             </div> : null
                         }
                     </div>
                 </div>
             )}
 
-            {/* 等待输入部分 */}
-            {task.event_type === "user_input" && <UserInput task={task} onSendInput={sendInput} />}
+            {/* 等待输入部分  */}
+            {/* {task.event_type === "user_input" && <UserInput taskId={task.id} history={task} onSendInput={sendInput} />} */}
             <div className={isExpanded ? 'block' : 'hidden'}>
                 {children}
                 {/* 任务总结 */}
@@ -497,7 +506,7 @@ export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
                                     }}
                                 >
                                     {/* 固定图片长宽：这里示例为 300x200px，可根据需求调整 */}
-                                    <div className="w-[300px] h-[200px] overflow-hidden rounded-lg bg-[#F4F6FB]">
+                                    {/* <div className="w-[300px] h-[200px] overflow-hidden rounded-lg bg-[#F4F6FB]">
                                         <img
                                             // src={file.file_url} // 用文件真实URL，替代原固定占位图
                                             src="https://bpic.588ku.com/element_origin_min_pic/23/07/11/d32dabe266d10da8b21bd640a2e9b611.jpg!r650"
@@ -508,7 +517,7 @@ export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
                                         //   e.target.src = "https://via.placeholder.com/300x200?text=Image+Load+Failed";
                                         // }}
                                         />
-                                    </div>
+                                    </div> */}
                                 </div>
                             ))
                         }
@@ -520,9 +529,9 @@ export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
                     <div className='mt-5 flex flex-wrap gap-3'>
                         {files?.map((file) => (
                             <>
-                                <div key={file.file_id} className='max-w-[80%] p-2 rounded-2xl border border-[#ebeef2] cursor-pointer'>
+                                {/* <div key={file.file_id} className='max-w-[80%] p-2 rounded-2xl border border-[#ebeef2] cursor-pointer'>
                                     <img src="https://bpic.588ku.com/element_origin_min_pic/23/07/11/d32dabe266d10da8b21bd640a2e9b611.jpg!r650" alt="" />
-                                </div>
+                                </div> */}
                                 <div
                                     key={file.file_id}
                                     onClick={() => {

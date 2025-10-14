@@ -1,11 +1,14 @@
 import { X, ChevronUp, ChevronDown } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { checkFileParseStatus } from "~/api/linsight";
+import { File_Accept } from "~/common";
 import { AttachmentIcon } from "~/components/svg";
 import SendIcon from "~/components/svg/SendIcon";
 import { Button, Textarea } from "~/components/ui";
 import { FileIcon } from "~/components/ui/icon/File/FileIcon";
-import { useUploadFileMutation } from "~/data-provider";
+import { useGetBsConfig, useUploadFileMutation } from "~/data-provider";
 import { useLocalize } from "~/hooks";
+import { useToastContext } from "~/Providers";
 
 interface UploadingFile {
     id: string
@@ -16,16 +19,69 @@ interface UploadingFile {
     result?: any
 }
 
-export default function UserInput({ task, onSendInput }) {
+export default function UserInput({ taskId, history = {}, disable = false, onSendInput }) {
     const localize = useLocalize()
-    const [inputValue, setInputValue] = useState("")
-    const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([])
+    const [inputValue, setInputValue] = useState(history.user_input || "")
+    const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>(history?.files?.map(file => ({
+        id: file.file_id,
+        file: new File([], file.original_filename),
+        progress: 100,
+        abortController: null,
+        status: '',
+        result: {
+            name: file.original_filename,
+            size: 0
+        }
+    })) || [])
     const [isDragOver, setIsDragOver] = useState(false)
     const [collapsed, setCollapsed] = useState(false)
-    const [isInput, setIsInput] = useState(false)
+    const [isInput, setIsInput] = useState(disable)
     const fileInputRef = useRef<HTMLInputElement>(null)
     // 新增：用于动画的容器Ref（获取折叠区域真实高度）
     const collapseContainerRef = useRef<HTMLDivElement>(null)
+    // 解析中
+    console.log('uploadingFiles :>> ', history, uploadingFiles);
+    const { showToast } = useToastContext();
+    const isParsing = useMemo(() => {
+        return uploadingFiles.some((file) => file.status === "success")
+    }, [uploadingFiles])
+    // 更新文件上传解析状态
+    useEffect(() => {
+        const files = uploadingFiles.filter((file) => file.status === "success");
+        if (files.length > 0) {
+            const intervalId = setInterval(async () => {
+                const res = await checkFileParseStatus(files.map((f) => f.result.file_id));
+                const statusMap = new Map(res.data.map(item => [item.file_id, item.parsing_status]));
+
+                setUploadingFiles((prev) => {
+                    return prev.reduce((result, file) => {
+                        const fileId = file.result.file_id; // 假设 file 对象中有 file_id 字段
+                        if (statusMap.has(fileId)) {
+                            const status = statusMap.get(fileId);
+                            if (status === 'completed' && file.status !== '') {
+                                // 将解析状态更新为空，并保留文件
+                                result.push({ ...file, status: '', result: { ...file.result, parsing_status: 'completed' } });
+                            } else if (status === 'failed') {
+                                // 失败文件，显示错误消息，且不加入结果数组
+                                showToast({ message: localize('com_file_parse_failed_auto_removed', { 0: file.result.filename }), status: 'error' });
+                            } else {
+                                // 其他状态保持文件不变
+                                result.push(file);
+                            }
+                        } else {
+                            result.push(file);
+                        }
+                        return result;
+                    }, []);
+                });
+            }, 2000);
+
+            // 清理定时器
+            return () => clearInterval(intervalId);
+        }
+    }, [uploadingFiles]);
+
+
 
     const uploadFile = useUploadFileMutation({
         onSuccess: (data, variables) => {
@@ -82,6 +138,7 @@ export default function UserInput({ task, onSendInput }) {
             formData.append("file_id", fileId)
             formData.append("file_name", file.name)
 
+            window.isLinsight = true // TODO: 临时方案，后续需要优化
             uploadFile.mutate({
                 body: formData,
                 signal: abortController.signal,
@@ -148,17 +205,17 @@ export default function UserInput({ task, onSendInput }) {
             setCollapsed(true)
             setIsInput(true)
             // console.log('object :>> ', {
-            //     task_id: task.id,
+            //     task_id: taskId,
             //     user_input: inputValue,
             //     files: uploadingFiles.map((file) => file.result)
             // });
             onSendInput({
-                task_id: task.id,
+                task_id: taskId,
                 user_input: inputValue,
-                files: uploadingFiles
+                files: uploadingFiles.map((file) => file.result)
             })
-            setUploadingFiles([])
-            setInputValue("")
+            // setUploadingFiles([])
+            // setInputValue("")
         }
     }
 
@@ -169,6 +226,13 @@ export default function UserInput({ task, onSendInput }) {
             handleSendInput()
         }
     }
+
+    const { data: bsConfig } = useGetBsConfig()
+    const accept = useMemo(() => {
+        return bsConfig?.enable_etl4lm
+            ? File_Accept.Linsight_Etl4lm
+            : File_Accept.Linsight
+    }, [bsConfig])
 
     return (
         <div
@@ -192,12 +256,12 @@ export default function UserInput({ task, onSendInput }) {
                 <div className="flex items-center">
                     {!isInput ? <span className="bg-[#D5E3FF] m-2 ml-3 p-1 px-3 text-xs text-primary rounded-md">
                         {localize("com_sop_waiting_input")}
-                    </span> : 
-                    <span className="bg-green-100 m-2 ml-3 p-1 px-3 text-xs text-green-800 rounded-md text-bold">
-                        {localize("已输入")}
-                    </span>
+                    </span> :
+                        <span className="bg-green-100 m-2 ml-3 p-1 px-3 text-xs text-green-800 rounded-md text-bold">
+                            {localize("已输入")}
+                        </span>
                     }
-                    <p className="m-2">标题</p>
+                    <p className="m-2">{history.params?.call_title}</p>
                 </div>
                 <button
                     type="button"
@@ -218,7 +282,7 @@ export default function UserInput({ task, onSendInput }) {
                 }}
             >
                 <div className="m-2">
-                    <span className="pl-3 text-sm ">{task.call_reason}</span>
+                    <span className="pl-3 text-sm ">{history.params?.call_content}</span>
                 </div>
 
                 {uploadingFiles.length > 0 && (
@@ -228,12 +292,13 @@ export default function UserInput({ task, onSendInput }) {
                                 key={uploadingFile.id}
                                 className="group min-w-52 relative flex items-center gap-2 border bg-white p-2 rounded-2xl cursor-default"
                             >
-                                <span
+                                {!disable && <span
                                     className="opacity-0 group-hover:opacity-100 absolute p-0.5 right-1.5 top-1.5 bg-black text-white rounded-full cursor-pointer transition-opacity hover:bg-gray-800"
                                     onClick={() => handleCancelUpload(uploadingFile.id)}
                                 >
                                     <X size={14} />
                                 </span>
+                                }
                                 <FileIcon loading={uploadingFile.status === "uploading"} type={getFileType(uploadingFile.file.name)} />
                                 <div className="flex-1">
                                     <div className="max-w-48 text-sm font-medium text-gray-700 truncate">{uploadingFile.file.name}</div>
@@ -246,7 +311,7 @@ export default function UserInput({ task, onSendInput }) {
                                     ) : uploadingFile.status === "error" ? (
                                         <div className="text-xs text-red-500">上传失败</div>
                                     ) : (
-                                        <div className="text-xs text-gray-500">{formatFileSize(uploadingFile.file.size)}</div>
+                                        uploadingFile.file.size ? <div className="text-xs text-gray-500">{formatFileSize(uploadingFile.file.size)}</div> : null
                                     )}
                                 </div>
                             </div>
@@ -256,7 +321,7 @@ export default function UserInput({ task, onSendInput }) {
 
                 <div className="bg-gray-50 rounded-lg pl-2 m-2 pb-10"> {/* 增加底部内边距，避免按钮被遮挡 */}
                     <Textarea
-                        id={task.id}
+                        id={taskId}
                         placeholder={localize("com_sop_please_input")}
                         className="border-none bg-transparent ![box-shadow:initial] pl-0 pr-2 pt-2 h-auto"
                         rows={1}
@@ -272,8 +337,8 @@ export default function UserInput({ task, onSendInput }) {
                         type="file"
                         multiple
                         className="hidden"
-                        onChange={handleFileSelect} 
-                        accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                        onChange={handleFileSelect}
+                        accept={accept}
                     />
 
                     <Button
@@ -287,7 +352,7 @@ export default function UserInput({ task, onSendInput }) {
                     <Button
                         className="absolute bottom-4 right-4 size-9 rounded-full p-0 bg-black hover:bg-black/80 transition-colors"
                         onClick={handleSendInput}
-                        disabled={!inputValue.trim() || isInput}
+                        disabled={!inputValue.trim() || isInput || isParsing}
                     >
                         <SendIcon size={24} />
                     </Button>
