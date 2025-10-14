@@ -982,7 +982,7 @@
   "com_inputfiles_parsing": "解析中...",
   "com_inputfiles_uploading": "上传中...",
   "com_preview_old_version_unsupported": "旧版文件格式暂不支持预览",
-  "com_preview_type_unsupported": "该类型文件不支持预览",
+  "com_preview_type_unsupported": "此文件暂不支持预览",
   "com_preview_source_paragraph": "来源段落",
   "com_search_found_webs": "已搜到 {{0}} 个网页",
   "com_search_results": "搜索结果",
