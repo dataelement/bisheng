@@ -173,7 +173,22 @@ if __name__ == '__main__':
     e2b_api_key = os.environ.get("E2B_API_KEY")
     e2b_exec = E2bCodeExecutor(api_key=e2b_api_key, keep_sandbox=True, minio={}, local_sync_path="./e2b_output")
     result = e2b_exec.run(
-        code="""import os\nwith open("output/test.txt", "w") as f:\n    f.write("Hello, E2B!")\nprint("File written to output/test.txt")""")
+        code="""import requests\nimport os
+os.makedirs('./downloaded_wallpapers', exist_ok=True)
+# 选定一个新的可靠高清风景图片链接
+direct_image_url = 'https://images.unsplash.com/photo-1524758631624-e2822e304c36?ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&ixlib=rb-1.2.1&auto=format&fit=crop&w=1050&q=80'
+output_path = './downloaded_wallpapers/wallpaper_1.jpg'
+try:
+    response = requests.get(direct_image_url, stream=True)
+    if response.status_code == 200:
+        with open(output_path, 'wb') as f:
+            for chunk in response.iter_content(1024):
+                f.write(chunk)
+        print(f'壁纸已成功下载到 {output_path}')
+    else:
+        print(f'请求失败，状态码: {response.status_code}')
+except Exception as e:
+    print(f'发生异常: {str(e)}')""")
     print(result)
     print(11111)
     e2b_exec.close()
