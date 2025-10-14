@@ -236,7 +236,7 @@ export const useLoginError = () => {
 
     useEffect(() => {
         const queryParams = new URLSearchParams(location.search);
-        const code = queryParams.get('code')
+        const code = queryParams.get('status_code')
         if (code) {
             toast({
                 variant: 'error',

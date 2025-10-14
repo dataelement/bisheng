@@ -1,4 +1,5 @@
 import React, { forwardRef, useMemo } from 'react';
+import { File_Accept } from '~/common';
 
 type FileUploadProps = {
   className?: string;
@@ -12,7 +13,7 @@ const FileUpload = forwardRef<HTMLInputElement, FileUploadProps>(
   ({ children, accept = '', handleFileChange }, ref) => {
 
     const _accept = useMemo(() => {
-      return accept || '.pdf,.txt,.docx,.pptx,.md,.html,.xls,.xlsx,.doc,.ppt,.png,.jpg,.jpeg,.bmp'
+      return accept || File_Accept.Default
     }, [accept])
 
     return (

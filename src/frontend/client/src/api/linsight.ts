@@ -53,12 +53,12 @@ export function startLinsight(versionId: string): Promise<any> {
 }
 
 // 用户任务中输入事件
-export function userInputLinsightEvent(session_version_id: string, linsight_execute_task_id: string, input_content: string): Promise<any> {
+export function userInputLinsightEvent(session_version_id: string, linsight_execute_task_id: string, input_content: string, files: any[]): Promise<any> {
   return request.post('/api/v1/linsight/workbench/user-input', {
     session_version_id,
     linsight_execute_task_id,
     input_content,
-    files: []
+    files
   });
 }
 
