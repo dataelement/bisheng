@@ -6,6 +6,7 @@ from fastapi import (APIRouter, BackgroundTasks, Body, File, Form, HTTPException
                      UploadFile)
 from starlette.responses import FileResponse
 
+from bisheng.api.errcode.http_error import ServerError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import (decide_vectorstores, delete_es, delete_vector,
@@ -258,6 +259,13 @@ def dump_vector_knowledge(collection_name: str, expr: str = None, store: str = '
 
 @router.get('/download_statistic')
 def download_statistic_file(file_path: str):
+    suffix = file_path.split('.')[-1]
+    if suffix != 'log':
+        raise ServerError.http_exception(msg='only .log file supported download')
+    dir_path = file_path.replace('.log', '')
+    if dir_path.find(".") != -1 or not dir_path.startswith("/app/data"):
+        raise ServerError.http_exception(msg='invalid file path, file path must not contain .')
+
     file_name = os.path.basename(file_path)
     return FileResponse(file_path, filename=file_name)
 
