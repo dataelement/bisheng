@@ -42,7 +42,7 @@ RUN python -m pip install --upgrade pip && \
 RUN python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab'); nltk.download('averaged_perceptron_tagger'); nltk.download('averaged_perceptron_tagger_eng')"
 
 # 安装 playwright chromium
-RUN playwright install chromium
+RUN playwright install chromium && playwright install-deps
 
 COPY . .
 
