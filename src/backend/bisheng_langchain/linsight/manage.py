@@ -133,14 +133,19 @@ class TaskManage(BaseModel):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "call_reason": {
+                        "call_content": {
                             "type": "string",
                             "description": "你需要在这里总结询问的前因后果，并生成问题询问用户。"
+                        },
+                        "call_title": {
+                            "type": "string",
+                            "description": "你可以在这里简要描述你需要询问用户的标题,方便用户理解。"
                         }
                     },
                 },
                 "required": [
-                    "call_reason"
+                    "call_content",
+                    "call_title"
                 ]
             }
         })

@@ -496,7 +496,9 @@ class Task(BaseTask):
                     if tool_name == CallUserInputToolName:
                         # 等待用户输入
                         self.status = TaskStatus.INPUT.value
-                        await self.put_event(NeedUserInput(task_id=self.id, call_reason=call_reason))
+                        call_reason = tool_args.get("call_content") or tool_args.get("call_reason")
+                        await self.put_event(
+                            NeedUserInput(task_id=self.id, call_reason=call_reason, params=tool_args.copy()))
                         # 等待用户输入
                         while self.status != TaskStatus.INPUT_OVER.value:
                             await asyncio.sleep(0.5)
