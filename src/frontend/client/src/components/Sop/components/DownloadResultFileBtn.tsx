@@ -28,7 +28,6 @@ export default function DownloadResultFileBtn({ file, onDownloadFile }) {
 
     const handleClick = (e, url) => {
         e.stopPropagation();
-        setIsLoading(true)
         onDownloadFile({
             file_name: file.file_name,
             file_url: url
