@@ -33,6 +33,8 @@ class GenerateSubTask(BaseEvent):
 # 需要用户输入的事件
 class NeedUserInput(BaseEvent):
     call_reason: str = Field(..., description='需要用户输入的原因')
+    params: Optional[Any] = Field(default=None, description='执行步骤的参数')
+    step_type: Optional[str] = Field(default="call_user_input")
 
 
 class TaskStart(BaseEvent):

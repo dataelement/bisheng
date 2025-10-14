@@ -129,7 +129,8 @@ class ReactTask(BaseTask):
             if action == CallUserInputToolName:
                 # 等待用户输入
                 self.status = TaskStatus.INPUT.value
-                await self.put_event(NeedUserInput(task_id=self.id, call_reason=_call_reason))
+                _call_reason = params.get("call_content") or params.get("call_reason")
+                await self.put_event(NeedUserInput(task_id=self.id, call_reason=_call_reason, params=params.copy()))
                 # 等待用户输入
                 while self.status != TaskStatus.INPUT_OVER.value:
                     await asyncio.sleep(0.5)

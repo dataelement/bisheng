@@ -1,8 +1,8 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List
 
-from sqlalchemy import Enum as SQLEnum, Column, JSON, Text, DateTime, text, CHAR, ForeignKey, update
+from sqlalchemy import Enum as SQLEnum, Column, JSON, DateTime, text, CHAR, ForeignKey, update
 from sqlmodel import Field, select, col
 
 from bisheng.database.base import async_session_getter, uuid_hex
@@ -59,9 +59,6 @@ class LinsightExecuteTaskBase(SQLModelSerializable):
     task_type: ExecuteTaskTypeEnum = Field(..., description='任务类型',
                                            sa_column=Column(SQLEnum(ExecuteTaskTypeEnum), nullable=False))
     task_data: Optional[dict] = Field(None, description='任务数据', sa_type=JSON, nullable=True)
-    # 人工参与数据
-    human_participate_data: Optional[Dict[int, Any]] = Field(None, description='人工参与数据', sa_type=JSON,
-                                                             nullable=True)
 
     # input_prompt: Optional[str] = Field(None, description='输入提示', sa_type=Text, nullable=True)
     # user_input: Optional[str] = Field(None, description='用户输入', sa_type=Text, nullable=True)

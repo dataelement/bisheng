@@ -7,13 +7,13 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from bisheng.api.errcode.http_error import ServerError
-from bisheng.api.v1.schema.linsight_schema import HumanParticipateDataSchema
+from bisheng.api.v1.schema.linsight_schema import UserInputEventSchema
 from bisheng.cache.redis import redis_client
 from bisheng.database.models import LinsightExecuteTask
 from bisheng.database.models.linsight_execute_task import ExecuteTaskStatusEnum, LinsightExecuteTaskDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersion, LinsightSessionVersionDao
 from bisheng.utils.util import retry_async
-from bisheng_langchain.linsight.event import ExecStep
+from bisheng_langchain.linsight.event import BaseEvent
 
 
 class MessageEventType(str, Enum):
@@ -277,22 +277,16 @@ class LinsightStateMessageManager:
             if not task_model:
                 raise ValueError(f"Task with ID {task_id} not found in Redis or database.")
 
-            if task_model.human_participate_data is None:
+            user_input_event = task_model.history[-1] if task_model.history else None
+            if user_input_event is None or user_input_event.get("step_type") != "call_user_input":
                 raise ValueError(f"Task with ID {task_id} does not support user input.")
 
-            # 获取当前的human_participate_data
-            human_data_dict = task_model.human_participate_data
+            user_input_event = UserInputEventSchema.model_validate(user_input_event)
 
-            # 查询最大的key值
-            max_key = max(human_data_dict.keys(), default=0) if human_data_dict else 0
-
-            # 更新对应的HumanParticipateDataSchema
-            current_human_data = HumanParticipateDataSchema.model_validate(human_data_dict[max_key])
-            current_human_data.user_input = user_input
-            current_human_data.files = files
-            current_human_data.is_completed = True
-            human_data_dict[max_key] = current_human_data.model_dump()
-            task_model.human_participate_data = human_data_dict
+            user_input_event.user_input = user_input
+            user_input_event.files = files
+            user_input_event.is_completed = True
+            task_model.history[-1] = user_input_event.model_dump()
 
             task_model.status = ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
 
@@ -304,8 +298,8 @@ class LinsightStateMessageManager:
             # 更新数据库
             await LinsightExecuteTaskDao.update_by_id(
                 task_id,
-                human_participate_data=human_data_dict,
                 status=ExecuteTaskStatusEnum.USER_INPUT_COMPLETED,
+                history=task_model.history
             )
 
             self._logger.info(f"Set user input for task {task_id}")
@@ -343,7 +337,7 @@ class LinsightStateMessageManager:
             return None
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
-    async def add_execution_task_step(self, task_id: str, step: ExecStep) -> None:
+    async def add_execution_task_step(self, task_id: str, step: BaseEvent) -> None:
         """
         添加执行任务步骤
 

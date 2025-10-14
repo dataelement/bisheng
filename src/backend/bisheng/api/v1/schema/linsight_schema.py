@@ -3,6 +3,7 @@ from typing import List, Dict, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from bisheng.database.models.linsight_sop import LinsightSOPRecord
+from bisheng_langchain.linsight.event import NeedUserInput
 
 
 class ToolChildrenSchema(BaseModel):
@@ -54,11 +55,7 @@ class SopRecordRead(LinsightSOPRecord, table=False):
     user_name: Optional[str] = Field(default=None, description="用户名称")
 
 
-# human_participate_data
-class HumanParticipateDataSchema(BaseModel):
-    title: Optional[str] = Field(None, description="标题")
-    call_reason: Optional[str] = Field(None, description="人工介入原因")
+class UserInputEventSchema(NeedUserInput):
     files: Optional[List[Dict[str, str]]] = Field(None, description="上传的文件列表")
     user_input: Optional[str] = Field(None, description="用户输入")
-    # 完成状态
     is_completed: bool = Field(False, description="是否已完成")
