@@ -1,11 +1,13 @@
 "use client"
 import { Sheet, SheetContent, SheetHeader } from '@/components/bs-ui/sheet'
-import { ChevronLeft, Download, FileIcon } from 'lucide-react'
+import { ChevronLeft, Download } from 'lucide-react'
 import type React from "react"
 import { useMemo } from "react"
 import { useTranslation } from 'react-i18next'
 import FilePreview from './FilePreview'
 import { Button } from '@/components/bs-ui/button'
+import {  Tooltip, TooltipContent, TooltipTrigger } from '@/components/bs-ui/tooltip'
+import FileIcon from './FileIcon'
 
 interface FileItem {
     file_id: string
@@ -41,6 +43,7 @@ export default function FilePreviewDrawer({
     downloadFile,
     directFile,
     onBack,
+    handleExportOther
 }: FilePreviewDrawerProps) {
     const { t: localize } = useTranslation()
     // const [selectedFileId, setSelectedFileId] = useState(currentFileId || files?.[0]?.file_id || "")
@@ -103,15 +106,36 @@ export default function FilePreviewDrawer({
                                 </div>
 
                                 {/* 下载按钮 */}
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => downloadFile?.(currentDisplayFile)}
-                                    className="h-8 w-8"
-                                    disabled={!currentDisplayFile}
-                                >
-                                    <Download size={14} />
-                                </Button>
+                                <Button variant="ghost" disabled={!currentDisplayFile}>
+                                        {String(currentDisplayFile.file_name).toLowerCase().endsWith('.md') ? (
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <span onClick={(e) => e.stopPropagation()}>
+                                                        <Download size={16} />
+                                                    </span>
+                                                </TooltipTrigger>
+                                                <TooltipContent side='bottom' align='center' className='bg-white text-gray-800 border border-gray-200'>
+                                                    <div className='flex flex-col gap-2'>
+                                                        <div className='flex gap-2 items-center cursor-pointer hover:bg-gray-100 rounded-md p-1' onClick={(e) => { e.stopPropagation(); downloadFile(currentDisplayFile); }}>
+                                                            <FileIcon type={'md'} className='size-5' />
+                                                            <div className='w-full flex gap-2 items-center'>Markdown</div>
+                                                        </div>
+                                                        <div className='flex gap-2 items-center rounded-md p-1 cursor-pointer hover:bg-gray-100' onClick={(e) => handleExportOther(e, 'pdf',currentDisplayFile)}>
+                                                            <FileIcon type={'pdf'} className='size-5' />
+                                                            <div className='w-full flex gap-2 items-center'>PDF</div>
+                                                        </div>
+                                                        <div className='flex gap-2 items-center rounded-md p-1 cursor-pointer hover:bg-gray-100' onClick={(e) => handleExportOther(e, 'docx',currentDisplayFile)}>
+                                                            <FileIcon type={'docx'} className='size-5' />
+                                                            <div className='w-full flex gap-2 items-center'>Docx</div>
+                                                        </div>
+                                                    </div>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        ) : (
+                                            <Download size={16} onClick={(e) => { e.stopPropagation(); downloadFile(currentDisplayFile); }} />
+                                            
+                                        )}
+                                    </Button>
                             </div>
                         </div>
                     </div>

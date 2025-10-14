@@ -1,7 +1,7 @@
 import DownIcon from '@/components/bs-icons/DownIcon';
 import { Button } from '@/components/bs-ui/button';
 import { Textarea } from '@/components/bs-ui/input';
-import { useToast } from '@/components/bs-ui/toast/use-toast';
+import { toast, useToast } from '@/components/bs-ui/toast/use-toast';
 import MessageMarkDown from '@/pages/BuildPage/flow/FlowChat/MessageMarkDown';
 import axios from 'axios';
 import {
@@ -19,7 +19,7 @@ import {
     CheckCircle,
     CircleX
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import FileDrawer from './FileDrawer';
 import FileIcon from './FileIcon';
@@ -415,7 +415,16 @@ export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
     // 文件导出提示
     const [exportState, setExportState] = useState<{ loading: boolean; success: boolean; error: boolean; title: string }>({ loading: false, success: false, error: false, title: 'PDF' })
     // useFoucsInput(tasks);
-
+    
+    const timerRef = useRef(null)
+    useEffect(()=>{
+        return ()=>{
+            if(timerRef.current) {
+                clearTimeout(timerRef.current)
+                timerRef.current = null;
+            }
+        }
+    },[])
     const mergeFiles = useMemo(() => {
         const mergedFiles = [...files, ...allFiles];
         return mergedFiles;
@@ -447,73 +456,125 @@ export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
         console.log(file);
         
         e.stopPropagation();
-        setExportState({ loading: true, success: false, error: false, title: type.toUpperCase() })
-    
-        try {
-            console.log('开始转换下载，参数:', {
-                file_url: file.file_url,
-                file_name: file.file_name,
-                to_type: type
-            });
-    
-            // 使用 axios.post 获取
-            const response = await axios.post('/api/v1/linsight/workbench/download-md-to-pdf-or-docx', {
-                file_info: {
-                    file_url: file.file_url,
-                    file_name: file.file_name
-                },
-                to_type: type
-            }, {
-                responseType: 'blob' // 重要：设置响应类型为 blob
-            });
-    
-            console.log('转换下载API返回:', response);
-            console.log('返回数据类型:', typeof response.data);
-            
-            // 根据文件类型设置MIME类型和文件扩展名
-            let mimeType, fileExtension;
-            if (type === 'pdf') {
-                mimeType = 'application/pdf';
-                fileExtension = 'pdf';
-            } else if (type === 'docx') {
-                mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-                fileExtension = 'docx';
-            }
-    
-            // 处理返回的 blob 数据
-            const blob = new Blob([response.data], { type: mimeType });
-            console.log('创建的Blob:', blob);
-    
-            // 创建下载链接
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${file.file_name.replace('.md', '')}.${fileExtension}`;
-            document.body.appendChild(a);
-            a.click();
-            
-            // 清理
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-            
-            setExportState(prev => ({ ...prev, loading: false, success: true }));
-            console.log(`${type.toUpperCase()}文件转换下载成功`);
-    
-            // 3秒后自动隐藏成功提示
-            setTimeout(() => {
-                setExportState(prev => ({ ...prev, success: false }));
-            }, 3000);
-    
-        } catch (error) {
-            console.error(`${type.toUpperCase()}转换下载失败:`, error);
-            setExportState(prev => ({ ...prev, loading: false, error: true }));
-            
-            // 3秒后自动隐藏错误提示
-            setTimeout(() => {
-                setExportState(prev => ({ ...prev, error: false }));
-            }, 3000);
+        setExportState({ loading: true, success: false, error: false, title: type.toUpperCase() });
+        
+        // 清除之前的定时器，避免重复提示
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+          timerRef.current = null;
         }
-    }
+      
+        try {
+          console.log('开始转换下载，参数:', {
+            file_url: file.file_url,
+            file_name: file.file_name,
+            to_type: type
+          });
+      
+          // 发起请求，指定响应类型为 blob
+          const response = await axios.post(
+            '/api/v1/linsight/workbench/download-md-to-pdf-or-docx',
+            {
+              file_info: {
+                file_url: file.file_url,
+                file_name: file.file_name
+              },
+              to_type: type
+            },
+            { responseType: 'blob' }
+          );
+      
+          console.log('转换下载API返回1:', response);
+          console.log('返回数据类型:', typeof response.data);
+      
+          // 关键步骤：校验响应是否为 JSON 格式的错误（后端返回 200 但实际出错）
+          const blob = response.data;
+          const contentType = response.headers['content-type'] || '';
+          let isErrorResponse = false;
+          let errorMessage = `转换${type.toUpperCase()}失败，请稍后重试`;
+      
+          // 如果响应类型是 JSON，说明是后端返回的错误信息
+          if (contentType.includes('application/json')) {
+            // 将 Blob 转为文本，解析 JSON 错误信息
+            const text = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result);
+              reader.onerror = reject;
+              reader.readAsText(blob);
+            });
+      
+            try {
+              const errorData = JSON.parse(text);
+              // 提取后端返回的错误信息（匹配接口返回的 status_message 和 data）
+              if (errorData.status_message) {
+                errorMessage = errorData.status_message;
+              }
+              // 若有详细错误数据（如 Playwright 安装提示），补充到提示中
+              if (errorData.data) {
+                // 简化 Playwright 错误提示，只保留关键操作指引
+                const simplifiedError = errorData.data.includes('playwright install') 
+                  ? '服务器浏览器依赖未安装，请联系管理员执行 "playwright install" 命令' 
+                  : errorData.data;
+                errorMessage += `（详情：${simplifiedError.slice(0, 100)}...）`; // 截断长文本避免提示过长
+              }
+              isErrorResponse = true;
+            } catch (parseErr) {
+              // 解析 JSON 失败，说明不是标准错误格式，按正常流程处理
+              isErrorResponse = false;
+            }
+          }
+      
+          // 若检测到错误响应，直接抛出错误触发 catch 逻辑
+          if (isErrorResponse) {
+            throw new Error(errorMessage);
+          }
+      
+          // 正常文件流处理：设置对应 MIME 类型和扩展名
+          let mimeType, fileExtension;
+          if (type === 'pdf') {
+            mimeType = 'application/pdf';
+            fileExtension = 'pdf';
+          } else if (type === 'docx') {
+            mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+            fileExtension = 'docx';
+          }
+      
+          // 创建最终下载用的 Blob（指定正确 MIME 类型）
+          const downloadBlob = new Blob([blob], { type: mimeType });
+          console.log('创建的下载Blob:', downloadBlob);
+      
+          // 生成下载链接并触发下载
+          const url = window.URL.createObjectURL(downloadBlob);
+          const a = document.createElement('a');
+          a.href = url;
+          // 处理文件名：替换 .md 后缀，避免出现 xxx.md.pdf 这种重复后缀
+          const fileName = file.file_name.replace(/\.md$/i, '') + `.${fileExtension}`;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+      
+          // 清理资源，避免内存泄漏
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+      
+          // 更新状态为成功，3秒后自动隐藏提示
+          setExportState(prev => ({ ...prev, loading: false, success: true }));
+          console.log(`${type.toUpperCase()}文件转换下载成功`);
+          timerRef.current = setTimeout(() => {
+            setExportState(prev => ({ ...prev, success: false }));
+          }, 3000);
+      
+        } catch (error) {
+          // 捕获所有错误（网络错误、JSON 解析错误、业务错误）
+          console.error(`${type.toUpperCase()}转换下载失败:`, error);
+          // 显示错误提示，3秒后自动隐藏
+          setExportState(prev => ({ ...prev, loading: false, error: true }));
+          toast?.({ description: error.message, variant: 'error' });
+          timerRef.current = setTimeout(() => {
+            setExportState(prev => ({ ...prev, error: false }));
+          }, 3000);
+        }
+      };
 
     if (queueCount) {
         const totalMinutes = queueCount * 8;
@@ -537,6 +598,7 @@ export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
     }
 
     return (
+        <div className='relative h-screen'>
         <div className="w-[100%] mx-auto p-5 text-gray-800 leading-relaxed overflow-y-auto h-[calc(100vh-170px)] overflow-x-hidden">
             {/* {!tasks?.length && <PlaySop content={sop} />} */}
             {/* feedback */}
@@ -713,6 +775,7 @@ export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
                 isOpen={isPreviewOpen}
                 onOpenChange={setIsPreviewOpen}
                 downloadFile={downloadFile}
+                handleExportOther={handleExportOther}
                 directFile={currentDirectFile}
                 currentFileId={currentPreviewFileId}
                 onFileChange={(fileId) => setCurrentPreviewFileId(fileId)}
@@ -722,25 +785,26 @@ export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
                 })}
             >
             </FilePreviewDrawer>
-            {exportState.loading && (
-                <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-50">
+        </div >
+             {exportState.loading && (
+                <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-500">
                     <Loader2 className="size-5 animate-spin text-blue-500" />
                     <div className="text-sm text-gray-800">{exportState.title}&nbsp;正在导出，请稍后...&nbsp;&nbsp;</div>
                 </div>
             )}
             {exportState.success && (
-                <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-50">
+                <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-500">
                     <CheckCircle className="size-5 text-green-500" />
                     <div className="text-sm text-gray-800">{exportState.title}&nbsp;文件下载成功</div>
                 </div>
             )}
             {exportState.error && (
-                <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-50">
+                <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-500">
                     <CircleX className="size-5 text-red-500" />
                     <div className="text-sm text-gray-800">{exportState.title}&nbsp;导出失败</div>
                 </div>
             )}
-        </div >
+            </div>
     );
 };
 
