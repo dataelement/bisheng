@@ -107,7 +107,7 @@ export default function FilePreviewDrawer({
                                 </div>
 
                                 {/* 下载按钮 */}
-                                <TooltipAnchor side="bottom" description={localize('com_ui_download')}>
+                                <TooltipAnchor side="bottom" showSide >
                                     <DownloadResultFileBtn file={currentDisplayFile} onDownloadFile={downloadFile} />
                                     {/* <Button
                                         variant="ghost"

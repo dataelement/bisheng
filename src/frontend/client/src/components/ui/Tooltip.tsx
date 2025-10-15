@@ -4,15 +4,16 @@ import { forwardRef, useMemo } from 'react';
 import { cn } from '~/utils';
 
 interface TooltipAnchorProps extends Ariakit.TooltipAnchorProps {
-  description: string | React.ReactNode;
+  description?: string | React.ReactNode;
   side?: 'top' | 'bottom' | 'left' | 'right';
   className?: string;
   focusable?: boolean;
   role?: string;
+  showSide?:boolean;
 }
 
 export const TooltipAnchor = forwardRef<HTMLDivElement, TooltipAnchorProps>(function TooltipAnchor(
-  { description, side = 'top', className, role, ...props },
+  { description,showSide, side = 'top', className, role, ...props },
   ref,
 ) {
   const tooltip = Ariakit.useTooltipStore({ placement: side });
@@ -51,25 +52,28 @@ export const TooltipAnchor = forwardRef<HTMLDivElement, TooltipAnchorProps>(func
         onKeyDown={handleKeyDown}
         className={cn('cursor-pointer', className)}
       />
-      <AnimatePresence>
-        {mounted === true && (
-          <Ariakit.Tooltip
-            gutter={4}
-            alwaysVisible
-            className="tooltip"
-            render={
-              <motion.div
-                initial={{ opacity: 0, x, y }}
-                animate={{ opacity: 1, x: 0, y: 0 }}
-                exit={{ opacity: 0, x, y }}
-              />
-            }
-          >
-            <Ariakit.TooltipArrow />
-            <span className='text-sm'>{description}</span>
-          </Ariakit.Tooltip>
-        )}
-      </AnimatePresence>
+      {!showSide && (
+              <AnimatePresence>
+              {mounted === true && (
+                <Ariakit.Tooltip
+                  gutter={4}
+                  alwaysVisible
+                  className="tooltip"
+                  render={
+                    <motion.div
+                      initial={{ opacity: 0, x, y }}
+                      animate={{ opacity: 1, x: 0, y: 0 }}
+                      exit={{ opacity: 0, x, y }}
+                    />
+                  }
+                >
+                  <Ariakit.TooltipArrow />
+                  <span className='text-sm'>{description}</span>
+                </Ariakit.Tooltip>
+              )}
+            </AnimatePresence>
+      )
+      }
     </Ariakit.TooltipProvider>
   );
 });

@@ -28,6 +28,8 @@ import tempfile
 from pathlib import Path
 from typing import Optional, Union
 
+from bisheng.common.utils.markdown_cmpnt.md_to_docx.parser.ext_md_syntax import ExtMdSyntax
+
 logger = logging.getLogger(__name__)
 
 # 依赖导入及错误处理
@@ -186,8 +188,8 @@ class MarkdownToPdfConverter:
     """
 
     SUPPORTED_PAGE_FORMATS = {'A4', 'A3', 'A5', 'Letter', 'Legal', 'Tabloid'}
-    DEFAULT_MARKDOWN_EXTENSIONS = ['extra', 'codehilite', 'toc', 'tables']
-    DEFAULT_MATHJAX_TIMEOUT = 1500
+    DEFAULT_MARKDOWN_EXTENSIONS = [ExtMdSyntax(), 'extra', 'codehilite', 'toc', 'tables', 'sane_lists', 'fenced_code']
+    DEFAULT_TIMEOUT = 60000  # 毫秒
 
     def __init__(self,
                  default_css: Optional[str] = None,
@@ -450,7 +452,7 @@ class MarkdownToPdfConverter:
                     file_url = f'file:///{html_file_path.replace(os.sep, "/")}'
 
                     logger.debug("在浏览器中加载 HTML: %s", file_url)
-                    page.goto(file_url)
+                    page.goto(file_url, timeout=self.DEFAULT_TIMEOUT)
 
                     # 如果启用了 MathJax，等待排版完成
                     if self.enable_math:
@@ -490,7 +492,7 @@ class MarkdownToPdfConverter:
                     file_url = f'file:///{html_file_path.replace(os.sep, "/")}'
 
                     logger.debug("在浏览器中加载 HTML: %s", file_url)
-                    page.goto(file_url)
+                    page.goto(file_url, timeout=self.DEFAULT_TIMEOUT)
 
                     # 如果启用了 MathJax，等待排版完成
                     if self.enable_math:
@@ -524,7 +526,7 @@ class MarkdownToPdfConverter:
             logger.debug("等待 MathJax 排版...")
             page.wait_for_function(
                 "() => window.MathJax && window.MathJax.typesetPromise",
-                timeout=self.DEFAULT_MATHJAX_TIMEOUT
+                timeout=self.DEFAULT_TIMEOUT
             )
             page.evaluate("() => window.MathJax && window.MathJax.typesetPromise()")
             logger.debug("MathJax 排版完成")

@@ -209,12 +209,15 @@ class BaseTask(BaseModel):
             if one_file_name in ignore_files:
                 continue
             one_file_content = ""
-            async with aiofiles.open(one_file, mode="r", encoding="utf-8") as f:
-                async for line in f:
-                    one_file_content += line
-                    if len(one_file_content) > self.exec_config.file_content_length:
-                        one_file_content = one_file_content[:self.exec_config.file_content_length]
-                        break
+            try:
+                async with aiofiles.open(one_file, mode="r", encoding="utf-8") as f:
+                    async for line in f:
+                        one_file_content += line
+                        if len(one_file_content) > self.exec_config.file_content_length:
+                            one_file_content = one_file_content[:self.exec_config.file_content_length]
+                            break
+            except Exception:
+                pass
             if one_file_content:
                 file_content += f"{one_file_name}文件内容:\n{one_file_content}\n\n"
         return file_content
