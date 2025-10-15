@@ -1,6 +1,7 @@
 import asyncio
 import os
 import shutil
+import traceback
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional, List, Dict, Callable
@@ -365,7 +366,7 @@ class LinsightWorkflowTask:
             logger.info("智能体任务被用户终止")
             return False
         except Exception as e:
-            # logger.exception(e)
+            logger.error(f"task_exec_error {traceback.format_exc()}")
             raise TaskExecutionError(f"智能体任务执行失败: {e}")
 
     # ==================== 事件处理 ====================
