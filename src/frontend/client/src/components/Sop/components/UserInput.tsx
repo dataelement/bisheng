@@ -258,7 +258,7 @@ export default function UserInput({ taskId, history = {}, disable = false, onSen
                         {localize("com_sop_waiting_input")}
                     </span> :
                         <span className="bg-green-100 m-2 ml-3 p-1 px-3 text-xs text-green-800 rounded-md text-bold">
-                            {localize("已输入")}
+                            {localize("com_sop_input")}
                         </span>
                     }
                     <p className="m-2">{history.params?.call_title}</p>
