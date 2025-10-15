@@ -23,19 +23,39 @@ interface SearchPanneProps {
     title: string;
     type: string;
     children?: (data: any[]) => React.ReactNode;
-    permissionProps?: {
-        form: any;
-        onUseChange: (id: any, checked: boolean) => void;
-        onManageChange: (id: any, checked: boolean) => void;
-        nameKey: string;
-        creatorKey: string;
-        useChecked: (id: any) => boolean;
-        manageChecked: (id: any) => boolean;
-    };
+    form?: any;
+    onUseChange?: (id: any, checked: boolean) => void;
+    onManageChange?: (id: any, checked: boolean) => void;
+    nameKey?: string;
+    creatorKey?: string;
+    useChecked?: (id: any) => boolean;
+    manageChecked?: (id: any) => boolean;
+    isPermissionTable?: boolean;
     role_id?: any;
 }
 
-const SearchPanne = ({ groupId, title, type, children, permissionProps, role_id }: SearchPanneProps) => {
+const enum MenuType {
+    BUILD = 'build',
+    KNOWLEDGE = 'knowledge',
+    MODEL = 'model',
+    EVALUATION = 'evaluation'
+}
+
+const SearchPanne = ({ 
+    groupId, 
+    title, 
+    type, 
+    children, 
+    role_id,
+    form,
+    onUseChange,
+    onManageChange,
+    nameKey,
+    creatorKey,
+    useChecked,
+    manageChecked,
+    isPermissionTable
+  }: SearchPanneProps) => {
     const { t } = useTranslation();
     const { page, pageSize, data, total, loading, setPage, search } = useTable({ pageSize: 10 }, (params) => {
         const { page, pageSize, keyword } = params
@@ -52,7 +72,6 @@ const SearchPanne = ({ groupId, title, type, children, permissionProps, role_id 
             case 'skill':
                 return getGroupResourcesApi({ ...param, resource_type: 2 });
             case 'tool':
-                // TODO 追加mcp工具
                 return getGroupResourcesApi({ ...param, resource_type: 4 });
             case 'assistant':
                 return getGroupResourcesApi({ ...param, resource_type: 3 });
@@ -61,11 +80,8 @@ const SearchPanne = ({ groupId, title, type, children, permissionProps, role_id 
         }
     })
 
-    // 如果传入了权限相关props，则渲染权限表格
     const renderPermissionTable = () => {
-        if (!permissionProps) return children(data);
-        
-        const {  onUseChange, onManageChange, nameKey, creatorKey, useChecked, manageChecked } = permissionProps;
+        if (!isPermissionTable) return children?.(data) || null;
         
         return (
             <Table>
@@ -117,280 +133,326 @@ const SearchPanne = ({ groupId, title, type, children, permissionProps, role_id 
     </>
 }
 
+const usePermissionSwitchLogic = (form, setForm) => {
+    // 基础权限变更：处理ID类型转换+数组更新
+    const switchDataChange = (id, key, checked) => {
+        const numberFields = ['useLibs', 'manageLibs', 'useTools', 'manageTools'];
+        const convertedId = numberFields.includes(key) ? Number(id) : String(id);
+        
+        const index = form[key].findIndex(el => el === convertedId);
+        if (checked && index === -1) {
+            form[key].push(convertedId);
+        } else if (!checked && index !== -1) {
+            form[key].splice(index, 1);
+        }
+        setForm({ ...form, [key]: [...form[key]] });
+    };
 
-const enum MenuType {
-    BUILD = 'build',
-    KNOWLEDGE = 'knowledge',
-    MODEL = 'model',
-    EVALUATION = 'evaluation'
-}
-// -1 id表示新增
+    // 通用管理权限：勾选时自动联动勾选使用权限
+    const switchManage = (id, keyManage, keyUse, checked) => {
+        switchDataChange(id, keyManage, checked);
+        if (checked) switchDataChange(id, keyUse, checked);
+    };
+
+    // 各权限类型专属开关（含“管理权限开启时，无法关闭使用权限”规则）
+    return {
+        switchDataChange,
+        // 知识库
+        switchLibManage: (id, checked) => switchManage(id, 'manageLibs', 'useLibs', checked),
+        switchUseLib: (id, checked) => {
+            if (!checked && form.manageLibs.includes(Number(id))) return;
+            switchDataChange(id, 'useLibs', checked);
+        },
+        // 助手
+        switchAssistantManage: (id, checked) => switchManage(id, 'manageAssistants', 'useAssistant', checked),
+        switchUseAssistant: (id, checked) => {
+            if (!checked && form.manageAssistants.includes(String(id))) return;
+            switchDataChange(id, 'useAssistant', checked);
+        },
+        // 技能
+        switchSkillManage: (id, checked) => switchManage(id, 'manageSkills', 'useSkills', checked),
+        switchUseSkill: (id, checked) => {
+            if (!checked && form.manageSkills.includes(String(id))) return;
+            switchDataChange(id, 'useSkills', checked);
+        },
+        // 工作流
+        switchFlowManage: (id, checked) => switchManage(id, 'manageFlows', 'useFlows', checked),
+        switchUseFlow: (id, checked) => {
+            if (!checked && form.manageFlows.includes(String(id))) return;
+            switchDataChange(id, 'useFlows', checked);
+        },
+        // 工具
+        switchToolManage: (id, checked) => switchManage(id, 'manageTools', 'useTools', checked),
+        switchUseTool: (id, checked) => {
+            if (!checked && form.manageTools.includes(Number(id))) return;
+            switchDataChange(id, 'useTools', checked);
+        },
+        // 菜单
+        switchMenu: (id, checked) => switchDataChange(id, 'useMenu', checked)
+    };
+};
+
+/**
+ * 权限初始化逻辑（处理详情接口返回数据）
+ * @param resData - 接口返回的权限列表
+ * @returns 格式化后的权限初始数据
+ */
+const initPermissionData = (resData) => {
+    const initData = {
+        useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [],
+        manageLibs: [], manageAssistants: [], manageSkills: [], manageFlows: [], manageTools: []
+    };
+
+    resData.forEach(item => {
+        switch (item.type) {
+            case 1: initData.useLibs.push(Number(item.third_id)); break;
+            case 2: initData.useSkills.push(String(item.third_id)); break;
+            case 3: initData.manageLibs.push(Number(item.third_id)); break;
+            case 4: initData.manageSkills.push(String(item.third_id)); break;
+            case 5: initData.useAssistant.push(String(item.third_id)); break;
+            case 6: initData.manageAssistants.push(String(item.third_id)); break;
+            case 7: initData.useTools.push(Number(item.third_id)); break;
+            case 8: initData.manageTools.push(Number(item.third_id)); break;
+            case 9: initData.useFlows.push(String(item.third_id)); break;
+            case 10: initData.manageFlows.push(String(item.third_id)); break;
+            case 99: initData.useMenu.push(String(item.third_id)); break;
+        }
+    });
+
+    return initData;
+};
+
+/**
+ * SearchPanne配置生成（统一表格参数）
+ * @param type - 权限类型（assistant/skill/flow/lib/tool）
+ * @param form - 表单状态
+ * @param switches - 开关函数集合
+ * @param t - 国际化函数
+ * @param groupId - 分组ID
+ * @param roleId - 角色ID
+ * @returns SearchPanne组件所需的完整配置
+ */
+const getSearchPanneConfig = (type, form, switches, t, groupId, roleId) => {
+    const configMap = {
+        assistant: {
+            title: t('system.assistantAuthorization'),
+            nameKey: 'system.assistantName',
+            useChecked: (id) => form.useAssistant.includes(String(id)),
+            manageChecked: (id) => form.manageAssistants.includes(String(id)),
+            onUseChange: switches.switchUseAssistant,
+            onManageChange: switches.switchAssistantManage
+        },
+        skill: {
+            title: t('system.skillAuthorization'),
+            nameKey: 'system.skillName',
+            useChecked: (id) => form.useSkills.includes(String(id)),
+            manageChecked: (id) => form.manageSkills.includes(String(id)),
+            onUseChange: switches.switchUseSkill,
+            onManageChange: switches.switchSkillManage
+        },
+        flow: {
+            title: t('system.flowAuthorization'),
+            nameKey: 'system.flowName',
+            useChecked: (id) => form.useFlows.includes(String(id)),
+            manageChecked: (id) => form.manageFlows.includes(String(id)),
+            onUseChange: switches.switchUseFlow,
+            onManageChange: switches.switchFlowManage
+        },
+        lib: {
+            title: t('system.knowledgeAuthorization'),
+            nameKey: 'system.libraryName',
+            useChecked: (id) => form.useLibs.includes(Number(id)),
+            manageChecked: (id) => form.manageLibs.includes(Number(id)),
+            onUseChange: switches.switchUseLib,
+            onManageChange: switches.switchLibManage
+        },
+        tool: {
+            title: t('system.toolAuthorization'),
+            nameKey: 'tools.toolName',
+            useChecked: (id) => form.useTools.includes(Number(id)),
+            manageChecked: (id) => form.manageTools.includes(Number(id)),
+            onUseChange: switches.switchUseTool,
+            onManageChange: switches.switchToolManage
+        }
+    };
+
+    const config = configMap[type];
+    return {
+        title: config.title,
+        groupId,
+        role_id: roleId,
+        type,
+        isPermissionTable: true,
+        nameKey: config.nameKey,
+        creatorKey: 'system.creator',
+        useChecked: config.useChecked,
+        manageChecked: config.manageChecked,
+        onUseChange: config.onUseChange,
+        onManageChange: config.onManageChange,
+        form
+    };
+};
+
+//主组件：EditRole
 export default function EditRole({ id, name, groupId, onChange, onBeforeChange }) {
     const { setErrorData, setSuccessData } = useContext(alertContext);
-    const { t } = useTranslation()
+    const { t } = useTranslation();
 
-    // 使用的权限
+    // 表单初始状态
     const [form, setForm] = useState({
         name,
-        useSkills: [],
-        useLibs: [],
-        useAssistant: [],
-        useFlows: [],
-        manageLibs: [],
-        useTools: [],
-        manageAssistants: [],
-        manageSkills: [],
-        manageFlows: [],
-        manageTools: [],
-        useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE]
-    })
+        useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE],
+        manageLibs: [], manageAssistants: [], manageSkills: [], manageFlows: [], manageTools: []
+    });
+
+    // 引入封装的开关逻辑
+    const switches = usePermissionSwitchLogic(form, setForm);
+
+    // 权限初始化（编辑场景：从接口获取数据）
     useEffect(() => {
         if (id !== -1) {
-            // 获取详情，初始化选中数据
             getRolePermissionsApi(id).then(res => {
-                const useSkills = [], useLibs = [], manageLibs = [], useAssistant = [], useFlows = [], useTools = [],
-                    useMenu = [], manageAssistants = [], manageSkills = [], manageFlows = [], manageTools = []
-                res.data.forEach(item => {
-                    switch (item.type) {
-                        case 1: useLibs.push(Number(item.third_id)); break;
-                        case 2: useSkills.push(String(item.third_id)); break;
-                        case 9: useFlows.push(String(item.third_id)); break;
-                        case 3: manageLibs.push(Number(item.third_id)); break;
-                        case 7: useTools.push(Number(item.third_id)); break;
-                        case 5: useAssistant.push(String(item.third_id)); break;
-                        case 6: manageAssistants.push(String(item.third_id)); break;
-                        case 4: manageSkills.push(String(item.third_id)); break;
-                        case 10: manageFlows.push(String(item.third_id)); break;
-                        case 8: manageTools.push(Number(item.third_id)); break;
-                        case 99: useMenu.push(String(item.third_id)); break;
-                    }
-                })
-                setForm({ name, useSkills, useLibs, useAssistant, useFlows, manageLibs, useTools, useMenu, manageAssistants, manageSkills, manageFlows, manageTools })
-            })
+                const initData = initPermissionData(res.data);
+                setForm(prev => ({ ...prev, ...initData }));
+            });
         }
-    }, [id])
+    }, [id]);
 
-    const switchDataChange = (id, key, checked) => {
-        // 根据字段类型决定ID转换方式
-        const numberFields = ['useLibs', 'manageLibs', 'useTools', 'manageTools']
-        const convertedId = numberFields.includes(key) ? Number(id) : String(id)
-        
-        const index = form[key].findIndex(el => el === convertedId)
-        if (checked && index === -1) {
-            form[key].push(convertedId)
-        } else if (!checked && index !== -1) {
-            form[key].splice(index, 1)
-        }
-        setForm({ ...form, [key]: [...form[key]] })
-    }
+    // 角色ID处理（新增时用0，编辑时用真实ID）
+    const roleId = id === -1 ? 0 : id;
 
-    // 通用管理权限switch（联动使用权限）
-    const switchManage = (id, keyManage, keyUse, checked) => {
-        switchDataChange(id, keyManage, checked)
-        if (checked) switchDataChange(id, keyUse, checked)
-    }
-    // 知识库管理权限switch
-    const switchLibManage = (id, checked) => switchManage(id, 'manageLibs', 'useLibs', checked)
-    const switchAssistantManage = (id, checked) => switchManage(id, 'manageAssistants', 'useAssistant', checked)
-    const switchSkillManage = (id, checked) => switchManage(id, 'manageSkills', 'useSkills', checked)
-    const switchFlowManage = (id, checked) => switchManage(id, 'manageFlows', 'useFlows', checked)
-    const switchToolManage = (id, checked) => switchManage(id, 'manageTools', 'useTools', checked)
-    // 知识库使用权限switch
-    const switchUseLib = (id, checked) => {
-        if (!checked && form.manageLibs.includes(Number(id))) return
-        switchDataChange(id, 'useLibs', checked)
-    }
-    /**
-     * 保存权限信息逻辑
-     * 1.验证重名
-     * 2.新增时先保存基本信息 创建 ID
-     * 3.修改时先更新基本信息
-     * 4.再批量 保存各个种类权限信息（助手、技能、知识库等）
-     * @returns 
-     */
+    // 生成SearchPanne配置并渲染
+    const panneTypes = ['assistant', 'skill', 'flow', 'lib', 'tool'];
+    const renderPermissionPanne = (type) => {
+        const config = getSearchPanneConfig(type, form, switches, t, groupId, roleId);
+        return <SearchPanne key={type} {...config} />;
+    };
+
+    // 保存逻辑（保持原有功能不变）
     const handleSave = async () => {
         const sanitizeIds = (arr: any[]) => (arr || []).filter(Boolean);
+        // 角色名校验
         if (!form.name.length || form.name.length > 50) {
             return setErrorData({
                 title: t('prompt'),
                 list: [t('system.roleNameRequired'), t('system.roleNamePrompt')],
             });
         }
+        // 重名校验
         if (onBeforeChange(form.name)) {
             return setErrorData({
                 title: t('prompt'),
                 list: [t('system.roleNameExists')]
-            })
+            });
         }
-        // 没有id时需要走创建流程，否则修改
-        let roleId = id
+
+        // 新增/编辑角色基础信息
+        let roleId = id;
         if (id === -1) {
-            const res = await captureAndAlertRequestErrorHoc(createRole(groupId, form.name))
-            roleId = res.id
+            const res = await captureAndAlertRequestErrorHoc(createRole(groupId, form.name));
+            roleId = res.id;
         } else {
-            // 更新基本信息
-            captureAndAlertRequestErrorHoc(updateRoleNameApi(roleId, form.name))
+            await captureAndAlertRequestErrorHoc(updateRoleNameApi(roleId, form.name));
         }
-        // 更新角色权限
-        const res = await Promise.all([
+
+        // 批量更新角色权限
+        await Promise.all([
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useSkills as any, type: 2 as any }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useLibs as any, type: 1 as any }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useFlows as any, type: 9 as any }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useTools as any, type: 7 as any }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useAssistant as any, type: 5 as any }),
-            // 新增管理权限项
             updateRolePermissionsApi({ role_id: roleId, access_id: form.manageLibs as any, type: 3 as any }),
             updateRolePermissionsApi({ role_id: roleId, access_id: sanitizeIds(form.manageAssistants) as any, type: 6 as any }),
             updateRolePermissionsApi({ role_id: roleId, access_id: sanitizeIds(form.manageSkills) as any, type: 4 as any }),
             updateRolePermissionsApi({ role_id: roleId, access_id: sanitizeIds(form.manageFlows) as any, type: 10 as any }),
             updateRolePermissionsApi({ role_id: roleId, access_id: sanitizeIds(form.manageTools) as any, type: 8 as any }),
             updateRolePermissionsApi({ role_id: roleId, access_id: sanitizeIds(form.useMenu) as any, type: 99 as any }),
-        ])
+        ]);
 
-        console.log('form :>> ', form, res);
-        setSuccessData({ title: t('saved') })
-        onChange(true)
-    }
+        setSuccessData({ title: t('saved') });
+        onChange(true);
+    };
 
-    const roleId = id === -1 ? 0 : id
-
-    return <div className="max-w-[600px] mx-auto pt-4 h-[calc(100vh-128px)] overflow-y-auto pb-40 scrollbar-hide">
-        <div className="font-bold mt-4">
-            <p className="text-xl mb-4">{t('system.roleName')}</p>
-            <Input placeholder={t('system.roleName')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60} showCount></Input>
-        </div>
-        {/* 菜单授权 */}
-        <div>
-            <div className="mt-20 flex justify-between items-center relative">
-                <p className="text-xl font-bold">{t('system.menuAuthorization')}</p>
+    return (
+        <div className="max-w-[600px] mx-auto pt-4 h-[calc(100vh-128px)] overflow-y-auto pb-40 scrollbar-hide">
+            {/* 角色名称输入 */}
+            <div className="font-bold mt-4">
+                <p className="text-xl mb-4">{t('system.roleName')}</p>
+                <Input 
+                    placeholder={t('system.roleName')} 
+                    value={form.name} 
+                    onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))} 
+                    maxLength={60} 
+                    showCount
+                />
             </div>
-            <div className="mt-4 w-full">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>{t('system.primaryMenu')}</TableHead>
-                            <TableHead className="text-right w-[75px]">{t('system.viewPermission')}</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        <TableRow>
-                            <TableCell className="font-medium">{t('menu.skills')}</TableCell>
-                            <TableCell className="text-center">
-                                <Switch checked={form.useMenu.includes(MenuType.BUILD)} onCheckedChange={(bln) => switchDataChange(MenuType.BUILD, 'useMenu', bln)} />
-                            </TableCell>
-                        </TableRow>
-                        <TableRow>
-                            <TableCell className="font-medium">{t('menu.knowledge')}</TableCell>
-                            <TableCell className="text-center">
-                                <Switch checked={form.useMenu.includes(MenuType.KNOWLEDGE)} onCheckedChange={(bln) => switchDataChange(MenuType.KNOWLEDGE, 'useMenu', bln)} />
-                            </TableCell>
-                        </TableRow>
-                        <TableRow>
-                            <TableCell className="font-medium">{t('menu.models')}</TableCell>
-                            <TableCell className="text-center">
-                                <Switch checked={form.useMenu.includes(MenuType.MODEL)} onCheckedChange={(bln) => switchDataChange(MenuType.MODEL, 'useMenu', bln)} />
-                            </TableCell>
-                        </TableRow>
-                        <TableRow>
-                            <TableCell className="font-medium">{t('menu.evaluation')}</TableCell>
-                            <TableCell className="text-center">
-                                <Switch checked={form.useMenu.includes(MenuType.EVALUATION)} onCheckedChange={(bln) => switchDataChange(MenuType.EVALUATION, 'useMenu', bln)} />
-                            </TableCell>
-                        </TableRow>
-                    </TableBody>
-                </Table>
+
+            {/* 菜单授权 */}
+            <div className="mt-10">
+                <div className="flex justify-between items-center relative">
+                    <p className="text-xl font-bold">{t('system.menuAuthorization')}</p>
+                </div>
+                <div className="mt-4 w-full">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>{t('system.primaryMenu')}</TableHead>
+                                <TableHead className="text-right w-[75px]">{t('system.viewPermission')}</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            <TableRow>
+                                <TableCell className="font-medium">{t('menu.skills')}</TableCell>
+                                <TableCell className="text-center">
+                                    <Switch 
+                                        checked={form.useMenu.includes(MenuType.BUILD)} 
+                                        onCheckedChange={(bln) => switches.switchMenu(MenuType.BUILD, bln)} 
+                                    />
+                                </TableCell>
+                            </TableRow>
+                            <TableRow>
+                                <TableCell className="font-medium">{t('menu.knowledge')}</TableCell>
+                                <TableCell className="text-center">
+                                    <Switch 
+                                        checked={form.useMenu.includes(MenuType.KNOWLEDGE)} 
+                                        onCheckedChange={(bln) => switches.switchMenu(MenuType.KNOWLEDGE, bln)} 
+                                    />
+                                </TableCell>
+                            </TableRow>
+                            <TableRow>
+                                <TableCell className="font-medium">{t('menu.models')}</TableCell>
+                                <TableCell className="text-center">
+                                    <Switch 
+                                        checked={form.useMenu.includes(MenuType.MODEL)} 
+                                        onCheckedChange={(bln) => switches.switchMenu(MenuType.MODEL, bln)} 
+                                    />
+                                </TableCell>
+                            </TableRow>
+                            <TableRow>
+                                <TableCell className="font-medium">{t('menu.evaluation')}</TableCell>
+                                <TableCell className="text-center">
+                                    <Switch 
+                                        checked={form.useMenu.includes(MenuType.EVALUATION)} 
+                                        onCheckedChange={(bln) => switches.switchMenu(MenuType.EVALUATION, bln)} 
+                                    />
+                                </TableCell>
+                            </TableRow>
+                        </TableBody>
+                    </Table>
+                </div>
+            </div>
+
+            {/* 各类型权限表格 */}
+            <div className="mt-10 space-y-10">
+                {panneTypes.map(type => renderPermissionPanne(type))}
+            </div>
+
+            {/* 保存/取消按钮 */}
+            <div className="flex justify-center items-center absolute bottom-0 w-[600px] h-[8vh] gap-4 mt-[100px] bg-background-login z-10">
+                <Button variant="outline" className="px-16" onClick={() => onChange()}>{t('cancel')}</Button>
+                <Button className="px-16" onClick={handleSave}>{t('save')}</Button>
             </div>
         </div>
-        {/* 助手 */}
-        <div className="">
-            <SearchPanne 
-                title={t('system.assistantAuthorization')}
-                groupId={groupId}
-                role_id={roleId}
-                type={'assistant'}
-                permissionProps={{
-                    form,
-                    onUseChange: (id, checked) => switchDataChange(id, 'useAssistant', checked),
-                    onManageChange: (id, checked) => switchAssistantManage(id, checked),
-                    nameKey: 'system.assistantName',
-                    creatorKey: 'system.creator',
-                    useChecked: (id) => form.useAssistant.includes(String(id)),
-                    manageChecked: (id) => form.manageAssistants.includes(String(id))
-                }}
-            />
-        </div>
-        {/* 技能 */}
-        <div className="">
-            <SearchPanne
-                title={t('system.skillAuthorization')}
-                groupId={groupId}
-                role_id={roleId}
-                type={'skill'}
-                permissionProps={{
-                    form,
-                    onUseChange: (id, checked) => switchDataChange(id, 'useSkills', checked),
-                    onManageChange: (id, checked) => switchSkillManage(id, checked),
-                    nameKey: 'system.skillName',
-                    creatorKey: 'system.creator',
-                    useChecked: (id) => form.useSkills.includes(String(id)),
-                    manageChecked: (id) => form.manageSkills.includes(String(id))
-                }}
-            />
-        </div>
-        {/* 工作流 */}
-        <div className="">
-            <SearchPanne
-                title={t('system.flowAuthorization')}
-                groupId={groupId}
-                role_id={roleId}
-                type={'flow'}
-                permissionProps={{
-                    onUseChange: (id, checked) => switchDataChange(id, 'useFlows', checked),
-                    onManageChange: (id, checked) => switchFlowManage(id, checked),
-                    nameKey: 'system.flowName',
-                    creatorKey: 'system.creator',
-                    useChecked: (id) => form.useFlows.includes(String(id)),
-                    manageChecked: (id) => form.manageFlows.includes(String(id))
-                }}
-            />
-        </div>
-        {/* 知识库 */}
-        <div className="mb-20">
-            <SearchPanne 
-                title={t('system.knowledgeAuthorization')}
-                groupId={groupId}
-                role_id={roleId}
-                type={'lib'}
-                permissionProps={{
-                    onUseChange: (id, checked) => switchUseLib(id, checked),
-                    onManageChange: (id, checked) => switchLibManage(id, checked),
-                    nameKey: 'lib.libraryName',
-                    creatorKey: 'system.creator',
-                    useChecked: (id) => form.useLibs.includes(Number(id)),
-                    manageChecked: (id) => form.manageLibs.includes(Number(id))
-                }}
-            />
-        </div>
-        {/* 工具 */}
-        <div className="">
-            <SearchPanne
-                title={t('system.toolAuthorization')}
-                groupId={groupId}
-                role_id={roleId}
-                type={'tool'}
-                permissionProps={{
-                    onUseChange: (id, checked) => switchDataChange(id, 'useTools', checked),
-                    onManageChange: (id, checked) => switchToolManage(id, checked),
-                    nameKey: 'tools.toolName',
-                    creatorKey: 'system.creator',
-                    useChecked: (id) => form.useTools.includes(Number(id)),
-                    manageChecked: (id) => form.manageTools.includes(Number(id))
-                }}
-            />
-        </div>
-        <div className="flex justify-center items-center absolute bottom-0 w-[600px] h-[8vh] gap-4 mt-[100px] bg-background-login z-10">
-            <Button variant="outline" className="px-16" onClick={() => onChange()}>{t('cancel')}</Button>
-            <Button className="px-16" onClick={handleSave}>{t('save')}</Button>
-        </div>
-    </div>
+    );
 }
