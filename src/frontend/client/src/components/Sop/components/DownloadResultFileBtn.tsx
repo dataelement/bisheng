@@ -1,13 +1,14 @@
-import { CheckCircle, CircleX, Download, Loader2, X } from 'lucide-react';
+import { CheckCircle, CircleX, Download, Loader2 } from 'lucide-react';
 import FileIcon from '~/components/ui/icon/File';
-import { AlertDialog, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../ui';
+import { Button } from '../../ui';
 import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { useState, useRef, useEffect } from "react";
 import { getMdDownload } from '~/api/linsight';
 import { useToastContext } from '~/Providers';
+import { createPortal } from 'react-dom';
 
 export default function DownloadResultFileBtn({ file, onDownloadFile, onTooltipOpenChange }) {
-    const isMd = /md$/i.test(file.file_name)
+    const isMd = /md$/i.test(file?.file_name || '')
     const [isLoading, setIsLoading] = useState(false)
     const [title, setTitle] = useState('PDF')
     const [isSuccess, setIsSuccess] = useState(false)
@@ -15,26 +16,48 @@ export default function DownloadResultFileBtn({ file, onDownloadFile, onTooltipO
     const { showToast } = useToastContext();
     const [tooltipOpen, setTooltipOpen] = useState(false); 
     const timerRef = useRef(null);
+    // 2. 创建用于挂载提示框的容器ref
+    const portalContainerRef = useRef(null);
 
-    // 弹窗状态变化时通知父组件（核心：保持与Eye图标的状态联动）
+    // 3. 初始化全局容器（只执行一次，避免重复创建）
+    useEffect(() => {
+        let container = document.getElementById('download-toast-portal');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'download-toast-portal';
+            // 保持和原样式一致的定位
+            container.style.position = 'fixed';
+            container.style.top = '0';
+            container.style.right = '0';
+            container.style.zIndex = '9999'; // 确保在最上层
+            document.body.appendChild(container);
+        }
+        portalContainerRef.current = container;
+
+        // 组件卸载时清除容器
+        return () => {
+            if (container) {
+                document.body.removeChild(container);
+            }
+        };
+    }, []);
+
     useEffect(() => {
         onTooltipOpenChange?.(tooltipOpen);
     }, [tooltipOpen, onTooltipOpenChange]);
 
     useEffect(() => {
         return () => {
-            if (timerRef.current) {
-                clearTimeout(timerRef.current);
-            }
+            if (timerRef.current) clearTimeout(timerRef.current);
         };
     }, []);
 
-    const handleClick = (e, url) => {
+    const handleClick = (e) => {
         e.stopPropagation();
         e.nativeEvent.stopImmediatePropagation()
         onDownloadFile({
             file_name: file.file_name,
-            file_url: url
+            file_url: file.file_url
         })
     }
 
@@ -43,61 +66,43 @@ export default function DownloadResultFileBtn({ file, onDownloadFile, onTooltipO
         e.nativeEvent.stopImmediatePropagation()
         setIsLoading(true);
         setTooltipOpen(false)
-        if(type === 'docx'){
-            setTitle('Docx')
-        }else{
-            setTitle(type);
-        }
+        setTitle(type === 'docx' ? 'Docx' : type);
         setIsSuccess(false);
         setIsError(false);
         let apiErrorMsg = `${type}导出失败，请稍后重试`;
         
-        if (timerRef.current) {
-            clearTimeout(timerRef.current);
-        }
+        if (timerRef.current) clearTimeout(timerRef.current);
     
         try {
             const response = await getMdDownload(
-                {
-                    file_url: file.file_url,
-                    file_name: file.file_name
-                },
+                { file_url: file.file_url, file_name: file.file_name },
                 type
             );
     
             let isErrorResponse = false;
             let validFileData = response;
     
-            if (response instanceof Blob) {
-                const blobType = response.type || '';
-                if (blobType.includes('application/json')) {
-                    const errorText = await new Promise((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => resolve(reader.result);
-                        reader.onerror = reject;
-                        reader.readAsText(response);
-                    });
-    
-                    try {
-                        const errorData = JSON.parse(errorText);
-                        if (errorData.status_code && errorData.status_code !== 200) {
-                            apiErrorMsg = errorData.status_message || apiErrorMsg;
-                            isErrorResponse = true;
-                        }
-                    } catch (parseErr) {
-                        isErrorResponse = false;
+            if (response instanceof Blob && response.type.includes('application/json')) {
+                const errorText = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.readAsText(response);
+                });
+                try {
+                    const errorData = JSON.parse(errorText);
+                    if (errorData.status_code && errorData.status_code !== 200) {
+                        apiErrorMsg = errorData.status_message || apiErrorMsg;
+                        isErrorResponse = true;
                     }
+                } catch (parseErr) {
+                    isErrorResponse = false;
                 }
-            } else if (typeof response === 'object' && response !== null) {
-                if (response.status_code && response.status_code !== 200) {
-                    apiErrorMsg = response.status_message || apiErrorMsg;
-                    isErrorResponse = true;
-                }
+            } else if (typeof response === 'object' && response !== null && response.status_code !== 200) {
+                apiErrorMsg = response.status_message || apiErrorMsg;
+                isErrorResponse = true;
             }
     
-            if (isErrorResponse) {
-                throw new Error(apiErrorMsg);
-            }
+            if (isErrorResponse) throw new Error(apiErrorMsg);
     
             let blob;
             if (validFileData instanceof Blob) {
@@ -105,9 +110,7 @@ export default function DownloadResultFileBtn({ file, onDownloadFile, onTooltipO
             } else if (typeof validFileData === 'string' && validFileData.startsWith('%PDF-')) {
                 blob = new Blob([validFileData], { type: 'application/pdf' });
             } else {
-                const mimeType = type === 'pdf' 
-                    ? 'application/pdf' 
-                    : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+                const mimeType = type === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
                 blob = new Blob([validFileData], { type: mimeType });
             }
     
@@ -121,82 +124,90 @@ export default function DownloadResultFileBtn({ file, onDownloadFile, onTooltipO
             document.body.removeChild(a);
     
             setIsSuccess(true);
+            setIsLoading(false);
             timerRef.current = setTimeout(() => {
                 setIsSuccess(false);
-                timerRef.current = null;
             }, 3000);
     
         } catch (error) {
-            console.error(`${type.toUpperCase()}下载失败:`, error);
+            console.error(`${type}下载失败:`, error);
             setIsError(true);
+            setIsLoading(false);
             timerRef.current = setTimeout(() => {
                 setIsError(false);
-                timerRef.current = null;
             }, 3000);
-        } finally {
-            setIsLoading(false);
         }
     };
 
-    if (!isMd) return <Button variant="ghost" className=' w-6 h-6 p-0'>
-        <Download size={16} onClick={(e) => {
-            e.stopPropagation();
-            onDownloadFile({
-                file_name: file.file_name,
-                file_url: file.file_url
-            })
-        }} />
-    </Button>
+    // 4. 全局提示框组件（复用原样式，通过Portal挂载到body）
+    const GlobalToast = () => {
+        if (!portalContainerRef.current) return null;
+
+        return createPortal(
+            <>
+                {isLoading && (
+                    <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-50">
+                        <Loader2 className="size-5 animate-spin text-blue-500" />
+                        <div className="text-sm text-gray-800">{title}&nbsp;正在导出，请稍后...&nbsp;&nbsp;</div>
+                    </div>
+                )}
+                {isSuccess && (
+                    <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-50">
+                        <CheckCircle className="size-5 text-green-500" />
+                        <div className="text-sm text-gray-800">{title}&nbsp;文件下载成功</div>
+                    </div>
+                )}
+                {isError && (
+                    <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-50">
+                        <CircleX className="size-5 text-red-500" />
+                        <div className="text-sm text-gray-800">{title}&nbsp;导出失败</div>
+                    </div>
+                )}
+            </>,
+            portalContainerRef.current // 挂载到全局容器
+        );
+    };
+
+    if (!isMd) return (
+        <>
+            <Button variant="ghost" className='w-6 h-6 p-0' onClick={(e) => {
+                e.stopPropagation();
+                onDownloadFile({ file_name: file.file_name, file_url: file.file_url });
+            }}>
+                <Download size={16} />
+            </Button>
+            {/* 5. 渲染全局提示框 */}
+            <GlobalToast />
+        </>
+    );
 
     return (
         <>
             <Tooltip open={tooltipOpen} onOpenChange={setTooltipOpen}>
                 <TooltipTrigger asChild>
                     <span onClick={(e) => e.stopPropagation()}>
-                        <Download size={16} className='text-gray-500' onClick={()=>{setTooltipOpen(true)}}/>
+                        <Download size={16} className='text-gray-500' onClick={() => setTooltipOpen(true)} />
                     </span>
                 </TooltipTrigger>
-                <TooltipContent side='bottom' align='center' noArrow className=' bg-white text-gray-800 border border-gray-200'>
-                    <div className='flex flex-col gap-2 '>
-                        <div className='flex gap-2 items-center cursor-pointer hover:bg-gray-100 rounded-md p-1' onClick={(e) => handleClick(e, file.file_url)}>
+                <TooltipContent side='bottom' align='center' noArrow className='bg-white text-gray-800 border border-gray-200'>
+                    <div className='flex flex-col gap-2'>
+                        <div className='flex gap-2 items-center cursor-pointer hover:bg-gray-100 rounded-md p-1' onClick={handleClick}>
                             <FileIcon type={'md'} className='size-5' />
-                            <div className='w-full flex gap-2 items-center'>
-                                Markdown
-                            </div>
+                            <span>Markdown</span>
                         </div>
                         <div className='flex gap-2 items-center cursor-pointer hover:bg-gray-100 rounded-md p-1' onClick={(e) => handleDownLoad(e, 'pdf')}>
                             <FileIcon type={'pdf'} className='size-5' />
-                            <div className='w-full flex gap-2 items-center' >
-                                PDF
-                            </div>
+                            <span>PDF</span>
                         </div>
                         <div className='flex gap-2 items-center cursor-pointer hover:bg-gray-100 rounded-md p-1' onClick={(e) => handleDownLoad(e, 'docx')}>
                             <FileIcon type={'docx'} className='size-5' />
-                            <div className='w-full flex gap-2 items-center' >
-                                Docx
-                            </div>
+                            <span>Docx</span>
                         </div>
                     </div>
                 </TooltipContent>
             </Tooltip>
-            {isLoading && (
-                <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-50">
-                    <Loader2 className="size-5 animate-spin text-blue-500" />
-                    <div className="text-sm text-gray-800">{title}&nbsp;正在导出，请稍后...&nbsp;&nbsp;</div>
-                </div>
-            )}
-            {isSuccess && (
-                <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-50">
-                    <CheckCircle className="size-5 text-green-500" />
-                    <div className="text-sm text-gray-800">{title}&nbsp;文件下载成功</div>
-                </div>
-            )}
-            {isError && (
-                <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-50">
-                    <CircleX className="size-5 text-red-500" />
-                    <div className="text-sm text-gray-800">{title}&nbsp;导出失败</div>
-                </div>
-            )}
+            {/* 5. 渲染全局提示框 */}
+            <GlobalToast />
         </>
-    )
+    );
 };
