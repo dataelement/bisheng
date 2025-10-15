@@ -16,29 +16,31 @@ export default function DownloadResultFileBtn({ file, onDownloadFile, onTooltipO
     const { showToast } = useToastContext();
     const [tooltipOpen, setTooltipOpen] = useState(false); 
     const timerRef = useRef(null);
-    // 2. 创建用于挂载提示框的容器ref
     const portalContainerRef = useRef(null);
 
-    // 3. 初始化全局容器（只执行一次，避免重复创建）
+    //初始化容器时增加存在性校验，卸载时确保容器是body子节点再删除
     useEffect(() => {
         let container = document.getElementById('download-toast-portal');
+        // 避免重复创建容器
         if (!container) {
             container = document.createElement('div');
             container.id = 'download-toast-portal';
-            // 保持和原样式一致的定位
             container.style.position = 'fixed';
             container.style.top = '0';
             container.style.right = '0';
-            container.style.zIndex = '9999'; // 确保在最上层
+            container.style.zIndex = '9999';
             document.body.appendChild(container);
         }
         portalContainerRef.current = container;
 
-        // 组件卸载时清除容器
+        // 组件卸载时：先判断容器是否存在且是body的子节点，再执行删除
         return () => {
-            if (container) {
-                document.body.removeChild(container);
+            const targetContainer = portalContainerRef.current;
+            if (targetContainer && document.body.contains(targetContainer)) {
+                document.body.removeChild(targetContainer);
             }
+            // 清空ref，避免后续引用无效容器
+            portalContainerRef.current = null;
         };
     }, []);
 
@@ -139,8 +141,8 @@ export default function DownloadResultFileBtn({ file, onDownloadFile, onTooltipO
         }
     };
 
-    // 4. 全局提示框组件（复用原样式，通过Portal挂载到body）
     const GlobalToast = () => {
+        // 增加ref有效性校验，避免引用已清空的容器
         if (!portalContainerRef.current) return null;
 
         return createPortal(
@@ -164,7 +166,7 @@ export default function DownloadResultFileBtn({ file, onDownloadFile, onTooltipO
                     </div>
                 )}
             </>,
-            portalContainerRef.current // 挂载到全局容器
+            portalContainerRef.current
         );
     };
 
@@ -176,7 +178,6 @@ export default function DownloadResultFileBtn({ file, onDownloadFile, onTooltipO
             }}>
                 <Download size={16} />
             </Button>
-            {/* 5. 渲染全局提示框 */}
             <GlobalToast />
         </>
     );
@@ -206,7 +207,6 @@ export default function DownloadResultFileBtn({ file, onDownloadFile, onTooltipO
                     </div>
                 </TooltipContent>
             </Tooltip>
-            {/* 5. 渲染全局提示框 */}
             <GlobalToast />
         </>
     );
