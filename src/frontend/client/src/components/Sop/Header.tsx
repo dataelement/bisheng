@@ -53,20 +53,36 @@ export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
                             </div>
                             {localize('com_sop_task_description')}
                         </p>
-                        <p className='text-sm overflow-y-scroll'
-                            style={{ display: '-webkit-box', WebkitLineClamp: 8, WebkitBoxOrient: 'vertical' }}
+                        <div
+                            className="text-sm overflow-y-auto max-h-[calc(1.25rem*8)]" // 1.25rem 是单行文本高度，8行总高度
+                            style={{
+                                lineHeight: '1.25',
+                                scrollbarWidth: 'thin'
+                            }}
                         >
-                            {linsight?.question}
-                        </p>
-                        <div>
-                            {
-                                linsight?.files.map(file =>
-                                    <div key={file.file_id} className="flex items-center space-x-3 flex-1 mt-4">
-                                        <FileIcon className='size-5 min-w-4' type={getFileExtension(file.file_name)} />
-                                        <span className="text-sm text-gray-900 flex-1">{file.file_name}</span>
-                                    </div>
-                                )
-                            }
+                            <p className="mb-3" 
+                                style={{
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 'unset',
+                                    WebkitBoxOrient: 'vertical',
+                                    marginBottom: linsight?.files.length ? '0.75rem' : '0'
+                                }}
+                            >
+                                {linsight?.question || localize('com_sop_no_task_description')}
+                            </p>
+
+                            {linsight?.files.length > 0 && (
+                                <div className="space-y-2">
+                                    {linsight?.files.map(file => (
+                                        <div key={file.file_id} className="flex items-center space-x-3">
+                                            <FileIcon className='size-5 min-w-4' type={getFileExtension(file.file_name)} />
+                                            <span className="text-sm text-gray-900 flex-1 truncate">
+                                                {file.file_name}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </PopoverContent>
                 </Popover>
