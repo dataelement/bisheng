@@ -9,6 +9,7 @@ import { FileIcon } from "~/components/ui/icon/File/FileIcon";
 import { useGetBsConfig, useUploadFileMutation } from "~/data-provider";
 import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
+import { getFileExtension } from "~/utils";
 
 interface UploadingFile {
     id: string
@@ -191,14 +192,6 @@ export default function UserInput({ taskId, history = {}, disable = false, onSen
         return fileName.split(".").pop()?.toLowerCase()
     }
 
-    const formatFileSize = (bytes: number) => {
-        if (bytes === 0) return "0 Bytes"
-        const k = 1024
-        const sizes = ["Bytes", "KB", "MB", "GB"]
-        const i = Math.floor(Math.log(bytes) / Math.log(k))
-        return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
-    }
-
     // Process the sent input
     const handleSendInput = () => {
         if (inputValue.trim()) {
@@ -299,20 +292,20 @@ export default function UserInput({ taskId, history = {}, disable = false, onSen
                                     <X size={14} />
                                 </span>
                                 }
-                                <FileIcon loading={uploadingFile.status === "uploading"} type={getFileType(uploadingFile.file.name)} />
+                                <FileIcon loading={uploadingFile.status !== ""} type={getFileType(uploadingFile.file.name)} />
                                 <div className="flex-1">
                                     <div className="max-w-48 text-sm font-medium text-gray-700 truncate">{uploadingFile.file.name}</div>
-                                    {uploadingFile.status === "uploading" ? (
-                                        <div className="text-xs text-gray-500">
-                                            {localize("com_inputfiles_uploading")} {uploadingFile.progress}%
-                                        </div>
-                                    ) : uploadingFile.status === "success" ? (
-                                        <div className="text-xs text-green-600">{localize("com_inputfiles_parsing")}</div>
-                                    ) : uploadingFile.status === "error" ? (
-                                        <div className="text-xs text-red-500">上传失败</div>
-                                    ) : (
-                                        uploadingFile.file.size ? <div className="text-xs text-gray-500">{formatFileSize(uploadingFile.file.size)}</div> : null
-                                    )}
+                                    {['uploading', 'success'].includes(uploadingFile.status) ? null
+                                        // <div className="text-xs text-gray-500">
+                                        //     {localize("com_inputfiles_uploading")} {uploadingFile.progress}%
+                                        // </div>
+                                        // ) : uploadingFile.status === "success" ? (
+                                        //     <div className="text-xs text-green-600">{localize("com_inputfiles_parsing")}</div>
+                                        : uploadingFile.status === "error" ? (
+                                            <div className="text-xs text-red-500">上传失败</div>
+                                        ) : (
+                                            uploadingFile.file.size ? <div className="text-xs text-gray-500">{getFileExtension(uploadingFile.file.name)}</div> : null
+                                        )}
                                 </div>
                             </div>
                         ))}

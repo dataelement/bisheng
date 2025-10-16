@@ -85,6 +85,8 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
   const {
     files,
     setFiles,
+    dailyFiles,
+    setDailyFiles,
     conversation,
     isSubmitting,
     filesLoading,
@@ -106,6 +108,8 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
     textAreaRef,
     files,
     setFiles,
+    dailyFiles,
+    setDailyFiles
   });
 
   const navigator = useNavigate()

@@ -320,28 +320,27 @@ const Task = ({
             {history?.length !== 0 && (
                 <div className='mb-2'>
                     <div className='flex'>
-                        {
-                            isExpanded ? <div className={`${lvl1 ? 'pl-6' : 'pl-0'} w-full text-sm text-gray-400 leading-6 scroll-hover`}>
-                                {history.map((_history, index) =>
-                                    _history.step_type === "call_user_input"
-                                        ? <UserInput
-                                            disable={_history.is_completed}
-                                            taskId={task.id}
-                                            history={_history}
-                                            onSendInput={sendInput}
-                                        ></UserInput>
-                                        : <div>
-                                            <p key={index}>{_history.call_reason}</p>
-                                            <Tool
-                                                data={_history}
-                                                setCurrentDirectFile={setCurrentDirectFile}
-                                                onSearchKnowledge={onSearchKnowledge}
-                                                onWebSearch={onWebSearch}
-                                            />
-                                        </div>
-                                )}
-                            </div> : null
-                        }
+                        <div className={`${lvl1 ? 'pl-6' : 'pl-0'} ${isExpanded ? 'block' : 'hidden'} w-full text-sm text-gray-400 leading-6 scroll-hover`}>
+                            {history.map((_history, index) =>
+                                _history.step_type === "call_user_input"
+                                    ? <UserInput
+                                        key={task.id}
+                                        disable={_history.is_completed}
+                                        taskId={task.id}
+                                        history={_history}
+                                        onSendInput={sendInput}
+                                    ></UserInput>
+                                    : <div>
+                                        <p key={index}>{_history.call_reason}</p>
+                                        <Tool
+                                            data={_history}
+                                            setCurrentDirectFile={setCurrentDirectFile}
+                                            onSearchKnowledge={onSearchKnowledge}
+                                            onWebSearch={onWebSearch}
+                                        />
+                                    </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

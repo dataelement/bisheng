@@ -177,6 +177,8 @@ export default function useChatHelpers(index = 0, paramId?: string, isLingsight 
     setShowAgentSettings,
     files: isLingsight ? linsightFiles : files,
     setFiles: isLingsight ? setLinsightFiles : setFiles,
+    dailyFiles: files,
+    setDailyFiles: setFiles,
     filesLoading,
     setFilesLoading
   };
