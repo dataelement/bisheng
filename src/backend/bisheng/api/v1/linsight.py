@@ -843,7 +843,8 @@ async def get_sop_showcase_result(
 
 
 class IntegratedExecuteRequestBody(BaseModel):
-    query: str = Body(..., description="用户提交的问题")
+    query: Optional[str] = Body(None, description="用户提交的问题")
+    sop_content: Optional[str] = Body(None, description="用户提交的SOP内容")
     tool_ids: List[int] = Body(None, description="选择的工具ID列表")
     org_knowledge_enabled: bool = Body(False, description="是否启用组织知识库")
     personal_knowledge_enabled: bool = Body(False, description="是否启用个人知识库")
@@ -872,6 +873,18 @@ async def integrated_execute(
     # ======================== 参数验证 ========================
     try:
         body_param = IntegratedExecuteRequestBody.model_validate_json(body_param)
+
+        if not body_param.query and not body_param.sop_content:
+            logger.error(f"用户 {login_user.user_id} 请求体参数错误: query和sop_content不能同时为空")
+            return EventSourceResponse(iter([{
+                "event": "error",
+                "data": json.dumps({
+                    "error": "请求体参数错误",
+                    "message": "query和sop_content不能同时为空",
+                    "code": "PARAM_ERROR"
+                })
+            }]))
+
     except ValidationError as e:
         logger.error(f"用户 {login_user.user_id} 请求体参数解析失败: {str(e)}")
         return EventSourceResponse(iter([{
@@ -1020,7 +1033,7 @@ async def integrated_execute(
                         return
 
                 submit_obj = LinsightQuestionSubmitSchema(
-                    question=body_param.query,
+                    question=body_param.query if body_param.query else "用户未提供问题",
                     org_knowledge_enabled=body_param.org_knowledge_enabled,
                     personal_knowledge_enabled=body_param.personal_knowledge_enabled,
                     files=submit_files,
@@ -1053,71 +1066,78 @@ async def integrated_execute(
                 return
 
             # ======================== 生成SOP ========================
-            try:
-                knowledge_res = []
-                linsight_conf = settings.get_linsight_conf()
-
-                # 获取组织知识库
-                if (linsight_session_version_model.org_knowledge_enabled and
-                        linsight_conf and linsight_conf.max_knowledge_num > 0):
-                    try:
-                        org_knowledge, _ = await KnowledgeService.get_knowledge(
-                            request, login_user, KnowledgeTypeEnum.NORMAL, None, 1,
-                            linsight_conf.max_knowledge_num
-                        )
-                        if org_knowledge:
-                            knowledge_res.extend(org_knowledge)
-                            logger.debug(f"获取到 {len(org_knowledge)} 个组织知识")
-                    except Exception as e:
-                        logger.warning(f"用户 {login_user.user_id} 获取组织知识库失败: {str(e)}")
-                        # 继续执行，不中断流程
-
-                # 获取个人知识库
-                if linsight_session_version_model.personal_knowledge_enabled:
-                    try:
-                        personal_knowledge = await KnowledgeDao.aget_user_knowledge(
-                            login_user.user_id, None, KnowledgeTypeEnum.PRIVATE
-                        )
-                        if personal_knowledge:
-                            knowledge_res.extend(personal_knowledge)
-                            logger.debug(f"获取到 {len(personal_knowledge)} 个个人知识")
-                    except Exception as e:
-                        logger.warning(f"用户 {login_user.user_id} 获取个人知识库失败: {str(e)}")
-                        # 继续执行，不中断流程
-
-                # 生成SOP
-                sop_generate = LinsightWorkbenchImpl.generate_sop(
+            if body_param.sop_content:
+                # 用户直接提交SOP内容，跳过生成SOP步骤
+                await LinsightSessionVersionDao.modify_sop_content(
                     linsight_session_version_id=linsight_session_version_model.id,
-                    previous_session_version_id=None,
-                    feedback_content=None,
-                    reexecute=False,
-                    login_user=login_user,
-                    knowledge_list=knowledge_res
+                    sop_content=body_param.sop_content
                 )
+            else:
+                try:
+                    knowledge_res = []
+                    linsight_conf = settings.get_linsight_conf()
 
-                async for event in sop_generate:
-                    if event.get("event") == "error":
+                    # 获取组织知识库
+                    if (linsight_session_version_model.org_knowledge_enabled and
+                            linsight_conf and linsight_conf.max_knowledge_num > 0):
+                        try:
+                            org_knowledge, _ = await KnowledgeService.get_knowledge(
+                                request, login_user, KnowledgeTypeEnum.NORMAL, None, 1,
+                                linsight_conf.max_knowledge_num
+                            )
+                            if org_knowledge:
+                                knowledge_res.extend(org_knowledge)
+                                logger.debug(f"获取到 {len(org_knowledge)} 个组织知识")
+                        except Exception as e:
+                            logger.warning(f"用户 {login_user.user_id} 获取组织知识库失败: {str(e)}")
+                            # 继续执行，不中断流程
+
+                    # 获取个人知识库
+                    if linsight_session_version_model.personal_knowledge_enabled:
+                        try:
+                            personal_knowledge = await KnowledgeDao.aget_user_knowledge(
+                                login_user.user_id, None, KnowledgeTypeEnum.PRIVATE
+                            )
+                            if personal_knowledge:
+                                knowledge_res.extend(personal_knowledge)
+                                logger.debug(f"获取到 {len(personal_knowledge)} 个个人知识")
+                        except Exception as e:
+                            logger.warning(f"用户 {login_user.user_id} 获取个人知识库失败: {str(e)}")
+                            # 继续执行，不中断流程
+
+                    # 生成SOP
+                    sop_generate = LinsightWorkbenchImpl.generate_sop(
+                        linsight_session_version_id=linsight_session_version_model.id,
+                        previous_session_version_id=None,
+                        feedback_content=None,
+                        reexecute=False,
+                        login_user=login_user,
+                        knowledge_list=knowledge_res
+                    )
+
+                    async for event in sop_generate:
+                        if event.get("event") == "error":
+                            yield event
+                            return
                         yield event
-                        return
-                    yield event
 
-                yield {
-                    "event": "sop_generate_complete",
-                    "data": json.dumps({"message": "SOP生成完成"})
-                }
+                    yield {
+                        "event": "sop_generate_complete",
+                        "data": json.dumps({"message": "SOP生成完成"})
+                    }
 
-            except Exception as e:
-                error_msg = f"SOP生成失败: {str(e)}"
-                logger.error(f"用户 {login_user.user_id} {error_msg}")
-                yield {
-                    "event": "error",
-                    "data": json.dumps({
-                        "error": "SOP生成失败",
-                        "message": error_msg,
-                        "code": "SOP_GENERATE_ERROR"
-                    })
-                }
-                return
+                except Exception as e:
+                    error_msg = f"SOP生成失败: {str(e)}"
+                    logger.error(f"用户 {login_user.user_id} {error_msg}")
+                    yield {
+                        "event": "error",
+                        "data": json.dumps({
+                            "error": "SOP生成失败",
+                            "message": error_msg,
+                            "code": "SOP_GENERATE_ERROR"
+                        })
+                    }
+                    return
 
             if body_param.only_generate_sop:
                 return
