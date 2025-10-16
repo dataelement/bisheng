@@ -101,7 +101,8 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
                                 id="select-all"
                                 checked={isAllSelected}
                                 onCheckedChange={handleSelectAll}
-                                className="rounded-full"
+                                tabIndex="-1"
+                                className="rounded-full" 
                                 ref={(ref) => {
                                     if (ref) {
                                         ref.indeterminate = isIndeterminate
@@ -149,6 +150,7 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
                                 checked={selectedFiles.has(file.file_id)}
                                 onCheckedChange={(checked) => handleFileSelect(file.file_id, checked as boolean)}
                                 className="rounded-full "
+                                 tabIndex="-1"
                             />
 
                             <div className="flex items-center space-x-3 flex-1">
