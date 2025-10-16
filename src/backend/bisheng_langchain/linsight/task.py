@@ -205,7 +205,7 @@ class BaseTask(BaseModel):
         all_files = await self._get_all_files(self.file_dir)
         file_num = 0
         for one_file in all_files:
-            if file_num >= self.max_file_content_num:
+            if file_num >= self.exec_config.max_file_content_num:
                 break
             one_file = one_file[0]
             one_file_name = os.path.basename(one_file)
