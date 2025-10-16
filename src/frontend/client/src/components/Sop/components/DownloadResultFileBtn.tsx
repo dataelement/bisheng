@@ -162,7 +162,7 @@ export default function DownloadResultFileBtn({ file, onDownloadFile, onTooltipO
                 {isError && (
                     <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-50">
                         <CircleX className="size-5 text-red-500" />
-                        <div className="text-sm text-gray-800">{title}&nbsp;导出失败</div>
+                        <div className="text-sm text-gray-800">导出失败</div>
                     </div>
                 )}
             </>,

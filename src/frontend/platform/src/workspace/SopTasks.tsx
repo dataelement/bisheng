@@ -415,16 +415,16 @@ export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
     // 文件导出提示
     const [exportState, setExportState] = useState<{ loading: boolean; success: boolean; error: boolean; title: string }>({ loading: false, success: false, error: false, title: 'PDF' })
     // useFoucsInput(tasks);
-    
+    const [tooltipOpen, setTooltipOpen] = useState(false)
     const timerRef = useRef(null)
-    useEffect(()=>{
-        return ()=>{
-            if(timerRef.current) {
+    useEffect(() => {
+        return () => {
+            if (timerRef.current) {
                 clearTimeout(timerRef.current)
                 timerRef.current = null;
             }
         }
-    },[])
+    }, [])
     const mergeFiles = useMemo(() => {
         const mergedFiles = [...files, ...allFiles];
         return mergedFiles;
@@ -454,127 +454,126 @@ export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
 
     const handleExportOther = async (e, type: 'pdf' | 'docx', file) => {
         console.log(file);
-        
+
         e.stopPropagation();
-        setExportState({ loading: true, success: false, error: false, title: type.toUpperCase() });
-        
+        setExportState({ loading: true, success: false, error: false, title: type === 'docx' ? 'Docx' : type });
+
         // 清除之前的定时器，避免重复提示
         if (timerRef.current) {
-          clearTimeout(timerRef.current);
-          timerRef.current = null;
+            clearTimeout(timerRef.current);
+            timerRef.current = null;
         }
-      
+
         try {
-          console.log('开始转换下载，参数:', {
-            file_url: file.file_url,
-            file_name: file.file_name,
-            to_type: type
-          });
-      
-          // 发起请求，指定响应类型为 blob
-          const response = await axios.post(
-            '/api/v1/linsight/workbench/download-md-to-pdf-or-docx',
-            {
-              file_info: {
+            console.log('开始转换下载，参数:', {
                 file_url: file.file_url,
-                file_name: file.file_name
-              },
-              to_type: type
-            },
-            { responseType: 'blob' }
-          );
-      
-          console.log('转换下载API返回1:', response);
-          console.log('返回数据类型:', typeof response.data);
-      
-          // 关键步骤：校验响应是否为 JSON 格式的错误（后端返回 200 但实际出错）
-          const blob = response.data;
-          const contentType = response.headers['content-type'] || '';
-          let isErrorResponse = false;
-          let errorMessage = `转换${type.toUpperCase()}失败，请稍后重试`;
-      
-          // 如果响应类型是 JSON，说明是后端返回的错误信息
-          if (contentType.includes('application/json')) {
-            // 将 Blob 转为文本，解析 JSON 错误信息
-            const text = await new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result);
-              reader.onerror = reject;
-              reader.readAsText(blob);
+                file_name: file.file_name,
+                to_type: type
             });
-      
-            try {
-              const errorData = JSON.parse(text);
-              // 提取后端返回的错误信息（匹配接口返回的 status_message 和 data）
-              if (errorData.status_message) {
-                errorMessage = errorData.status_message;
-              }
-              // 若有详细错误数据（如 Playwright 安装提示），补充到提示中
-              if (errorData.data) {
-                // 简化 Playwright 错误提示，只保留关键操作指引
-                const simplifiedError = errorData.data.includes('playwright install') 
-                  ? '服务器浏览器依赖未安装，请联系管理员执行 "playwright install" 命令' 
-                  : errorData.data;
-                errorMessage += `（详情：${simplifiedError.slice(0, 100)}...）`; // 截断长文本避免提示过长
-              }
-              isErrorResponse = true;
-            } catch (parseErr) {
-              // 解析 JSON 失败，说明不是标准错误格式，按正常流程处理
-              isErrorResponse = false;
+
+            // 发起请求，指定响应类型为 blob
+            const response = await axios.post(
+                '/api/v1/linsight/workbench/download-md-to-pdf-or-docx',
+                {
+                    file_info: {
+                        file_url: file.file_url,
+                        file_name: file.file_name
+                    },
+                    to_type: type
+                },
+                { responseType: 'blob' }
+            );
+
+            console.log('转换下载API返回1:', response);
+            console.log('返回数据类型:', typeof response.data);
+
+            // 关键步骤：校验响应是否为 JSON 格式的错误（后端返回 200 但实际出错）
+            const blob = response.data;
+            const contentType = response.headers['content-type'] || '';
+            let isErrorResponse = false;
+            let errorMessage = `转换${type.toUpperCase()}失败，请稍后重试`;
+
+            // 如果响应类型是 JSON，说明是后端返回的错误信息
+            if (contentType.includes('application/json')) {
+                // 将 Blob 转为文本，解析 JSON 错误信息
+                const text = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsText(blob);
+                });
+
+                try {
+                    const errorData = JSON.parse(text);
+                    // 提取后端返回的错误信息（匹配接口返回的 status_message 和 data）
+                    if (errorData.status_message) {
+                        errorMessage = errorData.status_message;
+                    }
+                    // 若有详细错误数据（如 Playwright 安装提示），补充到提示中
+                    if (errorData.data) {
+                        // 简化 Playwright 错误提示，只保留关键操作指引
+                        const simplifiedError = errorData.data.includes('playwright install')
+                            ? '服务器浏览器依赖未安装，请联系管理员执行 "playwright install" 命令'
+                            : errorData.data;
+                        errorMessage += `（详情：${simplifiedError.slice(0, 100)}...）`; // 截断长文本避免提示过长
+                    }
+                    isErrorResponse = true;
+                } catch (parseErr) {
+                    // 解析 JSON 失败，说明不是标准错误格式，按正常流程处理
+                    isErrorResponse = false;
+                }
             }
-          }
-      
-          // 若检测到错误响应，直接抛出错误触发 catch 逻辑
-          if (isErrorResponse) {
-            throw new Error(errorMessage);
-          }
-      
-          // 正常文件流处理：设置对应 MIME 类型和扩展名
-          let mimeType, fileExtension;
-          if (type === 'pdf') {
-            mimeType = 'application/pdf';
-            fileExtension = 'pdf';
-          } else if (type === 'docx') {
-            mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-            fileExtension = 'docx';
-          }
-      
-          // 创建最终下载用的 Blob（指定正确 MIME 类型）
-          const downloadBlob = new Blob([blob], { type: mimeType });
-          console.log('创建的下载Blob:', downloadBlob);
-      
-          // 生成下载链接并触发下载
-          const url = window.URL.createObjectURL(downloadBlob);
-          const a = document.createElement('a');
-          a.href = url;
-          // 处理文件名：替换 .md 后缀，避免出现 xxx.md.pdf 这种重复后缀
-          const fileName = file.file_name.replace(/\.md$/i, '') + `.${fileExtension}`;
-          a.download = fileName;
-          document.body.appendChild(a);
-          a.click();
-      
-          // 清理资源，避免内存泄漏
-          window.URL.revokeObjectURL(url);
-          document.body.removeChild(a);
-      
-          // 更新状态为成功，3秒后自动隐藏提示
-          setExportState(prev => ({ ...prev, loading: false, success: true }));
-          console.log(`${type.toUpperCase()}文件转换下载成功`);
-          timerRef.current = setTimeout(() => {
-            setExportState(prev => ({ ...prev, success: false }));
-          }, 3000);
-      
+
+            // 若检测到错误响应，直接抛出错误触发 catch 逻辑
+            if (isErrorResponse) {
+                throw new Error(errorMessage);
+            }
+
+            // 正常文件流处理：设置对应 MIME 类型和扩展名
+            let mimeType, fileExtension;
+            if (type === 'pdf') {
+                mimeType = 'application/pdf';
+                fileExtension = 'pdf';
+            } else if (type === 'docx') {
+                mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+                fileExtension = 'docx';
+            }
+
+            // 创建最终下载用的 Blob（指定正确 MIME 类型）
+            const downloadBlob = new Blob([blob], { type: mimeType });
+            console.log('创建的下载Blob:', downloadBlob);
+
+            // 生成下载链接并触发下载
+            const url = window.URL.createObjectURL(downloadBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            // 处理文件名：替换 .md 后缀，避免出现 xxx.md.pdf 这种重复后缀
+            const fileName = file.file_name.replace(/\.md$/i, '') + `.${fileExtension}`;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+
+            // 清理资源，避免内存泄漏
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            // 更新状态为成功，3秒后自动隐藏提示
+            setExportState(prev => ({ ...prev, loading: false, success: true }));
+            console.log(`${type.toUpperCase()}文件转换下载成功`);
+            timerRef.current = setTimeout(() => {
+                setExportState(prev => ({ ...prev, success: false }));
+            }, 3000);
+
         } catch (error) {
-          // 捕获所有错误（网络错误、JSON 解析错误、业务错误）
-          console.error(`${type.toUpperCase()}转换下载失败:`, error);
-          // 显示错误提示，3秒后自动隐藏
-          setExportState(prev => ({ ...prev, loading: false, error: true }));
-          toast?.({ description: error.message, variant: 'error' });
-          timerRef.current = setTimeout(() => {
-            setExportState(prev => ({ ...prev, error: false }));
-          }, 3000);
+            // 捕获所有错误（网络错误、JSON 解析错误、业务错误）
+            console.error(`${type.toUpperCase()}转换下载失败:`, error);
+            // 显示错误提示，3秒后自动隐藏
+            setExportState(prev => ({ ...prev, loading: false, error: true }));
+            timerRef.current = setTimeout(() => {
+                setExportState(prev => ({ ...prev, error: false }));
+            }, 3000);
         }
-      };
+    };
 
     if (queueCount) {
         const totalMinutes = queueCount * 8;
@@ -599,194 +598,199 @@ export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
 
     return (
         <div className='relative h-screen'>
-        <div className="w-[100%] mx-auto p-5 text-gray-800 leading-relaxed overflow-y-auto h-[calc(100vh-170px)] overflow-x-hidden">
-            {/* {!tasks?.length && <PlaySop content={sop} />} */}
-            {/* feedback */}
-            {showFeedBack && <div className='border border-primary/30 rounded-md p-2 bg-white'>
-                <div className='flex items-center gap-2'>
-                    <Sparkles size={18} className=' text-primary/80' />
-                    <span className='font-bold'>用户反馈</span>
-                </div>
-                <div className='max-h-24 overflow-y-auto no-scrollbar mt-2'>
-                    {linsight?.execute_feedback || '暂无用户反馈'}
-                </div>
-            </div>}
-            {/* 任务 */}
-            {!!tasks?.length && <div className='pl-6'>
-                <p className='text-sm text-gray-400 mt-6 mb-4'>{localize('com_sop_plan_task_path')}</p>
-                {tasks.map((task, i) => (
-                    <p key={task.id} className='leading-7'>{i + 1}. {task.task_data.target}</p>
-                ))}
-                <p className='text-sm text-gray-400 mt-6 mb-4'>{localize('com_sop_execute_tasks')}</p>
-            </div>}
-            {
-                tasks?.map((task, i) => <Task
-                    key={task.id}
-                    que={i + 1}
-                    lvl1
-                    task={task}
-                    hasSubTask={!!task.children?.length}
-                    setCurrentDirectFile={(file) => {
-                        setIsPreviewOpen(true);
-                        setCurrentDirectFile(file)
-                    }}
-                    onSearchKnowledge={setKnowledgeInfo}
-                    onWebSearch={setWebSearchInfo}
-                    sendInput={() => { }} >
-                    {
-                        task.children?.map((_task, i) => <Task
-                            key={_task.id}
-                            que={i + 1}
-                            task={_task}
-                            sendInput={() => { }}
-                            setCurrentDirectFile={(file) => {
-                                setIsPreviewOpen(true);
-                                setCurrentDirectFile(file)
-                            }}
-                            onSearchKnowledge={setKnowledgeInfo}
-                            onWebSearch={setWebSearchInfo}
-                        />)
-                    }
-                </Task>
-                )
-            }
-            {/* error */}
-            {/* {taskError && <ErrorDisplay title={localize('com_sop_task_execution_interrupted')} taskError={taskError} />} */}
-            {/* 总结 */}
-            {/* {
+            <div className="w-[100%] mx-auto p-5 text-gray-800 leading-relaxed overflow-y-auto h-[calc(100vh-170px)] overflow-x-hidden">
+                {/* {!tasks?.length && <PlaySop content={sop} />} */}
+                {/* feedback */}
+                {showFeedBack && <div className='border border-primary/30 rounded-md p-2 bg-white'>
+                    <div className='flex items-center gap-2'>
+                        <Sparkles size={18} className=' text-primary/80' />
+                        <span className='font-bold'>用户反馈</span>
+                    </div>
+                    <div className='max-h-24 overflow-y-auto no-scrollbar mt-2'>
+                        {linsight?.execute_feedback || '暂无用户反馈'}
+                    </div>
+                </div>}
+                {/* 任务 */}
+                {!!tasks?.length && <div className='pl-6'>
+                    <p className='text-sm text-gray-400 mt-6 mb-4'>{localize('com_sop_plan_task_path')}</p>
+                    {tasks.map((task, i) => (
+                        <p key={task.id} className='leading-7'>{i + 1}. {task.task_data.target}</p>
+                    ))}
+                    <p className='text-sm text-gray-400 mt-6 mb-4'>{localize('com_sop_execute_tasks')}</p>
+                </div>}
+                {
+                    tasks?.map((task, i) => <Task
+                        key={task.id}
+                        que={i + 1}
+                        lvl1
+                        task={task}
+                        hasSubTask={!!task.children?.length}
+                        setCurrentDirectFile={(file) => {
+                            setIsPreviewOpen(true);
+                            setCurrentDirectFile(file)
+                        }}
+                        onSearchKnowledge={setKnowledgeInfo}
+                        onWebSearch={setWebSearchInfo}
+                        sendInput={() => { }} >
+                        {
+                            task.children?.map((_task, i) => <Task
+                                key={_task.id}
+                                que={i + 1}
+                                task={_task}
+                                sendInput={() => { }}
+                                setCurrentDirectFile={(file) => {
+                                    setIsPreviewOpen(true);
+                                    setCurrentDirectFile(file)
+                                }}
+                                onSearchKnowledge={setKnowledgeInfo}
+                                onWebSearch={setWebSearchInfo}
+                            />)
+                        }
+                    </Task>
+                    )
+                }
+                {/* error */}
+                {/* {taskError && <ErrorDisplay title={localize('com_sop_task_execution_interrupted')} taskError={taskError} />} */}
+                {/* 总结 */}
+                {/* {
                 summary && <div className='relative mb-6 text-sm px-4 py-3 rounded-lg bg-[#F8F9FB] text-[#303133] leading-6 break-all'>
                     <MessageMarkDown message={summary} />
                     <div className='bg-gradient-to-t w-full h-10 from-[#F8F9FB] from-0% to-transparent to-100% absolute bottom-0'></div>
                 </div>
             } */}
-            {/* 结果文件 */}
-            {files &&
-                <div>
-                    {/* <p className='text-sm text-gray-500'></p> */}
-                    <div className='mt-5 flex flex-wrap gap-3'>
-                        {files?.map((file) => (
-                            <div
-                                key={file.file_id}
-                                onClick={() => {
-                                    if (file.file_name.split('.').pop() === 'html') {
-                                        return window.open(`${__APP_ENV__.BASE_URL}/html?url=${encodeURIComponent(file.file_url)}`, '_blank')
-                                    }
-                                    setCurrentDirectFile(null);
-                                    setCurrentPreviewFileId(file.file_id);
-                                    setIsPreviewOpen(true);
-                                    setTriggerDrawerFromCard(true);
-                                }}
-                                className='w-[calc(50%-6px)] p-2 rounded-2xl border border-[#ebeef2] cursor-pointer'
-                            >
-                                <div className='bg-[#F4F6FB] h-24 p-4 rounded-lg overflow-hidden'>
-                                    <FileIcon type={file.file_name.split('.').pop().toLowerCase()} className='size-24 mx-auto opacity-20' />
-                                </div>
-                                <div className='relative flex pt-3 gap-2 items-center'>
-                                    <FileIcon type={file.file_name.split('.').pop().toLowerCase()} className='size-4 min-w-4' />
-                                    <span className='text-sm truncate pr-6'>{file.file_name}</span>
-                                    <Button variant="ghost" className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
-                                        {String(file.file_name).toLowerCase().endsWith('.md') ? (
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <span onClick={(e) => e.stopPropagation()}>
-                                                        <Download size={16} />
-                                                    </span>
-                                                </TooltipTrigger>
-                                                <TooltipContent side='bottom' align='center' className='bg-white text-gray-800 border border-gray-200'>
-                                                    <div className='flex flex-col gap-2'>
-                                                        <div className='flex gap-2 items-center cursor-pointer hover:bg-gray-100 rounded-md p-1' onClick={(e) => { e.stopPropagation(); downloadFile(file); }}>
-                                                            <FileIcon type={'md'} className='size-5' />
-                                                            <div className='w-full flex gap-2 items-center'>Markdown</div>
+                {/* 结果文件 */}
+                {files &&
+                    <div>
+                        {/* <p className='text-sm text-gray-500'></p> */}
+                        <div className='mt-5 flex flex-wrap gap-3'>
+                            {files?.map((file) => (
+                                <div
+                                    key={file.file_id}
+                                    onClick={() => {
+                                        if (file.file_name.split('.').pop() === 'html') {
+                                            return window.open(`${__APP_ENV__.BASE_URL}/html?url=${encodeURIComponent(file.file_url)}`, '_blank')
+                                        }
+                                        setCurrentDirectFile(null);
+                                        setCurrentPreviewFileId(file.file_id);
+                                        setIsPreviewOpen(true);
+                                        setTriggerDrawerFromCard(true);
+                                    }}
+                                    className='w-[calc(50%-6px)] p-2 rounded-2xl border border-[#ebeef2] cursor-pointer'
+                                >
+                                    <div className='bg-[#F4F6FB] h-24 p-4 rounded-lg overflow-hidden'>
+                                        <FileIcon type={file.file_name.split('.').pop().toLowerCase()} className='size-24 mx-auto opacity-20' />
+                                    </div>
+                                    <div className='relative flex pt-3 gap-2 items-center'>
+                                        <FileIcon type={file.file_name.split('.').pop().toLowerCase()} className='size-4 min-w-4' />
+                                        <span className='text-sm truncate pr-6'>{file.file_name}</span>
+                                        <Button variant="ghost" className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
+                                            {String(file.file_name).toLowerCase().endsWith('.md') ? (
+                                                <Tooltip
+                                                    open={tooltipOpen}
+                                                    onOpenChange={setTooltipOpen}
+                                                >
+                                                    <TooltipTrigger asChild>
+                                                        <span onClick={(e) => e.stopPropagation()}>
+                                                            <Download size={16} onClick={()=>{setTooltipOpen(true)}}/>
+                                                        </span>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent side='bottom' align='center' className='bg-white text-gray-800 border border-gray-200'>
+                                                        <div className='flex flex-col gap-2'>
+                                                            <div className='flex gap-2 items-center cursor-pointer hover:bg-gray-100 rounded-md p-1' onClick={(e) => { e.stopPropagation(); downloadFile(file); setTooltipOpen(false);}}>
+                                                                <FileIcon type={'md'} className='size-5' />
+                                                                <div className='w-full flex gap-2 items-center'>Markdown</div>
+                                                            </div>
+                                                            <div className='flex gap-2 items-center rounded-md p-1 cursor-pointer hover:bg-gray-100' onClick={(e) =>{e.stopPropagation(); handleExportOther(e, 'pdf', file); setTooltipOpen(false);}}>
+                                                                <FileIcon type={'pdf'} className='size-5' />
+                                                                <div className='w-full flex gap-2 items-center'>PDF</div>
+                                                            </div>
+                                                            <div className='flex gap-2 items-center rounded-md p-1 cursor-pointer hover:bg-gray-100'onClick={(e) => {e.stopPropagation();handleExportOther(e, 'docx',file); setTooltipOpen(false);}}>
+                                                                <FileIcon type={'docx'} className='size-5' />
+                                                                <div className='w-full flex gap-2 items-center'>Docx</div>
+                                                            </div>
                                                         </div>
-                                                        <div className='flex gap-2 items-center rounded-md p-1 cursor-pointer hover:bg-gray-100' onClick={(e) => handleExportOther(e, 'pdf',file)}>
-                                                            <FileIcon type={'pdf'} className='size-5' />
-                                                            <div className='w-full flex gap-2 items-center'>PDF</div>
-                                                        </div>
-                                                        <div className='flex gap-2 items-center rounded-md p-1 cursor-pointer hover:bg-gray-100' onClick={(e) => handleExportOther(e, 'docx',file)}>
-                                                            <FileIcon type={'docx'} className='size-5' />
-                                                            <div className='w-full flex gap-2 items-center'>Docx</div>
-                                                        </div>
-                                                    </div>
-                                                </TooltipContent>
-                                            </Tooltip>
-                                        ) : (
-                                            <Download size={16} onClick={(e) => { e.stopPropagation(); downloadFile(file); }} />
-                                            
-                                        )}
-                                    </Button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                    {/*  预览所有文件列表 */}
-                    {
-                        allFiles.length > files.length && <div className='mt-2.5'>
-                            <div
-                                onClick={() => setIsDrawerOpen(true)}
-                                className='w-[calc(50%-6px)] p-2 rounded-2xl border border-[#ebeef2] cursor-pointer'
-                            >
-                                <div className='bg-[#F4F6FB] h-24 p-6 rounded-lg overflow-hidden'>
-                                    <FileIcon type="dir" className='size-24 mx-auto opacity-20' />
-                                </div>
-                                <div className='relative flex pt-3 gap-2 items-center'>
-                                    <FileIcon type="dir" className='size-4 min-w-4' />
-                                    <span className='text-sm truncate pr-6'>{localize('com_sop_view_all_files')}</span>
-                                    <Button variant="ghost" className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
-                                        <ArrowRight size={16} />
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
-                    }
-                </div>
-            }
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            ) : (
+                                                <Download size={16} onClick={(e) => { e.stopPropagation(); downloadFile(file); }} />
 
-            {/* search knowledge */}
-            <SearchKnowledgeSheet
-                isOpen={!!knowledgeInfo}
-                onClose={() => setKnowledgeInfo(null)}
-                data={knowledgeInfo?.data}
-                searchQuery={knowledgeInfo?.query} />
-            {/* web search */}
-            <WebSearchSheet
-                isOpen={!!webSearchInfo}
-                onClose={() => setWebSearchInfo(null)}
-                data={webSearchInfo?.data}
-                searchQuery={webSearchInfo?.query} />
-            {/* 文件列表抽屉 */}
-            <FileDrawer
-                title={title}
-                files={allFiles}
-                isOpen={isDrawerOpen}
-                onOpenChange={setIsDrawerOpen}
-                downloadFile={downloadFile}
-                handleExportOther={handleExportOther}
-                onPreview={(id) => {
-                    setCurrentDirectFile(null);
-                    setCurrentPreviewFileId(id);
-                    setIsDrawerOpen(false)
-                    setIsPreviewOpen(true)
-                    setTriggerDrawerFromCard(false)
-                }}
-            />
-            {/* 文件预览抽屉 */}
-            <FilePreviewDrawer
-                files={mergeFiles}
-                isOpen={isPreviewOpen}
-                onOpenChange={setIsPreviewOpen}
-                downloadFile={downloadFile}
-                handleExportOther={handleExportOther}
-                directFile={currentDirectFile}
-                currentFileId={currentPreviewFileId}
-                onFileChange={(fileId) => setCurrentPreviewFileId(fileId)}
-                onBack={currentDirectFile || triggerDrawerFromCard ? undefined : (() => {
-                    setIsDrawerOpen(true);
-                    setIsPreviewOpen(false);
-                })}
-            >
-            </FilePreviewDrawer>
-        </div >
-             {exportState.loading && (
+                                            )}
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        {/*  预览所有文件列表 */}
+                        {
+                            allFiles.length > files.length && <div className='mt-2.5'>
+                                <div
+                                    onClick={() => setIsDrawerOpen(true)}
+                                    className='w-[calc(50%-6px)] p-2 rounded-2xl border border-[#ebeef2] cursor-pointer'
+                                >
+                                    <div className='bg-[#F4F6FB] h-24 p-6 rounded-lg overflow-hidden'>
+                                        <FileIcon type="dir" className='size-24 mx-auto opacity-20' />
+                                    </div>
+                                    <div className='relative flex pt-3 gap-2 items-center'>
+                                        <FileIcon type="dir" className='size-4 min-w-4' />
+                                        <span className='text-sm truncate pr-6'>{localize('com_sop_view_all_files')}</span>
+                                        <Button variant="ghost" className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
+                                            <ArrowRight size={16} />
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+
+                {/* search knowledge */}
+                <SearchKnowledgeSheet
+                    isOpen={!!knowledgeInfo}
+                    onClose={() => setKnowledgeInfo(null)}
+                    data={knowledgeInfo?.data}
+                    searchQuery={knowledgeInfo?.query} />
+                {/* web search */}
+                <WebSearchSheet
+                    isOpen={!!webSearchInfo}
+                    onClose={() => setWebSearchInfo(null)}
+                    data={webSearchInfo?.data}
+                    searchQuery={webSearchInfo?.query} />
+                {/* 文件列表抽屉 */}
+                <FileDrawer
+                    title={title}
+                    files={allFiles}
+                    isOpen={isDrawerOpen}
+                    onOpenChange={setIsDrawerOpen}
+                    downloadFile={downloadFile}
+                    handleExportOther={handleExportOther}
+                    onPreview={(id) => {
+                        setCurrentDirectFile(null);
+                        setCurrentPreviewFileId(id);
+                        setIsDrawerOpen(false)
+                        setIsPreviewOpen(true)
+                        setTriggerDrawerFromCard(false)
+                    }}
+                    exportState={exportState}
+                />
+                {/* 文件预览抽屉 */}
+                <FilePreviewDrawer
+                    files={mergeFiles}
+                    isOpen={isPreviewOpen}
+                    onOpenChange={setIsPreviewOpen}
+                    downloadFile={downloadFile}
+                    handleExportOther={handleExportOther}
+                    directFile={currentDirectFile}
+                    currentFileId={currentPreviewFileId}
+                    onFileChange={(fileId) => setCurrentPreviewFileId(fileId)}
+                    onBack={currentDirectFile || triggerDrawerFromCard ? undefined : (() => {
+                        setIsDrawerOpen(true);
+                        setIsPreviewOpen(false);
+                    })}
+                    exportState={exportState}
+                >
+                </FilePreviewDrawer>
+            </div >
+            {exportState.loading && (
                 <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-500">
                     <Loader2 className="size-5 animate-spin text-blue-500" />
                     <div className="text-sm text-gray-800">{exportState.title}&nbsp;正在导出，请稍后...&nbsp;&nbsp;</div>
@@ -801,10 +805,10 @@ export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
             {exportState.error && (
                 <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-500">
                     <CircleX className="size-5 text-red-500" />
-                    <div className="text-sm text-gray-800">{exportState.title}&nbsp;导出失败</div>
+                    <div className="text-sm text-gray-800">导出失败</div>
                 </div>
             )}
-            </div>
+        </div>
     );
 };
 
