@@ -13,6 +13,7 @@ from bisheng.api.errcode.server import NoAsrModelConfigError, AsrModelConfigDele
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig, AssistantLLMConfig, \
     EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq, WorkbenchModelConfig, WSModel
+from bisheng.cache.redis import redis_client
 from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.knowledge import KnowledgeState
@@ -21,7 +22,7 @@ from bisheng.interface.importing import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm, instantiate_embedding
 from bisheng.llm.domain.llm.asr import BishengASR
 from bisheng.llm.domain.llm.tts import BishengTTS
-from bisheng.utils import generate_uuid
+from bisheng.utils import generate_uuid, md5_hash
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import minio_client
 
@@ -561,14 +562,25 @@ class LLMService:
         workbench_llm = await cls.get_workbench_llm()
         if not workbench_llm.tts_model or not workbench_llm.tts_model.id:
             raise NoTtsModelConfigError.http_exception()
-        model_info = await cls.get_bisheng_tts(model_id=int(workbench_llm.tts_model.id))
+        model_info = await LLMDao.aget_model_by_id(model_id=int(workbench_llm.tts_model.id))
         if not model_info:
             raise TtsModelConfigDeletedError.http_exception()
+
+        # get from cache
+        voice = model_info.config.get("voice", "default") if model_info.config else "default"
+        cache_key = f"workbench_tts:{model_info.id}:{voice}:{md5_hash(text)}"
+        cache_value = await redis_client.aget(cache_key)
+        if cache_value:
+            return cache_value
+
         tts_client = await cls.get_bisheng_tts(model_id=int(workbench_llm.tts_model.id))
         audio_bytes = await tts_client.ainvoke(text)
         # upload to minio
         object_name = f"tts/{generate_uuid()}.mp3"
         minio_client.upload_minio_data(object_name, audio_bytes, len(audio_bytes), "audio/mpeg",
                                        bucket_name=minio_client.tmp_bucket)
-        return minio_client.clear_minio_share_host(
+        cache_value = minio_client.clear_minio_share_host(
             minio_client.get_share_link(object_name, bucket=minio_client.tmp_bucket))
+        # The tmp bucket automatically clears files older than 7 days, so set the expiration time to 6 days
+        await redis_client.aset(cache_key, cache_value, expiration=6 * 24 * 3600)
+        return cache_value
