@@ -273,7 +273,7 @@ export default function RuleFile({
           <FileUploadSplitStrategy data={strategies} onChange={handleStrategiesChange} />
         </div>
 
-        {appConfig.enableEtl4lm && (
+        {(appConfig.enableEtl4lm && rules.fileList.some(item => item.suffix === 'pdf') )&& (
           <div className="space-y-4 p-4 border rounded-lg">
             <h3 className="text-md font-bold text-gray-800 text-left ">{t('pdfAnalysis')}</h3>
             <div className="flex items-center gap-2 pt-2">

@@ -94,7 +94,7 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
 
     return (
         <Sheet open={isOpen} onOpenChange={onOpenChange}>
-            <SheetContent className="w-[600px] sm:max-w-[600px] p-4">
+            <SheetContent className="w-[600px] sm:max-w-[600px] p-4 ">
                 {exportState.loading && (
                     <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-500">
                         <Loader2 className="size-5 animate-spin text-blue-500" />
