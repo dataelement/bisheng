@@ -1,31 +1,33 @@
-import React, { memo, useMemo, useRef, useEffect } from 'react';
+import React, { lazy, memo, Suspense, useEffect, useMemo, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import { useRecoilValue } from 'recoil';
+import rehypeHighlight from 'rehype-highlight';
+import rehypeKatex from 'rehype-katex';
+import remarkDirective from 'remark-directive';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import supersub from 'remark-supersub';
-import rehypeKatex from 'rehype-katex';
-import { useRecoilValue } from 'recoil';
-import ReactMarkdown from 'react-markdown';
-import rehypeHighlight from 'rehype-highlight';
-import remarkDirective from 'remark-directive';
-import { PermissionTypes, Permissions } from '~/data-provider/data-provider/src';
 import type { Pluggable } from 'unified';
 import {
-  useToastContext,
   ArtifactProvider,
   CodeBlockProvider,
   useCodeBlockContext,
+  useToastContext,
 } from '~/Providers';
 import { Artifact, artifactPlugin } from '~/components/Artifacts/Artifact';
-import { langSubset, preprocessLaTeX, handleDoubleClick } from '~/utils';
+import { remarkCitationPlugin } from '~/components/Artifacts/remarkCitationPlugin';
 import CodeBlock from '~/components/Messages/Content/CodeBlock';
-import useHasAccess from '~/hooks/Roles/useHasAccess';
+import { TooltipAnchor } from '~/components/ui';
 import { useFileDownload } from '~/data-provider';
+import { PermissionTypes, Permissions } from '~/data-provider/data-provider/src';
+import useHasAccess from '~/hooks/Roles/useHasAccess';
 import useLocalize from '~/hooks/useLocalize';
 import store from '~/store';
-import { remarkCitationPlugin } from '~/components/Artifacts/remarkCitationPlugin';
-import { Button } from '~/components/ui/Button';
-import { TooltipAnchor } from '~/components/ui';
+import { handleDoubleClick, langSubset, preprocessLaTeX } from '~/utils';
 import { WebItem } from './SearchWebUrls';
+
+const ECharts = lazy(() => import('./Echarts'));
+const MermaidBlock = lazy(() => import('./Mermaid'));
 
 type TCodeProps = {
   inline?: boolean;
@@ -59,14 +61,18 @@ export const code: React.ElementType = memo(({ className, children }: TCodeProps
       </code>
     );
   } else {
-    return (
-      <CodeBlock
-        lang={lang ?? 'text'}
-        codeChildren={children}
-        blockIndex={blockIndex}
-        allowExecution={canRunCode}
-      />
-    );
+    if (lang === 'echarts') return <Suspense fallback={<div>...</div>}>
+      <ECharts option={children} />
+    </Suspense>
+    if (lang === 'mermaid') return <Suspense fallback={<div>...</div>}>
+      <MermaidBlock>{String(children).trim()}</MermaidBlock>
+    </Suspense>
+    return <CodeBlock
+      lang={lang ?? 'text'}
+      codeChildren={children}
+      blockIndex={blockIndex}
+      allowExecution={canRunCode}
+    />
   }
 });
 
@@ -207,10 +213,19 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent }
       return '';
     }
     const message = LaTeXParsing ? preprocessLaTeX(content) : content;
-
+//         return `\`\`\`mermaid
+//     graph TD
+//       A[Next.js] --> B[Markdoc]
+//       B --> C[Mermaid Node]
+//       C --> D[渲染流程图]
+//       D --> E{交互式图表}
+// \`\`\``;
+//     return `\`\`\`echarts
+// {"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]},"yAxis":{"type":"value"},"series":[{"data":[120,200,150,80,70,110,130],"type":"bar"}]}
+// \`\`\``
     return message
       // .replaceAll(/(\n\s{4,})/g, '\n   ') // 禁止4空格转代码
-      .replace(/(?<![\n\|])\n(?!\n)/g, '\n\n') // 单个换行符 处理不换行情况，例如：`Hello|There\nFriend
+      .replace(/(?<![\n\|])\n(?!\n)/g, '\n\n') // 单个换行符 处理不换行情况，例如：`Hello | There\nFriend
     // .replaceAll('(bisheng/', '(/bisheng/') // TODO 临时处理方案,以后需要改为markdown插件方式处理
     // .replace(/\\[\[\]]/g, '$$') // 处理`\[...\]`包裹的公式
   }, [content, LaTeXParsing, isInitializing]);

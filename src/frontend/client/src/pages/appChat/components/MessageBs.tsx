@@ -63,7 +63,7 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { }, onS
         copyText(messageRef.current)
     }
 
-    return <div className="flex w-full py-2">
+    return <div className="bisheng-message flex w-full py-2">
         <div className="w-fit group max-w-[90%]">
             <ReasoningLog loading={!data.end && (data.reasoning_log || reasoningLog)} msg={data.reasoning_log || reasoningLog} />
             {!(data.reasoning_log && !message && !data.files.length) && <>
