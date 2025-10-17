@@ -1,17 +1,17 @@
-import {
-  megabyte,
-  QueryKeys,
-  excelMimeTypes,
-  codeTypeMapping,
-  fileConfig as defaultFileConfig,
-} from '~/data-provider/data-provider/src';
-import type { TFile, EndpointFileConfig } from '~/data-provider/data-provider/src';
 import type { QueryClient } from '@tanstack/react-query';
 import type { ExtendedFile } from '~/common';
+import CodePaths from '~/components/svg/Files/CodePaths';
+import FilePaths from '~/components/svg/Files/FilePaths';
 import SheetPaths from '~/components/svg/Files/SheetPaths';
 import TextPaths from '~/components/svg/Files/TextPaths';
-import FilePaths from '~/components/svg/Files/FilePaths';
-import CodePaths from '~/components/svg/Files/CodePaths';
+import type { EndpointFileConfig, TFile } from '~/data-provider/data-provider/src';
+import {
+  codeTypeMapping,
+  fileConfig as defaultFileConfig,
+  excelMimeTypes,
+  megabyte,
+  QueryKeys,
+} from '~/data-provider/data-provider/src';
 
 export const partialTypes = ['text/x-'];
 
@@ -200,12 +200,15 @@ export function formatBytes(bytes: number, decimals = 2) {
 
 const { checkType } = defaultFileConfig;
 
+// 上传文件校验
 export const validateFiles = ({
   files,
   fileList,
   setError,
   endpointFileConfig,
-  // 不限制size
+  showToast,
+  localize,
+  size,
   noLimitSize = false,
 }: {
   fileList: File[];
@@ -213,6 +216,9 @@ export const validateFiles = ({
   setError: (error: string) => void;
   endpointFileConfig: EndpointFileConfig;
   noLimitSize?: boolean;
+  showToast: any,
+  localize: any,
+  size: number,
 }) => {
   const { fileLimit, fileSizeLimit, totalSizeLimit, supportedMimeTypes } = endpointFileConfig;
   const existingFiles = Array.from(files.values());
@@ -223,8 +229,14 @@ export const validateFiles = ({
   }
   const currentTotalSize = existingFiles.reduce((total, file) => total + file.size, 0);
 
-  if (!noLimitSize && fileLimit && fileList.length + files.size > fileLimit) {
-    setError(`You can only upload up to ${fileLimit} files at a time.`);
+  const maxSize = (size || 200) * 1024 * 1024
+  const oversizeFiles = fileList.filter((file) => file.size > maxSize)
+  if (oversizeFiles.length > 0) {
+    showToast({
+      message: localize('com_file_size_exceed_limit', { name: oversizeFiles.map(f => f.name).join(', '), size: size }),
+      status: 'error'
+    })
+    fileList = fileList.filter((file) => file.size <= maxSize)
     return false;
   }
 

@@ -338,7 +338,34 @@ export const useLinsightWebSocket = (versionId) => {
                 ws.send(JSON.stringify({ user_input }));
             }
         } else {
-            userInputLinsightEvent(versionId, task_id, user_input, files)
+            userInputLinsightEvent(versionId, task_id, user_input, files.map((file) => file.result))
+            // update is_completed user_input files
+            // @ts-ignore
+            updateLinsight(versionId, (prev) => ({
+                ...prev,
+                tasks: prev.tasks.map(task => ({
+                    ...task,
+                    status: "success",
+                    history: task.history?.map(h => ({
+                        ...h,
+                        is_completed: true,
+                        user_input: h.user_input || user_input,
+                        files: h.files || files
+                    })),
+                    children: task.children
+                        ? task.children.map(child => ({
+                            ...child,
+                            status: "success",
+                            history: child.history?.map(h => ({
+                                ...h,
+                                is_completed: true,
+                                user_input: h.user_input || user_input,
+                                files: h.files || files
+                            })),
+                        }))
+                        : [],
+                })),
+            }));
         }
     }, [versionId]);
 

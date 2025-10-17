@@ -329,7 +329,8 @@ class DocxProcessor:
 
             # 处理 ol 子列表
             if hasattr(item, "ol") and item.ol is not None:
-                sub_num = 1
+                # 读取 start 属性,如果不存在则默认为1
+                sub_num = int(item.ol.get('start', 1))
                 for item2 in item.ol.children:
                     if item2.name != 'li':
                         continue

@@ -24,6 +24,7 @@ import ErrorDisplay from './components/ErrorDisplay';
 import { SearchKnowledgeSheet } from './components/SearchKnowledgeSheet';
 import UserInput from './components/UserInput';
 import { WebSearchSheet } from './components/WebSearchSheet';
+import { SvgImage } from './components/SvgImage';
 
 const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
     if (!params) return null
@@ -319,28 +320,27 @@ const Task = ({
             {history?.length !== 0 && (
                 <div className='mb-2'>
                     <div className='flex'>
-                        {
-                            isExpanded ? <div className={`${lvl1 ? 'pl-6' : 'pl-0'} w-full text-sm text-gray-400 leading-6 scroll-hover`}>
-                                {history.map((_history, index) =>
-                                    _history.step_type === "call_user_input"
-                                        ? <UserInput
-                                            disable={_history.is_completed}
-                                            taskId={task.id}
-                                            history={_history}
-                                            onSendInput={sendInput}
-                                        ></UserInput>
-                                        : <div>
-                                            <p key={index}>{_history.call_reason}</p>
-                                            <Tool
-                                                data={_history}
-                                                setCurrentDirectFile={setCurrentDirectFile}
-                                                onSearchKnowledge={onSearchKnowledge}
-                                                onWebSearch={onWebSearch}
-                                            />
-                                        </div>
-                                )}
-                            </div> : null
-                        }
+                        <div className={`${lvl1 ? 'pl-6' : 'pl-0'} ${isExpanded ? 'block' : 'hidden'} w-full text-sm text-gray-400 leading-6 scroll-hover`}>
+                            {history.map((_history, index) =>
+                                _history.step_type === "call_user_input"
+                                    ? <UserInput
+                                        key={task.id}
+                                        disable={_history.is_completed}
+                                        taskId={task.id}
+                                        history={_history}
+                                        onSendInput={sendInput}
+                                    ></UserInput>
+                                    : <div>
+                                        <p key={index}>{_history.call_reason}</p>
+                                        <Tool
+                                            data={_history}
+                                            setCurrentDirectFile={setCurrentDirectFile}
+                                            onSearchKnowledge={onSearchKnowledge}
+                                            onWebSearch={onWebSearch}
+                                        />
+                                    </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
@@ -487,51 +487,65 @@ export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
             }
             {/* 结果文件 */}
             {files && files.filter(file =>
-                // 匹配常见图片格式，可根据需求补充（如heic、tiff等）
                 /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(file.file_name)
             ).length > 0 && (
-                    <div className="mb-5"> {/* 与下方普通文件保持间距 */}
+                    <div className="mb-5">
                         {files
                             .filter(file => /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(file.file_name))
-                            .map(file => (
-                                <div
-                                    key={file.file_id}
-                                    className="mb-3 p-2 rounded-2xl border border-[#ebeef2] cursor-pointer"
-                                    // 点击图片可预览（复用原有预览逻辑）
-                                    onClick={() => {
-                                        setCurrentDirectFile(null);
-                                        setCurrentPreviewFileId(file.file_id);
-                                        setIsPreviewOpen(true);
-                                        setTriggerDrawerFromCard(true);
-                                    }}
-                                >
-                                    {/* 固定图片长宽：这里示例为 300x200px，可根据需求调整 */}
-                                    {/* <div className="w-[300px] h-[200px] overflow-hidden rounded-lg bg-[#F4F6FB]">
-                                        <img
-                                            // src={file.file_url} // 用文件真实URL，替代原固定占位图
-                                            src="https://bpic.588ku.com/element_origin_min_pic/23/07/11/d32dabe266d10da8b21bd640a2e9b611.jpg!r650"
-                                            alt={file.file_name} // 增加可访问性
-                                            className="w-full h-full object-cover" // 图片填充容器，避免拉伸变形
-                                        // 加载失败时显示默认占位（可选）
-                                        // onError={(e) => {
-                                        //   e.target.src = "https://via.placeholder.com/300x200?text=Image+Load+Failed";
-                                        // }}
-                                        />
-                                    </div> */}
-                                </div>
-                            ))
-                        }
+                            .map(file => {
+                                const fileExt = file.file_name.split('.').pop()?.toLowerCase() || '';
+                                const isSvg = fileExt === 'svg';
+
+                                return (
+                                    <div
+                                        key={file.file_id}
+                                        className="mb-3 p-2 rounded-2xl border border-[#ebeef2] cursor-pointer"
+                                        onClick={() => {
+                                            setCurrentDirectFile(null);
+                                            setCurrentPreviewFileId(file.file_id);
+                                            setIsPreviewOpen(true);
+                                            setTriggerDrawerFromCard(true);
+                                        }}
+                                    >
+                                        {/* 固定容器尺寸 */}
+                                        <div className="w-full min-h-[200px] overflow-hidden rounded-lg bg-[#F4F6FB]">
+                                            {/* SVG用专用组件 */}
+                                            {isSvg ? (
+                                                <SvgImage
+                                                    fileUrl={file.file_url}
+                                                />
+                                            ) : (
+                                                // 其他图片用img标签
+                                                <img
+                                                    src={`${__APP_ENV__.BASE_URL}${file.file_url}`}
+                                                    alt={file.file_name}
+                                                    className="w-full h-full object-cover"
+                                                    onError={(e) => {
+                                                        e.target.src = `${__APP_ENV__.BASE_URL}/assets/image-placeholder.png`;
+                                                    }}
+                                                />
+                                            )}
+                                        </div>
+                                        {/* 显示文件名 */}
+                                        <div className="mt-2 text-sm text-center truncate">{file.file_name}</div>
+                                    </div>
+                                );
+                            })}
                     </div>
                 )}
             {files &&
                 <div>
                     {/* <p className='text-sm text-gray-500'></p> */}
                     <div className='mt-5 flex flex-wrap gap-3'>
-                        {files?.map((file) => (
+                        {files.filter(file => {
+                            // 定义需要排除的图片格式（和你之前匹配的格式一致）
+                            const excludedImageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
+                            // 获取当前文件扩展名（转小写，避免大小写问题）
+                            const fileExt = file.file_name.split('.').pop()?.toLowerCase() || '';
+                            // 保留“扩展名不在排除列表中”的文件（即非图片文件）
+                            return !excludedImageExts.includes(fileExt);
+                        }).map((file) => (
                             <>
-                                {/* <div key={file.file_id} className='max-w-[80%] p-2 rounded-2xl border border-[#ebeef2] cursor-pointer'>
-                                    <img src="https://bpic.588ku.com/element_origin_min_pic/23/07/11/d32dabe266d10da8b21bd640a2e9b611.jpg!r650" alt="" />
-                                </div> */}
                                 <div
                                     key={file.file_id}
                                     onClick={() => {

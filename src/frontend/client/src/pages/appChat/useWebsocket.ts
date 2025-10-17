@@ -90,7 +90,7 @@ export const useWebSocket = (helpers) => {
                 console.log('data :>> ', data);
                 handleMessages(data, ws)
 
-                if (data.type === 'begin' && callBack) {
+                if (data.type === 'close' && callBack) {
                     callBack?.(ws)
                     callBack = null
                 }

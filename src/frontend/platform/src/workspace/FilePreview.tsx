@@ -1,4 +1,5 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
+import { SvgImage } from "@/components/LinSight/SvgImage";
 import MessageMarkDown from "@/pages/BuildPage/flow/FlowChat/MessageMarkDown";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -66,6 +67,10 @@ export default function FilePreview({ files, fileId, currentDisplayFile }: FileP
                     html
                     filePath={url}
                 />
+            case 'svg':
+                return <SvgImage
+                fileUrl={url}
+            />
             case 'png':
             case 'jpg':
             case 'jpeg':

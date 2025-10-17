@@ -65,7 +65,12 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
                 tasks: [],
                 summary: '',
                 file_list: [],
-                status: SopStatus.NotStarted
+                status: SopStatus.NotStarted,
+                output_result: {
+                    all_from_session_files: [],
+                    final_files: [],
+                    answer: ''
+                }
             })
 
             setVersions((prve) => [{

@@ -193,7 +193,7 @@ class MarkdownToPdfConverter:
 
     def __init__(self,
                  default_css: Optional[str] = None,
-                 enable_math: bool = True,
+                 enable_math: bool = False,
                  page_format: str = 'A4',
                  margin_mm: int = 20):
         """
@@ -308,7 +308,7 @@ class MarkdownToPdfConverter:
             # 确定 CSS 和 MathJax 设置
             css_content = custom_css or self.default_css
             use_math = enable_math if enable_math is not None else self.enable_math
-            math_snippet = MATHJAX_SNIPPET if use_math else ''
+            math_snippet = MATHJAX_SNIPPET if use_math else '\n'
 
             # 生成完整的 HTML 文档
             html_document = HTML_TEMPLATE.format(
@@ -688,7 +688,7 @@ class MarkdownToPdfConverter:
 
 
 # 向后兼容函数
-def render_markdown_to_html(md_text: str, css: str = None, enable_math: bool = True) -> str:
+def render_markdown_to_html(md_text: str, css: str = None, enable_math: bool = False) -> str:
     """用于向后兼容的遗留函数。"""
     converter = MarkdownToPdfConverter(enable_math=enable_math)
     return converter.render_markdown_to_html(md_text, custom_css=css, enable_math=enable_math)
@@ -701,7 +701,7 @@ def html_to_pdf_with_playwright(html: str, output_path: str, format: str = 'A4',
 
 
 def md_to_pdf(input_md: str, output_pdf: str, css_file: str = None, is_path: bool = False,
-              enable_math: bool = True, page_format: str = 'A4', margin_mm: int = 20):
+              enable_math: bool = False, page_format: str = 'A4', margin_mm: int = 20):
     """用于向后兼容的遗留函数。"""
     converter = MarkdownToPdfConverter(
         enable_math=enable_math,
@@ -719,7 +719,7 @@ def md_to_pdf(input_md: str, output_pdf: str, css_file: str = None, is_path: boo
 
 
 def md_to_pdf_bytes(input_md: str, css_file: str = None, is_path: bool = False,
-                    enable_math: bool = True, page_format: str = 'A4', margin_mm: int = 20) -> bytes:
+                    enable_math: bool = False, page_format: str = 'A4', margin_mm: int = 20) -> bytes:
     """
     将 Markdown 转换为 PDF 字节数据的便捷函数。
 
