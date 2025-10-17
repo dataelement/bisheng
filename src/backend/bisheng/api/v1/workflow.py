@@ -7,7 +7,7 @@ from fastapi import APIRouter, Body, Depends, Query, WebSocket, WebSocketExcepti
 from loguru import logger
 from sqlmodel import select
 
-from bisheng.api.errcode.flow import WorkflowNameExistsError, WorkFlowOnlineEditError
+from bisheng.api.errcode.flow import WorkflowNameExistsError, WorkFlowOnlineEditError, AppWriteAuthError
 from bisheng.api.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload, get_login_user
@@ -16,6 +16,7 @@ from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import FlowVersionCreate, resp_200
 from bisheng.chat.types import WorkType
 from bisheng.core.database import get_sync_db_session
+from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, FlowType, FlowUpdate, \
     FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
@@ -26,6 +27,30 @@ from bisheng_langchain.utils.requests import Requests
 from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(prefix='/workflow', tags=['Workflow'])
+
+
+@router.get("/write/auth")
+async def check_app_write_auth(
+        request: Request,
+        login_user: UserPayload = Depends(get_login_user),
+        flow_id: str = Query(..., description="应用ID"),
+        flow_type: int = Query(..., description="应用类型")
+):
+    """ 检查用户对应用是否有管理权限 """
+    check_auth_type = AccessType.FLOW_WRITE
+    if flow_type == FlowType.ASSISTANT.value:
+        check_auth_type = AccessType.ASSISTANT_WRITE
+        flow_info = await AssistantDao.aget_one_assistant(flow_id)
+        owner_id = flow_info.user_id
+    else:
+        flow_info = await FlowDao.aget_flow_by_id(flow_id)
+        owner_id = flow_info.user_id
+        if flow_info.flow_type == FlowType.WORKFLOW.value:
+            check_auth_type = AccessType.WORKFLOW_WRITE
+
+    if await login_user.async_access_check(owner_id, flow_id, check_auth_type):
+        return resp_200()
+    return AppWriteAuthError.return_resp()
 
 
 @router.get("/report/file")

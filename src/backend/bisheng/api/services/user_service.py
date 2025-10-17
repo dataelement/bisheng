@@ -90,6 +90,13 @@ class UserPayload:
             return True
         return False
 
+    @async_wrapper_access_check
+    async def async_access_check(self, owner_user_id: int, target_id: str, access_type: AccessType) -> bool:
+        if self.user_id == owner_user_id:
+            return True
+        flag = await RoleAccessDao.ajudge_role_access(self.user_role, target_id, access_type)
+        return True if flag else False
+
     @wrapper_access_check
     def copiable_check(self, owner_user_id: int) -> bool:
         """

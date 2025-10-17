@@ -5,7 +5,7 @@ from typing import List, Optional, Tuple
 from sqlalchemy import JSON, Column, DateTime, Text, and_, func, or_, text
 from sqlmodel import Field, select
 
-from bisheng.core.database import get_sync_db_session
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.utils import generate_uuid
@@ -92,6 +92,12 @@ class AssistantDao(AssistantBase):
         with get_sync_db_session() as session:
             statement = select(Assistant).where(Assistant.id == assistant_id)
             return session.exec(statement).first()
+
+    @classmethod
+    async def aget_one_assistant(cls, assistant_id: str) -> Assistant:
+        statement = select(Assistant).where(Assistant.id == assistant_id)
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).first()
 
     @classmethod
     def get_assistants_by_ids(cls, assistant_ids: List[str]) -> List[Assistant]:

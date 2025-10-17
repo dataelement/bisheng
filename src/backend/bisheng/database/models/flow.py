@@ -8,7 +8,7 @@ from pydantic import field_validator
 from sqlalchemy import Column, DateTime, String, and_, func, or_, text
 from sqlmodel import JSON, Field, select, update
 
-from bisheng.core.database import get_sync_db_session
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAccessDao
@@ -29,7 +29,7 @@ class FlowType(Enum):
     ASSISTANT = 5
     WORKFLOW = 10
     WORKSTATION = 15
-    LINSIGHT = 20 # 灵思模式
+    LINSIGHT = 20  # 灵思模式
 
 
 class AppEnum(Enum):
@@ -40,6 +40,7 @@ class AppEnum(Enum):
 
 class UserLinkType(Enum):
     app = AppEnum
+
 
 class FlowBase(SQLModelSerializable):
     name: str = Field(index=True)
@@ -140,6 +141,13 @@ class FlowDao(FlowBase):
             return session.exec(statement).first()
 
     @classmethod
+    async def aget_flow_by_id(cls, flow_id: str) -> Optional[Flow]:
+        async with get_async_db_session() as session:
+            statement = select(Flow).where(Flow.id == flow_id)
+            result = await session.exec(statement)
+            return result.first()
+
+    @classmethod
     def get_flow_by_idstr(cls, flow_id: str) -> Optional[Flow]:
         with get_sync_db_session() as session:
             statement = select(Flow).where(Flow.id == flow_id)
@@ -220,7 +228,7 @@ class FlowDao(FlowBase):
             if status is not None:
                 statement = statement.where(Flow.status == status)
             if flow_type is not None:
-                statement = statement.where(Flow.flow_type== flow_type)
+                statement = statement.where(Flow.flow_type == flow_type)
             if flow_ids:
                 statement = statement.where(Flow.id.in_(flow_ids))
             statement = statement.order_by(Flow.update_time.desc())
@@ -350,9 +358,9 @@ class FlowDao(FlowBase):
         sub_query = select(
             Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id,
             Flow.status, Flow.create_time, Flow.update_time).union_all(
-                select(Assistant.id, Assistant.name, Assistant.desc, FlowType.ASSISTANT.value,
-                       Assistant.logo, Assistant.user_id, Assistant.status, Assistant.create_time,
-                       Assistant.update_time).where(Assistant.is_delete == 0)).subquery()
+            select(Assistant.id, Assistant.name, Assistant.desc, FlowType.ASSISTANT.value,
+                   Assistant.logo, Assistant.user_id, Assistant.status, Assistant.create_time,
+                   Assistant.update_time).where(Assistant.is_delete == 0)).subquery()
 
         statement = select(sub_query.c.id, sub_query.c.name, sub_query.c.description,
                            sub_query.c.flow_type, sub_query.c.logo, sub_query.c.user_id,

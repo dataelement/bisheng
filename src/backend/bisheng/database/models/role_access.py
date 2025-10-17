@@ -94,6 +94,17 @@ class RoleAccessDao(RoleAccessBase):
             )).first()
 
     @classmethod
+    async def ajudge_role_access(cls, role_ids: List[int], third_id: str, access_type: AccessType) -> Optional[
+        RoleAccess]:
+        statement = select(RoleAccess).filter(
+            col(RoleAccess.role_id).in_(role_ids),
+            col(RoleAccess.type) == access_type.value,
+            col(RoleAccess.third_id) == third_id
+        )
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).first()
+
+    @classmethod
     def find_role_access(cls, role_ids: List[int], third_ids: List[str], access_type: AccessType) -> List[RoleAccess]:
         with get_sync_db_session() as session:
             if access_type:
