@@ -20,6 +20,8 @@ import { useToastContext } from '~/Providers/ToastContext';
 import { useChatContext } from '~/Providers/ChatContext';
 import { logger, validateFiles } from '~/utils';
 import useUpdateFiles from './useUpdateFiles';
+import { bishengConfState } from '~/pages/appChat/store/atoms';
+import { useRecoilState } from 'recoil';
 
 type UseFileHandling = {
   overrideEndpoint?: EModelEndpoint;
@@ -237,6 +239,7 @@ const useFileHandling = (params?: UseFileHandling) => {
     img.src = preview;
   };
 
+  const [config] = useRecoilState(bishengConfState)
   const handleFiles = async (_files: FileList | File[], _toolResource?: string) => {
     // abortControllerRef.current = new AbortController();
     const fileList = Array.from(_files);
@@ -248,12 +251,14 @@ const useFileHandling = (params?: UseFileHandling) => {
         files,
         fileList,
         setError,
+        showToast,
+        localize,
+        size: config?.uploaded_files_maximum_size || 200,
         endpointFileConfig:
           fileConfig?.endpoints[endpoint] ??
           fileConfig?.endpoints.default ??
           defaultFileConfig.endpoints[endpoint] ??
           defaultFileConfig.endpoints.default,
-        noLimitSize: true
       });
     } catch (error) {
       console.error('file validation error', error);

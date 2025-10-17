@@ -583,6 +583,8 @@
   "com_sop_replace_file_lines": "ファイルを編集中",
   "com_sop_using_tool": "{{0}} ツールを使用中",
   "com_sop_waiting_input": "入力待ち",
+  "com_sop_input": "入力済み",
+  "com_file_size_exceed_limit": "ファイル：{{name}} は {{size}}MB を超えたため、削除されました",
   "com_sop_please_input": "入力してください",
   "com_sop_task_execution_interrupted": "タスクの実行が中断されました",
   "com_sop_running": "実行中…",

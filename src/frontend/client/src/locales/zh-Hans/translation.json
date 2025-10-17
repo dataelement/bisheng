@@ -585,6 +585,7 @@
   "com_sop_using_tool": "正在使用 {{0}} 工具",
   "com_sop_waiting_input": "等待输入",
   "com_sop_input": "已输入",
+  "com_file_size_exceed_limit": "文件：{{name}}超过{{size}}MB，已移除",
   "com_sop_please_input": "请输入",
   "com_sop_task_execution_interrupted": "任务执行中断",
   "com_sop_running": "运行中...",

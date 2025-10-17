@@ -1,13 +1,16 @@
-import { X, ChevronUp, ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRecoilState } from "recoil";
 import { checkFileParseStatus } from "~/api/linsight";
 import { File_Accept } from "~/common";
+import { DragDropOverlayIcon } from "~/components/Chat/Input/Files/DragDropOverlay";
 import { AttachmentIcon } from "~/components/svg";
 import SendIcon from "~/components/svg/SendIcon";
 import { Button, Textarea } from "~/components/ui";
 import { FileIcon } from "~/components/ui/icon/File/FileIcon";
 import { useGetBsConfig, useUploadFileMutation } from "~/data-provider";
 import { useLocalize } from "~/hooks";
+import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { useToastContext } from "~/Providers";
 import { getFileExtension } from "~/utils";
 
@@ -25,7 +28,7 @@ export default function UserInput({ taskId, history = {}, disable = false, onSen
     const [inputValue, setInputValue] = useState(history.user_input || "")
     const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>(history?.files?.map(file => ({
         id: file.file_id,
-        file: new File([], file.original_filename),
+        file: file.file || new File([], file.original_filename),
         progress: 100,
         abortController: null,
         status: '',
@@ -56,7 +59,7 @@ export default function UserInput({ taskId, history = {}, disable = false, onSen
 
                 setUploadingFiles((prev) => {
                     return prev.reduce((result, file) => {
-                        const fileId = file.result.file_id; // 假设 file 对象中有 file_id 字段
+                        const fileId = file.result?.file_id;
                         if (statusMap.has(fileId)) {
                             const status = statusMap.get(fileId);
                             if (status === 'completed' && file.status !== '') {
@@ -117,7 +120,17 @@ export default function UserInput({ taskId, history = {}, disable = false, onSen
         }
     }
 
+    const [config] = useRecoilState(bishengConfState)
     const handleFiles = (files: File[]) => {
+        const maxSize = (config?.uploaded_files_maximum_size || 200) * 1024 * 1024
+        const oversizeFiles = files.filter((file) => file.size > maxSize)
+        if (oversizeFiles.length > 0) {
+            showToast({
+                message: localize('com_file_size_exceed_limit', { name: oversizeFiles.map(f => f.name).join(', '), size: config?.uploaded_files_maximum_size }),
+                status: 'error'
+            })
+            files = files.filter((file) => file.size <= maxSize)
+        }
         files.forEach((file) => {
             const fileId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
             const abortController = new AbortController()
@@ -205,7 +218,7 @@ export default function UserInput({ taskId, history = {}, disable = false, onSen
             onSendInput({
                 task_id: taskId,
                 user_input: inputValue,
-                files: uploadingFiles.map((file) => file.result)
+                files: uploadingFiles
             })
             // setUploadingFiles([])
             // setInputValue("")
@@ -238,7 +251,8 @@ export default function UserInput({ taskId, history = {}, disable = false, onSen
         >
             {isDragOver && (
                 <div className="absolute inset-0 bg-blue-50/90 border-2 border-dashed border-blue-400 rounded-2xl flex items-center justify-center z-10">
-                    <div className="text-blue-600 text-center">
+                    <div className="text-blue-600 text-center flex flex-col items-center gap-2">
+                        <DragDropOverlayIcon />
                         <div className="text-lg font-medium">{localize('com_addAnything')}</div>
                         <div className="text-sm opacity-75">{localize('com_dropAnyFileToAdd')}</div>
                     </div>
@@ -267,9 +281,9 @@ export default function UserInput({ taskId, history = {}, disable = false, onSen
             </div>
             <div
                 ref={collapseContainerRef}
-                className="overflow-hidden transition-all duration-300 ease-in-out"
+                className="overflow-hidden"
                 style={{
-                    maxHeight: collapsed ? 0 : collapseContainerRef.current?.scrollHeight + "px",
+                    maxHeight: collapsed ? 0 : 'none',
                     opacity: collapsed ? 0 : 1, // 配合透明度增强动画效果
                     padding: collapsed ? 0 : "0 2px", // 折叠时清除内边距
                 }}
@@ -285,7 +299,7 @@ export default function UserInput({ taskId, history = {}, disable = false, onSen
                                 key={uploadingFile.id}
                                 className="group min-w-52 relative flex items-center gap-2 border bg-white p-2 rounded-2xl cursor-default"
                             >
-                                {!disable && <span
+                                {!isInput && <span
                                     className="opacity-0 group-hover:opacity-100 absolute p-0.5 right-1.5 top-1.5 bg-black text-white rounded-full cursor-pointer transition-opacity hover:bg-gray-800"
                                     onClick={() => handleCancelUpload(uploadingFile.id)}
                                 >
@@ -304,7 +318,7 @@ export default function UserInput({ taskId, history = {}, disable = false, onSen
                                         : uploadingFile.status === "error" ? (
                                             <div className="text-xs text-red-500">上传失败</div>
                                         ) : (
-                                            uploadingFile.file.size ? <div className="text-xs text-gray-500">{getFileExtension(uploadingFile.file.name)}</div> : null
+                                            <div className="text-xs text-gray-500">{getFileExtension(uploadingFile.file.name)?.toLowerCase()}</div>
                                         )}
                                 </div>
                             </div>

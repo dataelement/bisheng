@@ -14,7 +14,7 @@ export default function DownloadResultFileBtn({ file, onDownloadFile, onTooltipO
     const [isSuccess, setIsSuccess] = useState(false)
     const [isError, setIsError] = useState(false)
     const { showToast } = useToastContext();
-    const [tooltipOpen, setTooltipOpen] = useState(false); 
+    const [tooltipOpen, setTooltipOpen] = useState(false);
     const timerRef = useRef(null);
     const portalContainerRef = useRef(null);
 
@@ -61,6 +61,7 @@ export default function DownloadResultFileBtn({ file, onDownloadFile, onTooltipO
             file_name: file.file_name,
             file_url: file.file_url
         })
+        setTooltipOpen(false)
     }
 
     const handleDownLoad = async (e, type) => {
@@ -72,18 +73,18 @@ export default function DownloadResultFileBtn({ file, onDownloadFile, onTooltipO
         setIsSuccess(false);
         setIsError(false);
         let apiErrorMsg = `${type}导出失败，请稍后重试`;
-        
+
         if (timerRef.current) clearTimeout(timerRef.current);
-    
+
         try {
             const response = await getMdDownload(
                 { file_url: file.file_url, file_name: file.file_name },
                 type
             );
-    
+
             let isErrorResponse = false;
             let validFileData = response;
-    
+
             if (response instanceof Blob && response.type.includes('application/json')) {
                 const errorText = await new Promise((resolve) => {
                     const reader = new FileReader();
@@ -103,9 +104,9 @@ export default function DownloadResultFileBtn({ file, onDownloadFile, onTooltipO
                 apiErrorMsg = response.status_message || apiErrorMsg;
                 isErrorResponse = true;
             }
-    
+
             if (isErrorResponse) throw new Error(apiErrorMsg);
-    
+
             let blob;
             if (validFileData instanceof Blob) {
                 blob = validFileData;
@@ -115,7 +116,7 @@ export default function DownloadResultFileBtn({ file, onDownloadFile, onTooltipO
                 const mimeType = type === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
                 blob = new Blob([validFileData], { type: mimeType });
             }
-    
+
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -124,13 +125,13 @@ export default function DownloadResultFileBtn({ file, onDownloadFile, onTooltipO
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
-    
+
             setIsSuccess(true);
             setIsLoading(false);
             timerRef.current = setTimeout(() => {
                 setIsSuccess(false);
             }, 3000);
-    
+
         } catch (error) {
             console.error(`${type}下载失败:`, error);
             setIsError(true);
