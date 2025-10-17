@@ -100,9 +100,9 @@ export default function DownloadResultFileBtn({ file, onDownloadFile, onTooltipO
                 } catch (parseErr) {
                     isErrorResponse = false;
                 }
-            } else if (typeof response === 'object' && response !== null && response.status_code !== 200) {
-                apiErrorMsg = response.status_message || apiErrorMsg;
-                isErrorResponse = true;
+            // } else if (typeof response === 'object' && response !== null && response.status_code !== 200) {
+            //     apiErrorMsg = response.status_message || apiErrorMsg;
+            //     isErrorResponse = true;
             }
 
             if (isErrorResponse) throw new Error(apiErrorMsg);
