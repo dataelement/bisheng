@@ -6,7 +6,7 @@ import { useMemo, useState } from "react"
 import { useTranslation } from 'react-i18next'
 import FilePreview from './FilePreview'
 import { Button } from '@/components/bs-ui/button'
-import {  Tooltip, TooltipContent, TooltipTrigger } from '@/components/bs-ui/tooltip'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/bs-ui/tooltip'
 import FileIcon from './FileIcon'
 
 interface FileItem {
@@ -82,7 +82,7 @@ export default function FilePreviewDrawer({
     return (
         <Sheet open={isOpen} onOpenChange={onOpenChange}>
             <SheetContent className="w-[800px] sm:max-w-[800px] p-0">
-            {exportState.loading && (
+                {exportState.loading && (
                     <div className="fixed top-24 right-5 flex items-center gap-2 bg-white p-3 rounded-lg shadow-md z-500">
                         <Loader2 className="size-5 animate-spin text-blue-500" />
                         <div className="text-sm text-gray-800">{exportState.title}&nbsp;正在导出，请稍后...&nbsp;&nbsp;</div>
@@ -127,38 +127,38 @@ export default function FilePreviewDrawer({
 
                                 {/* 下载按钮 */}
                                 <Button variant="ghost" disabled={!currentDisplayFile}>
-                                        {String(currentDisplayFile.file_name).toLowerCase().endsWith('.md') ? (
-                                             <Tooltip
-                                             open={tooltipOpen}
-                                             onOpenChange={setTooltipOpen} // 绑定tooltip状态
-                                         >
-                                                <TooltipTrigger asChild>
-                                                    <span onClick={(e) => e.stopPropagation()}>
-                                                        <Download size={16} onClick={()=>{setTooltipOpen(true)}}/>
-                                                    </span>
-                                                </TooltipTrigger>
-                                                <TooltipContent side='bottom' align='center' className='bg-white text-gray-800 border border-gray-200'>
-                                                    <div className='flex flex-col gap-2'>
-                                                        <div className='flex gap-2 items-center cursor-pointer hover:bg-gray-100 rounded-md p-1' onClick={(e) => { e.stopPropagation(); downloadFile(currentDisplayFile); setTooltipOpen(false); }}>
-                                                            <FileIcon type={'md'} className='size-5' />
-                                                            <div className='w-full flex gap-2 items-center'>Markdown</div>
-                                                        </div>
-                                                        <div className='flex gap-2 items-center rounded-md p-1 cursor-pointer hover:bg-gray-100' onClick={(e) => {e.stopPropagation();handleExportOther(e, 'pdf',currentDisplayFile); setTooltipOpen(false);}}>
-                                                            <FileIcon type={'pdf'} className='size-5' />
-                                                            <div className='w-full flex gap-2 items-center'>PDF</div>
-                                                        </div>
-                                                        <div className='flex gap-2 items-center rounded-md p-1 cursor-pointer hover:bg-gray-100' onClick={(e) => {e.stopPropagation();handleExportOther(e, 'docx',currentDisplayFile); setTooltipOpen(false);}}>
-                                                            <FileIcon type={'docx'} className='size-5' />
-                                                            <div className='w-full flex gap-2 items-center'>Docx</div>
-                                                        </div>
+                                    {String(currentDisplayFile.file_name).toLowerCase().endsWith('.md') ? (
+                                        <Tooltip
+                                            open={tooltipOpen}
+                                            onOpenChange={setTooltipOpen} // 绑定tooltip状态
+                                        >
+                                            <TooltipTrigger asChild>
+                                                <span onClick={(e) => e.stopPropagation()}>
+                                                    <Download size={16} onClick={() => { setTooltipOpen(true) }} />
+                                                </span>
+                                            </TooltipTrigger>
+                                            <TooltipContent side='bottom' align='center' className='bg-white text-gray-800 border border-gray-200'>
+                                                <div className='flex flex-col gap-2'>
+                                                    <div className='flex gap-2 items-center cursor-pointer hover:bg-gray-100 rounded-md p-1' onClick={(e) => { e.stopPropagation(); downloadFile(currentDisplayFile); setTooltipOpen(false); }}>
+                                                        <FileIcon type={'md'} className='size-5' />
+                                                        <div className='w-full flex gap-2 items-center'>Markdown</div>
                                                     </div>
-                                                </TooltipContent>
-                                            </Tooltip>
-                                        ) : (
-                                            <Download size={16} onClick={(e) => { e.stopPropagation(); downloadFile(currentDisplayFile); }} />
-                                            
-                                        )}
-                                    </Button>
+                                                    <div className='flex gap-2 items-center rounded-md p-1 cursor-pointer hover:bg-gray-100' onClick={(e) => { e.stopPropagation(); handleExportOther(e, 'pdf', currentDisplayFile); setTooltipOpen(false); }}>
+                                                        <FileIcon type={'pdf'} className='size-5' />
+                                                        <div className='w-full flex gap-2 items-center'>PDF</div>
+                                                    </div>
+                                                    <div className='flex gap-2 items-center rounded-md p-1 cursor-pointer hover:bg-gray-100' onClick={(e) => { e.stopPropagation(); handleExportOther(e, 'docx', currentDisplayFile); setTooltipOpen(false); }}>
+                                                        <FileIcon type={'docx'} className='size-5' />
+                                                        <div className='w-full flex gap-2 items-center'>Docx</div>
+                                                    </div>
+                                                </div>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    ) : (
+                                        <Download size={16} onClick={(e) => { e.stopPropagation(); downloadFile(currentDisplayFile); }} />
+
+                                    )}
+                                </Button>
                             </div>
                         </div>
                     </div>
@@ -170,6 +170,7 @@ export default function FilePreviewDrawer({
                         files={files}
                         fileId={currentFileId}
                         currentDisplayFile={currentDisplayFile}
+                        onDownloadFile={downloadFile}
                     />
                 </div>
             </SheetContent>

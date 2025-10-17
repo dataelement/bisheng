@@ -28,6 +28,7 @@ import { SearchKnowledgeSheet } from './SearchKnowledgeSheet';
 import { WebSearchSheet } from './WebSearchSheet';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/bs-ui/tooltip';
 import { SvgImage } from '@/components/LinSight/SvgImage';
+import DownloadList from './DownloadList';
 
 const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
     if (!params) return null
@@ -660,156 +661,130 @@ export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
                 </div>
             } */}
                 {/* 结果文件 */}
-{files && files.filter(file =>
-    /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(file.file_name)
-).length > 0 && (
-    <div className="mb-5"> {/* 与下方普通文件保持间距 */}
-        {files
-            .filter(file => /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(file.file_name))
-            .map(file => {
-                // 1. 获取文件扩展名，判断是否为SVG
-                const fileExt = file.file_name.split('.').pop()?.toLowerCase() || '';
-                const isSvg = fileExt === 'svg';
+                {files && files.filter(file =>
+                    /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(file.file_name)
+                ).length > 0 && (
+                        <div className="mb-5"> {/* 与下方普通文件保持间距 */}
+                            {files
+                                .filter(file => /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(file.file_name))
+                                .map(file => {
+                                    // 1. 获取文件扩展名，判断是否为SVG
+                                    const fileExt = file.file_name.split('.').pop()?.toLowerCase() || '';
+                                    const isSvg = fileExt === 'svg';
 
-                return (
-                    <div
-                        key={file.file_id}
-                        className="mb-3 p-2 rounded-2xl border border-[#ebeef2] cursor-pointer"
-                        // 点击图片打开预览抽屉（复用原有逻辑）
-                        onClick={() => {
-                            setCurrentDirectFile(null);
-                            setCurrentPreviewFileId(file.file_id);
-                            setIsPreviewOpen(true);
-                            setTriggerDrawerFromCard(true);
-                        }}
-                    >
-                        {/* 固定图片容器尺寸，统一展示风格 */}
-                        <div className="w-full min-h-[200px] overflow-hidden rounded-lg bg-[#F4F6FB]">
-                            {/* SVG 用专用组件 SvgImage（支持自适应尺寸） */}
-                            {isSvg ? (
-                                <SvgImage
-                                    fileUrl={file.file_url}
-                                />
-                            ) : (
-                                // 其他图片格式用img标签，补充加载失败兜底
-                                <img
-                                    src={`${__APP_ENV__.BASE_URL}${file.file_url}`} // 拼接完整后端URL
-                                    alt={file.file_name}
-                                    className="w-full h-full object-cover" // 填充容器，避免变形
-                                    // 图片加载失败时显示占位图（需确保占位图路径正确）
-                                    onError={(e) => {
-                                        e.target.src = `${__APP_ENV__.BASE_URL}/assets/image-placeholder.png`;
-                                    }}
-                                />
-                            )}
+                                    return (
+                                        <div
+                                            key={file.file_id}
+                                            className="mb-3 p-2 rounded-2xl border border-[#ebeef2] cursor-pointer"
+                                            // 点击图片打开预览抽屉（复用原有逻辑）
+                                            onClick={() => {
+                                                setCurrentDirectFile(null);
+                                                setCurrentPreviewFileId(file.file_id);
+                                                setIsPreviewOpen(true);
+                                                setTriggerDrawerFromCard(true);
+                                            }}
+                                        >
+                                            {/* 固定图片容器尺寸，统一展示风格 */}
+                                            <div className="w-full min-h-[200px] overflow-hidden rounded-lg bg-[#F4F6FB]">
+                                                {/* SVG 用专用组件 SvgImage（支持自适应尺寸） */}
+                                                {isSvg ? (
+                                                    <SvgImage
+                                                        fileUrl={file.file_url}
+                                                    />
+                                                ) : (
+                                                    // 其他图片格式用img标签，补充加载失败兜底
+                                                    <img
+                                                        src={`${__APP_ENV__.BASE_URL}${file.file_url}`} // 拼接完整后端URL
+                                                        alt={file.file_name}
+                                                        className="w-full h-full object-cover" // 填充容器，避免变形
+                                                        // 图片加载失败时显示占位图（需确保占位图路径正确）
+                                                        onError={(e) => {
+                                                            e.target.src = `${__APP_ENV__.BASE_URL}/assets/image-placeholder.png`;
+                                                        }}
+                                                    />
+                                                )}
+                                            </div>
+                                            {/* 显示文件名，提升用户体验 */}
+                                            <div className="mt-2 text-sm text-center truncate">{file.file_name}</div>
+                                        </div>
+                                    );
+                                })}
                         </div>
-                        {/* 显示文件名，提升用户体验 */}
-                        <div className="mt-2 text-sm text-center truncate">{file.file_name}</div>
-                    </div>
-                );
-            })}
-    </div>
-)}
+                    )}
 
-{files && (
-    <div>
-        <div className='mt-5 flex flex-wrap gap-3'>
-            {/* 过滤排除图片格式文件，只保留非图片文件 */}
-            {files.filter(file => {
-                const excludedImageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
-                const fileExt = file.file_name.split('.').pop()?.toLowerCase() || '';
-                return !excludedImageExts.includes(fileExt);
-            }).map((file) => (
-                <div
-                    key={file.file_id}
-                    onClick={() => {
-                        // HTML文件单独处理：打开新窗口
-                        if (file.file_name.split('.').pop() === 'html') {
-                            return window.open(`${__APP_ENV__.BASE_URL}/html?url=${encodeURIComponent(file.file_url)}`, '_blank');
-                        }
-                        // 其他文件打开预览抽屉
-                        setCurrentDirectFile(null);
-                        setCurrentPreviewFileId(file.file_id);
-                        setIsPreviewOpen(true);
-                        setTriggerDrawerFromCard(true);
-                    }}
-                    className='w-[calc(50%-6px)] p-2 rounded-2xl border border-[#ebeef2] cursor-pointer'
-                >
-                    {/* 非图片文件：显示图标占位 */}
-                    <div className='bg-[#F4F6FB] h-24 p-4 rounded-lg overflow-hidden'>
-                        <FileIcon 
-                            type={file.file_name.split('.').pop().toLowerCase()} 
-                            className='size-24 mx-auto opacity-20' 
-                        />
-                    </div>
-                    {/* 文件信息与下载按钮 */}
-                    <div className='relative flex pt-3 gap-2 items-center'>
-                        <FileIcon 
-                            type={file.file_name.split('.').pop().toLowerCase()} 
-                            className='size-4 min-w-4' 
-                        />
-                        <span className='text-sm truncate pr-6'>{file.file_name}</span>
-                        {/* 多文件类型下载按钮（复用原有组件） */}
-                        <Button variant="ghost" className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
+                {files && (
+                    <div>
+                        <div className='mt-5 flex flex-wrap gap-3'>
+                            {/* 过滤排除图片格式文件，只保留非图片文件 */}
+                            {files.filter(file => {
+                                const excludedImageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
+                                const fileExt = file.file_name.split('.').pop()?.toLowerCase() || '';
+                                return !excludedImageExts.includes(fileExt);
+                            }).map((file) => (
+                                <div
+                                    key={file.file_id}
+                                    onClick={() => {
+                                        // HTML文件单独处理：打开新窗口
+                                        if (file.file_name.split('.').pop() === 'html') {
+                                            return window.open(`${__APP_ENV__.BASE_URL}/html?url=${encodeURIComponent(file.file_url)}`, '_blank');
+                                        }
+                                        // 其他文件打开预览抽屉
+                                        setCurrentDirectFile(null);
+                                        setCurrentPreviewFileId(file.file_id);
+                                        setIsPreviewOpen(true);
+                                        setTriggerDrawerFromCard(true);
+                                    }}
+                                    className='w-[calc(50%-6px)] p-2 rounded-2xl border border-[#ebeef2] cursor-pointer'
+                                >
+                                    {/* 非图片文件：显示图标占位 */}
+                                    <div className='bg-[#F4F6FB] h-24 p-4 rounded-lg overflow-hidden'>
+                                        <FileIcon
+                                            type={file.file_name.split('.').pop().toLowerCase()}
+                                            className='size-24 mx-auto opacity-20'
+                                        />
+                                    </div>
+                                    {/* 文件信息与下载按钮 */}
+                                    <div className='relative flex pt-3 gap-2 items-center'>
+                                        <FileIcon
+                                            type={file.file_name.split('.').pop().toLowerCase()}
+                                            className='size-4 min-w-4'
+                                        />
+                                        <span className='text-sm truncate pr-6'>{file.file_name}</span>
+                                        {/* 多文件类型下载按钮（复用原有组件） */}
+                                        <Button variant="ghost" className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
                                             {String(file.file_name).toLowerCase().endsWith('.md') ? (
-                                                <Tooltip
-                                                    open={tooltipOpen}
-                                                    onOpenChange={setTooltipOpen}
-                                                >
-                                                    <TooltipTrigger asChild>
-                                                        <span onClick={(e) => e.stopPropagation()}>
-                                                            <Download size={16} onClick={()=>{setTooltipOpen(true)}}/>
-                                                        </span>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent side='bottom' align='center' className='bg-white text-gray-800 border border-gray-200'>
-                                                        <div className='flex flex-col gap-2'>
-                                                            <div className='flex gap-2 items-center cursor-pointer hover:bg-gray-100 rounded-md p-1' onClick={(e) => { e.stopPropagation(); downloadFile(file); setTooltipOpen(false);}}>
-                                                                <FileIcon type={'md'} className='size-5' />
-                                                                <div className='w-full flex gap-2 items-center'>Markdown</div>
-                                                            </div>
-                                                            <div className='flex gap-2 items-center rounded-md p-1 cursor-pointer hover:bg-gray-100' onClick={(e) =>{e.stopPropagation(); handleExportOther(e, 'pdf', file); setTooltipOpen(false);}}>
-                                                                <FileIcon type={'pdf'} className='size-5' />
-                                                                <div className='w-full flex gap-2 items-center'>PDF</div>
-                                                            </div>
-                                                            <div className='flex gap-2 items-center rounded-md p-1 cursor-pointer hover:bg-gray-100'onClick={(e) => {e.stopPropagation();handleExportOther(e, 'docx',file); setTooltipOpen(false);}}>
-                                                                <FileIcon type={'docx'} className='size-5' />
-                                                                <div className='w-full flex gap-2 items-center'>Docx</div>
-                                                            </div>
-                                                        </div>
-                                                    </TooltipContent>
-                                                </Tooltip>
+                                                <DownloadList file={file} onDownloadFile={downloadFile} onExportOther={handleExportOther} />
                                             ) : (
                                                 <Download size={16} onClick={(e) => { e.stopPropagation(); downloadFile(file); }} />
-
                                             )}
                                         </Button>
-                    </div>
-                </div>
-            ))}
-        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
 
-        {/* 预览所有文件列表（文件夹入口） */}
-        {allFiles.length > files.length && (
-            <div className='mt-2.5'>
-                <div
-                    onClick={() => setIsDrawerOpen(true)}
-                    className='w-[calc(50%-6px)] p-2 rounded-2xl border border-[#ebeef2] cursor-pointer'
-                >
-                    <div className='bg-[#F4F6FB] h-24 p-6 rounded-lg overflow-hidden'>
-                        <FileIcon type="dir" className='size-24 mx-auto opacity-20' />
+                        {/* 预览所有文件列表（文件夹入口） */}
+                        {allFiles.length > files.length && (
+                            <div className='mt-2.5'>
+                                <div
+                                    onClick={() => setIsDrawerOpen(true)}
+                                    className='w-[calc(50%-6px)] p-2 rounded-2xl border border-[#ebeef2] cursor-pointer'
+                                >
+                                    <div className='bg-[#F4F6FB] h-24 p-6 rounded-lg overflow-hidden'>
+                                        <FileIcon type="dir" className='size-24 mx-auto opacity-20' />
+                                    </div>
+                                    <div className='relative flex pt-3 gap-2 items-center'>
+                                        <FileIcon type="dir" className='size-4 min-w-4' />
+                                        <span className='text-sm truncate pr-6'>{localize('com_sop_view_all_files')}</span>
+                                        <Button variant="ghost" className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
+                                            <ArrowRight size={16} />
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
-                    <div className='relative flex pt-3 gap-2 items-center'>
-                        <FileIcon type="dir" className='size-4 min-w-4' />
-                        <span className='text-sm truncate pr-6'>{localize('com_sop_view_all_files')}</span>
-                        <Button variant="ghost" className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
-                            <ArrowRight size={16} />
-                        </Button>
-                    </div>
-                </div>
-            </div>
-        )}
-    </div>
-)}
+                )}
 
                 {/* search knowledge */}
                 <SearchKnowledgeSheet
