@@ -1,12 +1,13 @@
 "use client"
 
+import { Eye } from "lucide-react"
 import { useState } from "react"
-import { Download, Eye, X } from "lucide-react"
+import { batchDownload } from "~/api/linsight"
+import { useLocalize } from "~/hooks"
 import { Button, Checkbox } from "../ui"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../ui/Sheet"
 import FileIcon from "../ui/icon/File"
-import { batchDownload } from "~/api/linsight"
-import { useLocalize } from "~/hooks"
+import DownloadResultFileBtn from "./components/DownloadResultFileBtn"
 
 interface FileItem {
     file_id: string
@@ -30,6 +31,15 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
     const [isDownloading, setIsDownloading] = useState(false)
     const localize = useLocalize()
+
+    // 新增：记录鼠标hover的文件ID和弹窗打开的文件ID
+    const [hoveredId, setHoveredId] = useState<string | null>(null)
+    const [tooltipOpenIds, setTooltipOpenIds] = useState<Set<string>>(new Set())
+
+    // 图标显示条件：鼠标移入 或 弹窗打开
+    const shouldShowIcon = (fileId: string) => {
+        return hoveredId === fileId || tooltipOpenIds.has(fileId)
+    }
 
     // 获取文件扩展名
     const getFileExtension = (fileName: string): string => {
@@ -91,7 +101,8 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
                                 id="select-all"
                                 checked={isAllSelected}
                                 onCheckedChange={handleSelectAll}
-                                className="rounded-full"
+                                tabIndex="-1"
+                                className="rounded-full" 
                                 ref={(ref) => {
                                     if (ref) {
                                         ref.indeterminate = isIndeterminate
@@ -119,12 +130,27 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
                 {/* 文件列表 */}
                 <div className="space-y-1 h-[calc(100vh-100px)] overflow-auto pb-10">
                     {files.map((file) => (
-                        <div key={file.file_id} className="group flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50">
+                        <div 
+                            key={file.file_id} 
+                            className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50"
+                            // 鼠标移入：记录当前文件ID
+                            onMouseEnter={() => setHoveredId(file.file_id)}
+                            // 鼠标离开：清除hover记录
+                            onMouseLeave={() => {
+                                setHoveredId(null);
+                                // 弹窗关闭且鼠标离开，才清理ID
+                                if (!tooltipOpenIds.has(file.file_id)) return;
+                                const newIds = new Set(tooltipOpenIds);
+                                newIds.delete(file.file_id);
+                                setTooltipOpenIds(newIds);
+                            }}
+                        >
                             <Checkbox
                                 id={`file-${file.file_id}`}
                                 checked={selectedFiles.has(file.file_id)}
                                 onCheckedChange={(checked) => handleFileSelect(file.file_id, checked as boolean)}
                                 className="rounded-full "
+                                 tabIndex="-1"
                             />
 
                             <div className="flex items-center space-x-3 flex-1">
@@ -132,11 +158,13 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
                                 <span className="text-sm text-gray-900 flex-1">{file.file_name}</span>
                             </div>
 
-                            <div className="flex items-center space-x-2 group-hover:visible invisible">
+                            <div className="flex items-center space-x-2">
+                                {/* Eye图标：鼠标移入或弹窗打开显示 */}
                                 <Button
                                     variant="ghost"
                                     size="icon"
                                     className="h-8 w-8"
+                                    style={{ visibility: shouldShowIcon(file.file_id) ? 'visible' : 'hidden' }}
                                     onClick={() => {
                                         if (file.file_name.split('.').pop() === 'html') {
                                             return window.open(`${__APP_ENV__.BASE_URL}/html?url=${encodeURIComponent(file.file_url)}`, '_blank')
@@ -147,14 +175,25 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
                                     <Eye className="h-4 w-4 text-gray-500" />
                                 </Button>
 
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={() => downloadFile(file)}
-                                >
-                                    <Download className="h-4 w-4 text-gray-500" />
-                                </Button>
+                                {/* Download图标：与Eye图标显示逻辑完全一致 */}
+                                <span  style={{ visibility: shouldShowIcon(file.file_id) ? 'visible' : 'hidden' }}>
+                                <DownloadResultFileBtn 
+                                    file={file} 
+                                    onDownloadFile={downloadFile}
+                                   
+                                    // 接收弹窗状态，控制是否保持显示
+                                    onTooltipOpenChange={(isOpen) => {
+                                        const newIds = new Set(tooltipOpenIds);
+                                        if (isOpen) {
+                                            newIds.add(file.file_id);
+                                        } else {
+                                            // 弹窗关闭，立即移除ID（关键修复）
+                                            newIds.delete(file.file_id);
+                                        }
+                                        setTooltipOpenIds(newIds);
+                                    }}
+                                />
+                                </span>
                             </div>
                         </div>
                     ))}

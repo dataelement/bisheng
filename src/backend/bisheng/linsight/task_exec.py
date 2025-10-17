@@ -1,6 +1,7 @@
 import asyncio
 import os
 import shutil
+import traceback
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional, List, Dict, Callable
@@ -11,6 +12,7 @@ from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
 from bisheng.api.services.llm import LLMService
 from bisheng.api.services.tool import ToolServices
+from bisheng.api.v1.schema.linsight_schema import UserInputEventSchema
 from bisheng.cache.utils import create_cache_folder_async, CACHE_DIR
 from bisheng.core.app_context import app_ctx
 from bisheng.database.models import LinsightExecuteTask
@@ -57,6 +59,7 @@ class LinsightWorkflowTask:
         self.file_dir: Optional[str] = None
         self.session_version_id: Optional[str] = None
         self.step_event_extra_files: List[Dict] = []  # 用于存储步骤事件额外处理的文件信息
+        self.llm: Optional[BishengLLM] = None  # 用于存储LLM实例
 
     # ==================== 资源管理 ====================
 
@@ -130,14 +133,14 @@ class LinsightWorkflowTask:
         await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
 
         # 初始化执行组件
-        llm = await self._get_llm()
-        tools = await self._generate_tools(session_model, llm)
+        self.llm = await self._get_llm()
+        tools = await self._generate_tools(session_model)
         try:
             # 生成工具列表
             linsight_tools = await ToolServices.init_linsight_tools(root_path=self.file_dir)
             tools.extend(linsight_tools)
             # 创建智能体
-            agent = await self._create_agent(session_model, llm, tools)
+            agent = await self._create_agent(session_model, tools)
 
             # 检查是否在初始化过程中被终止
             self._check_termination()
@@ -156,7 +159,7 @@ class LinsightWorkflowTask:
                     break
 
         if success:
-            await self._handle_task_completion(session_model, llm)
+            await self._handle_task_completion(session_model)
         else:
             await self._handle_user_termination(session_model)
             raise UserTerminationError("任务被用户终止")
@@ -242,15 +245,15 @@ class LinsightWorkflowTask:
             logger.error(f"下载文件失败 {object_name}: {e}")
             raise
 
-    async def _generate_tools(self, session_model: LinsightSessionVersion, llm: BishengLLM) -> List:
+    async def _generate_tools(self, session_model: LinsightSessionVersion) -> List:
         """生成工具列表"""
         if not session_model.tools:
             return []
 
-        return await LinsightWorkbenchImpl.init_linsight_config_tools(session_version=session_model, llm=llm,
+        return await LinsightWorkbenchImpl.init_linsight_config_tools(session_version=session_model, llm=self.llm,
                                                                       need_upload=True, file_dir=self.file_dir)
 
-    async def _create_agent(self, session_model: LinsightSessionVersion, llm: BishengLLM, tools: List) -> LinsightAgent:
+    async def _create_agent(self, session_model: LinsightSessionVersion, tools: List) -> LinsightAgent:
 
         workbench_conf = await LLMService.get_workbench_llm()
         linsight_conf = settings.get_linsight_conf()
@@ -258,7 +261,7 @@ class LinsightWorkflowTask:
 
         """创建智能体"""
         return LinsightAgent(
-            llm=llm,
+            llm=self.llm,
             query=session_model.question,
             tools=tools,
             file_dir=self.file_dir,
@@ -363,7 +366,7 @@ class LinsightWorkflowTask:
             logger.info("智能体任务被用户终止")
             return False
         except Exception as e:
-            # logger.exception(e)
+            logger.error(f"task_exec_error {traceback.format_exc()}")
             raise TaskExecutionError(f"智能体任务执行失败: {e}")
 
     # ==================== 事件处理 ====================
@@ -436,16 +439,16 @@ class LinsightWorkflowTask:
             MessageData(event_type=MessageEventType.TASK_EXECUTE_STEP, data=event.model_dump())
         )
 
-    # ==================== 用户输入处理 ====================
-
     async def _wait_for_user_input(self, agent: LinsightAgent, event: NeedUserInput):
         """等待用户输入"""
         try:
+
+            await self._state_manager.add_execution_task_step(event.task_id, step=event)
+
             # 更新状态为等待用户输入
             await self._state_manager.update_execution_task_status(
                 event.task_id,
                 status=ExecuteTaskStatusEnum.WAITING_FOR_USER_INPUT,
-                input_prompt=event.call_reason
             )
 
             # 推送用户输入事件
@@ -456,9 +459,31 @@ class LinsightWorkflowTask:
             # 等待用户输入完成
             task_model = await self._wait_for_input_completion(event.task_id)
 
-            if task_model is None:
-                logger.error(f"任务 {event.task_id} 在等待用户输入时未找到")
-                raise TaskExecutionError(f"任务 {event.task_id} 在等待用户输入时未找到任务信息")
+            user_input_event = task_model.history[-1] if task_model.history else None
+            if user_input_event is None or user_input_event.get("step_type") != "call_user_input":
+                raise TaskExecutionError(f"任务 {event.task_id} 在等待用户输入时未找到用户输入事件")
+
+            user_input_event = UserInputEventSchema.model_validate(user_input_event)
+
+            # 检查用户是否上传了文件
+            if user_input_event.files:
+                # 并发下载文件
+                download_tasks = [
+                    self._download_file(file_info, self.file_dir)
+                    for file_info in user_input_event.files
+                ]
+
+                results = await asyncio.gather(*download_tasks, return_exceptions=True)
+
+                # 记录下载失败的文件
+                for i, result in enumerate(results):
+                    if isinstance(result, Exception):
+                        file_name = os.path.basename(user_input_event.files[i]["markdown_file_path"])
+                        logger.error(f"文件下载失败 {file_name}: {result}")
+
+                user_input_event.user_input += f"\n\n已上传文件:\n" + \
+                                               "\n".join([f"- {file}" for file in results if
+                                                          not isinstance(file, Exception)])
 
             # 推送输入完成事件
             await self._state_manager.push_message(
@@ -466,7 +491,7 @@ class LinsightWorkflowTask:
             )
 
             # 继续执行任务
-            await agent.continue_task(event.task_id, task_model.user_input)
+            await agent.continue_task(event.task_id, user_input_event.user_input)
 
         except Exception as e:
             raise TaskExecutionError(f"等待用户输入失败 task_id={event.task_id}: {e}")
@@ -557,18 +582,18 @@ class LinsightWorkflowTask:
 
     # ==================== 任务完成处理 ====================
 
-    async def _handle_task_completion(self, session_model: LinsightSessionVersion, llm: BishengLLM):
+    async def _handle_task_completion(self, session_model: LinsightSessionVersion):
         """处理任务完成"""
         if not self._final_result:
             logger.error("没有找到最终任务结果")
             return
 
         if self._final_result.status == TaskStatus.SUCCESS.value:
-            await self._handle_task_success(session_model, llm)
+            await self._handle_task_success(session_model)
         else:
             await self._handle_task_failure(session_model, "任务执行失败")
 
-    async def _handle_task_success(self, session_model: LinsightSessionVersion, llm: BishengLLM):
+    async def _handle_task_success(self, session_model: LinsightSessionVersion):
         """处理任务成功"""
         try:
             # 读取文件目录文件详情
@@ -600,9 +625,6 @@ class LinsightWorkflowTask:
                     data=session_model.model_dump()
                 )
             )
-
-            # TODO: 保存SOP 暂时关闭自动保存SOP功能
-            # await self._save_sop(session_model, llm)
 
             logger.info(f"任务成功完成，处理了 {len(final_result_files)} 个文件")
 

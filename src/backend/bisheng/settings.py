@@ -122,6 +122,7 @@ class LinsightConf(BaseModel):
     default_temperature: float = Field(default=0, description='模型请求时的默认温度')
     retry_temperature: float = Field(default=1, description='react模式json解析失败后重试时模型温度')
     file_content_length: int = Field(default=5000, description='拆分子任务时读取文件内容的字符数，超过后会截断')
+    max_file_content_num: int = Field(default=3, description='拆分子任务时读取文件数量，按修改时间倒序')
 
 
 class Settings(BaseModel):

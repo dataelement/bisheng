@@ -101,7 +101,7 @@ def _get_bearly_code_interpreter(**kwargs: Any) -> Tool:
     return BearlyInterpreterTool(**kwargs).as_tool()
 
 
-def _get_native_code_interpreter(**kwargs: Any) -> Tool:
+def _get_native_code_interpreter(**kwargs: Any) -> BaseTool:
     executor_type = kwargs.pop("type", "local")
     config = kwargs.pop("config", {}).get(executor_type, {})
     kwargs.update(config)

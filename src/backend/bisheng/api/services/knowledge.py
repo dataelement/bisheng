@@ -764,6 +764,47 @@ class KnowledgeService(KnowledgeUtils):
         return db_file
 
     @classmethod
+    def get_knowledge_files_title(cls, db_knowledge: Knowledge, files: List[KnowledgeFile]) -> Dict[str, str]:
+        """通过文件id获取文件标题"""
+        if not files:
+            return {}
+        files = [one for one in files if one.status == KnowledgeFileStatus.SUCCESS.value]
+        if not files:
+            return {}
+        file_title_map: Dict[str, str] = {}
+        try:
+            embeddings = FakeEmbedding()
+            es_client = decide_vectorstores(
+                db_knowledge.index_name, "ElasticKeywordsSearch", embeddings
+            )
+            search_data = {
+                "size": len(files),
+                "sort": [
+                    {
+                        "metadata.chunk_index": {
+                            "order": "asc",
+                            "missing": 0,
+                            "unmapped_type": "long",
+                        }
+                    }
+                ],
+                "post_filter": {
+                    "terms": {"metadata.file_id": [one.id for one in files]}
+                },
+                "collapse": {"field": "metadata.file_id"},
+            }
+            es_res = es_client.client.search(
+                index=db_knowledge.index_name, body=search_data
+            )
+            for one in es_res["hits"]["hits"]:
+                file_title_map[str(one["_source"]["metadata"]["file_id"])] = one["_source"]["metadata"]["title"]
+        except Exception as e:
+            # maybe es index not exist so ignore this error
+            logger.warning(f"act=get_knowledge_files error={str(e)}")
+            pass
+        return file_title_map
+
+    @classmethod
     def get_knowledge_files(
             cls,
             request: Request,
@@ -791,40 +832,7 @@ class KnowledgeService(KnowledgeUtils):
 
         # get file title from es
         finally_res = []
-        file_title_map = {}
-        if res:
-            try:
-                embeddings = FakeEmbedding()
-                es_client = decide_vectorstores(
-                    db_knowledge.index_name, "ElasticKeywordsSearch", embeddings
-                )
-                search_data = {
-                    "size": len(res),
-                    "sort": [
-                        {
-                            "metadata.chunk_index": {
-                                "order": "asc",
-                                "missing": 0,
-                                "unmapped_type": "long",
-                            }
-                        }
-                    ],
-                    "post_filter": {
-                        "terms": {"metadata.file_id": [one.id for one in res]}
-                    },
-                    "collapse": {"field": "metadata.file_id"},
-                }
-                es_res = es_client.client.search(
-                    index=db_knowledge.index_name, body=search_data
-                )
-                for one in es_res["hits"]["hits"]:
-                    file_title_map[one["_source"]["metadata"]["file_id"]] = one[
-                        "_source"
-                    ]["metadata"]["title"]
-            except Exception as e:
-                # maybe es index not exist so ignore this error
-                logger.warning(f"act=get_knowledge_files error={str(e)}")
-                pass
+        file_title_map = cls.get_knowledge_files_title(db_knowledge, res)
         timeout_files = []
         for index, one in enumerate(res):
             finally_res.append(KnowledgeFileResp(**one.model_dump()))
@@ -832,10 +840,9 @@ class KnowledgeService(KnowledgeUtils):
             if one.status == KnowledgeFileStatus.PROCESSING.value and (datetime.now() - one.update_time).days > 1:
                 timeout_files.append(one.id)
                 continue
-            finally_res[index].title = file_title_map.get(one.id, "")
+            finally_res[index].title = file_title_map.get(str(one.id), "")
         if timeout_files:
-            KnowledgeFileDao.update_file_status(timeout_files, KnowledgeFileStatus.FAILED,
-                                                '文件处理时间超过24小时')
+            KnowledgeFileDao.update_file_status(timeout_files, KnowledgeFileStatus.FAILED, '文件处理时间超过24小时')
 
         return (
             finally_res,

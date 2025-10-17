@@ -35,6 +35,7 @@ import FileFormWrapper from './Files/FileFormWrapper';
 import SendButton from './SendButton';
 import StopButton from './StopButton';
 import SameSopSpan, { sameSopLabelState } from './SameSopSpan';
+import { File_Accept } from '~/common';
 
 const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
   const submitButtonRef = useRef<HTMLButtonElement>(null);
@@ -84,6 +85,8 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
   const {
     files,
     setFiles,
+    dailyFiles,
+    setDailyFiles,
     conversation,
     isSubmitting,
     filesLoading,
@@ -105,6 +108,8 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
     textAreaRef,
     files,
     setFiles,
+    dailyFiles,
+    setDailyFiles
   });
 
   const navigator = useNavigate()
@@ -192,8 +197,8 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
   const accept = useMemo(() => {
     if (isLingsi) {
       return bsConfig?.enable_etl4lm
-        ? '.pdf,.txt,.docx,.ppt,.pptx,.md,.html,.xls,.xlsx,.doc,.png,.jpg,.jpeg,.bmp'
-        : '.pdf,.txt,.docx,.doc,.ppt,.pptx,.md,.html,.xls,.xlsx'
+        ? File_Accept.Linsight_Etl4lm
+        : File_Accept.Linsight
     }
     return ''
   }, [isLingsi])

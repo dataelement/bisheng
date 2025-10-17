@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "~/components/ui";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip2";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/Tooltip2";
 import { Copy, CopyCheck } from "lucide-react";
 import { useLocalize } from "~/hooks";
 

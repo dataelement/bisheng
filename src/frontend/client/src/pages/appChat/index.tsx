@@ -2,10 +2,10 @@ import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { ChatMessageType, FlowData } from "~/@types/chat";
-import { getAssistantDetailApi, getBysConfigApi, getChatHistoryApi, getDeleteFlowApi, getFlowApi, postBuildInit } from "~/api/apps";
+import { getAssistantDetailApi, getChatHistoryApi, getDeleteFlowApi, getFlowApi, postBuildInit } from "~/api/apps";
 import { useToastContext } from "~/Providers";
 import ChatView from "./ChatView";
-import { bishengConfState, chatIdState, chatsState, currentChatState, runningState, tabsState } from "./store/atoms";
+import { chatIdState, chatsState, currentChatState, runningState, tabsState } from "./store/atoms";
 import { AppLostMessage } from "./useWebsocket";
 
 const API_VERSION = 'v1';
@@ -25,9 +25,6 @@ export default function index() {
 
     // console.log('[chatState] :>> ', chatState);
     // console.log('[runningState] :>> ', __);
-
-    useConfig()
-
     // 切换会话
     const init = async () => {
         if (!cid) return;
@@ -143,19 +140,6 @@ export default function index() {
 
     return <ChatView data={chatState.flow} v={API_VERSION} />
 };
-
-
-const useConfig = () => {
-    const [_, setConfig] = useRecoilState(bishengConfState)
-
-    useEffect(() => {
-        getBysConfigApi().then(res => {
-            setConfig(res.data)
-        })
-    }, [])
-}
-
-
 
 /**
  * build flow

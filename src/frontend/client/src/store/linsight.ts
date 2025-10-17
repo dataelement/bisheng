@@ -42,6 +42,7 @@ export type LinsightInfo = {
         input_prompt: string | null;
         user_input: string | null;
         history: {
+            user_input: any;
             step: string;
         }[] | null;
         status: string;

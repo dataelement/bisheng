@@ -4,6 +4,8 @@ import type { DropTargetMonitor } from 'react-dnd';
 import { useDrop } from 'react-dnd';
 import { NativeTypes } from 'react-dnd-html5-backend';
 import { useRecoilValue } from 'recoil';
+import { File_Accept } from '~/common';
+import { useGetBsConfig } from '~/data-provider';
 import type * as t from '~/data-provider/data-provider/src';
 import {
   AgentCapabilities,
@@ -13,6 +15,7 @@ import {
 } from '~/data-provider/data-provider/src';
 import store from '~/store';
 import useFileHandling from './useFileHandling';
+import { useToastContext } from '~/Providers';
 
 export default function useDragHelpers(isLingsi) {
   const queryClient = useQueryClient();
@@ -27,16 +30,41 @@ export default function useDragHelpers(isLingsi) {
     setDraggedFiles([]);
   };
 
+  const { data: bsConfig } = useGetBsConfig()
+  const accept = useMemo(() => {
+    return bsConfig?.enable_etl4lm
+      ? File_Accept.Linsight_Etl4lm
+      : File_Accept.Linsight
+  }, [bsConfig])
+
   const isAgents = useMemo(
     () => isAgentsEndpoint(conversation?.endpoint),
     [conversation?.endpoint],
   );
 
+  const { showToast } = useToastContext();
   const [{ canDrop, isOver }, drop] = useDrop(
     () => ({
       accept: [NativeTypes.FILE],
       drop(item: { files: File[] }) {
         console.log('drop', item.files);
+        // Split the accepted file extensions
+        const acceptedExtensions = accept
+          ? accept.split(',')
+            .map(ext => ext.trim().toLowerCase().replace(/^\./, ''))  // Normalize extensions (remove leading dots)
+          : [];
+
+        // Check if any file has an invalid extension  // TODO 迁移到src/utils/files.ts（267行）
+        const invalidFiles = item.files.filter(file => {
+          const fileExtension = file.name.split('.').pop()?.toLowerCase();
+          return fileExtension && !acceptedExtensions.includes(fileExtension);
+        });
+
+        if (invalidFiles.length > 0) {
+          console.log('Invalid files:', invalidFiles);
+          showToast({ message: 'Unsupported file type', status: 'error' });
+          return;
+        }
         if (!isAgents) {
           handleFiles(item.files);
           return;

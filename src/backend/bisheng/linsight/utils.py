@@ -31,10 +31,8 @@ step_event_extra_tool_dict = {
 
 
 # 获取任务中的所有操作过的文件
-async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask], file_details: List[Dict]) -> list[
-                                                                                                                  Any] | \
-                                                                                                              list[
-                                                                                                                  Exception | BaseException | None]:
+async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask], file_details: List[Dict]) -> \
+        list[Any] | list[Exception | BaseException | None]:
     """
     获取会话中所有操作过的文件
     :param file_details:
@@ -42,31 +40,7 @@ async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask],
     :return: 包含文件详情的列表
     """
     # 过程文件列表
-    all_from_session_files = []
-    for task in execution_tasks:
-        if task.history is None or not task.history:
-            continue
-
-        for history in task.history:
-            history_name = history.get("name", "")
-            if history_name not in local_file_tool_dict.keys():
-                continue
-
-            file_path = history.get("params", {}).get(local_file_tool_dict[history_name], "")
-
-            if not file_path:
-                continue
-
-            file_name = os.path.basename(file_path)
-
-            # 从 file_details 中查找文件信息
-            file_info = next((f for f in file_details if f["file_name"] == file_name), None)
-
-            # 如果文件信息不存在，则跳过
-            if not file_info:
-                continue
-
-            all_from_session_files.append(file_info)
+    all_from_session_files = file_details
 
     # 去重
     seen = set()
@@ -306,7 +280,7 @@ async def check_and_terminate_incomplete_tasks():
             session_version_ids=session_version_ids,
             status=SessionVersionStatusEnum.FAILED,
             output_result={
-                "error_message":"后端服务重启"
+                "error_message": "后端服务重启"
             }
         )
 

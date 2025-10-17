@@ -1,18 +1,19 @@
 import asyncio
 import pickle
 from enum import Enum
-from loguru import logger
 from typing import List, Dict, Any, Optional
 
+from loguru import logger
 from pydantic import BaseModel, Field
 
 from bisheng.api.errcode.http_error import ServerError
+from bisheng.api.v1.schema.linsight_schema import UserInputEventSchema
 from bisheng.cache.redis import redis_client
 from bisheng.database.models import LinsightExecuteTask
 from bisheng.database.models.linsight_execute_task import ExecuteTaskStatusEnum, LinsightExecuteTaskDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersion, LinsightSessionVersionDao
 from bisheng.utils.util import retry_async
-from bisheng_langchain.linsight.event import ExecStep
+from bisheng_langchain.linsight.event import BaseEvent
 
 
 class MessageEventType(str, Enum):
@@ -258,13 +259,14 @@ class LinsightStateMessageManager:
             raise
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
-    async def set_user_input(self, task_id: str, user_input: str) -> None:
+    async def set_user_input(self, task_id: str, user_input: str, files: List[Dict[str, str]] = None) -> None:
         """
         设置用户输入
 
         Args:
             task_id: 任务ID
             user_input: 用户输入内容
+            files: 相关文件列表
         """
         task_key = f"{self._keys['execution_tasks']}{task_id}"
 
@@ -275,7 +277,17 @@ class LinsightStateMessageManager:
             if not task_model:
                 raise ValueError(f"Task with ID {task_id} not found in Redis or database.")
 
-            task_model.user_input = user_input
+            user_input_event = task_model.history[-1] if task_model.history else None
+            if user_input_event is None or user_input_event.get("step_type") != "call_user_input":
+                raise ValueError(f"Task with ID {task_id} does not support user input.")
+
+            user_input_event = UserInputEventSchema.model_validate(user_input_event)
+
+            user_input_event.user_input = user_input
+            user_input_event.files = files
+            user_input_event.is_completed = True
+            task_model.history[-1] = user_input_event.model_dump()
+
             task_model.status = ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
 
             # 使用事务确保数据一致性
@@ -286,8 +298,8 @@ class LinsightStateMessageManager:
             # 更新数据库
             await LinsightExecuteTaskDao.update_by_id(
                 task_id,
-                user_input=user_input,
-                status=ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
+                status=ExecuteTaskStatusEnum.USER_INPUT_COMPLETED,
+                history=task_model.history
             )
 
             self._logger.info(f"Set user input for task {task_id}")
@@ -325,7 +337,7 @@ class LinsightStateMessageManager:
             return None
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
-    async def add_execution_task_step(self, task_id: str, step: ExecStep) -> None:
+    async def add_execution_task_step(self, task_id: str, step: BaseEvent) -> None:
         """
         添加执行任务步骤
 
@@ -435,7 +447,6 @@ class LinsightStateMessageManager:
         except Exception as e:
             self._logger.error(f"Failed to get session stats: {e}")
             return {'error': str(e)}
-
 
     # 清理所有会话相关的Redis数据
     @classmethod

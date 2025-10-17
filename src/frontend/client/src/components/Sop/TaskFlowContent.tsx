@@ -3,7 +3,6 @@ import {
     ArrowRight,
     BookOpen,
     Check, ChevronDown,
-    Download,
     FileText,
     LucideLoaderCircle, Pause,
     Search,
@@ -11,19 +10,21 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useToastContext } from '~/Providers';
-import { SendIcon } from '~/components/svg';
 import { useLocalize } from '~/hooks';
-import { playDing } from '~/utils';
+import { formatStrTime, playDing } from '~/utils';
 import Markdown from '../Chat/Messages/Content/Markdown';
 import DownIcon from '../svg/DownIcon';
-import { Button, Textarea } from '../ui';
+import { Button } from '../ui';
 import FileIcon from '../ui/icon/File';
 import FilePreviewDrawer from './FilePreviewDrawer';
 import { SopStatus } from './SOPEditor';
 import FileDrawer from './TaskFiles';
+import DownloadResultFileBtn from './components/DownloadResultFileBtn';
 import ErrorDisplay from './components/ErrorDisplay';
 import { SearchKnowledgeSheet } from './components/SearchKnowledgeSheet';
+import UserInput from './components/UserInput';
 import { WebSearchSheet } from './components/WebSearchSheet';
+import { SvgImage } from './components/SvgImage';
 
 const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
     if (!params) return null
@@ -35,7 +36,8 @@ const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
 }
 
 const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) => {
-    const { name, step_type, params, extra_info, output } = data;
+    const { name, step_type, params, extra_info, output, timestamp } = data;
+
     const localize = useLocalize();
     const { showToast } = useToastContext();
     // 过滤尾部hash值
@@ -201,14 +203,16 @@ const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) =>
     // 获取图标
     const Icon = iconMap[toolName] || iconMap.default;
 
-    return (
-        <div className='inline-flex items-center gap-2 bg-[#F9FAFD] border rounded-full my-1.5 mb-4 px-3 py-1.5 text-muted-foreground'>
+    return (<div className='group relative mt-4 mb-3 '>
+        <div className='relative inline-flex items-center gap-2 bg-[#F9FAFD] border rounded-full px-3 py-1.5 text-muted-foreground'>
             <Icon size={16} />
             <div className='flex gap-4 items-center'>
                 <span className='text-xs text-gray-600 truncate'>{displayName}</span>
                 <span className='text-xs text-[#82868C] truncate max-w-72'>{paramValue()}</span>
             </div>
         </div>
+        {timestamp && <span className='absolute right-2 top-2 text-xs text-[#82868C] truncate max-w-72 opacity-0 group-hover:opacity-100 transition-opacity'>{formatStrTime(timestamp * 1000, 'yy-MM-dd HH:mm')}</span>}
+    </div>
     )
 }
 
@@ -224,7 +228,6 @@ const Task = ({
     children = null
 }) => {
     const [isExpanded, setIsExpanded] = useState(true);
-    const [inputValue, setInputValue] = useState('');
     const localize = useLocalize();
 
     // 根据状态选择对应的图标
@@ -243,25 +246,6 @@ const Task = ({
                 return <Check size={16} className='min-w-4 bg-[#BAC1CD] p-0.5 rounded-full text-white mr-2' />;
             default:
                 return <LucideLoaderCircle size={16} className='min-w-4 text-primary mr-2 animate-spin' />;
-        }
-    };
-
-    // 处理发送输入
-    const handleSendInput = () => {
-        if (inputValue.trim()) {
-            sendInput({
-                task_id: task.id,
-                user_input: inputValue
-            });
-            setInputValue(''); // 清空输入框
-        }
-    };
-
-    // 处理回车键发送
-    const handleKeyDown = (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSendInput();
         }
     };
 
@@ -287,6 +271,8 @@ const Task = ({
                 }
                 // 总是添加 end 消息
                 msg.call_reason && result.push(msg);
+            } else if (msg.step_type === 'call_user_input') {
+                startMap.set(msg.timestamp, msg);
             }
         }
 
@@ -335,10 +321,17 @@ const Task = ({
             {history?.length !== 0 && (
                 <div className='mb-2'>
                     <div className='flex'>
-                        {
-                            isExpanded ? <div className={`${lvl1 ? 'pl-6' : 'pl-0'} w-full text-sm text-gray-400 leading-6 scroll-hover`}>
-                                {history.map((_history, index) => (
-                                    <div>
+                        <div className={`${lvl1 ? 'pl-6' : 'pl-0'} ${isExpanded ? 'block' : 'hidden'} w-full text-sm text-gray-400 leading-6 scroll-hover`}>
+                            {history.map((_history, index) =>
+                                _history.step_type === "call_user_input"
+                                    ? <UserInput
+                                        key={task.id}
+                                        disable={_history.is_completed}
+                                        taskId={task.id}
+                                        history={_history}
+                                        onSendInput={sendInput}
+                                    ></UserInput>
+                                    : <div>
                                         <p key={index}>{_history.call_reason}</p>
                                         <Tool
                                             data={_history}
@@ -347,41 +340,14 @@ const Task = ({
                                             onWebSearch={onWebSearch}
                                         />
                                     </div>
-                                ))}
-                            </div> : null
-                        }
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
 
-            {/* 等待输入部分 */}
-            {task.event_type === "user_input" && (
-                <div className='bg-[#F3F4F6] border border-[#dfdede] rounded-2xl px-5 py-4 my-2 relative'>
-                    <div>
-                        <span className='bg-[#D5E3FF] p-1 px-2 text-xs text-primary rounded-md'>{localize('com_sop_waiting_input')}</span>
-                        <span className='pl-3 text-sm'>{task.call_reason}</span>
-                    </div>
-                    <div>
-                        <Textarea
-                            id={task.id}
-                            placeholder={localize('com_sop_please_input')}
-                            className='border-none bg-transparent ![box-shadow:initial] pl-0 pr-10 pt-4 h-auto'
-                            rows={1}
-                            value={inputValue}
-                            maxLength={10000}
-                            onChange={(e) => setInputValue(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                        />
-                        <Button
-                            className='absolute bottom-4 right-4 size-9 rounded-full p-0 bg-black hover:bg-black/80'
-                            onClick={handleSendInput}
-                            disabled={!inputValue.trim()}
-                        >
-                            <SendIcon size={24} />
-                        </Button>
-                    </div>
-                </div>
-            )}
+            {/* 等待输入部分  */}
+            {/* {task.event_type === "user_input" && <UserInput taskId={task.id} history={task} onSendInput={sendInput} />} */}
             <div className={isExpanded ? 'block' : 'hidden'}>
                 {children}
                 {/* 任务总结 */}
@@ -419,7 +385,6 @@ export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
         const mergedFiles = [...files, ...allFiles];
         return mergedFiles;
     }, [files, allFiles]);
-    console.log('files xx:>> ', files, allFiles);
 
     const downloadFile = (file) => {
         const { file_name, file_url } = file;
@@ -522,38 +487,91 @@ export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
                 </div>
             }
             {/* 结果文件 */}
+            {files && files.filter(file =>
+                /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(file.file_name)
+            ).length > 0 && (
+                    <div className="mb-5">
+                        {files
+                            .filter(file => /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(file.file_name))
+                            .map(file => {
+                                const fileExt = file.file_name.split('.').pop()?.toLowerCase() || '';
+                                const isSvg = fileExt === 'svg';
+
+                                return (
+                                    <div
+                                        key={file.file_id}
+                                        className="mb-3 p-2 rounded-2xl border border-[#ebeef2] cursor-pointer"
+                                        onClick={() => {
+                                            setCurrentDirectFile(null);
+                                            setCurrentPreviewFileId(file.file_id);
+                                            setIsPreviewOpen(true);
+                                            setTriggerDrawerFromCard(true);
+                                        }}
+                                    >
+                                        {/* 固定容器尺寸 */}
+                                        <div className="w-full min-h-[200px] overflow-hidden rounded-lg bg-[#F4F6FB]">
+                                            {/* SVG用专用组件 */}
+                                            {isSvg ? (
+                                                <SvgImage
+                                                    fileUrl={file.file_url}
+                                                />
+                                            ) : (
+                                                // 其他图片用img标签
+                                                <img
+                                                    src={`${__APP_ENV__.BASE_URL}${file.file_url}`}
+                                                    alt={file.file_name}
+                                                    className="w-full h-full object-cover"
+                                                    onError={(e) => {
+                                                        e.target.src = `${__APP_ENV__.BASE_URL}/assets/image-placeholder.png`;
+                                                    }}
+                                                />
+                                            )}
+                                        </div>
+                                        {/* 显示文件名 */}
+                                        <div className="mt-2 text-sm text-center truncate">{file.file_name}</div>
+                                    </div>
+                                );
+                            })}
+                    </div>
+                )}
             {files &&
                 <div>
                     {/* <p className='text-sm text-gray-500'></p> */}
                     <div className='mt-5 flex flex-wrap gap-3'>
-                        {files?.map((file) => (
-                            <div
-                                key={file.file_id}
-                                onClick={() => {
-                                    if (file.file_name.split('.').pop() === 'html') {
-                                        return window.open(`${__APP_ENV__.BASE_URL}/html?url=${encodeURIComponent(file.file_url)}`, '_blank')
-                                    }
-                                    setCurrentDirectFile(null);
-                                    setCurrentPreviewFileId(file.file_id);
-                                    setIsPreviewOpen(true);
-                                    setTriggerDrawerFromCard(true);
-                                }}
-                                className='w-[calc(50%-6px)] p-2 rounded-2xl border border-[#ebeef2] cursor-pointer'
-                            >
-                                <div className='bg-[#F4F6FB] h-24 p-4 rounded-lg overflow-hidden'>
-                                    <FileIcon type={file.file_name.split('.').pop().toLowerCase()} className='size-24 mx-auto opacity-20' />
+                        {files.filter(file => {
+                            // 定义需要排除的图片格式（和你之前匹配的格式一致）
+                            const excludedImageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
+                            // 获取当前文件扩展名（转小写，避免大小写问题）
+                            const fileExt = file.file_name.split('.').pop()?.toLowerCase() || '';
+                            // 保留“扩展名不在排除列表中”的文件（即非图片文件）
+                            return !excludedImageExts.includes(fileExt);
+                        }).map((file) => (
+                            <>
+                                <div
+                                    key={file.file_id}
+                                    onClick={() => {
+                                        if (file.file_name.split('.').pop() === 'html') {
+                                            return window.open(`${__APP_ENV__.BASE_URL}/html?url=${encodeURIComponent(file.file_url)}`, '_blank')
+                                        }
+                                        setCurrentDirectFile(null);
+                                        setCurrentPreviewFileId(file.file_id);
+                                        setIsPreviewOpen(true);
+                                        setTriggerDrawerFromCard(true);
+                                    }}
+                                    className='w-[calc(50%-6px)] p-2 rounded-2xl border border-[#ebeef2] cursor-pointer'
+                                >
+                                    <div className='bg-[#F4F6FB] h-24 p-4 rounded-lg overflow-hidden'>
+                                        <FileIcon type={file.file_name.split('.').pop().toLowerCase()} className='size-24 mx-auto opacity-20' />
+                                    </div>
+                                    <div className='relative flex pt-3 gap-2 items-center'>
+                                        <FileIcon type={file.file_name.split('.').pop().toLowerCase()} className='size-4 min-w-4' />
+                                        <span className='text-sm truncate pr-6'>{file.file_name}</span>
+                                        {/* Multi-file type download */}
+                                        <DownloadResultFileBtn file={file} onDownloadFile={downloadFile} />
+                                    </div>
                                 </div>
-                                <div className='relative flex pt-3 gap-2 items-center'>
-                                    <FileIcon type={file.file_name.split('.').pop().toLowerCase()} className='size-4 min-w-4' />
-                                    <span className='text-sm truncate pr-6'>{file.file_name}</span>
-                                    <Button variant="ghost" className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
-                                        <Download size={16} onClick={(e) => {
-                                            e.stopPropagation();
-                                            downloadFile(file)
-                                        }} />
-                                    </Button>
-                                </div>
-                            </div>
+                            </>
+
                         ))}
                     </div>
                     {/*  预览所有文件列表 */}

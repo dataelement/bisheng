@@ -22,7 +22,7 @@ from bisheng.api.services.llm import LLMService
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.services.workstation import WorkStationService
-from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, BatchDownloadFilesSchema, \
+from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
     SubmitFileSchema
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_file_to_folder, CACHE_DIR
@@ -96,6 +96,29 @@ class LinsightWorkbenchImpl:
         linsight_conf = settings.get_linsight_conf()
         llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=linsight_conf.default_temperature)
         return llm, workbench_conf
+
+    @classmethod
+    async def human_participate_add_file(cls, linsight_session_version: LinsightSessionVersion,
+                                         files: List[SubmitFileSchema]) -> Optional[List]:
+        """
+        人工参与时添加文件
+        :param linsight_session_version:
+        :param files:
+        :return:
+        """
+        if not files:
+            return None
+
+        processed_files = await cls._process_submitted_files(files, linsight_session_version.session_id)
+
+        if linsight_session_version.files:
+            linsight_session_version.files.extend(processed_files)
+        else:
+            linsight_session_version.files = processed_files
+
+        await LinsightSessionVersionDao.insert_one(linsight_session_version)
+
+        return processed_files
 
     @classmethod
     async def submit_user_question(cls, submit_obj: LinsightQuestionSubmitSchema,
@@ -827,8 +850,12 @@ class LinsightWorkbenchImpl:
         code_config = json.loads(bisheng_code_tool.extra) if bisheng_code_tool.extra else {}
         if "config" not in code_config:
             code_config["config"] = {}
+        if "local" not in code_config["config"]:
+            code_config["config"]["local"] = {}
+        code_config["config"]["local"] = {"local_sync_path": file_dir}
         if "e2b" not in code_config["config"]:
             code_config["config"]["e2b"] = {}
+        code_config["config"]["e2b"] = {"local_sync_path": file_dir}
         # 默认60分钟的有效期
         code_config["config"]["e2b"]["timeout"] = 3600
         code_config["config"]["e2b"]["keep_sandbox"] = True
@@ -838,6 +865,7 @@ class LinsightWorkbenchImpl:
                 file_path = os.path.join(root, file)
                 file_list.append(WriteEntry(data=file_path, path=file_path.replace(file_dir, ".")))
         code_config["config"]["e2b"]["file_list"] = file_list
+
         bisheng_code_tool.extra = code_config
 
         tools = AssistantAgent.sync_init_preset_tools([bisheng_code_tool], None, None)
@@ -964,7 +992,28 @@ class LinsightWorkbenchImpl:
         return history_summary
 
     @classmethod
-    async def batch_download_files(cls, file_info_list: List[BatchDownloadFilesSchema]) -> bytes:
+    async def download_file(cls, file_info: DownloadFilesSchema) -> Tuple[str, bytes]:
+        """下载单个文件"""
+        object_name = file_info.file_url
+        object_name = object_name.replace(f"/{minio_client.bucket}/", "")
+        try:
+
+            bytes_io = BytesIO()
+
+            file_byte = await util.sync_func_to_async(minio_client.get_object)(bucket_name=minio_client.bucket,
+                                                                               object_name=object_name)
+            bytes_io.write(file_byte)
+
+            bytes_io.seek(0)
+
+            return file_info.file_name, bytes_io.getvalue()
+
+        except Exception as e:
+            logger.error(f"下载文件失败 {object_name}: {e}")
+            return object_name, b''
+
+    @classmethod
+    async def batch_download_files(cls, file_info_list: List[DownloadFilesSchema]) -> bytes:
         """
         批量下载文件
 
@@ -975,28 +1024,8 @@ class LinsightWorkbenchImpl:
             包含文件下载信息的列表
         """
 
-        async def download_file(file_info: BatchDownloadFilesSchema) -> Tuple[str, bytes]:
-            """下载单个文件"""
-            object_name = file_info.file_url
-            object_name = object_name.replace(f"/{minio_client.bucket}/", "")
-            try:
-
-                bytes_io = BytesIO()
-
-                file_byte = await util.sync_func_to_async(minio_client.get_object)(bucket_name=minio_client.bucket,
-                                                                                   object_name=object_name)
-                bytes_io.write(file_byte)
-
-                bytes_io.seek(0)
-
-                return file_info.file_name, bytes_io.getvalue()
-
-            except Exception as e:
-                logger.error(f"下载文件失败 {object_name}: {e}")
-                return object_name, b''
-
         # 批量下载文件
-        download_tasks = [download_file(file_info) for file_info in file_info_list]
+        download_tasks = [cls.download_file(file_info) for file_info in file_info_list]
 
         results = await asyncio.gather(*download_tasks)
 

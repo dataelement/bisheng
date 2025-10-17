@@ -1,12 +1,14 @@
 import glob
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from hashlib import md5
+from os import DirEntry
 from pathlib import Path
 from typing import List, Tuple, Optional, Any
 
@@ -129,6 +131,51 @@ class LocalExecutor(BaseExecutor):
         raise NotImplementedError(f'{lang} not recognized in code execution')
 
     @classmethod
+    def _execute_code(cls,
+                      code: Optional[str] = None,
+                      timeout: Optional[int] = None,
+                      filename: Optional[str] = None,
+                      work_dir: Optional[str] = None,
+                      lang: Optional[str] = 'python',
+                      file_path: Optional[str] = None):
+        cmd = [
+            sys.executable if lang.startswith('python') else cls._cmd(lang),
+            f'.\\{filename}' if WIN32 else filename,
+        ]
+        if WIN32:
+            logger.warning('SIGALRM is not supported on Windows. No timeout will be enforced.')
+            result = subprocess.run(
+                cmd,
+                cwd=work_dir,
+                capture_output=True,
+                text=True,
+            )
+        else:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(
+                    subprocess.run,
+                    cmd,
+                    cwd=work_dir,
+                    capture_output=True,
+                    text=True,
+                )
+                try:
+                    result = future.result(timeout=timeout)
+                except TimeoutError:
+                    return 1, TIMEOUT_MSG, ""
+        if result.returncode:
+            logs = result.stderr
+            if file_path is not None:
+                abs_path = str(Path(file_path).absolute())
+                logs = logs.replace(str(abs_path), '').replace(filename, '')
+            else:
+                abs_path = str(Path(work_dir).absolute()) + PATH_SEPARATOR
+                logs = logs.replace(str(abs_path), '')
+        else:
+            logs = result.stdout
+        return result.returncode, logs, ""
+
+    @classmethod
     def execute_code(
             cls,
             code: Optional[str] = None,
@@ -158,71 +205,83 @@ class LocalExecutor(BaseExecutor):
         if code is not None:
             with open(filepath, 'w', encoding='utf-8') as fout:
                 fout.write(code)
+        try:
+            return cls._execute_code(code=code, timeout=timeout, filename=filename, work_dir=work_dir, lang=lang,
+                                     file_path=filepath)
+        finally:
+            if filepath is not None:
+                os.remove(filepath)
 
-        cmd = [
-            sys.executable if lang.startswith('python') else cls._cmd(lang),
-            f'.\\{filename}' if WIN32 else filename,
-        ]
-        if WIN32:
-            logger.warning('SIGALRM is not supported on Windows. No timeout will be enforced.')
-            result = subprocess.run(
-                cmd,
-                cwd=work_dir,
-                capture_output=True,
-                text=True,
-            )
-        else:
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(
-                    subprocess.run,
-                    cmd,
-                    cwd=work_dir,
-                    capture_output=True,
-                    text=True,
-                )
-                try:
-                    result = future.result(timeout=timeout)
-                except TimeoutError:
-                    if original_filename is None:
-                        os.remove(filepath)
-                    return 1, TIMEOUT_MSG, ""
-        if original_filename is None:
-            os.remove(filepath)
-        if result.returncode:
-            logs = result.stderr
-            if original_filename is None:
-                abs_path = str(Path(filepath).absolute())
-                logs = logs.replace(str(abs_path), '').replace(filename, '')
-            else:
-                abs_path = str(Path(work_dir).absolute()) + PATH_SEPARATOR
-                logs = logs.replace(str(abs_path), '')
-        else:
-            logs = result.stdout
-        return result.returncode, logs, ""
+    def run_with_dir(self, code: str, dir_path: str, lang: str) -> (int, str, list):
+        """在指定目录下运行代码，并返回日志和生成的文件列表"""
+        exitcode, logs, _ = self.execute_code(
+            code,
+            work_dir=dir_path,
+            lang=lang,
+        )
+        logs += '\n' + logs
+        file_list = []
+        if exitcode != 0:
+            return exitcode, logs, file_list
+
+        # 获取文件
+        for root, dirs, files in os.walk(dir_path):
+            for name in files:
+                file_name = os.path.join(root, name)
+                file_ext = os.path.splitext(name)[-1]
+                file_list.append(self.upload_minio(f"{uuid.uuid4().hex}.{file_ext}", file_name))
+        # 同步执行结果文件到本地同步目录
+        if self.local_sync_path and os.path.exists(self.local_sync_path):
+            files_info = list(os.scandir(dir_path))
+            self.sync_files_to_local(files_info, dir_path)
+        return exitcode, logs, file_list
 
     def run(self, code: str) -> Any:
         code_blocks = self.extract_code(code)
         logs_all = ''
-        file_list = []
+        all_file_list = []
         for i, code_block in enumerate(code_blocks):
             lang, code = code_block
             lang = self.infer_lang(code)
             code = self.insert_set_font_code(code)
-            with tempfile.TemporaryDirectory() as temp_dir:
-                exitcode, logs, _ = self.execute_code(
-                    code,
-                    work_dir=temp_dir,
-                    lang=lang,
-                )
-                logs_all += '\n' + logs
-                if exitcode != 0:
-                    return {'exitcode': exitcode, 'log': logs_all}
+            if self.local_sync_path and os.path.exists(self.local_sync_path):
+                exit_code, logs, file_list = self.run_with_dir(code, dir_path=self.local_sync_path, lang=lang)
+            else:
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    exit_code, logs, file_list = self.run_with_dir(code, dir_path=temp_dir, lang=lang)
+            if exit_code != 0:
+                return {'exitcode': exit_code, 'log': logs_all}
+            logs_all += "\n" + logs
+            all_file_list += file_list
 
-                # 获取文件
-                for root, dirs, files in os.walk(temp_dir):
-                    for name in files:
-                        file_name = os.path.join(root, name)
-                        file_ext = os.path.splitext(name)[-1]
-                        file_list.append(self.upload_minio(f"{uuid.uuid4().hex}.{file_ext}", file_name))
+        return {'exitcode': 0, 'log': logs_all, 'file_list': all_file_list}
 
-        return {'exitcode': 0, 'log': logs_all, 'file_list': file_list}
+    def sync_files_to_local(self, files_info: List[DirEntry], root_path: str):
+        if not files_info:
+            return
+        for file in files_info:
+            # ignore hidden files
+            if file.name.startswith("."):
+                continue
+            if file.is_file():
+                self.download_file(file, root_path)
+            else:
+                new_files_info = os.scandir(file.path)
+                self.sync_files_to_local(list(new_files_info), root_path)
+
+    def download_file(self, file_info: DirEntry, root_path: str):
+        relative_path = file_info.path.replace(root_path, "").lstrip(os.sep)
+        local_path = os.path.join(self.local_sync_path, relative_path)
+        local_dir = os.path.dirname(local_path)
+        os.makedirs(local_dir, exist_ok=True)
+        shutil.move(file_info.path, local_path)
+
+
+if __name__ == '__main__':
+    tmp_executor = LocalExecutor(minio={}, )
+    result = tmp_executor.run(
+        code="""import os\nwith open("output/test2.txt", "w") as f:\n    f.write("Hello, E2222B!")\nprint("File written to output/test.txt")""")
+    result2 = tmp_executor.run(
+        code="""import os\nwith open("output/test2.txt", "r") as f:\n    content = f.read()\n    print(f"File read from output/test2.txt=={content}")""")
+    print(result)
+    print(result2)
