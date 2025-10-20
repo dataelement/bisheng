@@ -205,59 +205,49 @@ class BishengLLM(BishengBase, BaseChatModel):
         if not model_id:
             raise NoLlmModelConfigError()
         model_info = await LLMDao.aget_model_by_id(model_id)
-        if not model_info:
-            raise LlmModelConfigDeletedError()
-        server_info = await LLMDao.aget_server_by_id(model_info.server_id)
-        if not server_info:
-            raise LlmProviderDeletedError()
-        if model_info.model_type != LLMModelType.LLM.value:
-            raise LlmModelTypeError(model_type=model_info.model_type)
-        if not ignore_online and not model_info.online:
-            raise LlmModelOfflineError(server_name=server_info.name, model_name=model_info.model_name)
-
-        logger.debug(f'async_init_bisheng_llm: server_id: {server_info.id}, model_id: {model_info.id}')
+        server_info = None
+        if model_info:
+            server_info = await LLMDao.aget_server_by_id(model_info.server_id)
         instance = cls(
             model_id=model_id,
-            model_name=model_info.model_name,
             streaming=streaming,
             temperature=temperature,
             cache=cache,
-            model_info=model_info,
-            server_info=server_info,
         )
-        class_type = instance._get_llm_class(server_info.type)
-        class_params = instance._get_llm_params(server_info, model_info)
-        instance.llm = class_type(**class_params)
+        instance._init_chat_model(model_info, server_info, ignore_online)
 
         return instance
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.model_id = kwargs.get('model_id')
-        self.model_name = kwargs.get('model_name')
-        self.streaming = kwargs.get('streaming', True)
+        self.streaming = kwargs.get('streaming', None)
         self.temperature = kwargs.get('temperature', None)
-        self.cache = kwargs.get('cache', False)
+        self.cache = kwargs.get('cache', None)
         # 是否忽略模型是否上线的检查
         ignore_online = kwargs.get('ignore_online', False)
 
         if not self.model_id:
             raise NoLlmModelConfigError()
         model_info = LLMDao.get_model_by_id(self.model_id)
+        server_info = None
+        if model_info:
+            server_info = LLMDao.get_server_by_id(model_info.server_id)
+        self._init_chat_model(model_info, server_info, ignore_online)
+
+    def _init_chat_model(self, model_info: LLMModel, server_info: LLMServer, ignore_online: bool):
         if not model_info:
             raise LlmModelConfigDeletedError()
-        self.model_name = model_info.model_name
-        server_info = LLMDao.get_server_by_id(model_info.server_id)
         if not server_info:
             raise LlmProviderDeletedError()
         if model_info.model_type != LLMModelType.LLM.value:
             raise LlmModelTypeError(model_type=model_info.model_type)
         if not ignore_online and not model_info.online:
-            # raise Exception(f'{server_info.name}下的{model_info.model_name}模型已下线，请联系管理员上线对应的模型')
             raise LlmModelOfflineError(server_name=server_info.name, model_name=model_info.model_name)
 
         logger.debug(f'init_bisheng_llm: server_id: {server_info.id}, model_id: {model_info.id}')
         self.model_info = model_info
+        self.model_name = model_info.model_name
         self.server_info = server_info
 
         class_object = self._get_llm_class(server_info.type)
