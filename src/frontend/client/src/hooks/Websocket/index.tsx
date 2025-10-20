@@ -72,7 +72,11 @@ export const useLinsightWebSocket = (versionId) => {
         websocket.onmessage = (event) => {
             const taskData = JSON.parse(event.data);
             console.log('ws data :>> ', taskData);
-
+            /**
+             * 生成一级任务list
+             * 生成当前一级任务下的二级任务list
+             * 更新生成的任务信息
+             */
             switch (taskData.event_type) {
                 case 'task_generate':
                     // 生成一级任务
@@ -152,7 +156,7 @@ export const useLinsightWebSocket = (versionId) => {
                                     event_type: taskData.event_type,
                                     params,
                                     call_reason,
-                                    history: [{
+                                    history: [...(task.history || []), {
                                         ...taskData.data
                                     }]
                                 };
@@ -169,7 +173,7 @@ export const useLinsightWebSocket = (versionId) => {
                                                 event_type: taskData.event_type,
                                                 params,
                                                 call_reason,
-                                                history: [{
+                                                history: [...(child.history || []), {
                                                     ...taskData.data
                                                 }]
                                             };
@@ -345,7 +349,7 @@ export const useLinsightWebSocket = (versionId) => {
                 ...prev,
                 tasks: prev.tasks.map(task => ({
                     ...task,
-                    status: "success",
+                    status: task_id === task.id ? "success" : task.status,
                     history: task.history?.map(h => ({
                         ...h,
                         is_completed: true,
@@ -355,7 +359,7 @@ export const useLinsightWebSocket = (versionId) => {
                     children: task.children
                         ? task.children.map(child => ({
                             ...child,
-                            status: "success",
+                            status: task_id === child.id ? "success" : child.status,
                             history: child.history?.map(h => ({
                                 ...h,
                                 is_completed: true,
