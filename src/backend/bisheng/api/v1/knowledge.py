@@ -22,9 +22,10 @@ from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, Kn
 from bisheng.database.models.knowledge import KnowledgeState
 from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
                                                     QAKnoweldgeDao, QAKnowledgeUpsert, QAStatus)
-from bisheng.database.models.llm_server import LLMDao, LLMModelType
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
+from bisheng.llm.const import LLMModelType
+from bisheng.llm.models import LLMDao
 from bisheng.utils.logger import logger
 from bisheng.worker.knowledge.qa import insert_qa_celery
 

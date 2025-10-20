@@ -2,7 +2,7 @@ import functools
 from datetime import datetime
 
 from bisheng.cache.redis import redis_client
-from bisheng.database.models.llm_server import LLMModelStatus
+from bisheng.llm.const import LLMModelStatus
 
 
 async def bisheng_model_limit_check(self: 'BishengBase'):

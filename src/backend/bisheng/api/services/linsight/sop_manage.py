@@ -26,11 +26,12 @@ from bisheng.api.v1.schema.linsight_schema import SopRecordRead
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.core.app_context import app_ctx
 from bisheng.database.models.linsight_sop import LinsightSOP, LinsightSOPDao, LinsightSOPRecord
-from bisheng.database.models.llm_server import LLMDao, LLMModelType
 from bisheng.database.models.user import UserDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.interface.llms.custom import BishengLLM
 from bisheng.llm import LLMService
+from bisheng.llm.const import LLMModelType
+from bisheng.llm.domain.llm import BishengLLM
+from bisheng.llm.models import LLMDao
 from bisheng.settings import settings
 from bisheng.utils import util
 from bisheng.utils.embedding import decide_embeddings

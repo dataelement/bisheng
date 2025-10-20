@@ -35,8 +35,8 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
 from bisheng.database.models.linsight_sop import LinsightSOPRecord
 from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.interface.llms.custom import BishengLLM
 from bisheng.llm import LLMService
+from bisheng.llm.domain.llm import BishengLLM
 from bisheng.settings import settings
 from bisheng.utils import util
 from bisheng.utils.embedding import decide_embeddings

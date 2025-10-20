@@ -17,8 +17,8 @@ from bisheng.api.errcode.server import NoLlmModelConfigError, LlmModelConfigDele
 from bisheng.core.ai import CustomChatOllamaWithReasoning, ChatOpenAI, ChatOpenAICompatible, \
     AzureChatOpenAI, ChatTongyi, QianfanChatEndpoint, ChatZhipuAI, MiniMaxChat, ChatAnthropic, ChatDeepSeek, \
     MoonshotChat
-from bisheng.database.models.llm_server import LLMDao, LLMModelType, LLMServerType, LLMModel, LLMServer
-from bisheng.interface.initialize.loading import instantiate_llm
+from bisheng.llm.const import LLMModelType, LLMServerType
+from bisheng.llm.models import LLMServer, LLMModel, LLMDao
 from .base import BishengBase
 from ..utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_limit_check_async, \
     wrapper_bisheng_model_generator, wrapper_bisheng_model_generator_async
@@ -260,10 +260,10 @@ class BishengLLM(BishengBase, BaseChatModel):
         self.model_info = model_info
         self.server_info = server_info
 
-        class_object, class_name = self._get_llm_class(server_info.type)
+        class_object = self._get_llm_class(server_info.type)
         params = self._get_llm_params(server_info, model_info)
         try:
-            self.llm = instantiate_llm(class_name, class_object, params)
+            self.llm = class_object(**params)
         except Exception as e:
             logger.exception('init bisheng llm error')
             raise InitLlmError(exception=e)

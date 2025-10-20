@@ -7,9 +7,9 @@ from pydantic import BaseModel, Field
 from bisheng.api.services.knowledge_imp import decide_vectorstores
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao
-from bisheng.database.models.llm_server import LLMDao
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
+from bisheng.llm.models import LLMDao
 from bisheng.utils.embedding import decide_embeddings
 
 

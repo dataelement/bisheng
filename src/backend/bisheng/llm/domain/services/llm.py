@@ -11,20 +11,18 @@ from bisheng.api.errcode.llm import ServerExistError, ModelNameRepeatError, Serv
 from bisheng.api.errcode.server import NoAsrModelConfigError, AsrModelConfigDeletedError, NoTtsModelConfigError, \
     TtsModelConfigDeletedError
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.v1.schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig, AssistantLLMConfig, \
-    EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq, WorkbenchModelConfig, WSModel
 from bisheng.cache.redis import redis_client
 from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.knowledge import KnowledgeState
-from bisheng.database.models.llm_server import LLMDao, LLMServer, LLMModel, LLMModelType
-from bisheng.interface.importing import import_by_type
-from bisheng.interface.initialize.loading import instantiate_llm, instantiate_embedding
-from bisheng.llm.domain.llm.asr import BishengASR
-from bisheng.llm.domain.llm.tts import BishengTTS
+from bisheng.llm.const import LLMModelType
+from bisheng.llm.models import LLMDao, LLMServer, LLMModel
+from bisheng.llm.schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig, AssistantLLMConfig, \
+    EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq, WorkbenchModelConfig, WSModel
 from bisheng.utils import generate_uuid, md5_hash
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import minio_client
+from ..llm import BishengASR, BishengEmbedding, BishengLLM, BishengTTS
 
 
 class LLMService:
@@ -390,14 +388,12 @@ class LLMService:
     @classmethod
     def get_bisheng_llm(cls, **kwargs) -> BaseChatModel:
         """ 初始化毕昇llm对话模型 """
-        class_object = import_by_type(_type='llms', name='BishengLLM')
-        return instantiate_llm('BishengLLM', class_object, kwargs)
+        return BishengLLM(**kwargs)
 
     @classmethod
     def get_bisheng_embedding(cls, **kwargs) -> Embeddings:
         """ 初始化毕昇embedding模型 """
-        class_object = import_by_type(_type='embeddings', name='BishengEmbedding')
-        return instantiate_embedding(class_object, kwargs)
+        return BishengEmbedding(**kwargs)
 
     @classmethod
     async def get_bisheng_asr(cls, **kwargs) -> BishengASR:

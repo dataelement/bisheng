@@ -10,7 +10,6 @@ from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
 from bisheng.api.errcode.http_error import UnAuthorizedError
 from bisheng.api.errcode.user import (UserLoginOfflineError, UserNameAlreadyExistError,
                                       UserNeedGroupAndRoleError)
-from bisheng.api.utils import md5_hash
 from bisheng.api.v1.schemas import CreateUserReq
 from bisheng.cache.redis import redis_client
 from bisheng.database.constants import AdminRole
@@ -23,6 +22,7 @@ from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.settings import settings
+from bisheng.utils import md5_hash
 from bisheng.utils.constants import RSA_KEY, USER_CURRENT_SESSION
 from fastapi_jwt_auth import AuthJWT
 

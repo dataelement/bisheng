@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Request, Depends, Body, Query, BackgroundTasks, UploadFile
 
 from bisheng.api.services.user_service import UserPayload, get_login_user, get_admin_user
-from bisheng.api.v1.schemas import resp_200, KnowledgeLLMConfig, \
-    AssistantLLMConfig, EvaluationLLMConfig, LLMServerCreateReq, WorkbenchModelConfig, UnifiedResponseModel
+from bisheng.common.schemas.api import resp_200, UnifiedResponseModel
 from ..domain import LLMService
+from ..schemas import KnowledgeLLMConfig, AssistantLLMConfig, EvaluationLLMConfig, LLMServerCreateReq, \
+    WorkbenchModelConfig
 
 router = APIRouter(prefix='/llm', tags=['LLM'])
 

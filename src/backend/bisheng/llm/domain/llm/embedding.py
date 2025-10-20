@@ -5,8 +5,8 @@ from langchain_core.embeddings import Embeddings
 from loguru import logger
 from pydantic import Field
 
-from bisheng.database.models.llm_server import LLMServerType
 from bisheng.interface.importing import import_by_type
+from bisheng.llm.const import LLMServerType
 from .base import BishengBase
 from ..utils import wrapper_bisheng_model_limit_check
 from ...models.llm_server import LLMModel, LLMServer, LLMDao, LLMModelType
@@ -47,7 +47,6 @@ class BishengEmbedding(BishengBase, Embeddings):
     server_info: Optional[LLMServer] = Field(default=None)
 
     def __init__(self, **kwargs):
-        from bisheng.interface.initialize.loading import instantiate_embedding
         super().__init__()
         self.model_id = kwargs.get('model_id')
         # 是否忽略模型是否上线的检查
@@ -74,12 +73,12 @@ class BishengEmbedding(BishengBase, Embeddings):
         class_object = self._get_embedding_class(server_info.type)
         params = self._get_embedding_params(server_info, model_info)
         try:
-            self.embeddings = instantiate_embedding(class_object, params)
+            self.embeddings = class_object(**params)
         except Exception as e:
             logger.exception('init_bisheng_embedding error')
             raise Exception(f'初始化bisheng embedding组件失败，请检查配置或联系管理员。错误信息：{e}')
 
-    def _get_embedding_class(self, server_type: str) -> Embeddings:
+    def _get_embedding_class(self, server_type: str) -> type[Embeddings]:
         node_type = self.llm_node_type.get(server_type)
         if not node_type:
             raise Exception(f'{server_type}类型的服务提供方暂不支持embedding')

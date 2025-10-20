@@ -55,13 +55,14 @@ from bisheng.database.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus, ParseType,
 )
-from bisheng.database.models.llm_server import LLMDao, LLMModelType
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.llm import LLMService
+from bisheng.llm.const import LLMModelType
+from bisheng.llm.models import LLMDao
 from bisheng.settings import settings
 from bisheng.utils import generate_uuid
 from bisheng.utils.embedding import decide_embeddings
@@ -842,7 +843,8 @@ class KnowledgeService(KnowledgeUtils):
                 continue
             finally_res[index].title = file_title_map.get(str(one.id), "")
         if timeout_files:
-            KnowledgeFileDao.update_file_status(timeout_files, KnowledgeFileStatus.FAILED, 'Parsing time exceeds 24 hours')
+            KnowledgeFileDao.update_file_status(timeout_files, KnowledgeFileStatus.FAILED,
+                                                'Parsing time exceeds 24 hours')
 
         return (
             finally_res,
