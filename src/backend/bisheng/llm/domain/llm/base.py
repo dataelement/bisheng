@@ -1,10 +1,10 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from bisheng.database.models.llm_server import LLMModel, LLMServer, LLMDao
 
 
 class BishengBase(BaseModel):
-    model_config = {"arbitrary_types_allowed": True}
+    model_config = ConfigDict(arbitrary_types_allowed=True, validate_by_name=True)
 
     model_id: int = Field(description="后端服务保存的model唯一ID")
 
@@ -17,3 +17,9 @@ class BishengBase(BaseModel):
         if self.model_info.status != status:
             self.model_info.status = status
             await LLMDao.aupdate_model_status(self.model_id, status, remark[-500:])  # 限制备注长度为500字符
+
+    def sync_update_model_status(self, status: int, remark: str = ''):
+        """更新模型状态"""
+        if self.model_info.status != status:
+            self.model_info.status = status
+            LLMDao.update_model_status(self.model_id, status, remark[-500:])
