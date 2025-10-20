@@ -198,10 +198,6 @@ class BishengLLM(BishengBase, BaseChatModel):
     @classmethod
     async def get_bisheng_llm(cls, **kwargs) -> Self:
         model_id = kwargs.get('model_id')
-        ignore_online = kwargs.get('ignore_online', False)
-        temperature = kwargs.get('temperature', None)
-        cache = kwargs.get('cache', None)
-        streaming = kwargs.get('streaming', None)
         if not model_id:
             raise NoLlmModelConfigError()
         model_info = await LLMDao.aget_model_by_id(model_id)
@@ -210,32 +206,34 @@ class BishengLLM(BishengBase, BaseChatModel):
             server_info = await LLMDao.aget_server_by_id(model_info.server_id)
         instance = cls(
             model_id=model_id,
-            streaming=streaming,
-            temperature=temperature,
-            cache=cache,
+            model_info=model_info,
+            server_info=server_info,
         )
-        instance._init_chat_model(model_info, server_info, ignore_online)
+        instance._init_chat_model(model_info, server_info, **kwargs)
 
         return instance
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.model_id = kwargs.get('model_id')
-        self.streaming = kwargs.get('streaming', None)
+        if "model_info" in kwargs and "server_info" in kwargs:
+            # 说明是从class method初始化的 不用再次查询数据库
+            self._init_chat_model(model_info=kwargs.pop("model_info"), server_info=kwargs.pop("server_info"), **kwargs)
+        else:
+            if not self.model_id:
+                raise NoLlmModelConfigError()
+            model_info = LLMDao.get_model_by_id(self.model_id)
+            server_info = None
+            if model_info:
+                server_info = LLMDao.get_server_by_id(model_info.server_id)
+            self._init_chat_model(model_info, server_info, **kwargs)
+
+    def _init_chat_model(self, model_info: LLMModel, server_info: LLMServer, **kwargs):
+        ignore_online = kwargs.get('ignore_online', False)
         self.temperature = kwargs.get('temperature', None)
         self.cache = kwargs.get('cache', None)
-        # 是否忽略模型是否上线的检查
-        ignore_online = kwargs.get('ignore_online', False)
+        self.streaming = kwargs.get('streaming', None) or kwargs.get('stream', None)
 
-        if not self.model_id:
-            raise NoLlmModelConfigError()
-        model_info = LLMDao.get_model_by_id(self.model_id)
-        server_info = None
-        if model_info:
-            server_info = LLMDao.get_server_by_id(model_info.server_id)
-        self._init_chat_model(model_info, server_info, ignore_online)
-
-    def _init_chat_model(self, model_info: LLMModel, server_info: LLMServer, ignore_online: bool):
         if not model_info:
             raise LlmModelConfigDeletedError()
         if not server_info:

@@ -88,7 +88,7 @@ class LLMService:
         for one in ret.models:
             try:
                 if one.model_type == LLMModelType.LLM.value:
-                    cls.get_bisheng_llm(model_id=one.id, ignore_online=True)
+                    await cls.get_bisheng_llm(model_id=one.id, ignore_online=True)
                 elif one.model_type == LLMModelType.EMBEDDING.value:
                     cls.get_bisheng_embedding(model_id=one.id, ignore_online=True)
                 elif one.model_type == LLMModelType.ASR.value:
@@ -145,7 +145,7 @@ class LLMService:
     async def test_model_status(cls, model: LLMModel | LLMModelInfo):
         try:
             if model.model_type == LLMModelType.LLM.value:
-                bisheng_model = cls.get_bisheng_llm(model_id=model.id, ignore_online=True, cache=False)
+                bisheng_model = await cls.get_bisheng_llm(model_id=model.id, ignore_online=True, cache=False)
                 await bisheng_model.ainvoke('hello')
             elif model.model_type == LLMModelType.EMBEDDING.value:
                 bisheng_embed = cls.get_bisheng_embedding(model_id=model.id, ignore_online=True, cache=False)
@@ -298,7 +298,7 @@ class LLMService:
         # 没有配置模型，则用jieba
         if not knowledge_llm.source_model_id:
             return None
-        return cls.get_bisheng_llm(model_id=knowledge_llm.source_model_id)
+        return cls.get_bisheng_llm_sync(model_id=knowledge_llm.source_model_id)
 
     @classmethod
     def get_knowledge_similar_llm(cls) -> Optional[BaseChatModel]:
@@ -307,7 +307,7 @@ class LLMService:
         # 没有配置模型，则用jieba
         if not knowledge_llm.qa_similar_model_id:
             return None
-        return cls.get_bisheng_llm(model_id=knowledge_llm.qa_similar_model_id)
+        return cls.get_bisheng_llm_sync(model_id=knowledge_llm.qa_similar_model_id)
 
     @classmethod
     def get_knowledge_default_embedding(cls) -> Optional[Embeddings]:
@@ -383,10 +383,15 @@ class LLMService:
         evaluation_llm = cls.sync_get_evaluation_llm()
         if not evaluation_llm.model_id:
             raise Exception('未配置评测模型')
-        return cls.get_bisheng_llm(model_id=evaluation_llm.model_id)
+        return cls.get_bisheng_llm_sync(model_id=evaluation_llm.model_id)
 
     @classmethod
-    def get_bisheng_llm(cls, **kwargs) -> BaseChatModel:
+    async def get_bisheng_llm(cls, **kwargs) -> BaseChatModel:
+        """ 初始化毕昇llm对话模型 """
+        return await BishengLLM.get_bisheng_llm(**kwargs)
+
+    @classmethod
+    def get_bisheng_llm_sync(cls, **kwargs) -> BaseChatModel:
         """ 初始化毕昇llm对话模型 """
         return BishengLLM(**kwargs)
 

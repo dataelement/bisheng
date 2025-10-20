@@ -1228,9 +1228,9 @@ def mixed_retrieval_recall(question: str, vector_store, keyword_store, max_conte
         dict: 包含检索结果和源文档的字典
     """
     try:
-        llm = LLMService.get_bisheng_llm(model_id=model_id,
-                                         temperature=0.01,
-                                         cache=False)
+        llm = LLMService.get_bisheng_llm_sync(model_id=model_id,
+                                              temperature=0.01,
+                                              cache=False)
         # 创建混合检索器
         rag_tool = BishengRAGTool(
             llm=llm,

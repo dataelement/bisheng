@@ -35,12 +35,9 @@ class LLMNode(BaseNode):
         self._log_reasoning_content = []
 
         # 初始化llm对象
-        self._stream = True
-        self._llm = LLMService.get_bisheng_llm(model_id=self.node_params['model_id'],
-                                               temperature=self.node_params.get(
-                                                   'temperature', 0.3),
-                                               params={'stream': self._stream},
-                                               cache=False)
+        self._llm = LLMService.get_bisheng_llm_sync(model_id=self.node_params['model_id'],
+                                                    temperature=self.node_params.get('temperature', 0.3),
+                                                    cache=False)
 
     def _run(self, unique_id: str):
         self._system_prompt_list = []

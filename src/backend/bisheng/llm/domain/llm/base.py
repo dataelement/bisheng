@@ -6,7 +6,7 @@ from bisheng.llm.models import LLMModel, LLMServer, LLMDao
 
 
 class BishengBase(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True, validate_by_name=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, validate_by_name=True, validate_by_alias=True)
 
     model_id: int = Field(description="后端服务保存的model唯一ID")
 

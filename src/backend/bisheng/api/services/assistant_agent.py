@@ -105,9 +105,9 @@ class AssistantAgent(AssistantUtils):
         }
 
         # 初始化llm
-        self.llm = LLMService.get_bisheng_llm(model_id=default_llm.model_id,
-                                              temperature=self.assistant.temperature,
-                                              streaming=default_llm.streaming)
+        self.llm = await LLMService.get_bisheng_llm(model_id=default_llm.model_id,
+                                                    temperature=self.assistant.temperature,
+                                                    streaming=default_llm.streaming)
 
     async def init_auto_update_llm(self):
         """ 初始化自动优化prompt等信息的llm实例 """
@@ -115,9 +115,9 @@ class AssistantAgent(AssistantUtils):
         if not assistant_llm.auto_llm:
             raise Exception('未配置助手画像自动优化模型')
 
-        self.llm = LLMService.get_bisheng_llm(model_id=assistant_llm.auto_llm.model_id,
-                                              temperature=self.assistant.temperature,
-                                              streaming=assistant_llm.auto_llm.streaming)
+        self.llm = await LLMService.get_bisheng_llm(model_id=assistant_llm.auto_llm.model_id,
+                                                    temperature=self.assistant.temperature,
+                                                    streaming=assistant_llm.auto_llm.streaming)
 
     @staticmethod
     def parse_tool_params(tool: GptsTools) -> Dict:

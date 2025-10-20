@@ -364,7 +364,7 @@ def decide_knowledge_llm() -> Any:
         return None
 
     # 获取llm对象
-    return LLMService.get_bisheng_llm(
+    return LLMService.get_bisheng_llm_sync(
         model_id=knowledge_llm.extract_title_model_id, cache=False
     )
 

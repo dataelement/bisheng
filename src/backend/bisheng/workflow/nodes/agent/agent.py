@@ -73,10 +73,10 @@ class AgentNode(BaseNode):
         self._chat_history_flag = self.node_params['chat_history_flag']['value'] > 0
         self._chat_history_num = self.node_params['chat_history_flag']['value']
 
-        self._llm = LLMService.get_bisheng_llm(model_id=self.node_params['model_id'],
-                                               temperature=self.node_params.get(
-                                                   'temperature', 0.3),
-                                               cache=False)
+        self._llm = LLMService.get_bisheng_llm_sync(model_id=self.node_params['model_id'],
+                                                    temperature=self.node_params.get(
+                                                        'temperature', 0.3),
+                                                    cache=False)
 
         # 是否输出结果给用户
         self._output_user = self.node_params.get('output_user', False)

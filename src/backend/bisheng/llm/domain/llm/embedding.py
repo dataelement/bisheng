@@ -4,12 +4,33 @@ import numpy as np
 from langchain_core.embeddings import Embeddings
 from loguru import logger
 from pydantic import Field
+from typing_extensions import Self
 
 from bisheng.interface.importing import import_by_type
 from bisheng.llm.const import LLMServerType
 from .base import BishengBase
 from ..utils import wrapper_bisheng_model_limit_check
 from ...models.llm_server import LLMModel, LLMServer, LLMDao, LLMModelType
+
+_node_type: Dict = {
+    # 开源推理框架
+    LLMServerType.OLLAMA.value: 'OllamaEmbeddings',
+    LLMServerType.XINFERENCE.value: 'OpenAIEmbeddings',
+    LLMServerType.LLAMACPP.value: 'OpenAIEmbeddings',
+    LLMServerType.VLLM.value: 'OpenAIEmbeddings',
+    LLMServerType.BISHENG_RT.value: 'HostEmbeddings',
+
+    # 官方API服务
+    LLMServerType.OPENAI.value: 'OpenAIEmbeddings',
+    LLMServerType.AZURE_OPENAI.value: 'AzureOpenAIEmbeddings',
+    LLMServerType.QWEN.value: 'DashScopeEmbeddings',
+    LLMServerType.QIAN_FAN.value: 'QianfanEmbeddingsEndpoint',
+    LLMServerType.MINIMAX.value: 'OpenAIEmbeddings',
+    LLMServerType.ZHIPU.value: 'OpenAIEmbeddings',
+    LLMServerType.TENCENT.value: 'OpenAIEmbeddings',
+    LLMServerType.VOLCENGINE.value: 'OpenAIEmbeddings',
+    LLMServerType.SILICON.value: 'OpenAIEmbeddings',
+}
 
 
 class BishengEmbedding(BishengBase, Embeddings):
@@ -22,29 +43,12 @@ class BishengEmbedding(BishengBase, Embeddings):
     model_kwargs: dict = Field(default={}, description='embedding模型调用参数')
 
     embeddings: Optional[Embeddings] = Field(default=None)
-    llm_node_type: Dict = {
-        # 开源推理框架
-        LLMServerType.OLLAMA.value: 'OllamaEmbeddings',
-        LLMServerType.XINFERENCE.value: 'OpenAIEmbeddings',
-        LLMServerType.LLAMACPP.value: 'OpenAIEmbeddings',
-        LLMServerType.VLLM.value: 'OpenAIEmbeddings',
-        LLMServerType.BISHENG_RT.value: 'HostEmbeddings',
 
-        # 官方API服务
-        LLMServerType.OPENAI.value: 'OpenAIEmbeddings',
-        LLMServerType.AZURE_OPENAI.value: 'AzureOpenAIEmbeddings',
-        LLMServerType.QWEN.value: 'DashScopeEmbeddings',
-        LLMServerType.QIAN_FAN.value: 'QianfanEmbeddingsEndpoint',
-        LLMServerType.MINIMAX.value: 'OpenAIEmbeddings',
-        LLMServerType.ZHIPU.value: 'OpenAIEmbeddings',
-        LLMServerType.TENCENT.value: 'OpenAIEmbeddings',
-        LLMServerType.VOLCENGINE.value: 'OpenAIEmbeddings',
-        LLMServerType.SILICON.value: 'OpenAIEmbeddings',
-    }
-
-    # bisheng强相关的业务参数
-    model_info: Optional[LLMModel] = Field(default=None)
-    server_info: Optional[LLMServer] = Field(default=None)
+    async def get_bisheng_embedding(cls, **kwargs) -> Self:
+        self.model_id = kwargs.get('model_id')
+        # 是否忽略模型是否上线的检查
+        ignore_online = kwargs.get('ignore_online', False)
+        return cls(**kwargs)
 
     def __init__(self, **kwargs):
         super().__init__()
