@@ -254,19 +254,18 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
   useEffect(() => {
     markdownRef.current?.setValue(currentRecord?.content || '');
   }, [currentRecord])
-  useEffect( () => {
-    console.log(currentRecord?.linsight_version_id, 22266);
+  useEffect(() => {
     const fetchSopShowcase = async () => {
-      const res =  await sopApi.getSopShowcaseDetail({ linsight_version_id: currentRecord?.linsight_version_id });
-      if(res.execute_tasks.length === 0){
-          setSopShowcase(true);
-          setLinsight({});
-          return;
+      const res = await sopApi.getSopShowcaseDetail({ linsight_version_id: currentRecord?.linsight_version_id });
+      if (res.execute_tasks.length === 0) {
+        setSopShowcase(true);
+        setLinsight({});
+        return;
       }
-      setLinsight({ 
+      setLinsight({
         ...res.version_info,
-         tasks: res.execute_tasks,
-        summary: '' 
+        tasks: res.execute_tasks,
+        summary: ''
       });
       setSopShowcase(false);
     }
@@ -474,7 +473,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
                   <h3 className="text-lg font-semibold truncate">{currentRecord.name}</h3>
                   <TabsList className='mr-4'>
                     <TabsTrigger value="manual">指导手册</TabsTrigger>
-                    {sopShowcase? <Tip content="无运行结果" side="bottom">
+                    {sopShowcase ? <Tip content="无运行结果" side="bottom">
                       <span className="inline-block">
                         <TabsTrigger value="result" disabled={sopShowcase}>运行结果</TabsTrigger>
                       </span>
@@ -528,7 +527,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
                 {activeTab === 'result' && (
                   <div className="flex-1 flex flex-col">
                     <div className="flex-1 overflow-y-auto bg-gray-50 rounded-md p-4 text-sm text-gray-500">
-                    <TaskFlowContent linsight={linsight} />
+                      <TaskFlowContent showFeedBack linsight={linsight} />
                     </div>
                     <div className="flex justify-start gap-2 pt-4">
                       <Button

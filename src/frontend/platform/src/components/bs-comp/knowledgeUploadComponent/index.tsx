@@ -25,7 +25,7 @@ const KnowledgeUploadComponent = ({
     progressClassName = '',
     onFileChange,
     onSelectFile,
-    initialFiles = [] 
+    initialFiles = []
 }) => {
     const { t } = useTranslation()
     const { message } = useToast()
@@ -74,23 +74,47 @@ const KnowledgeUploadComponent = ({
 
     // beforeupload
     const handleDrop = (acceptedFiles) => {
-        // 校验超大小文件
+        console.log(acceptedFiles,33);
+        
+        // 1. 新增：定义支持的文件类型（根据实际业务补充/删减，示例含常见格式）
+        const SUPPORTED_FILE_EXTS = ['pdf', 'txt', 'docx', 'ppt', 'pptx', 'md', 'html', 'xls', 'xlsx', 'csv', 'doc', 'png', 'jpep', 'bmp'];
         const sizeLimit = appConfig.uploadFileMaxSize * 1024 * 1024;
-        const [bigFiles, files] = acceptedFiles.reduce(
-            ([big, small], file) => {
-                if (progressList.some(pros => pros.fileName === file.name)) return [big, small] // 过滤重复文件
+        
+        const [unsupportedFiles, bigFiles, files] = acceptedFiles.reduce(
+            ([unsupported, big, small], file) => {
+                if (progressList.some(pros => pros.fileName === file.name)) return [unsupported, big, small];
+                
+                // 新增：获取文件后缀并校验类型
+                const fileExt = file.name.split('.').pop()?.toLowerCase() || '';
+                if (!SUPPORTED_FILE_EXTS.includes(fileExt)) {
+                    return [[...unsupported, file.name], big, small]; // 不支持的文件
+                }
+                
+                // 原有：大小校验
                 return file.size < sizeLimit
-                    ? [big, [...small, file]]
-                    : [[...big, file.name], small]
+                    ? [unsupported, big, [...small, file]] // 合法文件
+                    : [unsupported, [...big, file.name], small]; // 超大小文件
             },
-            [[], []]
+            [[], [],[]]
         );
-        bigFiles.length && message({
-            title: t('prompt'),
-            description: bigFiles.map(str => `${t('code.file')}: ${str} ${t('code.sizeExceedsLimit', { size })}`),
-        });
-        if (!files.length) return
-        // 追加上传文件
+    
+        
+        if (unsupportedFiles.length > 0) {
+            message({
+                title: t('prompt'),
+                description: `此文件类型不支持上传`,
+                variant: 'error'
+            });
+        }
+
+        if (bigFiles.length > 0) {
+            message({
+                title: t('prompt'),
+                description: bigFiles.map(str => `${t('code.file')}: ${str} ${t('code.sizeExceedsLimit', { size: appConfig.uploadFileMaxSize + 'MB' })}`).join('；'),
+                variant: 'error'
+            });
+        }
+        if (!files?.length) return
         setProgressList((list) => {
             return [...list, ...files.map(file => {
                 return {
@@ -114,11 +138,11 @@ const KnowledgeUploadComponent = ({
                 error: !result.file_path
             } : pros
         )))
-        
+
         // 临时去重方式
         successFilesRef.current = successFilesRef.current.filter((pros) => pros.id !== id)
         failFilesRef.current = failFilesRef.current.filter((pros) => pros.id !== id)
-        
+
         result.file_path
             ? successFilesRef.current.push(result)
             : failFilesRef.current.push(result)
@@ -129,7 +153,7 @@ const KnowledgeUploadComponent = ({
         failFilesRef.current = failFilesRef.current.filter((pros) => pros.id !== id)
         setProgressList((list) => list.filter((pros) => pros.id !== id))
     }
- useEffect(() => {
+    useEffect(() => {
         if (initialFiles.length > 0) {
             // 将初始文件转换为组件需要的Progress格式
             const initialProgress = initialFiles.map(file => ({
@@ -159,11 +183,11 @@ const KnowledgeUploadComponent = ({
             {progressList.map((pros) =>
                 <ProgressItem
                     key={pros.id}
-                        item={{
-                            ...pros,
-                            // 优先使用fileData（回显文件），其次用原始file（新上传文件）
-                            displayFile: pros.fileData || pros.file
-                        }}
+                    item={{
+                        ...pros,
+                        // 优先使用fileData（回显文件），其次用原始file（新上传文件）
+                        displayFile: pros.fileData || pros.file
+                    }}
                     onResulte={handleUploadResult}
                     onDelete={handleDelete}
                 />

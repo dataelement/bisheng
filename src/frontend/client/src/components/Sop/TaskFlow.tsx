@@ -53,7 +53,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
 
             const newVersionId = res.data.id
             updateLinsight(versionId, { status: SopStatus.FeedbackCompleted })
-            !cancel && showToast({ status: 'success', message: localize('com_sop_submit_success') })
+            if (!check) return showToast({ status: 'success', message: localize('com_sop_submit_success') })
             if (res.data === true) return
 
             // 克隆当前版本
@@ -65,7 +65,12 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
                 tasks: [],
                 summary: '',
                 file_list: [],
-                status: SopStatus.NotStarted
+                status: SopStatus.NotStarted,
+                output_result: {
+                    all_from_session_files: [],
+                    final_files: [],
+                    answer: ''
+                }
             })
 
             setVersions((prve) => [{

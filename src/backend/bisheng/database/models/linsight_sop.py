@@ -57,6 +57,7 @@ class LinsightSOPRecord(SQLModelSerializable, table=True):
                          sa_column=Column(LONGTEXT, nullable=False, comment="SOP内容"))
 
     rating: Optional[int] = Field(default=0, ge=0, le=5, description='SOP评分，范围0-5')
+    execute_feedback: Optional[str] = Field(None, description='执行结果反馈信息', sa_type=Text, nullable=True)
     linsight_version_id: Optional[str] = Field(default=None, description='灵思会话版本id，同步评分')
     create_time: datetime = Field(default_factory=datetime.now, description='创建时间',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
@@ -280,6 +281,18 @@ class LinsightSOPDao(LinsightSOPBase):
         statement = update(LinsightSOPRecord).where(
             col(LinsightSOPRecord.linsight_version_id) == linsight_version_id).values(rating=rating)
         async with get_async_db_session() as session:
+            await session.exec(statement)
+            await session.commit()
+            return True
+
+    @classmethod
+    async def update_sop_record_feedback(cls, linsight_version_id: str, execute_feedback: str) -> bool:
+        """
+        更新SOP记录的执行反馈
+        """
+        statement = update(LinsightSOPRecord).where(
+            col(LinsightSOPRecord.linsight_version_id) == linsight_version_id).values(execute_feedback=execute_feedback)
+        async with async_session_getter() as session:
             await session.exec(statement)
             await session.commit()
             return True

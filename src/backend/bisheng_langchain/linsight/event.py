@@ -1,3 +1,4 @@
+import time
 from typing import Optional, Any
 
 from pydantic import BaseModel, Field
@@ -5,6 +6,8 @@ from pydantic import BaseModel, Field
 
 class BaseEvent(BaseModel):
     task_id: str = Field(..., description='触发事件的任务ID')
+    # 时间戳，单位秒
+    timestamp: int = Field(default_factory=lambda: int(time.time()), description='秒级时间戳')
 
 
 # 任务步骤执行事件
@@ -30,6 +33,8 @@ class GenerateSubTask(BaseEvent):
 # 需要用户输入的事件
 class NeedUserInput(BaseEvent):
     call_reason: str = Field(..., description='需要用户输入的原因')
+    params: Optional[Any] = Field(default=None, description='执行步骤的参数')
+    step_type: Optional[str] = Field(default="call_user_input")
 
 
 class TaskStart(BaseEvent):

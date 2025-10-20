@@ -26,7 +26,7 @@ from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
 from bisheng.api.services.user_service import get_login_user, UserPayload, get_admin_user
 from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
-from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, BatchDownloadFilesSchema, \
+from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
     SubmitFileSchema, LinsightToolSchema, ToolChildrenSchema
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
 from bisheng.cache.redis import redis_client
@@ -36,6 +36,7 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
 from bisheng.database.models.linsight_sop import LinsightSOPDao, LinsightSOPRecord
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 from bisheng.settings import settings
+from bisheng.utils import util
 from bisheng.utils.minio_client import minio_client
 from fastapi_jwt_auth import AuthJWT
 
@@ -313,9 +314,11 @@ async def user_input(
         session_version_id: str = Body(..., description="灵思会话版本ID"),
         linsight_execute_task_id: str = Body(..., description="灵思执行任务ID"),
         input_content: str = Body(..., description="用户输入内容"),
+        files: Optional[List[SubmitFileSchema]] = Body(None, description="用户上传的文件"),
         login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
     """
     用户输入
+    :param files:
     :param session_version_id:
     :param input_content:
     :param linsight_execute_task_id:
@@ -333,7 +336,11 @@ async def user_input(
 
     state_message_manager = LinsightStateMessageManager(session_version_id=session_version_id)
 
-    await state_message_manager.set_user_input(task_id=linsight_execute_task_id, user_input=input_content)
+    # 如果有文件 先处理文件
+    processed_files = await LinsightWorkbenchImpl.human_participate_add_file(session_version_model, files=files)
+
+    await state_message_manager.set_user_input(task_id=linsight_execute_task_id, user_input=input_content,
+                                               files=processed_files)
 
     return resp_200(data=True, message="用户输入已提交")
 
@@ -415,13 +422,15 @@ async def submit_feedback(
     else:
 
         if feedback is not None and feedback.strip() != "":
-            # 重新生成SOP记录到记录表
-            background_tasks.add_task(
-                LinsightWorkbenchImpl.feedback_regenerate_sop_task,
-                session_version_model,
-                feedback
-            )
-            pass
+            await SOPManageService.update_sop_record_feedback(session_version_model.id, feedback)
+
+            # # 重新生成SOP记录到记录表
+            # background_tasks.add_task(
+            #     LinsightWorkbenchImpl.feedback_regenerate_sop_task,
+            #     session_version_model,
+            #     feedback
+            # )
+            # pass
 
         return resp_200(data=True, message="提交成功")
 
@@ -552,7 +561,7 @@ async def task_message_stream(
 @router.post("/workbench/batch-download-files", summary="批量下载任务文件")
 async def batch_download_files(
         zip_name: str = Body(..., description="压缩包名称"),
-        file_info_list: List[BatchDownloadFilesSchema] = Body(..., description="文件信息列表"),
+        file_info_list: List[DownloadFilesSchema] = Body(..., description="文件信息列表"),
         login_user: UserPayload = Depends(get_login_user)):
     """
     批量下载任务文件
@@ -601,6 +610,53 @@ async def get_queue_status(
     except Exception as e:
         logger.error(f"获取灵思队列排队状态失败: {str(e)}")
         return LinsightQueueStatusError.return_resp(data=str(e))
+
+
+# 灵思md转pdf or docx 下载
+@router.post("/workbench/download-md-to-pdf-or-docx", summary="灵思md转pdf or docx 下载")
+async def download_md_to_pdf_or_docx(
+        file_info: DownloadFilesSchema = Body(..., description="文件信息"),
+        to_type: Literal["pdf", "docx"] = Body(..., description="转换的目标文件类型，pdf或docx"),
+        login_user: UserPayload = Depends(get_login_user)):
+    """
+    灵思md转pdf or docx 下载
+    :param file_info:
+    :param to_type:
+    :param login_user:
+    :return:
+    """
+    try:
+        # 调用实现类处理文件下载
+        file_name, file_bytes = await LinsightWorkbenchImpl.download_file(file_info)
+
+        md_str = file_bytes.decode('utf-8')
+
+        # 文件名去除扩展名
+        file_name = os.path.splitext(file_name)[0]
+
+        if to_type == "pdf":
+            from bisheng.common.utils.markdown_cmpnt.md_to_pdf import md_to_pdf_bytes
+            converted_bytes = await util.sync_func_to_async(md_to_pdf_bytes)(md_str)
+            file_name = f"{file_name}.pdf"
+            content_type = "application/pdf"
+        else:
+            from bisheng.common.utils.markdown_cmpnt.md_to_docx.markdocx import MarkDocx
+            mark_docx = MarkDocx()
+            converted_bytes, _ = await util.sync_func_to_async(mark_docx)(md_str)
+            file_name = f"{file_name}.docx"
+            content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        # 转成 unicode 字符串
+        file_name = parse.quote(file_name)
+        return StreamingResponse(
+            iter([converted_bytes]),
+            media_type=content_type,
+            headers={
+                "Content-Disposition": f"attachment; filename={file_name}"
+            }
+        )
+    except Exception as e:
+        logger.error(f"文件下载失败: {str(e)}")
+        return ResourceDownloadError.return_resp(data=str(e))
 
 
 @router.post("/sop/add", summary="添加灵思SOP", response_model=UnifiedResponseModel)
@@ -787,7 +843,8 @@ async def get_sop_showcase_result(
 
 
 class IntegratedExecuteRequestBody(BaseModel):
-    query: str = Body(..., description="用户提交的问题")
+    query: Optional[str] = Body(None, description="用户提交的问题")
+    sop_content: Optional[str] = Body(None, description="用户提交的SOP内容")
     tool_ids: List[int] = Body(None, description="选择的工具ID列表")
     org_knowledge_enabled: bool = Body(False, description="是否启用组织知识库")
     personal_knowledge_enabled: bool = Body(False, description="是否启用个人知识库")
@@ -816,6 +873,18 @@ async def integrated_execute(
     # ======================== 参数验证 ========================
     try:
         body_param = IntegratedExecuteRequestBody.model_validate_json(body_param)
+
+        if not body_param.query and not body_param.sop_content:
+            logger.error(f"用户 {login_user.user_id} 请求体参数错误: query和sop_content不能同时为空")
+            return EventSourceResponse(iter([{
+                "event": "error",
+                "data": json.dumps({
+                    "error": "请求体参数错误",
+                    "message": "query和sop_content不能同时为空",
+                    "code": "PARAM_ERROR"
+                })
+            }]))
+
     except ValidationError as e:
         logger.error(f"用户 {login_user.user_id} 请求体参数解析失败: {str(e)}")
         return EventSourceResponse(iter([{
@@ -964,7 +1033,7 @@ async def integrated_execute(
                         return
 
                 submit_obj = LinsightQuestionSubmitSchema(
-                    question=body_param.query,
+                    question=body_param.query if body_param.query else "用户未提供问题",
                     org_knowledge_enabled=body_param.org_knowledge_enabled,
                     personal_knowledge_enabled=body_param.personal_knowledge_enabled,
                     files=submit_files,
@@ -997,71 +1066,78 @@ async def integrated_execute(
                 return
 
             # ======================== 生成SOP ========================
-            try:
-                knowledge_res = []
-                linsight_conf = settings.get_linsight_conf()
-
-                # 获取组织知识库
-                if (linsight_session_version_model.org_knowledge_enabled and
-                        linsight_conf and linsight_conf.max_knowledge_num > 0):
-                    try:
-                        org_knowledge, _ = await KnowledgeService.get_knowledge(
-                            request, login_user, KnowledgeTypeEnum.NORMAL, None, 1,
-                            linsight_conf.max_knowledge_num
-                        )
-                        if org_knowledge:
-                            knowledge_res.extend(org_knowledge)
-                            logger.debug(f"获取到 {len(org_knowledge)} 个组织知识")
-                    except Exception as e:
-                        logger.warning(f"用户 {login_user.user_id} 获取组织知识库失败: {str(e)}")
-                        # 继续执行，不中断流程
-
-                # 获取个人知识库
-                if linsight_session_version_model.personal_knowledge_enabled:
-                    try:
-                        personal_knowledge = await KnowledgeDao.aget_user_knowledge(
-                            login_user.user_id, None, KnowledgeTypeEnum.PRIVATE
-                        )
-                        if personal_knowledge:
-                            knowledge_res.extend(personal_knowledge)
-                            logger.debug(f"获取到 {len(personal_knowledge)} 个个人知识")
-                    except Exception as e:
-                        logger.warning(f"用户 {login_user.user_id} 获取个人知识库失败: {str(e)}")
-                        # 继续执行，不中断流程
-
-                # 生成SOP
-                sop_generate = LinsightWorkbenchImpl.generate_sop(
+            if body_param.sop_content:
+                # 用户直接提交SOP内容，跳过生成SOP步骤
+                await LinsightSessionVersionDao.modify_sop_content(
                     linsight_session_version_id=linsight_session_version_model.id,
-                    previous_session_version_id=None,
-                    feedback_content=None,
-                    reexecute=False,
-                    login_user=login_user,
-                    knowledge_list=knowledge_res
+                    sop_content=body_param.sop_content
                 )
+            else:
+                try:
+                    knowledge_res = []
+                    linsight_conf = settings.get_linsight_conf()
 
-                async for event in sop_generate:
-                    if event.get("event") == "error":
+                    # 获取组织知识库
+                    if (linsight_session_version_model.org_knowledge_enabled and
+                            linsight_conf and linsight_conf.max_knowledge_num > 0):
+                        try:
+                            org_knowledge, _ = await KnowledgeService.get_knowledge(
+                                request, login_user, KnowledgeTypeEnum.NORMAL, None, 1,
+                                linsight_conf.max_knowledge_num
+                            )
+                            if org_knowledge:
+                                knowledge_res.extend(org_knowledge)
+                                logger.debug(f"获取到 {len(org_knowledge)} 个组织知识")
+                        except Exception as e:
+                            logger.warning(f"用户 {login_user.user_id} 获取组织知识库失败: {str(e)}")
+                            # 继续执行，不中断流程
+
+                    # 获取个人知识库
+                    if linsight_session_version_model.personal_knowledge_enabled:
+                        try:
+                            personal_knowledge = await KnowledgeDao.aget_user_knowledge(
+                                login_user.user_id, None, KnowledgeTypeEnum.PRIVATE
+                            )
+                            if personal_knowledge:
+                                knowledge_res.extend(personal_knowledge)
+                                logger.debug(f"获取到 {len(personal_knowledge)} 个个人知识")
+                        except Exception as e:
+                            logger.warning(f"用户 {login_user.user_id} 获取个人知识库失败: {str(e)}")
+                            # 继续执行，不中断流程
+
+                    # 生成SOP
+                    sop_generate = LinsightWorkbenchImpl.generate_sop(
+                        linsight_session_version_id=linsight_session_version_model.id,
+                        previous_session_version_id=None,
+                        feedback_content=None,
+                        reexecute=False,
+                        login_user=login_user,
+                        knowledge_list=knowledge_res
+                    )
+
+                    async for event in sop_generate:
+                        if event.get("event") == "error":
+                            yield event
+                            return
                         yield event
-                        return
-                    yield event
 
-                yield {
-                    "event": "sop_generate_complete",
-                    "data": json.dumps({"message": "SOP生成完成"})
-                }
+                    yield {
+                        "event": "sop_generate_complete",
+                        "data": json.dumps({"message": "SOP生成完成"})
+                    }
 
-            except Exception as e:
-                error_msg = f"SOP生成失败: {str(e)}"
-                logger.error(f"用户 {login_user.user_id} {error_msg}")
-                yield {
-                    "event": "error",
-                    "data": json.dumps({
-                        "error": "SOP生成失败",
-                        "message": error_msg,
-                        "code": "SOP_GENERATE_ERROR"
-                    })
-                }
-                return
+                except Exception as e:
+                    error_msg = f"SOP生成失败: {str(e)}"
+                    logger.error(f"用户 {login_user.user_id} {error_msg}")
+                    yield {
+                        "event": "error",
+                        "data": json.dumps({
+                            "error": "SOP生成失败",
+                            "message": error_msg,
+                            "code": "SOP_GENERATE_ERROR"
+                        })
+                    }
+                    return
 
             if body_param.only_generate_sop:
                 return

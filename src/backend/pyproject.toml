@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "bisheng"
-version = "2.2.0-beta2"
+version = "2.2.0-beta3"
 description = "A Python package with a built-in web application"
 authors = ["Dataelement <hanfeng@dataelem.com>"]
 maintainers = [
@@ -33,8 +33,8 @@ minio = "7.2.0"
 loguru = "^0.7.1"
 captcha = "^0.5.0"
 rsa = "4.9"
-pydantic = "^2.7.2"
-numexpr = "^2.8.6"
+pydantic = "2.12.0"
+numexpr = "2.13.*"
 pypinyin = "0.50.0"
 celery = { extras = ["redis"], version = "^5.3.6" }
 redis = "^5.0.0"
@@ -113,7 +113,7 @@ Pillow = "10.3.0"
 filetype = "1.2.0"
 aiomysql = "^0.2.0"
 sse-starlette = "^2.3.6"
-transformers = "^4.53.0"
+transformers = "4.53.*"
 ibm-db = "^3.2.6"
 ibm-db-sa = "^0.4.2"
 opengauss-sqlalchemy = "^2.4.0"
@@ -124,6 +124,8 @@ llama-index-llms-openai = ">=0.5,<0.6"
 llama-index-embeddings-openai = ">=0.5,<0.6"
 e2b-code-interpreter = "^1.5.2"
 azure-cognitiveservices-speech = "^1.46.0"
+playwright = "^1.55.0"
+
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"

@@ -141,7 +141,7 @@ export const useLinsightWebSocket = (versionId) => {
                     });
                     break;
                 case 'user_input':
-                    const { task_id, call_reason } = taskData.data;
+                    const { task_id, call_reason, params } = taskData.data;
                     updateLinsight(id, (prev) => {
                         const newTasks = prev.tasks.map(task => {
                             if (task.id === task_id) {
@@ -150,7 +150,11 @@ export const useLinsightWebSocket = (versionId) => {
                                     ...task,
                                     status: taskData.event_type,
                                     event_type: taskData.event_type,
-                                    call_reason
+                                    params,
+                                    call_reason,
+                                    history: [{
+                                        ...taskData.data
+                                    }]
                                 };
                             } else {
                                 return {
@@ -163,7 +167,11 @@ export const useLinsightWebSocket = (versionId) => {
                                                 ...child, // 关键修复：使用 child 而不是 task
                                                 status: taskData.event_type,
                                                 event_type: taskData.event_type,
-                                                call_reason
+                                                params,
+                                                call_reason,
+                                                history: [{
+                                                    ...taskData.data
+                                                }]
                                             };
                                         }
                                         return child;
@@ -323,14 +331,41 @@ export const useLinsightWebSocket = (versionId) => {
         toggleNav(true)
     }, [versionId])
 
-    const sendInput = useCallback(({ task_id, user_input }) => {
+    const sendInput = useCallback(({ task_id, user_input, files }) => {
         if (MOCK) {
             const ws = connections[versionId];
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ user_input }));
             }
         } else {
-            userInputLinsightEvent(versionId, task_id, user_input)
+            userInputLinsightEvent(versionId, task_id, user_input, files.map((file) => file.result))
+            // update is_completed user_input files
+            // @ts-ignore
+            updateLinsight(versionId, (prev) => ({
+                ...prev,
+                tasks: prev.tasks.map(task => ({
+                    ...task,
+                    status: "success",
+                    history: task.history?.map(h => ({
+                        ...h,
+                        is_completed: true,
+                        user_input: h.user_input || user_input,
+                        files: h.files || files
+                    })),
+                    children: task.children
+                        ? task.children.map(child => ({
+                            ...child,
+                            status: "success",
+                            history: child.history?.map(h => ({
+                                ...h,
+                                is_completed: true,
+                                user_input: h.user_input || user_input,
+                                files: h.files || files
+                            })),
+                        }))
+                        : [],
+                })),
+            }));
         }
     }, [versionId]);
 

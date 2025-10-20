@@ -13,7 +13,8 @@ import { TaskFlow } from './TaskFlow';
 export default function index() {
     // 获取url参数
     const { conversationId, sopId: sid } = useParams();
-    const sopId = conversationId ? conversationId.replace('case', '') : sid; // Compatible with historical cases 
+    // 兼容历史链接 case开头
+    const sopId = conversationId ? (conversationId.match(/case(\d+)/)?.[1] || '') : sid; // Compatible with historical cases 
 
     const { loading, versionId, setVersionId, switchVersion, versions, setVersions, checkQueueStatus } = useLinsightData(conversationId, sopId);
     const [isLoading, error] = useGenerateSop(versionId, setVersionId, setVersions)
@@ -98,11 +99,13 @@ export const useLinsightData = (conversationId: string | undefined, sopId?: stri
     // Get details using sop ID
     useEffect(() => {
         if (sopId) {
+            setLoading(true);
             getCaseDetail(sopId).then(res => {
                 const { version_info, execute_tasks } = res.data
                 setVersions([])
                 setVersionId(version_info.id);
                 switchAndUpdateLinsight(version_info.id, { ...version_info, tasks: execute_tasks });
+                setLoading(false);
             })
         }
     }, [sopId])

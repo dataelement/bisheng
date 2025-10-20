@@ -8,36 +8,38 @@ from io import BytesIO
 from typing import Annotated, Dict, List, Optional
 
 import rsa
-from captcha.image import ImageCaptcha
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.security import OAuth2PasswordBearer
-from sqlmodel import select
+from fastapi_jwt_auth import AuthJWT
+from sqlmodel import delete, select, func
+from captcha.image import ImageCaptcha
 
-from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
-from bisheng.api.errcode.http_error import UnAuthorizedError, NotFoundError
+from bisheng.utils import generate_uuid
+from bisheng.api.errcode.http_error import UnAuthorizedError
 from bisheng.api.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
                                       UserValidateError, UserPasswordError)
+from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
+from bisheng.api.utils import get_request_ip
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.captcha import verify_captcha
 from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_user_role, get_login_user,
-                                               get_admin_user, UserService)
-from bisheng.api.utils import get_request_ip
-from bisheng.api.v1.schemas import resp_200, CreateUserReq
-from bisheng.cache.redis import redis_client
-from bisheng.core.database import get_sync_db_session
-from bisheng.database.constants import AdminRole, DefaultRole
-from bisheng.database.models.group import GroupDao
+                                               get_assistant_list_by_access, get_admin_user, UserService)
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, CreateUserReq
 from bisheng.database.models.mark_task import MarkTaskDao
+
+from bisheng.cache.redis import redis_client
+from bisheng.database.base import session_getter
+from bisheng.database.models.group import GroupDao
 from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
-from bisheng.database.models.role_access import RoleRefresh, RoleAccessDao, AccessType
+from bisheng.database.constants import AdminRole, DefaultRole
+from bisheng.database.models.role_access import RoleAccess, RoleRefresh
 from bisheng.database.models.user import User, UserCreate, UserDao, UserLogin, UserRead, UserUpdate
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRole, UserRoleCreate, UserRoleDao
 from bisheng.settings import settings
-from bisheng.utils import generate_uuid
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_PASSWORD_ERROR, USER_CURRENT_SESSION
 from bisheng.utils.logger import logger
-from fastapi_jwt_auth import AuthJWT
 
 # build router
 router = APIRouter(prefix='', tags=['User'])
@@ -97,7 +99,8 @@ async def sso(*, request: Request, user: UserCreate):
                 # 创建为普通用户
                 user_exist = UserDao.add_user_and_default_role(user_exist)
             UserGroupDao.add_default_user_group(user_exist.user_id)
-
+        if 1 == user_exist.delete:
+            raise UserForbiddenError.http_exception()
         access_token, refresh_token, _, _ = gen_user_jwt(user_exist)
 
         # 设置登录用户当前的cookie, 比jwt有效期多一个小时

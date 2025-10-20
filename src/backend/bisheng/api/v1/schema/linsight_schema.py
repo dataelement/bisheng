@@ -3,6 +3,7 @@ from typing import List, Dict, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from bisheng.database.models.linsight_sop import LinsightSOPRecord
+from bisheng_langchain.linsight.event import NeedUserInput
 
 
 class ToolChildrenSchema(BaseModel):
@@ -45,10 +46,16 @@ class LinsightQuestionSubmitSchema(BaseModel):
         return [tool.model_dump() for tool in v]
 
 
-class BatchDownloadFilesSchema(BaseModel):
+class DownloadFilesSchema(BaseModel):
     file_name: str = Field(..., description="文件名称")
     file_url: str = Field(..., description="文件下载链接")
 
 
 class SopRecordRead(LinsightSOPRecord, table=False):
     user_name: Optional[str] = Field(default=None, description="用户名称")
+
+
+class UserInputEventSchema(NeedUserInput):
+    files: Optional[List[Dict[str, str]]] = Field(None, description="上传的文件列表")
+    user_input: Optional[str] = Field(None, description="用户输入")
+    is_completed: bool = Field(False, description="是否已完成")

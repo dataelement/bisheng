@@ -27,13 +27,13 @@ def extract_json_from_markdown(markdown_code_block: str) -> dict:
             # 尝试直接解析整个markdown代码块为JSON
             return json.loads(markdown_code_block)
         except json.decoder.JSONDecodeError:
-            raise Exception(f"Invalid JSON format from response: {markdown_code_block}")
+            raise Exception(f"Invalid JSON format from llm response")
 
     json_str = matches.group(1).strip()
     try:
         return json.loads(json_str)
     except json.JSONDecodeError:
-        raise Exception(f"Invalid JSON format from json_str: {json_str}")
+        raise Exception(f"Invalid JSON format from json str")
 
 
 # 提取文本中的markdown代码块内容
@@ -132,3 +132,20 @@ def record_llm_prompt(llm: BaseLanguageModel, prompt: str, answer: str, token_us
                 "time": cost_time
             }, ensure_ascii=False) + "\n"
         )
+
+
+if __name__ == '__main__':
+    extract_json_from_markdown(markdown_code_block="""<Thought>
+    图片下载已顺利完成，两张图片分别为output/news_image_020_1.jpg（主图，来自og:image）和output/news_image_020_2.jpg（正文配图，来自IMG_0 bigOrigUrl）。图片内容均与新闻正文直接相关且命名规范。未发现与新闻内容相关的第三张配图，因此未产出output/news_image_020_3.jpg。所有图片均保存于output/目录。当前step_3图片抽取任务针对编号020已全部达成，无需额外操作，可以向用户和下游明确汇报产出情况并结束流程。
+    </Thought>
+    ```json
+    {
+        "思考": "自动下载了output/news_raw_020.html的主图和正文配图，共生成两张图片output/news_image_020_1.jpg和output/news_image_020_2.jpg，均为与新闻内容相关、命名规范的jpg文件、存于output/目录。未发现其它正文相关配图，未产出news_image_020_3.jpg。step_3目标已完成，产出内容明确，可以结束执行。",
+        "结束": "True",
+        "类型": "固定步骤",
+        "行动": "回答",
+        "参数": {},
+        "调用原因": "总结此次step_3编号020图片抽取自动化产出，供确认和后续任务引用。",
+        "生成内容": "编号020新闻主图及正文配图已自动下载完毕，全部保存于output/目录：\n- output/news_image_020_1.jpg  （主图，来自meta og:image，新闻正文相关）\n- output/news_image_020_2.jpg  （正文配图，IMG_0 bigOrigUrl）\n未发现其它与正文直接相关的配图，未产出news_image_020_3.jpg。\n所有产出图片文件命名规范，内容与新闻正文紧密关联，可直接作为后续任务输入使用。step_3图片自动抽取目标已达成。"
+    }
+    ```""")

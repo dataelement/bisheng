@@ -14,6 +14,7 @@ class ExecConfig(BaseModel):
     max_file_num: int = Field(default=5, description='生成SOP时，prompt里放的用户上传文件信息的数量')
     retry_temperature: float = Field(default=1, description='重试时的模型温度')
     file_content_length: int = Field(default=5000, description='拆分子任务时读取文件内容的字符数，超过后会截断')
+    max_file_content_num: int = Field(default=3, description='拆分子任务时读取的中间过程文件数量，按时间倒序')
 
 
 CallUserInputToolName = "call_user_input"

@@ -7,7 +7,7 @@ import AppAvator from "~/components/Avator"
 import { Card, CardContent } from "~/components/ui/Card"
 import { useLocalize } from "~/hooks"
 
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip2"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/Tooltip2"
 
 interface Agent {
     id: string

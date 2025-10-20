@@ -3,6 +3,10 @@ import '../../markdown.css';
 import Markdown from '../Chat/Messages/Content/Markdown';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui";
 import { useLocalize } from "~/hooks";
+import { Input, Button, Label } from '~/components';
+import FileIcon from "../ui/icon/File"
+
+
 
 interface FilePreviewProps {
     // 原有方式：通过 fileId 查找文件
@@ -12,7 +16,7 @@ interface FilePreviewProps {
     currentDisplayFile?: any
 }
 
-export default function FilePreview({ files, fileId, currentDisplayFile }: FilePreviewProps) {
+export default function FilePreview({ files, fileId, currentDisplayFile, onDownloadFile }: FilePreviewProps) {
     const localize = useLocalize();
     // 获取当前文件信息
     const currentFile = useMemo(() => {
@@ -35,6 +39,7 @@ export default function FilePreview({ files, fileId, currentDisplayFile }: FileP
     }
 
     const render = () => {
+        console.log(currentFile, 999);
         if (!currentFile && !currentFile?.file_url) {
             return <div className="flex justify-center items-center h-full text-gray-400">{localize('com_sop_preview_failed')}</div>
         }
@@ -44,10 +49,27 @@ export default function FilePreview({ files, fileId, currentDisplayFile }: FileP
 
         // 对于直接文件模式，不需要 URL
         const url = `${location.origin}${file_url}`
-
+        const handleClick = (e, url) => {
+            e.stopPropagation();
+            onDownloadFile({
+                file_name: currentFile.file_name,
+                file_url: url
+            })
+        }
         switch (type) {
+            case 'xls':
+            case 'xlsx':
             case 'doc':
             case 'docx':
+                return <div className="flex flex-col items-center justify-center h-full">
+                    <FileIcon
+                        type={type}
+                        className="w-20 h-20"
+                    />
+                    <div className="text-lg font-bold mt-2">{file_name}</div>
+                    <div className="text-sm text-gray-500 m-4">{localize('com_preview_type_unsupported')}</div>
+                    <Button variant="outline" onClick={(e) => handleClick(e, file_url)}>{localize('com_ui_download')}</Button>
+                </div>
             case 'md':
                 return <TxtFileViewer
                     markdown
@@ -67,6 +89,14 @@ export default function FilePreview({ files, fileId, currentDisplayFile }: FileP
                     html
                     filePath={url}
                 />
+            case 'svg':
+                return (
+                    <SvgViewer
+                        fileUrl={file_url}
+                        fileName={file_name}
+                        onDownload={(url) => handleClick(null, url)}
+                    />
+                );
             case 'png':
             case 'jpg':
             case 'jpeg':
@@ -91,7 +121,98 @@ interface TxtFileViewerProps {
     filePath?: string
     directContent?: string // 新增：直接传入的内容
 }
+const SvgViewer = ({ fileUrl, fileName, onDownload }: SvgViewerProps) => {
+    const [svgContent, setSvgContent] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const localize = useLocalize();
 
+    // 构建完整的后端URL
+    const fullUrl = `${__APP_ENV__.BASE_URL}${fileUrl}`;
+
+    useEffect(() => {
+        // 用于清理请求的AbortController
+        const abortController = new AbortController();
+
+        const fetchSvgContent = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+
+                const response = await fetch(fullUrl, {
+                    signal: abortController.signal,
+                    headers: {
+                        'Accept': 'image/svg+xml' // 明确请求SVG类型
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status} - ${response.statusText}`);
+                }
+
+                // 直接获取SVG文本内容
+                const content = await response.text();
+                
+                setSvgContent(content);
+            } catch (err) {
+                if (!abortController.signal.aborted) { // 排除手动取消的情况
+                    setError(err instanceof Error ? err.message : '加载SVG失败');
+                    console.error('SVG加载错误:', err);
+                }
+            } finally {
+                if (!abortController.signal.aborted) {
+                    setLoading(false);
+                }
+            }
+        };
+
+        fetchSvgContent();
+
+        // 组件卸载时取消请求
+        return () => abortController.abort();
+    }, [fullUrl]);
+
+    if (loading) {
+        return (
+            <div className="flex justify-center items-center h-full">
+                <img
+                    className="size-8 animate-spin"
+                    src={`${__APP_ENV__.BASE_URL}/assets/load.webp`}
+                    alt="加载中"
+                />
+                <span className="ml-2 text-sm text-gray-500">加载SVG文件...</span>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full p-6">
+                <FileIcon type="svg" className="w-16 h-16 mb-4 text-gray-400" />
+                <div className="text-red-500 text-sm mb-4">
+                    {localize('com_sop_file_load_error')}: {error}
+                </div>
+                <Button
+                    variant="outline"
+                    onClick={() => onDownload(fullUrl)}
+                >
+                    {localize('com_ui_download')} {fileName}
+                </Button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="relative h-full flex justify-center items-center p-4 overflow-hidden">
+            {/* 直接渲染SVG内容，绕过标签限制 */}
+            <div
+                className="max-w-full max-h-[calc(100vh-200px)]"
+                dangerouslySetInnerHTML={{ __html: svgContent }}
+                onClick={(e) => e.stopPropagation()}
+            />
+        </div>
+    );
+};
 const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath }: TxtFileViewerProps) => {
     const [content, setContent] = useState('');
     const [loading, setLoading] = useState(true);

@@ -53,11 +53,12 @@ export function startLinsight(versionId: string): Promise<any> {
 }
 
 // 用户任务中输入事件
-export function userInputLinsightEvent(session_version_id: string, linsight_execute_task_id: string, input_content: string): Promise<any> {
+export function userInputLinsightEvent(session_version_id: string, linsight_execute_task_id: string, input_content: string, files: any[]): Promise<any> {
   return request.post('/api/v1/linsight/workbench/user-input', {
     session_version_id,
     linsight_execute_task_id,
-    input_content
+    input_content,
+    files
   });
 }
 
@@ -164,4 +165,14 @@ export function getCaseDetail(sop_id: string): Promise<any> {
       sop_id
     }
   })
+}
+
+export function getMdDownload(file_info: { file_url: string; file_name: string }, to_type: 'pdf' | 'docx'): Promise<any> {
+  return request.post('/api/v1/linsight/workbench/download-md-to-pdf-or-docx', {
+    file_info: file_info,
+    to_type: to_type
+  }
+    , {
+      responseType: 'blob' // 确保这里设置了 responseType
+    })
 }

@@ -12,10 +12,7 @@ const SegmentSelector = ({ lingsi, onChange }) => {
                         ? 'bg-blue-50 shadow-sm'
                         : '0'
                         }`}
-                    onClick={() => {
-                        onChange(false);
-                        window.isLinsight = false
-                    }}
+                    onClick={() => onChange(false)}
                 >
                     {localize('com_segment_daily_mode')}
                 </button>
@@ -24,10 +21,7 @@ const SegmentSelector = ({ lingsi, onChange }) => {
                         ? 'bg-blue-50 shadow-sm'
                         : ''
                         }`}
-                    onClick={() => {
-                        onChange(true);
-                        window.isLinsight = true
-                    }}
+                    onClick={() => onChange(true)}
                 >
                     <div className='flex items-center justify-center relative'>
                         {lingsi && <img src={__APP_ENV__.BASE_URL + "/assets/lingsi.svg"} className='size-4 block' alt="" />}

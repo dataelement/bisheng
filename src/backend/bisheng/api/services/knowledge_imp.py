@@ -23,8 +23,6 @@ from sqlmodel import select
 
 from bisheng.api.errcode.knowledge import KnowledgeSimilarError, KnowledgeFileDeleteError
 from bisheng.api.services.etl4lm_loader import Etl4lmLoader
-from bisheng.api.services.handler.impl.xls_split_handle import XlsSplitHandle
-from bisheng.api.services.handler.impl.xlsx_split_handle import XlsxSplitHandle
 from bisheng.api.services.libreoffice_converter import (
     convert_doc_to_docx,
     convert_ppt_to_pdf,
@@ -68,11 +66,6 @@ filetype_load_map = {
     "docx": UnstructuredWordDocumentLoader,
     "pptx": UnstructuredPowerPointLoader,
 }
-
-split_handles = [
-    XlsxSplitHandle(),
-    XlsSplitHandle(),
-]
 
 
 class KnowledgeUtils:

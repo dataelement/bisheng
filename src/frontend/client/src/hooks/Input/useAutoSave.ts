@@ -11,19 +11,21 @@ export const useAutoSave = ({
   conversationId,
   textAreaRef,
   files,
-  setFiles,
+  dailyFiles,
+  setDailyFiles,
 }: {
   conversationId?: string | null;
   textAreaRef?: React.RefObject<HTMLTextAreaElement>;
   files: Map<string, ExtendedFile>;
-  setFiles: SetterOrUpdater<Map<string, ExtendedFile>>;
+  dailyFiles: Map<string, ExtendedFile>;
+  setDailyFiles: SetterOrUpdater<Map<string, ExtendedFile>>;
 }) => {
   // setting for auto-save
   const { setValue } = useChatFormContext();
   const saveDrafts = useRecoilValue<boolean>(store.saveDrafts);
 
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
-  const fileIds = useMemo(() => Array.from(files.keys()), [files]);
+  const fileIds = useMemo(() => Array.from(dailyFiles.keys()), [dailyFiles]);
   const { data: fileList } = useGetFiles<TFile[]>();
 
   const encodeBase64 = (plainText: string): string => {
@@ -55,7 +57,7 @@ export const useAutoSave = ({
       ) as string[];
 
       if (filesDraft.length === 0) {
-        setFiles(new Map());
+        setDailyFiles(new Map());
         return;
       }
 
@@ -72,7 +74,7 @@ export const useAutoSave = ({
           };
 
         if (fileToRecover) {
-          setFiles((currentFiles) => {
+          setDailyFiles((currentFiles) => {
             const updatedFiles = new Map(currentFiles);
             updatedFiles.set(fileIdToRecover, {
               ...fileToRecover,
@@ -85,7 +87,7 @@ export const useAutoSave = ({
         }
       });
     },
-    [fileList, setFiles],
+    [fileList, setDailyFiles],
   );
 
   const restoreText = useCallback(
@@ -160,7 +162,7 @@ export const useAutoSave = ({
     }
 
     // clear attachment files when switching conversation
-    setFiles(new Map());
+    setDailyFiles(new Map());
 
     try {
       if (currentConversationId != null && currentConversationId) {
@@ -181,7 +183,7 @@ export const useAutoSave = ({
     restoreText,
     saveDrafts,
     saveText,
-    setFiles,
+    setDailyFiles,
   ]);
 
   useEffect(() => {
@@ -207,7 +209,7 @@ export const useAutoSave = ({
         JSON.stringify(fileIds),
       );
     }
-  }, [files, conversationId, saveDrafts, currentConversationId, fileIds]);
+  }, [dailyFiles, conversationId, saveDrafts, currentConversationId, fileIds]);
 
   const clearDraft = useCallback(() => {
     if (conversationId != null && conversationId) {

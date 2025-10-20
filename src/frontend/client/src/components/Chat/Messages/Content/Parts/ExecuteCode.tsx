@@ -17,6 +17,12 @@ interface ParsedArgs {
 
 export function useParseArgs(args: string): ParsedArgs {
   return useMemo(() => {
+    if (!args) {
+      return {
+        lang: '',
+        code: '',
+      };
+    }
     const langMatch = args.match(/"lang"\s*:\s*"(\w+)"/);
     const codeMatch = args.match(/"code"\s*:\s*"(.+?)(?="\s*,\s*"args"|$)/s);
 

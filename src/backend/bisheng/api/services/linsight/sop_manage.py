@@ -122,6 +122,10 @@ class SOPManageService:
     async def update_sop_record_score(session_version_id: str, score: int) -> None:
         await LinsightSOPDao.update_sop_record_score(session_version_id, score)
 
+    @staticmethod
+    async def update_sop_record_feedback(session_version_id: str, feedback: str) -> None:
+        await LinsightSOPDao.update_sop_record_feedback(session_version_id, feedback)
+
     @classmethod
     async def sync_sop_record(cls, record_ids: list[int], override: bool = False, save_new: bool = False) \
             -> list[str] | None:
