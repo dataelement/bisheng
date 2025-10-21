@@ -14,9 +14,6 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlmodel import select
 
 from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
-from bisheng.api.errcode.http_error import UnAuthorizedError
-from bisheng.api.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
-                                      UserValidateError, UserPasswordError)
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.captcha import verify_captcha
 from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_user_role, get_login_user,
@@ -24,6 +21,9 @@ from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_us
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import resp_200, CreateUserReq
 from bisheng.cache.redis import redis_client
+from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
+                                         UserValidateError, UserPasswordError)
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.mark_task import MarkTaskDao

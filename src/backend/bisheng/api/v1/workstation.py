@@ -12,10 +12,6 @@ from langchain_core.runnables import RunnableConfig
 from loguru import logger
 from sse_starlette import EventSourceResponse
 
-from bisheng.api.errcode import BaseErrorCode
-from bisheng.api.errcode.http_error import ServerError
-from bisheng.api.errcode.workstation import WebSearchToolNotFoundError, ConversationNotFoundError, \
-    AgentAlreadyExistsError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.knowledge import KnowledgeService
@@ -29,6 +25,10 @@ from bisheng.api.v1.schemas import FrequentlyUsedChat
 from bisheng.api.v1.schemas import WorkstationConfig, resp_200, WSPrompt, ExcelRule, UnifiedResponseModel
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download, save_download_file, save_uploaded_file
+from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.http_error import ServerError
+from bisheng.common.errcode.workstation import WebSearchToolNotFoundError, ConversationNotFoundError, \
+    AgentAlreadyExistsError
 from bisheng.core.app_context import app_ctx
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao

@@ -9,19 +9,19 @@ from loguru import logger
 from openai import BaseModel
 from pydantic import field_validator
 
-from bisheng.api.errcode.server import EmbeddingModelStatusError
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge import mixed_retrieval_recall
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig
+from bisheng.common.errcode.server import EmbeddingModelStatusError
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession
-from bisheng.llm import LLMService
+from bisheng.llm.domain.services import LLMService
 from bisheng.utils.embedding import create_knowledge_keyword_store, decide_embeddings
 from bisheng.utils.embedding import create_knowledge_vector_store
 

@@ -6,9 +6,9 @@ from typing import List, Dict, Any, Optional
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from bisheng.api.errcode.http_error import ServerError
 from bisheng.api.v1.schema.linsight_schema import UserInputEventSchema
 from bisheng.cache.redis import redis_client
+from bisheng.common.errcode.http_error import ServerError
 from bisheng.database.models import LinsightExecuteTask
 from bisheng.database.models.linsight_execute_task import ExecuteTaskStatusEnum, LinsightExecuteTaskDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersion, LinsightSessionVersionDao

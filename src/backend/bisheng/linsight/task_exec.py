@@ -19,10 +19,10 @@ from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao
     ExecuteTaskTypeEnum
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
     LinsightSessionVersion
-from bisheng.interface.llms.custom import BishengLLM
 from bisheng.linsight import utils as linsight_execute_utils
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
-from bisheng.llm import LLMService
+from bisheng.llm.domain.llm import BishengLLM
+from bisheng.llm.domain.services import LLMService
 from bisheng.settings import settings
 from bisheng.utils.minio_client import minio_client
 from bisheng_langchain.linsight.agent import LinsightAgent

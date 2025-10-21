@@ -5,11 +5,11 @@ from typing import Any, List, Optional
 
 from loguru import logger
 
-from bisheng.api.errcode.http_error import UnAuthorizedError
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import resp_200
+from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.database.models.assistant import AssistantDao, Assistant
 from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
 from bisheng.database.models.flow import FlowDao, Flow, FlowType

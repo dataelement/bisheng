@@ -9,10 +9,6 @@ from typing import Any, Dict, List
 from fastapi import Request, WebSocket, WebSocketDisconnect, status
 from loguru import logger
 
-from bisheng.api.errcode.base import BaseErrorCode
-from bisheng.api.errcode.chat import (DocumentParseError, InputDataParseError,
-                                      LLMExecutionError, SkillDeletedError,
-                                      SkillNotOnlineError)
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import build_flow_no_yield, get_request_ip
@@ -24,6 +20,10 @@ from bisheng.chat.client import ChatClient
 from bisheng.chat.clients.workflow_client import WorkflowClient
 from bisheng.chat.types import IgnoreException, WorkType
 from bisheng.chat.utils import process_node_data
+from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.common.errcode.chat import (DocumentParseError, InputDataParseError,
+                                         LLMExecutionError, SkillDeletedError,
+                                         SkillNotOnlineError)
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.flow import Flow, FlowType, FlowDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao

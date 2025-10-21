@@ -2,7 +2,7 @@ import httpx
 from pydantic import Field
 from typing_extensions import Self
 
-from bisheng.api.errcode.server import NoTtsModelConfigError, TtsModelConfigDeletedError, \
+from bisheng.common.errcode.server import NoTtsModelConfigError, TtsModelConfigDeletedError, \
     TtsModelTypeError, TtsProviderDeletedError, TtsModelOfflineError
 from bisheng.core.ai import BaseTTSClient, OpenAITTSClient, \
     AliyunTTSClient, AzureOpenAITTSClient

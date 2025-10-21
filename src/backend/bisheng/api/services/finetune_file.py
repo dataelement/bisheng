@@ -1,15 +1,16 @@
 import os.path
 from typing import Any, List
 
-from bisheng.api.errcode.finetune import TrainFileNotExistError
+from fastapi import UploadFile
+from pydantic import BaseModel
+
 from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.common.errcode.finetune import TrainFileNotExistError
 from bisheng.database.models.preset_train import PresetTrain, PresetTrainDao
 from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
-from fastapi import UploadFile
-from pydantic import BaseModel
 
 
 class FinetuneFileService(BaseModel):

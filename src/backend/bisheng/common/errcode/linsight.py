@@ -1,4 +1,4 @@
-from bisheng.api.errcode.base import BaseErrorCode
+from bisheng.common.errcode.base import BaseErrorCode
 
 
 class SopFileError(BaseErrorCode):

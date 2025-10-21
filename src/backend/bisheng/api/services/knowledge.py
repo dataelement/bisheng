@@ -10,12 +10,6 @@ from fastapi import BackgroundTasks, Request
 from loguru import logger
 from pymilvus import Collection
 
-from bisheng.api.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
-from bisheng.api.errcode.knowledge import (
-    KnowledgeChunkError,
-    KnowledgeExistError,
-    KnowledgeNoEmbeddingError,
-)
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.knowledge_imp import (
     KnowledgeUtils,
@@ -37,6 +31,12 @@ from bisheng.api.v1.schemas import (
 )
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download
+from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeChunkError,
+    KnowledgeExistError,
+    KnowledgeNoEmbeddingError,
+)
 from bisheng.database.models.group_resource import (
     GroupResource,
     GroupResourceDao,
@@ -60,8 +60,8 @@ from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.llm import LLMService
 from bisheng.llm.const import LLMModelType
+from bisheng.llm.domain.services import LLMService
 from bisheng.llm.models import LLMDao
 from bisheng.settings import settings
 from bisheng.utils import generate_uuid

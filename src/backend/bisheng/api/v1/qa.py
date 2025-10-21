@@ -2,12 +2,12 @@ import asyncio
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body
 from sqlmodel import select
 
-from bisheng.api.errcode.qa import BackendProcessingError
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.v1.schemas import resp_200
+from bisheng.common.errcode.qa import BackendProcessingError
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.knowledge_file import KnowledgeFileDao
 from bisheng.database.models.recall_chunk import RecallChunk

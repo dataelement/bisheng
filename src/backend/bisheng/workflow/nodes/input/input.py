@@ -11,7 +11,7 @@ from bisheng.api.utils import md5_hash
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.cache.utils import file_download
 from bisheng.chat.types import IgnoreException
-from bisheng.llm import LLMService
+from bisheng.llm.domain.services import LLMService
 from bisheng.workflow.nodes.base import BaseNode
 
 

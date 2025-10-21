@@ -21,7 +21,6 @@ from pymilvus import Collection
 from sqlalchemy import func, or_
 from sqlmodel import select
 
-from bisheng.api.errcode.knowledge import KnowledgeSimilarError, KnowledgeFileDeleteError
 from bisheng.api.services.etl4lm_loader import Etl4lmLoader
 from bisheng.api.services.libreoffice_converter import (
     convert_doc_to_docx,
@@ -32,10 +31,10 @@ from bisheng.api.services.patch_130 import (
     convert_file_to_md,
     combine_multiple_md_files_to_raw_texts,
 )
-from bisheng.api.utils import md5_hash
 from bisheng.api.v1.schemas import ExcelRule
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download
+from bisheng.common.errcode.knowledge import KnowledgeSimilarError, KnowledgeFileDeleteError
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.database.models.knowledge_file import (
@@ -51,8 +50,9 @@ from bisheng.database.models.knowledge_file import (
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
-from bisheng.llm import LLMService
+from bisheng.llm.domain.services import LLMService
 from bisheng.settings import settings
+from bisheng.utils import md5_hash
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import minio_client
 from bisheng_langchain.rag.extract_info import extract_title

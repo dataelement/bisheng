@@ -5,10 +5,6 @@ from typing import Any, List, Optional
 from fastapi import Request
 from loguru import logger
 
-from bisheng.api.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
-                                           AssistantNotEditError, AssistantNotExistsError, ToolTypeRepeatError,
-                                           ToolTypeIsPresetError)
-from bisheng.api.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
@@ -19,6 +15,10 @@ from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
                                     StreamData, UnifiedResponseModel, resp_200, resp_500)
 from bisheng.cache import InMemoryCache
+from bisheng.common.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
+                                              AssistantNotEditError, AssistantNotExistsError, ToolTypeRepeatError,
+                                              ToolTypeIsPresetError)
+from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.assistant import (Assistant, AssistantDao, AssistantLinkDao,
                                                AssistantStatus)
@@ -32,7 +32,7 @@ from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
-from bisheng.llm import LLMService
+from bisheng.llm.domain.services import LLMService
 
 
 class AssistantService(BaseService, AssistantUtils):

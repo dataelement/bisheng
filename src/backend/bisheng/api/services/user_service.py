@@ -7,11 +7,11 @@ import rsa
 from fastapi import Depends, HTTPException, Request
 
 from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
-from bisheng.api.errcode.http_error import UnAuthorizedError
-from bisheng.api.errcode.user import (UserLoginOfflineError, UserNameAlreadyExistError,
-                                      UserNeedGroupAndRoleError)
 from bisheng.api.v1.schemas import CreateUserReq
 from bisheng.cache.redis import redis_client
+from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.errcode.user import (UserLoginOfflineError, UserNameAlreadyExistError,
+                                         UserNeedGroupAndRoleError)
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.assistant import Assistant, AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowRead

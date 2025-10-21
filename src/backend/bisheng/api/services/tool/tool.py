@@ -7,12 +7,12 @@ from langchain_core.tools import BaseTool
 from loguru import logger
 from pydantic import BaseModel, ConfigDict
 
-from bisheng.api.errcode.assistant import ToolTypeNotExistsError, ToolTypeRepeatError
-from bisheng.api.errcode.http_error import ServerError, UnAuthorizedError
 from bisheng.api.services.openapi import OpenApiSchema
 from bisheng.api.services.tool.langchain_tool.search_knowledge import SearchKnowledgeBase
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_url_content
+from bisheng.common.errcode.assistant import ToolTypeNotExistsError, ToolTypeRepeatError
+from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.gpts_tools import GptsToolsDao, GptsTools, GptsToolsType, GptsToolsTypeRead
 from bisheng.database.models.role_access import AccessType

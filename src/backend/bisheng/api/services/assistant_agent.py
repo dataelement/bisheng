@@ -15,18 +15,18 @@ from langchain_core.vectorstores import VectorStoreRetriever
 from langgraph.prebuilt import create_react_agent
 from loguru import logger
 
-from bisheng.api.errcode.assistant import AssistantModelEmptyError, AssistantModelNotConfigError
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.knowledge_imp import decide_vectorstores
 from bisheng.api.services.openapi import OpenApiSchema
 from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import InputRequest
+from bisheng.common.errcode.assistant import AssistantModelEmptyError, AssistantModelNotConfigError
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
 from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
-from bisheng.llm import LLMService
+from bisheng.llm.domain.services import LLMService
 from bisheng.mcp_manage.langchain.tool import McpTool
 from bisheng.mcp_manage.manager import ClientManager
 from bisheng.settings import settings

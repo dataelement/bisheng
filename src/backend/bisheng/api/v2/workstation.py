@@ -6,7 +6,7 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, resp_200, ExcelRule
 from bisheng.cache.utils import save_download_file
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
-from bisheng.llm import LLMService
+from bisheng.llm.domain.services import LLMService
 
 router = APIRouter(prefix='/workstation', tags=['OpenAPI', 'Chat'])
 

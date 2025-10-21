@@ -4,12 +4,12 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlmodel import select
 
 from bisheng.api.services.user_service import get_login_user
-from bisheng.api.errcode.flow import FlowTemplateNameError
 from bisheng.api.utils import remove_api_keys
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.api.v1.schemas import resp_200
+from bisheng.common.errcode.flow import FlowTemplateNameError
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.flow import Flow
-from bisheng.database.models.template import Template, TemplateCreate, TemplateRead, TemplateUpdate
+from bisheng.database.models.template import Template, TemplateCreate, TemplateUpdate
 from bisheng.settings import settings
 
 # build router
@@ -51,7 +51,7 @@ def read_template(page_size: Optional[int] = None,
                   id: Optional[int] = None,
                   name: Optional[str] = None):
     """Read all flows."""
-    sql = select(Template.id, Template.name, Template.description, Template.update_time,Template.order_num)
+    sql = select(Template.id, Template.name, Template.description, Template.update_time, Template.order_num)
     if id:
         with get_sync_db_session() as session:
             template = session.get(Template, id)

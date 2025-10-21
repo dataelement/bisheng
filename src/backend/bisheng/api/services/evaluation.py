@@ -29,7 +29,7 @@ from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersion
 from bisheng.database.models.user import UserDao
 from bisheng.graph.graph.base import Graph
-from bisheng.llm import LLMService
+from bisheng.llm.domain.services import LLMService
 from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient

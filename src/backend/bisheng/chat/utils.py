@@ -14,7 +14,7 @@ from bisheng.api.v1.schemas import ChatMessage
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.interface.utils import try_setting_streaming_options
-from bisheng.llm import LLMService
+from bisheng.llm.domain.services import LLMService
 from bisheng.processing.base import get_result_and_steps
 from bisheng.utils.logger import logger
 

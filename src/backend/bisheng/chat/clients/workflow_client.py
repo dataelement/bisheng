@@ -5,13 +5,13 @@ from typing import Dict, Optional
 from fastapi import Request, WebSocket
 from loguru import logger
 
-from bisheng.api.errcode.chat import SkillNotOnlineError
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.chat.clients.base import BaseClient
 from bisheng.chat.types import WorkType
+from bisheng.common.errcode.chat import SkillNotOnlineError
 from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.message import ChatMessageDao, ChatMessage
 from bisheng.utils import generate_uuid

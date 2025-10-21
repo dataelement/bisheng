@@ -4,7 +4,7 @@ import httpx
 from pydantic import Field
 from typing_extensions import Self
 
-from bisheng.api.errcode.server import NoAsrModelConfigError, AsrModelConfigDeletedError, AsrModelTypeError, \
+from bisheng.common.errcode.server import NoAsrModelConfigError, AsrModelConfigDeletedError, AsrModelTypeError, \
     AsrProviderDeletedError, \
     AsrModelOfflineError
 from bisheng.core.ai import BaseASRClient, OpenAIASRClient, AliyunASRClient, AzureOpenAIASRClient

@@ -2,14 +2,11 @@ import json
 from typing import List, Optional
 from uuid import UUID, uuid4
 
-from fastapi import (APIRouter, Body, HTTPException, Query, Request, WebSocket, WebSocketException,
-                     status)
+from fastapi import (APIRouter, Body, HTTPException, Query, Request, WebSocket, WebSocketException)
 from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
 from sqlmodel import select
 
-from bisheng.api.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
-from bisheng.api.errcode.chat import ChatServiceError, SkillDeletedError, SkillNotBuildError, SkillNotOnlineError
 from bisheng.api.services import chat_imp
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
@@ -26,6 +23,8 @@ from bisheng.api.v1.schemas import (AddChatMessages, BuildStatus, BuiltResponse,
                                     UnifiedResponseModel, resp_200)
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
+from bisheng.common.errcode.chat import ChatServiceError, SkillDeletedError, SkillNotBuildError, SkillNotOnlineError
+from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType

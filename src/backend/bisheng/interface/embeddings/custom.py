@@ -14,10 +14,8 @@ class OpenAIProxyEmbedding(Embeddings):
 
     def __init__(self) -> None:
         super().__init__()
-        from bisheng.llm import LLMService
-
-        knowledge_llm = LLMService.get_knowledge_llm()
-        self.embeddings = BishengEmbedding(model_id=knowledge_llm.embedding_model_id)
+        from bisheng.llm.domain.services import LLMService
+        self.embeddings = LLMService.get_knowledge_default_embedding()
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """Embed search docs."""

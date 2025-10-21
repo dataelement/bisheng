@@ -12,7 +12,7 @@ from loguru import logger
 from pydantic import Field
 from typing_extensions import Self
 
-from bisheng.api.errcode.server import NoLlmModelConfigError, LlmModelConfigDeletedError, LlmProviderDeletedError, \
+from bisheng.common.errcode.server import NoLlmModelConfigError, LlmModelConfigDeletedError, LlmProviderDeletedError, \
     LlmModelTypeError, LlmModelOfflineError, InitLlmError
 from bisheng.core.ai import CustomChatOllamaWithReasoning, ChatOpenAI, ChatOpenAICompatible, \
     AzureChatOpenAI, ChatTongyi, QianfanChatEndpoint, ChatZhipuAI, MiniMaxChat, ChatAnthropic, ChatDeepSeek, \

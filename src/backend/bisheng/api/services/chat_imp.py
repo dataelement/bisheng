@@ -5,11 +5,11 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from bisheng.core.database import get_sync_db_session
 from pydantic import BaseModel
 from websockets import connect
 
-from bisheng.api.errcode.http_error import ServerError
+from bisheng.common.errcode.http_error import ServerError
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.message import ChatMessage
 
 # 维护一个连接池

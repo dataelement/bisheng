@@ -3,17 +3,17 @@ import json
 from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
-from fastapi_jwt_auth import AuthJWT
 
-from bisheng.api.errcode.http_error import UnAuthorizedError
 from bisheng.api.services.role_group_service import RoleGroupService
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.utils import check_permissions
-from bisheng.api.v1.schemas import  resp_200
+from bisheng.api.v1.schemas import resp_200
+from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.database.models.group import Group, GroupCreate
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role import RoleDao
-from bisheng.database.models.group import Group, GroupCreate
 from bisheng.database.models.user_group import UserGroupDao
+from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(prefix='/group', tags=['User'], dependencies=[Depends(get_login_user)])
 
