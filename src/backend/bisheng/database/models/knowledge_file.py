@@ -9,6 +9,7 @@ from sqlalchemy import JSON, Column, DateTime, String, or_, text, Text
 from sqlmodel import Field, delete, func, select, update, col
 
 from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.database.base import async_get_count, get_count
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -420,3 +421,35 @@ class QAKnoweldgeDao(QAKnowledgeBase):
                 QAKnowledge.create_time.between(create_start, create_end))
 
             return session.exec(sql).all()
+
+    # 根据qa_id获取总数
+    @classmethod
+    async def async_count_by_id(cls, qa_id: int) -> int:
+        async with get_async_db_session() as session:
+            statement = select(func.count(QAKnowledge.id)).where(QAKnowledge.knowledge_id == qa_id)
+            return await async_get_count(session, statement)
+
+    @classmethod
+    def count_by_id(cls, qa_id: int) -> int:
+        with get_sync_db_session() as session:
+            statement = select(func.count(QAKnowledge.id)).where(QAKnowledge.knowledge_id == qa_id)
+            return get_count(session, statement)
+
+    @classmethod
+    def batch_update_status_by_ids(cls, qa_ids: List[int],
+                                   status: QAStatus) -> None:
+        """
+        根据QA知识点ID批量更新状态
+        :param qa_ids: QA知识点ID列表
+        :param status: 状态
+        :return:
+        """
+
+        statement = (
+            update(QAKnowledge).where(col(QAKnowledge.id).in_(qa_ids))
+        )
+
+        statement = statement.values(status=status.value)
+        with get_sync_db_session() as session:
+            session.exec(statement)
+            session.commit()

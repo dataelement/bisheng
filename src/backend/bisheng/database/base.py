@@ -1,12 +1,12 @@
 import uuid
 from sqlalchemy import func
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlmodel.sql.expression import SelectOfScalar
+from sqlmodel.sql.expression import SelectBase
 from sqlmodel import Session
 
 
 
-def get_count(session: Session, q: SelectOfScalar) -> int:
+def get_count(session: Session, q: SelectBase) -> int:
     """
     获取查询结果的数量
     :param session:
@@ -20,7 +20,7 @@ def get_count(session: Session, q: SelectOfScalar) -> int:
     return 0
 
 
-async def async_get_count(session: AsyncSession, q: SelectOfScalar) -> int:
+async def async_get_count(session: AsyncSession, q: SelectBase) -> int:
     """
     获取异步查询结果的数量
     :param session:

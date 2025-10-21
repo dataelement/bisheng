@@ -10,7 +10,8 @@ from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPExcept
 from fastapi.encoders import jsonable_encoder
 
 from bisheng.api.errcode.http_error import UnAuthorizedError
-from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError
+from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError, \
+    KnowledgeNotQAError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import add_qa
@@ -147,6 +148,36 @@ async def copy_knowledge(*,
     if knowledge.state != KnowledgeState.PUBLISHED.value or knowledge_count > 0:
         return KnowledgeCPError.return_resp()
     knowledge = await KnowledgeService.copy_knowledge(request, background_tasks, login_user, knowledge)
+    return resp_200(knowledge)
+
+
+@router.post("/qa/copy")
+async def copy_qa_knowledge(*,
+                            request: Request,
+                            login_user: UserPayload = Depends(get_login_user),
+                            knowledge_id: int = Body(..., embed=True)):
+    """
+    复制QA知识库.
+    :param request:
+    :param login_user:
+    :param knowledge_id:
+    :return:
+    """
+
+    qa_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+    if not login_user.is_admin and qa_knowledge.user_id != login_user.user_id:
+        return UnAuthorizedError.return_resp()
+
+    if qa_knowledge.type != KnowledgeTypeEnum.QA.value:
+        return KnowledgeNotQAError.return_resp()
+
+    qa_knowledge_count = await QAKnoweldgeDao.async_count_by_id(qa_id=qa_knowledge.id)
+
+    if qa_knowledge.state != KnowledgeState.PUBLISHED.value or qa_knowledge_count == 0:
+        return KnowledgeCPError.return_resp()
+
+    knowledge = await KnowledgeService.copy_qa_knowledge(request, login_user, qa_knowledge)
+
     return resp_200(knowledge)
 
 

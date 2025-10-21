@@ -1198,6 +1198,40 @@ class KnowledgeService(KnowledgeUtils):
         return target_knowlege
 
     @classmethod
+    async def copy_qa_knowledge(
+            cls,
+            request,
+            login_user: UserPayload,
+            qa_knowledge: Knowledge,
+    ) -> Any:
+        await KnowledgeDao.async_update_state(qa_knowledge.id, KnowledgeState.COPYING,
+                                              update_time=qa_knowledge.update_time)
+        qa_knowldge_dict = qa_knowledge.model_dump()
+        qa_knowldge_dict.pop("id")
+        qa_knowldge_dict.pop("create_time")
+        qa_knowldge_dict.pop("update_time", None)
+        qa_knowldge_dict["user_id"] = login_user.user_id
+        qa_knowldge_dict["index_name"] = f"col_{int(time.time())}_{generate_uuid()[:8]}"
+        qa_knowldge_dict["name"] = f"{qa_knowledge.name} 副本"[:30]
+        qa_knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
+        qa_knowledge_new = Knowledge(**qa_knowldge_dict)
+        target_qa_knowlege = await KnowledgeDao.async_insert_one(qa_knowledge_new)
+
+        celery_params = {
+            "source_knowledge_id": qa_knowledge.id,
+            "target_id": target_qa_knowlege.id,
+            "login_user_id": login_user.user_id,
+        }
+
+        cls.create_knowledge_hook(request, login_user, target_qa_knowlege)
+
+        from bisheng.worker.knowledge.qa import copy_qa_knowledge_celery
+        copy_qa_knowledge_celery.delay(source_knowledge_id=qa_knowledge.id, target_knowledge_id=target_qa_knowlege.id,
+                                       login_user_id=login_user.user_id)
+
+        return target_qa_knowlege
+
+    @classmethod
     def judge_qa_knowledge_write(
             cls, login_user: UserPayload, qa_knowledge_id: int
     ) -> Knowledge:
