@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { Mic, Square, Loader } from 'lucide-react';
+import { Mic, Square, Loader, LoaderCircle, Ellipsis } from 'lucide-react';
 import i18next from "i18next";
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { speechToText } from '@/controllers/API/workbench';
+import VoiceRecordingIcon from '../bs-ui/voice';
 
 // --- 核心音频处理逻辑（保留优化，不改动）---
 const encodeWAV = (audioBuffer) => {
@@ -222,10 +223,10 @@ const SpeechToTextComponent = ({ onChange }) => {
       {/* 还原原始按钮位置：right-12 top-5 绝对定位 */}
       <div className="absolute right-12 top-5 cursor-pointer">
         {isProcessing && (
-          <Loader size={18} />
+          <LoaderCircle className="animate-spin" />
         )}
         {!isProcessing && isRecording && (
-          <Square size={18} onClick={stopRecording}/>
+          <VoiceRecordingIcon size={18} onClick={stopRecording}/>
         )}
         {!isProcessing && !isRecording && (
           <Mic size={18} onClick={startRecording}/>

@@ -16,6 +16,7 @@ import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
 const GuideQuestionsAny = GuideQuestions as any;
 import SpeechToTextComponent from "@/components/voiceFunction/speechTotext";
+import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 
 export const FileTypes = {
     ALL: ['.PNG', '.JPEG', '.JPG', '.BMP', '.PDF', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.DOCX', '.PPT', '.PPTX'],
@@ -33,7 +34,8 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     const inputNodeIdRef = useRef('') // 当前输入框节点id
     const messageIdRef = useRef('') // 当前输入框节点messageId
     const [accepts, setAccepts] = useState('*') // 接受文件类型
-
+    const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
+    
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
 
     const __store: any = useMessageStore() as any
@@ -512,7 +514,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             </div>
             {/* 语音转文字 */}
             <div className={` ${!inputLock.locked && 'mr-4'}`}>
-            <SpeechToTextComponent onChange={handleSpeechRecognition} />
+                {linsightConfig?.asr_model?.id && <SpeechToTextComponent onChange={handleSpeechRecognition} />}
             </div>
           
             {/* 附件 */}

@@ -12,6 +12,7 @@ import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
 import { CirclePause } from "lucide-react";
 import SpeechToTextComponent from "@/components/voiceFunction/speechTotext";
+import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 
 export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend, onClickClear }) {
     const { toast } = useToast()
@@ -21,7 +22,9 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     const [formShow, setFormShow] = useState(false)
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
     const [inputLock, setInputLock] = useState({ locked: false, reason: '' })
+    const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
 
+    
     const { messages, hisMessages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, destory, setShowGuideQuestion } = useMessageStore()
     const currentChatIdRef = useRef(null)
     const inputRef = useRef(null)
@@ -296,7 +299,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
         <div className={`relative ${clear && 'pl-9'}`}>
             {/* 语音转文字 */}
-            <SpeechToTextComponent onChange={handleSpeechRecognition} />
+            {linsightConfig?.asr_model?.id && <SpeechToTextComponent onChange={handleSpeechRecognition} />}
             {/* form */}
             {
                 formShow && <div className="relative">
