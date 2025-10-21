@@ -18,7 +18,7 @@ from bisheng.core.ai import CustomChatOllamaWithReasoning, ChatOpenAI, ChatOpenA
     AzureChatOpenAI, ChatTongyi, QianfanChatEndpoint, ChatZhipuAI, MiniMaxChat, ChatAnthropic, ChatDeepSeek, \
     MoonshotChat
 from bisheng.llm.const import LLMModelType, LLMServerType
-from bisheng.llm.models import LLMServer, LLMModel, LLMDao
+from bisheng.llm.models import LLMServer, LLMModel
 from .base import BishengBase
 from ..utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_limit_check_async, \
     wrapper_bisheng_model_generator, wrapper_bisheng_model_generator_async
@@ -82,8 +82,10 @@ def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> d
     params['dashscope_api_key'] = server_config.get('openai_api_key', '')
     params['model_kwargs'] = {
         'enable_search': model_config.get('enable_web_search', False),
-        'incremental_output': True,  # 默认增量输出，tool call拼接流式内容call_id拼接重复的bug
     }
+    if params.get("streaming"):
+        params['model_kwargs']['incremental_output'] = True
+
     if params.get('temperature'):
         params['model_kwargs']['temperature'] = params.pop('temperature')
 
@@ -197,13 +199,8 @@ class BishengLLM(BishengBase, BaseChatModel):
 
     @classmethod
     async def get_bisheng_llm(cls, **kwargs) -> Self:
-        model_id = kwargs.get('model_id')
-        if not model_id:
-            raise NoLlmModelConfigError()
-        model_info = await LLMDao.aget_model_by_id(model_id)
-        server_info = None
-        if model_info:
-            server_info = await LLMDao.aget_server_by_id(model_info.server_id)
+        model_id: int | None = kwargs.pop('model_id', None)
+        model_info, server_info = await cls.get_model_server_info(model_id)
         instance = cls(
             model_id=model_id,
             model_info=model_info,
@@ -216,23 +213,21 @@ class BishengLLM(BishengBase, BaseChatModel):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.model_id = kwargs.get('model_id')
+        if not self.model_id:
+            raise NoLlmModelConfigError()
+
         if "model_info" in kwargs and "server_info" in kwargs:
             # 说明是从class method初始化的 不用再次查询数据库
             self._init_chat_model(model_info=kwargs.pop("model_info"), server_info=kwargs.pop("server_info"), **kwargs)
         else:
-            if not self.model_id:
-                raise NoLlmModelConfigError()
-            model_info = LLMDao.get_model_by_id(self.model_id)
-            server_info = None
-            if model_info:
-                server_info = LLMDao.get_server_by_id(model_info.server_id)
+            model_info, server_info = self.get_model_server_info_sync(self.model_id)
             self._init_chat_model(model_info, server_info, **kwargs)
 
     def _init_chat_model(self, model_info: LLMModel, server_info: LLMServer, **kwargs):
         ignore_online = kwargs.get('ignore_online', False)
         self.temperature = kwargs.get('temperature', None)
         self.cache = kwargs.get('cache', None)
-        self.streaming = kwargs.get('streaming', None) or kwargs.get('stream', None)
+        self.streaming = kwargs.get('streaming', None)
 
         if not model_info:
             raise LlmModelConfigDeletedError()
@@ -277,8 +272,16 @@ class BishengLLM(BishengBase, BaseChatModel):
         default_params: Dict[str, Any] = {
             'model': self.model_info.model_name,
         }
+
+        # 实例化时传参了优先级最高，其次用高级配置里的。否则默认为true
         if self.streaming is not None:
             default_params['streaming'] = self.streaming
+        else:
+            if model_config.get('user_kwargs', {}).get('streaming', None) is None:
+                default_params['streaming'] = True
+            else:
+                default_params['streaming'] = model_config.get('user_kwargs', {}).get('streaming', None)
+
         if self.temperature is not None:
             default_params['temperature'] = self.temperature
         if self.cache is not None:
@@ -290,16 +293,6 @@ class BishengLLM(BishengBase, BaseChatModel):
     @property
     def _llm_type(self):
         return self.llm._llm_type
-
-    def get_server_info_config(self):
-        if self.server_info.config:
-            return self.server_info.config
-        return {}
-
-    def get_model_info_config(self):
-        if self.model_info.config:
-            return self.model_info.config
-        return {}
 
     def parse_kwargs(self, messages: List[BaseMessage], kwargs: Dict[str, Any]) -> (List[BaseMessage], Dict[str, Any]):
         if self.server_info.type == LLMServerType.MINIMAX.value:
@@ -365,18 +358,13 @@ class BishengLLM(BishengBase, BaseChatModel):
             stream: Optional[bool] = None,
             **kwargs: Any,
     ) -> ChatResult:
-        try:
-            messages, kwargs = self.parse_kwargs(messages, kwargs)
-            if self.server_info.type == LLMServerType.MOONSHOT.value:
-                ret = self.moonshot_generate(messages, stop, run_manager, **kwargs)
-            else:
-                ret = self.llm._generate(messages, stop, run_manager, **kwargs)
-                if self.server_info.type == LLMServerType.QWEN.value:
-                    ret.generations[0].message = self.convert_qwen_result(ret.generations[0].message)
-            self._update_model_status(0)
-        except Exception as e:
-            self._update_model_status(1, str(e))
-            raise e
+        messages, kwargs = self.parse_kwargs(messages, kwargs)
+        if self.server_info.type == LLMServerType.MOONSHOT.value:
+            ret = self.moonshot_generate(messages, stop, run_manager, **kwargs)
+        else:
+            ret = self.llm._generate(messages, stop, run_manager, **kwargs)
+            if self.server_info.type == LLMServerType.QWEN.value:
+                ret.generations[0].message = self.convert_qwen_result(ret.generations[0].message)
         return ret
 
     def moonshot_generate(
@@ -386,28 +374,23 @@ class BishengLLM(BishengBase, BaseChatModel):
             run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
             **kwargs: Any,
     ) -> ChatResult:
-        try:
-            result = None
-            finish_reason = None
-            while finish_reason is None or finish_reason == 'tool_calls':
-                result = self.llm._generate(messages, stop, run_manager, **kwargs)
-                result_message = result.generations[0].message
-                finish_reason = result.generations[0].generation_info.get('finish_reason')
-                for tool_call in result_message.tool_calls:
-                    tool_call_name = tool_call['name']
-                    if tool_call_name == "$web_search":
-                        messages.append(result_message)
-                        messages.append(ToolMessage(
-                            tool_call_id=tool_call['id'],
-                            name=tool_call_name,
-                            content=json.dumps(tool_call['args'], ensure_ascii=False),
-                        ))
-                    else:
-                        break
-            self._update_model_status(0)
-        except Exception as e:
-            self._update_model_status(1, str(e))
-            raise e
+        result = None
+        finish_reason = None
+        while finish_reason is None or finish_reason == 'tool_calls':
+            result = self.llm._generate(messages, stop, run_manager, **kwargs)
+            result_message = result.generations[0].message
+            finish_reason = result.generations[0].generation_info.get('finish_reason')
+            for tool_call in result_message.tool_calls:
+                tool_call_name = tool_call['name']
+                if tool_call_name == "$web_search":
+                    messages.append(result_message)
+                    messages.append(ToolMessage(
+                        tool_call_id=tool_call['id'],
+                        name=tool_call_name,
+                        content=json.dumps(tool_call['args'], ensure_ascii=False),
+                    ))
+                else:
+                    break
         return result
 
     @wrapper_bisheng_model_limit_check_async
@@ -419,19 +402,13 @@ class BishengLLM(BishengBase, BaseChatModel):
             stream: Optional[bool] = None,
             **kwargs: Any,
     ) -> ChatResult:
-        try:
-            messages, kwargs = self.parse_kwargs(messages, kwargs)
-            if self.server_info.type == LLMServerType.MOONSHOT.value:
-                ret = await self.moonshot_agenerate(messages, stop, run_manager, **kwargs)
-            else:
-                ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
-                if self.server_info.type == LLMServerType.QWEN.value:
-                    ret.generations[0].message = self.convert_qwen_result(ret.generations[0].message)
-            self._update_model_status(0)
-        except Exception as e:
-            self._update_model_status(1, str(e))
-            # 记录失败状态
-            raise e
+        messages, kwargs = self.parse_kwargs(messages, kwargs)
+        if self.server_info.type == LLMServerType.MOONSHOT.value:
+            ret = await self.moonshot_agenerate(messages, stop, run_manager, **kwargs)
+        else:
+            ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+            if self.server_info.type == LLMServerType.QWEN.value:
+                ret.generations[0].message = self.convert_qwen_result(ret.generations[0].message)
         return ret
 
     async def moonshot_agenerate(
@@ -441,35 +418,24 @@ class BishengLLM(BishengBase, BaseChatModel):
             run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
             **kwargs: Any,
     ) -> ChatResult:
-        try:
-            result = None
-            finish_reason = None
-            while finish_reason is None or finish_reason == 'tool_calls':
-                result = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
-                result_message = result.generations[0].message
-                finish_reason = result.generations[0].generation_info.get('finish_reason')
-                for tool_call in result_message.tool_calls:
-                    tool_call_name = tool_call['name']
-                    if tool_call_name == "$web_search":
-                        messages.append(result_message)
-                        messages.append(ToolMessage(
-                            tool_call_id=tool_call['id'],
-                            name=tool_call_name,
-                            content=json.dumps(tool_call['args'], ensure_ascii=False),
-                        ))
-                    else:
-                        break
-            self._update_model_status(0)
-        except Exception as e:
-            self._update_model_status(1, str(e))
-            raise e
+        result = None
+        finish_reason = None
+        while finish_reason is None or finish_reason == 'tool_calls':
+            result = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+            result_message = result.generations[0].message
+            finish_reason = result.generations[0].generation_info.get('finish_reason')
+            for tool_call in result_message.tool_calls:
+                tool_call_name = tool_call['name']
+                if tool_call_name == "$web_search":
+                    messages.append(result_message)
+                    messages.append(ToolMessage(
+                        tool_call_id=tool_call['id'],
+                        name=tool_call_name,
+                        content=json.dumps(tool_call['args'], ensure_ascii=False),
+                    ))
+                else:
+                    break
         return result
-
-    def _update_model_status(self, status: int, remark: str = ''):
-        """更新模型状态"""
-        if self.model_info.status != status:
-            self.model_info.status = status
-            LLMDao.update_model_status(self.model_id, status, remark[-500:])  # 限制备注长度为500字符
 
     def bind_tools(
             self,
@@ -493,15 +459,10 @@ class BishengLLM(BishengBase, BaseChatModel):
             run_manager: Optional[CallbackManagerForLLMRun] = None,
             **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
-        try:
-            for one in self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs):
-                if self.server_info.type == LLMServerType.QWEN.value:
-                    one.message = self.convert_qwen_result(one.message)
-                yield one
-            self._update_model_status(0)
-        except Exception as e:
-            self._update_model_status(1, str(e))
-            raise e
+        for one in self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs):
+            if self.server_info.type == LLMServerType.QWEN.value:
+                one.message = self.convert_qwen_result(one.message)
+            yield one
 
     @wrapper_bisheng_model_generator_async
     async def _astream(
@@ -511,12 +472,7 @@ class BishengLLM(BishengBase, BaseChatModel):
             run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
             **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
-        try:
-            async for one in self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs):
-                if self.server_info.type == LLMServerType.QWEN.value:
-                    one.message = self.convert_qwen_result(one.message)
-                yield one
-            self._update_model_status(0)
-        except Exception as e:
-            self._update_model_status(1, str(e))
-            raise e
+        async for one in self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs):
+            if self.server_info.type == LLMServerType.QWEN.value:
+                one.message = self.convert_qwen_result(one.message)
+            yield one

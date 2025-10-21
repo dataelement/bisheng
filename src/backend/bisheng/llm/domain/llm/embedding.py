@@ -6,30 +6,85 @@ from loguru import logger
 from pydantic import Field
 from typing_extensions import Self
 
-from bisheng.interface.importing import import_by_type
+from bisheng.core.ai import OllamaEmbeddings, OpenAIEmbeddings, AzureOpenAIEmbeddings, DashScopeEmbeddings, \
+    QianfanEmbeddingsEndpoint
 from bisheng.llm.const import LLMServerType
 from .base import BishengBase
 from ..utils import wrapper_bisheng_model_limit_check
-from ...models.llm_server import LLMModel, LLMServer, LLMDao, LLMModelType
+from ...models.llm_server import LLMModel, LLMServer, LLMModelType
+
+
+def _get_ollama_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    params['query_instruction'] = 'passage: '
+    params['base_url'] = server_config.get('base_url', '').rstrip('/')
+
+    user_kwargs = model_config.get('user_kwargs', {})
+    user_kwargs.update(params)
+    return user_kwargs
+
+
+def _get_openai_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    if server_config:
+        params.update({
+            'api_key': server_config.get('openai_api_key') or server_config.get('api_key') or 'empty',
+            'base_url': server_config.get('openai_api_base', '') or server_config.get('base_url', ''),
+        })
+        params['base_url'] = params['base_url'].rstrip('/')
+    if server_config.get('openai_proxy'):
+        params['openai_proxy'] = server_config.get('openai_proxy')
+
+    user_kwargs = model_config.get('user_kwargs', {})
+    user_kwargs.update(params)
+    return user_kwargs
+
+
+def _get_azure_openai_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    params.update({
+        'azure_endpoint': server_config.get('azure_endpoint').rstrip('/'),
+        'openai_api_key': server_config.get('openai_api_key'),
+        'openai_api_version': server_config.get('openai_api_version'),
+        'azure_deployment': params.pop('model'),
+    })
+
+    user_kwargs = model_config.get('user_kwargs', {})
+    user_kwargs.update(params)
+    return user_kwargs
+
+
+def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    params['dashscope_api_key'] = server_config.get('openai_api_key', '')
+
+    user_kwargs = model_config.get('user_kwargs', {})
+    user_kwargs.update(params)
+    return user_kwargs
+
+
+def _get_qianfan_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    params['qianfan_ak'] = server_config.get('wenxin_api_key')
+    params['qianfan_sk'] = server_config.get('wenxin_secret_key')
+
+    user_kwargs = model_config.get('user_kwargs', {})
+    user_kwargs.update(params)
+    return user_kwargs
+
 
 _node_type: Dict = {
     # 开源推理框架
-    LLMServerType.OLLAMA.value: 'OllamaEmbeddings',
-    LLMServerType.XINFERENCE.value: 'OpenAIEmbeddings',
-    LLMServerType.LLAMACPP.value: 'OpenAIEmbeddings',
-    LLMServerType.VLLM.value: 'OpenAIEmbeddings',
-    LLMServerType.BISHENG_RT.value: 'HostEmbeddings',
+    LLMServerType.OLLAMA.value: {"client": OllamaEmbeddings, "params_handler": _get_ollama_params},
+    LLMServerType.XINFERENCE.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
+    LLMServerType.LLAMACPP.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
+    LLMServerType.VLLM.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
 
     # 官方API服务
-    LLMServerType.OPENAI.value: 'OpenAIEmbeddings',
-    LLMServerType.AZURE_OPENAI.value: 'AzureOpenAIEmbeddings',
-    LLMServerType.QWEN.value: 'DashScopeEmbeddings',
-    LLMServerType.QIAN_FAN.value: 'QianfanEmbeddingsEndpoint',
-    LLMServerType.MINIMAX.value: 'OpenAIEmbeddings',
-    LLMServerType.ZHIPU.value: 'OpenAIEmbeddings',
-    LLMServerType.TENCENT.value: 'OpenAIEmbeddings',
-    LLMServerType.VOLCENGINE.value: 'OpenAIEmbeddings',
-    LLMServerType.SILICON.value: 'OpenAIEmbeddings',
+    LLMServerType.OPENAI.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
+    LLMServerType.AZURE_OPENAI.value: {"client": AzureOpenAIEmbeddings, "params_handler": _get_azure_openai_params},
+    LLMServerType.QWEN.value: {"client": DashScopeEmbeddings, "params_handler": _get_qwen_params},
+    LLMServerType.QIAN_FAN.value: {"client": QianfanEmbeddingsEndpoint, "params_handler": _get_qianfan_params},
+    LLMServerType.MINIMAX.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
+    LLMServerType.ZHIPU.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
+    LLMServerType.TENCENT.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
+    LLMServerType.VOLCENGINE.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
+    LLMServerType.SILICON.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
 }
 
 
@@ -44,24 +99,33 @@ class BishengEmbedding(BishengBase, Embeddings):
 
     embeddings: Optional[Embeddings] = Field(default=None)
 
+    @classmethod
     async def get_bisheng_embedding(cls, **kwargs) -> Self:
-        self.model_id = kwargs.get('model_id')
-        # 是否忽略模型是否上线的检查
-        ignore_online = kwargs.get('ignore_online', False)
+        model_id: int | None = kwargs.pop('model_id', None)
+        model_info, server_info = await cls.get_model_server_info(model_id)
+        instance = cls(
+            model_id=model_id,
+            model_info=model_info,
+            server_info=server_info,
+        )
+        instance._init_embeddings(model_info, server_info, **kwargs)
         return cls(**kwargs)
 
     def __init__(self, **kwargs):
-        super().__init__()
+        super().__init__(**kwargs)
         self.model_id = kwargs.get('model_id')
-        # 是否忽略模型是否上线的检查
-        ignore_online = kwargs.get('ignore_online', False)
-
         if not self.model_id:
             raise Exception('没有找到embedding模型配置')
-        model_info = LLMDao.get_model_by_id(self.model_id)
+        if "model_info" in kwargs and "server_info" in kwargs:
+            self._init_embeddings(model_info=kwargs.pop('model_info'), server_info=kwargs.pop('server_info'), **kwargs)
+        else:
+            model_info, server_info = self.get_model_server_info_sync(self.model_id)
+            self._init_embeddings(model_info=model_info, server_info=server_info, **kwargs)
+
+    def _init_embeddings(self, model_info, server_info, **kwargs):
+        ignore_online = kwargs.get('ignore_online', False)
         if not model_info:
             raise Exception('embedding模型配置已被删除，请重新配置模型')
-        server_info = LLMDao.get_server_by_id(model_info.server_id)
         if not server_info:
             raise Exception('服务提供方配置已被删除，请重新配置embedding模型')
         if model_info.model_type != LLMModelType.EMBEDDING.value:
@@ -75,83 +139,51 @@ class BishengEmbedding(BishengBase, Embeddings):
         self.model = model_info.model_name
 
         class_object = self._get_embedding_class(server_info.type)
-        params = self._get_embedding_params(server_info, model_info)
+        params = self._get_embedding_params(server_info, **kwargs)
         try:
             self.embeddings = class_object(**params)
         except Exception as e:
             logger.exception('init_bisheng_embedding error')
             raise Exception(f'初始化bisheng embedding组件失败，请检查配置或联系管理员。错误信息：{e}')
 
-    def _get_embedding_class(self, server_type: str) -> type[Embeddings]:
-        node_type = self.llm_node_type.get(server_type)
+    @staticmethod
+    def _get_embedding_class(server_type: str) -> type[Embeddings]:
+        node_type = _node_type.get(server_type)
         if not node_type:
             raise Exception(f'{server_type}类型的服务提供方暂不支持embedding')
-        class_object = import_by_type(_type='embeddings', name=node_type)
+        class_object = node_type.get('client')
         return class_object
 
-    def _get_embedding_params(self, server_info: LLMServer, model_info: LLMModel) -> dict:
-        params = {}
-        if server_info.config:
-            params.update(server_info.config)
-        if model_info.config:
-            params.update(model_info.config)
-        params.update({
-            'model': model_info.model_name,
-        })
+    def _get_default_params(self, server_config: dict, model_config: dict, **kwargs) -> dict:
+        params = {
+            "model": self.model_info.model_name,
+        }
+        return params
 
-        # 非openai官方但是符合openai接口标准的embedding模型，强制chunk_size=1，防止batch_size太大导致服务报错
-        if self.llm_node_type.get(server_info.type) == "OpenAIEmbeddings":
-            params['chunk_size'] = params.pop('chunk_size', 1)
+    def _get_embedding_params(self, server_info: LLMServer, **kwargs) -> dict:
+        server_config = self.get_server_info_config()
+        model_config = self.get_model_info_config()
+        default_params = self._get_default_params(server_config, model_config, **kwargs)
 
-        if server_info.type == LLMServerType.QWEN.value:
-            params = {
-                'dashscope_api_key': params.get('openai_api_key'),
-                'model': params.get('model'),
-            }
-        elif server_info.type == LLMServerType.QIAN_FAN.value:
-            params = {
-                'qianfan_ak': params.get('wenxin_api_key'),
-                'qianfan_sk': params.get('wenxin_secret_key'),
-                'model': params.get('model'),
-            }
-        elif server_info.type in [
-            LLMServerType.XINFERENCE.value, LLMServerType.LLAMACPP.value,
-            LLMServerType.VLLM.value
-        ]:
-            params['openai_api_key'] = params.pop('openai_api_key', None) or 'EMPTY'
-        elif server_info.type == LLMServerType.OLLAMA.value:
-            params['query_instruction'] = 'passage: '
+        params_handler = _node_type[server_info.type]['params_handler']
+        params = params_handler(default_params, server_config, model_config)
         return params
 
     @wrapper_bisheng_model_limit_check
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """embedding"""
-        try:
-            if self.server_info.limit_flag:
-                pass
-            ret = self.embeddings.embed_documents(texts)
-            # 盘单向量是否归一化了
-            if ret:
-                vector = ret[0]
-                if np.linalg.norm(vector) != 1:
-                    ret = [(np.array(doc) / np.linalg.norm(doc)).tolist() for doc in ret]
-            self._update_model_status(0)
-            return ret
-        except Exception as e:
-            self._update_model_status(1, str(e))
-            logger.exception('embedding error')
-            raise Exception(f'embedding error: {e}')
+        ret = self.embeddings.embed_documents(texts)
+        # 盘单向量是否归一化了
+        if ret:
+            vector = ret[0]
+            if np.linalg.norm(vector) != 1:
+                ret = [(np.array(doc) / np.linalg.norm(doc)).tolist() for doc in ret]
+        return ret
 
     @wrapper_bisheng_model_limit_check
     def embed_query(self, text: str) -> List[float]:
         """embedding"""
-        try:
-            ret = self.embeddings.embed_query(text)
-            if np.linalg.norm(ret) != 1:
-                ret = (np.array(ret) / np.linalg.norm(ret)).tolist()
-            self._update_model_status(0)
-            return ret
-        except Exception as e:
-            self._update_model_status(1, str(e))
-            logger.exception('embedding error')
-            raise Exception(f'embedding组件异常，请检查配置或联系管理员。错误信息：{e}')
+        ret = self.embeddings.embed_query(text)
+        if np.linalg.norm(ret) != 1:
+            ret = (np.array(ret) / np.linalg.norm(ret)).tolist()
+        return ret

@@ -7,7 +7,7 @@ from bisheng.api.errcode.server import NoTtsModelConfigError, TtsModelConfigDele
 from bisheng.core.ai import BaseTTSClient, OpenAITTSClient, \
     AliyunTTSClient, AzureOpenAITTSClient
 from bisheng.llm.const import LLMModelType, LLMServerType
-from bisheng.llm.models import LLMServer, LLMModel, LLMDao
+from bisheng.llm.models import LLMServer, LLMModel
 from .base import BishengBase
 from ..utils import wrapper_bisheng_model_limit_check_async
 
@@ -73,15 +73,14 @@ class BishengTTS(BishengBase):
         model_id = kwargs.get('model_id')
         if not model_id:
             raise NoTtsModelConfigError()
+        model_info, server_info = await cls.get_model_server_info(model_id)
         # ignore_online参数用于跳过模型在线状态检查
         ignore_online = kwargs.get('ignore_online', False)
 
-        model_info = await LLMDao.aget_model_by_id(model_id=model_id)
         if not model_info:
             raise TtsModelConfigDeletedError()
         if model_info.model_type != LLMModelType.TTS.value:
             raise TtsModelTypeError(model_type=model_info.model_type)
-        server_info = await LLMDao.aget_server_by_id(server_id=model_info.server_id)
         if not server_info:
             raise TtsProviderDeletedError()
         if not ignore_online and not model_info.online:

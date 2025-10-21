@@ -7,7 +7,7 @@ def decide_embeddings(model: str) -> Embeddings:
     """ embed method """
     from bisheng.llm import LLMService
 
-    return LLMService.get_bisheng_embedding(model_id=model)
+    return LLMService.get_bisheng_embedding_sync(model_id=model)
 
 
 def create_knowledge_vector_store(knowledge_ids: List[str], user_name: str, check_auth: bool = True):

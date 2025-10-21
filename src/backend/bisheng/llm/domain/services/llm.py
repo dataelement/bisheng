@@ -22,7 +22,7 @@ from bisheng.llm.schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig,
 from bisheng.utils import generate_uuid, md5_hash
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import minio_client
-from ..llm import BishengASR, BishengEmbedding, BishengLLM, BishengTTS
+from ..llm import BishengASR, BishengLLM, BishengTTS, BishengEmbedding
 
 
 class LLMService:
@@ -90,7 +90,7 @@ class LLMService:
                 if one.model_type == LLMModelType.LLM.value:
                     await cls.get_bisheng_llm(model_id=one.id, ignore_online=True)
                 elif one.model_type == LLMModelType.EMBEDDING.value:
-                    cls.get_bisheng_embedding(model_id=one.id, ignore_online=True)
+                    await cls.get_bisheng_embedding(model_id=one.id, ignore_online=True)
                 elif one.model_type == LLMModelType.ASR.value:
                     await cls.get_bisheng_asr(model_id=one.id, ignore_online=True)
                 elif one.model_type == LLMModelType.TTS.value:
@@ -148,7 +148,7 @@ class LLMService:
                 bisheng_model = await cls.get_bisheng_llm(model_id=model.id, ignore_online=True, cache=False)
                 await bisheng_model.ainvoke('hello')
             elif model.model_type == LLMModelType.EMBEDDING.value:
-                bisheng_embed = cls.get_bisheng_embedding(model_id=model.id, ignore_online=True, cache=False)
+                bisheng_embed = await cls.get_bisheng_embedding(model_id=model.id, ignore_online=True, cache=False)
                 await bisheng_embed.aembed_query('hello')
             elif model.model_type == LLMModelType.TTS.value:
                 bisheng_tts = await cls.get_bisheng_tts(model_id=model.id, ignore_online=True)
@@ -313,10 +313,9 @@ class LLMService:
     def get_knowledge_default_embedding(cls) -> Optional[Embeddings]:
         """ 获取知识库默认的embedding模型 """
         knowledge_llm = cls.get_knowledge_llm()
-        # 没有配置模型，则用jieba
         if not knowledge_llm.embedding_model_id:
             return None
-        return cls.get_bisheng_embedding(model_id=knowledge_llm.embedding_model_id)
+        return cls.get_bisheng_embedding_sync(model_id=knowledge_llm.embedding_model_id)
 
     @classmethod
     async def _base_update_llm_config(cls, data: Dict, key: ConfigKeyEnum) -> Dict:
@@ -396,7 +395,12 @@ class LLMService:
         return BishengLLM(**kwargs)
 
     @classmethod
-    def get_bisheng_embedding(cls, **kwargs) -> Embeddings:
+    async def get_bisheng_embedding(cls, **kwargs) -> Embeddings:
+        """ 初始化毕昇embedding模型 """
+        return await BishengEmbedding.get_bisheng_embedding(**kwargs)
+
+    @classmethod
+    def get_bisheng_embedding_sync(cls, **kwargs) -> Embeddings:
         """ 初始化毕昇embedding模型 """
         return BishengEmbedding(**kwargs)
 

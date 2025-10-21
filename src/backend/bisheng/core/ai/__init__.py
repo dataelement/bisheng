@@ -1,7 +1,9 @@
 from langchain_anthropic import ChatAnthropic
 from langchain_community.chat_models import ChatTongyi, QianfanChatEndpoint, ChatZhipuAI, MiniMaxChat, MoonshotChat
+from langchain_community.embeddings import DashScopeEmbeddings, QianfanEmbeddingsEndpoint
 from langchain_deepseek import ChatDeepSeek
-from langchain_openai import ChatOpenAI, AzureChatOpenAI
+from langchain_ollama import OllamaEmbeddings
+from langchain_openai import ChatOpenAI, AzureChatOpenAI, OpenAIEmbeddings, AzureOpenAIEmbeddings
 
 from .asr import OpenAIASRClient, AliyunASRClient, AzureOpenAIASRClient
 from .base import BaseASRClient, BaseTTSClient
@@ -32,4 +34,10 @@ __all__ = [
     'ChatDeepSeek',
     'MoonshotChat',
     'ChatOpenAICompatible',
+
+    'OllamaEmbeddings',
+    'OpenAIEmbeddings',
+    'AzureOpenAIEmbeddings',
+    'DashScopeEmbeddings',
+    'QianfanEmbeddingsEndpoint',
 ]
