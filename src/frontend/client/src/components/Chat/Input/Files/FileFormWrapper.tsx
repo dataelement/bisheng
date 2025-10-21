@@ -22,7 +22,8 @@ function FileFormWrapper({
   fileTip = false,
   disableInputs,
   disabledSearch,
-  noUpload = false
+  noUpload = false,
+  showVoice = false,
 }: {
   disableInputs: boolean;
   children?: React.ReactNode;
@@ -30,6 +31,7 @@ function FileFormWrapper({
   fileTip?: boolean;
   accept?: string;
   noUpload: boolean;
+  showVoice?: boolean;
 }) {
   const t = useLocalize();
   const [fileTotalTokens, setFileTotalTokens] = useState(0);
@@ -70,6 +72,7 @@ function FileFormWrapper({
       return (
         <AttachFile
           isRTL={isRTL}
+          showVoice={showVoice}
           accept={accept}
           disabled={disableInputs || disabledSearch}
           handleFileChange={handleFileChange}

@@ -1,37 +1,38 @@
-import {
-  QueryKeys,
-  dataService,
-  EModelEndpoint,
-  defaultOrderQuery,
-  defaultAssistantsVersion,
-} from '~/data-provider/data-provider/src';
-import { useRecoilValue } from 'recoil';
-import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import type {
-  UseInfiniteQueryOptions,
   QueryObserverResult,
+  UseInfiniteQueryOptions,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRecoilValue } from 'recoil';
+import { getWorkbenchModelListApi } from '~/api';
+import { inviteCode } from '~/api/linsight';
 import type t from '~/data-provider/data-provider/src';
 import type {
   Action,
-  TPreset,
-  TPlugin,
-  ConversationListResponse,
-  ConversationListParams,
   Assistant,
+  AssistantDocument,
   AssistantListParams,
   AssistantListResponse,
-  AssistantDocument,
-  TEndpointsConfig,
-  TCheckUserKeyResponse,
+  ConversationListParams,
+  ConversationListResponse,
   SharedLinksListParams,
   SharedLinksResponse,
+  TCheckUserKeyResponse,
+  TEndpointsConfig,
+  TPlugin,
+  TPreset,
 } from '~/data-provider/data-provider/src';
-import { findPageForConversation } from '~/utils';
+import {
+  EModelEndpoint,
+  QueryKeys,
+  dataService,
+  defaultAssistantsVersion,
+  defaultOrderQuery,
+} from '~/data-provider/data-provider/src';
 import store from '~/store';
-import { inviteCode } from '~/api/linsight';
+import { findPageForConversation } from '~/utils';
 
 export const useGetPresetsQuery = (
   config?: UseQueryOptions<TPreset[]>,
@@ -547,3 +548,17 @@ export const useGetUserLinsightCountQuery = (): UseQueryResult<t.TGetUserPromptC
     refetchOnMount: false,
   });
 };
+
+// 获取工作台使用的模型列表
+export const useGetWorkbenchModelsQuery = () => {
+  return useQuery({
+    queryKey: [QueryKeys.getWorkspaceModel],
+    queryFn: () => getWorkbenchModelListApi(),
+    select(data) {
+      return data?.data;
+    },
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+}

@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { Button, TextareaAutosize } from '~/components/ui';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '~/components/ui/Select';
-import { useGetBsConfig, useGetFileConfig, useGetUserLinsightCountQuery } from '~/data-provider';
+import { useGetBsConfig, useGetFileConfig, useGetUserLinsightCountQuery, useGetWorkbenchModelsQuery } from '~/data-provider';
 import {
   BsConfig,
   fileConfig as defaultFileConfig,
@@ -36,6 +36,7 @@ import SendButton from './SendButton';
 import StopButton from './StopButton';
 import SameSopSpan, { sameSopLabelState } from './SameSopSpan';
 import { File_Accept } from '~/common';
+import SpeechToTextComponent from '~/components/Voice/speechToText';
 
 const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
   const submitButtonRef = useRef<HTMLButtonElement>(null);
@@ -133,8 +134,11 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
     [conversation?.assistant_id, conversation?.endpoint, assistantMap],
   );
   const disableInputs = useMemo(
-    () => !!((requiresKey ?? false) || invalidAssistant),
-    [requiresKey, invalidAssistant],
+    () => {
+      if (!isLingsi && bsConfig?.models.length === 0) return true
+      return !!((requiresKey ?? false) || invalidAssistant)
+    },
+    [requiresKey, invalidAssistant, isLingsi, bsConfig],
   );
 
   const { ref, ...registerProps } = methods.register('text', {
@@ -203,6 +207,9 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
     return ''
   }, [isLingsi])
 
+  const { data: modelData } = useGetWorkbenchModelsQuery()
+  const showVoice = modelData?.asr_model.id
+
   return (
     <form
       onSubmit={methods.handleSubmit((data) => {
@@ -253,6 +260,7 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
 
           <FileFormWrapper
             accept={accept}
+            showVoice={showVoice}
             fileTip={!isLingsi}
             noUpload={!bsConfig?.fileUpload.enabled}
             disableInputs={disableInputs}
@@ -302,7 +310,10 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
             )}
           </FileFormWrapper>
           {/* 发送和停止 */}
-          <div className="absolute bottom-2 right-3">
+          <div className="absolute bottom-2 right-3 flex gap-2 items-center">
+            {showVoice && <SpeechToTextComponent onChange={(e) => {
+              textAreaRef.current.value += e;
+            }} />}
             {(isSubmitting || isSubmittingAdded) && (showStopButton || showStopAdded) ? (
               <StopButton stop={handleStopGenerating} setShowStopButton={setShowStopButton} />
             ) : (
@@ -377,7 +388,12 @@ const ModelSelect = ({ options, value, onChange }: { options?: BsConfig['models'
     if (currentOpt) {
       return currentOpt.displayName
     } else {
-      options[0] && onChange(options[0].id + '')
+      if (options[0]) {
+        const id = options[0].id + ''
+        const currentOpt = options.find(opt => opt.id === id)
+        options[0] && onChange(id)
+        return currentOpt?.displayName
+      }
       return ''
     }
   }, [options, value])

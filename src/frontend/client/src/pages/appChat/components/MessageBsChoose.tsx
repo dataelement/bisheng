@@ -3,10 +3,11 @@ import { useMemo, useRef, useState } from "react";
 import { ChatMessageType } from "~/@types/chat";
 import { Button, Textarea } from "~/components";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
+import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
+import useLocalize from "~/hooks/useLocalize";
 import { downloadFile } from "~/utils";
 import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
 import { changeMinioUrl } from "./ResouceModal";
-import useLocalize from "~/hooks/useLocalize";
 
 export default function MessageBsChoose({ type = 'choose', logo, data, flow }: { type?: string, logo: React.ReactNode, data: ChatMessageType }) {
     const t = useLocalize()
@@ -111,6 +112,9 @@ export default function MessageBsChoose({ type = 'choose', logo, data, flow }: {
                             }
                         </div>
                     }
+                    <div className="flex justify-end py-2">
+                        {data.message.msg && <TextToSpeechButton messageId={String(data.id)} text={data.message.msg} />}
+                    </div>
                 </div>
             </div>
         </div>
