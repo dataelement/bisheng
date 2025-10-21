@@ -781,9 +781,20 @@ def update_knowledge_model(*,
         KnowledgeDao.update_one(knowledge)
 
         # 发起异步任务
-        # 延迟导入以避免循环导入
-        from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
-        rebuild_knowledge_celery.delay(knowledge.id, str(req_data.model_id))
+
+        if knowledge.type == KnowledgeTypeEnum.NORMAL.value:
+
+            # 延迟导入以避免循环导入
+            from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
+            rebuild_knowledge_celery.delay(knowledge.id, str(req_data.model_id))
+
+        elif knowledge.type == KnowledgeTypeEnum.QA.value:
+
+            # 延迟导入以避免循环导入
+            from bisheng.worker.knowledge.qa import rebuild_qa_knowledge_celery
+            rebuild_qa_knowledge_celery.delay(knowledge.id, str(req_data.model_id))
+
+
         logger.info(f"Started rebuild task for knowledge_id={knowledge.id} with model_id={req_data.model_id}")
 
         return resp_200(
