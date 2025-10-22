@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { useQuery } from "react-query";
+import { useModel } from "..";
 
 export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange }) => {
     const defaultValue = useMemo(() => {
@@ -49,7 +50,8 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
     )
 }
 
-export default function WorkbenchModel({ llmOptions, embeddings, asrModel, ttsModel, onBack }) {
+export default function WorkbenchModel({ onBack }) {
+    const { llmOptions,embeddings,asrModel,ttsModel } = useModel();
     const { t } = useTranslation('model')
     const { message } = useToast()
 
@@ -138,7 +140,6 @@ console.log(updatedConfig,343);
         }
     };
 
-    // 修复后的 useEffect
     useEffect(() => {
         // 1. 处理请求错误
         if (error) {

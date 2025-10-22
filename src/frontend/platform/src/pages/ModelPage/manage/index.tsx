@@ -185,15 +185,25 @@ export function useModel() {
         select: (data) => {
             const llmOptions = []
             const embeddings = []
+            const asrModel = []
+            const ttsModel = []
             data.forEach(server => {
                 const serverEmbItem = { value: server.id, label: server.name, children: [] }
                 const serverLlmItem = { value: server.id, label: server.name, children: [] }
+                const serverAsrItem = { value: server.id, label: server.name, children: [] }
+                const serverTtsItem = { value: server.id, label: server.name, children: [] }
                 server.models.forEach(model => {
                     const item = {
                         value: String(model.id),
                         label: model.model_name
                     }
                     if (!model.online) return
+                    if (model.model_type === 'asr') {
+                        serverAsrItem.children.push(item)
+                    }
+                    if (model.model_type === 'tts') {
+                        serverTtsItem.children.push(item)
+                    }
 
                     model.model_type === 'embedding' ?
                         serverEmbItem.children.push(item) : serverLlmItem.children.push(item)
@@ -201,16 +211,25 @@ export function useModel() {
 
                 if (serverLlmItem.children.length) llmOptions.push(serverLlmItem)
                 if (serverEmbItem.children.length) embeddings.push(serverEmbItem)
+                if (serverAsrItem.children.length) asrModel.push(serverAsrItem)
+                if (serverTtsItem.children.length) ttsModel.push(serverTtsItem)
             });
 
-            return [llmOptions, embeddings]; // 返回选择的结果
+            return { llmOptions, embeddings, asrModel, ttsModel }
         }
     });
 
-    const [llmOptions, embeddings] = data ?? [[], []];
+    const {
+        llmOptions = [],
+        embeddings = [],
+        asrModel = [],
+        ttsModel = []
+    } = data ?? {};
     return {
         llmOptions,
         embeddings,
+        asrModel,
+        ttsModel,
         refetch
     }
 }
