@@ -112,6 +112,7 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { }, onS
                     <MessageButtons
                         id={data.id}
                         data={data.liked}
+                        text={message}
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
                     >

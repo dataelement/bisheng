@@ -1,3 +1,4 @@
+import { message } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
 import { UploadIcon } from "lucide-react";
 import { useContext } from "react";
@@ -12,12 +13,39 @@ export default function DropZone({ onDrop }) {
     const supportedFormats = appConfig.enableEtl4lm 
         ? ['.PDF', '.TXT', '.DOCX', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.PNG', '.JPG', '.JPEG', '.BMP']
         : ['.PDF', '.TXT', '.DOCX', '.DOC', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV'];
-
+        const allowedExts = new Set(
+            supportedFormats.map(ext => ext.toLowerCase().replace('.', ''))
+        );
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         // 2. 关闭默认过滤：accept设为null，允许所有文件进入onDrop
-        accept: null, 
+        accept: null,
         useFsAccessApi: false,
-        onDrop
+        onDrop: (acceptedFiles) => {
+            // 1. 过滤不符合格式的文件
+            const validFiles = acceptedFiles.filter(file => {
+                // 获取文件后缀（无后缀则视为无效）
+                const ext = file.name.split('.').pop()?.toLowerCase();
+                return ext ? allowedExts.has(ext) : false;
+            });
+
+            // 2. 计算无效文件并提示
+            const invalidFiles = acceptedFiles.filter(
+                file => !validFiles.includes(file)
+            );
+
+            if (invalidFiles.length > 0) {
+                message({
+                    title: t('prompt'),
+                    description: `不支持文件类型:${invalidFiles.map(f => f.name)}`,
+                    variant: 'error'
+                });
+            }
+
+            // 3. 只传递有效文件给父组件
+            if (validFiles.length > 0) {
+                onDrop(validFiles);
+            }
+        }
     });
 
     const formatText = appConfig.enableEtl4lm

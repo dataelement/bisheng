@@ -8,11 +8,13 @@ const AttachFile = ({
   isRTL,
   accept = '',
   disabled,
+  showVoice,
   handleFileChange,
 }: {
   isRTL: boolean;
   accept?: string;
   disabled?: boolean | null;
+  showVoice?: boolean;
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
 }) => {
   const localize = useLocalize();
@@ -28,7 +30,8 @@ const AttachFile = ({
         disabled={isUploadDisabled}
         className={cn(
           'absolute flex size-[35px] items-center justify-center rounded-full p-1 transition-colors hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50',
-          isRTL ? 'bottom-2 right-2' : 'bottom-2 right-14',
+          isRTL ? 'bottom-1.5 right-2' : 'bottom-1.5 right-14',
+          showVoice && 'right-[94px]'
         )}
         description={localize('com_sidepanel_attach_files')}
         onKeyDownCapture={(e) => {

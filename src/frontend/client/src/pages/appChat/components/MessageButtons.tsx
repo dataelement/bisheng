@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { copyTrackingApi, likeChatApi } from "~/api/apps";
 import MessageIcon from "~/components/ui/icon/Message";
+import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
 
 const enum ThumbsState {
     Default = 0,
@@ -8,7 +9,7 @@ const enum ThumbsState {
     ThumbsDown
 }
 
-export default function MessageButtons({ id, onCopy, data, onUnlike, children = null }) {
+export default function MessageButtons({ id, text, onCopy, data, onUnlike, children = null }) {
     const [state, setState] = useState<ThumbsState>(data)
     const [copied, setCopied] = useState(false)
 
@@ -34,6 +35,7 @@ export default function MessageButtons({ id, onCopy, data, onUnlike, children = 
 
     return <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         {children}
+        <TextToSpeechButton messageId={String(id)} text={text} />
         <MessageIcon
             type='copy'
             className={`cursor-pointer ${copied && 'text-primary hover:text-primary'}`}

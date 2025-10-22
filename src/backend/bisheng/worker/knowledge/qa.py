@@ -1,17 +1,18 @@
 from typing import List
 
-from elasticsearch.helpers import bulk
 from loguru import logger
 
+from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import QA_save_knowledge, decide_vectorstores
 from bisheng.database.models.knowledge import KnowledgeDao, KnowledgeState
 from bisheng.database.models.knowledge_file import (
     QAKnoweldgeDao, QAKnowledge, KnowledgeFileStatus, QAKnowledgeUpsert, QAStatus,
 )
 from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.utils import generate_uuid
+from bisheng.llm.domain import LLMService
+from bisheng.settings import settings
 from bisheng.worker import bisheng_celery
-from bisheng_langchain.vectorstores import Milvus
+from bisheng_langchain.vectorstores import Milvus, ElasticKeywordsSearch
 
 
 @bisheng_celery.task
@@ -108,6 +109,7 @@ def copy_qa_knowledge_celery(source_knowledge_id: int, target_knowledge_id: int,
             es_metadatas = []
             for vector in vectors:
                 text = vector.pop("text")
+                vector.pop("vector")
                 es_texts.append(text)
                 es_metadatas.append(vector)
 
@@ -133,3 +135,101 @@ def copy_qa_knowledge_celery(source_knowledge_id: int, target_knowledge_id: int,
 
         logger.info(f"Finished copying all QA knowledge from knowledge id {source_knowledge_id} "
                     f"to knowledge id {target_knowledge_id}.")
+
+
+@bisheng_celery.task
+def rebuild_qa_knowledge_celery(knowledge_id: int, embedding_model_id: str):
+    """
+     重建QA知识库,向量存储
+    :param knowledge_id:
+    :param embedding_model_id:
+    :return:
+    """
+
+    with logger.contextualize(trace_id=f"rebuild_qa_knowledge_{knowledge_id}"):
+        knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
+        if not knowledge_info:
+            logger.error(f"Knowledge with id {knowledge_id} not found.")
+            return
+
+        es_db: ElasticKeywordsSearch = decide_vectorstores(
+            knowledge_info.index_name, "ElasticKeywordsSearch", FakeEmbedding()
+        )
+
+        # 查询es中所有数据 删除
+        es_result = es_db.client.search(body={
+            "query": {
+                "term": {
+                    "metadata.knowledge_id": str(knowledge_id)
+                }
+            }
+        }, filter_path=["hits.total.value"])
+
+        total = es_result.get("hits", {}).get("total", {}).get("value", 0)
+
+        logger.info(f"Found {total} documents in Elasticsearch for knowledge id {knowledge_id}.")
+
+        if total <= 0:
+            logger.info(f"No documents to delete in Elasticsearch for knowledge id {knowledge_id}.")
+            return
+
+        # 删除milvus中对应数据
+        KnowledgeService.delete_knowledge_file_in_vector(knowledge=knowledge_info, del_es=False)
+
+        suffix_id = settings.get_vectors_conf().milvus.partition_suffix
+        new_collection_name = f"partition_{embedding_model_id}_knowledge_{suffix_id}"
+        knowledge_info.collection_name = new_collection_name
+        embeddings = LLMService.get_bisheng_embedding_sync(model_id=embedding_model_id)
+        milvus_db: Milvus = decide_vectorstores(
+            new_collection_name, "Milvus", embeddings
+        )
+
+        # 分批 重建QA知识库 从第一页开始
+        batch_size = 100
+        for page in range((total + batch_size - 1) // batch_size):
+            page += 1
+            texts = []
+            metadatas = []
+
+            es_result = es_db.client.search(body={
+                "query": {
+                    "term": {
+                        "metadata.knowledge_id": str(knowledge_id)
+                    }
+                },
+                "from": (page - 1) * batch_size,
+                "size": batch_size
+            }, filter_path=["hits.hits._source"])
+
+            hits = es_result.get("hits", {}).get("hits", [])
+
+            file_ids = [hit.get("_source", {}).get("metadata", {}).get("file_id") for hit in hits]
+
+            QAKnoweldgeDao.batch_update_status_by_ids(
+                qa_ids=file_ids,
+                status=QAStatus.PROCESSING
+            )
+
+            for hit in hits:
+                source = hit.get("_source", {})
+                text = source.get("text", "")
+                metadata = source.get("metadata", {})
+                texts.append(text)
+                metadata.pop("vector", None)
+                metadatas.append(metadata)
+
+            # 插入milvus
+            milvus_db.add_texts(texts, metadatas)
+
+            QAKnoweldgeDao.batch_update_status_by_ids(
+                qa_ids=file_ids,
+                status=QAStatus.ENABLED
+            )
+
+            logger.info(f"Rebuilt batch {page} of QA knowledge into Milvus for knowledge id {knowledge_id}.")
+
+        knowledge_info.state = KnowledgeState.PUBLISHED.value
+
+        KnowledgeDao.update_one(knowledge_info)
+
+        logger.info(f"Finished rebuilding QA knowledge for knowledge id {knowledge_id}.")

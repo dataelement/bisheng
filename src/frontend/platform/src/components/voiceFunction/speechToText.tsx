@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { Mic, Square, Loader } from 'lucide-react';
+import { Mic, Square, Loader, LoaderCircle, Ellipsis } from 'lucide-react';
 import i18next from "i18next";
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { speechToText } from '@/controllers/API/workbench';
+import VoiceRecordingIcon from '../bs-ui/voice';
 
-// --- 核心音频处理逻辑（保留优化，不改动）---
+// --- 核心音频处理逻辑 ---
 const encodeWAV = (audioBuffer) => {
   const sampleRate = audioBuffer.sampleRate;
   const channels = audioBuffer.numberOfChannels;
@@ -91,7 +92,7 @@ const convertBlobToWav = async (blob) => {
   });
 };
 
-// --- 主组件（还原原始样式结构）---
+// --- 主组件---
 const SpeechToTextComponent = ({ onChange }) => {
   const { toast } = useToast();
   const [isRecording, setIsRecording] = useState(false);
@@ -176,7 +177,7 @@ const SpeechToTextComponent = ({ onChange }) => {
     }
   };
 
-  // 停止录音（逻辑还原）
+  // 停止录音
   const stopRecording = () => {
     if (isProcessing) return;
     if (mediaRecorderRef.current && isRecording) {
@@ -186,7 +187,7 @@ const SpeechToTextComponent = ({ onChange }) => {
     }
   };
 
-  // 语音转文字API（逻辑不变）
+  // 语音转文字API
   const convertSpeechToText = async (audioBlob) => {
     try {
       const formData = new FormData();
@@ -216,29 +217,28 @@ const SpeechToTextComponent = ({ onChange }) => {
     }
   };
 
-  // --- 还原原始样式结构：绝对定位、按钮布局、pulse-ring ---
+  //绝对定位、按钮布局、pulse-ring ---
   return (
     <div className="relative z-10">
-      {/* 还原原始按钮位置：right-12 top-5 绝对定位 */}
+      {/* right-12 top-5 绝对定位 */}
       <div className="absolute right-12 top-5 cursor-pointer">
         {isProcessing && (
-          <Loader size={18} />
+          <LoaderCircle className="animate-spin" />
         )}
         {!isProcessing && isRecording && (
-          <Square size={18} onClick={stopRecording}/>
+          <VoiceRecordingIcon size={18} onClick={stopRecording}/>
         )}
         {!isProcessing && !isRecording && (
           <Mic size={18} onClick={startRecording}/>
         )}
       </div>
 
-      {/* 还原录音中脉冲样式（需确保全局CSS中有pulse-ring样式） */}
       {isRecording && <div className="pulse-ring"></div>}
     </div>
   );
 };
 
-// 类型定义（还原）
+// 类型定义
 SpeechToTextComponent.propTypes = {
   onChange: PropTypes.func.isRequired
 };

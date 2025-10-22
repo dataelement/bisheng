@@ -47,6 +47,7 @@ export enum QueryKeys {
   health = 'health',
   userTerms = 'userTerms',
   getLinsightCount = 'getLinsightCount',
+  getWorkspaceModel = 'getWorkspaceModel',
   banner = 'banner',
 }
 
