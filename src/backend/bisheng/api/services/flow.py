@@ -9,7 +9,7 @@ from loguru import logger
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.utils import get_L2_param_from_flow, get_request_ip
+from bisheng.api.utils import get_L2_param_from_flow
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq, resp_500, \
     StreamData
 from bisheng.chat.utils import process_node_data
@@ -28,6 +28,7 @@ from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.database.models.variable_value import VariableDao
 from bisheng.processing.process import process_graph_cached, process_tweaks
+from bisheng.utils import get_request_ip
 
 
 class FlowService(BaseService):

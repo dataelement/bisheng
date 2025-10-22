@@ -11,7 +11,7 @@ from loguru import logger
 
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.utils import build_flow_no_yield, get_request_ip
+from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse, FileResponse
 from bisheng.cache import cache_manager
 from bisheng.cache.flow import InMemoryCache
@@ -31,6 +31,7 @@ from bisheng.database.models.user import User, UserDao
 from bisheng.graph.utils import find_next_node
 from bisheng.processing.process import process_tweaks
 from bisheng.utils import generate_uuid
+from bisheng.utils import get_request_ip
 from bisheng.utils.threadpool import ThreadPoolManager, thread_pool
 from bisheng.utils.util import get_cache_key
 from bisheng_langchain.input_output.output import Report

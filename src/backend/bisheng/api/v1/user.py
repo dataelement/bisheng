@@ -18,7 +18,6 @@ from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.captcha import verify_captcha
 from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_user_role, get_login_user,
                                                get_admin_user, UserService)
-from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import resp_200, CreateUserReq
 from bisheng.cache.redis import redis_client
 from bisheng.common.errcode.http_error import UnAuthorizedError
@@ -34,6 +33,7 @@ from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRole, UserRoleCreate, UserRoleDao
 from bisheng.settings import settings
 from bisheng.utils import generate_uuid
+from bisheng.utils import get_request_ip
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_PASSWORD_ERROR, USER_CURRENT_SESSION
 from bisheng.utils.logger import logger
 from fastapi_jwt_auth import AuthJWT

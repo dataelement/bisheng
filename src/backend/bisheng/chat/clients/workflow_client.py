@@ -7,7 +7,6 @@ from loguru import logger
 
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.chat.clients.base import BaseClient
 from bisheng.chat.types import WorkType
@@ -15,6 +14,7 @@ from bisheng.common.errcode.chat import SkillNotOnlineError
 from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.message import ChatMessageDao, ChatMessage
 from bisheng.utils import generate_uuid
+from bisheng.utils import get_request_ip
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow
 from bisheng.workflow.common.workflow import WorkflowStatus

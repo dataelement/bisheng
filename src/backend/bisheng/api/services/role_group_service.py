@@ -9,7 +9,6 @@ from loguru import logger
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import resp_200
 from bisheng.cache.redis import redis_client
 from bisheng.common.errcode.user import UserGroupNotDeleteError
@@ -24,6 +23,7 @@ from bisheng.database.models.role import RoleDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
 from bisheng.database.models.user_role import UserRoleDao
+from bisheng.utils import get_request_ip
 
 
 class RoleGroupService():

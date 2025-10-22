@@ -12,7 +12,6 @@ from loguru import logger
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.assistant_agent import AssistantAgent
-from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import (OpenAIChatCompletionReq,
                                     OpenAIChatCompletionResp, OpenAIChoice)
@@ -20,6 +19,7 @@ from bisheng.api.v2.utils import get_default_operator
 from bisheng.chat.types import WorkType
 from bisheng.settings import settings
 from bisheng.utils import generate_uuid
+from bisheng.utils import get_request_ip
 
 router = APIRouter(prefix='/assistant', tags=['OpenAPI', 'Assistant'])
 

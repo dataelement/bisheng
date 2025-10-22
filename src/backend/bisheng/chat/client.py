@@ -9,7 +9,6 @@ from loguru import logger
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.types import WorkType
@@ -22,6 +21,7 @@ from bisheng.database.models.message import ChatMessageDao, ChatMessage as ChatM
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.settings import settings
 from bisheng.utils import generate_uuid
+from bisheng.utils import get_request_ip
 from bisheng.utils.threadpool import thread_pool
 from bisheng_langchain.gpts.message_types import LiberalToolMessage
 

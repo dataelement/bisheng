@@ -19,7 +19,6 @@ from bisheng.api.services.knowledge_imp import (
     read_chunk_text,
 )
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schema.knowledge import KnowledgeFileResp
 from bisheng.api.v1.schemas import (
     FileChunk,
@@ -65,6 +64,7 @@ from bisheng.llm.domain.services import LLMService
 from bisheng.llm.models import LLMDao
 from bisheng.settings import settings
 from bisheng.utils import generate_uuid
+from bisheng.utils import get_request_ip
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import minio_client
 from bisheng.worker.knowledge import file_worker

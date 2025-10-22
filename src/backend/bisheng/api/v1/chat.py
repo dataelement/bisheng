@@ -14,7 +14,7 @@ from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.services.knowledge_imp import delete_es, delete_vector
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.services.workflow import WorkFlowService
-from bisheng.api.utils import build_flow, build_input_keys_response, get_request_ip
+from bisheng.api.utils import build_flow, build_input_keys_response
 from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType
@@ -37,6 +37,7 @@ from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.graph.graph.base import Graph
 from bisheng.utils import generate_uuid
+from bisheng.utils import get_request_ip
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
 from fastapi_jwt_auth import AuthJWT

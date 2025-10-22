@@ -3,8 +3,8 @@ from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
-from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import resp_200, resp_500
+from bisheng.utils import get_request_ip
 
 router = APIRouter(prefix='/invite', tags=['InviteCode'])
 
