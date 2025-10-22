@@ -1,4 +1,6 @@
 import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
+import Echarts from "@/workspace/markdown/Echarts";
+import MermaidBlock from "@/workspace/markdown/Mermaid";
 import React, { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeMathjax from "rehype-mathjax";
@@ -28,6 +30,9 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message }) {
                     code: ({ node, className, children }) => {
                         const match = /language-(\w+)/.exec(className ?? '');
                         const lang = match && match[1];
+
+                        if (lang === 'echarts') return <Echarts option={children} />
+                        if (lang === 'mermaid') return <MermaidBlock>{String(children).trim()}</MermaidBlock>
 
                         return <CodeBlock
                             key={Math.random()}

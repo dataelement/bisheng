@@ -73,7 +73,7 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
         copyText(messageRef.current)
     }
     const chatId = useMessageStore(state => state.chatId)
-    return <div className="flex w-full">
+    return <div className="bisheng-message flex w-full">
         <div className="w-fit group max-w-[90%]">
             <ReasoningLog loading={!data.end && data.reasoning_log} msg={data.reasoning_log} />
             {!(data.reasoning_log && !message && !data.files.length) && <>
