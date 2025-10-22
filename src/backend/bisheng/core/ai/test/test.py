@@ -55,6 +55,15 @@ async def test_azure_openai_tts():
     assert os.path.exists("./data/azure_openai_result.mp3")
 
 
+def test_xinference_rerank():
+    from ..rerank.xinference_rerank import XinferenceRerank
+    api_key = os.environ.get('XINFERENCE_API_KEY')
+    base_url = os.environ.get('XINFERENCE_BASE_URL')
+    model_uid = os.environ.get('XINFERENCE_RERANK_MODEL_UID')
+
+    reranker = XinferenceRerank(base_url=base_url, api_key=api_key, model_uid=model_uid)
+
+
 async def main():
     await test_aliyun_asr()
     # await test_aliyun_tts()

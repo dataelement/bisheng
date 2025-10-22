@@ -15,14 +15,14 @@ from bisheng.common.errcode.server import NoAsrModelConfigError, AsrModelConfigD
 from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.knowledge import KnowledgeState
-from bisheng.llm.const import LLMModelType
-from bisheng.llm.models import LLMDao, LLMServer, LLMModel
-from bisheng.llm.schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig, AssistantLLMConfig, \
-    EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq, WorkbenchModelConfig, WSModel
 from bisheng.utils import generate_uuid, md5_hash
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import minio_client
 from ..llm import BishengASR, BishengLLM, BishengTTS, BishengEmbedding
+from ...const import LLMModelType
+from ...models import LLMDao, LLMServer, LLMModel
+from ...schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig, AssistantLLMConfig, \
+    EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq, WorkbenchModelConfig, WSModel
 
 
 class LLMService:

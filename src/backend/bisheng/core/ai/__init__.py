@@ -1,6 +1,7 @@
 from langchain_anthropic import ChatAnthropic
-from langchain_community.chat_models import ChatTongyi, QianfanChatEndpoint, ChatZhipuAI, MiniMaxChat, MoonshotChat
-from langchain_community.embeddings import DashScopeEmbeddings, QianfanEmbeddingsEndpoint
+from langchain_community.chat_models import ChatTongyi, ChatZhipuAI, MiniMaxChat, MoonshotChat
+from langchain_community.document_compressors import DashScopeRerank
+from langchain_community.embeddings import DashScopeEmbeddings
 from langchain_deepseek import ChatDeepSeek
 from langchain_ollama import OllamaEmbeddings
 from langchain_openai import ChatOpenAI, AzureChatOpenAI, OpenAIEmbeddings, AzureOpenAIEmbeddings
@@ -9,6 +10,8 @@ from .asr import OpenAIASRClient, AliyunASRClient, AzureOpenAIASRClient
 from .base import BaseASRClient, BaseTTSClient
 from .llm.chat_ollama import CustomChatOllamaWithReasoning
 from .llm.chat_openai_compatible import ChatOpenAICompatible
+from .rerank.common_rerank import CommonRerank
+from .rerank.xinference_rerank import XinferenceRerank
 from .tts import OpenAITTSClient, AliyunTTSClient, AzureOpenAITTSClient
 
 __all__ = [
@@ -27,7 +30,6 @@ __all__ = [
     'ChatOpenAI',
     'AzureChatOpenAI',
     'ChatTongyi',
-    'QianfanChatEndpoint',
     'ChatZhipuAI',
     'MiniMaxChat',
     'ChatAnthropic',
@@ -39,5 +41,8 @@ __all__ = [
     'OpenAIEmbeddings',
     'AzureOpenAIEmbeddings',
     'DashScopeEmbeddings',
-    'QianfanEmbeddingsEndpoint',
+
+    'DashScopeRerank',
+    'CommonRerank',
+    'XinferenceRerank'
 ]

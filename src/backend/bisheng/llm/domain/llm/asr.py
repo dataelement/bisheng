@@ -8,10 +8,10 @@ from bisheng.common.errcode.server import NoAsrModelConfigError, AsrModelConfigD
     AsrProviderDeletedError, \
     AsrModelOfflineError
 from bisheng.core.ai import BaseASRClient, OpenAIASRClient, AliyunASRClient, AzureOpenAIASRClient
-from bisheng.llm.const import LLMModelType, LLMServerType
-from bisheng.llm.models import LLMModel, LLMServer
 from .base import BishengBase
 from ..utils import wrapper_bisheng_model_limit_check_async
+from ...const import LLMModelType, LLMServerType
+from ...models import LLMModel, LLMServer
 
 
 async def _get_openai_params(params: dict, server_info: LLMServer, model_info: LLMModel) -> dict:

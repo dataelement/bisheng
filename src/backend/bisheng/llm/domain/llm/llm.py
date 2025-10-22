@@ -15,13 +15,13 @@ from typing_extensions import Self
 from bisheng.common.errcode.server import NoLlmModelConfigError, LlmModelConfigDeletedError, LlmProviderDeletedError, \
     LlmModelTypeError, LlmModelOfflineError, InitLlmError
 from bisheng.core.ai import CustomChatOllamaWithReasoning, ChatOpenAI, ChatOpenAICompatible, \
-    AzureChatOpenAI, ChatTongyi, QianfanChatEndpoint, ChatZhipuAI, MiniMaxChat, ChatAnthropic, ChatDeepSeek, \
+    AzureChatOpenAI, ChatTongyi, ChatZhipuAI, MiniMaxChat, ChatAnthropic, ChatDeepSeek, \
     MoonshotChat
-from bisheng.llm.const import LLMModelType, LLMServerType
-from bisheng.llm.models import LLMServer, LLMModel
 from .base import BishengBase
 from ..utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_limit_check_async, \
     wrapper_bisheng_model_generator, wrapper_bisheng_model_generator_async
+from ...const import LLMModelType, LLMServerType
+from ...models import LLMServer, LLMModel
 
 
 # 需要注意初始化参数的优先级。实例化传入的最高 -> 前端界面配置的其次 -> 前端界面的高级参数优先级最低
@@ -102,21 +102,6 @@ def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> d
     return user_kwargs
 
 
-def _get_qianfan_params(params: dict, server_config: dict, model_config: dict) -> dict:
-    params['qianfan_ak'] = server_config.get('wenxin_api_key')
-    params['qianfan_sk'] = server_config.get('wenxin_secret_key')
-    if params.get('max_tokens'):
-        params['model_kwargs'] = {"max_output_tokens": params.pop('max_tokens')}
-
-    user_kwargs = model_config.get('user_kwargs', {})
-    if user_model_kwargs := user_kwargs.get('model_kwargs'):
-        user_model_kwargs.update(params.get('model_kwargs', {}))
-        params['model_kwargs'] = user_model_kwargs
-        user_kwargs.pop('model_kwargs', None)
-    user_kwargs.update(params)
-    return params
-
-
 def _get_minimax_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params['minimax_api_key'] = server_config.get('openai_api_key')
     params['base_url'] = server_config.get('openai_api_base').rstrip('/')
@@ -171,7 +156,7 @@ _llm_node_type: Dict = {
     LLMServerType.OPENAI.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
     LLMServerType.AZURE_OPENAI.value: {'client': AzureChatOpenAI, 'params_handler': _get_azure_openai_params},
     LLMServerType.QWEN.value: {'client': ChatTongyi, 'params_handler': _get_qwen_params},
-    LLMServerType.QIAN_FAN.value: {'client': QianfanChatEndpoint, 'params_handler': _get_qianfan_params},
+    LLMServerType.QIAN_FAN.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
     LLMServerType.ZHIPU.value: {'client': ChatZhipuAI, 'params_handler': _get_zhipu_params},
     LLMServerType.MINIMAX.value: {'client': MiniMaxChat, 'params_handler': _get_minimax_params},
     LLMServerType.ANTHROPIC.value: {'client': ChatAnthropic, 'params_handler': _get_anthropic_params},
@@ -199,16 +184,7 @@ class BishengLLM(BishengBase, BaseChatModel):
 
     @classmethod
     async def get_bisheng_llm(cls, **kwargs) -> Self:
-        model_id: int | None = kwargs.pop('model_id', None)
-        model_info, server_info = await cls.get_model_server_info(model_id)
-        instance = cls(
-            model_id=model_id,
-            model_info=model_info,
-            server_info=server_info,
-        )
-        instance._init_chat_model(model_info, server_info, **kwargs)
-
-        return instance
+        return cls.get_class_instance(**kwargs)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -218,12 +194,12 @@ class BishengLLM(BishengBase, BaseChatModel):
 
         if "model_info" in kwargs and "server_info" in kwargs:
             # 说明是从class method初始化的 不用再次查询数据库
-            self._init_chat_model(model_info=kwargs.pop("model_info"), server_info=kwargs.pop("server_info"), **kwargs)
+            self._init_client(model_info=kwargs.pop("model_info"), server_info=kwargs.pop("server_info"), **kwargs)
         else:
             model_info, server_info = self.get_model_server_info_sync(self.model_id)
-            self._init_chat_model(model_info, server_info, **kwargs)
+            self._init_client(model_info, server_info, **kwargs)
 
-    def _init_chat_model(self, model_info: LLMModel, server_info: LLMServer, **kwargs):
+    def _init_client(self, model_info: LLMModel, server_info: LLMServer, **kwargs):
         ignore_online = kwargs.get('ignore_online', False)
         self.temperature = kwargs.get('temperature', None)
         self.cache = kwargs.get('cache', None)

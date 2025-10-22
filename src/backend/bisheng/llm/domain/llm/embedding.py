@@ -6,11 +6,10 @@ from loguru import logger
 from pydantic import Field
 from typing_extensions import Self
 
-from bisheng.core.ai import OllamaEmbeddings, OpenAIEmbeddings, AzureOpenAIEmbeddings, DashScopeEmbeddings, \
-    QianfanEmbeddingsEndpoint
-from bisheng.llm.const import LLMServerType
+from bisheng.core.ai import OllamaEmbeddings, OpenAIEmbeddings, AzureOpenAIEmbeddings, DashScopeEmbeddings
 from .base import BishengBase
 from ..utils import wrapper_bisheng_model_limit_check
+from ...const import LLMServerType
 from ...models.llm_server import LLMModel, LLMServer, LLMModelType
 
 
@@ -59,15 +58,6 @@ def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> d
     return user_kwargs
 
 
-def _get_qianfan_params(params: dict, server_config: dict, model_config: dict) -> dict:
-    params['qianfan_ak'] = server_config.get('wenxin_api_key')
-    params['qianfan_sk'] = server_config.get('wenxin_secret_key')
-
-    user_kwargs = model_config.get('user_kwargs', {})
-    user_kwargs.update(params)
-    return user_kwargs
-
-
 _node_type: Dict = {
     # 开源推理框架
     LLMServerType.OLLAMA.value: {"client": OllamaEmbeddings, "params_handler": _get_ollama_params},
@@ -79,7 +69,7 @@ _node_type: Dict = {
     LLMServerType.OPENAI.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
     LLMServerType.AZURE_OPENAI.value: {"client": AzureOpenAIEmbeddings, "params_handler": _get_azure_openai_params},
     LLMServerType.QWEN.value: {"client": DashScopeEmbeddings, "params_handler": _get_qwen_params},
-    LLMServerType.QIAN_FAN.value: {"client": QianfanEmbeddingsEndpoint, "params_handler": _get_qianfan_params},
+    LLMServerType.QIAN_FAN.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
     LLMServerType.MINIMAX.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
     LLMServerType.ZHIPU.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
     LLMServerType.TENCENT.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
@@ -101,15 +91,7 @@ class BishengEmbedding(BishengBase, Embeddings):
 
     @classmethod
     async def get_bisheng_embedding(cls, **kwargs) -> Self:
-        model_id: int | None = kwargs.pop('model_id', None)
-        model_info, server_info = await cls.get_model_server_info(model_id)
-        instance = cls(
-            model_id=model_id,
-            model_info=model_info,
-            server_info=server_info,
-        )
-        instance._init_embeddings(model_info, server_info, **kwargs)
-        return cls(**kwargs)
+        return cls.get_class_instance(**kwargs)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -117,12 +99,12 @@ class BishengEmbedding(BishengBase, Embeddings):
         if not self.model_id:
             raise Exception('没有找到embedding模型配置')
         if "model_info" in kwargs and "server_info" in kwargs:
-            self._init_embeddings(model_info=kwargs.pop('model_info'), server_info=kwargs.pop('server_info'), **kwargs)
+            self._init_client(model_info=kwargs.pop('model_info'), server_info=kwargs.pop('server_info'), **kwargs)
         else:
             model_info, server_info = self.get_model_server_info_sync(self.model_id)
-            self._init_embeddings(model_info=model_info, server_info=server_info, **kwargs)
+            self._init_client(model_info=model_info, server_info=server_info, **kwargs)
 
-    def _init_embeddings(self, model_info, server_info, **kwargs):
+    def _init_client(self, model_info, server_info, **kwargs):
         ignore_online = kwargs.get('ignore_online', False)
         if not model_info:
             raise Exception('embedding模型配置已被删除，请重新配置模型')

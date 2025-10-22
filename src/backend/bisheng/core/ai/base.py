@@ -1,6 +1,10 @@
 import tempfile
 from abc import ABC, abstractmethod
-from typing import Optional, Union, BinaryIO
+from typing import Optional, Union, BinaryIO, Sequence
+
+from langchain_core.callbacks import Callbacks
+from langchain_core.documents import BaseDocumentCompressor, Document
+from pydantic import ConfigDict
 
 
 class BaseASRClient(ABC):
@@ -83,3 +87,39 @@ class BaseTTSClient(ABC):
             音频字节数据
         """
         pass
+
+
+class BaseRerank(BaseDocumentCompressor):
+    """Rerank base interface class"""
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @abstractmethod
+    def compress_documents(
+            self,
+            documents: Sequence[Document],
+            query: str,
+            callbacks: Optional[Callbacks] = None,
+    ) -> Sequence[Document]:
+        """Compress retrieved documents given the query context.
+
+        Args:
+            documents: The retrieved documents.
+            query: The query context.
+            callbacks: Optional callbacks to run during compression.
+
+        Returns:
+            The compressed documents.
+
+        """
+
+    @staticmethod
+    def sort_rerank_result(documents: Sequence[Document], results: list[dict]) -> Sequence[Document]:
+        """Sort and annotate original documents based on rerank results."""
+        sorted_docs = []
+        for res in results:
+            index = res.get("index")
+            if index is not None and 0 <= index < len(documents):
+                doc = documents[index]
+                doc.metadata["relevance_score"] = res.get("relevance_score")
+                sorted_docs.append(doc)
+        return sorted_docs
