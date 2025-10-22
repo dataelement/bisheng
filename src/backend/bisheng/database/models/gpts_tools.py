@@ -1,7 +1,9 @@
+import json
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
 
+from pydantic import model_validator
 from sqlalchemy import JSON, Column, DateTime, String, text, func
 from sqlmodel import Field, or_, select, Text, update
 
@@ -86,6 +88,14 @@ class GptsToolsTypeRead(GptsToolsTypeBase):
     children: Optional[List[GptsTools]] = Field(default_factory=list, description="工具类别下的工具列表")
     parameter_name: Optional[str] = Field(default="", description="自定义请求头参数名")
     api_location: Optional[str] = Field(default="", description="自定义请求头参数位置 header or query")
+    write: Optional[bool] = Field(default=False, description="是否有写权限")
+
+    @model_validator(mode="after")
+    def validate(self):
+        if self.extra:
+            result = json.loads(self.extra)
+            self.api_location = result.get('api_location')
+            self.parameter_name = result.get('parameter_name')
 
 
 class GptsToolsRead(GptsToolsBase):
