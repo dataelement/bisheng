@@ -381,12 +381,9 @@ class AssistantService(BaseService, AssistantUtils):
         tool_type_ids_extra = []
         if is_preset != ToolPresetType.PRESET.value:
             # 获取自定义工具列表时，需要包含用户可用的工具列表
-            user_role = UserRoleDao.get_user_roles(user.user_id)
-            if user_role:
-                role_ids = [role.role_id for role in user_role]
-                role_access = RoleAccessDao.get_role_access(role_ids, AccessType.GPTS_TOOL_READ)
-                if role_access:
-                    tool_type_ids_extra = [int(access.third_id) for access in role_access]
+            access_resources = user.get_user_access_resource_ids([AccessType.GPTS_TOOL_READ])
+            if access_resources:
+                tool_type_ids_extra = [int(access) for access in access_resources]
         # 获取用户可见的所有工具列表
         if is_preset is None:
             all_tool_type = GptsToolsDao.get_user_tool_type(user.user_id, tool_type_ids_extra)
@@ -398,20 +395,41 @@ class AssistantService(BaseService, AssistantUtils):
             all_tool_type = GptsToolsDao.get_user_tool_type(user.user_id, tool_type_ids_extra, False,
                                                             ToolPresetType(is_preset))
         tool_type_id = [one.id for one in all_tool_type]
-        res = []
+        res: List[GptsToolsTypeRead] = []
         tool_type_children = {}
+        need_judge_write_tool_type = []
         for one in all_tool_type:
+            if one.user_id != user.user_id:
+                need_judge_write_tool_type.append(one.id)
             tool_type_id.append(one.id)
             tool_type_children[one.id] = []
-            res.append(one.model_dump(exclude={'extra'}))
+            res.append(GptsToolsTypeRead.model_validate(one))
 
         # 获取对应类别下的工具列表
         tool_list = GptsToolsDao.get_list_by_type(tool_type_id)
         for one in tool_list:
             tool_type_children[one.type].append(one)
 
+        # check write permission
+        write_tool_type = None
         for one in res:
-            one["children"] = tool_type_children.get(one["id"], [])
+            if user.is_admin() or one.user_id == user.user_id:
+                one.write = True
+            else:
+                if write_tool_type is None:
+                    write_resources = user.get_user_access_resource_ids([AccessType.GPTS_TOOL_WRITE])
+                    write_tool_type = {int(x): True for x in write_resources}
+                one.write = write_tool_type.get(one.id, False)
+            one.children = tool_type_children.get(one.id, [])
+
+            # no write auth, clear sensitive info
+            if not one.write:
+                one.api_key = ""
+                one.extra = None
+                # preset tool extra contains sensitive information
+                if one.is_preset == ToolPresetType.PRESET.value:
+                    for child in one.children:
+                        child.extra = None
 
         return res
 

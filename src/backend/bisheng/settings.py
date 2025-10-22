@@ -98,16 +98,16 @@ class WorkflowConf(BaseModel):
 
 
 class CeleryConf(BaseModel):
-    task_routers: Optional[dict] = Field(default_factory=dict, validate_default=True, description='任务路由配置')
+    task_routers: Optional[Dict] = Field(default_factory=dict, description='任务路由配置')
 
-    @field_validator('task_routers', mode='before')
-    def handle_routers(cls, value):
-        if not value:
-            return {
+    @model_validator(mode='after')
+    def validate(self):
+        if not self.task_routers:
+            self.task_routers = {
                 "bisheng.worker.knowledge.*": {"queue": "knowledge_celery"},  # 知识库相关任务
                 "bisheng.worker.workflow.*": {"queue": "workflow_celery"},  # 工作流执行相关任务
             }
-        return value
+        return self
 
 
 class LinsightConf(BaseModel):

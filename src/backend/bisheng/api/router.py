@@ -10,6 +10,7 @@ from bisheng.api.v1 import (assistant_router, audit_router, chat_router, compone
 from bisheng.api.v2 import (assistant_router_rpc, chat_router_rpc, flow_router,
                             knowledge_router_rpc, rpc_router_rpc, workflow_router_rpc,
                             workstation_router_rpc)
+from bisheng.api.v2.llm import router as llm_router_rpc
 from bisheng.llm.api.router import router as llm_router
 
 router = APIRouter(prefix='/api/v1', )
@@ -46,3 +47,4 @@ router_rpc.include_router(flow_router)
 router_rpc.include_router(assistant_router_rpc)
 router_rpc.include_router(workflow_router_rpc)
 router_rpc.include_router(workstation_router_rpc)
+router_rpc.include_router(llm_router_rpc)
