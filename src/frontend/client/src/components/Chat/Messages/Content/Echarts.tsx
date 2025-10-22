@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "~/components/ui"
 import { copyText } from "~/utils"
 import { loadScript } from "./Mermaid"
+import { useLocalize } from "~/hooks"
 
 export default function ECharts({ option }: { option: string }) {
     const [mode, setMode] = useState<"chart" | "code">("chart")
@@ -12,6 +13,7 @@ export default function ECharts({ option }: { option: string }) {
     const chartRef = useRef<any | null>(null)
     const domRef = useRef<HTMLDivElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
+    const localize = useLocalize();
 
     useEffect(() => {
         loadScript("echarts")
@@ -118,21 +120,21 @@ export default function ECharts({ option }: { option: string }) {
                             variant={mode === "chart" ? "default" : "ghost"}
                             className="text-xs h-8"
                         >
-                            图表
+                            {localize('com_ui_chart')}
                         </Button>
                         <Button
                             onClick={() => setMode("code")}
                             variant={mode === "code" ? "default" : "ghost"}
                             className="text-xs h-8"
                         >
-                            代码
+                            {localize('com_ui_code')}
                         </Button>
                     </div>
                     {mode === "code" && (
                         <div className="flex items-center">
                             <Button onClick={handleCopy} variant="ghost" className="text-xs h-8">
                                 <Copy size={16} />
-                                {copySuccess ? "已复制" : "复制"}
+                                {copySuccess ? localize('com_ui_duplicated') : localize('com_ui_duplicate')}
                             </Button>
                         </div>
                     )}

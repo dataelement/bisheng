@@ -6,6 +6,7 @@ import { Copy, DownloadIcon, ZoomIn, ZoomOut } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Button, Separator } from "~/components/ui"
 import { copyText, formatDate } from "~/utils"
+import { useLocalize } from "~/hooks"
 
 // 动态加载 mermaid
 export const loadScript = async (fileName) => {
@@ -37,6 +38,7 @@ export default function MermaidBlock({ children }: { children: string }) {
     const containerRef = useRef<HTMLDivElement>(null)
     const [mode, setMode] = useState<"chart" | "code">("chart")
     const mermaidRef = useRef<any>(null)
+    const localize = useLocalize();
 
     const [zoom, setZoom] = useState(1)
     const [pan, setPan] = useState({ x: 0, y: 0 })
@@ -188,14 +190,14 @@ export default function MermaidBlock({ children }: { children: string }) {
                             variant={mode === "chart" ? "default" : "ghost"}
                             className="text-xs h-8"
                         >
-                            图表
+                            {localize('com_ui_chart')}
                         </Button>
                         <Button
                             onClick={() => setMode("code")}
                             variant={mode === "code" ? "default" : "ghost"}
                             className="text-xs h-8"
                         >
-                            代码
+                            {localize('com_ui_code')}
                         </Button>
                     </div>
                     {mode === "chart" && (
@@ -215,7 +217,7 @@ export default function MermaidBlock({ children }: { children: string }) {
                             <Separator orientation="vertical" className="h-4 mx-1" />
                             <Button onClick={handleDownload} variant="ghost" className="text-xs h-8">
                                 <DownloadIcon size={16} />
-                                下载
+                                {localize('com_ui_download')}
                             </Button>
                         </div>
                     )}
@@ -223,7 +225,7 @@ export default function MermaidBlock({ children }: { children: string }) {
                         <div className="flex items-center">
                             <Button onClick={handleCopy} variant="ghost" className="text-xs h-8">
                                 <Copy size={16} />
-                                {copySuccess ? "已复制" : "复制"}
+                                {copySuccess ? localize('com_ui_duplicated') : localize('com_ui_duplicate')}
                             </Button>
                         </div>
                     )}

@@ -218,12 +218,12 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent }
       return '';
     }
     const message = LaTeXParsing ? preprocessLaTeX(content) : content;
-    //     return `\`\`\`mermaid
-    //         graph TD
-    //           A[Next.js] --> B[Markdoc]
-    //           B --> C[Mermaid Node]
-    //           C --> D[渲染流程图]
-    //           D --> E{交互式图表}
+//         return `\`\`\`mermaid
+//             graph TD
+//               A[Next.js] --> B[Markdoc]
+//               B --> C[Mermaid Node]
+//               C --> D[渲染流程图]
+//               D --> E{交互式图表}
 // \`\`\``;
 //     return `\`\`\`echarts
 //     {"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]},"yAxis":{"type":"value"},"series":[{"data":[120,200,150,80,70,110,130],"type":"bar"}]}
