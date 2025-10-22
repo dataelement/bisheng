@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 
 from pydantic import model_validator
 from sqlalchemy import JSON, Column, DateTime, String, text, func
-from sqlmodel import Field, or_, select, Text, update
+from sqlmodel import Field, or_, select, Text, update, col
 
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.constants import ToolPresetType
@@ -393,19 +393,15 @@ class GptsToolsDao(GptsToolsBase):
         """
         删除工具类别
         """
+        statement = update(GptsToolsType).where(col(GptsToolsType.id) == tool_type_id,
+                                                col(GptsToolsType.is_preset) != ToolPresetType.PRESET.value).values(
+            is_delete=1)
+        tool_statement = update(GptsTools).where(col(GptsTools.type) == tool_type_id,
+                                                 col(GptsTools.is_preset) != ToolPresetType.PRESET.value).values(
+            is_delete=1)
         with get_sync_db_session() as session:
-            session.exec(
-                update(GptsToolsType).filter(
-                    GptsToolsType.id == tool_type_id,
-                    GptsToolsType.is_preset != ToolPresetType.PRESET.value,
-                ).values(is_delete=1)
-            )
-            session.exec(
-                update(GptsTools).filter(
-                    GptsTools.type == tool_type_id,
-                    GptsToolsType.is_preset != ToolPresetType.PRESET.value
-                ).values(is_delete=1)
-            )
+            session.exec(statement)
+            session.exec(tool_statement)
             session.commit()
 
     @classmethod

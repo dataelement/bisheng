@@ -11,7 +11,6 @@ from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
                                     StreamData, UnifiedResponseModel, resp_200, resp_500)
 from bisheng.cache import InMemoryCache
@@ -33,6 +32,7 @@ from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.llm.domain.services import LLMService
+from bisheng.utils import get_request_ip
 
 
 class AssistantService(BaseService, AssistantUtils):
@@ -446,7 +446,7 @@ class AssistantService(BaseService, AssistantUtils):
         return tool_type
 
     @classmethod
-    async def add_gpts_tools(cls, user: UserPayload, req: GptsToolsTypeRead) -> UnifiedResponseModel:
+    async def add_gpts_tools(cls, request: Request, user: UserPayload, req: GptsToolsTypeRead) -> UnifiedResponseModel:
         """ 添加自定义工具 """
         # 尝试解析下openapi schema看下是否可以正常解析, 不能的话保存不允许保存
         tool_service = ToolServices()
@@ -475,27 +475,30 @@ class AssistantService(BaseService, AssistantUtils):
         # 添加工具类别和对应的 工具列表
         res = GptsToolsDao.insert_tool_type(req)
 
-        cls.add_gpts_tools_hook(user, res)
+        cls.add_gpts_tools_hook(request, user, res)
         return resp_200(data=res)
 
     @classmethod
-    def add_gpts_tools_hook(cls, user: UserPayload, gpts_tool_type: GptsToolsTypeRead) -> bool:
+    def add_gpts_tools_hook(cls, request: Request, user: UserPayload, gpts_tool_type: GptsToolsTypeRead) -> bool:
         """ 添加自定义工具后的hook函数 """
         # 查询下用户所在的用户组
         user_group = UserGroupDao.get_user_group(user.user_id)
+        group_ids = []
         if user_group:
             # 批量将自定义工具插入到关联表里
             batch_resource = []
             for one in user_group:
+                group_ids.append(one.group_id)
                 batch_resource.append(GroupResource(
                     group_id=one.group_id,
                     third_id=gpts_tool_type.id,
                     type=ResourceTypeEnum.GPTS_TOOL.value))
             GroupResourceDao.insert_group_batch(batch_resource)
+        AuditLogService.create_tool(user, get_request_ip(request), group_ids, gpts_tool_type)
         return True
 
     @classmethod
-    def delete_gpts_tools(cls, user: UserPayload, tool_type_id: int) -> UnifiedResponseModel:
+    def delete_gpts_tools(cls, request, user: UserPayload, tool_type_id: int) -> UnifiedResponseModel:
         """ 删除工具类别 """
         exist_tool_type = GptsToolsDao.get_one_tool_type(tool_type_id)
         if not exist_tool_type:
@@ -507,14 +510,17 @@ class AssistantService(BaseService, AssistantUtils):
             return UnAuthorizedError.return_resp()
 
         GptsToolsDao.delete_tool_type(tool_type_id)
-        cls.delete_gpts_tool_hook(user, exist_tool_type)
+        cls.delete_gpts_tool_hook(request, user, exist_tool_type)
         return resp_200()
 
     @classmethod
-    def delete_gpts_tool_hook(cls, user: UserPayload, gpts_tool_type) -> bool:
+    def delete_gpts_tool_hook(cls, request, user: UserPayload, gpts_tool_type) -> bool:
         """ 删除自定义工具后的hook函数 """
         logger.info(f"delete_gpts_tool_hook id: {gpts_tool_type.id}, user: {user.user_id}")
         GroupResourceDao.delete_group_resource_by_third_id(gpts_tool_type.id, ResourceTypeEnum.GPTS_TOOL)
+        groups = GroupResourceDao.get_resource_group(ResourceTypeEnum.GPTS_TOOL, gpts_tool_type.id)
+        group_ids = [int(one.group_id) for one in groups]
+        AuditLogService.delete_tool(user, get_request_ip(request), group_ids, gpts_tool_type)
         return True
 
     @classmethod

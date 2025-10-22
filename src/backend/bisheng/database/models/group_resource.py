@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 from sqlalchemy import Column, DateTime, text, delete
 from sqlmodel import Field, select
 
-from bisheng.core.database import get_sync_db_session
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -104,6 +104,17 @@ class GroupResourceDao(GroupResourceBase):
             statement = select(GroupResource).where(GroupResource.third_id == third_id,
                                                     GroupResource.type == resource_type.value)
             return session.exec(statement).all()
+
+    @classmethod
+    async def aget_resource_group(cls, resource_type: ResourceTypeEnum, third_id: str) -> list[GroupResource]:
+        """
+        获取资源所属的分组
+        """
+        async with get_async_db_session() as session:
+            statement = select(GroupResource).where(GroupResource.third_id == third_id,
+                                                    GroupResource.type == resource_type.value)
+            result = await session.exec(statement)
+            return result.all()
 
     @classmethod
     def get_resources_group(cls, resource_type: ResourceTypeEnum | None, third_ids: List[str]) -> list[GroupResource]:

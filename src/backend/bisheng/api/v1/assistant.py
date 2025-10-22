@@ -259,26 +259,28 @@ async def refresh_all_mcp_tools(request: Request, login_user: UserPayload = Depe
 
 @router.post('/tool_list')
 async def add_tool_type(*,
+                        request: Request,
                         req: Dict = Body(default={}, description='openapi解析后的工具对象'),
                         login_user: UserPayload = Depends(get_login_user)):
     """ 新增自定义tool """
     req = GptsToolsTypeRead(**req)
-    return await AssistantService.add_gpts_tools(login_user, req)
+    return await AssistantService.add_gpts_tools(request, login_user, req)
 
 
 @router.put('/tool_list')
 async def update_tool_type(*,
+                           request: Request,
                            login_user: UserPayload = Depends(get_login_user),
                            req: Dict = Body(default={}, description='通过openapi 解析后的内容，包含类别的唯一ID')):
     """ 更新自定义tool """
     req = GptsToolsTypeRead(**req)
-    return resp_200(data=await ToolServices.update_gpts_tools(login_user, req))
+    return resp_200(data=await ToolServices.update_gpts_tools(request, login_user, req))
 
 
 @router.delete('/tool_list')
-def delete_tool_type(*, login_user: UserPayload = Depends(get_login_user), req: DeleteToolTypeReq):
+def delete_tool_type(*, request: Request, login_user: UserPayload = Depends(get_login_user), req: DeleteToolTypeReq):
     """ 删除自定义工具 """
-    return AssistantService.delete_gpts_tools(login_user, req.tool_type_id)
+    return AssistantService.delete_gpts_tools(request, login_user, req.tool_type_id)
 
 
 @router.post('/tool_test')

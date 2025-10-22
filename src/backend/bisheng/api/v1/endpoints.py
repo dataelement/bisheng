@@ -8,7 +8,6 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, Uplo
 
 from bisheng import settings
 from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
-from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import (ProcessResponse, UploadFileResponse,
                                     resp_200)
 from bisheng.cache.redis import redis_client
@@ -24,6 +23,7 @@ from bisheng.services.deps import get_session_service, get_task_service
 from bisheng.services.task.service import TaskService
 from bisheng.settings import settings as bisheng_settings
 from bisheng.utils import generate_uuid
+from bisheng.utils import get_request_ip
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient, bucket
 

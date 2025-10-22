@@ -13,6 +13,7 @@ from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.database.models.assistant import AssistantDao, Assistant
 from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
 from bisheng.database.models.flow import FlowDao, Flow, FlowType
+from bisheng.database.models.gpts_tools import GptsToolsType
 from bisheng.database.models.group import Group
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
@@ -393,6 +394,26 @@ class AuditLogService:
 
         cls._system_log(user, ip_address, [role.group_id], EventType.DELETE_ROLE,
                         ObjectType.ROLE_CONF, str(role.id), role.role_name)
+
+    @classmethod
+    def create_tool(cls, user: UserPayload, ip_address: str, group_ids: List[int], tool_type: GptsToolsType):
+        logger.info(f"act=create_tool user={user.user_name} ip={ip_address} tool_type_id={tool_type.id}")
+
+        cls._system_log(user, ip_address, group_ids, EventType.ADD_TOOL, ObjectType.TOOL, str(tool_type.id),
+                        tool_type.name)
+
+    @classmethod
+    def update_tool(cls, user: UserPayload, ip_address: str, group_ids: List[int], tool_type: GptsToolsType):
+        logger.info(f"act=update_tool user={user.user_name} ip={ip_address} tool_type_id={tool_type.id}")
+
+        cls._system_log(user, ip_address, group_ids, EventType.UPDATE_TOOL, ObjectType.TOOL, str(tool_type.id),
+                        tool_type.name)
+
+    @classmethod
+    def delete_tool(cls, user: UserPayload, ip_address: str, group_ids: List[int], tool_type: GptsToolsType):
+        logger.info(f"act=delete_tool user={user.user_name} ip={ip_address} tool_type_id={tool_type.id}")
+        cls._system_log(user, ip_address, group_ids, EventType.DELETE_TOOL, ObjectType.TOOL, str(tool_type.id),
+                        tool_type.name)
 
     @classmethod
     def user_login(cls, user: UserPayload, ip_address: str):
