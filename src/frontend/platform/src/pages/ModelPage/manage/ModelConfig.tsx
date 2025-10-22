@@ -18,15 +18,27 @@ import CustomForm from "./CustomForm";
 
 function ModelItem({ data, type, onDelete, onInput, onConfig }) {
     const { t } = useTranslation('model')
-    const [model, setModel] = useState(data)
+    const [model, setModel] = useState({
+        ...data,
+        voice: data.config?.voice || '' 
+    })
     const [error, setError] = useState('')
     const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(data.config?.enable_web_search || false)
     const [maxTokens, setMaxTokens] = useState(data.config?.max_tokens ?? '')
+    const [voiceError, setVoiceError] = useState('')
 
+    // 当data从父组件更新时，同步本地状态
+    useEffect(() => {
+        setModel({
+            ...data,
+            voice: data.config?.voice || '' // 确保从 config 中获取 voice
+        });
+    }, [data]);
 
     const handleInput = (e) => {
         const value = e.target.value
-        setModel({ ...model, model_name: value })
+        const updatedModel = { ...model, model_name: value }
+        setModel(updatedModel)
         const repeated = onInput(value, model.model_type)
 
         setError('')
@@ -35,14 +47,26 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
         if (repeated) setError(t('model.modelNameDuplicate'))
     }
 
+    const handleVoiceInput = (e) => {
+        const value = e.target.value
+        
+        // 更新本地状态
+        const updatedModel = { ...model, voice: value }
+        setModel(updatedModel)
+        
+        // 将 voice 通过 onConfig 传递给父组件，放在 config 中
+        onConfig({ ...model.config, voice: value })
+        
+        setVoiceError('')
+    }
     const handleSelectChange = (val) => {
-        setModel({ ...model, model_type: val })
+        const updatedModel = { ...model, model_type: val }
+        setModel(updatedModel)
         onInput(model.model_name, val)
 
         // Reset states when model_type changes
-        setIsWebSearchEnabled(false)  // Reset web search toggle to false
-        setMaxTokens('')  // Reset max tokens input
-        // onConfig(null)
+        setIsWebSearchEnabled(false)
+        setMaxTokens('')
     }
 
     const handleDelClick = () => {
@@ -84,10 +108,10 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                 <div>
                     <Label className="bisheng-label">
                         <span>{t('model.modelName')}</span>
-                        <QuestionTooltip
+                    <QuestionTooltip
                             className="relative top-0.5 ml-1"
                             content={t('model.modelNameTooltip')}
-                        />
+                        ><span /></QuestionTooltip>
                     </Label>
                     <Label className="bisheng-label"></Label>
                     <Input value={model.model_name} onChange={handleInput} className="h-8"></Input>
@@ -104,10 +128,31 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                                 <SelectItem value="llm">LLM</SelectItem>
                                 <SelectItem value="embedding">Embedding</SelectItem>
                                 <SelectItem value="rerank">Rerank</SelectItem>
+                                <SelectItem value="asr">ASR</SelectItem>
+                                <SelectItem value="tts">TTS</SelectItem>
                             </SelectGroup>
                         </SelectContent>
                     </Select>
                 </div>
+                { model.model_type === 'tts' && (
+                    <div>
+                        <Label className="bisheng-label">
+                            <span>{t('model.voiceType')}</span>
+                            <span className="text-red-500">*</span>
+                            <QuestionTooltip
+                                className="relative top-0.5 ml-1"
+                                content={t('model.voiceTypeTooltip')}
+                            ><span /></QuestionTooltip>
+                        </Label>
+                        <Input 
+                            value={model.voice || ''} 
+                            onChange={handleVoiceInput} 
+                            className="h-8"
+                        ></Input>
+                        
+                        {voiceError && <span className="text-red-500 text-xs">{voiceError}</span>}
+                    </div>
+                )}
                 {model.model_type === 'llm' && (
                     <>
                         {['qwen', 'tencent', 'moonshot'].includes(type) && <div className="flex gap-2 items-center">
@@ -158,6 +203,7 @@ const bishengModelProvider = { "name": "bishengRT", "value": "bisheng_rt" }
 
 // 默认表单项
 const defaultForm = {
+    id: null as any,
     type: '',
     name: '',
     limit_flag: false,
@@ -194,7 +240,8 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
             id: generateUUID(4),
             name: `model ${maxIndex + 1}`,
             model_name: '',
-            model_type: 'llm'
+            model_type: 'llm',
+            voice: '' // 为TTS模型添加voice字段
         }
         setFormData({ ...formData, models: [...formData.models, model] })
     }
@@ -209,11 +256,21 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
             ...el,
             config: type === 'llm' ? el.config : null,
             model_name: name,
-            model_type: type
+            model_type: type,
+            voice: type === 'tts' ? (el.voice || '') : '' // 如果是TTS类型，保留voice字段，否则清空
         } : el)
         setFormData({ ...formData, models })
         // 重复校验
         return formData.models.find((el, i) => index !== i && el.model_name === name)
+    }
+
+    // 新增处理音色类型变化的函数
+    const handleVoiceChange = (voice, index) => {
+        const models = formData.models.map((el, i) => index === i ? {
+            ...el,
+            voice
+        } : el)
+        setFormData({ ...formData, models })
     }
 
     const handleModelConfig = (config, index) => {
@@ -229,74 +286,90 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
     const { message, toast } = useToast()
     const formRef = useRef(null)
     const [isLoading, setIsLoading] = useState(false);
-    const handleSave = async () => {
-        setIsLoading(true)
-        try {
-            const exists = onBerforSave(formData.id, formData.name)
-            if (exists) {
-                return message({
-                    variant: 'warning',
-                    description: t('model.duplicateServiceProviderName')
-                })
-            }
-            if (!formData.name || formData.name.length > 100) {
-                return message({
-                    variant: 'warning',
-                    description: t('model.duplicateServiceProviderNameValidation')
-                })
-            }
-            const [config, errorKey] = formRef.current.getData();
-            if (errorKey) {
-                return message({
-                    variant: 'warning',
-                    description: `${errorKey} ${t('model.notBeEmpty')}`
-                })
-            }
-
-            // 重复检验map
-            const map = {}
-            let repeat = false
-            const error = formData.models.some(model => {
-                if (map[model.model_name]) repeat = true
-                map[model.model_name] = true
-                return !model.model_name || model.model_name.length > 100
+const handleSave = async () => {
+    setIsLoading(true)
+    try {
+        const exists = onBerforSave(formData.id, formData.name)
+        if (exists) {
+            return message({
+                variant: 'warning',
+                description: t('model.duplicateServiceProviderName')
             })
-            if (error) {
-                return message({
-                    variant: 'warning',
-                    description: t('model.modelNameValidation')
-                })
-            }
-            if (repeat) {
-                return message({
-                    variant: 'warning',
-                    description: t('model.modelDuplicate')
-                })
-            }
-
-            if (id === -1) {
-                await captureAndAlertRequestErrorHoc(addLLmServer({ ...formData, config }).then(res => {
-                    // if (res.code === 10802) {
-                    //     return toast({
-                    //         variant: 'error',
-                    //         description: res.msg
-                    //     })
-                    // }
-                    onAfterSave(res.code === 10803 ? res.msg : t('model.addSuccess'))
-                    onBack()
-                }))
-            } else {
-                await captureAndAlertRequestErrorHoc(updateLLmServer({ ...formData, config }).then(res => {
-                    onAfterSave(t('model.updateSuccess'))
-                    onBack()
-                }))
-            }
-        } catch (error) {
-            console.error('Save error:', error);
-        } finally {
-            setIsLoading(false);
         }
-    };
+        if (!formData.name || formData.name.length > 100) {
+            return message({
+                variant: 'warning',
+                description: t('model.duplicateServiceProviderNameValidation')
+            })
+        }
+        const [config, errorKey] = formRef.current.getData();
+        if (errorKey) {
+            return message({
+                variant: 'warning',
+                description: `${errorKey} ${t('model.notBeEmpty')}`
+            })
+        }
+
+        // 重复检验map
+        const map = {}
+        let repeat = false
+        let hasTTSVoiceError = false
+        let emptyVoiceModels = [] // 记录没有填写voice的TTS模型名称
+       
+        const error = formData.models.some(model => {
+            if (map[model.model_name]) repeat = true
+            map[model.model_name] = true
+            
+            // 检查TTS模型的voice字段是否为空
+            if (model.model_type === 'tts' && !model.config?.voice) {
+                hasTTSVoiceError = true
+            }
+            
+            return !model.model_name || model.model_name.length > 100
+        })
+        if (error) {
+            return message({
+                variant: 'warning',
+                description: t('model.modelNameValidation')
+            })
+        }
+        if (repeat) {
+            return message({
+                variant: 'warning',
+                description: t('model.modelDuplicate')
+            })
+        }
+        if (hasTTSVoiceError) {
+            return message({
+                variant: 'warning',
+                description: t('model.voiceTypeRequired')
+            })
+        }
+
+        // 直接使用 formData，不创建新的 dataToSend 对象
+        const saveData = {
+            ...formData,
+            config
+        }
+        console.log(saveData,4343);
+
+        if (id === -1) {
+            await captureAndAlertRequestErrorHoc(addLLmServer(saveData).then(res => {
+                onAfterSave(res.code === 10803 ? res.msg : t('model.addSuccess'))
+                onBack()
+            }))
+        } else {
+            await captureAndAlertRequestErrorHoc(updateLLmServer(saveData).then(res => {
+                onAfterSave(t('model.updateSuccess'))
+                onBack()
+            }))
+        }
+    } catch (error) {
+        console.error('Save error:', error);
+    } finally {
+        setIsLoading(false);
+    }
+};
 
     const handleModelDel = () => {
         bsConfirm({
@@ -348,7 +421,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
             <div className="mb-2">
                 <Label className="bisheng-label">
                     <span>{t('model.serviceProviderName')}</span>
-                    <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.serviceProviderNameTooltip')} />
+                    <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.serviceProviderNameTooltip')}><span /></QuestionTooltip>
                 </Label>
                 <Input value={formData.name} onChange={(e) => {
                     const name = e.target.value
@@ -388,6 +461,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                                 data={m}
                                 type={formData.type}
                                 onInput={(name, type) => handleModelChange(name, type, i)}
+                                onVoiceChange={(voice) => handleVoiceChange(voice, i)}
                                 onConfig={(config) => handleModelConfig(config, i)}
                                 onDelete={() => handleDelete(i)}
                             />)
@@ -421,7 +495,7 @@ const useSelectModel = () => {
 
     const loadData = async () => {
         try {
-            const response = await fetch(__APP_ENV__.BASE_URL + '/models/data.json');
+            const response = await fetch((window as any).__APP_ENV__?.BASE_URL + '/models/data.json');
             if (!response.ok) {
                 throw new Error('Failed to fetch data');
             }

@@ -7,13 +7,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, ORJSONResponse
 from fastapi.staticfiles import StaticFiles
-
-from bisheng.api.errcode import BaseErrorCode
-from fastapi_jwt_auth import AuthJWT
-from fastapi_jwt_auth.exceptions import AuthJWTException
 from loguru import logger
 
 from bisheng.api import router, router_rpc
+from bisheng.common.errcode import BaseErrorCode
 from bisheng.core.app_context import init_app_context
 from bisheng.database.init_data import init_default_data
 from bisheng.interface.utils import setup_llm_caching
@@ -22,6 +19,8 @@ from bisheng.settings import settings
 from bisheng.utils.http_middleware import CustomMiddleware
 from bisheng.utils.logger import configure
 from bisheng.utils.threadpool import thread_pool
+from fastapi_jwt_auth import AuthJWT
+from fastapi_jwt_auth.exceptions import AuthJWTException
 
 
 def handle_http_exception(req: Request, exc: Exception) -> ORJSONResponse:

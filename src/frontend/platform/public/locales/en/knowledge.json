@@ -51,6 +51,7 @@
     "chunkOverlapPlaceholder": "Enter chunk overlap length",
     "submit": "Submit",
     "previewResults": "Preview Split Results",
+    "ocrForceTip": "When enabled, OCR recognizes text in scans/images and extracts table structures",
     "splitContent": "Split Content",
     "markdownPreview": "Markdown Preview",
     "editSuccess": "Edit Success",

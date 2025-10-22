@@ -11,28 +11,45 @@ import WorkbenchModel from "./tabs/WorkbenchModel";
 
 export default function SystemModelConfig({ data, onBack }) {
     const { t } = useTranslation('model')
-    const { llmOptions, embeddings } = useMemo(() => {
+    const { llmOptions, embeddings, asrModel, ttsModel} = useMemo(() => {
         let llmOptions = []
         let embeddings = []
-        data.forEach(server => {
+        let asrModel = []
+        let ttsModel = []
+        data.forEach(server => {     
             const serverEmbItem = { value: server.id, label: server.name, children: [] }
             const serverLlmItem = { value: server.id, label: server.name, children: [] }
+            const serverAsrItem = { value: server.id, label: server.name, children: [] }
+            const serverTtsItem = { value: server.id, label: server.name, children: [] }
+
             server.models.forEach(model => {
+                console.log(model,44);
                 const item = {
                     value: model.id,
                     label: model.model_name
                 }
                 if (!model.online) return
+                if(model.model_type === 'asr'){
+                    console.log(item,34);
+                    
+                    serverAsrItem.children.push(item)
+                }
+                if(model.model_type === 'tts'){
+                    console.log(item,35);
 
+                    serverTtsItem.children.push(item)
+                }
                 model.model_type === 'embedding' ?
                     serverEmbItem.children.push(item) : serverLlmItem.children.push(item)
             })
-
             if (serverLlmItem.children.length) llmOptions.push(serverLlmItem)
             if (serverEmbItem.children.length) embeddings.push(serverEmbItem)
+            if (serverAsrItem.children.length) asrModel.push(serverAsrItem)
+            if (serverTtsItem.children.length) ttsModel.push(serverTtsItem)
+
         });
 
-        return { llmOptions, embeddings }
+        return { llmOptions, embeddings, asrModel, ttsModel}
     }, [data])
 
     return <div className="px-2 py-4 size-full pb-20 relative overflow-y-auto">
@@ -55,7 +72,7 @@ export default function SystemModelConfig({ data, onBack }) {
                         <TabsTrigger value="workflow" className="w-[150px]">{t('model.workflowModel')}</TabsTrigger>
                     </TabsList>
                      <TabsContent value="workbench">
-                        <WorkbenchModel llmOptions={llmOptions} embeddings={embeddings} onBack={onBack}></WorkbenchModel>
+                        <WorkbenchModel llmOptions={llmOptions} embeddings={embeddings} asrModel={asrModel} ttsModel={ttsModel} onBack={onBack}></WorkbenchModel>
                     </TabsContent>
                     <TabsContent value="knowledge">
                         <KnowledgeModle llmOptions={llmOptions} embeddings={embeddings} onBack={onBack}></KnowledgeModle>

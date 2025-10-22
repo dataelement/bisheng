@@ -14,6 +14,9 @@ import useFlowStore from "../flowStore";
 import ChatFiles from "./ChatFiles";
 import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
+const GuideQuestionsAny = GuideQuestions as any;
+import SpeechToTextComponent from "@/components/voiceFunction/speechTotext";
+import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 
 export const FileTypes = {
     ALL: ['.PNG', '.JPEG', '.JPG', '.BMP', '.PDF', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.DOCX', '.PPT', '.PPTX'],
@@ -31,9 +34,11 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     const inputNodeIdRef = useRef('') // 当前输入框节点id
     const messageIdRef = useRef('') // 当前输入框节点messageId
     const [accepts, setAccepts] = useState('*') // 接受文件类型
-
+    const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
+    
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
 
+    const __store: any = useMessageStore() as any
     const {
         messages,
         hisMessages,
@@ -48,7 +53,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         destory,
         insetNodeRun,
         setShowGuideQuestion
-    } = useMessageStore()
+    } = __store
 
     const currentChatIdRef = useRef(null)
     const inputRef = useRef(null)
@@ -466,11 +471,27 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
 
     // 文件上传状态
     const { fileUploading, getFileIds, loadingChange } = useFileLoading(inputLock.locked)
+    const handleSpeechRecognition = (text) => {
+        console.log('text', text);
+        
+        if (!showWhenLocked && inputLock.locked) return;
+        if (!inputRef.current) return;
+        
+        // 将识别结果追加到当前输入框内容后
+        const currentValue = inputRef.current.value;
+        inputRef.current.value = currentValue + text;
+        
+        // 触发input事件以更新UI（如自动调整高度）
+        const event = new Event('input', { bubbles: true, cancelable: true });
+        inputRef.current.dispatchEvent(event);
+    };
 
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
+        
         <div className={`relative pr-4 ${clear && 'pl-9'}`}>
+       
             {/* 引导问题 */}
-            <GuideQuestions
+            <GuideQuestionsAny
                 ref={questionsRef}
                 locked={inputLock.locked}
                 onClick={handleClickGuideWord}
@@ -481,6 +502,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                     <Button className="rounded-full" disabled={restarted} variant="ghost" size="icon" onClick={handleRestartClick}><RefreshCw size={18} /></Button>
                 </Tip>
             </div>
+        
             {/* form switch */}
             <div className="flex absolute left-3 top-4 z-10">
                 {
@@ -490,6 +512,11 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                     ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}></FormIcon></div>
                 }
             </div>
+            {/* 语音转文字 */}
+            <div className={` ${!inputLock.locked && 'mr-4'}`}>
+                {linsightConfig?.asr_model?.id && <SpeechToTextComponent onChange={handleSpeechRecognition} />}
+            </div>
+          
             {/* 附件 */}
             {!inputLock.locked && <ChatFiles accepts={accepts} v={location.href.indexOf('/chat/flow/') === -1 ? 'v1' : 'v2'} onChange={loadingChange} />}
             {/* send */}

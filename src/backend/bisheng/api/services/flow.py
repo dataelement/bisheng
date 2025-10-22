@@ -6,10 +6,6 @@ from fastapi import Request
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
 
-from bisheng.api.errcode.http_error import UnAuthorizedError
-from bisheng.api.errcode.flow import NotFoundVersionError, CurVersionDelError, VersionNameExistsError, \
-    NotFoundFlowError, \
-    FlowOnlineEditError, WorkFlowOnlineEditError
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.user_service import UserPayload
@@ -17,6 +13,10 @@ from bisheng.api.utils import get_L2_param_from_flow, get_request_ip
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq, resp_500, \
     StreamData
 from bisheng.chat.utils import process_node_data
+from bisheng.common.errcode.flow import NotFoundVersionError, CurVersionDelError, VersionNameExistsError, \
+    NotFoundFlowError, \
+    FlowOnlineEditError, WorkFlowOnlineEditError
+from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.database.models.flow import FlowDao, FlowStatus, Flow, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead, FlowVersion
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum, GroupResource
@@ -68,7 +68,7 @@ class FlowService(BaseService):
 
         atype = AccessType.FLOW_WRITE
         if flow_info.flow_type == FlowType.WORKFLOW.value:
-            atype = AccessType.WORK_FLOW_WRITE
+            atype = AccessType.WORKFLOW_WRITE
 
         # 判断权限
         if not user.access_check(flow_info.user_id, flow_info.id, atype):
@@ -92,7 +92,7 @@ class FlowService(BaseService):
 
         atype = AccessType.FLOW_WRITE
         if flow_info.flow_type == FlowType.WORKFLOW.value:
-            atype = AccessType.WORK_FLOW_WRITE
+            atype = AccessType.WORKFLOW_WRITE
 
         # 判断权限
         if not login_user.access_check(flow_info.user_id, flow_info.id, atype):
@@ -169,7 +169,7 @@ class FlowService(BaseService):
 
         atype = AccessType.FLOW_WRITE
         if flow_info.flow_type == FlowType.WORKFLOW.value:
-            atype = AccessType.WORK_FLOW_WRITE
+            atype = AccessType.WORKFLOW_WRITE
         # 判断权限
         if not user.access_check(flow_info.user_id, flow_info.id, atype):
             return UnAuthorizedError.return_resp()
@@ -209,7 +209,7 @@ class FlowService(BaseService):
             raise NotFoundFlowError()
         atype = AccessType.FLOW
         if flow_info.flow_type == FlowType.WORKFLOW.value:
-            atype = AccessType.WORK_FLOW
+            atype = AccessType.WORKFLOW
         if not login_user.access_check(flow_info.user_id, flow_info.id, atype):
             raise UnAuthorizedError()
         flow_info.logo = cls.get_logo_share_link(flow_info.logo)

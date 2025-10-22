@@ -290,7 +290,7 @@ class Settings(BaseModel):
         return all_config.get(key, {})
 
     def get_all_config(self):
-        from bisheng.database.base import session_getter
+        from bisheng.core.database import get_sync_db_session
         from bisheng.cache.redis import redis_client
         from bisheng.database.models.config import Config
 
@@ -299,7 +299,7 @@ class Settings(BaseModel):
         if cache:
             return yaml.safe_load(cache)
         else:
-            with session_getter() as session:
+            with get_sync_db_session() as session:
                 initdb_config = session.exec(
                     select(Config).where(Config.key == 'initdb_config')).first()
                 if initdb_config:
@@ -309,7 +309,7 @@ class Settings(BaseModel):
                     raise Exception('initdb_config not found, please check your system config')
 
     async def aget_all_config(self):
-        from bisheng.database.base import async_session_getter
+        from bisheng.core.database import get_async_db_session
         from bisheng.cache.redis import redis_client
         from bisheng.database.models.config import Config
 
@@ -318,7 +318,7 @@ class Settings(BaseModel):
         if cache:
             return yaml.safe_load(cache)
         else:
-            async with async_session_getter() as session:
+            async with get_async_db_session() as session:
                 initdb_config = (await session.exec(select(Config).where(Config.key == 'initdb_config'))).first()
                 if initdb_config:
                     await redis_client.aset(redis_key, initdb_config.value, 100)

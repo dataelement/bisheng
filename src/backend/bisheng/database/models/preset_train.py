@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple
 from sqlalchemy import func
 from sqlmodel import Column, DateTime, Field, select, text
 
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.utils import generate_uuid
 
@@ -31,7 +31,7 @@ class PresetTrainDao(PresetTrainBase):
 
     @classmethod
     def insert_batch(cls, models: List[PresetTrain]) -> List[PresetTrain]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             for one in models:
                 session.add(one)
             session.commit()
@@ -41,20 +41,20 @@ class PresetTrainDao(PresetTrainBase):
 
     @classmethod
     def delete_one(cls, model: PresetTrain) -> bool:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.delete(model)
             session.commit()
         return True
 
     @classmethod
     def find_one(cls, file_id: str) -> PresetTrain | None:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(PresetTrain).where(PresetTrain.id == file_id)
             return session.exec(statement).first()
 
     @classmethod
     def find_all(cls) -> List[PresetTrain]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(PresetTrain)
             return session.exec(statement).all()
 
@@ -63,7 +63,7 @@ class PresetTrainDao(PresetTrainBase):
                     keyword: str = None,
                     page_size: int = None,
                     page_num: int = None) -> Tuple[List[PresetTrain], int]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(PresetTrain)
             count = select(func.count(PresetTrain.id))
             if keyword:

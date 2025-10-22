@@ -47,7 +47,7 @@ const ApiAccess = ({ }) => {
     }
   ],
   "temperature": 0,
-  "stream": True
+  "stream": true
 }'
 `
     }

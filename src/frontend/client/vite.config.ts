@@ -5,6 +5,7 @@ import { defineConfig } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import compression from 'vite-plugin-compression';
+import { visualizer } from "rollup-plugin-visualizer";
 import type { Plugin } from 'vite';
 
 const app_env = {
@@ -24,7 +25,7 @@ export default defineConfig({
       //   changeOrigin: true,
       // },
       '^(/workspace)?/bisheng': {
-        target: "http://192.168.106.120:3002",
+        target: "http://192.168.106.120:3003",
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
@@ -32,7 +33,7 @@ export default defineConfig({
         },
       },
       '/workspace/api': {
-        target: 'http://192.168.106.120:3002',
+        target: 'http://192.168.106.120:3003',
         changeOrigin: true,
         secure: false,
         ws: true,
@@ -46,7 +47,7 @@ export default defineConfig({
         },
       },
       '/workspace/tmp-dir': {
-        target: 'http://192.168.106.120:3002',
+        target: 'http://192.168.106.120:3003',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
@@ -132,6 +133,10 @@ export default defineConfig({
         }
       ]
     }),
+    // visualizer({
+    //   open: true, // 打包后自动打开分析页面
+    //   filename: "stats.html",
+    // })
   ],
   publicDir: './public',
   build: {
@@ -166,6 +171,15 @@ export default defineConfig({
             // Additional grouping for other node_modules:
             if (id.includes('@headlessui')) {
               return 'headlessui';
+            }
+            if (id.includes('lodash')) {
+              return 'lodash';
+            }
+            if (id.includes('echarts')) {
+              return 'echarts';
+            }
+            if (id.includes('mermaid') || id.includes('cytoscape') || id.includes('dagre-d3') || id.includes('dagre-d3-es')) {
+              return 'mermaid';
             }
 
             // Everything else falls into a generic vendor chunk.

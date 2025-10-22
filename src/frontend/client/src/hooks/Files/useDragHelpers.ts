@@ -54,7 +54,7 @@ export default function useDragHelpers(isLingsi) {
             .map(ext => ext.trim().toLowerCase().replace(/^\./, ''))  // Normalize extensions (remove leading dots)
           : [];
 
-        // Check if any file has an invalid extension
+        // Check if any file has an invalid extension  // TODO 迁移到src/utils/files.ts（267行）
         const invalidFiles = item.files.filter(file => {
           const fileExtension = file.name.split('.').pop()?.toLowerCase();
           return fileExtension && !acceptedExtensions.includes(fileExtension);

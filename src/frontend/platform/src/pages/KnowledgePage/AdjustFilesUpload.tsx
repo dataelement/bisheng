@@ -29,7 +29,7 @@ export default function AdjustFilesUpload() {
 
   // 从路由状态获取调整模式的初始数据（必须传文件数据）
   const initFileData = location.state?.fileData;
-
+  console.log(initFileData, 33);
   useEffect(() => {
     // 如果没有初始化数据，说明是直接访问，跳转到/filelib
     if (!initFileData) {
@@ -127,7 +127,8 @@ export default function AdjustFilesUpload() {
       suffix: initFileData.suffix || initFileData.file_name?.split(".").pop() || "", // 解析后缀
       previewUrl: initFileData.previewUrl,
       fileType: fileType,
-      split_rule: getParsedSplitRule(initFileData.split_rule) // 传入转换后的配置对象
+      split_rule: getParsedSplitRule(initFileData.split_rule), // 传入转换后的配置对象
+      isEtl4lm: initFileData.fileType,
     }
   ]);
 

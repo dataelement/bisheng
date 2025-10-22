@@ -9,8 +9,6 @@ from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPExcept
                      UploadFile)
 from fastapi.encoders import jsonable_encoder
 
-from bisheng.api.errcode.http_error import UnAuthorizedError
-from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import add_qa
@@ -18,13 +16,17 @@ from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
                                     resp_200, resp_500, resp_501, resp_502, UpdateKnowledgeReq, KnowledgeFileReProcess)
 from bisheng.cache.utils import save_uploaded_file
+from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError, \
+    KnowledgeNotQAError
 from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate)
 from bisheng.database.models.knowledge import KnowledgeState
 from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
                                                     QAKnoweldgeDao, QAKnowledgeUpsert, QAStatus)
-from bisheng.database.models.llm_server import LLMDao, LLMModelType
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
+from bisheng.llm.const import LLMModelType
+from bisheng.llm.models import LLMDao
 from bisheng.utils.logger import logger
 from bisheng.worker.knowledge.qa import insert_qa_celery
 
@@ -146,6 +148,36 @@ async def copy_knowledge(*,
     if knowledge.state != KnowledgeState.PUBLISHED.value or knowledge_count > 0:
         return KnowledgeCPError.return_resp()
     knowledge = await KnowledgeService.copy_knowledge(request, background_tasks, login_user, knowledge)
+    return resp_200(knowledge)
+
+
+@router.post("/qa/copy")
+async def copy_qa_knowledge(*,
+                            request: Request,
+                            login_user: UserPayload = Depends(get_login_user),
+                            knowledge_id: int = Body(..., embed=True)):
+    """
+    复制QA知识库.
+    :param request:
+    :param login_user:
+    :param knowledge_id:
+    :return:
+    """
+
+    qa_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+    if not login_user.is_admin and qa_knowledge.user_id != login_user.user_id:
+        return UnAuthorizedError.return_resp()
+
+    if qa_knowledge.type != KnowledgeTypeEnum.QA.value:
+        return KnowledgeNotQAError.return_resp()
+
+    qa_knowledge_count = await QAKnoweldgeDao.async_count_by_id(qa_id=qa_knowledge.id)
+
+    if qa_knowledge.state != KnowledgeState.PUBLISHED.value or qa_knowledge_count == 0:
+        return KnowledgeCPError.return_resp()
+
+    knowledge = await KnowledgeService.copy_qa_knowledge(request, login_user, qa_knowledge)
+
     return resp_200(knowledge)
 
 
@@ -749,9 +781,20 @@ def update_knowledge_model(*,
         KnowledgeDao.update_one(knowledge)
 
         # 发起异步任务
-        # 延迟导入以避免循环导入
-        from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
-        rebuild_knowledge_celery.delay(knowledge.id, str(req_data.model_id))
+
+        if knowledge.type == KnowledgeTypeEnum.NORMAL.value:
+
+            # 延迟导入以避免循环导入
+            from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
+            rebuild_knowledge_celery.delay(knowledge.id, str(req_data.model_id))
+
+        elif knowledge.type == KnowledgeTypeEnum.QA.value:
+
+            # 延迟导入以避免循环导入
+            from bisheng.worker.knowledge.qa import rebuild_qa_knowledge_celery
+            rebuild_qa_knowledge_celery.delay(knowledge.id, str(req_data.model_id))
+
+
         logger.info(f"Started rebuild task for knowledge_id={knowledge.id} with model_id={req_data.model_id}")
 
         return resp_200(

@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from sqlmodel import delete, select
 
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.variable_value import Variable, VariableCreate, VariableRead, VariableDao
 
@@ -20,14 +20,14 @@ def post_variable(variable: Variable):
             raise HTTPException(status_code=500, detail='version_id is required')
         if variable.id:
             # 更新，采用全量替换
-            with session_getter() as session:
+            with get_sync_db_session() as session:
                 db_variable = session.get(Variable, variable.id)
             db_variable.variable_name = variable.variable_name[:50]
             db_variable.value = variable.value
             db_variable.value_type = variable.value_type
         else:
             # if name exist
-            with session_getter() as session:
+            with get_sync_db_session() as session:
                 db_variable = session.exec(
                     select(Variable).where(
                         Variable.node_id == variable.node_id,
@@ -37,7 +37,7 @@ def post_variable(variable: Variable):
                 raise HTTPException(status_code=500, detail='name repeat, please choose another')
             db_variable = Variable.from_orm(variable)
 
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(db_variable)
             session.commit()
             session.refresh(db_variable)
@@ -68,7 +68,7 @@ def get_variables(*,
 def del_variables(*, id: int):
     try:
         statment = delete(Variable).where(Variable.id == id)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(statment)
             session.commit()
         return resp_200()
@@ -82,7 +82,7 @@ def save_all_variables(*, data: List[VariableCreate]):
     try:
         # delete first
         flow_id = data[0].flow_id
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(delete(Variable).where(Variable.flow_id == flow_id))
             session.commit()
             for var in data:

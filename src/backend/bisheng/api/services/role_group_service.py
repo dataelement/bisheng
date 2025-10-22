@@ -2,16 +2,17 @@ import json
 from datetime import datetime
 from typing import List, Any, Dict, Optional
 
-from fastapi.encoders import jsonable_encoder
 from fastapi import Request, HTTPException
+from fastapi.encoders import jsonable_encoder
+from loguru import logger
 
-from bisheng.cache.redis import redis_client
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.errcode.user import UserGroupNotDeleteError
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import resp_200
+from bisheng.cache.redis import redis_client
+from bisheng.common.errcode.user import UserGroupNotDeleteError
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao, FlowType
@@ -21,9 +22,8 @@ from bisheng.database.models.group_resource import GroupResourceDao, ResourceTyp
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.user import User, UserDao
-from bisheng.database.models.user_role import UserRoleDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
-from loguru import logger
+from bisheng.database.models.user_role import UserRoleDao
 
 
 class RoleGroupService():
@@ -263,7 +263,8 @@ class RoleGroupService():
         user_map = {user.user_id: user.user_name for user in user_list}
         return user_map
 
-    def get_group_flow(self, group_id: int, keyword: str, page_size: int, page_num: int,flow_type:Optional[FlowType] = None) -> (List[Any], int):
+    def get_group_flow(self, group_id: int, keyword: str, page_size: int, page_num: int,
+                       flow_type: Optional[FlowType] = None) -> (List[Any], int):
         """ 获取用户组下的知识库列表 """
         # 查询用户组下的技能ID列表
         rs_type = ResourceTypeEnum.FLOW
@@ -274,7 +275,7 @@ class RoleGroupService():
             return [], 0
         res = []
         flow_ids = [resource.third_id for resource in resource_list]
-        flow_type_value = flow_type.value if flow_type else FlowType.FLOW.value 
+        flow_type_value = flow_type.value if flow_type else FlowType.FLOW.value
         data, total = FlowDao.filter_flows_by_ids(flow_ids, keyword, page_num, page_size, flow_type_value)
         db_user_ids = {one.user_id for one in data}
         user_map = self.get_user_map(db_user_ids)

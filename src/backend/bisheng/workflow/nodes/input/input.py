@@ -7,11 +7,11 @@ from loguru import logger
 
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import decide_vectorstores, read_chunk_text
-from bisheng.api.services.llm import LLMService
 from bisheng.api.utils import md5_hash
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.cache.utils import file_download
 from bisheng.chat.types import IgnoreException
+from bisheng.llm.domain.services import LLMService
 from bisheng.workflow.nodes.base import BaseNode
 
 

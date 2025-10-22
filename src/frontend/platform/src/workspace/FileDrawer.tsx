@@ -165,12 +165,12 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
                                 <span className="text-sm text-gray-900 flex-1">{file.file_name}</span>
                             </div>
 
-                            <div className="flex items-center space-x-2">
+                            <div className="items-center space-x-2 group-hover:opacity-100 flex opacity-0">
                                 <Button
                                     variant="ghost"
                                     size="icon"
                                     className="h-8 w-8"
-                                    style={{ visibility: shouldShowIcon(file.file_id) ? 'visible' : 'hidden' }}
+                                    // style={{ visibility: shouldShowIcon(file.file_id) ? 'visible' : 'hidden' }}
                                     onClick={() => {
                                         if (file.file_name.split('.').pop() === 'html') {
                                             return window.open(`${__APP_ENV__.BASE_URL}/html?url=${encodeURIComponent(file.file_url)}`, '_blank')
@@ -182,29 +182,13 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
                                 </Button>
 
                                 {/* 下载按钮：同时支持 hover 和 click 触发下拉窗口 */}
-                                <Button 
-                                    variant="ghost" 
-                                    style={{ visibility: shouldShowIcon(file.file_id) ? 'visible' : 'hidden' }}
-                                    // 关键：按钮自身添加hover事件辅助触发
-                                    onMouseEnter={() => {
-                                        if (!tooltipOpenIds.has(file.file_id)) {
-                                            const newSet = new Set(tooltipOpenIds);
-                                            newSet.add(file.file_id);
-                                            setTooltipOpenIds(newSet);
-                                        }
-                                    }}
-                                    onMouseLeave={() => {
-                                        // 只有hover触发的才在离开时关闭（点击触发的保持打开）
-                                        if (hoveredId !== file.file_id && tooltipOpenIds.has(file.file_id)) {
-                                            const newSet = new Set(tooltipOpenIds);
-                                            newSet.delete(file.file_id);
-                                            setTooltipOpenIds(newSet);
-                                        }
-                                    }}
+                                <Button
+                                    variant="ghost"
                                 >
                                     {String(file.file_name).toLowerCase().endsWith('.md') ? (
                                         <Tooltip
                                             open={tooltipOpenIds.has(file.file_id)}
+                                            delayDuration={0}
                                             onOpenChange={(open) => {
                                                 const newSet = new Set(tooltipOpenIds);
                                                 open ? newSet.add(file.file_id) : newSet.delete(file.file_id);

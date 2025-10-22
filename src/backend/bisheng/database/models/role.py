@@ -4,7 +4,7 @@ from typing import List, Optional
 from sqlalchemy import Column, DateTime, text, func, delete, and_, UniqueConstraint
 from sqlmodel import Field, select
 
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.role_access import RoleAccess
@@ -59,7 +59,7 @@ class RoleDao(RoleBase):
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(Role.create_time.desc())
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
@@ -72,12 +72,12 @@ class RoleDao(RoleBase):
             statement = statement.where(Role.group_id.in_(group))
         if keyword:
             statement = statement.filter(Role.role_name.like(f'%{keyword}%'))
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.scalar(statement)
 
     @classmethod
     def insert_role(cls, role: RoleCreate):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(role)
             session.commit()
             session.refresh(role)
@@ -85,7 +85,7 @@ class RoleDao(RoleBase):
 
     @classmethod
     def delete_role(cls, role_id: int):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(delete(Role).where(Role.id == role_id))
             session.exec(delete(UserRole).where(UserRole.role_id == role_id))
             session.exec(delete(RoleAccess).where(RoleAccess.role_id == role_id))
@@ -93,13 +93,19 @@ class RoleDao(RoleBase):
 
     @classmethod
     def get_role_by_ids(cls, role_ids: List[int]) -> List[Role]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.query(Role).filter(Role.id.in_(role_ids)).all()
 
     @classmethod
     def get_role_by_id(cls, role_id: int) -> Role:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.query(Role).filter(Role.id == role_id).first()
+
+    @classmethod
+    async def aget_role_by_id(cls, role_id: int) -> Role:
+        async with get_async_db_session() as session:
+            result = await session.execute(select(Role).where(Role.id == role_id))
+            return result.scalars().first()
 
     @classmethod
     def delete_role_by_group_id(cls, group_id: int):
@@ -107,7 +113,7 @@ class RoleDao(RoleBase):
         删除分组下所有的角色，清理用户对应的角色
         """
         from bisheng.database.models.user_role import UserRole
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             # 清理对应的用户
             all_user = select(UserRole, Role).join(
                 Role, and_(UserRole.role_id == Role.id,

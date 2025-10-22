@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "bisheng"
-version = "2.2.0-beta2"
+version = "2.2.0-beta3"
 description = "A Python package with a built-in web application"
 authors = ["Dataelement <hanfeng@dataelem.com>"]
 maintainers = [
@@ -88,7 +88,6 @@ matplotlib = "3.8.4"
 cchardet = "^2.1.7"
 tenacity = "<8.4.0"
 bisheng-ragas = "^1.0.3"
-qianfan = "^0.4.4"
 dashscope = "^1.20.3"
 blobfile = "^3.0.0"
 mcp = "1.10.0"
@@ -123,7 +122,9 @@ llama-index-core = ">=0.13.0,<0.14"
 llama-index-llms-openai = ">=0.5,<0.6"
 llama-index-embeddings-openai = ">=0.5,<0.6"
 e2b-code-interpreter = "^1.5.2"
+azure-cognitiveservices-speech = "^1.46.0"
 playwright = "^1.55.0"
+xinference = "^1.11.0.post1"
 
 
 [tool.poetry.dev-dependencies]

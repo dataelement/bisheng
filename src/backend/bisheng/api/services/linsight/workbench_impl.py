@@ -12,13 +12,9 @@ from fastapi import UploadFile
 from langchain_core.tools import BaseTool
 from loguru import logger
 
-from bisheng.api.errcode import BaseErrorCode
-from bisheng.api.errcode.http_error import UnAuthorizedError
-from bisheng.api.errcode.linsight import LinsightToolInitError, LinsightBishengLLMError, LinsightGenerateSopError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.knowledge_imp import read_chunk_text, decide_vectorstores
 from bisheng.api.services.linsight.sop_manage import SOPManageService
-from bisheng.api.services.llm import LLMService
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.services.workstation import WorkStationService
@@ -26,6 +22,9 @@ from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, 
     SubmitFileSchema
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_file_to_folder, CACHE_DIR
+from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.errcode.linsight import LinsightToolInitError, LinsightBishengLLMError, LinsightGenerateSopError
 from bisheng.core.app_context import app_ctx
 from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
@@ -36,7 +35,8 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
 from bisheng.database.models.linsight_sop import LinsightSOPRecord
 from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.interface.llms.custom import BishengLLM
+from bisheng.llm.domain.llm import BishengLLM
+from bisheng.llm.domain.services import LLMService
 from bisheng.settings import settings
 from bisheng.utils import util
 from bisheng.utils.embedding import decide_embeddings

@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 
 from sqlalchemy import func
 
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.base import SQLModelSerializable
 # if TYPE_CHECKING:
 from pydantic import field_validator
@@ -62,7 +62,7 @@ class FlowVersionDao(FlowVersionBase):
         """
         创建新版本
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(version)
             session.commit()
             session.refresh(version)
@@ -73,7 +73,7 @@ class FlowVersionDao(FlowVersionBase):
         """
         更新版本信息，同时更新技能表里的data数据
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(version)
             session.commit()
             # 如果是当前版本，则更新技能表里的数据
@@ -90,7 +90,7 @@ class FlowVersionDao(FlowVersionBase):
         """
         根据技能ID和版本名字获取版本的信息
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(FlowVersion).where(FlowVersion.flow_id == flow_id,
                                                   FlowVersion.name == name,
                                                   FlowVersion.is_delete == 0)
@@ -101,7 +101,7 @@ class FlowVersionDao(FlowVersionBase):
         """
         根据版本ID获取技能版本的信息
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(FlowVersion).where(FlowVersion.id == version_id)
             if not include_delete:
                 statement = statement.where(FlowVersion.is_delete == 0)
@@ -112,7 +112,7 @@ class FlowVersionDao(FlowVersionBase):
         """
         根据技能ID获取当前技能版本的信息
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(FlowVersion).where(FlowVersion.flow_id == flow_id,
                                                   FlowVersion.is_current == 1,
                                                   FlowVersion.is_delete == 0)
@@ -123,7 +123,7 @@ class FlowVersionDao(FlowVersionBase):
         """
         根据ID列表获取所有版本详情
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(FlowVersion).where(FlowVersion.id.in_(ids))
             return session.exec(statement).all()
 
@@ -132,7 +132,7 @@ class FlowVersionDao(FlowVersionBase):
         """
         根据技能ID 获取所有的技能版本
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(FlowVersion.id, FlowVersion.flow_id, FlowVersion.name, FlowVersion.description,
                                FlowVersion.is_current, FlowVersion.create_time, FlowVersion.update_time).where(
                 FlowVersion.flow_id == flow_id, FlowVersion.is_delete == 0).order_by(FlowVersion.id.desc())
@@ -144,7 +144,7 @@ class FlowVersionDao(FlowVersionBase):
         """
         根据技能ID 技能版本的数量
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             count_statement = session.query(func.count()).where(FlowVersion.flow_id == flow_id)
             if not include_delete:
                 count_statement = count_statement.where(FlowVersion.is_delete == 0)
@@ -155,7 +155,7 @@ class FlowVersionDao(FlowVersionBase):
         """
         根据技能ID列表 获取所有的技能的所有版本信息
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(FlowVersion.id, FlowVersion.flow_id, FlowVersion.name, FlowVersion.description,
                                FlowVersion.is_current, FlowVersion.create_time, FlowVersion.update_time).where(
                 FlowVersion.flow_id.in_(flow_ids), FlowVersion.is_delete == 0).order_by(FlowVersion.id.desc())
@@ -167,7 +167,7 @@ class FlowVersionDao(FlowVersionBase):
         """
         删除某个版本，正在使用的版本不能删除
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             update_statement = update(FlowVersion).where(
                 FlowVersion.id == version_id, FlowVersion.is_current == 0).values(is_delete=1)
             session.exec(update_statement)
@@ -179,7 +179,7 @@ class FlowVersionDao(FlowVersionBase):
         修改技能的当前版本, 判断当前版本是否存在
         同时修改技能表里的data数据
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             # 设置当前版本
             set_statement = update(FlowVersion).where(
                 FlowVersion.flow_id == flow_id,

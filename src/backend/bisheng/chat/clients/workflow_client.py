@@ -1,18 +1,17 @@
 import asyncio
 import json
-import threading
 from typing import Dict, Optional
 
 from fastapi import Request, WebSocket
 from loguru import logger
 
-from bisheng.api.errcode.chat import SkillNotOnlineError
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.chat.clients.base import BaseClient
 from bisheng.chat.types import WorkType
+from bisheng.common.errcode.chat import SkillNotOnlineError
 from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.message import ChatMessageDao, ChatMessage
 from bisheng.utils import generate_uuid
@@ -32,7 +31,7 @@ class WorkflowClient(BaseClient):
         self.workflow: Optional[RedisCallback] = None
         self.latest_history: Optional[ChatMessage] = None
         self.ws_closed = False
-        self.run_lock = threading.Lock()
+        self.run_lock = asyncio.Lock()
 
     async def close(self, force_stop=False):
         # 不是用户主动停止的话，设置ws关闭标志，但是不需要中止workflow的执行
@@ -41,7 +40,7 @@ class WorkflowClient(BaseClient):
         # 非会话模式关闭workflow执行, 会话模式判断是否是用户主动关闭的
         if self.workflow:
             if force_stop or not self.chat_id:
-                self.workflow.set_workflow_stop()
+                await self.workflow.async_set_workflow_stop()
                 workflow_over = await self.workflow_run()
                 while not workflow_over:
                     if self.ws_closed:
@@ -50,6 +49,7 @@ class WorkflowClient(BaseClient):
                     await asyncio.sleep(0.5)
         else:
             await self.send_response('processing', 'close', '')
+        await super().close()
 
     async def _handle_message(self, message: Dict[any, any]):
         logger.debug('----------------------------- start handle message -----------------------')
@@ -69,7 +69,7 @@ class WorkflowClient(BaseClient):
     async def init_history(self):
         if not self.chat_id:
             return
-        self.latest_history = ChatMessageDao.get_latest_message_by_chatid(self.chat_id)
+        self.latest_history = await ChatMessageDao.aget_latest_message_by_chatid(self.chat_id)
         if not self.latest_history:
             # 用户点击了新建会话，记录审计日志
             AuditLogService.create_chat_workflow(self.login_user, get_request_ip(self.request), self.client_id)
@@ -139,8 +139,8 @@ class WorkflowClient(BaseClient):
 
             # 发起新的workflow
             self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, str(self.user_id))
-            self.workflow.set_workflow_data(workflow_data)
-            self.workflow.set_workflow_status(WorkflowStatus.WAITING.value)
+            await self.workflow.async_set_workflow_data(workflow_data)
+            await self.workflow.async_set_workflow_status(WorkflowStatus.WAITING.value)
             # 发起异步任务
             execute_workflow.delay(unique_id, workflow_id, self.chat_id, str(self.user_id))
             await self.send_response('processing', 'begin', '')
@@ -152,7 +152,7 @@ class WorkflowClient(BaseClient):
             return
 
     async def workflow_run(self):
-        with self.run_lock:
+        async with self.run_lock:
             return await self._workflow_run()
 
     async def _workflow_run(self):
@@ -165,11 +165,11 @@ class WorkflowClient(BaseClient):
         async for event in self.workflow.get_response_until_break():
             await self.send_json(event)
 
-        status_info = self.workflow.get_workflow_status()
+        status_info = await self.workflow.async_get_workflow_status()
         if not status_info or status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
             await self.send_response('processing', 'close', '')
             logger.debug(f"workflow is {status_info}, clear workflow object")
-            self.workflow.clear_workflow_status()
+            await self.workflow.async_clear_workflow_status()
             self.workflow = None
             return True
 
@@ -183,7 +183,7 @@ class WorkflowClient(BaseClient):
         if not self.workflow:
             logger.warning('workflow is over')
             return
-        status_info = self.workflow.get_workflow_status(user_cache=False)
+        status_info = await self.workflow.async_get_workflow_status()
         if status_info['status'] != WorkflowStatus.INPUT.value:
             logger.warning(f'workflow is not input status: {status_info}')
         else:
@@ -196,8 +196,8 @@ class WorkflowClient(BaseClient):
                 message_id = node_info.get('message_id')
                 new_message = node_info.get('message')
                 break
-            self.workflow.set_user_input(user_input, message_id=message_id, message_content=new_message)
-            self.workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
+            await self.workflow.async_set_user_input(user_input, message_id=message_id, message_content=new_message)
+            await self.workflow.async_set_workflow_status(WorkflowStatus.INPUT_OVER.value)
             continue_workflow.delay(self.workflow.unique_id, self.workflow.workflow_id, self.workflow.chat_id,
                                     self.workflow.user_id)
             await self.workflow_run()

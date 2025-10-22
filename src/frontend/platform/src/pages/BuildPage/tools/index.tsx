@@ -5,7 +5,7 @@ import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { userContext } from "@/contexts/userContext";
-import { getAssistantMcpApi, getAssistantToolsApi, refreshAssistantMcpApi } from "@/controllers/API/assistant";
+import { getAssistantMcpApi, getAssistantToolsApi, refreshAssistantMcpApi,getAssistantToolsWithManageApi } from "@/controllers/API/assistant";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { CpuIcon, Star, User } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -42,7 +42,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     const [loading, setLoading] = useState(false)
 
     const loadData = async (_type = "custom") => {
-        await getAssistantToolsApi(_type).then((res) => {
+        await getAssistantToolsWithManageApi(_type).then((res) => {
             setAllData(res);
             // setKeyword("");
         });

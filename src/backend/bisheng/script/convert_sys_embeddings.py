@@ -1,5 +1,6 @@
 from bisheng.database.models.knowledge import KnowledgeDao
-from bisheng.database.models.llm_server import LLMServer, LLMServerType, LLMModelType, LLMModel, LLMDao
+from bisheng.llm.const import LLMServerType, LLMModelType
+from bisheng.llm.models import LLMServer, LLMDao, LLMModel
 from bisheng.settings import settings
 
 

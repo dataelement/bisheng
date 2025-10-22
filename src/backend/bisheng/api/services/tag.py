@@ -4,9 +4,9 @@ from typing import List
 from fastapi import Request, HTTPException
 from loguru import logger
 
-from bisheng.api.errcode.http_error import UnAuthorizedError
-from bisheng.api.errcode.tag import TagExistError, TagNotExistError
 from bisheng.api.services.user_service import UserPayload
+from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.errcode.tag import TagExistError, TagNotExistError
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.flow import FlowDao

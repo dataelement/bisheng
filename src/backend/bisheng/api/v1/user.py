@@ -10,14 +10,10 @@ from typing import Annotated, Dict, List, Optional
 import rsa
 from captcha.image import ImageCaptcha
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
-from fastapi.encoders import jsonable_encoder
 from fastapi.security import OAuth2PasswordBearer
-from sqlmodel import delete, select, func
+from sqlmodel import select
 
 from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
-from bisheng.api.errcode.http_error import UnAuthorizedError
-from bisheng.api.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
-                                      UserValidateError, UserPasswordError, UserForbiddenError)
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.captcha import verify_captcha
 from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_user_role, get_login_user,
@@ -25,12 +21,14 @@ from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_us
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import resp_200, CreateUserReq
 from bisheng.cache.redis import redis_client
-from bisheng.database.base import session_getter
+from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
+                                         UserValidateError, UserPasswordError)
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
-from bisheng.database.models.role_access import RoleAccess, RoleRefresh
+from bisheng.database.models.role_access import RoleRefresh
 from bisheng.database.models.user import User, UserCreate, UserDao, UserLogin, UserRead, UserUpdate
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRole, UserRoleCreate, UserRoleDao
@@ -357,7 +355,7 @@ async def update(*,
     # check if user already exist
     if db_user and user.delete is not None:
         # 判断是否是管理员
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             admin = session.exec(
                 select(UserRole).where(UserRole.role_id == 1,
                                        UserRole.user_id == user.user_id)).first()
@@ -369,7 +367,7 @@ async def update(*,
     if db_user.delete == 0:  # 启用用户
         # 清理密码错误次数的计数
         clear_error_password_key(db_user.user_name)
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         session.add(db_user)
         session.commit()
         session.refresh(db_user)
@@ -401,7 +399,7 @@ async def create_role(*,
 
     db_role = Role.model_validate(role)
     try:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(db_role)
             session.commit()
             session.refresh(db_role)
@@ -435,7 +433,7 @@ async def update_role(*,
             db_role.role_name = role.role_name
         if role.remark:
             db_role.remark = role.remark
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(db_role)
             session.commit()
             session.refresh(db_role)
@@ -584,11 +582,11 @@ async def get_user_role(*, user_id: int, Authorize: AuthJWT = Depends()):
     if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
         raise HTTPException(status_code=500, detail='无设置权限')
 
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         db_userroles = session.exec(select(UserRole).where(UserRole.user_id == user_id)).all()
 
     role_ids = [role.role_id for role in db_userroles]
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         db_role = session.exec(select(Role).where(Role.id.in_(role_ids))).all()
     role_name_dict = {role.id: role.role_name for role in db_role}
 
@@ -606,56 +604,37 @@ async def get_user_role(*, user_id: int, Authorize: AuthJWT = Depends()):
 
 @router.post('/role_access/refresh', status_code=200)
 async def access_refresh(*, request: Request, data: RoleRefresh, login_user: UserPayload = Depends(get_login_user)):
-    db_role = RoleDao.get_role_by_id(data.role_id)
+    db_role = await RoleDao.aget_role_by_id(data.role_id)
     if not db_role:
-        raise HTTPException(status_code=500, detail='角色不存在')
+        raise NotFoundError().http_exception()
     if db_role.id == AdminRole:
-        raise HTTPException(status_code=500, detail='系统管理员不允许编辑')
-
-    if not login_user.check_group_admin(db_role.group_id):
-        return UnAuthorizedError.return_resp()
+        raise UnAuthorizedError.http_exception()
+    if not await login_user.async_check_group_admin(db_role.group_id):
+        raise UnAuthorizedError.http_exception()
 
     role_id = data.role_id
     access_type = data.type
     access_id = data.access_id
-    # delete old access
-    with session_getter() as session:
-        session.exec(
-            delete(RoleAccess).where(RoleAccess.role_id == role_id,
-                                     RoleAccess.type == access_type))
-        session.commit()
-    # 添加新的权限
-    with session_getter() as session:
-        for third_id in access_id:
-            role_access = RoleAccess(role_id=role_id, third_id=str(third_id), type=access_type)
-            session.add(role_access)
-        session.commit()
+    await RoleAccessDao.update_role_access_all(role_id, AccessType(access_type), access_id)
+
     update_role_hook(request, login_user, db_role)
     return resp_200()
 
 
 @router.get('/role_access/list', status_code=200)
 async def access_list(*, role_id: int, type: Optional[int] = None, login_user: UserPayload = Depends(get_login_user)):
-    db_role = RoleDao.get_role_by_id(role_id)
+    db_role = await RoleDao.aget_role_by_id(role_id)
     if not db_role:
-        raise HTTPException(status_code=500, detail='角色不存在')
+        raise NotFoundError().http_exception()
 
-    if not login_user.check_group_admin(db_role.group_id):
+    if not await login_user.async_check_group_admin(db_role.group_id):
         return UnAuthorizedError.return_resp()
 
-    sql = select(RoleAccess).where(RoleAccess.role_id == role_id)
-    count_sql = select(func.count(RoleAccess.id)).where(RoleAccess.role_id == role_id)
-    if type:
-        sql.where(RoleAccess.type == type)
-        count_sql.where(RoleAccess.type == type)
-
-    with session_getter() as session:
-        db_role_access = session.exec(sql).all()
-        total_count = session.scalar(count_sql)
+    res = await RoleAccessDao.aget_role_access([role_id], AccessType(type))
 
     return resp_200({
-        'data': [jsonable_encoder(access) for access in db_role_access],
-        'total': total_count
+        'data': res,
+        'total': len(res)
     })
 
 

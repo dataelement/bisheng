@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from typing import Any, Coroutine, Dict, List, Optional, Tuple, Union
 
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.message import ChatMessage
 from bisheng.database.models.report import Report as ReportModel
 from bisheng.interface.run import build_sorted_vertices, get_memory_key, update_memory_keys
@@ -178,7 +178,7 @@ async def process_graph_cached(
     # memery input
     if hasattr(built_object, 'memory') and built_object.memory is not None:
         fix_memory_inputs(built_object)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             history = session.exec(
                 select(ChatMessage).where(
                     ChatMessage.chat_id == session_id,
@@ -202,7 +202,7 @@ async def process_graph_cached(
         processed_inputs = process_inputs(inputs, artifacts or {}, input_key_object)
         result = generate_result(built_object, processed_inputs)
         # build report
-        with session_getter() as db_session:
+        with get_sync_db_session() as db_session:
             template = db_session.exec(
                 select(ReportModel).where(ReportModel.flow_id == flow_id).order_by(
                     ReportModel.id.desc())).first()

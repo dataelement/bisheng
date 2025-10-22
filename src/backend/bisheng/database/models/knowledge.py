@@ -6,7 +6,7 @@ from pydantic import BaseModel, field_validator
 from sqlmodel import Column, DateTime, Field, delete, func, or_, select, text, update
 from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
-from bisheng.database.base import session_getter, async_session_getter
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
@@ -75,7 +75,7 @@ class KnowledgeDao(KnowledgeBase):
 
     @classmethod
     def insert_one(cls, data: Knowledge) -> Knowledge:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(data)
             session.commit()
             session.refresh(data)
@@ -83,7 +83,7 @@ class KnowledgeDao(KnowledgeBase):
 
     @classmethod
     async def async_insert_one(cls, data: Knowledge) -> Knowledge:
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             session.add(data)
             await session.commit()
             await session.refresh(data)
@@ -91,15 +91,23 @@ class KnowledgeDao(KnowledgeBase):
 
     @classmethod
     def update_one(cls, data: Knowledge) -> Knowledge:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(data)
             session.commit()
             session.refresh(data)
             return data
 
     @classmethod
+    async def aupdate_one(cls, data: Knowledge) -> Knowledge:
+        async with get_async_db_session() as session:
+            session.add(data)
+            await session.commit()
+            await session.refresh(data)
+            return data
+
+    @classmethod
     async def async_update_state(cls, knowledge_id: int, state: KnowledgeState, update_time: Optional[datetime] = None):
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             statement = update(Knowledge).where(col(Knowledge.id) == knowledge_id)
             statement = statement.values(state=state.value,
                                          update_time=update_time or datetime.now())
@@ -108,7 +116,7 @@ class KnowledgeDao(KnowledgeBase):
 
     @classmethod
     def update_state(cls, knowledge_id: int, state: KnowledgeState, update_time: Optional[datetime] = None):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = update(Knowledge).where(col(Knowledge.id) == knowledge_id)
             statement = statement.values(state=state.value,
                                          update_time=update_time or datetime.now())
@@ -119,29 +127,29 @@ class KnowledgeDao(KnowledgeBase):
     def update_knowledge_update_time(cls, knowledge: Knowledge):
         statement = update(Knowledge).where(Knowledge.id == knowledge.id).values(
             update_time=text('NOW()'))
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
 
     @classmethod
     def query_by_id(cls, knowledge_id: int) -> Knowledge:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.get(Knowledge, knowledge_id)
 
     @classmethod
     async def aquery_by_id(cls, knowledge_id: int) -> Knowledge:
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             return await session.get(Knowledge, knowledge_id)
 
     @classmethod
     async def async_query_by_id(cls, knowledge_id: int) -> Knowledge:
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             result = await session.execute(select(Knowledge).where(Knowledge.id == knowledge_id))
             return result.scalars().first()
 
     @classmethod
     def get_list_by_ids(cls, ids: List[int]) -> List[Knowledge]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(select(Knowledge).where(Knowledge.id.in_(ids))).all()
 
     @classmethod
@@ -198,7 +206,7 @@ class KnowledgeDao(KnowledgeBase):
                                                 filter_knowledge)
 
         statement = statement.order_by(Knowledge.update_time.desc())
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
@@ -217,7 +225,7 @@ class KnowledgeDao(KnowledgeBase):
                                                 filter_knowledge)
 
         statement = statement.order_by(Knowledge.update_time.desc())
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
 
     @classmethod
@@ -229,7 +237,7 @@ class KnowledgeDao(KnowledgeBase):
         statement = select(func.count(Knowledge.id))
         statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
                                                 knowledge_type, name)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.scalar(statement)
 
     @classmethod
@@ -241,12 +249,12 @@ class KnowledgeDao(KnowledgeBase):
         statement = select(func.count(Knowledge.id))
         statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
                                                 knowledge_type, name)
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             return await session.scalar(statement)
 
     @classmethod
     def count_by_filter(cls, filters: List[Any]) -> int:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.scalar(select(Knowledge.id).where(*filters))
 
     @classmethod
@@ -301,7 +309,7 @@ class KnowledgeDao(KnowledgeBase):
         finally_knowledge_list.extend([str(one.id) for one in user_knowledge_list])
         statement = select(Knowledge).where(Knowledge.id.in_(finally_knowledge_list))
 
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
@@ -329,7 +337,7 @@ class KnowledgeDao(KnowledgeBase):
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(Knowledge.update_time.desc())
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
@@ -363,7 +371,7 @@ class KnowledgeDao(KnowledgeBase):
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(Knowledge.update_time.desc())
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
@@ -380,7 +388,7 @@ class KnowledgeDao(KnowledgeBase):
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(Knowledge.update_time.desc())
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
 
     @classmethod
@@ -391,7 +399,7 @@ class KnowledgeDao(KnowledgeBase):
         statement = cls.generate_all_knowledge_filter(statement,
                                                       name=name,
                                                       knowledge_type=knowledge_type)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.scalar(statement)
 
     @classmethod
@@ -402,12 +410,12 @@ class KnowledgeDao(KnowledgeBase):
         statement = cls.generate_all_knowledge_filter(statement,
                                                       name=name,
                                                       knowledge_type=knowledge_type)
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             return await session.scalar(statement)
 
     @classmethod
     def update_knowledge_list(cls, knowledge_list: List[Knowledge]):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             for knowledge in knowledge_list:
                 session.add(knowledge)
             session.commit()
@@ -418,7 +426,7 @@ class KnowledgeDao(KnowledgeBase):
         statement = select(Knowledge).where(Knowledge.name == name)
         if user_id:
             statement = statement.where(Knowledge.user_id == user_id)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).first()
 
     @classmethod
@@ -427,7 +435,7 @@ class KnowledgeDao(KnowledgeBase):
         删除或者清空知识库
         """
         # 处理knowledge file
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(delete(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id))
             # 清空知识库时，不删除知识库记录
             if not only_clear:

@@ -10,7 +10,7 @@ from bisheng.api.services.evaluation import EvaluationService, add_evaluation_ta
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import resp_200, resp_500
 from bisheng.cache.utils import convert_encoding_cchardet
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.evaluation import EvaluationCreate, Evaluation
 from bisheng.utils.minio_client import MinioClient
 from fastapi_jwt_auth import AuthJWT
@@ -73,7 +73,7 @@ def create_evaluation(*,
                                                                user_id=user_id,
                                                                file_name=file_name,
                                                                file_path=file_path))
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         session.add(db_evaluation)
         session.commit()
         session.refresh(db_evaluation)

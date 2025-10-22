@@ -7,8 +7,8 @@ import re
 from datetime import datetime
 from typing import List, Type
 
-from pydantic import BaseModel, Field
 from loguru import logger
+from pydantic import BaseModel, Field
 
 from .base import APIToolBase
 
@@ -89,7 +89,7 @@ class StockInfo(APIToolBase):
             if len(stockNumber) == 8:
                 # 8位长度的代码必须以sh或者sz开头，后面6位是数字
                 if (stockNumber.startswith('sh')
-                        or stockNumber.startswith('sz')) and stockNumber[2:8].isdecimal():
+                    or stockNumber.startswith('sz')) and stockNumber[2:8].isdecimal():
                     stockList.append(stockNumber)
             elif len(stockNumber) == 6:
                 # 6位长度的代码必须全是数字
@@ -198,7 +198,7 @@ class StockInfo(APIToolBase):
         """查询中国A股（沪深北交易所）股票或指数的实时行情数据，返回收盘价、涨跌额、涨跌幅、成交量、成交额"""
         url = 'https://hq.sinajs.cn'
         input_key = 'list'
-        headers = {'Referer': 'http://finance.sina.com.cn'}
+        headers = {'Referer': 'https://finance.sina.com.cn'}
         return cls(url=url, input_key=input_key, headers=headers)
 
     @classmethod
@@ -206,7 +206,7 @@ class StockInfo(APIToolBase):
         """查询中国A股（沪深北交易所）股票或指数的的历史行情数据，返回时间、开盘价、最高价、最低价、收盘价、成交量（股）"""
         url = 'https://quotes.sina.cn/cn/api/jsonp_v2.php/var%20_{stock}=/CN_MarketDataService.getKLineData?symbol={stockName}&scale=240&ma=no&datalen={count}'  # noqa
         input_key = 'kLine'
-        header = {'Referer': 'http://finance.sina.com.cn'}
+        header = {'Referer': 'https://finance.sina.com.cn'}
 
         class stockK(BaseModel):
             stock_symbol: str = Field(description="""6位数字的股票或者指数代码。

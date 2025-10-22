@@ -7,7 +7,8 @@ from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import Field, select, delete, col, or_, func, Column, Text, DateTime, text, CHAR
 
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema
-from bisheng.database.base import async_session_getter, async_get_count
+from bisheng.core.database import get_async_db_session
+from bisheng.database.base import async_get_count
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -71,7 +72,7 @@ class LinsightSOPDao(LinsightSOPBase):
 
     @classmethod
     async def create_sop(cls, sop: LinsightSOP) -> LinsightSOP:
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             session.add(sop)
             await session.commit()
             await session.refresh(sop)
@@ -79,7 +80,7 @@ class LinsightSOPDao(LinsightSOPBase):
 
     @classmethod
     async def update_sop(cls, sop_obj: SOPManagementUpdateSchema) -> LinsightSOP:
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             # 使用Update语句更新SOP
             statement = select(LinsightSOP).where(LinsightSOP.id == sop_obj.id)
             result = await session.exec(statement)
@@ -123,7 +124,7 @@ class LinsightSOPDao(LinsightSOPBase):
         if showcase is not None:
             statement = statement.where(LinsightSOP.showcase == showcase)
 
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             total_count = await async_get_count(session, statement)
             statement = statement.offset((page - 1) * page_size).limit(page_size)
             result = (await session.exec(statement)).all()
@@ -140,7 +141,7 @@ class LinsightSOPDao(LinsightSOPBase):
         """
         根据SOP ID列表获取SOP对象
         """
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             statement = select(LinsightSOP).where(col(LinsightSOP.id).in_(sop_ids))
             result = await session.exec(statement)
             sop_list = result.all()
@@ -152,7 +153,7 @@ class LinsightSOPDao(LinsightSOPBase):
         根据SOP名称列表获取SOP对象
         """
         statement = select(LinsightSOP).where(col(LinsightSOP.name).in_(names))
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             result = await session.exec(statement)
             sop_list = result.all()
             return sop_list
@@ -162,7 +163,7 @@ class LinsightSOPDao(LinsightSOPBase):
         """
         删除SOP
         """
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             delete_statement = delete(LinsightSOP).where(col(LinsightSOP.id).in_(sop_ids))
             result = await session.exec(delete_statement)
             await session.commit()
@@ -174,7 +175,7 @@ class LinsightSOPDao(LinsightSOPBase):
         """
         根据灵思会话ID获取SOP
         """
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             statement = select(LinsightSOP).where(LinsightSOP.linsight_session_id == session_id)
             result = await session.exec(statement)
             sop = result.first()
@@ -185,7 +186,7 @@ class LinsightSOPDao(LinsightSOPBase):
         """
         根据向量存储ID列表获取SOP对象
         """
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             statement = select(LinsightSOP).where(col(LinsightSOP.vector_store_id).in_(vector_store_ids))
             result = await session.exec(statement)
             sop_list = result.all()
@@ -196,7 +197,7 @@ class LinsightSOPDao(LinsightSOPBase):
         """
         获取所有SOP
         """
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             statement = select(LinsightSOP)
             result = await session.exec(statement)
             sop_list = result.all()
@@ -207,7 +208,7 @@ class LinsightSOPDao(LinsightSOPBase):
         """
         插入一条SOP记录
         """
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             session.add(sop_record)
             await session.commit()
             await session.refresh(sop_record)
@@ -246,7 +247,7 @@ class LinsightSOPDao(LinsightSOPBase):
         else:
             statement = statement.order_by(col(LinsightSOPRecord.create_time).desc())
 
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.all()
 
@@ -257,7 +258,7 @@ class LinsightSOPDao(LinsightSOPBase):
         """
         statement = select(func.count(LinsightSOPRecord.id))
         statement = await cls._filter_sop_record_statement(statement, keywords, user_ids)
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             return await session.scalar(statement)
 
     @classmethod
@@ -267,7 +268,7 @@ class LinsightSOPDao(LinsightSOPBase):
         """
         statement = select(LinsightSOPRecord).where(col(LinsightSOPRecord.id).in_(ids))
 
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             result = await session.exec(statement)
             sop_record_list = result.all()
             return sop_record_list
@@ -279,7 +280,7 @@ class LinsightSOPDao(LinsightSOPBase):
         """
         statement = update(LinsightSOPRecord).where(
             col(LinsightSOPRecord.linsight_version_id) == linsight_version_id).values(rating=rating)
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             await session.exec(statement)
             await session.commit()
             return True
@@ -303,7 +304,7 @@ class LinsightSOPDao(LinsightSOPBase):
         """
         statement = update(LinsightSOP).where(
             col(LinsightSOP.id) == sop_id).values(showcase=showcase)
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             await session.exec(statement)
             await session.commit()
             return True

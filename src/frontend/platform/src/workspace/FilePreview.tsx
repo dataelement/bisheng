@@ -3,6 +3,8 @@ import { SvgImage } from "@/components/LinSight/SvgImage";
 import MessageMarkDown from "@/pages/BuildPage/flow/FlowChat/MessageMarkDown";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import FileIcon from "./FileIcon";
+import { Button } from "@/components/bs-ui/button";
 
 interface FilePreviewProps {
     // 原有方式：通过 fileId 查找文件
@@ -12,7 +14,7 @@ interface FilePreviewProps {
     currentDisplayFile?: any
 }
 
-export default function FilePreview({ files, fileId, currentDisplayFile }: FilePreviewProps) {
+export default function FilePreview({ files, fileId, currentDisplayFile, onDownloadFile }: FilePreviewProps) {
     const { t: localize } = useTranslation()
     // 获取当前文件信息
     const currentFile = useMemo(() => {
@@ -44,10 +46,27 @@ export default function FilePreview({ files, fileId, currentDisplayFile }: FileP
 
         // 对于直接文件模式，不需要 URL
         const url = `${location.origin}${file_url}`
-
+        const handleClick = (e, url) => {
+            e.stopPropagation();
+            onDownloadFile({
+                file_name: currentFile.file_name,
+                file_url: url
+            })
+        }
         switch (type) {
+            case 'xls':
+            case 'xlsx':
             case 'doc':
             case 'docx':
+                return <div className="flex flex-col items-center justify-center h-full">
+                    <FileIcon
+                        type={type}
+                        className="w-20 h-20"
+                    />
+                    <div className="text-lg font-bold mt-2">{file_name}</div>
+                    <div className="text-sm text-gray-500 m-4">{localize('com_preview_type_unsupported')}</div>
+                    <Button variant="outline" onClick={(e) => handleClick(e, file_url)}>{localize('download')}</Button>
+                </div>
             case 'md':
                 return <TxtFileViewer
                     markdown
@@ -69,8 +88,8 @@ export default function FilePreview({ files, fileId, currentDisplayFile }: FileP
                 />
             case 'svg':
                 return <SvgImage
-                fileUrl={url}
-            />
+                    fileUrl={url}
+                />
             case 'png':
             case 'jpg':
             case 'jpeg':

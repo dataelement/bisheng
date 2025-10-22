@@ -281,9 +281,9 @@ export default function UserInput({ taskId, history = {}, disable = false, onSen
             </div>
             <div
                 ref={collapseContainerRef}
-                className="overflow-hidden"
+                className="overflow-hidden transition-all duration-500"
                 style={{
-                    maxHeight: collapsed ? 0 : 'none',
+                    maxHeight: collapsed ? 0 : '9999px',
                     opacity: collapsed ? 0 : 1, // 配合透明度增强动画效果
                     padding: collapsed ? 0 : "0 2px", // 折叠时清除内边距
                 }}

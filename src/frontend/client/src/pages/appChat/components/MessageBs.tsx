@@ -47,7 +47,10 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { }, onS
 
     const t = useLocalize()
     const [message, reasoningLog] = useMemo(() => {
-        const msg = typeof data.message === 'string' ? data.message : data.message.msg
+        const msg = typeof data.message === 'string' ? data.message : data.message?.msg
+        if (!msg) {
+            return ['', '']
+        }
         const regex = /<think>(.*?)<\/think>/s;
         const match = msg.match(regex);
         if (match) {
@@ -63,7 +66,7 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { }, onS
         copyText(messageRef.current)
     }
 
-    return <div className="flex w-full py-2">
+    return <div className="bisheng-message flex w-full py-2">
         <div className="w-fit group max-w-[90%]">
             <ReasoningLog loading={!data.end && (data.reasoning_log || reasoningLog)} msg={data.reasoning_log || reasoningLog} />
             {!(data.reasoning_log && !message && !data.files.length) && <>
@@ -109,6 +112,7 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { }, onS
                     <MessageButtons
                         id={data.id}
                         data={data.liked}
+                        text={message}
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
                     >

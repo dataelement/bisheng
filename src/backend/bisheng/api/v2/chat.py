@@ -8,7 +8,7 @@ from bisheng.api.v1.schemas import ChatInput, resp_200
 from bisheng.api.v2.schema.message import SyncMessage
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.processing.process import process_tweaks
@@ -31,7 +31,7 @@ async def union_websocket(flow_id: str,
                           knowledge_id: Optional[int] = None):
     """Websocket endpoint forF  chat."""
     if chat_id:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             db_flow = session.get(Flow, flow_id)
         if not db_flow:
             await websocket.accept()
@@ -73,7 +73,7 @@ async def union_websocket(flow_id: str,
 def like_response(*, data: dict):
     message_id = data.get('message_id')
     liked = data.get('liked')
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         message = session.get(ChatMessage, message_id)
         message.liked = liked
         session.add(message)
@@ -85,11 +85,11 @@ def like_response(*, data: dict):
 def solve_response(*, data: dict):
     chat_id = data.get('chat_id')
     solved = data.get('solved')
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         messages = session.query(ChatMessage).where(ChatMessage.chat_id == chat_id).all()
     for message in messages:
         message.solved = solved
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         session.add(message)
         session.commit()
     return {'status_code': 200, 'status_message': 'success'}

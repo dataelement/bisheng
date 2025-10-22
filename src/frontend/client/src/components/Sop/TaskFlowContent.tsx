@@ -203,15 +203,16 @@ const Tool = ({ data, setCurrentDirectFile, onSearchKnowledge, onWebSearch }) =>
     // 获取图标
     const Icon = iconMap[toolName] || iconMap.default;
 
-    return (
-        <div className='group relative inline-flex items-center gap-2 bg-[#F9FAFD] border rounded-full mt-4 mb-3 px-3 py-1.5 text-muted-foreground'>
+    return (<div className='group relative mt-4 mb-3 '>
+        <div className='relative inline-flex items-center gap-2 bg-[#F9FAFD] border rounded-full px-3 py-1.5 text-muted-foreground'>
             <Icon size={16} />
             <div className='flex gap-4 items-center'>
                 <span className='text-xs text-gray-600 truncate'>{displayName}</span>
                 <span className='text-xs text-[#82868C] truncate max-w-72'>{paramValue()}</span>
             </div>
-            {timestamp && <span className='absolute right-2 -top-4 text-xs text-[#82868C] truncate max-w-72 opacity-0 group-hover:opacity-100 transition-opacity'>{formatStrTime(timestamp * 1000, 'yy-MM-dd HH:mm')}</span>}
         </div>
+        {timestamp && <span className='absolute right-2 top-2 text-xs text-[#82868C] truncate max-w-72 opacity-0 group-hover:opacity-100 transition-opacity'>{formatStrTime(timestamp * 1000, 'yy-MM-dd HH:mm')}</span>}
+    </div>
     )
 }
 
@@ -258,6 +259,7 @@ const Task = ({
     const history = useMemo(() => {
         const result: any = [];
         const startMap = new Map(); // 存储未匹配的 start 消息: call_id -> message
+
         for (const msg of task.history) {
             if (msg.status === 'start') {
                 // 存储或覆盖同 call_id 的 start
@@ -269,20 +271,25 @@ const Task = ({
                     startMap.delete(msg.call_id);
                 }
                 // 总是添加 end 消息
-                msg.call_reason && result.push(msg);
+                if (msg.call_reason) {
+                    result.push(msg);
+                }
             } else if (msg.step_type === 'call_user_input') {
-                startMap.set(msg.timestamp, msg);
+                result.push(msg);
+                // startMap.set(msg.timestamp, msg);
             }
         }
 
         // 添加所有未匹配的 start 消息
         for (const startMsg of startMap.values()) {
-            startMsg.call_reason && result.push(startMsg);
+            if (startMsg.call_reason) {
+                result.push(startMsg);
+            }
         }
 
+        // 返回保持原始顺序的 result
         return result;
-    }, [task.history])
-
+    }, [task.history]);
 
     // 未开始执行的任务不展示
     if (task.status === 'not_started') {
@@ -324,7 +331,7 @@ const Task = ({
                             {history.map((_history, index) =>
                                 _history.step_type === "call_user_input"
                                     ? <UserInput
-                                        key={task.id}
+                                        key={index}
                                         disable={_history.is_completed}
                                         taskId={task.id}
                                         history={_history}

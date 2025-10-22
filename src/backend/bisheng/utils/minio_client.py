@@ -111,9 +111,9 @@ class MinioClient:
                                             data=file,
                                             **kwargs)
 
-    def upload_minio_data(self, object_name: str, data, length, content_type):
+    def upload_minio_data(self, object_name: str, data, length, content_type, bucket_name=bucket):
         # 初始化minio
-        self.minio_client.put_object(bucket_name=bucket,
+        self.minio_client.put_object(bucket_name=bucket_name,
                                      object_name=object_name,
                                      data=io.BytesIO(data),
                                      length=length,

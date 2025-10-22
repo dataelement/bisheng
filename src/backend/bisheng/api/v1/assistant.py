@@ -6,8 +6,6 @@ from fastapi import (APIRouter, Body, Depends, HTTPException, Query, Request, We
 from fastapi import status as http_status
 from fastapi.responses import StreamingResponse
 
-from bisheng.api.errcode.http_error import NotFoundError
-
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.openapi import OpenApiSchema
 from bisheng.api.services.tool import ToolServices
@@ -18,6 +16,7 @@ from bisheng.api.v1.schemas import (AssistantCreateReq, AssistantUpdateReq,
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.chat.types import WorkType
+from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.gpts_tools import GptsToolsTypeRead

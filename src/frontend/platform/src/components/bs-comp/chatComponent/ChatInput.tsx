@@ -11,6 +11,8 @@ import { useTranslation } from "react-i18next";
 import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
 import { CirclePause } from "lucide-react";
+import SpeechToTextComponent from "@/components/voiceFunction/speechTotext";
+import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 
 export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend, onClickClear }) {
     const { toast } = useToast()
@@ -20,7 +22,9 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     const [formShow, setFormShow] = useState(false)
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
     const [inputLock, setInputLock] = useState({ locked: false, reason: '' })
+    const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
 
+    
     const { messages, hisMessages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, destory, setShowGuideQuestion } = useMessageStore()
     const currentChatIdRef = useRef(null)
     const inputRef = useRef(null)
@@ -277,8 +281,25 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         // setInputEmpty(textarea.value.trim() === '')
     }
 
+    const handleSpeechRecognition = (text) => {
+        console.log('text', text);
+        
+        if (!showWhenLocked && inputLock.locked) return;
+        if (!inputRef.current) return;
+        
+        // 将识别结果追加到当前输入框内容后
+        const currentValue = inputRef.current.value;
+        inputRef.current.value = currentValue + text;
+        
+        // 触发input事件以更新UI（如自动调整高度）
+        const event = new Event('input', { bubbles: true, cancelable: true });
+        inputRef.current.dispatchEvent(event);
+    };
+
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
         <div className={`relative ${clear && 'pl-9'}`}>
+            {/* 语音转文字 */}
+            {linsightConfig?.asr_model?.id && <SpeechToTextComponent onChange={handleSpeechRecognition} />}
             {/* form */}
             {
                 formShow && <div className="relative">

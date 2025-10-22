@@ -8,7 +8,7 @@ from bisheng.api.utils import build_input_keys_response
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.manager import ChatManager
 from bisheng.chat.utils import judge_source, process_graph, process_source_document
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.report import Report
 from bisheng.database.models.message import ChatMessage as ChatMessageDB, ChatMessageDao
 from bisheng.interface.importing.utils import import_by_type
@@ -149,7 +149,7 @@ class Handler:
             await session.send_json(client_id, chat_id, response)
 
         # build report
-        with session_getter() as db_session:
+        with get_sync_db_session() as db_session:
             template = db_session.exec(
                 select(Report).where(Report.flow_id == client_id).order_by(
                     Report.id.desc())).first()

@@ -10,12 +10,6 @@ from fastapi import BackgroundTasks, Request
 from loguru import logger
 from pymilvus import Collection
 
-from bisheng.api.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
-from bisheng.api.errcode.knowledge import (
-    KnowledgeChunkError,
-    KnowledgeExistError,
-    KnowledgeNoEmbeddingError,
-)
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.knowledge_imp import (
     KnowledgeUtils,
@@ -24,7 +18,6 @@ from bisheng.api.services.knowledge_imp import (
     process_file_task,
     read_chunk_text,
 )
-from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schema.knowledge import KnowledgeFileResp
@@ -38,6 +31,12 @@ from bisheng.api.v1.schemas import (
 )
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download
+from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeChunkError,
+    KnowledgeExistError,
+    KnowledgeNoEmbeddingError,
+)
 from bisheng.database.models.group_resource import (
     GroupResource,
     GroupResourceDao,
@@ -56,12 +55,14 @@ from bisheng.database.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus, ParseType,
 )
-from bisheng.database.models.llm_server import LLMDao, LLMModelType
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.llm.const import LLMModelType
+from bisheng.llm.domain.services import LLMService
+from bisheng.llm.models import LLMDao
 from bisheng.settings import settings
 from bisheng.utils import generate_uuid
 from bisheng.utils.embedding import decide_embeddings
@@ -842,7 +843,8 @@ class KnowledgeService(KnowledgeUtils):
                 continue
             finally_res[index].title = file_title_map.get(str(one.id), "")
         if timeout_files:
-            KnowledgeFileDao.update_file_status(timeout_files, KnowledgeFileStatus.FAILED, '文件处理时间超过24小时')
+            KnowledgeFileDao.update_file_status(timeout_files, KnowledgeFileStatus.FAILED,
+                                                'Parsing time exceeds 24 hours')
 
         return (
             finally_res,
@@ -1196,6 +1198,40 @@ class KnowledgeService(KnowledgeUtils):
         return target_knowlege
 
     @classmethod
+    async def copy_qa_knowledge(
+            cls,
+            request,
+            login_user: UserPayload,
+            qa_knowledge: Knowledge,
+    ) -> Any:
+        await KnowledgeDao.async_update_state(qa_knowledge.id, KnowledgeState.COPYING,
+                                              update_time=qa_knowledge.update_time)
+        qa_knowldge_dict = qa_knowledge.model_dump()
+        qa_knowldge_dict.pop("id")
+        qa_knowldge_dict.pop("create_time")
+        qa_knowldge_dict.pop("update_time", None)
+        qa_knowldge_dict["user_id"] = login_user.user_id
+        qa_knowldge_dict["index_name"] = f"col_{int(time.time())}_{generate_uuid()[:8]}"
+        qa_knowldge_dict["name"] = f"{qa_knowledge.name} 副本"[:30]
+        qa_knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
+        qa_knowledge_new = Knowledge(**qa_knowldge_dict)
+        target_qa_knowlege = await KnowledgeDao.async_insert_one(qa_knowledge_new)
+
+        celery_params = {
+            "source_knowledge_id": qa_knowledge.id,
+            "target_id": target_qa_knowlege.id,
+            "login_user_id": login_user.user_id,
+        }
+
+        cls.create_knowledge_hook(request, login_user, target_qa_knowlege)
+
+        from bisheng.worker.knowledge.qa import copy_qa_knowledge_celery
+        copy_qa_knowledge_celery.delay(source_knowledge_id=qa_knowledge.id, target_knowledge_id=target_qa_knowlege.id,
+                                       login_user_id=login_user.user_id)
+
+        return target_qa_knowlege
+
+    @classmethod
     def judge_qa_knowledge_write(
             cls, login_user: UserPayload, qa_knowledge_id: int
     ) -> Knowledge:
@@ -1226,9 +1262,9 @@ def mixed_retrieval_recall(question: str, vector_store, keyword_store, max_conte
         dict: 包含检索结果和源文档的字典
     """
     try:
-        llm = LLMService.get_bisheng_llm(model_id=model_id,
-                                         temperature=0.01,
-                                         cache=False)
+        llm = LLMService.get_bisheng_llm_sync(model_id=model_id,
+                                              temperature=0.01,
+                                              cache=False)
         # 创建混合检索器
         rag_tool = BishengRAGTool(
             llm=llm,

@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 from sqlalchemy import Column, DateTime, text, delete
 from sqlmodel import Field, select
 
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -49,7 +49,7 @@ class GroupResourceDao(GroupResourceBase):
 
     @classmethod
     def insert_group(cls, group_resource: GroupResource) -> GroupResource:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(group_resource)
             session.commit()
             session.refresh(group_resource)
@@ -57,7 +57,7 @@ class GroupResourceDao(GroupResourceBase):
 
     @classmethod
     def insert_group_batch(cls, group_resources: List[GroupResource]) -> List[GroupResource]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add_all(group_resources)
             session.commit()
             return group_resources
@@ -69,7 +69,7 @@ class GroupResourceDao(GroupResourceBase):
                            name: str = None,
                            page_size: int = None,
                            page_num: int = None) -> list[GroupResource]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(GroupResource).where(GroupResource.group_id == group_id,
                                                     GroupResource.type == resource_type.value)
             if name:
@@ -85,7 +85,7 @@ class GroupResourceDao(GroupResourceBase):
                             name: str = None,
                             page_size: int = None,
                             page_num: int = None) -> list[GroupResource]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(GroupResource).where(GroupResource.group_id.in_(group_ids))
             if resource_types:
                 statement = statement.where(GroupResource.type.in_([r.value for r in resource_types]))
@@ -100,7 +100,7 @@ class GroupResourceDao(GroupResourceBase):
         """
         获取资源所属的分组
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(GroupResource).where(GroupResource.third_id == third_id,
                                                     GroupResource.type == resource_type.value)
             return session.exec(statement).all()
@@ -113,12 +113,12 @@ class GroupResourceDao(GroupResourceBase):
         statement = select(GroupResource).where(GroupResource.third_id.in_(third_ids))
         if resource_type:
             statement = statement.where(GroupResource.type == resource_type.value)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
     def delete_group_resource_by_third_id(cls, third_id: str, resource_type: ResourceTypeEnum) -> None:
-        with (session_getter() as session):
+        with (get_sync_db_session() as session):
             statement = delete(GroupResource).where(
                 GroupResource.third_id == third_id).where(
                 GroupResource.type == resource_type.value)
@@ -127,7 +127,7 @@ class GroupResourceDao(GroupResourceBase):
 
     @classmethod
     def delete_group_resource_by_group_id(cls, group_id: int):
-        with (session_getter() as session):
+        with (get_sync_db_session() as session):
             statement = delete(GroupResource).where(GroupResource.group_id == group_id)
             session.exec(statement)
             session.commit()
@@ -137,13 +137,13 @@ class GroupResourceDao(GroupResourceBase):
         """
         获取分组下的所有资源
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(
                 select(GroupResource).where(GroupResource.group_id == group_id)).all()
 
     @classmethod
     def update_group_resource(cls, group_resources: List[GroupResource]) -> List[GroupResource]:
-        with (session_getter() as session):
+        with (get_sync_db_session() as session):
             session.add_all(group_resources)
             session.commit()
         return group_resources

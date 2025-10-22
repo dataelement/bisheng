@@ -5,21 +5,20 @@ from typing import Any, List, Optional
 from fastapi import Request
 from loguru import logger
 
-from bisheng.api.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
-                                           AssistantNotEditError, AssistantNotExistsError, ToolTypeRepeatError,
-                                           ToolTypeIsPresetError)
-from bisheng.api.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
-from bisheng.api.services.llm import LLMService
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
                                     StreamData, UnifiedResponseModel, resp_200, resp_500)
 from bisheng.cache import InMemoryCache
+from bisheng.common.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
+                                              AssistantNotEditError, AssistantNotExistsError, ToolTypeRepeatError,
+                                              ToolTypeIsPresetError)
+from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.assistant import (Assistant, AssistantDao, AssistantLinkDao,
                                                AssistantStatus)
@@ -33,6 +32,7 @@ from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
+from bisheng.llm.domain.services import LLMService
 
 
 class AssistantService(BaseService, AssistantUtils):
@@ -150,11 +150,11 @@ class AssistantService(BaseService, AssistantUtils):
         logger.info(f"assistant original prompt id: {assistant.id}, desc: {assistant.prompt}")
 
         # 自动补充默认的模型配置
-        assistant_llm = LLMService.get_assistant_llm()
+        assistant_llm = await LLMService.get_assistant_llm()
         if assistant_llm.llm_list:
             for one in assistant_llm.llm_list:
                 if one.default:
-                    assistant.model_name = one.model_id
+                    assistant.model_name = str(one.model_id)
                     break
 
         # 自动生成描述
@@ -403,7 +403,7 @@ class AssistantService(BaseService, AssistantUtils):
         for one in all_tool_type:
             tool_type_id.append(one.id)
             tool_type_children[one.id] = []
-            res.append(one.model_dump())
+            res.append(one.model_dump(exclude={'extra'}))
 
         # 获取对应类别下的工具列表
         tool_list = GptsToolsDao.get_list_by_type(tool_type_id)
@@ -411,14 +411,7 @@ class AssistantService(BaseService, AssistantUtils):
             tool_type_children[one.type].append(one)
 
         for one in res:
-            one['write'] = one['id'] not in tool_type_ids_extra or one['user_id'] == user.user_id
-            if not user.is_admin():
-                one['extra'] = ''
             one["children"] = tool_type_children.get(one["id"], [])
-            if one['extra']:
-                extra = json.loads(one['extra'])
-                one["parameter_name"] = extra.get("parameter_name")
-                one["api_location"] = extra.get("api_location")
 
         return res
 

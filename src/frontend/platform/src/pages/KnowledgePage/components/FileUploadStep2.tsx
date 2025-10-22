@@ -20,6 +20,7 @@ export interface FileItem {
     file_path: string;
     fileType: 'table' | 'file';
     suffix: string;
+    isEtl4lm?: string;
 }
 interface IProps {
     step: number
@@ -49,9 +50,11 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
     const [previewFailed, setPreviewFailed] = useState(false);
     const displayStep = isAdjustMode ? step + 1 : step;
     const splitRule = resultFiles[0]?.split_rule;
+    const isEtl4lm = resultFiles[0]?.isEtl4lm === 'etl4lm';
     console.log("子组件接收的布尔值：", {
         retain_images: splitRule?.retain_images,
-        force_ocr: splitRule?.force_ocr
+        force_ocr: splitRule?.force_ocr,
+        isEtl4lm
     });
     const displayMode: DisplayModeType | null = useMemo(() => {
         if (!resultFiles || resultFiles.length === 0) return null;
@@ -226,6 +229,7 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
                                     setRules={setRules}
                                     strategies={strategies}
                                     setStrategies={(next) => setStrategies(next)}
+                                    isEtl4lm={isEtl4lm}
                                     showPreview={showPreview}
                                 />
                             </TabsContent>

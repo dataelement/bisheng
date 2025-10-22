@@ -4,7 +4,7 @@ from typing import Optional, List, Dict
 from sqlalchemy import Column, DateTime, UniqueConstraint
 from sqlmodel import Field, select, delete, and_, func, text
 
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.group_resource import ResourceTypeEnum
 
@@ -57,7 +57,7 @@ class TagDao(Tag):
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
 
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
@@ -66,13 +66,13 @@ class TagDao(Tag):
         statement = select(func.count(Tag.id))
         if keyword:
             statement = statement.where(Tag.name.like(f'%{keyword}%'))
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.scalar(statement)
 
     @classmethod
     def insert_tag(cls, data: Tag) -> Tag:
         """ 插入一条新的标签数据 """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(data)
             session.commit()
             session.refresh(data)
@@ -81,7 +81,7 @@ class TagDao(Tag):
     @classmethod
     def delete_tag(cls, tag_id: int) -> bool:
         """ 删除一条标签数据 """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             # 删除标签数据
             session.exec(delete(Tag).where(Tag.id == tag_id))
             # 删除标签关联的数据
@@ -92,21 +92,21 @@ class TagDao(Tag):
     @classmethod
     def get_tag_by_name(cls, name: str) -> Tag:
         """ 通过标签名查找标签 """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(Tag).where(Tag.name == name)
             return session.exec(statement).first()
 
     @classmethod
     def get_tag_by_id(cls, tag_id: int) -> Tag:
         """ 通过标签ID查找标签 """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(Tag).where(Tag.id == tag_id)
             return session.exec(statement).first()
 
     @classmethod
     def get_tags_by_ids(cls, tag_ids: List[int]) -> List[Tag]:
         """ 通过标签ID查找标签 """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(Tag).where(Tag.id.in_(tag_ids))
             return session.exec(statement).all()
 
@@ -125,7 +125,7 @@ class TagDao(Tag):
                                                                                Tag.id == TagLink.tag_id,
                                                                                TagLink.resource_id.in_(resource_ids),
                                                                                TagLink.resource_type == resource_type.value))
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             result = session.exec(statement).all()
         ret = {}
         for one in result:
@@ -138,7 +138,7 @@ class TagDao(Tag):
     def get_tags_by_resource_batch(cls, resource_type: List[ResourceTypeEnum], resource_ids: list[str]) -> Dict[
         str, List[Tag]]:
         """ 查询资源下的所有标签 """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(Tag.id, Tag.name, TagLink.resource_id).join(TagLink,
                                                                            and_(
                                                                                Tag.id == TagLink.tag_id,
@@ -158,7 +158,7 @@ class TagDao(Tag):
         """ 查询标签下的所有资源 """
 
         statement = select(TagLink).where(TagLink.tag_id.in_(tag_ids), TagLink.resource_type == resource_type.value)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
@@ -167,13 +167,13 @@ class TagDao(Tag):
 
         statement = select(TagLink).where(TagLink.tag_id.in_(tag_ids),
                                           TagLink.resource_type.in_([x.value for x in resource_type]))
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
     def insert_tag_link(cls, tag_link: TagLink) -> TagLink:
         """ 插入标签关联数据 """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(tag_link)
             session.commit()
             session.refresh(tag_link)
@@ -182,14 +182,14 @@ class TagDao(Tag):
     @classmethod
     def get_tag_link(cls, tag_link_id: int) -> TagLink:
         """ 通过标签关联ID查找标签关联数据 """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(TagLink).where(TagLink.id == tag_link_id)
             return session.exec(statement).first()
 
     @classmethod
     def delete_tag_link(cls, tag_link_id: int) -> bool:
         """ 删除标签关联数据 """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             # 删除标签关联数据
             session.exec(delete(TagLink).where(TagLink.id == tag_link_id))
             session.commit()
@@ -203,7 +203,7 @@ class TagDao(Tag):
             TagLink.resource_id == resource_id,
             TagLink.resource_type == resource_type.value
         )
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             # 删除标签关联数据
             session.exec(statement)
             session.commit()

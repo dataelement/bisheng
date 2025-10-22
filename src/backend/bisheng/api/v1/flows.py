@@ -5,16 +5,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlmodel import select
 from starlette.responses import StreamingResponse
 
-from bisheng.api.errcode.flow import FlowOnlineEditError, FlowNameExistsError
-from bisheng.api.errcode.http_error import UnAuthorizedError, ServerError, NotFoundError
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.utils import build_flow_no_yield, remove_api_keys
-from bisheng.api.v1.schemas import (FlowCompareReq, FlowListRead, FlowVersionCreate, StreamData,
-                                    resp_200)
-from bisheng.database.base import session_getter
-from bisheng.database.models.flow import (Flow, FlowCreate, FlowDao, FlowRead, FlowType,
-                                          FlowUpdate)
+from bisheng.api.v1.schemas import (FlowCompareReq, FlowListRead, FlowVersionCreate, StreamData, resp_200)
+from bisheng.common.errcode.flow import FlowOnlineEditError, FlowNameExistsError
+from bisheng.common.errcode.http_error import UnAuthorizedError, ServerError, NotFoundError
+from bisheng.core.database import get_sync_db_session
+from bisheng.database.models.flow import (Flow, FlowCreate, FlowDao, FlowRead, FlowType, FlowUpdate)
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
 from bisheng.settings import settings
@@ -29,7 +27,7 @@ router = APIRouter(prefix='/flows', tags=['Flows'], dependencies=[Depends(get_lo
 def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload = Depends(get_login_user)):
     """Create a new flow."""
     # 判断用户是否重复技能名
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         if session.exec(
                 select(Flow).where(Flow.name == flow.name,
                                    Flow.user_id == login_user.user_id)).first():
@@ -179,7 +177,7 @@ async def update_flow(*,
         if key in ['data', 'create_time', 'update_time']:
             continue
         setattr(db_flow, key, value)
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         session.add(db_flow)
         session.commit()
         session.refresh(db_flow)
