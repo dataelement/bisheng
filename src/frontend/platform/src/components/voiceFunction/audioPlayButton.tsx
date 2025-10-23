@@ -8,10 +8,12 @@ import { message } from '../bs-ui/toast/use-toast';
 interface AudioPlayButtonProps {
   messageId: string;
   msg?: string;
+  version?: string;
 }
 
 export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps) => {
   const [error, setError] = useState('');
+  const [version] = useState(window.chat_version || 'v1');
   const {
     currentPlayingId,
     soundInstance,
@@ -24,13 +26,13 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
     setCurrentPlayingId,
   } = useAudioPlayerStore();
 
-  const API_BASE_URL = ''; 
+  const API_BASE_URL = '';
 
   const getAudioUrl = async (text: string) => {
     console.log('请求TTS的文本:', text);
-    
+
     // 1. 调用API
-    const response = await textToSpeech(text);
+    const response = await textToSpeech(text, version);
     console.log('TTS API 原始响应:', response);
 
     // 2. 处理响应
@@ -64,7 +66,7 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
   const handlePlay = async () => {
     try {
       setError('');
-      
+
       if (currentPlayingId === messageId) {
         if (soundInstance?.playing()) {
           pauseAudio();
@@ -77,13 +79,13 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
       if (currentPlayingId) {
         stopAudio();
       }
-      
+
       setLoading(true);
       setCurrentPlayingId(messageId);
-      
+
       const audioUrl = await getAudioUrl(msg);
       console.log('成功获取音频链接:', audioUrl);
-      
+
       playAudio({
         id: messageId,
         audioUrl,
@@ -94,8 +96,8 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
     } catch (err) {
       console.error('播放请求异常详情:', err);
       message({
-          variant: 'error',
-          description: '音频生成或播放失败，请稍后再试'
+        variant: 'error',
+        description: '音频生成或播放失败，请稍后再试'
       });
       setLoading(false);
       setCurrentPlayingId(null);
@@ -110,10 +112,10 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
         aria-label={isPlaying ? 'Pause' : 'Play'}
       >
         {isThisLoading ? (
-          <Loader size={20} strokeWidth={1.8}  color="#9ca3af" className={'mt-0.5 mr-1 animate-spin'} />
+          <Loader size={20} strokeWidth={1.8} color="#9ca3af" className={'mt-0.5 mr-1 animate-spin'} />
         ) : (
-          <Volume2 size={20} strokeWidth={1.8}  color="#9ca3af"  className={`cursor-pointer mt-0.5 mr-1 text-primary hover:text-primary`} />
-          
+          <Volume2 size={20} strokeWidth={1.8} color="#9ca3af" className={`cursor-pointer mt-0.5 mr-1 text-primary hover:text-primary`} />
+
         )}
       </button>
       {error && <div className="error-message">{error}</div>}

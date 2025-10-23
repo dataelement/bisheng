@@ -94,6 +94,7 @@ const convertBlobToWav = async (blob) => {
 
 // --- 主组件---
 const SpeechToTextComponent = ({ onChange }) => {
+  const [version] = useState(window.chat_version || 'v1');
   const { toast } = useToast();
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -199,7 +200,7 @@ const SpeechToTextComponent = ({ onChange }) => {
           }
           return newDuration;
         });
-      }, 1000);
+      }, 600000);
 
     } catch (err) {
       toast({
@@ -245,20 +246,20 @@ const SpeechToTextComponent = ({ onChange }) => {
     try {
       const formData = new FormData();
       formData.append('file', audioBlob, 'recording.wav');
-  
+
       // 直接调用API，不要使用captureAndAlertRequestErrorHoc
-      const res = await speechToText(formData);
-      
+      const res = await speechToText(formData, version);
+
       // 解析返回的JSON数据
       const responseData = res.data || res;
       console.log('responseData', responseData);
-      
+
       // 从data字段中获取识别文本
       const transcript = responseData || '';
-      
+
       // 调用onChange回调，传递识别到的文本
       onChange(transcript);
-      
+
     } catch (err) {
       toast({
         title: i18next.t('prompt'),
@@ -279,10 +280,10 @@ const SpeechToTextComponent = ({ onChange }) => {
           <LoaderCircle className="animate-spin" />
         )}
         {!isProcessing && isRecording && (
-          <VoiceRecordingIcon size={18} onClick={stopRecording}/>
+          <VoiceRecordingIcon size={18} onClick={stopRecording} />
         )}
         {!isProcessing && !isRecording && (
-          <Mic size={18} onClick={startRecording}/>
+          <Mic size={18} onClick={startRecording} />
         )}
       </div>
 
