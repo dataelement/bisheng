@@ -4,15 +4,15 @@ import { SendIcon } from "@/components/bs-icons/send";
 import { Button } from "@/components/bs-ui/button";
 import { Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import SpeechToTextComponent from "@/components/voiceFunction/speechToText";
 import { locationContext } from "@/contexts/locationContext";
+import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 import { formatDate } from "@/util/utils";
+import { CirclePause } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
-import { CirclePause } from "lucide-react";
-import SpeechToTextComponent from "@/components/voiceFunction/speechTotext";
-import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 
 export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend, onClickClear }) {
     const { toast } = useToast()

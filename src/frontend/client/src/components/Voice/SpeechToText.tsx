@@ -6,6 +6,7 @@ import { getVoice2TextApi } from "~/api"
 import { useToastContext } from "~/Providers"
 import PropTypes from "prop-types"
 import { Button } from "../ui"
+import VoiceRecordingIcon from "../ui/icon/Voice"
 
 // --- Core Audio Processing Logic ---
 
@@ -172,6 +173,12 @@ const SpeechToTextComponent = ({ onChange }: SpeechToTextComponentProps) => {
             e.preventDefault();
             audioChunksRef.current = []
             setIsProcessing(false)
+            // Ten minute recording limit
+            setTimeout(() => {
+                setIsProcessing(true)
+                mediaRecorderRef.current?.stop()
+                setIsRecording(false)
+            }, 600000)
 
             // Request microphone access with noise reduction settings
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -255,7 +262,8 @@ const SpeechToTextComponent = ({ onChange }: SpeechToTextComponentProps) => {
                 {isProcessing && <LoaderCircle size={30} className="animate-spin p-1" />}
                 {!isProcessing && isRecording && (
                     <Button size={'icon'} variant='outline' onClick={stopRecording} className="rounded-full w-8 h-8">
-                        <AudioLines size={18} className="animate-pulse" />
+                        {/* <AudioLines size={18} className="animate-pulse" /> */}
+                        <VoiceRecordingIcon onClick={() => { }} />
                     </Button>
                 )}
                 {!isProcessing && !isRecording && (

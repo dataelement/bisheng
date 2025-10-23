@@ -40,6 +40,7 @@ export default function ChatPanne({ customWsHost = '', chatList, chat, appendHis
     // console.log('autoRun :>> ', autoRun);
     const init = async () => {
         const isV1 = version === 'v1';
+        window.chat_version = version
 
         if (type === AppNumType.SKILL) {
             setAssistant(null)

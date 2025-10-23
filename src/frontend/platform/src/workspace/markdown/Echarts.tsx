@@ -2,10 +2,9 @@
 
 import { Copy } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Button } from "~/components/ui"
-import { copyText } from "~/utils"
+import { Button } from "@/components/bs-ui/button"
+import { copyText } from "@/utils"
 import { loadScript } from "./Mermaid"
-import { useLocalize } from "~/hooks"
 
 export default function ECharts({ option }: { option: string }) {
     const [mode, setMode] = useState<"chart" | "code">("chart")
@@ -13,7 +12,6 @@ export default function ECharts({ option }: { option: string }) {
     const chartRef = useRef<any | null>(null)
     const domRef = useRef<HTMLDivElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
-    const localize = useLocalize();
 
     useEffect(() => {
         loadScript("echarts")
@@ -110,7 +108,7 @@ export default function ECharts({ option }: { option: string }) {
     }
 
     return (
-        <div className="w-full my-3 -ml-3.5" ref={containerRef}>
+        <div className="my-3 -ml-3.5" ref={containerRef}>
             <div className="shadow-sm rounded-lg bg-muted overflow-hidden">
                 {/* 头部切换按钮 */}
                 <div className="flex items-center justify-between p-2 relative z-10 bg-muted">
@@ -120,21 +118,21 @@ export default function ECharts({ option }: { option: string }) {
                             variant={mode === "chart" ? "default" : "ghost"}
                             className="text-xs h-8"
                         >
-                            {localize('com_ui_chart')}
+                            图表
                         </Button>
                         <Button
                             onClick={() => setMode("code")}
                             variant={mode === "code" ? "default" : "ghost"}
                             className="text-xs h-8"
                         >
-                            {localize('com_ui_code')}
+                            代码
                         </Button>
                     </div>
                     {mode === "code" && (
                         <div className="flex items-center">
                             <Button onClick={handleCopy} variant="ghost" className="text-xs h-8">
                                 <Copy size={16} />
-                                {copySuccess ? localize('com_ui_duplicated') : localize('com_ui_duplicate')}
+                                {copySuccess ? "已复制" : "复制"}
                             </Button>
                         </div>
                     )}

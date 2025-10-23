@@ -73,7 +73,7 @@ export default function apps() {
     const { message } = useToast()
     const navigate = useNavigate()
 
-    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<FlowType>({ pageSize: 14, managed_bool: true }, (param) =>
+    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<FlowType>({ pageSize: 14, managed: true }, (param) =>
         getAppsApi(param)
     )
 

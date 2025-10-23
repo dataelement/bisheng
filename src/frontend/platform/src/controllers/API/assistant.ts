@@ -101,7 +101,7 @@ export const getAssistantToolsWithManageApi = async (type: 'all' | 'default' | '
         custom: '?is_preset=0',
         mcp: '?is_preset=2'
     }
-    return await axios.get(`/api/v1/tool/manage${queryStr[type]}`)
+    return await axios.get(`/api/v1/assistant/tool_list${queryStr[type]}`)
 };
 
 // 获取mcp服务集合
