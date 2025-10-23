@@ -1,50 +1,38 @@
 import Cascader from "@/components/bs-ui/select/cascader";
-import { getAssistantModelList, getModelListApi } from "@/controllers/API/finetune";
-import { useEffect, useState } from "react";
+import { useModel } from "@/pages/ModelPage/manage";
+import { useMemo } from "react";
 
 export default function ModelSelect({ type = 'assistant', modelType = 'llm', value, onChange }) {
 
     // const [configServers, setConfigServers] = useState([])
-    const [loading, setLoading] = useState(true)
-    const [modelValue, setModelValue] = useState(null)
-    const [options, setOptions] = useState([])
 
-    const loadModels = async () => {
-        // const data = await getAssistantModelsApi()
-        // setConfigServers(data)
-        setLoading(true)
-        const data = await (type === 'assistant' ? getAssistantModelList() : getModelListApi())
+    const { llmOptions, embeddings, isLoading } = useModel(type === 'assistant' ? type : 'llm')
 
-        let _value = []
-        let _options = []
-        data.forEach(server => {
-            const serverItem = { value: server.id, label: server.name, children: [] }
-            serverItem.children = server.models.reduce((res, model) => {
-                if (model.id === value) {
-                    _value = [{ ...serverItem }, { value: model.id, label: model.model_name }]
-                }
-                return model.online && model.model_type === modelType ? [...res, {
-                    value: model.id,
-                    label: model.model_name
-                }] : res
-            }, [])
-            if (serverItem.children.length) _options.push(serverItem)
-        });
-        setModelValue(_value)
-        setOptions(_options)
-        setLoading(false)
+    const defaultValue = useMemo(() => {
+        let _defaultValue = []
+        const options = modelType === 'llm' ? llmOptions : embeddings
+        if (!value || !options || options.length === 0) return _defaultValue
 
-        if (!_value.length) onChange(null)
-    }
+        options.forEach(option => {
+            const model = option.children?.find(el => el.value == value)
+            if (model) {
+                _defaultValue = [
+                    { value: option.value, label: option.label },
+                    { value: model.value, label: model.label }
+                ]
+                return true
+            }
+            return false
+        })
+        return _defaultValue
+    }, [value, llmOptions, embeddings])
 
-    useEffect(() => {
-        loadModels()
-    }, [value])
-    if (loading) return null
+
+    if (isLoading) return null
     return <Cascader
         selectPlaceholder="选择一个模型"
-        defaultValue={modelValue}
-        options={options}
+        defaultValue={defaultValue}
+        options={modelType === 'llm' ? llmOptions : embeddings}
         onChange={(val) => onChange(val[1])}
     />
 };

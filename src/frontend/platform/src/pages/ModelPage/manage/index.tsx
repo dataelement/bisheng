@@ -6,15 +6,15 @@ import { userContext } from "@/contexts/userContext"
 import { useContext, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 // import { transformModule, transformEvent, transformObjectType } from "../LogPage/utils"
+import { LoadingIcon } from "@/components/bs-icons/loading"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { QuestionTooltip } from "@/components/bs-ui/tooltip"
 import { changeLLmServerStatus, getAssistantModelList, getModelListApi } from "@/controllers/API/finetune"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { CircleMinus, CirclePlus } from "lucide-react"
+import { useQuery } from "react-query"
 import ModelConfig from "./ModelConfig"
 import SystemModelConfig from "./SystemModelConfig"
-import { LoadingIcon } from "@/components/bs-icons/loading"
-import { useQuery } from "react-query"
 
 function CustomTableRow({ data, index, user, onModel, onCheck }) {
     const { t } = useTranslation()
@@ -178,10 +178,10 @@ export default function Management() {
 }
 
 // model list（embeddings llm）
-export function useModel() {
-    const { data, refetch } = useQuery({
-        queryKey: "QueryModelsKey",
-        queryFn: () => getModelListApi(),
+export function useModel(type = 'llm') {
+    const { data, isLoading, refetch } = useQuery({
+        queryKey: type === 'llm' ? "QueryModelsKey" : "QueryAssistantModelsKey",
+        queryFn: () => type === 'llm' ? getModelListApi() : getAssistantModelList(),
         select: (data) => {
             const llmOptions = []
             const embeddings = []
@@ -200,13 +200,13 @@ export function useModel() {
                     if (!model.online) return
                     if (model.model_type === 'asr') {
                         serverAsrItem.children.push(item)
-                    }
-                    if (model.model_type === 'tts') {
+                    } else if (model.model_type === 'tts') {
                         serverTtsItem.children.push(item)
+                    } else if (model.model_type === 'embedding') {
+                        serverEmbItem.children.push(item)
+                    } else {
+                        serverLlmItem.children.push(item)
                     }
-
-                    model.model_type === 'embedding' ?
-                        serverEmbItem.children.push(item) : serverLlmItem.children.push(item)
                 })
 
                 if (serverLlmItem.children.length) llmOptions.push(serverLlmItem)
@@ -230,6 +230,7 @@ export function useModel() {
         embeddings,
         asrModel,
         ttsModel,
+        isLoading,
         refetch
     }
 }

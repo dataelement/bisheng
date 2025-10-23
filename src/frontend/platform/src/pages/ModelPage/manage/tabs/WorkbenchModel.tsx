@@ -1,6 +1,8 @@
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import { Label } from "@/components/bs-ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import Cascader from "@/components/bs-ui/select/cascader";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
@@ -8,8 +10,6 @@ import { getLinsightModelConfig, updateLinsightModelConfig } from "@/controllers
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { useQuery } from "react-query";
 import { useModel } from "..";
 
@@ -18,7 +18,7 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
         let _defaultValue = []
         if (!value || !options || options.length === 0) return _defaultValue
 
-        const found = options.some(option => {
+        options.forEach(option => {
             const model = option.children?.find(el => el.value == value)
             if (model) {
                 _defaultValue = [
@@ -51,7 +51,7 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
 }
 
 export default function WorkbenchModel({ onBack }) {
-    const { llmOptions,embeddings,asrModel,ttsModel } = useModel();
+    const { llmOptions, embeddings, asrModel, ttsModel } = useModel();
     const { t } = useTranslation('model')
     const { message } = useToast()
 
@@ -86,7 +86,6 @@ export default function WorkbenchModel({ onBack }) {
             // 提交更新并通过 refetch 获取最新配置（无需再次调用 getLinsightModelConfig）
             await captureAndAlertRequestErrorHoc(updateLinsightModelConfig(data));
             const updatedConfig = await refetchConfig();
-console.log(updatedConfig,343);
 
             // 直接使用 refetch 返回的最新数据更新状态
             const newConfig = updatedConfig.data;
