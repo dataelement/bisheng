@@ -20,14 +20,15 @@ from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_us
                                                get_admin_user, UserService)
 from bisheng.api.v1.schemas import resp_200, CreateUserReq
 from bisheng.cache.redis import redis_client
-from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.common.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
-                                         UserValidateError, UserPasswordError)
+                                         UserValidateError, UserPasswordError, UserForbiddenError)
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
-from bisheng.database.models.role_access import RoleRefresh
+from bisheng.database.models.role_access import RoleRefresh, RoleAccessDao, AccessType
 from bisheng.database.models.user import User, UserCreate, UserDao, UserLogin, UserRead, UserUpdate
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRole, UserRoleCreate, UserRoleDao
