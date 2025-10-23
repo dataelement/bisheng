@@ -1,4 +1,5 @@
 import json
+import os
 from typing import List, Optional, Dict
 
 from fastapi import Request, BackgroundTasks, UploadFile
@@ -153,6 +154,11 @@ class LLMService:
             elif model.model_type == LLMModelType.TTS.value:
                 bisheng_tts = await cls.get_bisheng_tts(model_id=model.id, ignore_online=True)
                 await bisheng_tts.ainvoke('hello')
+            elif model.model_type == LLMModelType.ASR.value:
+                example_file_path = os.path.join(os.path.dirname(__file__), "./asr_example.wav")
+                with open(example_file_path, 'rb') as f:
+                    bisheng_asr = await cls.get_bisheng_asr(model_id=model.id, ignore_online=True)
+                    await bisheng_asr.ainvoke(f)
         except Exception as e:
             LLMDao.update_model_status(model.id, 1, str(e))
             logger.exception(f'test model status: {model.id} {model.model_name}')
