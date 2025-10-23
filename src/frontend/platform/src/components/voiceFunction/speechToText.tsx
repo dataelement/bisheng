@@ -97,16 +97,26 @@ const SpeechToTextComponent = ({ onChange }) => {
   const { toast } = useToast();
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [recordDuration, setRecordDuration] = useState(0); // 录音时长（秒）
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const audioContextRef = useRef(null);
-  const timerRef = useRef(null);
+  const timerRef = useRef(null); // 定时器引用
+  const maxRecordTime = 600; // 最大录音时长：10分钟 = 600秒
 
-  // 开始录音（保留优化参数，样式逻辑还原）
+  // 格式化时长为 "MM:SS" 格式
+  const formatDuration = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // 开始录音（添加10分钟限制逻辑）
   const startRecording = async () => {
     try {
       audioChunksRef.current = [];
       setIsProcessing(false);
+      setRecordDuration(0); // 重置时长
 
       // 优化的音频请求配置（保留降噪、高采样率）
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -159,8 +169,10 @@ const SpeechToTextComponent = ({ onChange }) => {
           if (audioContextRef.current) {
             await audioContextRef.current.close();
           }
+          // 清除定时器
           if (timerRef.current) {
             clearInterval(timerRef.current);
+            timerRef.current = null;
           }
         }
       };
@@ -168,6 +180,27 @@ const SpeechToTextComponent = ({ onChange }) => {
       // 开始录音
       mediaRecorderRef.current.start();
       setIsRecording(true);
+
+      // 启动定时器：每秒更新时长，到达10分钟自动停止
+      timerRef.current = setInterval(() => {
+        setRecordDuration(prev => {
+          const newDuration = prev + 1;
+          // 到达最大时长，自动停止录音
+          if (newDuration >= maxRecordTime) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+            stopRecording();
+            // 提示用户已达最大时长
+            toast({
+              title: i18next.t('prompt'),
+              variant: 'info',
+              description: '已达到最大录音时长（10分钟），录音已自动停止'
+            });
+          }
+          return newDuration;
+        });
+      }, 1000);
+
     } catch (err) {
       toast({
         title: i18next.t('prompt'),
@@ -184,8 +217,28 @@ const SpeechToTextComponent = ({ onChange }) => {
       setIsProcessing(true);
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      // 清除定时器
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     }
   };
+
+  // 组件卸载时清理资源
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+      if (mediaRecorderRef.current?.stream) {
+        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
 
   // 语音转文字API
   const convertSpeechToText = async (audioBlob) => {
