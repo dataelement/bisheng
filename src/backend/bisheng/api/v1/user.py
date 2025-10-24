@@ -631,7 +631,10 @@ async def access_list(*, role_id: int, type: Optional[int] = None, login_user: U
     if not await login_user.async_check_group_admin(db_role.group_id):
         return UnAuthorizedError.return_resp()
 
-    res = await RoleAccessDao.aget_role_access([role_id], AccessType(type))
+    access_type = None
+    if type:
+        access_type = AccessType(type)
+    res = await RoleAccessDao.aget_role_access([role_id], access_type)
 
     return resp_200({
         'data': res,
