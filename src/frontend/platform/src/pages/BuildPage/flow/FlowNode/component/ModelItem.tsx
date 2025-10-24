@@ -1,56 +1,40 @@
 import { Label } from "@/components/bs-ui/label";
 import Cascader from "@/components/bs-ui/select/cascader";
-import { getAssistantModelList, getLlmDefaultModel, getModelListApi } from "@/controllers/API/finetune";
+import { getLlmDefaultModel } from "@/controllers/API/finetune";
+import { useModel } from "@/pages/ModelPage/manage";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function ModelItem({ agent = false, data, onChange, onValidate }) {
-    const [options, setOptions] = useState<any[]>([])
     const { t } = useTranslation()
 
+    const { llmOptions, isLoading } = useModel(agent ? 'assistant' : 'llm')
+    const [modelId, setModelId] = useState('')
+
     useEffect(() => {
-        (agent ? getAssistantModelList() : getModelListApi()).then(res => {
-            let llmOptions = []
-            let embeddings = []
-            res.forEach(server => {
-                const serverEmbItem = { value: server.id, label: server.name, children: [] }
-                const serverLlmItem = { value: server.id, label: server.name, children: [] }
-                server.models.forEach(model => {
-                    const item = {
-                        value: model.id,
-                        label: model.model_name
-                    }
-                    if (!model.online) return
-
-                    model.model_type === 'embedding' ?
-                        serverEmbItem.children.push(item) : serverLlmItem.children.push(item)
-                })
-
-                if (serverLlmItem.children.length) llmOptions.push(serverLlmItem)
-                if (serverEmbItem.children.length) embeddings.push(serverEmbItem)
-            });
-
-            setOptions(llmOptions)
-            agent && !data.value && onChange(llmOptions[0].children[0].value)
-
-            setLoading(false)
-            // return { llmOptions, embeddings }
-        })
-
-        // 更新默认值
-        !agent && getLlmDefaultModel().then(res => {
-            res && !data.value && onChange(res.model_id)
-        })
-    }, [])
+        if (llmOptions && agent && !data.value) {
+            const id = String(llmOptions[0].children[0].value)
+            setModelId(id)
+            onChange(id)
+        } else if (!agent) {
+            getLlmDefaultModel().then(res => {
+                if (res && !data.value) {
+                    const id = String(res.model_id)
+                    setModelId(id)
+                    onChange(id)
+                }
+            })
+        } else {
+            setModelId(data.value)
+        }
+    }, [llmOptions])
 
 
-    const [loading, setLoading] = useState(true)
     const defaultValue = useMemo(() => {
-        if (!options.length) return []
         let _defaultValue = []
-        if (!data.value) return _defaultValue
-        options.some(option => {
-            const model = option.children.find(el => el.value === data.value)
+        if (!modelId) return _defaultValue
+        llmOptions.some(option => {
+            const model = option.children.find(el => String(el.value) === modelId)
             if (model) {
                 _defaultValue = [{ value: option.value, label: option.label }, { value: model.value, label: model.label }]
                 return true
@@ -62,7 +46,7 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
         // 无对应选项自动清空旧值
         if (_defaultValue.length === 0) onChange(null)
         return _defaultValue
-    }, [data.value, options])
+    }, [modelId, llmOptions])
 
     const [error, setError] = useState(false)
     useEffect(() => {
@@ -84,11 +68,11 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
             {data.label}
         </Label>
         <Cascader
-            key={options[0]?.value}
+            key={modelId}
             error={error}
             placholder={data.placeholder}
             defaultValue={defaultValue}
-            options={options}
+            options={llmOptions}
             onChange={(val) => onChange(val[1])}
         />
     </div>

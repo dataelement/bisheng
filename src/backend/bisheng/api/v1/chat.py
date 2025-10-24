@@ -1,5 +1,5 @@
 import json
-from typing import List, Optional
+from typing import List, Optional, Union
 from uuid import UUID, uuid4
 
 from fastapi import (APIRouter, Body, HTTPException, Query, Request, WebSocket, WebSocketException)
@@ -36,6 +36,8 @@ from bisheng.database.models.session import MessageSession, MessageSessionDao, S
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.graph.graph.base import Graph
+from bisheng.share_link.api.dependencies import header_share_token_parser
+from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 from bisheng.utils.logger import logger
@@ -179,15 +181,24 @@ def get_chatmessage(*,
                     flow_id: str,
                     id: Optional[str] = None,
                     page_size: Optional[int] = 20,
-                    login_user: UserPayload = Depends(get_login_user)):
+                    login_user: UserPayload = Depends(get_login_user),
+                    share_link: Union['ShareLink', None] = Depends(header_share_token_parser)):
     if not chat_id or not flow_id:
         return ServerError()
+
     where = select(ChatMessage).where(ChatMessage.flow_id == flow_id,
                                       ChatMessage.chat_id == chat_id)
+
     if id:
         where = where.where(ChatMessage.id < int(id))
     with get_sync_db_session() as session:
         db_message = session.exec(where.order_by(ChatMessage.id.desc()).limit(page_size)).all()
+
+    # Authorization check
+    if db_message and login_user.user_id != db_message[0].user_id:
+        if not share_link or share_link.resource_id != chat_id:
+            return UnAuthorizedError.return_resp()
+
     return resp_200(db_message)
 
 

@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager, contextmanager
 from sqlalchemy import create_engine, Engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -98,15 +99,23 @@ class DatabaseConnectionManager:
     @contextmanager
     def create_session(self) -> Generator[Session, Any, None]:
         """创建同步会话"""
-        session = Session(self.engine)
-        try:
-            yield session
-        except Exception as e:
-            session.rollback()
-            logger.error(f"Database session rolled back due to error: {e}")
-            raise
-        finally:
-            session.close()
+        session_maker = sessionmaker(
+            bind=self.engine,
+            class_=Session,
+            expire_on_commit=False,
+            autoflush=True,
+            autocommit=False
+        )
+
+        with session_maker() as session:
+            try:
+                yield session
+            except Exception as e:
+                session.rollback()
+                logger.error(f"Database session rolled back due to error: {e}")
+                raise
+            finally:
+                session.close()
 
     @asynccontextmanager
     async def async_session(self):
