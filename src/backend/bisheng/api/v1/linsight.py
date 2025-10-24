@@ -515,7 +515,7 @@ async def get_linsight_session_version_list(
 
     linsight_session_version_models = await LinsightWorkbenchImpl.get_linsight_session_version_list(session_id)
 
-    if login_user.user_id != linsight_session_version_models[0].user_id:
+    if linsight_session_version_models and login_user.user_id != linsight_session_version_models[0].user_id:
         # 通过分享链接访问
         session_version_ids = [model.id for model in linsight_session_version_models]
         if not share_link or share_link.resource_id not in session_version_ids:

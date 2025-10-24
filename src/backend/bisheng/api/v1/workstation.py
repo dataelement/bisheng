@@ -1,7 +1,7 @@
 import asyncio
 import json
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 from urllib.parse import unquote
 from uuid import uuid4
 
@@ -26,7 +26,7 @@ from bisheng.api.v1.schemas import WorkstationConfig, resp_200, WSPrompt, ExcelR
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download, save_download_file, save_uploaded_file
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.errcode.http_error import ServerError
+from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
 from bisheng.common.errcode.workstation import WebSearchToolNotFoundError, ConversationNotFoundError, \
     AgentAlreadyExistsError
 from bisheng.core.app_context import app_ctx
@@ -36,6 +36,8 @@ from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.llm.domain.llm import BishengLLM
 from bisheng.settings import settings as bisheng_settings
+from bisheng.share_link.api.dependencies import header_share_token_parser
+from bisheng.share_link.domain.models.share_link import ShareLink
 
 router = APIRouter(prefix='/workstation', tags=['WorkStation'])
 
@@ -235,9 +237,18 @@ async def gen_title(conversationId: str = Body(..., description='', embed=True),
 
 
 @router.get('/messages/{conversationId}')
-def get_chat_history(conversationId: str):
+def get_chat_history(conversationId: str,
+                     login_user: UserPayload = Depends(get_login_user),
+                     share_link: Union['ShareLink', None] = Depends(header_share_token_parser)
+                     ):
     messages = ChatMessageDao.get_messages_by_chat_id(chat_id=conversationId, limit=1000)
     if messages:
+
+        if login_user.user_id != messages[0].user_id:
+            # 校验分享链接权限
+            if not share_link or share_link.resource_id != conversationId:
+                return UnAuthorizedError.return_resp()
+
         return resp_200([WorkstationMessage.from_chat_message(message) for message in messages])
     else:
         return resp_200([])
