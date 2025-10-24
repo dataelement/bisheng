@@ -91,7 +91,7 @@ class BishengEmbedding(BishengBase, Embeddings):
 
     @classmethod
     async def get_bisheng_embedding(cls, **kwargs) -> Self:
-        return cls.get_class_instance(**kwargs)
+        return await cls.get_class_instance(**kwargs)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

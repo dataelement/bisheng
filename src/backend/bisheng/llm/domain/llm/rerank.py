@@ -52,7 +52,7 @@ class BishengRerank(BishengBase, BaseDocumentCompressor):
 
     @classmethod
     async def get_bisheng_rerank(cls, **kwargs) -> Self:
-        return cls.get_class_instance(**kwargs)
+        return await cls.get_class_instance(**kwargs)
 
     def __init__(self, model_id: int, **kwargs):
         super().__init__(model_id=model_id, **kwargs)
