@@ -52,7 +52,7 @@ async def update_model_online(request: Request, login_user: UserPayload = Depend
 
 
 @router.get('/workbench', summary="获取工作台相关的模型配置", response_model=UnifiedResponseModel)
-async def get_workbench_llm(request: Request, login_user: UserPayload = Depends(get_admin_user)):
+async def get_workbench_llm():
     """ 获取灵思相关的模型配置 """
     ret = await LLMService.get_workbench_llm()
     return resp_200(data=ret)
