@@ -780,7 +780,10 @@ export function getConversations(pageNumber: string): Promise<t.TGetConversation
 }
 
 export function getConversationById(id: string): Promise<s.TConversation> {
-  return request.get(endpoints.conversationById(id));
+  return Promise.resolve({
+
+  })
+  // return request.get(endpoints.conversationById(id));
 }
 
 export function updateConversation(

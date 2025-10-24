@@ -1,9 +1,11 @@
-import { Rotate3DIcon, Spline } from 'lucide-react';
+import { Rotate3DIcon } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
+import { File_Accept } from '~/common';
 import { Button, TextareaAutosize } from '~/components/ui';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '~/components/ui/Select';
+import SpeechToTextComponent from '~/components/Voice/SpeechToText';
 import { useGetBsConfig, useGetFileConfig, useGetUserLinsightCountQuery, useGetWorkbenchModelsQuery } from '~/data-provider';
 import {
   BsConfig,
@@ -32,11 +34,9 @@ import { checkIfScrollable, cn, removeFocusRings } from '~/utils';
 import { ChatToolDown } from './ChatFormTools';
 import CollapseChat from './CollapseChat';
 import FileFormWrapper from './Files/FileFormWrapper';
+import SameSopSpan, { sameSopLabelState } from './SameSopSpan';
 import SendButton from './SendButton';
 import StopButton from './StopButton';
-import SameSopSpan, { sameSopLabelState } from './SameSopSpan';
-import { File_Accept } from '~/common';
-import SpeechToTextComponent from '~/components/Voice/speechToText';
 
 const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
   const submitButtonRef = useRef<HTMLButtonElement>(null);
