@@ -12,8 +12,9 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
     const [modelId, setModelId] = useState('')
 
     useEffect(() => {
-        if (llmOptions && agent && !data.value) {
-            const id = String(llmOptions[0].children[0].value)
+        if (llmOptions && llmOptions.length > 0 && agent && !data.value) {
+            const id = String(llmOptions[0]?.children[0]?.value)
+            console.log(id,llmOptions,666);
             setModelId(id)
             onChange(id)
         } else if (!agent) {
