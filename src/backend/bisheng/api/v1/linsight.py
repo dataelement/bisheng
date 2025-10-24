@@ -3,7 +3,7 @@ import json
 import os
 import time
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Union
 from urllib import parse
 
 from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks, Request, HTTPException, Form
@@ -36,6 +36,8 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
 from bisheng.database.models.linsight_sop import LinsightSOPDao, LinsightSOPRecord
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 from bisheng.settings import settings
+from bisheng.share_link.api.dependencies import header_share_token_parser
+from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import util
 from bisheng.utils.minio_client import minio_client
 from fastapi_jwt_auth import AuthJWT
@@ -500,15 +502,30 @@ async def terminate_execute(
 @router.get("/workbench/session-version-list", summary="获取当前会话所有灵思信息", response_model=UnifiedResponseModel)
 async def get_linsight_session_version_list(
         session_id: str = Query(..., description="会话ID"),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(get_login_user),
+        share_link: Union['ShareLink', None] = Depends(header_share_token_parser)
+) -> UnifiedResponseModel:
     """
     获取当前会话所有灵思信息
+    :param share_link:
     :param session_id:
     :param login_user:
     :return:
     """
 
     linsight_session_version_models = await LinsightWorkbenchImpl.get_linsight_session_version_list(session_id)
+
+    if login_user.user_id != linsight_session_version_models[0].user_id:
+        # 通过分享链接访问
+        session_version_ids = [model.id for model in linsight_session_version_models]
+        if not share_link or share_link.resource_id not in session_version_ids:
+            return UnAuthorizedError.return_resp()
+
+        # 仅返回分享的灵思会话版本
+        linsight_session_version_models = [
+            model for model in linsight_session_version_models if model.id == share_link.resource_id
+        ]
+
     return resp_200([model.model_dump() for model in linsight_session_version_models])
 
 
@@ -516,15 +533,26 @@ async def get_linsight_session_version_list(
 @router.get("/workbench/execute-task-detail", summary="获取执行任务详情", response_model=UnifiedResponseModel)
 async def get_execute_task_detail(
         session_version_id: str = Query(..., description="灵思会话版本ID"),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(get_login_user),
+        share_link: Union['ShareLink', None] = Depends(header_share_token_parser)) -> UnifiedResponseModel:
     """
     获取执行任务详情
+    :param share_link:
     :param session_version_id:
     :param login_user:
     :return:
     """
 
     execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(session_version_id)
+
+    if not execute_task_models:
+        return resp_200([])
+
+    if login_user.user_id != execute_task_models[0].user_id:
+        # 通过分享链接访问
+        if not share_link or share_link.resource_id != session_version_id:
+            return UnAuthorizedError.return_resp()
+
     return resp_200(execute_task_models)
 
 

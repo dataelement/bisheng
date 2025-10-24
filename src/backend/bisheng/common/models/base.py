@@ -9,6 +9,11 @@ from typing_extensions import Literal
 class SQLModelSerializable(SQLModel):
     model_config = ConfigDict(from_attributes=True)
 
+    @classmethod
+    def create_new(cls, **data) -> "SQLModelSerializable":
+        """ create a new instance """
+        return cls(**data)
+
     def model_dump(
             self,
             *,
