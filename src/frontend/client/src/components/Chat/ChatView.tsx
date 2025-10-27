@@ -131,7 +131,7 @@ const ChatView = ({ index = 0 }: { index?: number }) => {
       </div>
     );
   } else if (messagesTree && messagesTree.length !== 0) {
-    content = <MessagesView messagesTree={messagesTree} Header={<HeaderTitle conversation={chatHelpers?.conversation} />} />;
+    content = <MessagesView messagesTree={messagesTree} Header={<HeaderTitle conversation={chatHelpers?.conversation} logo={null} />} />;
   } else {
     content = <Landing lingsi={isLingsi} setLingsi={setIsLingsi} isNew={isNew} />;
   }
@@ -198,6 +198,8 @@ const Cases = forwardRef(({ t, isLingsi, setIsLingsi }, ref) => {
 
   const queryParams = typeof window !== "undefined" ? new URLSearchParams(location.search) : null
   const sopid = queryParams?.get("sopid")
+  const sopName = queryParams?.get("name")
+  const sopSharePath = queryParams?.get("path")
 
   const handleCardClick = (sopId: string) => {
     window.open(`${__APP_ENV__.BASE_URL}/linsight/case/${sopId}`)
@@ -246,6 +248,9 @@ const Cases = forwardRef(({ t, isLingsi, setIsLingsi }, ref) => {
             setSameSopLabel({ ...caseItem }) // Uncomment if you have this state
             setIsLingsi(true)
           }
+        } else if (sopName && sopSharePath) {
+          setSameSopLabel({ id: '', name: decodeURIComponent(sopName), url: decodeURIComponent(sopSharePath) })
+          setIsLingsi(true)
         }
       } catch (error) {
         console.error("Error loading initial cases:", error)

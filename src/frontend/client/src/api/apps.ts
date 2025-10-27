@@ -83,7 +83,8 @@ export const disLikeCommentApi = (message_id, comment) => {
 /**
  * 技能 工作流详情
  */
-export async function getChatHistoryApi(flowId: string, chatId: string, flowType: string, id?: number): Promise<any> {
+export async function getChatHistoryApi({ flowId, chatId, flowType, id, shareToken }
+    : { flowId: string, chatId: string, flowType: string, id?: number, shareToken?: string }): Promise<any> {
     const filterFlowMsg = (data) => {
         return data.filter(item =>
             ["question", "output_with_input_msg", "output_with_choose_msg", "stream_msg", "output_msg", "guide_question", "guide_word", "node_run", "answer"].includes(item.category)
@@ -96,7 +97,11 @@ export async function getChatHistoryApi(flowId: string, chatId: string, flowType
         )
     }
 
-    return await request.get(`/api/v1/chat/history?flow_id=${flowId}&chat_id=${chatId}&page_size=40&id=${id || ''}`).then(res => {
+    const headers = shareToken ? { 'share-token': shareToken } : {}
+
+    return await request.get(`/api/v1/chat/history?flow_id=${flowId}&chat_id=${chatId}&page_size=40&id=${id || ''}`, {
+        headers
+    }).then(res => {
         const newData = Number(flowType) === 10 ? filterFlowMsg(res.data) : filterSkillMsg(res.data)
 
         return newData.map(item => {

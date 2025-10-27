@@ -821,7 +821,7 @@
   "com_ui_select_search_plugin": "根据名称搜索插件",
   "com_ui_select_search_provider": "以名称搜索服务商",
   "com_ui_select_search_region": "以名称搜索区域",
-  "com_ui_share": "共享",
+  "com_ui_share": "分享",
   "com_ui_share_create_message": "您的姓名以及您在共享后添加的任何消息将保持私密。",
   "com_ui_share_delete_error": "删除共享链接时出现错误",
   "com_ui_share_error": "共享聊天链接时发生错误",
@@ -1055,8 +1055,9 @@
   "error_chat_service_exception": "后端服务异常",
   "error_llm_skill_execution_error": "LLM 技能执行错误. error={{error}}",
   "error_document_parse_failure": "文档解析失败，点击输入框上传按钮重新上传",
-  "error_input_data_parse_fail": "Input data is parsed fail. error={{error}}",
+  "error_input_data_parse_fail": "输入数据解析失败。 error={{error}}",
   "error_backend_processing_try_later": "后台处理中，稍后再试",
+  "error_no_permission_to_view": "暂无查看权限",
   "com_sop_minutes": "分钟",
   "com_sop_hours": "小时",
   "com_make_samestyle": "做同款",
@@ -1065,5 +1066,7 @@
   "com_searchQueryLabel": "检索问题:",
   "error_workflow_task_execution_failed": "工作流任务执行失败：{{exception}}",
   "com_addAnything": "添加任何内容",
-  "com_dropAnyFileToAdd": "将任何文件拖放到此处以添加到对话中"
+  "com_dropAnyFileToAdd": "将任何文件拖放到此处以添加到对话中",
+  "com_share_title": "分享对话",
+  "com_share_desc": "任何人只要拥有链接都可以查看此对话。"
 }

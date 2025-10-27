@@ -11,8 +11,9 @@ import {
 import Sop from '~/components/Sop';
 import WebView from '~/components/WebView';
 import { AuthContextProvider } from '~/hooks/AuthContext';
-import AgentCenter from '~/pages/apps';
 import AppChat from '~/pages/appChat';
+import AgentCenter from '~/pages/apps';
+import Share from '~/pages/share';
 import ChatRoute from './ChatRoute';
 import LoginLayout from './Layouts/Login';
 import StartupLayout from './Layouts/Startup';
@@ -33,11 +34,11 @@ const baseConfig = {
 }
 
 export const router = createBrowserRouter([
-  {
-    path: 'share/:shareId',
-    element: <ShareRoute />,
-    errorElement: <RouteErrorBoundary />,
-  },
+  // {
+  //   path: 'share/:shareId',
+  //   element: <ShareRoute />,
+  //   errorElement: <RouteErrorBoundary />,
+  // },
   {
     path: '/',
     element: <StartupLayout />,
@@ -109,6 +110,14 @@ export const router = createBrowserRouter([
           {
             path: 'chat/:conversationId/:fid/:type',
             element: <AppChat />,
+          },
+          {
+            path: 'share/:token',
+            element: <Share />,
+          },
+          {
+            path: 'share/:token/:vid',
+            element: <Share />,
           },
         ],
       },

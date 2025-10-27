@@ -10,11 +10,13 @@ export function saveSop(data: {
 }
 
 // 获取灵思会话信息
-export function getLinsightSessionVersionList(ConversationId: string): Promise<any> {
+export function getLinsightSessionVersionList(ConversationId: string, shareToken: string): Promise<any> {
+  const headers = shareToken ? { 'share-token': shareToken } : {}
   return request.get('/api/v1/linsight/workbench/session-version-list', {
     params: {
       session_id: ConversationId
     },
+    headers
   }).then(res => {
     return res.data.map(item => {
       return {

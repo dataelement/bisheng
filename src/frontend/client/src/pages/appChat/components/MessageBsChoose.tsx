@@ -9,7 +9,8 @@ import { downloadFile } from "~/utils";
 import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
 import { changeMinioUrl } from "./ResouceModal";
 
-export default function MessageBsChoose({ type = 'choose', logo, data, flow }: { type?: string, logo: React.ReactNode, data: ChatMessageType }) {
+export default function MessageBsChoose({ type = 'choose', disabled, logo, data, flow }
+    : { type?: string, disabled?: Boolean, logo: React.ReactNode, data: ChatMessageType }) {
     const t = useLocalize()
     const [selected, setSelected] = useState(data.message.hisValue || '')
     const handleSelect = (obj) => {
@@ -87,13 +88,13 @@ export default function MessageBsChoose({ type = 'choose', logo, data, flow }: {
                             <Textarea
                                 className="w-full"
                                 ref={textRef}
-                                disabled={inputSended}
+                                disabled={inputSended || disabled}
                                 defaultValue={data.message.input_msg || data.message.hisValue}
                             />
                             <div className="flex justify-end mt-2">
                                 <Button
                                     className="h-8"
-                                    disabled={inputSended}
+                                    disabled={inputSended || disabled}
                                     onClick={handleSend}
                                 >{inputSended ? t('com_bschoose_confirmed') : t('com_bschoose_confirm')}</Button>
                             </div>
