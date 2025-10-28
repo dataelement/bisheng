@@ -10,14 +10,14 @@ from loguru import logger
 
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import ChatResponse
-from bisheng.cache.redis import redis_client
 from bisheng.chat.utils import sync_judge_source, sync_process_source_document
 from bisheng.common.errcode.flow import WorkFlowNodeRunMaxTimesError, WorkFlowWaitUserTimeoutError, \
     WorkFlowNodeUpdateError, WorkFlowVersionUpdateError, WorkFlowTaskBusyError, WorkFlowTaskOtherError
+from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.message import ChatMessageDao, ChatMessage
 from bisheng.database.models.session import MessageSessionDao, MessageSession
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeStartData, NodeEndData, UserInputData, GuideWordData, GuideQuestionData, \
     OutputMsgData, StreamMsgData, StreamMsgOverData, OutputMsgChooseData, OutputMsgInputData
@@ -36,7 +36,7 @@ class RedisCallback(BaseCallback):
         self.workflow = None
         self.create_session = False
 
-        self.redis_client = redis_client
+        self.redis_client = get_redis_client_sync()
         self.workflow_data_key = f'workflow:{unique_id}:data'
         self.workflow_status_key = f'workflow:{unique_id}:status'
         self.workflow_event_key = f'workflow:{unique_id}:event'

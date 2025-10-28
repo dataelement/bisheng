@@ -14,8 +14,18 @@ class BaseRepository(ABC, Generic[T, ID]):
         pass
 
     @abstractmethod
+    def save_sync(self, entity: T) -> T:
+        """同步保存实体"""
+        pass
+
+    @abstractmethod
     async def find_by_id(self, entity_id: ID) -> Optional[T]:
         """根据ID查找实体"""
+        pass
+
+    @abstractmethod
+    def find_by_id_sync(self, entity_id: ID) -> Optional[T]:
+        """同步根据ID查找实体"""
         pass
 
     @abstractmethod
@@ -24,8 +34,18 @@ class BaseRepository(ABC, Generic[T, ID]):
         pass
 
     @abstractmethod
+    def find_one_sync(self, **filters) -> Optional[T]:
+        """同步查找单个实体"""
+        pass
+
+    @abstractmethod
     async def find_all(self, **filters) -> List[T]:
         """查找所有实体"""
+        pass
+
+    @abstractmethod
+    def find_all_sync(self, **filters) -> List[T]:
+        """同步查找所有实体"""
         pass
 
     @abstractmethod
@@ -34,8 +54,18 @@ class BaseRepository(ABC, Generic[T, ID]):
         pass
 
     @abstractmethod
+    def update_sync(self, entity: T) -> T:
+        """同步更新实体"""
+        pass
+
+    @abstractmethod
     async def delete(self, entity_id: ID) -> bool:
         """删除实体"""
+        pass
+
+    @abstractmethod
+    def delete_sync(self, entity_id: ID) -> bool:
+        """同步删除实体"""
         pass
 
     @abstractmethod
@@ -44,6 +74,16 @@ class BaseRepository(ABC, Generic[T, ID]):
         pass
 
     @abstractmethod
+    def exists_sync(self, entity_id: ID) -> bool:
+        """同步检查实体是否存在"""
+        pass
+
+    @abstractmethod
     async def count(self, **filters) -> int:
         """统计实体数量"""
+        pass
+
+    @abstractmethod
+    def count_sync(self, **filters) -> int:
+        """同步统计实体数量"""
         pass

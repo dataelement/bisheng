@@ -29,7 +29,7 @@ from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.llm.domain.services import LLMService
 from bisheng.mcp_manage.langchain.tool import McpTool
 from bisheng.mcp_manage.manager import ClientManager
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils.embedding import decide_embeddings
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
 from bisheng_langchain.gpts.auto_optimization import (generate_breif_description,

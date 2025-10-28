@@ -4,15 +4,15 @@ from typing import List, Dict
 
 from fastapi import Depends
 
-from bisheng.cache.redis import redis_client
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.user import UserLoginOfflineError
+from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils.constants import USER_CURRENT_SESSION
 from fastapi_jwt_auth import AuthJWT
 
@@ -174,7 +174,8 @@ async def get_login_user(authorize: AuthJWT = Depends()) -> UserPayload:
     # 判断是否允许多点登录
     if not settings.get_system_login_method().allow_multi_login:
         # 获取access_token
-        current_token = redis_client.get(USER_CURRENT_SESSION.format(user.user_id))
+        redis_client = await get_redis_client()
+        current_token = await redis_client.aget(USER_CURRENT_SESSION.format(user.user_id))
         # 登录被挤下线了，http状态码是200, status_code是特殊code
         if current_token != authorize._token:
             raise UserLoginOfflineError.http_exception()

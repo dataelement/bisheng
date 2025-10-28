@@ -13,7 +13,7 @@ from bisheng.database.models.report import Report
 from bisheng.database.models.message import ChatMessage as ChatMessageDB, ChatMessageDao
 from bisheng.interface.importing.utils import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils.docx_temp import test_replace_string
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient

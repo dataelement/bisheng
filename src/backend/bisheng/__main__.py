@@ -10,7 +10,7 @@ from typing import Optional
 import httpx
 import typer
 from bisheng.main import setup_app
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils.logger import configure, logger
 from dotenv import load_dotenv
 from multiprocess import Process, cpu_count  # type: ignore

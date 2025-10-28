@@ -22,7 +22,7 @@ from bisheng.api.utils import build_flow, build_input_keys_response
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import (UnifiedResponseModel, resp_200)
 from bisheng.cache import InMemoryCache
-from bisheng.cache.redis import redis_client
+from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.evaluation import (Evaluation, EvaluationDao, ExecType, EvaluationTaskStatus)
 from bisheng.database.models.flow import FlowDao
@@ -36,8 +36,6 @@ from bisheng.utils.minio_client import MinioClient
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow
 from bisheng.workflow.common.workflow import WorkflowStatus
-
-flow_data_store = redis_client
 
 expire = 600
 
@@ -86,6 +84,8 @@ class EvaluationService:
         if assistant_ids:
             assistants = AssistantDao.get_assistants_by_ids(assistant_ids=assistant_ids)
             assistant_names = {str(one.id): one.name for one in assistants}
+
+        redis_client = get_redis_client_sync()
 
         for one in res_evaluations:
             evaluation_item = jsonable_encoder(one)
@@ -305,7 +305,7 @@ def add_evaluation_task(evaluation_id: int):
         return
 
     redis_key = EvaluationService.get_redis_key(evaluation_id)
-
+    redis_client = get_redis_client_sync()
     try:
         file_data = EvaluationService.read_csv_file(evaluation.file_path)
         csv_data = EvaluationService.parse_csv(file_data)

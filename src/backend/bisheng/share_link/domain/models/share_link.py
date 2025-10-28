@@ -17,6 +17,12 @@ class ResourceTypeEnum(str, Enum):
     LINSIGHT_SESSION = "linsight_session"
     # 工作台对话
     WORKBENCH_CHAT = "workbench_chat"
+    # 工作流
+    WORKFLOW = "workflow"
+    # 技能
+    SKILL = "skill"
+    # 助手
+    ASSISTANT = "assistant"
 
 
 class ShareMode(str, Enum):

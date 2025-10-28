@@ -11,11 +11,12 @@ from loguru import logger
 
 from bisheng.api import router, router_rpc
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.services.config_service import settings
 from bisheng.core.app_context import init_app_context
-from bisheng.database.init_data import init_default_data
+from bisheng.common.init_data import init_default_data
+from bisheng.core.context import initialize_app_context
 from bisheng.interface.utils import setup_llm_caching
 from bisheng.services.utils import initialize_services, teardown_services
-from bisheng.settings import settings
 from bisheng.utils.http_middleware import CustomMiddleware
 from bisheng.utils.logger import configure
 from bisheng.utils.threadpool import thread_pool
@@ -54,6 +55,7 @@ _EXCEPTION_HANDLERS = {
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await initialize_app_context(config=settings.model_dump())
     initialize_services()
     await init_app_context()
     setup_llm_caching()
@@ -148,11 +150,13 @@ def setup_promethues(app: FastAPI):
     app.mount('/metrics', metrics_app)
 
 
-configure(settings.logger_conf)
+
 
 app = create_app()
 
 if __name__ == '__main__':
     import uvicorn
+
+    configure(settings.logger_conf)
 
     uvicorn.run(app, host='0.0.0.0', port=7860, workers=1)

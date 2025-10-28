@@ -16,7 +16,7 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig
 from bisheng.common.errcode.server import EmbeddingModelStatusError
 from bisheng.database.constants import MessageCategory
-from bisheng.database.models.config import Config, ConfigDao, ConfigKeyEnum
+from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.message import ChatMessage, ChatMessageDao

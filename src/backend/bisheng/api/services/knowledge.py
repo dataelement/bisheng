@@ -28,7 +28,6 @@ from bisheng.api.v1.schemas import (
     KnowledgeFileProcess,
     UpdatePreviewFileChunk, ExcelRule, KnowledgeFileReProcess,
 )
-from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
 from bisheng.common.errcode.knowledge import (
@@ -36,6 +35,7 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeExistError,
     KnowledgeNoEmbeddingError,
 )
+from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.database.models.group_resource import (
     GroupResource,
     GroupResourceDao,
@@ -62,7 +62,7 @@ from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.llm.const import LLMModelType
 from bisheng.llm.domain.services import LLMService
 from bisheng.llm.models import LLMDao
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 from bisheng.utils.embedding import decide_embeddings
@@ -372,7 +372,7 @@ class KnowledgeService(KnowledgeUtils):
             raise ServerError.http_exception("file_name is empty")
         # 从redis内获取
         uuid_file_name = file_name.split(".")[0]
-        original_file_name = redis_client.get(f"file_name:{uuid_file_name}") or file_name
+        original_file_name = get_redis_client_sync().get(f"file_name:{uuid_file_name}") or file_name
         return original_file_name
 
     @classmethod
@@ -385,7 +385,7 @@ class KnowledgeService(KnowledgeUtils):
         file_ext = original_file_name.split(".")[-1]
         # 生成一个唯一的uuid作为key
         uuid_file_name = generate_uuid()
-        redis_client.set(f"file_name:{uuid_file_name}", original_file_name, expiration=86400)
+        get_redis_client_sync().set(f"file_name:{uuid_file_name}", original_file_name, expiration=86400)
         return f"{uuid_file_name}.{file_ext}"
 
     @classmethod
@@ -407,6 +407,8 @@ class KnowledgeService(KnowledgeUtils):
         file_path = req_data.file_list[0].file_path
         excel_rule = req_data.file_list[0].excel_rule
         cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path)
+
+        redis_client = get_redis_client_sync()
 
         # 尝试从缓存获取
         if req_data.cache:

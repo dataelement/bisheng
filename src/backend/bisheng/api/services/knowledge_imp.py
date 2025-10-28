@@ -32,9 +32,9 @@ from bisheng.api.services.patch_130 import (
     combine_multiple_md_files_to_raw_texts,
 )
 from bisheng.api.v1.schemas import ExcelRule
-from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download
 from bisheng.common.errcode.knowledge import KnowledgeSimilarError, KnowledgeFileDeleteError
+from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.database.models.knowledge_file import (
@@ -51,7 +51,7 @@ from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.llm.domain.services import LLMService
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils import md5_hash
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import minio_client
@@ -109,6 +109,7 @@ class KnowledgeUtils:
     def save_preview_cache(
             cls, cache_key, mapping: dict = None, chunk_index: int = 0, value: dict = None
     ):
+        redis_client = get_redis_client_sync()
         if mapping:
             for key, val in mapping.items():
                 mapping[key] = json.dumps(val, ensure_ascii=False)
@@ -120,6 +121,7 @@ class KnowledgeUtils:
 
     @classmethod
     def delete_preview_cache(cls, cache_key, chunk_index: int = None):
+        redis_client = get_redis_client_sync()
         if chunk_index is None:
             redis_client.delete(cache_key)
             redis_client.delete(f"{cache_key}_parse_type")
@@ -130,6 +132,7 @@ class KnowledgeUtils:
 
     @classmethod
     def get_preview_cache(cls, cache_key, chunk_index: int = None) -> dict:
+        redis_client = get_redis_client_sync()
         if chunk_index is None:
             all_chunk_info = redis_client.hgetall(cache_key)
             for key, value in all_chunk_info.items():

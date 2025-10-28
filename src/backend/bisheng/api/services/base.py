@@ -1,6 +1,5 @@
 from bisheng.cache import InMemoryCache
-from bisheng.cache.redis import redis_client
-from bisheng.settings import settings
+from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.utils.minio_client import MinioClient
 
 
@@ -9,6 +8,8 @@ class BaseService:
 
     @classmethod
     def get_logo_share_link(cls, logo_path: str):
+
+        redis_client = get_redis_client_sync()
         if not logo_path:
             return ''
         cache_key = f'logo_cache:{logo_path}'

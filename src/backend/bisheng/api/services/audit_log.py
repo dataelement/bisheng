@@ -22,7 +22,7 @@ from bisheng.database.models.role import Role
 from bisheng.database.models.session import MessageSessionDao, SensitiveStatus
 from bisheng.database.models.user import UserDao, User
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils import generate_uuid
 from bisheng.utils.minio_client import MinioClient
 

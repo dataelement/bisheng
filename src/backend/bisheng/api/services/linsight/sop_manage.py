@@ -32,7 +32,7 @@ from bisheng.llm.const import LLMModelType
 from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.services import LLMService
 from bisheng.llm.models import LLMDao
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils import util
 from bisheng.utils.embedding import decide_embeddings
 from bisheng_langchain.rag.init_retrievers import KeywordRetriever, BaselineVectorRetriever

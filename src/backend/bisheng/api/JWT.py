@@ -3,7 +3,7 @@ from typing import List
 
 from pydantic import BaseModel
 
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 
 # 配置JWT token的有效期
 ACCESS_TOKEN_EXPIRE_TIME = 86400

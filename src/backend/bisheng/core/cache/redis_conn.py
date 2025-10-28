@@ -1,11 +1,10 @@
 import pickle
 import typing
-from typing import Dict, Optional, Any, Coroutine
+from typing import Dict, Optional
 
 import redis
 from redis.asyncio.client import Pipeline
 
-from bisheng.settings import settings
 from loguru import logger
 from redis import ConnectionPool, RedisCluster
 from redis.backoff import ExponentialBackoff
@@ -19,10 +18,10 @@ from redis.asyncio import Redis as AsyncRedis
 
 class RedisClient:
 
-    def __init__(self, url, max_connections=100):
+    def __init__(self, redis_url, max_connections=100):
         # # 哨兵模式
-        if isinstance(settings.redis_url, Dict):
-            redis_conf = dict(settings.redis_url)
+        if isinstance(redis_url, Dict):
+            redis_conf = dict(redis_url)
             mode = redis_conf.pop('mode', 'sentinel')
             if mode == 'cluster':
                 # 集群模式
@@ -51,8 +50,8 @@ class RedisClient:
 
         else:
             # 单机模式
-            self.pool = ConnectionPool.from_url(url, max_connections=max_connections)
-            self.async_pool = redis.asyncio.ConnectionPool.from_url(url, max_connections=max_connections)
+            self.pool = ConnectionPool.from_url(redis_url, max_connections=max_connections)
+            self.async_pool = redis.asyncio.ConnectionPool.from_url(redis_url, max_connections=max_connections)
             self.connection = redis.StrictRedis(connection_pool=self.pool)
             self.async_connection: AsyncRedis = redis.asyncio.Redis.from_pool(self.async_pool)
 
@@ -514,7 +513,3 @@ class RedisClient:
                       AsyncRedisCluster) and self.async_connection.get_default_node() is None:
             target = self.async_connection.get_node_from_key(key)
             self.async_connection.set_default_node(target)
-
-
-# 示例用法
-redis_client = RedisClient(settings.redis_url)

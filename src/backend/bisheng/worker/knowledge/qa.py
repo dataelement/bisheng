@@ -10,7 +10,7 @@ from bisheng.database.models.knowledge_file import (
 )
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.llm.domain import LLMService
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.worker import bisheng_celery
 from bisheng_langchain.vectorstores import Milvus, ElasticKeywordsSearch
 
@@ -66,65 +66,74 @@ def copy_qa_knowledge_celery(source_knowledge_id: int, target_knowledge_id: int,
                 page=page,
                 page_size=batch_size
             )
-            # 复制QA知识点 批量 插入
-            new_qa_list = []
-            for qa in qa_list:
-                qa_dict = qa.model_dump()
-                qa_dict.pop("id")
-                qa_dict.pop("create_time")
-                qa_dict.pop("update_time")
-                qa_dict["user_id"] = login_user_id
-                qa_dict["knowledge_id"] = target_knowledge_id
-                qa_dict["status"] = KnowledgeFileStatus.PROCESSING.value
-                new_qa = QAKnowledgeUpsert(**qa_dict)
-                new_qa_list.append(new_qa)
+            try:
 
-            result = QAKnoweldgeDao.batch_insert_qa(new_qa_list)
+                # 复制QA知识点 批量 插入
+                new_qa_list = []
+                for qa in qa_list:
+                    qa_dict = qa.model_dump()
+                    qa_dict.pop("id")
+                    qa_dict.pop("create_time")
+                    qa_dict.pop("update_time")
+                    qa_dict["user_id"] = login_user_id
+                    qa_dict["knowledge_id"] = target_knowledge_id
+                    qa_dict["status"] = KnowledgeFileStatus.PROCESSING.value
+                    new_qa = QAKnowledgeUpsert(**qa_dict)
+                    new_qa_list.append(new_qa)
 
-            id_mapping = {qa_list[i].id: result[i].id for i in range(len(qa_list))}
+                result = QAKnoweldgeDao.batch_insert_qa(new_qa_list)
 
-            # 复制向量
-            source_ids = [int(qa.id) for qa in qa_list]
-            fields = [s.name for s in source_milvus.col.schema.fields if s.name != "pk"]
-            vectors = source_milvus.col.query(
-                expr=f"file_id in {source_ids} && knowledge_id == '{source_knowledge_id}'",
-                output_fields=fields)
+                id_mapping = {qa_list[i].id: result[i].id for i in range(len(qa_list))}
 
-            for vector in vectors:
-                vector["file_id"] = id_mapping[vector["file_id"]]
-                vector["knowledge_id"] = str(target_knowledge_id)
-                vector.pop("pk")
+                # 复制向量
+                source_ids = [int(qa.id) for qa in qa_list]
+                fields = [s.name for s in source_milvus.col.schema.fields if s.name != "pk"]
+                vectors = source_milvus.col.query(
+                    expr=f"file_id in {source_ids} && knowledge_id == '{source_knowledge_id}'",
+                    output_fields=fields)
 
-            target_milvus.col.insert(vectors)
+                for vector in vectors:
+                    vector["file_id"] = id_mapping[vector["file_id"]]
+                    vector["knowledge_id"] = str(target_knowledge_id)
+                    vector.pop("pk")
 
-            logger.info(f"Copied {len(qa_list)} QA knowledge from knowledge id {source_knowledge_id} "
-                        f"to knowledge id {target_knowledge_id}.")
+                target_milvus.col.insert(vectors)
 
-            # es 复制
-            es_db = decide_vectorstores(
-                target_knowledge.index_name, "ElasticKeywordsSearch", FakeEmbedding()
-            )
+                logger.info(f"Copied {len(qa_list)} QA knowledge from knowledge id {source_knowledge_id} "
+                            f"to knowledge id {target_knowledge_id}.")
 
-            es_texts = []
-            es_metadatas = []
-            for vector in vectors:
-                text = vector.pop("text")
-                vector.pop("vector")
-                es_texts.append(text)
-                es_metadatas.append(vector)
+                # es 复制
+                es_db = decide_vectorstores(
+                    target_knowledge.index_name, "ElasticKeywordsSearch", FakeEmbedding()
+                )
 
-            es_db.add_texts(es_texts, es_metadatas)
+                es_texts = []
+                es_metadatas = []
+                for vector in vectors:
+                    text = vector.pop("text")
+                    vector.pop("vector")
+                    es_texts.append(text)
+                    es_metadatas.append(vector)
 
-            # TODO 不需要修改状态 使用原有状态
-            # 批量更新状态为完成
-            # QAKnoweldgeDao.batch_update_status_by_ids(
-            #     qa_ids=[new_qa.id for new_qa in result],
-            #     status=QAStatus.ENABLED
-            # )
+                es_db.add_texts(es_texts, es_metadatas)
 
-            logger.info(f"Updated status to SUCCESS for copied QA knowledge in knowledge id {target_knowledge_id}.")
+                # TODO 不需要修改状态 使用原有状态
+                # 批量更新状态为完成
+                # QAKnoweldgeDao.batch_update_status_by_ids(
+                #     qa_ids=[new_qa.id for new_qa in result],
+                #     status=QAStatus.ENABLED
+                # )
 
-            logger.info(f"Finished copying batch {page + 1} of QA knowledge.")
+                logger.info(f"Updated status to SUCCESS for copied QA knowledge in knowledge id {target_knowledge_id}.")
+
+                logger.info(f"Finished copying batch {page + 1} of QA knowledge.")
+            except Exception as e:
+                logger.error(f"Error copying batch {page + 1} of QA knowledge: {e}")
+
+                QAKnoweldgeDao.batch_update_status_by_ids(
+                    qa_ids=[new_qa.id for new_qa in result],
+                    status=QAStatus.FAILED
+                )
 
         # 全部复制完成 更新状态
 
@@ -201,32 +210,42 @@ def rebuild_qa_knowledge_celery(knowledge_id: int, embedding_model_id: str):
                 "size": batch_size
             }, filter_path=["hits.hits._source"])
 
+
             hits = es_result.get("hits", {}).get("hits", [])
 
             file_ids = [hit.get("_source", {}).get("metadata", {}).get("file_id") for hit in hits]
 
-            QAKnoweldgeDao.batch_update_status_by_ids(
-                qa_ids=file_ids,
-                status=QAStatus.PROCESSING
-            )
+            try:
 
-            for hit in hits:
-                source = hit.get("_source", {})
-                text = source.get("text", "")
-                metadata = source.get("metadata", {})
-                texts.append(text)
-                metadata.pop("vector", None)
-                metadatas.append(metadata)
+                QAKnoweldgeDao.batch_update_status_by_ids(
+                    qa_ids=file_ids,
+                    status=QAStatus.PROCESSING
+                )
 
-            # 插入milvus
-            milvus_db.add_texts(texts, metadatas)
+                for hit in hits:
+                    source = hit.get("_source", {})
+                    text = source.get("text", "")
+                    metadata = source.get("metadata", {})
+                    texts.append(text)
+                    metadata.pop("vector", None)
+                    metadatas.append(metadata)
 
-            QAKnoweldgeDao.batch_update_status_by_ids(
-                qa_ids=file_ids,
-                status=QAStatus.ENABLED
-            )
+                # 插入milvus
+                milvus_db.add_texts(texts, metadatas)
 
-            logger.info(f"Rebuilt batch {page} of QA knowledge into Milvus for knowledge id {knowledge_id}.")
+                QAKnoweldgeDao.batch_update_status_by_ids(
+                    qa_ids=file_ids,
+                    status=QAStatus.ENABLED
+                )
+
+                logger.info(f"Rebuilt batch {page} of QA knowledge into Milvus for knowledge id {knowledge_id}.")
+            except Exception as e:
+                logger.error(f"Error rebuilding batch {page} of QA knowledge: {e}")
+
+                QAKnoweldgeDao.batch_update_status_by_ids(
+                    qa_ids=file_ids,
+                    status=QAStatus.FAILED
+                )
 
         knowledge_info.state = KnowledgeState.PUBLISHED.value
 

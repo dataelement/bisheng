@@ -1,7 +1,7 @@
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.llm.const import LLMServerType, LLMModelType
 from bisheng.llm.models import LLMServer, LLMDao, LLMModel
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 
 
 def parse_openai_embedding_conf(name, model_name, embedding_conf):

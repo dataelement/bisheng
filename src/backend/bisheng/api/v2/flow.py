@@ -3,7 +3,7 @@ from uuid import UUID
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v2.assistant import get_default_operator
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from fastapi import APIRouter, HTTPException, Query, Request
 from loguru import logger
 
