@@ -3,14 +3,24 @@ import os
 import re
 from typing import Dict, List, Optional, Union
 
-import yaml
 from cryptography.fernet import Fernet
 from loguru import logger
 from pydantic import ConfigDict, BaseModel, Field, field_validator, model_validator
-from sqlmodel import select
+
+
+secret_key = 'TI31VYJ-ldAq-FXo5QNPKV_lqGTFfp-MIdbK2Hm5F1E='
+
+
+def encrypt_token(token: str):
+    return Fernet(secret_key).encrypt(token.encode())
+
+
+def decrypt_token(token: str):
+    return Fernet(secret_key).decrypt(token).decode()
 
 
 class LoggerConf(BaseModel):
+    """Looger Config"""
     level: str = 'DEBUG'
     format: str = '<level>[{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'  # noqa
     handlers: List[Dict] = Field(default_factory=list, description='日志处理器')
@@ -38,18 +48,21 @@ class LoggerConf(BaseModel):
 
 
 class PasswordConf(BaseModel):
+    """ Password Config """
     password_valid_period: Optional[int] = Field(default=0, description='密码超过X天必须进行修改, 登录提示重新修改密码')
     login_error_time_window: Optional[int] = Field(default=0, description='登录错误时间窗口,单位分钟')
     max_error_times: Optional[int] = Field(default=0, description='最大错误次数，超过后会封禁用户')
 
 
 class SystemLoginMethod(BaseModel):
+    """ System Login Method Config """
     bisheng_pro: bool = Field(default=False, description='是否是商业版, 从环境变量获取')
     admin_username: Optional[str] = Field(default=None, description='通过网关注册的系统管理员用户名')
     allow_multi_login: bool = Field(default=True, description='是否允许多点登录')
 
 
 class MilvusConf(BaseModel):
+    """ milvus 配置 """
     connection_args: Optional[dict] = Field(default=None, description='milvus 配置')
     is_partition: Optional[bool] = Field(default=True, description='是否是partition模式')
     partition_suffix: Optional[str] = Field(default='1', description='partition后缀')
@@ -63,17 +76,20 @@ class MilvusConf(BaseModel):
 
 
 class ElasticsearchConf(BaseModel):
+    """ elasticsearch 配置 """
     elasticsearch_url: Optional[str] = Field(default='http://127.0.0.1:9200', alias='url',
                                              description='elasticsearch访问地址')
     ssl_verify: Optional[str] = Field(default='{"basic_auth": ("elastic", "elastic")}', description='额外的参数')
 
 
 class VectorStores(BaseModel):
+    """ 向量存储配置 """
     milvus: MilvusConf = Field(default_factory=MilvusConf, description='milvus 配置')
     elasticsearch: ElasticsearchConf = Field(default_factory=ElasticsearchConf, description='elasticsearch 配置')
 
 
 class MinioConf(BaseModel):
+    """ minio 配置 """
     schema: Optional[bool] = Field(default=False, description="是否使用https", alias="schema")
     cert_check: Optional[bool] = Field(default=False, description="是否校验证书")
     endpoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio 地址")
@@ -88,16 +104,19 @@ class MinioConf(BaseModel):
 
 
 class ObjectStore(BaseModel):
+    """ 对象存储配置 """
     type: str = Field(default='minio', description="对象存储类型")
     minio: Optional[MinioConf] = Field(default_factory=MinioConf, description="minio 配置")
 
 
 class WorkflowConf(BaseModel):
+    """ 工作流配置 """
     max_steps: int = Field(default=50, description="节点运行最大步数")
     timeout: int = Field(default=720, description="节点超时时间（min）")
 
 
 class CeleryConf(BaseModel):
+    """ Celery 配置 """
     task_routers: Optional[Dict] = Field(default_factory=dict, description='任务路由配置')
 
     @model_validator(mode='after')
@@ -111,6 +130,7 @@ class CeleryConf(BaseModel):
 
 
 class LinsightConf(BaseModel):
+    """ 灵思配置 """
     debug: bool = Field(default=False, description='是否开启debug模式')
     tool_buffer: int = Field(default=100000, description='工具执行历史记录的最大token，超过后需要总结下历史记录')
     max_steps: int = Field(default=200, description='单个任务最大执行步骤数，防止死循环')
@@ -126,6 +146,7 @@ class LinsightConf(BaseModel):
 
 
 class Settings(BaseModel):
+    """ Application Settings """
     model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True, extra='ignore')
 
     chains: dict = {}
@@ -241,233 +262,15 @@ class Settings(BaseModel):
                 values[key] = []
         return values
 
-    def get_knowledge(self):
-        # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
-        all_config = self.get_all_config()
-        ret = all_config.get('knowledges', {})
-        return ret
-
-    def get_minio_conf(self) -> MinioConf:
-        return self.object_storage.minio
-
-    def get_vectors_conf(self) -> VectorStores:
-        return self.vector_stores
-
-    def get_default_llm(self):
-        # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
-        all_config = self.get_all_config()
-        return all_config.get('default_llm', {})
-
-    def get_password_conf(self) -> PasswordConf:
-        # 获取密码相关的配置项
-        all_config = self.get_all_config()
-        return PasswordConf(**all_config.get('password_conf', {}))
-
-    def get_system_login_method(self) -> SystemLoginMethod:
-        # 获取密码相关的配置项
-        all_config = self.get_all_config()
-        tmp = SystemLoginMethod(**all_config.get('system_login_method', {}))
-        tmp.bisheng_pro = os.getenv('BISHENG_PRO') == 'true'
-        return tmp
-
-    def get_workflow_conf(self) -> WorkflowConf:
-        # 获取密码相关的配置项
-        all_config = self.get_all_config()
-        return WorkflowConf(**all_config.get('workflow', {}))
-
-    def get_linsight_conf(self) -> LinsightConf:
-        # 获取灵思相关的配置项
-        all_config = self.get_all_config()
-        conf = LinsightConf(debug=self.linsight_conf.debug)
-        linsight_conf = all_config.get('linsight', {})
-        for k, v in linsight_conf.items():
-            setattr(conf, k, v)
-        return conf
-
-    def get_from_db(self, key: str):
-        # 先获取所有的key
-        all_config = self.get_all_config()
-        return all_config.get(key, {})
-
-    def get_all_config(self):
-        from bisheng.core.database import get_sync_db_session
-        from bisheng.cache.redis import redis_client
-        from bisheng.database.models.config import Config
-
-        redis_key = 'config:initdb_config'
-        cache = redis_client.get(redis_key)
-        if cache:
-            return yaml.safe_load(cache)
-        else:
-            with get_sync_db_session() as session:
-                initdb_config = session.exec(
-                    select(Config).where(Config.key == 'initdb_config')).first()
-                if initdb_config:
-                    redis_client.set(redis_key, initdb_config.value, 100)
-                    return yaml.safe_load(initdb_config.value)
-                else:
-                    raise Exception('initdb_config not found, please check your system config')
-
-    async def aget_all_config(self):
-        from bisheng.core.database import get_async_db_session
-        from bisheng.cache.redis import redis_client
-        from bisheng.database.models.config import Config
-
-        redis_key = 'config:initdb_config'
-        cache = await redis_client.aget(redis_key)
-        if cache:
-            return yaml.safe_load(cache)
-        else:
-            async with get_async_db_session() as session:
-                initdb_config = (await session.exec(select(Config).where(Config.key == 'initdb_config'))).first()
-                if initdb_config:
-                    await redis_client.aset(redis_key, initdb_config.value, 100)
-                    return yaml.safe_load(initdb_config.value)
-                else:
-                    raise Exception('initdb_config not found, please check your system config')
-
-    def update_from_yaml(self, file_path: str, dev: bool = False):
-        new_settings = load_settings_from_yaml(file_path)
-        self.chains = new_settings.chains or {}
-        self.agents = new_settings.agents or {}
-        self.prompts = new_settings.prompts or {}
-        self.llms = new_settings.llms or {}
-        self.tools = new_settings.tools or {}
-        self.memories = new_settings.memories or {}
-        self.wrappers = new_settings.wrappers or {}
-        self.toolkits = new_settings.toolkits or {}
-        self.textsplitters = new_settings.textsplitters or {}
-        self.utilities = new_settings.utilities or {}
-        self.embeddings = new_settings.embeddings or {}
-        self.knowledges = new_settings.knowledges or {}
-        self.vectorstores = new_settings.vectorstores or {}
-        self.documentloaders = new_settings.documentloaders or {}
-        self.retrievers = new_settings.retrievers or {}
-        self.output_parsers = new_settings.output_parsers or {}
-        self.input_output = new_settings.input_output or {}
-        self.autogen_roles = new_settings.autogen_roles or {}
-
-        self.admin = new_settings.admin or {}
-        self.bisheng_rt = new_settings.bisheng_rt or {}
-        self.default_llm = new_settings.default_llm or {}
-        self.gpts = new_settings.gpts or {}
-        self.openai_conf = new_settings.openai_conf
-        self.minio_conf = new_settings.openai_conf
-        self.vector_stores = new_settings.vector_stores or {}
-        self.object_storage = new_settings.object_storage or {}
-        self.dev = dev
-
-    def update_settings(self, **kwargs):
-        for key, value in kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
 
 
-def env_var_constructor(loader, node):
-    value = loader.construct_scalar(node)  # PyYAML loader的固定方法，用于根据当前节点构造一个变量值
-    var_name = value.strip('${} ')  # 去除变量值（例如${PATH}）前后的特殊字符及空格
-    env_val = os.getenv(var_name)  # 尝试在环境变量中获取变量名（如USER）对应的值，获取不到则为空
-    if env_val is None:
-        raise ValueError(f'Environment variable {var_name} not found')
-    return env_val
 
 
-yaml.SafeLoader.add_constructor('!env', env_var_constructor)
 
 
-def save_settings_to_yaml(settings: Settings, file_path: str):
-    # Check if a string is a valid path or a file name
-    if '/' not in file_path:
-        # Get current path
-        current_path = os.path.dirname(os.path.abspath(__file__))
-
-        file_path = os.path.join(current_path, file_path)
-
-    with open(file_path, 'w') as f:
-        settings_dict = settings.dict()
-        yaml.dump(settings_dict, f)
 
 
-def load_settings_from_yaml(file_path: str) -> Settings:
-    # Get current path
-    current_path = os.path.dirname(os.path.abspath(__file__))
-    # Check if a string is a valid path or a file name
-    if '/' not in file_path:
-        file_path = os.path.join(current_path, file_path)
-
-    with open(file_path, 'r', encoding='utf-8') as f:
-        settings_dict = yaml.safe_load(f)
-
-    with open(os.path.join(current_path, 'default_node.yaml'), 'r', encoding='utf-8') as node:
-        settings_dict.update(yaml.safe_load(node))
-    for key in settings_dict:
-        if key not in Settings.model_fields.keys():
-            raise KeyError(f'Key {key} not found in settings')
-        logger.debug(f'Loading {len(settings_dict[key])} {key} from {file_path}')
-
-    return Settings(**settings_dict)
 
 
-def read_from_conf(file_path: str) -> str:
-    if '/' not in file_path:
-        # Get current path
-        current_path = os.path.dirname(os.path.abspath(__file__))
-
-        file_path = os.path.join(current_path, file_path)
-
-    with open(file_path, 'r', encoding='utf-8') as f:
-        content = f.read()
-
-    return content
 
 
-def save_conf(file_path: str, content: str):
-    if '/' not in file_path:
-        # Get current path
-        current_path = os.path.dirname(os.path.abspath(__file__))
-
-        file_path = os.path.join(current_path, file_path)
-
-    with open(file_path, 'w') as f:
-        f.write(content)
-
-
-def parse_key(keys: list[str], setting_str: str = None, include_key: bool = False) -> str:
-    # 通过key，返回yaml配置里value所有的字符串，包含注释
-    if not setting_str:
-        setting_str = read_from_conf(config_file)
-    setting_lines = setting_str.split('\n')
-    value_of_key = [[] for _ in keys]
-    value_start_flag = [False for _ in keys]
-    prev_line = ''
-    for line in setting_lines:
-        for index, key in enumerate(keys):
-            if value_start_flag[index]:
-                if line.startswith('  ') or not line.strip() or line.startswith('#'):
-                    value_of_key[index].append(line)
-                else:
-                    value_start_flag[index] = False
-                    continue
-            if line.startswith(key + ':'):
-                value_start_flag[index] = True
-                if include_key:
-                    if prev_line.startswith('#'):
-                        value_of_key[index].append(prev_line)
-                    value_of_key[index].append(line)
-        prev_line = line
-    return ['\n'.join(value) for value in value_of_key]
-
-
-secret_key = 'TI31VYJ-ldAq-FXo5QNPKV_lqGTFfp-MIdbK2Hm5F1E='
-
-
-def encrypt_token(token: str):
-    return Fernet(secret_key).encrypt(token.encode())
-
-
-def decrypt_token(token: str):
-    return Fernet(secret_key).decrypt(token).decode()
-
-
-config_file = os.getenv('config', 'config.yaml')
-settings = load_settings_from_yaml(config_file)

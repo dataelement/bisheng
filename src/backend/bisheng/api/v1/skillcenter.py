@@ -10,7 +10,7 @@ from bisheng.common.errcode.flow import FlowTemplateNameError
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.template import Template, TemplateCreate, TemplateUpdate
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 
 # build router
 router = APIRouter(prefix='/skill', tags=['Skills'], dependencies=[Depends(get_login_user)])

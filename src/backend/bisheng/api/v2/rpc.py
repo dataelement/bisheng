@@ -4,7 +4,7 @@ from typing import Optional, Union
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.user import User
 from bisheng.database.models.user_role import UserRole
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from fastapi_jwt_auth import AuthJWT

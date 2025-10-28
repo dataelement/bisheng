@@ -8,12 +8,12 @@ from langchain_core.language_models import BaseChatModel
 from loguru import logger
 
 from bisheng.api.services.user_service import UserPayload
-from bisheng.cache.redis import redis_client
 from bisheng.common.errcode.http_error import NotFoundError, ServerError
 from bisheng.common.errcode.llm import ServerExistError, ModelNameRepeatError, ServerAddError, ServerAddAllError
 from bisheng.common.errcode.server import NoAsrModelConfigError, AsrModelConfigDeletedError, NoTtsModelConfigError, \
     TtsModelConfigDeletedError
-from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
+from bisheng.common.models.config import ConfigDao, ConfigKeyEnum, Config
+from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.database.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.knowledge import KnowledgeState
 from bisheng.utils import generate_uuid, md5_hash
@@ -571,6 +571,9 @@ class LLMService:
         """
 
         workbench_llm = await cls.get_workbench_llm()
+
+        redis_client = await get_redis_client()
+
         if not workbench_llm.tts_model or not workbench_llm.tts_model.id:
             raise NoTtsModelConfigError.http_exception()
         model_info = await LLMDao.aget_model_by_id(model_id=int(workbench_llm.tts_model.id))

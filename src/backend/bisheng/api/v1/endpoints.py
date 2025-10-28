@@ -6,14 +6,13 @@ from uuid import UUID
 import yaml
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, UploadFile
 
-from bisheng import settings
 from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.v1.schemas import (ProcessResponse, UploadFileResponse,
                                     resp_200)
-from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_uploaded_file, upload_file_to_minio
 from bisheng.chat.utils import judge_source, process_source_document
-from bisheng.database.models.config import Config, ConfigDao, ConfigKeyEnum
+from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
+from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
@@ -21,7 +20,7 @@ from bisheng.interface.types import get_all_types_dict
 from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.services.deps import get_session_service, get_task_service
 from bisheng.services.task.service import TaskService
-from bisheng.settings import settings as bisheng_settings
+from bisheng.common.services.config_service import settings as bisheng_settings, settings
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 from bisheng.utils.logger import logger
@@ -100,7 +99,7 @@ def save_config(data: dict, admin_user: UserPayload = Depends(get_admin_user)):
         db_config = ConfigDao.get_config(ConfigKeyEnum.INIT_DB)
         db_config.value = data.get('data')
         ConfigDao.insert_config(db_config)
-        redis_client.delete('config:initdb_config')
+        get_redis_client_sync().delete('config:initdb_config')
     except Exception as e:
         raise HTTPException(status_code=500, detail=f'格式不正确, {str(e)}')
 

@@ -23,19 +23,19 @@ from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import FrequentlyUsedChat
 from bisheng.api.v1.schemas import WorkstationConfig, resp_200, WSPrompt, ExcelRule, UnifiedResponseModel
-from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download, save_download_file, save_uploaded_file
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
 from bisheng.common.errcode.workstation import WebSearchToolNotFoundError, ConversationNotFoundError, \
     AgentAlreadyExistsError
 from bisheng.core.app_context import app_ctx
+from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.llm.domain.llm import BishengLLM
-from bisheng.settings import settings as bisheng_settings
+from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 
@@ -221,14 +221,16 @@ async def gen_title(conversationId: str = Body(..., description='', embed=True),
     """
     # 获取会话消息
     redis_key = f'workstation_title_{conversationId}'
-    title = redis_client.get(redis_key)
+    redis_client = await get_redis_client()
+
+    title = await redis_client.aget(redis_key)
     if not title:
         await asyncio.sleep(5)
         # 如果标题已经存在，则直接返回
-        title = redis_client.get(redis_key)
+        title = await redis_client.aget(redis_key)
     if title:
         # 如果标题已经存在，则直接返回
-        redis_client.delete(redis_key)
+        await redis_client.adelete(redis_key)
         return resp_200({'title': title})
     else:
         # 如果标题不存在，则返回空值
@@ -263,7 +265,8 @@ async def genTitle(human: str, assistant: str, llm: BishengLLM, conversationId: 
     logger.info(f'convo: {convo}')
     res = await llm.ainvoke(prompt)
     title = res.content
-    redis_client.set(f'workstation_title_{conversationId}', title)
+    redis_client = await get_redis_client()
+    await redis_client.aset(f'workstation_title_{conversationId}', title)
     session = await MessageSessionDao.async_get_one(conversationId)
     if session:
         session.flow_name = title[:200]

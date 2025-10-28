@@ -5,9 +5,11 @@ import logging
 from multiprocessing import Process, Manager, set_start_method
 from multiprocessing.managers import ValueProxy
 from typing import Optional, Union
-from bisheng.cache.redis import RedisClient, redis_client
+
+from bisheng.core.cache.redis_conn import RedisClient
+from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.linsight.task_exec import LinsightWorkflowTask
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils.logger import configure
 
 logger = logging.getLogger(__name__)
@@ -132,6 +134,7 @@ class ScheduleCenterProcess(Process):
         self.semaphore = asyncio.Semaphore(self.max_concurrency)
         logger.info(f"Semaphore initialized with max concurrency: {self.semaphore._value}")
 
+        redis_client = get_redis_client_sync()
         self.queue = LinsightQueue('queue', namespace="linsight", redis=redis_client)
         for _ in range(10000):
             try:

@@ -1,7 +1,7 @@
 import functools
 from datetime import datetime
 
-from bisheng.cache.redis import redis_client
+from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.llm.const import LLMModelStatus
 
 
@@ -10,6 +10,7 @@ async def bisheng_model_limit_check(self: 'BishengBase'):
     if self.server_info.limit_flag:
         # 开启了调用次数检查
         cache_key = f"model_limit:{now}:{self.server_info.id}"
+        redis_client = await get_redis_client()
         use_num = await redis_client.aincr(cache_key)
         if use_num > self.server_info.limit:
             raise Exception(f'{self.server_info.name}/{self.model_info.model_name} 额度已用完')
@@ -20,7 +21,7 @@ def sync_bisheng_model_limit_check(self: 'BishengBase'):
     if self.server_info.limit_flag:
         # 开启了调用次数检查
         cache_key = f"model_limit:{now}:{self.server_info.id}"
-        use_num = redis_client.incr(cache_key)
+        use_num = get_redis_client_sync().incr(cache_key)
         if use_num > self.server_info.limit:
             raise Exception(f'{self.server_info.name}/{self.model_info.model_name} 额度已用完')
 

@@ -13,10 +13,10 @@ from bisheng.api.services.user_service import UserPayload, get_admin_user, get_l
 from bisheng.api.v1.schemas import (AssistantCreateReq, AssistantUpdateReq,
                                     DeleteToolTypeReq, StreamData, TestToolReq,
                                     resp_200, resp_500)
-from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.chat.types import WorkType
 from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.gpts_tools import GptsToolsTypeRead
@@ -96,7 +96,8 @@ async def auto_update_assistant_task(*, request: Request, login_user: UserPayloa
                                      prompt: str = Body(description='用户填写的提示词')):
     # 存入缓存
     task_id = generate_uuid()
-    redis_client.set(f'auto_update_task:{task_id}', {
+    redis_client = await get_redis_client()
+    await redis_client.aset(f'auto_update_task:{task_id}', {
         'assistant_id': assistant_id,
         'prompt': prompt,
     })
@@ -108,7 +109,8 @@ async def auto_update_assistant_task(*, request: Request, login_user: UserPayloa
 # 自动优化prompt和工具选择
 @router.get('/auto', response_class=StreamingResponse)
 async def auto_update_assistant(*, task_id: str = Query(description='优化任务唯一ID')):
-    task = redis_client.get(f'auto_update_task:{task_id}')
+    redis_client = await get_redis_client()
+    task = await redis_client.aget(f'auto_update_task:{task_id}')
     if not task:
         raise NotFoundError()
     assistant_id = task['assistant_id']

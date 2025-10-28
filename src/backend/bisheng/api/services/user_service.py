@@ -8,10 +8,10 @@ from fastapi import Depends, HTTPException, Request
 
 from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
 from bisheng.api.v1.schemas import CreateUserReq
-from bisheng.cache.redis import redis_client
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.user import (UserLoginOfflineError, UserNameAlreadyExistError,
                                          UserNeedGroupAndRoleError)
+from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.assistant import Assistant, AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowRead
@@ -21,7 +21,7 @@ from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils import md5_hash
 from bisheng.utils.constants import RSA_KEY, USER_CURRENT_SESSION
 from fastapi_jwt_auth import AuthJWT
@@ -175,7 +175,7 @@ class UserService:
 
     @classmethod
     def decrypt_md5_password(cls, password: str):
-        if value := redis_client.get(RSA_KEY):
+        if value := get_redis_client_sync().get(RSA_KEY):
             private_key = value[1]
             password = md5_hash(rsa.decrypt(b64decode(password), private_key).decode('utf-8'))
         else:
@@ -343,7 +343,7 @@ async def get_login_user(authorize: AuthJWT = Depends()) -> UserPayload:
     # 判断是否允许多点登录
     if not settings.get_system_login_method().allow_multi_login:
         # 获取access_token
-        current_token = redis_client.get(USER_CURRENT_SESSION.format(user.user_id))
+        current_token = get_redis_client_sync().get(USER_CURRENT_SESSION.format(user.user_id))
         # 登录被挤下线了，http状态码是200, status_code是特殊code
         if current_token != authorize._token:
             raise UserLoginOfflineError.http_exception()

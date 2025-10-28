@@ -20,12 +20,12 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
     SubmitFileSchema
-from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_file_to_folder, CACHE_DIR
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.linsight import LinsightToolInitError, LinsightBishengLLMError, LinsightGenerateSopError
 from bisheng.core.app_context import app_ctx
+from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao
@@ -37,7 +37,7 @@ from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.services import LLMService
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils import util
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import minio_client
@@ -194,7 +194,7 @@ class LinsightWorkbenchImpl:
             file_ids.append(file.file_id)
 
         redis_keys = [f"{cls.FILE_INFO_REDIS_KEY_PREFIX}{file_id}" for file_id in file_ids]
-
+        redis_client = await get_redis_client()
         processed_files = await redis_client.amget(redis_keys)
 
         for file_info in processed_files:
@@ -829,6 +829,7 @@ class LinsightWorkbenchImpl:
     @classmethod
     async def _cache_parse_result(cls, file_id: str, parse_result: Dict) -> None:
         """缓存解析结果"""
+        redis_client = await get_redis_client()
         key = f"{cls.FILE_INFO_REDIS_KEY_PREFIX}{file_id}"
         await redis_client.aset(
             key=key,

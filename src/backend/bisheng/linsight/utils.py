@@ -10,7 +10,7 @@ from bisheng.database.models import LinsightSessionVersion, LinsightExecuteTask
 from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao, ExecuteTaskStatusEnum
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils import util
 from bisheng.utils.minio_client import minio_client
 from bisheng.utils.util import sync_func_to_async

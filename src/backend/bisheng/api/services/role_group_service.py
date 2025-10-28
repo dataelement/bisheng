@@ -10,8 +10,8 @@ from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import resp_200
-from bisheng.cache.redis import redis_client
 from bisheng.common.errcode.user import UserGroupNotDeleteError
+from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao, FlowType
@@ -131,6 +131,7 @@ class RoleGroupService():
         UserGroupDao.delete_group_all_admin(group_info.id)
         # 将删除事件发到redis队列中
         delete_message = json.dumps({"id": group_info.id})
+        redis_client = get_redis_client_sync()
         redis_client.rpush('delete_group', delete_message, expiration=86400)
         redis_client.publish('delete_group', delete_message)
 

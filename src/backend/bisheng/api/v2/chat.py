@@ -6,20 +6,18 @@ from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.services.utils import set_flow_knowledge_id
 from bisheng.api.v1.schemas import ChatInput, resp_200
 from bisheng.api.v2.schema.message import SyncMessage
-from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.processing.process import process_tweaks
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
 from fastapi import APIRouter, Body, WebSocket, status
 
 router = APIRouter(prefix='/chat', tags=['OpenAPI', 'Chat'])
 chat_manager = ChatManager()
-flow_data_store = redis_client
 expire = 600  # reids 60s 过期
 
 

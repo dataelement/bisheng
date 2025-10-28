@@ -8,7 +8,7 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.tag import TagExistError, TagNotExistError
 from bisheng.database.models.assistant import AssistantDao
-from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
+from bisheng.common.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.group_resource import ResourceTypeEnum, GroupResourceDao
 from bisheng.database.models.tag import TagDao, Tag, TagLink

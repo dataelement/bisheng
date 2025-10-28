@@ -3,15 +3,14 @@ import json
 import os
 from typing import List
 
+from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.database import get_async_db_session, get_database_connection
+from bisheng.common.services.config_service import settings
 from bisheng.database.models.template import Template
 from bisheng.utils.minio_client import MinioClient
 from loguru import logger
 from sqlmodel import select, update, text
 
-from bisheng.database.init_config import init_config
-from bisheng.settings import settings
-from bisheng.cache.redis import redis_client
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.component import Component
 from bisheng.database.models.role import Role
@@ -27,7 +26,7 @@ from bisheng.database.models.role_access import RoleAccess, AccessType
 
 async def init_default_data():
     """初始化数据库"""
-
+    redis_client = await get_redis_client()
     if await redis_client.asetNx('init_default_data', '1'):
         try:
             db_manager = await get_database_connection()
@@ -78,7 +77,7 @@ async def init_default_data():
                 component_db = component_db.all()
                 if not component_db:
                     db_components = []
-                    json_items = json.loads(read_from_conf('data/component.json'))
+                    json_items = json.loads(read_from_conf('../database/data/component.json'))
                     for item in json_items:
                         for k, v in item.items():
                             db_component = Component(name=k, user_id=1, user_name='admin', data=v)
@@ -90,7 +89,7 @@ async def init_default_data():
                 templates = await session.exec(select(Template).limit(1))
                 templates = templates.all()
                 if not templates:
-                    json_items = json.loads(read_from_conf('data/template.json'))
+                    json_items = json.loads(read_from_conf('../database/data/template.json'))
                     for item in json_items:
                         session.add(Template(**item))
                     await session.commit()
@@ -100,7 +99,7 @@ async def init_default_data():
                 preset_tools = preset_tools.all()
                 if not preset_tools:
                     preset_tools = []
-                    json_items = json.loads(read_from_conf('data/t_gpts_tools.json'))
+                    json_items = json.loads(read_from_conf('../database/data/t_gpts_tools.json'))
                     for item in json_items:
                         preset_tool = GptsTools(**item)
                         preset_tools.append(preset_tool)
@@ -111,7 +110,7 @@ async def init_default_data():
                 preset_tools_type = preset_tools_type.all()
                 if not preset_tools_type:
                     preset_tools_type = []
-                    json_items = json.loads(read_from_conf('data/t_gpts_tools_type.json'))
+                    json_items = json.loads(read_from_conf('../database/data/t_gpts_tools_type.json'))
                     for item in json_items:
                         preset_tool_type = GptsToolsType(**item)
                         preset_tools_type.append(preset_tool_type)
@@ -134,7 +133,7 @@ async def init_default_data():
                 preset_models = preset_models.all()
                 if not preset_models:
                     preset_models = []
-                    json_items = json.loads(read_from_conf('data/sft_model.json'))
+                    json_items = json.loads(read_from_conf('../database/data/sft_model.json'))
                     for item in json_items:
                         preset_model = SftModel(**item)
                         preset_models.append(preset_model)
@@ -158,7 +157,7 @@ async def init_default_data():
                     await session.execute(sql_query)
                     await session.commit()
             # 初始化数据库config
-            await init_config()
+            await settings.init_config()
         except Exception as exc:
             # if the exception involves tables already existing
             # we can ignore it
@@ -185,7 +184,7 @@ def upload_preset_minio_file():
     """ 上传预置文件到minio, 为了和工作流模板配合 """
     minio_client = MinioClient()
     # 上传 「多助手并行+串行报告生成」 工作流模板需要的docx文件
-    template_data = read_from_conf('data/0254d1808a5247d2a3ee0d0011819acb.docx')
+    template_data = read_from_conf('../database/data/0254d1808a5247d2a3ee0d0011819acb.docx')
     minio_client.upload_minio_data('workflow/report/0254d1808a5247d2a3ee0d0011819acb.docx', template_data,
                                    len(template_data),
                                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document')

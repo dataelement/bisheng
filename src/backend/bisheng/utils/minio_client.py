@@ -7,7 +7,7 @@ from loguru import logger
 from minio.commonconfig import Filter, CopySource
 from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration
 
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 
 _MinioConf = settings.get_minio_conf()
 bucket = _MinioConf.public_bucket

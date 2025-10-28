@@ -3,7 +3,7 @@ from typing import Dict, List, Optional, Type
 from bisheng.interface.base import LangChainTypeCreator
 from bisheng.interface.custom_lists import llm_type_to_cls_dict
 from bisheng.llm.domain.llm import BishengLLM
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.template.frontend_node.llms import LLMFrontendNode
 from bisheng.utils.logger import logger
 from bisheng.utils.util import build_template_from_class
