@@ -16,13 +16,14 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
             const id = String(llmOptions[0]?.children[0]?.value)
             console.log(id,llmOptions,666);
             setModelId(id)
-            onChange(id)
+                    onChange(Number(id))
+                    // onChange(id)
         } else if (!agent) {
             getLlmDefaultModel().then(res => {
                 if (res && !data.value) {
                     const id = String(res.model_id)
                     setModelId(id)
-                    onChange(id)
+                    onChange(Number(id))
                 }
             })
         } else {
@@ -74,7 +75,7 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
             placholder={data.placeholder}
             defaultValue={defaultValue}
             options={llmOptions}
-            onChange={(val) => onChange(val[1])}
+            onChange={(val) => onChange(Number(val[1]))}
         />
     </div>
 };
