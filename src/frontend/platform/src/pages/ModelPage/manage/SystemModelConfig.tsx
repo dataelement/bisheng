@@ -23,20 +23,15 @@ export default function SystemModelConfig({ data, onBack }) {
             const serverTtsItem = { value: server.id, label: server.name, children: [] }
 
             server.models.forEach(model => {
-                console.log(model,44);
                 const item = {
                     value: model.id,
                     label: model.model_name
                 }
                 if (!model.online) return
                 if(model.model_type === 'asr'){
-                    console.log(item,34);
-                    
                     serverAsrItem.children.push(item)
                 }
                 if(model.model_type === 'tts'){
-                    console.log(item,35);
-
                     serverTtsItem.children.push(item)
                 }
                 model.model_type === 'embedding' ?

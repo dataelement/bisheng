@@ -366,10 +366,16 @@ export default function Paragraphs({ fileId, onBack }) {
 
     // 处理分段修改（完全保留原始逻辑）
     const handleChunkChange = useCallback((chunkIndex, text) => {
-        const bbox = { chunk_bboxes: selectedBbox };
-        // selectedBbox空数组时，使用safeChunks的bbox
-        const bboxStr = selectedBbox.length ? JSON.stringify(bbox) : safeChunks[chunkIndex].bbox;
+        let chunkIndexPage = chunkIndex % pageSize;
+        console.log('转换后的localIndex:', chunkIndexPage);
 
+        // if(chunkIndex > 19){
+        //     chunkIndexPage = chunkIndex % pageSize;
+        // }
+        const bbox = { chunk_bboxes: selectedBbox };
+        
+        // selectedBbox空数组时，使用safeChunks的bbox
+        const bboxStr = selectedBbox.length ? JSON.stringify(bbox) : safeChunks[chunkIndexPage].bbox;
         captureAndAlertRequestErrorHoc(updateChunkApi({
             knowledge_id: Number(id),
             file_id: selectedFileId || currentFile?.id || '',

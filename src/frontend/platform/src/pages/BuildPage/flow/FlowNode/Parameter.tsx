@@ -23,6 +23,7 @@ import VarSelectItem, { VarSelectSingleItem } from "./component/VarSelectItem";
 import VarTextareaItem from "./component/VarTextareaItem";
 import VarTextareaUploadItem from "./component/VarTextareaUploadItem";
 import ImagePromptItem from "./component/ImagePromptItem";
+import RetrievalWeightSlider from "./component/RetrievalWeightSlider";
 
 // 节点表单项
 export default function Parameter({ node, nodeId, item, onOutPutChange, onStatusChange, onFouceUpdate, onVarEvent }
@@ -37,9 +38,17 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
     }) {
 
     const handleOnNewValue = (newValue: any, validate?: any) => {
+        
         // 更新by引用(视图更新再组件内部完成)
         item.value = newValue;
-        // Set state to pending
+        
+        // 处理linkage属性，当值改变时触发联动更新
+        if ((item as any).linkage) {
+            onOutPutChange((item as any).linkage, newValue);
+        }
+        
+        // 触发重新渲染以更新visibleOn控制的组件
+        onFouceUpdate();
     }
 
     const bindValidate = (validate) => {
@@ -122,7 +131,7 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
         case 'code':
             return <CodePythonItem data={item} onChange={handleOnNewValue} />;
         case 'code_output':
-            return <CodeOutputItem data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
+            return <CodeOutputItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
         case 'add_tool':
             return <ToolItem data={item} onChange={handleOnNewValue} />;
         case 'condition':
@@ -150,6 +159,8 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
             }} />;
         case 'image_prompt':
             return <ImagePromptItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onVarEvent={bindVarValidate} />;
+        case 'search_switch':
+            return <RetrievalWeightSlider data={item} onChange={handleOnNewValue} />;
         default:
             return <div>Unsupported parameter type</div>;
     }
