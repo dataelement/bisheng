@@ -170,28 +170,28 @@ class Settings(BaseModel):
     workflow_conf: WorkflowConf = WorkflowConf()
     celery_task: CeleryConf = CeleryConf()
 
-    @field_validator('database_url')
-    @classmethod
-    def set_database_url(cls, value):
-        if not value:
-            logger.debug('No database_url provided, trying bisheng_DATABASE_URL env variable')
-            if bisheng_database_url := os.getenv('bisheng_DATABASE_URL'):
-                value = bisheng_database_url
-            else:
-                logger.debug('No DATABASE_URL env variable, using sqlite database')
-                value = 'sqlite:///./bisheng.db'
-        else:
-            # 对密码进行加密
-            import re
-            pattern = r'(?<=:)[^:]+(?=@)'  # 匹配冒号后面到@符号前面的任意字符
-            match = re.search(pattern, value)
-            if match:
-                password = match.group(0)
-                new_password = decrypt_token(password)
-                new_mysql_url = re.sub(pattern, f'{new_password}', value)
-                value = new_mysql_url
-
-        return value
+    # @field_validator('database_url')
+    # @classmethod
+    # def set_database_url(cls, value):
+    #     if not value:
+    #         logger.debug('No database_url provided, trying bisheng_DATABASE_URL env variable')
+    #         if bisheng_database_url := os.getenv('bisheng_DATABASE_URL'):
+    #             value = bisheng_database_url
+    #         else:
+    #             logger.debug('No DATABASE_URL env variable, using sqlite database')
+    #             value = 'sqlite:///./bisheng.db'
+    #     else:
+    #         # 对密码进行加密
+    #         import re
+    #         pattern = r'(?<=:)[^:]+(?=@)'  # 匹配冒号后面到@符号前面的任意字符
+    #         match = re.search(pattern, value)
+    #         if match:
+    #             password = match.group(0)
+    #             new_password = decrypt_token(password)
+    #             new_mysql_url = re.sub(pattern, f'{new_password}', value)
+    #             value = new_mysql_url
+    #
+    #     return value
 
     @model_validator(mode='before')
     @classmethod

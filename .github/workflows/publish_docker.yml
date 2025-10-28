@@ -1,0 +1,77 @@
+name: publish bisheng-backend to Dockerhub
+
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - "v*"
+
+
+jobs:
+        
+  build_bisheng_backend_amd64:
+    runs-on: ubuntu-latest
+    # if: startsWith(github.event.ref, 'refs/tags')
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASS }}
+
+      - name: Build backend and push amd64 Docker image
+        uses: docker/build-push-action@v3
+        with:
+          push: true
+          tags: beclab/bisheng-backend:${{ github.event.inputs.tags }}-amd64
+          file: src/backend/Dockerfile
+          platforms: linux/amd64
+
+  build_bisheng_backend_arm64:
+    runs-on: self-hosted
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+
+      # 登录 docker hub
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          # GitHub Repo => Settings => Secrets 增加 docker hub 登录密钥信息
+          # DOCKERHUB_USERNAME 是 docker hub 账号名.
+          # DOCKERHUB_TOKEN: docker hub => Account Setting => Security 创建.
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASS }}
+
+      # because ibm-db driver not support linux arm64
+      - name: fix ibm-db lib error
+        run: |
+          # remove ibm-db lib
+          sed -i '/ibm-db*/d' ./src/backend/pyproject.toml
+
+      - name: Build backend and push arm64 Docker image
+        uses: docker/build-push-action@v3
+        with:
+          push: true
+          tags: beclab/bisheng-backend:${{ github.event.inputs.tags }}-arm64
+          file: src/backend/Dockerfile
+          platforms: linux/arm64
+
+  publish_manifest:
+    needs:
+      - build_bisheng_backend_amd64
+      - build_bisheng_backend_arm64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASS }}
+
+      - name: Push manifest
+        run: |
+          docker manifest create beclab/bisheng-backend:${{ github.event.inputs.tags }} --amend beclab/bisheng-backend:${{ github.event.inputs.tags }}-amd64 --amend beclab/bisheng-backend:${{ github.event.inputs.tags }}-arm64
+          docker manifest push beclab/bisheng-backend:${{ github.event.inputs.tags }}

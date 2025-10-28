@@ -1,7 +1,6 @@
 # 数据库配置， 当前加密串的密码是1234，
 # 密码加密参考 https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc#Gxitd1xEeof1TzxdhINcGS6JnXd
-database_url:
-  "mysql+pymysql://root:gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==@mysql:3306/bisheng?charset=utf8mb4"
+database_url: !env ${BS_DATABASE_URL}
 
 # 缓存配置  redis://[[username]:[password]]@localhost:6379/0
 # 普通模式:
@@ -51,8 +50,8 @@ object_storage:
     sharepoint: !env ${BS_MINIO_SHAREPOINT}
     access_key: !env ${BS_MINIO_ACCESS_KEY}
     secret_key: !env ${BS_MINIO_SECRET_KEY}
-    public_bucket: 'bisheng'  # 公共bucket，存储平台上一些需要持久化的文件。会设置为可公开访问
-    tmp_bucket: 'tmp-dir'  # 临时bucket，会对传到此bucket内的文件设置有效期
+    public_bucket: !env ${BS_MINIO_PUBLIC_BUCKET}  # 公共bucket，存储平台上一些需要持久化的文件。会设置为可公开访问
+    tmp_bucket: !env ${BS_MINIO_TMP_BUCKET}  # 临时bucket，会对传到此bucket内的文件设置有效期
 
 environment:
   env: dev
