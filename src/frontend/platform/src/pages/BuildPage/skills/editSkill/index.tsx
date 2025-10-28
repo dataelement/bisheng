@@ -1,8 +1,8 @@
+import { TabsContext } from "@/contexts/tabsContext";
+import { checkAppEditPermission, getFlowApi } from "@/controllers/API/flow";
 import cloneDeep from "lodash-es/cloneDeep";
 import { useContext, useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
-import { TabsContext } from "@/contexts/tabsContext";
-import { getFlowApi } from "@/controllers/API/flow";
 import Page from "./PageComponent";
 
 export default function FlowPage() {
@@ -12,12 +12,16 @@ export default function FlowPage() {
   // useEffect(() => {
   //   loadFlow(flowId)
   // }, [])
+  const flowInit = async () => {
+    await checkAppEditPermission(id, 1)
+    getFlowApi(id).then(_flow => setFlow('flow_init', _flow))
+  }
+
   useEffect(() => {
     if (id && flow?.id !== id) {
       // 切换技能重新加载flow数据
-      getFlowApi(id).then(_flow => setFlow('flow_init', _flow))
+      flowInit()
     }
-
     // return () => setFlow('destroy', null)
   }, [])
 

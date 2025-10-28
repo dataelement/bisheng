@@ -162,7 +162,7 @@ export async function readFlowsFromDatabase(page: number = 1, pageSize: number =
 }
 
 /* app list */
-export async function getAppsApi({ page = 1, pageSize = 20, keyword, tag_id = -1, type,managed}) {
+export async function getAppsApi({ page = 1, pageSize = 20, keyword, tag_id = -1, type, managed }) {
     const tagIdStr = tag_id === -1 ? '' : `&tag_id=${tag_id}`
     const map = { assistant: 5, skill: 1, flow: 10 }
     const flowType = map[type] ? `&flow_type=${map[type]}` : ''
@@ -201,7 +201,7 @@ export const createCustomFlowApi = async (params: {
 }, userName: string) => {
     if (params.logo) {
         // logo保存相对路径
-        params.logo = params.logo.replace(/^\/\w+/, '') 
+        params.logo = params.logo.replace(/^\/\w+/, '')
     }
     const response: FlowType = await axios.post("/api/v1/flows/", {
         ...params,
@@ -366,5 +366,15 @@ export async function uploadChatFile(v, file: File, onProgress): Promise<any> {
                 onProgress(progress);
             }
         }
+    });
+}
+
+
+/**
+ * 检查是否有编辑app权限
+ */
+export async function checkAppEditPermission(flowId, flowType) {
+    return await axios.get(`/api/v1/workflow/write/auth`, {
+        params: { flow_id: flowId, flow_type: flowType }
     });
 }

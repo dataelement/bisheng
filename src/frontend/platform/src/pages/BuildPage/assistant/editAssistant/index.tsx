@@ -15,6 +15,7 @@ import Header from "./Header";
 import Prompt from "./Prompt";
 import Setting from "./Setting";
 import TestChat from "./TestChat";
+import { checkAppEditPermission } from "@/controllers/API/flow";
 
 export default function editAssistant() {
     const { t } = useTranslation()
@@ -27,12 +28,18 @@ export default function editAssistant() {
     const { assistantState, changed, loadAssistantState, changeStatus, saveAfter, destroy } = useAssistantStore()
     const { startNewRound, insetSystemMsg, insetBsMsg, destory, setShowGuideQuestion } = useMessageStore()
 
-    useEffect(() => {
+    const flowInit = async () => {
+        await checkAppEditPermission(assisId, 5)
+
         loadAssistantState(assisId, 'v1').then((res) => {
             setShowGuideQuestion(true)
             setGuideQuestion(res.guide_question?.filter((item) => item) || [])
             res.guide_word && insetBsMsg(res.guide_word)
         })
+    }
+
+    useEffect(() => {
+        flowInit()
     }, [])
 
     // 展示的引导词独立存储
