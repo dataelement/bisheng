@@ -15,7 +15,7 @@ export const enum FLOW_TYPES {
     SKILL = 1,
 }
 
-export default function index({ chatId, flowId, shareToken, flowType }) {
+export default function index({ chatId = '', flowId = '', shareToken = '', flowType = '' }) {
     const { conversationId: _cid, fid: _fid, type: _type } = useParams();
     const cid = _cid || chatId;
     const fid = _fid || flowId;

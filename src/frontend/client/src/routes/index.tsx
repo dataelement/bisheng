@@ -20,6 +20,7 @@ import StartupLayout from './Layouts/Startup';
 import Root from './Root';
 import RouteErrorBoundary from './RouteErrorBoundary';
 import ShareRoute from './ShareRoute';
+import Page404 from '~/pages/Page404';
 
 const AuthLayout = () => (
   <AuthContextProvider>
@@ -127,4 +128,10 @@ export const router = createBrowserRouter([
     path: '/html',
     element: <WebView />,
   },
+  {
+    path: '/404',
+    element: <Page404 />,
+    errorElement: <RouteErrorBoundary />,
+  },
+  { path: "*", element: <Navigate to="/404" replace /> }
 ], baseConfig);

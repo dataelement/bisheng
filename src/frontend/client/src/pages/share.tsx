@@ -1,6 +1,6 @@
 
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { getShareParamsApi } from "~/api";
 import ChatView from "~/components/Chat/ChatView";
 import Sop from "~/components/Sop";
@@ -16,15 +16,15 @@ export default function Share() {
     const { token: shareToken, vid } = useParams()
     const [type, setType] = useState('')
     const [shareInfo, setShareInfo] = useState(null)
+    const navigate = useNavigate()
 
     useEffect(() => {
-        console.log('token, vid :>> ', shareToken, vid);
         getShareParamsApi(shareToken).then(res => {
-            if (res.data.status_code === 404) {
+            if (res.status_code === 404) {
                 console.log('404 page')
+                return navigate('/404', { replace: true })
             }
-            const { resource_id, resource_type, meta_data } = res.data
-            setType(resource_type)
+            setType(res.data.resource_type)
             setShareInfo(res.data)
         })
     }, [])
@@ -35,7 +35,7 @@ export default function Share() {
         case 'linsight_session':
             return <Sop id={shareInfo.resource_id} vid={vid} shareToken={shareToken} />
         case 'workbench_chat':
-            return <ChatView />;
+            return <ChatView id={shareInfo.resource_id} shareToken={shareToken} />;
         default:
             return <AppChat
                 chatId={shareInfo.resource_id}

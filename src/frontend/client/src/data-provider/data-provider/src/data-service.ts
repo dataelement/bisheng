@@ -30,11 +30,12 @@ export function deleteUser(): Promise<s.TPreset> {
   return request.delete(endpoints.deleteUser());
 }
 
-export function getMessagesByConvoId(conversationId: string): Promise<s.TMessage[]> {
+export function getMessagesByConvoId(conversationId: string, shareToken: string): Promise<s.TMessage[]> {
   if (conversationId === 'new') {
     return Promise.resolve([]);
   }
-  return request.get(endpoints.messages(conversationId)).then(res => res.data);
+  const headers = shareToken ? { 'share-token': shareToken } : {}
+  return request.get(endpoints.messages(conversationId), { headers }).then(res => res.data);
 }
 
 export function getSharedMessages(shareId: string): Promise<t.TSharedMessagesResponse> {
