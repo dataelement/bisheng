@@ -21,8 +21,9 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import build_flow, build_input_keys_response
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import (UnifiedResponseModel, resp_200)
-from bisheng.cache import InMemoryCache
+from bisheng.core.cache import InMemoryCache
 from bisheng.core.cache.redis_manager import get_redis_client_sync
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.evaluation import (Evaluation, EvaluationDao, ExecType, EvaluationTaskStatus)
 from bisheng.database.models.flow import FlowDao
@@ -32,7 +33,6 @@ from bisheng.graph.graph.base import Graph
 from bisheng.llm.domain.services import LLMService
 from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
-from bisheng.utils.minio_client import MinioClient
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow
 from bisheng.workflow.common.workflow import WorkflowStatus
@@ -138,18 +138,19 @@ class EvaluationService:
 
     @classmethod
     def upload_file(cls, file: UploadFile):
-        minio_client = MinioClient()
+        minio_client = get_minio_storage_sync()
         file_id = generate_uuid()
         file_name = file.filename
 
         file_ext = os.path.basename(file.filename).split('.')[-1]
         file_path = f'evaluation/dataset/{file_id}.{file_ext}'
-        minio_client.upload_minio_file(file_path, file.file, content_type=file.content_type)
+        minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=file_path, file=file.file,
+                                     content_type=file.content_type)
         return file_name, file_path
 
     @classmethod
     def upload_result_file(cls, df: pd.DataFrame):
-        minio_client = MinioClient()
+        minio_client = get_minio_storage_sync()
         file_id = generate_uuid()
 
         csv_buffer = io.BytesIO()
@@ -157,25 +158,20 @@ class EvaluationService:
         csv_buffer.seek(0)
 
         file_path = f'evaluation/result/{file_id}.csv'
-        minio_client.upload_minio_data(object_name=file_path,
-                                       data=csv_buffer.read(),
-                                       length=csv_buffer.getbuffer().nbytes,
-                                       content_type='application/csv')
+        minio_client.put_object_sync(
+            bucket_name=minio_client.bucket,
+            object_name=file_path,
+            file=csv_buffer.read(),
+            content_type='application/csv')
         return file_path
 
     @classmethod
     def read_csv_file(cls, file_path: str):
-        minio_client = MinioClient()
-        resp = minio_client.download_minio(file_path)
+        minio_client = get_minio_storage_sync()
+        resp = minio_client.get_object_sync(file_path)
         if resp is None:
             return None
-        new_data = io.BytesIO()
-        for d in resp.stream(32 * 1024):
-            new_data.write(d)
-        resp.close()
-        resp.release_conn()
-        new_data.seek(0)
-        return new_data
+        return resp
 
     @classmethod
     def parse_csv(cls, file_data: io.BytesIO):

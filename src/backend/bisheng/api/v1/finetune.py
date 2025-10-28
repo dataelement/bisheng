@@ -1,7 +1,8 @@
 import json
 import tempfile
-from typing import List, Optional
+from typing import Optional
 
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from fastapi_jwt_auth import AuthJWT
 from fastapi import APIRouter, Body, Depends, File, Query, UploadFile, Request
 from loguru import logger
@@ -9,15 +10,11 @@ from loguru import logger
 from bisheng.api.services.finetune import FinetuneService
 from bisheng.api.services.finetune_file import FinetuneFileService
 from bisheng.api.services.user_service import get_login_user, UserPayload
-from bisheng.api.v1.schemas import FinetuneCreateReq, UnifiedResponseModel, resp_200
-from bisheng.cache.utils import file_download
+from bisheng.api.v1.schemas import FinetuneCreateReq, resp_200
+from bisheng.core.cache.utils import file_download
 from bisheng.database.models.finetune import Finetune, FinetuneChangeModelName, FinetuneList
-from bisheng.database.models.model_deploy import ModelDeploy
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.knowledge_file import QAKnoweldgeDao
-from bisheng.database.models.preset_train import PresetTrain
-from bisheng.utils.minio_client import MinioClient
-
 
 router = APIRouter(prefix='/finetune', tags=['Finetune'], dependencies=[Depends(get_login_user)])
 
@@ -177,7 +174,7 @@ async def delete_preset_file(*, file_id: str, Authorize: AuthJWT = Depends()):
 @router.get('/job/file/download')
 async def get_download_url(*, file_url: str, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
-    minio_client = MinioClient()
+    minio_client = get_minio_storage_sync()
     download_url = minio_client.get_share_link(file_url)
     return resp_200(data={'url': download_url})
 

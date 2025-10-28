@@ -20,12 +20,13 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
     SubmitFileSchema
-from bisheng.cache.utils import save_file_to_folder, CACHE_DIR
+from bisheng.core.cache.utils import save_file_to_folder, CACHE_DIR
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.linsight import LinsightToolInitError, LinsightBishengLLMError, LinsightGenerateSopError
 from bisheng.core.app_context import app_ctx
 from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao
@@ -40,7 +41,6 @@ from bisheng.llm.domain.services import LLMService
 from bisheng.common.services.config_service import settings
 from bisheng.utils import util
 from bisheng.utils.embedding import decide_embeddings
-from bisheng.utils.minio_client import minio_client
 from bisheng.utils.util import calculate_md5
 from bisheng_langchain.linsight.const import ExecConfig
 
@@ -217,11 +217,12 @@ class LinsightWorkbenchImpl:
             original_filename = file_info.get("original_filename")
             markdown_filename = f"{original_filename.rsplit('.', 1)[0]}.md"
             new_object_name = f"linsight/{chat_id}/{source_object_name}"
-            minio_client.copy_object(
-                source_object_name=source_object_name,
-                target_object_name=new_object_name,
-                bucket_name=minio_client.tmp_bucket,
-                target_bucket_name=minio_client.bucket
+            minio_client = await get_minio_storage()
+            await minio_client.copy_object(
+                source_object=source_object_name,
+                dest_object=new_object_name,
+                source_bucket=minio_client.tmp_bucket,
+                dest_bucket=minio_client.bucket
             )
             file_info["markdown_file_path"] = new_object_name
             file_info["markdown_filename"] = markdown_filename
@@ -784,7 +785,8 @@ class LinsightWorkbenchImpl:
 
             # 保存markdown文件
             markdown_filename = f"{file_id}.md"
-            minio_client.upload_tmp(markdown_filename, markdown_bytes)
+            minio_client = get_minio_storage_sync()
+            minio_client.put_object_tmp_sync(markdown_filename, markdown_bytes)
             markdown_md5 = calculate_md5(markdown_bytes)
 
             # 处理向量存储
@@ -995,13 +997,16 @@ class LinsightWorkbenchImpl:
     @classmethod
     async def download_file(cls, file_info: DownloadFilesSchema) -> Tuple[str, bytes]:
         """下载单个文件"""
+
+        minio_client = await get_minio_storage()
+
         object_name = file_info.file_url
         object_name = object_name.replace(f"/{minio_client.bucket}/", "")
         try:
 
             bytes_io = BytesIO()
 
-            file_byte = await util.sync_func_to_async(minio_client.get_object)(bucket_name=minio_client.bucket,
+            file_byte = await minio_client.get_object(bucket_name=minio_client.bucket,
                                                                                object_name=object_name)
             bytes_io.write(file_byte)
 

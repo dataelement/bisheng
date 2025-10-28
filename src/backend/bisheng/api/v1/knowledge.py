@@ -15,7 +15,7 @@ from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
                                     resp_200, resp_500, resp_501, resp_502, UpdateKnowledgeReq, KnowledgeFileReProcess)
-from bisheng.cache.utils import save_uploaded_file
+from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError, \
     KnowledgeNotQAError
@@ -40,7 +40,7 @@ async def upload_file(*, file: UploadFile = File(...)):
         file_name = file.filename
         # 缓存本地
         uuid_file_name = KnowledgeService.save_upload_file_original_name(file_name)
-        file_path = save_uploaded_file(file.file, 'bisheng', uuid_file_name)
+        file_path = await save_uploaded_file(file.file, 'bisheng', uuid_file_name)
         if not isinstance(file_path, str):
             file_path = str(file_path)
         return resp_200(UploadFileResponse(file_path=file_path))
@@ -261,21 +261,21 @@ def get_filelist(*,
 
 
 @router.get('/qa/list/{qa_knowledge_id}', status_code=200)
-def get_QA_list(*,
-                qa_knowledge_id: int,
-                page_size: int = 10,
-                page_num: int = 1,
-                question: Optional[str] = None,
-                answer: Optional[str] = None,
-                keyword: Optional[str] = None,
-                status: Optional[int] = None,
-                login_user: UserPayload = Depends(get_login_user)):
+async def get_QA_list(*,
+                      qa_knowledge_id: int,
+                      page_size: int = 10,
+                      page_num: int = 1,
+                      question: Optional[str] = None,
+                      answer: Optional[str] = None,
+                      keyword: Optional[str] = None,
+                      status: Optional[int] = None,
+                      login_user: UserPayload = Depends(get_login_user)):
     """ 获取知识库文件信息. """
     db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_knowledge_id)
 
-    qa_list, total_count = knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
-                                                                 page_num, question, answer,
-                                                                 keyword, status)
+    qa_list, total_count = await knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
+                                                                       page_num, question, answer,
+                                                                       keyword, status)
     user_list = UserDao.get_user_by_ids([qa.user_id for qa in qa_list])
     user_map = {user.user_id: user.user_name for user in user_list}
     data = [jsonable_encoder(qa) for qa in qa_list]
@@ -489,26 +489,26 @@ def qa_auto_question(
 
 
 @router.get('/qa/export/template', status_code=200)
-def get_export_url():
+async def get_export_url():
     data = [{"问题": "", "答案": "", "相似问题1": "", "相似问题2": ""}]
     df = pd.DataFrame(data)
     bio = BytesIO()
     with pd.ExcelWriter(bio, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="Sheet1", index=False)
     file_name = f"QA知识库导入模板.xlsx"
-    file_path = save_uploaded_file(bio, 'bisheng', file_name)
+    file_path = await save_uploaded_file(bio, 'bisheng', file_name)
     return resp_200({"url": file_path})
 
 
 @router.get('/qa/export/{qa_knowledge_id}', status_code=200)
-def get_export_url(*,
-                   qa_knowledge_id: int,
-                   question: Optional[str] = None,
-                   answer: Optional[str] = None,
-                   keyword: Optional[str] = None,
-                   status: Optional[int] = None,
-                   max_lines: Optional[int] = 10000,
-                   login_user: UserPayload = Depends(get_login_user)):
+async def get_export_url(*,
+                         qa_knowledge_id: int,
+                         question: Optional[str] = None,
+                         answer: Optional[str] = None,
+                         keyword: Optional[str] = None,
+                         status: Optional[int] = None,
+                         max_lines: Optional[int] = 10000,
+                         login_user: UserPayload = Depends(get_login_user)):
     # 查询当前知识库，是否有写入权限
     db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_knowledge_id)
 
@@ -539,9 +539,9 @@ def get_export_url(*,
     file_pr = datetime.now().strftime('%Y%m%d%H%M%S')
     file_index = 1
     while True:
-        qa_list, total_count = knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
-                                                                     page_num, question, answer,
-                                                                     status)
+        qa_list, total_count = await knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
+                                                                           page_num, question, answer,
+                                                                           status)
 
         data = [jsonable_encoder(qa) for qa in qa_list]
         qa_dict_list = []
@@ -573,7 +573,7 @@ def get_export_url(*,
             df.to_excel(writer, sheet_name="Sheet1", index=False)
         file_name = f"{file_pr}_{file_index}.xlsx"
         file_index = file_index + 1
-        file_path = save_uploaded_file(bio, 'bisheng', file_name)
+        file_path = await save_uploaded_file(bio, 'bisheng', file_name)
         file_list.append(file_path)
         total_num += len(qa_list)
         if len(qa_list) < page_size or total_num >= total_count:
@@ -793,7 +793,6 @@ def update_knowledge_model(*,
             # 延迟导入以避免循环导入
             from bisheng.worker.knowledge.qa import rebuild_qa_knowledge_celery
             rebuild_qa_knowledge_celery.delay(knowledge.id, str(req_data.model_id))
-
 
         logger.info(f"Started rebuild task for knowledge_id={knowledge.id} with model_id={req_data.model_id}")
 

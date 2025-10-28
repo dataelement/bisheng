@@ -34,15 +34,15 @@ class RedisManager(BaseContextManager[RedisClient]):
         """同步初始化"""
         return RedisClient(self.redis_url)
 
-    async def _sync_cleanup(self) -> None:
+    def _sync_cleanup(self) -> None:
         """同步清理 Redis 资源"""
         if self._instance:
-            await self._instance.close()
+            self._instance.close()
 
     async def _async_cleanup(self) -> None:
         """清理 Redis 资源"""
         if self._instance:
-            await self._instance.close()
+            await self._instance.aclose()
 
 
 async def get_redis_client() -> RedisClient:

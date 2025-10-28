@@ -50,15 +50,15 @@ class DatabaseManager(BaseContextManager[DatabaseConnectionManager]):
             **self.engine_config
         )
 
-    async def _sync_cleanup(self) -> None:
-        """同步清理数据库资源"""
-        if self._instance:
-            await self._instance.close()
-
     async def _async_cleanup(self) -> None:
         """清理数据库资源"""
         if self._instance:
             await self._instance.close()
+
+    def _sync_cleanup(self) -> None:
+        """同步清理数据库资源"""
+        if self._instance:
+            self._instance.close_sync()
 
     async def health_check(self) -> bool:
         """数据库健康检查

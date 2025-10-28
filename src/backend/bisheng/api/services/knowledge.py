@@ -28,14 +28,15 @@ from bisheng.api.v1.schemas import (
     KnowledgeFileProcess,
     UpdatePreviewFileChunk, ExcelRule, KnowledgeFileReProcess,
 )
-from bisheng.cache.utils import file_download
+from bisheng.core.cache.utils import file_download
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
 from bisheng.common.errcode.knowledge import (
     KnowledgeChunkError,
     KnowledgeExistError,
     KnowledgeNoEmbeddingError,
 )
-from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
+from bisheng.core.cache.redis_manager import get_redis_client_sync
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.group_resource import (
     GroupResource,
     GroupResourceDao,
@@ -66,7 +67,6 @@ from bisheng.common.services.config_service import settings
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 from bisheng.utils.embedding import decide_embeddings
-from bisheng.utils.minio_client import minio_client
 from bisheng.worker.knowledge import file_worker
 from bisheng_langchain.rag.bisheng_rag_chain import BishengRAGTool
 
@@ -354,14 +354,17 @@ class KnowledgeService(KnowledgeUtils):
             return
         page_size = 1000
         page_num = math.ceil(count / page_size)
+
+        minio_client = get_minio_storage_sync()
+
         for i in range(page_num):
             file_list = KnowledgeFileDao.get_file_simple_by_knowledge_id(
                 knowledge_id, i + 1, page_size
             )
             for file in file_list:
-                minio_client.delete_minio(str(file[0]))
+                minio_client.remove_object_sync(str(file[0]))
                 if file[1]:
-                    minio_client.delete_minio(file[1])
+                    minio_client.remove_object_sync(file[1])
 
     @classmethod
     def get_upload_file_original_name(cls, file_name: str) -> str:
@@ -457,7 +460,8 @@ class KnowledgeService(KnowledgeUtils):
         if file_ext in ['doc', 'ppt', 'pptx']:
             file_share_url = ''
             new_file_name = KnowledgeUtils.get_tmp_preview_file_object_name(filepath)
-            if minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
+            minio_client = get_minio_storage_sync()
+            if minio_client.object_exists_sync(minio_client.tmp_bucket, new_file_name):
                 file_share_url = minio_client.get_share_link(
                     new_file_name, minio_client.tmp_bucket
                 )
@@ -648,6 +652,9 @@ class KnowledgeService(KnowledgeUtils):
         res = []
 
         req_data["knowledge_id"] = knowledge.id
+
+        minio_client = get_minio_storage_sync()
+
         for file in db_files:
             input_file = id2input.get(file.id)
 
@@ -660,9 +667,9 @@ class KnowledgeService(KnowledgeUtils):
             if file.object_name.startswith('tmp'):
                 # 把临时文件移动到正式目录
                 new_object_name = KnowledgeUtils.get_knowledge_file_object_name(file.id, file.object_name)
-                minio_client.copy_object(file.object_name, new_object_name,
-                                         bucket_name=minio_client.tmp_bucket,
-                                         target_bucket_name=minio_client.bucket)
+                minio_client.copy_object_sync(source_object=file.object_name, dest_object=new_object_name,
+                                              source_bucket=minio_client.tmp_bucket,
+                                              dest_bucket=minio_client.bucket)
                 file.object_name = new_object_name
 
             if input_file["remark"] and "对应已存在文件" in input_file["remark"]:
@@ -732,6 +739,7 @@ class KnowledgeService(KnowledgeUtils):
             file_info.excel_rule = ExcelRule()
         split_rule["excel_rule"] = file_info.excel_rule.model_dump()
         str_split_rule = json.dumps(split_rule)
+        minio_client = get_minio_storage_sync()
 
         if content_repeat or name_repeat:
             db_file = content_repeat[0] if content_repeat else name_repeat[0]
@@ -742,7 +750,7 @@ class KnowledgeService(KnowledgeUtils):
             db_file.remark = f"{original_file_name} 对应已存在文件 {old_name}"
             # 上传到minio，不修改数据库，由前端决定是否覆盖，覆盖的话调用重试接口
             with open(filepath, "rb") as file:
-                minio_client.upload_tmp(db_file.object_name, file.read())
+                minio_client.put_object_tmp_sync(db_file.object_name, file.read())
             db_file.status = KnowledgeFileStatus.FAILED.value
             db_file.split_rule = str_split_rule
             # 更新文件大小信息
@@ -761,8 +769,9 @@ class KnowledgeService(KnowledgeUtils):
         db_file = KnowledgeFileDao.add_file(db_file)
         # 原始文件保存
         db_file.object_name = KnowledgeUtils.get_knowledge_file_object_name(db_file.id, db_file.file_name)
-        res = minio_client.upload_minio(db_file.object_name, filepath)
-        logger.info("upload_original_file path={} res={}", db_file.object_name, res)
+        minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=db_file.object_name,
+                                     file=filepath)
+        logger.info("upload_original_file path={}", db_file.object_name)
         KnowledgeFileDao.update(db_file)
         return db_file
 
@@ -1127,6 +1136,7 @@ class KnowledgeService(KnowledgeUtils):
         if not file:
             raise NotFoundError.http_exception()
         file = file[0]
+        minio_client = get_minio_storage_sync()
         # 130版本以前的文件解析
         if file.parse_type in [ParseType.LOCAL.value, ParseType.UNS.value]:
             original_url = minio_client.get_share_link(cls.get_knowledge_file_object_name(file.id, file.file_name))
@@ -1147,7 +1157,8 @@ class KnowledgeService(KnowledgeUtils):
         :param object_name: 文件在minio中的对象名称
         :return: 文件的分享链接
         """
-        if minio_client.object_exists(minio_client.bucket, object_name):
+        minio_client = get_minio_storage_sync()
+        if minio_client.object_exists_sync(minio_client.bucket, object_name):
             return minio_client.get_share_link(object_name, minio_client.bucket)
         return ""
 
@@ -1160,15 +1171,11 @@ class KnowledgeService(KnowledgeUtils):
         if not file_info.bbox_object_name:
             return None
 
+        minio_client = get_minio_storage_sync()
+
         # download bbox file
-        resp = minio_client.download_minio(file_info.bbox_object_name)
-        new_data = io.BytesIO()
-        for d in resp.stream(32 * 1024):
-            new_data.write(d)
-        resp.close()
-        resp.release_conn()
-        new_data.seek(0)
-        return json.loads(new_data.read().decode("utf-8"))
+        resp = minio_client.get_object_sync(bucket_name=minio_client.bucket, object_name=file_info.bbox_object_name)
+        return json.loads(resp.decode("utf-8"))
 
     @classmethod
     async def copy_knowledge(

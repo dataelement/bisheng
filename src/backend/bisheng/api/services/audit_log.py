@@ -10,6 +10,7 @@ from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.assistant import AssistantDao, Assistant
 from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
 from bisheng.database.models.flow import FlowDao, Flow, FlowType
@@ -24,7 +25,6 @@ from bisheng.database.models.user import UserDao, User
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.common.services.config_service import settings
 from bisheng.utils import generate_uuid
-from bisheng.utils.minio_client import MinioClient
 
 
 class AuditLogService:
@@ -561,15 +561,15 @@ class AuditLogService:
                             '是' if message.sensitive_status == SensitiveStatus.VIOLATIONS.value else '否')
                     excel_data.append(message_data)
 
-        minio_client = MinioClient()
+        minio_client = get_minio_storage_sync()
         tmp_object_name = f'tmp/session/export_{generate_uuid()}.csv'
         with NamedTemporaryFile(mode='w', newline='') as tmp_file:
             csv_writer = csv.writer(tmp_file)
             csv_writer.writerows(excel_data)
             tmp_file.seek(0)
-            minio_client.upload_minio(tmp_object_name, tmp_file.name,
-                                      'application/text',
-                                      minio_client.tmp_bucket)
+            minio_client.put_object_sync(object_name=tmp_object_name, file=tmp_file.name,
+                                         content_type='application/text',
+                                         bucket_name=minio_client.tmp_bucket)
         share_url = minio_client.get_share_link(tmp_object_name, minio_client.tmp_bucket)
         return minio_client.clear_minio_share_host(share_url)
 

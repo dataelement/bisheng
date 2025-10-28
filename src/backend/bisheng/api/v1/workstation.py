@@ -23,7 +23,7 @@ from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import FrequentlyUsedChat
 from bisheng.api.v1.schemas import WorkstationConfig, resp_200, WSPrompt, ExcelRule, UnifiedResponseModel
-from bisheng.cache.utils import file_download, save_download_file, save_uploaded_file
+from bisheng.core.cache.utils import file_download, save_download_file, save_uploaded_file
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
 from bisheng.common.errcode.workstation import WebSearchToolNotFoundError, ConversationNotFoundError, \
@@ -194,7 +194,7 @@ async def upload_file(
     """
     # 读取文件内容
     # 保存文件
-    file_path = save_uploaded_file(file.file, 'bisheng', unquote(file.filename))
+    file_path = await save_uploaded_file(file.file, 'bisheng', unquote(file.filename))
 
     # 返回文件路径
     return resp_200(

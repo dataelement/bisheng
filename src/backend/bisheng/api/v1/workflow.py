@@ -16,13 +16,13 @@ from bisheng.chat.types import WorkType
 from bisheng.common.errcode.flow import WorkflowNameExistsError, WorkFlowOnlineEditError, AppWriteAuthError
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.core.database import get_sync_db_session
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, FlowType, FlowUpdate, \
     FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
 from bisheng.utils import generate_uuid
-from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.utils.requests import Requests
 from fastapi_jwt_auth import AuthJWT
 
@@ -66,8 +66,8 @@ async def get_report_file(
         version_key = version_key.split('_', 1)[0]
     file_url = ""
     object_name = f"workflow/report/{version_key}.docx"
-    minio_client = MinioClient()
-    if minio_client.object_exists(minio_client.bucket, object_name):
+    minio_client = await get_minio_storage()
+    if await minio_client.object_exists(minio_client.bucket, object_name):
         file_url = minio_client.get_share_link(object_name)
 
     return resp_200(data={
@@ -86,9 +86,10 @@ async def copy_report_file(
     new_version_key = generate_uuid()
     object_name = f"workflow/report/{version_key}.docx"
     new_object_name = f"workflow/report/{new_version_key}.docx"
-    minio_client = MinioClient()
-    if minio_client.object_exists(minio_client.bucket, object_name):
-        minio_client.copy_object(object_name, new_object_name, minio_client.bucket)
+    minio_client = await get_minio_storage()
+    if await minio_client.object_exists(minio_client.bucket, object_name):
+        await minio_client.copy_object(source_object=object_name, dest_object=new_object_name,
+                                       source_bucket=minio_client.tmp_bucket, dest_bucket=minio_client.bucket)
     return resp_200(data={
         'version_key': f'{new_version_key}',
     })
@@ -110,11 +111,11 @@ async def upload_report_file(
     file = Requests().get(url=file_url)
     version_key = key.split('_', 1)[0]
 
-    minio_client = MinioClient()
+    minio_client = await get_minio_storage()
     object_name = f"workflow/report/{version_key}.docx"
-    minio_client.upload_minio_data(
-        object_name, file._content, len(file._content),
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    await minio_client.put_object(
+        object_name=object_name, file=file._content, bucket_name=minio_client.bucket,
+        content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
     return {'error': 0}
 
 

@@ -71,6 +71,9 @@ class ApplicationContextManager:
             from bisheng.core.cache.redis_manager import RedisManager
             self.register_context(RedisManager(redis_url=config.get('redis_url')))
 
+            from bisheng.core.storage.minio.minio_manager import MinioManager
+            self.register_context(MinioManager(minio_config=config.get('object_storage').get('minio')))
+
             logger.debug("Default contexts registered")
         except ImportError as e:
             logger.warning(f"Failed to import default context managers: {e}")

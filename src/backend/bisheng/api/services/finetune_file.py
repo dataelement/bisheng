@@ -7,10 +7,10 @@ from pydantic import BaseModel
 from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.common.errcode.finetune import TrainFileNotExistError
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.preset_train import PresetTrain, PresetTrainDao
 from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
-from bisheng.utils.minio_client import MinioClient
 
 
 class FinetuneFileService(BaseModel):
@@ -39,7 +39,8 @@ class FinetuneFileService(BaseModel):
         file_id = generate_uuid()
         file_ext = os.path.basename(file_path).split('.')[-1]
         object_name = f'{file_root}/{file_id}.{file_ext}'
-        MinioClient().upload_minio(object_name, file_path)
+        minio_client = get_minio_storage_sync()
+        minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=object_name, file=file_path)
         # 将预置数据存入数据库
         file_info = PresetTrain(id=file_id,
                                 name=name,
@@ -60,7 +61,7 @@ class FinetuneFileService(BaseModel):
     @classmethod
     def upload_file_to_minio(cls, files: List[UploadFile], file_root: str,
                              user: Any) -> List[PresetTrain]:
-        minio_client = MinioClient()
+        minio_client = get_minio_storage_sync()
         ret = []
         for file in files:
             file_id = generate_uuid()
@@ -70,10 +71,8 @@ class FinetuneFileService(BaseModel):
                                     url=f'{file_root}/{file_id}.{file_ext}',
                                     user_id=user.get('user_id'),
                                     user_name=user.get('user_name'))
-            minio_client.upload_minio_file(file_info.url,
-                                           file.file,
-                                           length=file.size,
-                                           content_type=file.content_type)
+            minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=file_info.url,
+                                         file=file.file, content_type=file.content_type)
             ret.append(file_info)
         return ret
 

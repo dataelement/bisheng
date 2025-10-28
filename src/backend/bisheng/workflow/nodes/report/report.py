@@ -13,7 +13,7 @@ import pandas as pd
 from openpyxl import load_workbook
 from charset_normalizer import detect
 
-from bisheng.utils.minio_client import MinioClient
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.utils.docx_temp import DocxTemplateRender
 from bisheng.workflow.callback.event import OutputMsgData
 from bisheng.workflow.nodes.base import BaseNode
@@ -911,12 +911,12 @@ class ResourceDownloadManager:
         """
         try:
             # 检查文件是否存在
-            if not self.minio_client.object_exists(bucket_name, object_name):
+            if not self.minio_client.object_exists_sync(bucket_name, object_name):
                 self.logger.debug(f"MinIO文件不存在: {bucket_name}/{object_name}")
                 return False
 
             # 下载文件内容
-            file_content = self.minio_client.get_object(bucket_name, object_name)
+            file_content = self.minio_client.get_object_sync(bucket_name, object_name)
 
             # 生成临时文件名
             file_ext = os.path.splitext(object_name)[1] or ".dat"
@@ -1022,8 +1022,8 @@ class ResourceDownloadManager:
         bucket_name, object_name = self._parse_path_for_minio(file_path)
         if bucket_name and object_name:
             try:
-                if self.minio_client.object_exists(bucket_name, object_name):
-                    file_content = self.minio_client.get_object(bucket_name, object_name)
+                if self.minio_client.object_exists_sync(bucket_name, object_name):
+                    file_content = self.minio_client.get_object_sync(bucket_name, object_name)
                     
                     # 生成临时文件
                     file_ext = os.path.splitext(object_name)[1] or ".dat"
@@ -1210,12 +1210,12 @@ class ResourceDownloadManager:
                 
                 # 先尝试主bucket
                 bucket_name = self.minio_client.bucket
-                if self.minio_client.object_exists(bucket_name, object_name):
+                if self.minio_client.object_exists_sync(bucket_name, object_name):
                     self.logger.debug(f"在主bucket找到文件: {bucket_name}/{object_name}")
                 else:
                     # 主bucket没有，尝试tmp_bucket
                     bucket_name = self.minio_client.tmp_bucket
-                    if self.minio_client.object_exists(bucket_name, object_name):
+                    if self.minio_client.object_exists_sync(bucket_name, object_name):
                         self.logger.debug(f"在tmp_bucket找到文件: {bucket_name}/{object_name}")
                     else:
                         self.logger.warning(f"两个bucket都没找到文件: {object_name}")
@@ -1228,12 +1228,12 @@ class ResourceDownloadManager:
                     return "", False
 
             # 检查文件是否存在
-            if not self.minio_client.object_exists(bucket_name, object_name):
+            if not self.minio_client.object_exists_sync(bucket_name, object_name):
                 self.logger.error(f"MinIO文件不存在: {bucket_name}/{object_name}")
                 return "", False
 
             # 下载文件内容
-            file_content = self.minio_client.get_object(bucket_name, object_name)
+            file_content = self.minio_client.get_object_sync(bucket_name, object_name)
 
             # 生成临时文件名
             file_ext = os.path.splitext(object_name)[1] or ".dat"
@@ -1392,7 +1392,7 @@ class ReportNode(BaseNode):
         self._file_name = self._report_info["file_name"] if self._report_info["file_name"] else "tmp_report.docx"
         if not self._file_name.endswith(".docx"):
             self._file_name += ".docx"
-        self._minio_client = MinioClient()
+        self._minio_client = get_minio_storage_sync()
 
     def _run(self, unique_id: str):
         """主执行流程"""
@@ -1479,10 +1479,10 @@ class ReportNode(BaseNode):
 
     def _download_template(self) -> bytes:
         """下载模板文件"""
-        if not self._minio_client.object_exists(self._minio_client.bucket, self._object_name):
+        if not self._minio_client.object_exists_sync(self._minio_client.bucket, self._object_name):
             raise Exception(f"模板文件不存在: {self._object_name}")
 
-        template_content = self._minio_client.get_object(self._minio_client.bucket, self._object_name)
+        template_content = self._minio_client.get_object_sync(self._minio_client.bucket, self._object_name)
         logger.info(f"模板下载成功，大小: {len(template_content)} 字节")
 
         return template_content
@@ -1533,7 +1533,7 @@ class ReportNode(BaseNode):
         tmp_object_name = f"workflow/report/{uuid4().hex}/{self._file_name}"
 
         # 上传到MinIO
-        self._minio_client.upload_tmp(tmp_object_name, document_content)
+        self._minio_client.put_object_tmp_sync(tmp_object_name, document_content)
 
         # 获取分享链接
         share_url = self._minio_client.get_share_link(tmp_object_name, self._minio_client.tmp_bucket)

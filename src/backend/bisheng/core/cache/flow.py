@@ -2,7 +2,7 @@ import threading
 import time
 from collections import OrderedDict
 
-from bisheng.cache.base import BaseCache
+from bisheng.core.cache.base import BaseCache
 
 
 class InMemoryCache(BaseCache):

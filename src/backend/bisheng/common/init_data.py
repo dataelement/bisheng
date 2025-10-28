@@ -6,8 +6,8 @@ from typing import List
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.database import get_async_db_session, get_database_connection
 from bisheng.common.services.config_service import settings
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.template import Template
-from bisheng.utils.minio_client import MinioClient
 from loguru import logger
 from sqlmodel import select, update, text
 
@@ -182,9 +182,10 @@ def read_from_conf(file_path: str) -> str:
 
 def upload_preset_minio_file():
     """ 上传预置文件到minio, 为了和工作流模板配合 """
-    minio_client = MinioClient()
+    minio_client = get_minio_storage_sync()
     # 上传 「多助手并行+串行报告生成」 工作流模板需要的docx文件
     template_data = read_from_conf('../database/data/0254d1808a5247d2a3ee0d0011819acb.docx')
-    minio_client.upload_minio_data('workflow/report/0254d1808a5247d2a3ee0d0011819acb.docx', template_data,
-                                   len(template_data),
-                                   'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    minio_client.put_object_sync(bucket_name=minio_client.bucket,
+                                 object_name='workflow/report/0254d1808a5247d2a3ee0d0011819acb.docx',
+                                 file=template_data,
+                                 content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')

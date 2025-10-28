@@ -11,20 +11,20 @@ from bisheng.api.services.sft_backend import SFTBackend
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import parse_gpus, parse_server_host
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
-from bisheng.cache import InMemoryCache
 from bisheng.common.errcode.finetune import (CancelJobError, ChangeModelNameError, CreateFinetuneError,
                                              DeleteJobError, ExportJobError, InvalidExtraParamsError, JobStatusError,
                                              ModelNameExistsError, NotFoundJobError,
                                              TrainDataNoneError, UnExportJobError, GetModelError)
 from bisheng.common.errcode.model_deploy import NotFoundModelError
 from bisheng.common.errcode.server import NoSftServerError
+from bisheng.core.cache import InMemoryCache
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.finetune import (Finetune, FinetuneChangeModelName, FinetuneDao,
                                               FinetuneExtraParams, FinetuneList, FinetuneStatus)
 from bisheng.database.models.model_deploy import ModelDeploy, ModelDeployDao, ModelDeployInfo
 from bisheng.database.models.server import Server, ServerDao
 from bisheng.database.models.sft_model import SftModelDao
 from bisheng.utils.logger import logger
-from bisheng.utils.minio_client import MinioClient
 
 sync_job_thread_pool = ThreadPoolExecutor(3)
 
@@ -75,7 +75,7 @@ class FinetuneService:
         """ 获取minio上文件的公开链接，以便SFT-Backend下载训练文件 """
         if train_data is None:
             return
-        minio_client = MinioClient()
+        minio_client = get_minio_storage_sync()
         for i in train_data:
             params['dataset'].append(minio_client.get_share_link(i['url']))
             params['each_max_samples'].append(str(i.get('num', 0)))
@@ -221,29 +221,24 @@ class FinetuneService:
 
     @classmethod
     def delete_job_log(cls, finetune: Finetune):
-        minio_client = MinioClient()
-        minio_client.delete_minio(f'/finetune/log/{finetune.id}')
+        minio_client = get_minio_storage_sync()
+        minio_client.remove_object_sync(f'/finetune/log/{finetune.id}')
 
     @classmethod
     def upload_job_log(cls, finetune: Finetune, log_data: io.BytesIO, length: int) -> str:
-        minio_client = MinioClient()
+        minio_client = get_minio_storage_sync()
         log_path = f'finetune/log/{finetune.id}'
-        minio_client.upload_minio_file(log_path, log_data, length=length)
+        minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=log_path, file=log_data)
         return log_path
 
     @classmethod
     def get_job_log(cls, finetune: Finetune) -> str | None:
-        minio_client = MinioClient()
-        resp = minio_client.download_minio(finetune.log_path)
+        minio_client = get_minio_storage_sync()
+        resp = minio_client.get_object_sync(finetune.log_path)
         if resp is None:
             return None
-        new_data = io.BytesIO()
-        for d in resp.stream(32 * 1024):
-            new_data.write(d)
-        resp.close()
-        resp.release_conn()
-        new_data.seek(0)
-        return new_data.read().decode('utf-8')
+
+        return resp.decode('utf-8')
 
     @classmethod
     def delete_published_model(cls, finetune: Finetune, rt_endpoint: str) -> str | None:

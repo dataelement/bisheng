@@ -405,14 +405,15 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             return qas
 
     @classmethod
-    def total_count(cls, sql):
-        with get_sync_db_session() as session:
-            return session.scalar(sql)
+    async def total_count(cls, sql):
+        with get_async_db_session() as session:
+            return await async_get_count(session, sql)
 
     @classmethod
-    def query_by_condition(cls, sql):
-        with get_sync_db_session() as session:
-            return session.exec(sql).all()
+    async def query_by_condition(cls, sql):
+        with get_async_db_session() as session:
+            result = await session.exec(sql)
+            return result.all()
 
     @classmethod
     def query_by_condition_v1(cls, source: List[int], create_start: str, create_end: str):

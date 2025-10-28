@@ -6,11 +6,11 @@ from langchain_core.prompts import (ChatPromptTemplate, HumanMessagePromptTempla
                                     SystemMessagePromptTemplate)
 
 from bisheng.chat.types import IgnoreException
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.user import UserDao
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.llm.domain.services import LLMService
-from bisheng.utils.minio_client import MinioClient
 from bisheng.workflow.callback.event import OutputMsgData, StreamMsgOverData
 from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
 from bisheng.workflow.nodes.base import BaseNode
@@ -31,7 +31,7 @@ class RagNode(BaseNode):
             one['key'] for one in self.node_params['knowledge']['value']
         ]
 
-        self._minio_client = MinioClient()
+        self._minio_client = get_minio_storage_sync()
 
         self._knowledge_auth = self.node_params['user_auth']
         self._max_chunk_size = int(self.node_params['max_chunk_size'])
@@ -136,7 +136,7 @@ class RagNode(BaseNode):
         if len(tmp_retrieved_result.encode('utf-8')) >= 50 * 1024:  # 大于50kb的日志数据存文件
             tmp_retrieved_type = 'file'
             tmp_object_name = f'/workflow/source_document/{time.time()}.txt'
-            self._minio_client.upload_tmp(tmp_object_name, tmp_retrieved_result.encode('utf-8'))
+            self._minio_client.put_object_tmp_sync(tmp_object_name, tmp_retrieved_result.encode('utf-8'))
             share_url = self._minio_client.get_share_link(tmp_object_name, self._minio_client.tmp_bucket)
             tmp_retrieved_result = self._minio_client.clear_minio_share_host(share_url)
 

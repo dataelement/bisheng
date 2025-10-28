@@ -9,10 +9,11 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, Uplo
 from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.v1.schemas import (ProcessResponse, UploadFileResponse,
                                     resp_200)
-from bisheng.cache.utils import save_uploaded_file, upload_file_to_minio
+from bisheng.core.cache.utils import save_uploaded_file, upload_file_to_minio
 from bisheng.chat.utils import judge_source, process_source_document
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.core.cache.redis_manager import get_redis_client_sync
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
@@ -24,7 +25,6 @@ from bisheng.common.services.config_service import settings as bisheng_settings,
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 from bisheng.utils.logger import logger
-from bisheng.utils.minio_client import MinioClient, bucket
 
 try:
     from bisheng.worker import process_graph_cached_task
@@ -289,7 +289,8 @@ async def process_flow(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-def _upload_file(file: UploadFile, object_name_prefix: str, file_supports: List[str] = None, bucket_name: str = None) \
+async def _upload_file(file: UploadFile, object_name_prefix: str, file_supports: List[str] = None,
+                       bucket_name: str = None) \
         -> UploadFileResponse:
     if file.size == 0:
         raise HTTPException(status_code=500, detail='上传文件不能为空')
@@ -301,8 +302,10 @@ def _upload_file(file: UploadFile, object_name_prefix: str, file_supports: List[
         file_path = upload_file_to_minio(file, object_name=object_name, bucket_name=bucket_name)
         if not isinstance(file_path, str):
             file_path = str(file_path)
+
+        minio_client = get_minio_storage_sync()
         return UploadFileResponse(
-            file_path=MinioClient.clear_minio_share_host(file_path),  # minio可访问的链接
+            file_path=minio_client.clear_minio_share_host(file_path),  # minio可访问的链接
             relative_path=object_name,  # minio中的object_name
         )
     except Exception as exc:
@@ -314,10 +317,11 @@ def _upload_file(file: UploadFile, object_name_prefix: str, file_supports: List[
 async def upload_icon(request: Request,
                       login_user: UserPayload = Depends(get_login_user),
                       file: UploadFile = None):
-    resp = _upload_file(file,
-                        object_name_prefix='icon',
-                        file_supports=['jpeg', 'jpg', 'png'],
-                        bucket_name=bucket)
+    bucket = bisheng_settings.object_storage.minio.public_bucket
+    resp = await _upload_file(file,
+                              object_name_prefix='icon',
+                              file_supports=['jpeg', 'jpg', 'png'],
+                              bucket_name=bucket)
     return resp_200(data=resp)
 
 
@@ -326,7 +330,8 @@ async def upload_icon_workflow(request: Request,
                                login_user: UserPayload = Depends(get_login_user),
                                file: UploadFile = None,
                                workflow_id: str = Path(..., description='workflow id')):
-    resp = _upload_file(file, object_name_prefix=f'workflow/{workflow_id}', bucket_name=bucket)
+    bucket = bisheng_settings.object_storage.minio.public_bucket
+    resp = await _upload_file(file, object_name_prefix=f'workflow/{workflow_id}', bucket_name=bucket)
     return resp_200(data=resp)
 
 
@@ -336,7 +341,7 @@ async def create_upload_file(file: UploadFile, flow_id: str):
     try:
         if len(file.filename) > 80:
             file.filename = file.filename[-80:]
-        file_path = save_uploaded_file(file.file, folder_name=flow_id, file_name=file.filename)
+        file_path = await save_uploaded_file(file.file, folder_name=flow_id, file_name=file.filename)
         if not isinstance(file_path, str):
             file_path = str(file_path)
         return resp_200(UploadFileResponse(
@@ -351,7 +356,7 @@ async def create_upload_file(file: UploadFile, flow_id: str):
 @router.get('/download')
 async def get_download_url(object_name: str):
     # Cache file
-    minio_client = MinioClient()
+    minio_client = await get_minio_storage()
     try:
         url = minio_client.get_share_link(object_name)
         url = minio_client.clear_minio_share_host(file_url=url)

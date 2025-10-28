@@ -13,11 +13,11 @@ from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
                                     StreamData, UnifiedResponseModel, resp_200, resp_500)
-from bisheng.cache import InMemoryCache
 from bisheng.common.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
                                               AssistantNotEditError, AssistantNotExistsError, ToolTypeRepeatError,
                                               ToolTypeIsPresetError)
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
+from bisheng.core.cache import InMemoryCache
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.assistant import (Assistant, AssistantDao, AssistantLinkDao,
                                                AssistantStatus)
