@@ -9,7 +9,7 @@ from bisheng.share_link.api.schemas.share_link_schema import GenerateShareLinkRe
 router = APIRouter()
 
 
-@router.post('/generate_share_link', tags=['Share Link'], summary='generate share link',
+@router.post('/generate_share_link', summary='generate share link',
              response_model=UnifiedResponseModel)
 async def generate_share_link(
         req_param: GenerateShareLinkRequest = Body(..., description="generate share link request"),
@@ -29,7 +29,7 @@ async def generate_share_link(
     return resp_200(data=share_link)
 
 
-@router.get('/{share_token}', tags=['Share Link'], summary='get share link info',
+@router.get('/{share_token}', summary='get share link info',
             response_model=UnifiedResponseModel)
 async def get_share_link_info(
         share_token: str,
