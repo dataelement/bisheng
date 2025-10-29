@@ -7,7 +7,6 @@ from cryptography.fernet import Fernet
 from loguru import logger
 from pydantic import ConfigDict, BaseModel, Field, field_validator, model_validator
 
-
 secret_key = 'TI31VYJ-ldAq-FXo5QNPKV_lqGTFfp-MIdbK2Hm5F1E='
 
 
@@ -64,8 +63,10 @@ class SystemLoginMethod(BaseModel):
 class MilvusConf(BaseModel):
     """ milvus 配置 """
     connection_args: Optional[dict] = Field(default=None, description='milvus 配置')
-    is_partition: Optional[bool] = Field(default=True, description='是否是partition模式')
-    partition_suffix: Optional[str] = Field(default='1', description='partition后缀')
+    is_partition: Optional[bool] = Field(default=True, description='是否是partition模式',
+                                         deprecated="不在支持partition模式")
+    partition_suffix: Optional[str] = Field(default='1', description='partition后缀',
+                                            deprecated="不在支持partition模式")
 
     @field_validator('connection_args', mode='before')
     @classmethod
@@ -261,16 +262,3 @@ class Settings(BaseModel):
             if key != 'dev' and not value:
                 values[key] = []
         return values
-
-
-
-
-
-
-
-
-
-
-
-
-

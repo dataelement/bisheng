@@ -1,5 +1,6 @@
 import argparse
 import os
+import traceback
 from typing import List
 
 import openpyxl
@@ -514,22 +515,24 @@ def fix_one_knowledge(knowledge: Knowledge = None, knowledge_id: int = None):
     if not knowledge.index_name:
         knowledge.index_name = knowledge.collection_name
         KnowledgeDao.update_one(knowledge)
-    print(f"---- start fix knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name}")
-    if knowledge.type == KnowledgeTypeEnum.QA.value:
-        fix_qa_knowledge_data(knowledge, milvus_obj, es_obj)
-    else:
-        fix_normal_knowledge_data(knowledge, milvus_obj, es_obj)
-    print(f"---- finish fix knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name}")
+    try:
+        print(f"---- start fix knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name}")
+        if knowledge.type == KnowledgeTypeEnum.QA.value:
+            fix_qa_knowledge_data(knowledge, milvus_obj, es_obj)
+        else:
+            fix_normal_knowledge_data(knowledge, milvus_obj, es_obj)
+        print(f"---- finish fix knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name}")
+    except Exception as e:
+        print(f"---- error fix knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name}")
+        traceback.print_exc()
 
 
 def fix_knowledge_error_data():
     all_knowledge = get_all_knowledge()
     total = len(all_knowledge)
     for index, knowledge in enumerate(all_knowledge):
-        print(
-            f"{round(index / total * 100, 2)}% ---- start fix knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name}")
+        print(f"---- start fix knowledge process: {round(index / total * 100, 2)}%")
         fix_one_knowledge(knowledge)
-        print(f"---- finish fix knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name}")
 
 
 if __name__ == '__main__':

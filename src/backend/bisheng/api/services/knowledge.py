@@ -1,8 +1,6 @@
-import io
 import json
 import math
 import os
-import time
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -28,7 +26,6 @@ from bisheng.api.v1.schemas import (
     KnowledgeFileProcess,
     UpdatePreviewFileChunk, ExcelRule, KnowledgeFileReProcess,
 )
-from bisheng.core.cache.utils import file_download, async_file_download
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
 from bisheng.common.errcode.knowledge import (
     KnowledgeChunkError,
@@ -36,6 +33,7 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeNoEmbeddingError,
 )
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
+from bisheng.core.cache.utils import file_download, async_file_download
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
 from bisheng.database.models.group_resource import (
     GroupResource,
@@ -63,8 +61,7 @@ from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.llm.const import LLMModelType
 from bisheng.llm.domain.services import LLMService
 from bisheng.llm.models import LLMDao
-from bisheng.common.services.config_service import settings
-from bisheng.utils import generate_uuid, util
+from bisheng.utils import generate_uuid, generate_knowledge_index_name
 from bisheng.utils import get_request_ip
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.worker.knowledge import file_worker
@@ -157,12 +154,6 @@ class KnowledgeService(KnowledgeUtils):
     def create_knowledge(
             cls, request: Request, login_user: UserPayload, knowledge: KnowledgeCreate
     ) -> Knowledge:
-        # 设置默认的is_partition
-        knowledge.is_partition = (
-            knowledge.is_partition
-            if knowledge.is_partition is not None
-            else settings.get_vectors_conf().milvus.is_partition
-        )
 
         # 判断知识库是否重名
         repeat_knowledge = KnowledgeDao.get_knowledge_by_name(
@@ -182,20 +173,9 @@ class KnowledgeService(KnowledgeUtils):
         if embed_info.model_type != LLMModelType.EMBEDDING.value:
             raise KnowledgeNoEmbeddingError.http_exception()
 
-        # 自动生成 es和milvus的 collection_name
-        if not db_knowledge.collection_name:
-            if knowledge.is_partition:
-                embedding = knowledge.model
-                suffix_id = settings.get_vectors_conf().milvus.partition_suffix
-                db_knowledge.collection_name = (
-                    f"partition_{embedding}_knowledge_{suffix_id}"
-                )
-            else:
-                # 默认collectionName
-                db_knowledge.collection_name = (
-                    f"col_{int(time.time())}_{generate_uuid()[:8]}"
-                )
-        db_knowledge.index_name = f"col_{int(time.time())}_{generate_uuid()[:8]}"
+        # generate index_name and collection_name
+        db_knowledge.index_name = generate_knowledge_index_name()
+        db_knowledge.collection_name = db_knowledge.index_name
 
         # 插入到数据库
         db_knowledge.user_id = login_user.user_id
@@ -1192,7 +1172,8 @@ class KnowledgeService(KnowledgeUtils):
         knowldge_dict.pop("create_time")
         knowldge_dict.pop("update_time", None)
         knowldge_dict["user_id"] = login_user.user_id
-        knowldge_dict["index_name"] = f"col_{int(time.time())}_{generate_uuid()[:8]}"
+        knowldge_dict["index_name"] = generate_knowledge_index_name()
+        knowldge_dict["collection_name"] = knowldge_dict["index_name"]
         knowldge_dict["name"] = f"{knowledge.name} 副本"[:30]
         knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
         knowledge_new = Knowledge(**knowldge_dict)
@@ -1221,17 +1202,12 @@ class KnowledgeService(KnowledgeUtils):
         qa_knowldge_dict.pop("create_time")
         qa_knowldge_dict.pop("update_time", None)
         qa_knowldge_dict["user_id"] = login_user.user_id
-        qa_knowldge_dict["index_name"] = f"col_{int(time.time())}_{generate_uuid()[:8]}"
+        qa_knowldge_dict["index_name"] = generate_knowledge_index_name()
+        qa_knowldge_dict["collection_name"] = qa_knowldge_dict["index_name"]
         qa_knowldge_dict["name"] = f"{qa_knowledge.name} 副本"[:30]
         qa_knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
         qa_knowledge_new = Knowledge(**qa_knowldge_dict)
         target_qa_knowlege = await KnowledgeDao.async_insert_one(qa_knowledge_new)
-
-        celery_params = {
-            "source_knowledge_id": qa_knowledge.id,
-            "target_id": target_qa_knowlege.id,
-            "login_user_id": login_user.user_id,
-        }
 
         cls.create_knowledge_hook(request, login_user, target_qa_knowlege)
 

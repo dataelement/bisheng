@@ -1,4 +1,5 @@
 import hashlib
+import time
 import uuid
 
 from fastapi import Request, WebSocket
@@ -22,3 +23,8 @@ def get_request_ip(request: Request | WebSocket) -> str:
     if x_forwarded_for:
         return x_forwarded_for.split(',')[0]
     return request.client.host
+
+
+def generate_knowledge_index_name() -> str:
+    """ generate knowledge index name """
+    return f"col_{int(time.time())}_{generate_uuid()[:8]}"

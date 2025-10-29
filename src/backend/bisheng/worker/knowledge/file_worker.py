@@ -3,6 +3,7 @@ from typing import List
 
 from loguru import logger
 from pymilvus import Collection, MilvusException
+
 from bisheng.api.services.knowledge_imp import decide_vectorstores, process_file_task, delete_knowledge_file_vectors, \
     KnowledgeUtils, delete_vector_files
 from bisheng.api.v1.schemas import FileProcessBase
@@ -208,6 +209,13 @@ def copy_vector(
     milvus_db: Milvus = decide_vectorstores(
         target_knowledge.collection_name, "Milvus", embedding
     )
+    # 首次新建一个 collection
+    if milvus_db.col is None:
+        new_col = Collection(name=target_knowledge.collection_name, schema=embedding, using=source_milvus.alias,
+                             consistency_level=source_milvus.consistency_level)
+        milvus_db: Milvus = decide_vectorstores(
+            target_knowledge.collection_name, "Milvus", embedding
+        )
     if milvus_db:
         insert_milvus(source_data, fields, milvus_db)
 
