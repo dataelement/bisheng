@@ -116,20 +116,20 @@ const modelProviders = {
     ],
     qianfan: [
         {
+            label: "Base URL",
+            type: "",
+            placeholder: "",
+            default: "https://qianfan.baidubce.com/v2",
+            required: true,
+            key: "base_url",
+        },
+        {
             label: "API Key",
             type: "password",
             placeholder: "",
             default: "",
             required: true,
-            key: "wenxin_api_key",
-        },
-        {
-            label: "Secret Key",
-            type: "password",
-            placeholder: "",
-            default: "",
-            required: true,
-            key: "wenxin_secret_key",
+            key: "api_key",
         },
     ],
     zhipu: [

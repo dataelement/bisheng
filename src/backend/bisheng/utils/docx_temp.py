@@ -10,7 +10,7 @@ from docx import Document
 from docx.shared import Inches
 from loguru import logger
 
-from bisheng.utils.minio_client import MinioClient
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.utils.util import _is_valid_url
 
 
@@ -39,7 +39,6 @@ class DocxTemplateRender(object):
             self.doc = Document(self.filepath)
         else:
             self.doc = Document(self.file_content)
-
 
     def _insert_image(self, paragraph, image_path: str, alt_text: str = "图片"):
         """
@@ -1128,7 +1127,7 @@ class DocxTemplateRender(object):
         for i, row_data in enumerate(table_data):
             # 确保空行也能被正确处理
             current_row = row_data if row_data else []
-            
+
             # 填充该行的所有列
             for j in range(cols):
                 cell = table.cell(i, j)
@@ -1136,7 +1135,7 @@ class DocxTemplateRender(object):
                     cell_data = current_row[j]
                 else:
                     cell_data = ""  # 空单元格
-                
+
                 cell.text = str(cell_data)
 
                 # 设置单元格对齐方式
@@ -1221,10 +1220,10 @@ class DocxTemplateRender(object):
                 table = self.doc.add_table(rows=1, cols=1)
                 table.cell(0, 0).text = ""
                 return table._tbl
-            
+
             # 计算最大列数，如果所有行都为空，默认为1列
             cols = max((len(row) for row in table_data if row), default=1)
-            
+
             logger.info(f"创建表格：{rows}行 x {cols}列")
             table = self.doc.add_table(rows=rows, cols=cols)
 
@@ -1585,6 +1584,7 @@ def test_replace_string(template_file, kv_dict: dict, file_name: str):
     temp_dir = tempfile.TemporaryDirectory()
     temp_file = Path(temp_dir.name) / file_name
     output.save(temp_file)
-    MinioClient().upload_minio(file_name, temp_file)
+    minio_client = get_minio_storage_sync()
+    minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=file_name, file=temp_file)
 
     return file_name

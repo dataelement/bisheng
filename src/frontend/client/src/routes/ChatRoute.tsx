@@ -1,29 +1,30 @@
 import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Constants, EModelEndpoint } from '~/data-provider/data-provider/src';
-import { useGetModelsQuery } from '~/data-provider/data-provider/src/react-query';
-import type { TPreset } from '~/data-provider/data-provider/src';
+import { useRecoilCallback } from 'recoil';
+import { ToolCallsMapProvider, useToastContext } from '~/Providers';
+import ChatView from '~/components/Chat/ChatView';
+import { Spinner } from '~/components/svg';
 import {
   useGetConvoIdQuery,
-  useHealthCheck,
   useGetEndpointsQuery,
   useGetStartupConfig,
-  useGetBsConfig,
+  useHealthCheck
 } from '~/data-provider';
-import { useNewConvo, useAppStartup, useAssistantListMap } from '~/hooks';
-import { getDefaultModelSpec, getModelSpecIconURL } from '~/utils';
-import { ToolCallsMapProvider } from '~/Providers';
-import ChatView from '~/components/Chat/ChatView';
-import useAuthRedirect from './useAuthRedirect';
-import temporaryStore from '~/store/temporary';
-import { Spinner } from '~/components/svg';
-import { useRecoilCallback } from 'recoil';
+import type { TPreset } from '~/data-provider/data-provider/src';
+import { Constants, EModelEndpoint } from '~/data-provider/data-provider/src';
+import { useGetModelsQuery } from '~/data-provider/data-provider/src/react-query';
+import { useAppStartup, useAssistantListMap, useLocalize, useNewConvo } from '~/hooks';
+import { getErrorI18nKey } from '~/pages/appChat/store/constants';
 import store from '~/store';
+import temporaryStore from '~/store/temporary';
+import { getDefaultModelSpec, getModelSpecIconURL } from '~/utils';
+import useAuthRedirect from './useAuthRedirect';
 
 export default function ChatRoute() {
+  useErrorPrompt()
+
   useHealthCheck();
   const { data: startupConfig } = useGetStartupConfig();
-  const { data: bsConfig } = useGetBsConfig()
 
   const { isAuthenticated, user } = useAuthRedirect();
   const setIsTemporary = useRecoilCallback(
@@ -167,4 +168,19 @@ export default function ChatRoute() {
       <ChatView index={index} />
     </ToolCallsMapProvider>
   );
+}
+
+
+const useErrorPrompt = () => {
+  const search = location.search;
+  const params = new URLSearchParams(search);
+  const error = params.get('error');
+  const { showToast } = useToastContext();
+  const localize = useLocalize()
+
+  useEffect(() => {
+    if (error) {
+      showToast({ message: localize(getErrorI18nKey(error)), status: 'error' });
+    }
+  }, [])
 }

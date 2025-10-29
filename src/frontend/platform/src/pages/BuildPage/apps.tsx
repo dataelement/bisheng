@@ -66,6 +66,8 @@ const TypeNames = {
 }
 export default function apps() {
     const { t, i18n } = useTranslation()
+    useErrorPrompt();
+
     useEffect(() => {
         i18n.loadNamespaces('flow');
     }, [i18n]);
@@ -301,4 +303,18 @@ const useCreateTemp = () => {
             setOpen(!open)
         }
     }
+}
+
+const useErrorPrompt = () => {
+    const search = location.search;
+    const params = new URLSearchParams(search);
+    const error = params.get('error');
+    const { toast } = useToast()
+    const { t } = useTranslation()
+
+    useEffect(() => {
+        if (error) {
+            toast({ description: t(`errors.${error}`), variant: 'error' });
+        }
+    }, [])
 }

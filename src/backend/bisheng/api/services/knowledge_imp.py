@@ -2,7 +2,7 @@ import json
 import os
 import re
 import time
-from typing import Any, Dict, List, Optional, BinaryIO, Union
+from typing import Any, Dict, List, Optional, BinaryIO, Union, Coroutine
 
 import requests
 from langchain.embeddings.base import Embeddings
@@ -32,10 +32,11 @@ from bisheng.api.services.patch_130 import (
     combine_multiple_md_files_to_raw_texts,
 )
 from bisheng.api.v1.schemas import ExcelRule
-from bisheng.cache.redis import redis_client
-from bisheng.cache.utils import file_download
+from bisheng.core.cache.utils import file_download
 from bisheng.common.errcode.knowledge import KnowledgeSimilarError, KnowledgeFileDeleteError
+from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.database import get_sync_db_session
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.database.models.knowledge_file import (
     KnowledgeFile,
@@ -51,10 +52,9 @@ from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.llm.domain.services import LLMService
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils import md5_hash
 from bisheng.utils.embedding import decide_embeddings
-from bisheng.utils.minio_client import minio_client
 from bisheng_langchain.rag.extract_info import extract_title
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 
@@ -109,6 +109,7 @@ class KnowledgeUtils:
     def save_preview_cache(
             cls, cache_key, mapping: dict = None, chunk_index: int = 0, value: dict = None
     ):
+        redis_client = get_redis_client_sync()
         if mapping:
             for key, val in mapping.items():
                 mapping[key] = json.dumps(val, ensure_ascii=False)
@@ -120,6 +121,7 @@ class KnowledgeUtils:
 
     @classmethod
     def delete_preview_cache(cls, cache_key, chunk_index: int = None):
+        redis_client = get_redis_client_sync()
         if chunk_index is None:
             redis_client.delete(cache_key)
             redis_client.delete(f"{cache_key}_parse_type")
@@ -130,6 +132,7 @@ class KnowledgeUtils:
 
     @classmethod
     def get_preview_cache(cls, cache_key, chunk_index: int = None) -> dict:
+        redis_client = get_redis_client_sync()
         if chunk_index is None:
             all_chunk_info = redis_client.hgetall(cache_key)
             for key, value in all_chunk_info.items():
@@ -190,12 +193,14 @@ def put_images_to_minio(local_image_dir, knowledge_id, doc_id):
     if not os.path.exists(local_image_dir):
         return
 
+    minio_client = get_minio_storage_sync()
+
     files = [f for f in os.listdir(local_image_dir)]
     for file_name in files:
         local_file_name = f"{local_image_dir}/{file_name}"
         object_name = f"{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{file_name}"
         file_obj: BinaryIO = open(local_file_name, "rb")
-        minio_client.upload_minio_file(
+        minio_client.put_object_sync(
             object_name=object_name, file=file_obj, bucket_name=minio_client.bucket
         )
 
@@ -285,23 +290,25 @@ def delete_vector_files(file_ids: List[int], knowledge: Knowledge) -> bool:
 def delete_minio_files(file: KnowledgeFile):
     """删除知识库文件在minio上的存储"""
 
+    minio_client = get_minio_storage_sync()
+
     # 删除源文件
     if file.object_name:
-        minio_client.delete_minio(file.object_name)
+        minio_client.remove_object_sync(bucket_name=minio_client.bucket, object_name=file.object_name)
 
     # 删除bbox文件
     if file.bbox_object_name:
-        minio_client.delete_minio(file.bbox_object_name)
+        minio_client.remove_object_sync(bucket_name=minio_client.bucket, object_name=file.bbox_object_name)
 
     # 删除转换后的pdf文件
-    minio_client.delete_minio(f"{file.id}")
+    minio_client.remove_object_sync(bucket_name=minio_client.bucket, object_name=f"{file.id}")
 
     # 删除预览文件
     preview_object_name = KnowledgeUtils.get_knowledge_preview_file_object_name(
         file.id, file.file_name
     )
     if preview_object_name:
-        minio_client.delete_minio(preview_object_name)
+        minio_client.remove_object_sync(bucket_name=minio_client.bucket, object_name=preview_object_name)
     return True
 
 
@@ -397,7 +404,7 @@ def addEmbedding(
 
     logger.info("start init ElasticKeywordsSearch")
     es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
-
+    minio_client = get_minio_storage_sync()
     for index, db_file in enumerate(knowledge_files):
         # 尝试从缓存中获取文件的分块
         preview_cache_key = None
@@ -529,11 +536,10 @@ def add_file_embedding(
         db_file.bbox_object_name = KnowledgeUtils.get_knowledge_bbox_file_object_name(
             db_file.id
         )
-        minio_client.upload_minio_data(
-            db_file.bbox_object_name,
-            partition_data,
-            len(partition_data),
-            "application/json",
+        minio_client.put_object_sync(
+            bucket_name=db_file.bucket_name,
+            object_name=db_file.bbox_object_name,
+            file=partition_data, content_type="application/json",
         )
 
     logger.info(
@@ -570,12 +576,12 @@ def add_file_embedding(
         logger.info(
             f"upload_preview_file_to_minio file={db_file.id} tmp_object_name={tmp_preview_file}, preview_object_name={preview_object_name}"
         )
-        if minio_client.object_exists(minio_client.tmp_bucket, tmp_preview_file):
-            minio_client.copy_object(
-                tmp_preview_file,
-                preview_object_name,
-                minio_client.tmp_bucket,
-                minio_client.bucket,
+        if minio_client.object_exists_sync(minio_client.tmp_bucket, tmp_preview_file):
+            minio_client.copy_object_sync(
+                source_object=tmp_preview_file,
+                dest_object=preview_object_name,
+                source_bucket=minio_client.tmp_bucket,
+                dest_bucket=minio_client.bucket,
             )
         logger.info(
             f"upload_preview_file_over file={db_file.id} tmp_object_name={tmp_preview_file}, preview_object_name={preview_object_name}"
@@ -626,11 +632,13 @@ def upload_preview_file_to_minio(original_file_path: str, preview_file_path: str
         logger.error(
             f"原始文件和预览文件路径不匹配: {original_file_path} vs {preview_file_path}"
         )
+
+    minio_client = get_minio_storage_sync()
     object_name = KnowledgeUtils.get_tmp_preview_file_object_name(original_file_path)
     with open(preview_file_path, "rb") as file_obj:
         # 上传预览文件到minio
-        minio_client.upload_minio_file(
-            object_name=object_name, file=file_obj, bucket_name=minio_client.tmp_bucket
+        minio_client.put_object_tmp_sync(
+            object_name=object_name, file=file_obj
         )
     return object_name
 
@@ -1056,7 +1064,7 @@ def qa_status_change(qa_db: QAKnowledge, target_status: int, db_knowledge: Knowl
     return qa_db
 
 
-def list_qa_by_knowledge_id(
+async def list_qa_by_knowledge_id(
         knowledge_id: int,
         page_size: int = 10,
         page_num: int = 1,
@@ -1064,7 +1072,7 @@ def list_qa_by_knowledge_id(
         answer: Optional[str] = None,
         keyword: Optional[str] = None,
         status: Optional[int] = None,
-) -> List[QAKnowledge]:
+) -> list[Any] | tuple[Any, Any]:
     """获取知识库下的所有qa"""
     if not knowledge_id:
         return []
@@ -1105,8 +1113,8 @@ def list_qa_by_knowledge_id(
         .limit(page_size)
         .offset((page_num - 1) * page_size)
     )
-    count = QAKnoweldgeDao.total_count(count_sql)
-    list_qa = QAKnoweldgeDao.query_by_condition(list_sql)
+    count = await QAKnoweldgeDao.total_count(count_sql)
+    list_qa = await QAKnoweldgeDao.query_by_condition(list_sql)
 
     return list_qa, count
 

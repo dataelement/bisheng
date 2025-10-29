@@ -17,7 +17,7 @@ from bisheng.api.v1.schemas import (OpenAIChatCompletionReq,
                                     OpenAIChatCompletionResp, OpenAIChoice)
 from bisheng.api.v2.utils import get_default_operator
 from bisheng.chat.types import WorkType
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 

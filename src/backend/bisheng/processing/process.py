@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Coroutine, Dict, List, Optional, Tuple, Union
 
 from bisheng.core.database import get_sync_db_session
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.message import ChatMessage
 from bisheng.database.models.report import Report as ReportModel
 from bisheng.interface.run import build_sorted_vertices, get_memory_key, update_memory_keys
@@ -11,7 +12,6 @@ from bisheng.services.deps import get_session_service
 from bisheng.template.field.base import TemplateField
 from bisheng.utils.docx_temp import test_replace_string
 from bisheng.utils.logger import logger
-from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.input_output import Report
 from langchain.chains.base import Chain
 from langchain.schema import AgentAction, Document
@@ -209,7 +209,7 @@ async def process_graph_cached(
         if not template:
             logger.error('template not found flow_id={}', flow_id)
             raise ValueError(f'template not found flow_id={flow_id}')
-        minio_client = MinioClient()
+        minio_client = get_minio_storage_sync()
         template_muban = minio_client.get_share_link(template.object_name)
         report_name = built_object.report_name
         report_name = report_name if report_name.endswith('.docx') else f'{report_name}.docx'

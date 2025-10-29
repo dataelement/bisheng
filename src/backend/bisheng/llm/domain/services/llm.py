@@ -8,17 +8,17 @@ from langchain_core.language_models import BaseChatModel
 from loguru import logger
 
 from bisheng.api.services.user_service import UserPayload
-from bisheng.cache.redis import redis_client
 from bisheng.common.errcode.http_error import NotFoundError, ServerError
 from bisheng.common.errcode.llm import ServerExistError, ModelNameRepeatError, ServerAddError, ServerAddAllError
 from bisheng.common.errcode.server import NoAsrModelConfigError, AsrModelConfigDeletedError, NoTtsModelConfigError, \
     TtsModelConfigDeletedError
-from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
+from bisheng.common.models.config import ConfigDao, ConfigKeyEnum, Config
+from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.knowledge import KnowledgeState
 from bisheng.utils import generate_uuid, md5_hash
 from bisheng.utils.embedding import decide_embeddings
-from bisheng.utils.minio_client import minio_client
 from ..llm import BishengASR, BishengLLM, BishengTTS, BishengEmbedding
 from ...const import LLMModelType
 from ...models import LLMDao, LLMServer, LLMModel
@@ -571,6 +571,9 @@ class LLMService:
         """
 
         workbench_llm = await cls.get_workbench_llm()
+
+        redis_client = await get_redis_client()
+
         if not workbench_llm.tts_model or not workbench_llm.tts_model.id:
             raise NoTtsModelConfigError.http_exception()
         model_info = await LLMDao.aget_model_by_id(model_id=int(workbench_llm.tts_model.id))
@@ -588,8 +591,10 @@ class LLMService:
         audio_bytes = await tts_client.ainvoke(text)
         # upload to minio
         object_name = f"tts/{generate_uuid()}.mp3"
-        minio_client.upload_minio_data(object_name, audio_bytes, len(audio_bytes), "audio/mpeg",
-                                       bucket_name=minio_client.tmp_bucket)
+
+        minio_client = await get_minio_storage()
+        await minio_client.put_object(object_name=object_name, file=audio_bytes, content_type="audio/mpeg",
+                                      bucket_name=minio_client.tmp_bucket)
         cache_value = minio_client.clear_minio_share_host(
             minio_client.get_share_link(object_name, bucket=minio_client.tmp_bucket))
         # The tmp bucket automatically clears files older than 7 days, so set the expiration time to 6 days

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { Navigate, createBrowserRouter } from "react-router-dom";
 import CrashErrorComponent from "./components/CrashErrorComponent";
@@ -19,6 +20,7 @@ import DiffFlowPage from "./pages/DiffFlowPage";
 import EvaluatingPage from "./pages/EvaluationPage";
 import EvaluatingCreate from "./pages/EvaluationPage/EvaluationCreate";
 import KnowledgePage from "./pages/KnowledgePage";
+import AdjustFilesUpload from "./pages/KnowledgePage/AdjustFilesUpload";
 import FilesPage from "./pages/KnowledgePage/detail";
 import FilesUpload from "./pages/KnowledgePage/filesUpload";
 import QasPage from "./pages/KnowledgePage/qas";
@@ -33,12 +35,11 @@ import Doc from "./pages/ModelPage/doc";
 import { Finetune } from "./pages/ModelPage/finetune";
 import Management from "./pages/ModelPage/manage";
 import Page403 from "./pages/Page403";
+import Page404 from "./pages/Page404";
 import Report from "./pages/Report";
 import SystemPage from "./pages/SystemPage";
 import ResoucePage from "./pages/resoucePage";
 import { AppNumType } from "./types/app";
-import AdjustFilesUpload from "./pages/KnowledgePage/AdjustFilesUpload";
-import { useEffect } from "react";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
@@ -141,7 +142,8 @@ const privateRouter = [
   { path: "/diff/:id/:vid/:cid", element: <ErrorHoc Comp={DiffFlowPage} /> },
   { path: "/reset", element: <ResetPwdPage /> },
   { path: "/403", element: <Page403 /> },
-  { path: "*", element: <Navigate to="/" replace /> }
+  { path: "/404", element: <Page404 /> },
+  { path: "*", element: <Navigate to="/404" replace /> }
 ]
 
 export const getPrivateRouter = (permissions) => {
@@ -181,6 +183,7 @@ export const publicRouter = createBrowserRouter([
   { path: "/chat/assistant/:id/", element: <ChatAssitantShare /> },
   { path: "/resouce/:cid/:mid", element: <ResoucePage /> },
   { path: "/403", element: <Page403 /> },
-  { path: "*", element: <LoginPage /> }
+  { path: "/404", element: <Page404 /> },
+  { path: "*", element: <Navigate to="/404" replace /> }
 ],
   baseConfig)

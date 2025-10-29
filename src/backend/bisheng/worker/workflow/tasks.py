@@ -2,7 +2,7 @@ import time
 
 from loguru import logger
 
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils.exceptions import IgnoreException
 from bisheng.worker.main import bisheng_celery
 from bisheng.worker.workflow.redis_callback import RedisCallback

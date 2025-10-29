@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { useRecoilValue } from "recoil";
+import { useLocalize } from "~/hooks";
 import GuideWord from "./components/GuideWord";
 import InputForm from "./components/InputForm";
 import InputFormSkill from "./components/InputFormSkill";
@@ -15,9 +16,8 @@ import MessageUser from "./components/MessageUser";
 import ResouceModal from "./components/ResouceModal";
 import { currentChatState, currentRunningState } from "./store/atoms";
 import { useMessage } from "./useMessages";
-import { useLocalize } from "~/hooks";
 
-export default function ChatMessages({ useName, title, logo, disabledSearch = false }) {
+export default function ChatMessages({ useName, readOnly, title, logo, disabledSearch = false }) {
     const { messageScrollRef, chatId, messages } = useMessage()
     const { inputForm, guideWord, inputDisabled } = useRecoilValue(currentRunningState)
     const chatState = useRecoilValue(currentChatState)
@@ -88,9 +88,22 @@ export default function ChatMessages({ useName, title, logo, disabledSearch = fa
                             ----------- {localize(msg.message)} -----------
                         </div>
                     case 'output_with_choose_msg':
-                        return <MessageBsChoose key={msg.id} data={msg} logo={logo} flow={chatState.flow} />;
+                        return <MessageBsChoose
+                            key={msg.id}
+                            data={msg}
+                            logo={logo}
+                            disabled={readOnly}
+                            flow={chatState.flow}
+                        />;
                     case 'output_with_input_msg':
-                        return <MessageBsChoose type='input' key={msg.id} data={msg} logo={logo} flow={chatState.flow} />;
+                        return <MessageBsChoose
+                            type='input'
+                            key={msg.id}
+                            data={msg}
+                            logo={logo}
+                            disabled={readOnly}
+                            flow={chatState.flow}
+                        />;
                     case 'node_run':
                         return <MessageNodeRun key={msg.id} data={msg} />;
                     case 'system':

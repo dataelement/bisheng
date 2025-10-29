@@ -99,7 +99,7 @@ const ToolErrorTip = () => {
 
 interface MarkdownProps {
     linsight: LinsightInfo,
-    edit?: boolean;
+    disable?: boolean;
 }
 
 interface MarkdownRef {
@@ -107,7 +107,7 @@ interface MarkdownRef {
 }
 
 const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
-    const { linsight, edit, onChange } = props;
+    const { linsight, disable, onChange } = props;
     const { sop: value = '', inputSop, files, tools } = linsight
     const localize = useLocalize()
 
@@ -215,12 +215,12 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
 
     // 开启/禁用
     useEffect(() => {
-        if (edit) {
+        if (disable) {
             veditorRef.current?.disabled()
         } else {
             veditorRef.current?.enable()
         }
-    }, [edit, RenderingCompleted])
+    }, [disable, RenderingCompleted])
 
     // 暴露方法给父组件
     useImperativeHandle(ref, () => ({

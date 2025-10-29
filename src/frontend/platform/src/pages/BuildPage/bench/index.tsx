@@ -31,7 +31,7 @@ export interface FormErrors {
     functionDescription: string;
     inputPlaceholder: string;
     modelNames: string[] | string[][];
-    webSearch?: Record<string, string>; // 新增动态错误存储
+    webSearch?: Record<string, string>;
     systemPrompt: string;
     model: string;
     kownledgeBase: string;
@@ -56,7 +56,6 @@ export interface ChatConfigForm {
     welcomeMessage: string;
     functionDescription: string;
     inputPlaceholder: string;
-    // 添加这两个属性
     applicationCenterWelcomeMessage: string;
     applicationCenterDescription: string;
     models: Model[];
@@ -122,6 +121,9 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const systemPromptRef = useRef<HTMLDivElement>(null);
     const appCenterWelcomeRef = useRef<HTMLDivElement>(null);
     const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
+    // 新增：模型管理容器的ref
+    const modelManagementContainerRef = useRef<HTMLDivElement>(null);
+    
     const { t } = useTranslation()
     const {
         formData,
@@ -141,6 +143,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         systemPromptRef,
         appCenterWelcomeRef,
         appCenterDescriptionRef,
+        modelManagementContainerRef, // 传入新增的ref
     }, parentFormData, parentSetFormData);
 
     useEffect(() => {
@@ -211,7 +214,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             }
         }));
 
-    }, [setFormData]); // 添加依赖项
+    }, [setFormData]);
     return (
         <div className=" h-full overflow-y-scroll scrollbar-hide relative border-t">
             <div className="pt-4 relative">
@@ -304,7 +307,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                         </div>
 
                         {/* Model Management */}
-                        <div className="mb-6">
+                        {/* 绑定模型管理容器ref */}
+                        <div className="mb-6" ref={modelManagementContainerRef}>
                             <p className="text-lg font-bold mb-2">{t('chatConfig.modelManagement')}</p>
                             <div className="mb-6">
                                 <ModelManagement
@@ -454,6 +458,7 @@ interface UseChatConfigProps {
     systemPromptRef: React.RefObject<HTMLDivElement>;
     appCenterWelcomeRef: React.RefObject<HTMLDivElement>;
     appCenterDescriptionRef: React.RefObject<HTMLDivElement>;
+    modelManagementContainerRef: React.RefObject<HTMLDivElement>; // 新增
 }
 
 const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormData) => {
@@ -526,14 +531,6 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
       }
   }, [formData, parentFormData]);
 
-    //         const sidebarSloganRef = useRef<HTMLDivElement>(null);
-    // const welcomeMessageRef = useRef<HTMLDivElement>(null);
-    // const functionDescriptionRef = useRef<HTMLDivElement>(null);
-    // const inputPlaceholderRef = useRef<HTMLDivElement>(null);
-    // const knowledgeBaseRef = useRef<HTMLDivElement>(null);
-    // const modelRefs = useRef<(HTMLDivElement | null)[]>([]);
-    // const webSearchRef = useRef<HTMLDivElement>(null);
-    // const systemPromptRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
         if (!parentFormData) {
             console.log('parentFormData :>> ', parentFormData);
@@ -657,9 +654,10 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
         if (formData.models.length === 0) {
             newErrors.model = t('chatConfig.errors.atLeastOneModel');
             if (!firstErrorRef) {
-                firstErrorRef = refs.modelRefs.current[0] ?
-                    { current: refs.modelRefs.current[0] } :
-                    refs.sidebarSloganRef; // 默认回退
+                // 修改：使用模型管理容器ref作为优先滚动目标
+                firstErrorRef = refs.modelManagementContainerRef.current 
+                    ? { current: refs.modelManagementContainerRef.current } 
+                    : refs.sidebarSloganRef; // 保留默认回退
             }
             isValid = false;
         }
@@ -767,16 +765,15 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
         if (!isValid) {
             if (firstErrorRef?.current) {
                 firstErrorRef.current.scrollIntoView({
-                    behavior: 'smooth', // 平滑滚动
-                    block: 'end', // 滚动后文本框底部显示在视图中（下方位置）
+                    behavior: 'smooth',
+                    block: 'end',
                     inline: 'nearest'
                 });
 
-                // 延迟聚焦输入框，确保滚动完成后再聚焦（提升体验）
                 setTimeout(() => {
                     const input = firstErrorRef.current?.querySelector('input, textarea, [role="combobox"]');
-                    if (input) input.focus(); // 聚焦到错误输入框
-                }, 300); // 300ms 匹配滚动动画时长
+                    if (input) input.focus();
+                }, 300);
             }
             return false;
         }

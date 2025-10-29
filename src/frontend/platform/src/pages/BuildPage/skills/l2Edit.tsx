@@ -10,7 +10,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
 import { TabsContext } from "@/contexts/tabsContext";
 import { userContext } from "@/contexts/userContext";
-import { createCustomFlowApi, getFlowApi, updateVersion } from "@/controllers/API/flow";
+import { checkAppEditPermission, createCustomFlowApi, getFlowApi, updateVersion } from "@/controllers/API/flow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import { useHasForm } from "@/util/hook";
@@ -36,9 +36,8 @@ export default function l2Edit() {
     const [description, setDescription] = useState('');
     const [guideWords, setGuideWords] = useState('');
 
-    useEffect(() => {
-        if (!id) return;
-
+    const flowInit = async () => {
+        await checkAppEditPermission(id, 1)
         getFlowApi(id).then(_flow => {
             setFlow('l2 flow init', _flow);
             setIsL2(true);
@@ -47,6 +46,11 @@ export default function l2Edit() {
             setGuideWords(_flow.guide_word);
             setLogo(_flow.logo);
         });
+    }
+    useEffect(() => {
+        if (!id) return;
+
+        flowInit()
     }, [id]);
 
 

@@ -7,7 +7,7 @@ import { bishengConfState, currentRunningState } from "./store/atoms";
 import { useAreaText } from "./useAreaText";
 import { getErrorI18nKey } from "./store/constants";
 
-export default function ChatInput({ v }) {
+export default function ChatInput({ readOnly, v }) {
     const [bishengConfig] = useRecoilState(bishengConfState)
     const { inputDisabled, error: inputMsg, showUpload, showStop, showReRun } = useRecoilValue(currentRunningState)
     const { accepts, chatState, inputRef, setChatFiles, handleInput, handleRestart, handleSendClick, handleStopClick } = useAreaText()
@@ -30,7 +30,7 @@ export default function ChatInput({ v }) {
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
         <div className="relative px-4 rounded-3xl bg-surface-tertiary ">
             {/* 附件 */}
-            {showUpload && !inputDisabled && <InputFiles
+            {showUpload && !inputDisabled && !readOnly && <InputFiles
                 v={v}
                 accepts={accepts}
                 size={bishengConfig?.uploaded_files_maximum_size || 50}
@@ -50,7 +50,7 @@ export default function ChatInput({ v }) {
                     <button
                         id="bs-send-btn"
                         className="size-8 flex items-center justify-center rounded-full bg-primary text-white transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-20"
-                        disabled={inputDisabled || fileUploading}
+                        disabled={inputDisabled || fileUploading || readOnly}
                         onClick={() => { !inputDisabled && !fileUploading && handleSendClick() }}>
                         <SendIcon size={24} />
                     </button>
@@ -75,7 +75,7 @@ export default function ChatInput({ v }) {
                 ref={inputRef}
                 rows={2}
                 style={{ height: 56 }}
-                disabled={inputDisabled}
+                disabled={readOnly || inputDisabled}
                 onInput={handleInput}
                 onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {

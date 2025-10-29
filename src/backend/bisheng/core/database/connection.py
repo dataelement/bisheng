@@ -159,6 +159,8 @@ class DatabaseConnectionManager:
             await self._async_engine.dispose()
             logger.debug("Async database engine disposed")
 
+    def close_sync(self):
+        """同步关闭数据库连接"""
         if self._engine:
             self._engine.dispose()
             logger.debug("Sync database engine disposed")

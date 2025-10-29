@@ -6,13 +6,13 @@ from typing import List, Dict, Any
 from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models import LinsightSessionVersion, LinsightExecuteTask
 from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao, ExecuteTaskStatusEnum
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils import util
-from bisheng.utils.minio_client import minio_client
 from bisheng.utils.util import sync_func_to_async
 from bisheng_langchain.linsight.event import ExecStep
 
@@ -58,12 +58,13 @@ async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask],
     async def upload_file_to_minio(file_info: Dict) -> dict | None:
         """上传文件到MinIO并返回文件信息"""
         try:
+            minio_client = await get_minio_storage()
             object_name = f"linsight/session_files/{execution_tasks[0].session_version_id}/{file_info['file_name']}"
             # Use async upload if available, otherwise wrap sync call
-            await sync_func_to_async(minio_client.upload_minio)(
+            await sync_func_to_async(minio_client.put_object)(
                 bucket_name=minio_client.bucket,
                 object_name=object_name,
-                file_path=file_info["file_path"]
+                file=file_info["file_path"]
             )
             file_info["file_url"] = minio_client.clear_minio_share_host(minio_client.get_share_link(object_name))
             return file_info
@@ -145,10 +146,11 @@ async def get_final_result_file(session_model: LinsightSessionVersion, file_deta
         try:
             object_name = f"linsight/final_result/{session_model.id}/{final_file_info['file_name']}"
             # Use async upload if available, otherwise wrap sync call
-            await sync_func_to_async(minio_client.upload_minio)(
+            minio_client = await get_minio_storage()
+            await sync_func_to_async(minio_client.put_object)(
                 bucket_name=minio_client.bucket,
                 object_name=object_name,
-                file_path=final_file_info["file_path"]
+                file=final_file_info["file_path"]
             )
             final_file_info["file_url"] = minio_client.clear_minio_share_host(minio_client.get_share_link(object_name))
             return final_file_info
@@ -229,11 +231,12 @@ async def handle_step_event_extra(event: ExecStep, task_exec_obj) -> ExecStep:
             object_name = f"linsight/step_event/{task_exec_obj.session_version_id}/{uuid.uuid4().hex[:8]}.{file_name.split('.')[-1]}"
             logger.debug(f"步骤事件额外处理，上传文件到MinIO: {object_name}")
 
+            minio_client = await get_minio_storage()
             # 上传文件到MinIO
-            await sync_func_to_async(minio_client.upload_minio)(
+            await sync_func_to_async(minio_client.put_object)(
                 bucket_name=minio_client.bucket,
                 object_name=object_name,
-                file_path=file_path
+                file=file_path
             )
 
             event.extra_info["file_info"] = {

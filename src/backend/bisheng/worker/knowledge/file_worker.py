@@ -6,6 +6,7 @@ from pymilvus import Collection, MilvusException
 from bisheng.api.services.knowledge_imp import decide_vectorstores, process_file_task, delete_knowledge_file_vectors, \
     KnowledgeUtils, delete_vector_files
 from bisheng.api.v1.schemas import FileProcessBase
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, KnowledgeState
 from bisheng.database.models.knowledge_file import (
     KnowledgeFile,
@@ -16,7 +17,6 @@ from bisheng.database.models.knowledge_file import (
 )
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.utils import generate_uuid
-from bisheng.utils.minio_client import minio_client
 from bisheng.worker import bisheng_celery
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
 
@@ -108,19 +108,22 @@ def copy_normal(
     # 迁移 file
     try:
         target_source_file = KnowledgeUtils.get_knowledge_file_object_name(knowledge_new.id, knowledge_new.file_name)
+
+        minio_client = get_minio_storage_sync()
+
         # 拷贝源文件
-        if minio_client.object_exists(minio_client.bucket, source_file):
-            minio_client.copy_object(source_file, target_source_file)
+        if minio_client.object_exists_sync(minio_client.bucket, source_file):
+            minio_client.copy_object_sync(source_object=source_file, dest_object=target_source_file)
         knowledge_new.object_name = target_source_file
 
         # 拷贝生成的pdf文件
-        if minio_client.object_exists(minio_client.bucket, f"{source_file_pdf}"):
-            minio_client.copy_object(source_file, f"{knowledge_new.id}")
+        if minio_client.object_exists_sync(minio_client.bucket, f"{source_file_pdf}"):
+            minio_client.copy_object_sync(source_object=source_file, dest_object=f"{knowledge_new.id}")
 
         # 拷贝bbox文件
-        if minio_client.object_exists("bisheng", bbox_file):
+        if minio_client.object_exists_sync("bisheng", bbox_file):
             target_bbox_file = KnowledgeUtils.get_knowledge_bbox_file_object_name(knowledge_new.id)
-            minio_client.copy_object(bbox_file, target_bbox_file)
+            minio_client.copy_object_sync(source_object=bbox_file, dest_object=target_bbox_file)
             knowledge_new.bbox_object_name = target_bbox_file
 
         preview_file = None
@@ -131,8 +134,8 @@ def copy_normal(
             target_preview_file = KnowledgeUtils.get_knowledge_preview_file_object_name(knowledge_new.id,
                                                                                         knowledge_new.file_name)
         if preview_file and target_preview_file:
-            if minio_client.object_exists(minio_client.bucket, preview_file):
-                minio_client.copy_object(preview_file, target_preview_file)
+            if minio_client.object_exists_sync(minio_client.bucket, preview_file):
+                minio_client.copy_object_sync(source_object=preview_file, dest_object=target_preview_file)
 
     except Exception as e:
         logger.exception(f"copy_file_error file_id={knowledge_new.id}")

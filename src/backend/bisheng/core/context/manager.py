@@ -4,7 +4,7 @@
 提供便捷的依赖注入和生命周期管理功能
 """
 import asyncio
-from typing import Optional, Dict, Any, TypeVar, List, Type, Union
+from typing import Optional, Dict, Any, TypeVar, List, Union
 from contextlib import asynccontextmanager, contextmanager
 
 from bisheng.core.context.base import (
@@ -66,7 +66,13 @@ class ApplicationContextManager:
         """注册默认的上下文管理器"""
         try:
             from bisheng.core.database.manager import DatabaseManager
-            self.register_context(DatabaseManager())
+            self.register_context(DatabaseManager(database_url=config.get('database_url')))
+
+            from bisheng.core.cache.redis_manager import RedisManager
+            self.register_context(RedisManager(redis_url=config.get('redis_url')))
+
+            from bisheng.core.storage.minio.minio_manager import MinioManager
+            self.register_context(MinioManager(minio_config=config.get('object_storage').get('minio')))
 
             logger.debug("Default contexts registered")
         except ImportError as e:

@@ -1,10 +1,9 @@
-import { getFlowApi } from "@/controllers/API/flow";
-import { cloneDeep } from "lodash-es";
+import { checkAppEditPermission, getFlowApi } from "@/controllers/API/flow";
+import { flowVersionCompatible } from "@/util/flowCompatible";
 import { useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import Panne from "./Panne";
 import useFlowStore from "./flowStore";
-import { flowVersionCompatible } from "@/util/flowCompatible";
 
 
 export default function FlowPage() {
@@ -20,7 +19,9 @@ export default function FlowPage() {
 
     const { flow, setFlow, clearRunCache, clearNotifications } = useFlowStore()
 
-    useEffect(() => {
+    const flowInit = async () => {
+        await checkAppEditPermission(id, 10)
+
         getFlowApi(id).then(f => {
             clearRunCache();
 
@@ -46,6 +47,11 @@ export default function FlowPage() {
                 version_list: []
             });
         })
+    }
+
+    useEffect(() => {
+        flowInit()
+
         return () => {
             setFlow(null);
             clearRunCache();

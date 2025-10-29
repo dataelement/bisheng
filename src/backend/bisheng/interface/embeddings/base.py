@@ -4,7 +4,7 @@ from bisheng.custom.customs import get_custom_nodes
 from bisheng.interface.base import LangChainTypeCreator
 from bisheng.interface.custom_lists import embedding_type_to_cls_dict
 from bisheng.interface.embeddings.custom import CUSTOM_EMBEDDING
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.template.frontend_node.base import FrontendNode
 from bisheng.template.frontend_node.embeddings import EmbeddingFrontendNode
 from bisheng.utils.logger import logger

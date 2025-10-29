@@ -1,0 +1,264 @@
+import React, { useState, useEffect } from 'react';
+import { Slider } from '@/components/bs-ui/slider';
+import { HelpCircle } from 'lucide-react';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger
+} from '@/components/bs-ui/tooltip';
+import { Switch } from '@/components/bs-ui/switch';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue
+} from '@/components/bs-ui/select';
+import { Input } from '@/components/bs-ui/input';
+import { WorkflowNodeParam } from '@/types/flow';
+
+// 重排模型类型定义
+interface RerankModel {
+    value: string;
+    label: string;
+}
+
+/**
+ * 检索配置组件
+ * 包含权限校验、开关控制、权重调整和结果设置
+ */
+interface RetrievalConfigProps {
+    data: WorkflowNodeParam;
+    onChange: (value: any) => void;
+}
+
+const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => {
+    // 初始化状态值，将原retrievalEnabled改为search_switch
+    const [keywordWeight, setKeywordWeight] = useState(data.value?.keyword_weight || 0.5);
+    const [vectorWeight, setVectorWeight] = useState(data.value?.vector_weight || 0.5);
+    const [searchSwitch, setSearchSwitch] = useState(data.value?.search_switch ?? true); 
+    const [rerankEnabled, setRerankEnabled] = useState(data.value?.rerank_enabled ?? false);
+    const [selectedRerankModel, setSelectedRerankModel] = useState(data.value?.rerank_model || '');
+    const [resultLength, setResultLength] = useState(data.value?.result_length || 15000);
+    const [userAuth, setUserAuth] = useState(data.value?.user_auth ?? true);
+
+    // 确保权重和为1
+    useEffect(() => {
+        const total = keywordWeight + vectorWeight;
+        if (Math.abs(total - 1.0) > 0.001) {
+            const normalizedKeyword = keywordWeight / total;
+            const normalizedVector = vectorWeight / total;
+            setKeywordWeight(normalizedKeyword);
+            setVectorWeight(normalizedVector);
+        }
+    }, [keywordWeight, vectorWeight]);
+
+    // 通知父组件值变化
+    useEffect(() => {
+        onChange({
+            keyword_weight: keywordWeight,
+            vector_weight: vectorWeight,
+            user_auth: userAuth, 
+            search_switch: searchSwitch,
+            rerank_flag: rerankEnabled,
+            rerank_model: selectedRerankModel,
+            result_length: resultLength,
+        });
+    }, [
+        keywordWeight,
+        vectorWeight,
+        searchSwitch,
+        rerankEnabled,
+        selectedRerankModel,
+        resultLength,
+        userAuth 
+    ]);
+
+    // 处理权重滑块变化
+    const handleSliderChange = (value: number[]) => {
+        const newKeywordWeight = value[0];
+        const newVectorWeight = 1.0 - newKeywordWeight;
+
+        setKeywordWeight(newKeywordWeight);
+        setVectorWeight(newVectorWeight);
+    };
+
+    // 处理检索开关变化（键名变更）
+    const handleSearchToggle = (checked: boolean) => {
+        // 注释：原逻辑中"if (checked) return"可能有误，这里保留原逻辑
+        if (checked) return; 
+        setSearchSwitch(checked);
+    };
+
+    // 重排模型列表
+    const rerankModels: RerankModel[] = [
+        { value: 'bge-reranker-base', label: 'BGE Reranker Base' },
+        { value: 'bge-reranker-large', label: 'BGE Reranker Large' },
+        { value: 'cross-encoder-ms-marco-MiniLM-L-6-v2', label: 'Cross Encoder (MiniLM)' },
+        { value: 'cross-encoder-ms-marco-TinyBERT-L-2-v2', label: 'Cross Encoder (TinyBERT)' },
+    ];
+
+    // 处理结果长度变化
+    const handleResultLengthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = parseInt(e.target.value, 10);
+        if (!isNaN(value) && value > 0) {
+            setResultLength(value);
+        }
+    };
+
+    return (
+        <div className="space-y-2 rounded-lg">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-500">高级检索设置</span>
+                </div>
+                <Switch
+                    checked={searchSwitch} 
+                    onCheckedChange={handleSearchToggle} 
+                />
+            </div>
+
+            {/* 用户知识库权限校验 - 绑定到user_auth */}
+            {searchSwitch && (
+                <div className="flex items-center justify-between pl-4 pr-4">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-500">用户知识库权限校验</span>
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <HelpCircle className="h-4 w-4 text-gray-400" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p className="max-w-xs">开启后将验证用户对知识库的访问权限</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
+                    <Switch
+                        checked={userAuth}
+                        onCheckedChange={setUserAuth}
+                    />
+                </div>
+            )}
+
+            {/* 检索器权重设置（仅在检索开启时显示） */}
+            {searchSwitch && ( 
+                <div className="space-y-4 pl-4 pr-4">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-500">检索器权重设置</span>
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <HelpCircle className="h-4 w-4 text-gray-400" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p className="max-w-xs">通过调整权重，确定优先使用向量检索还是优先使用关键词检索。</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
+
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                            <div className="flex flex-col items-start w-12">
+                                <span className="text-xs font-medium text-gray-600">关键词</span>
+                                <span className="text-xs text-gray-500">{keywordWeight.toFixed(2)}</span>
+                            </div>
+
+                            <div className="flex-1 px-0">
+                                <Slider
+                                    value={[keywordWeight]}
+                                    onValueChange={handleSliderChange}
+                                    min={0}
+                                    max={1}
+                                    step={0.01}
+                                    className="w-full"
+                                />
+                            </div>
+
+                            <div className="flex flex-col items-end w-12">
+                                <span className="text-xs font-medium text-gray-600">向量</span>
+                                <span className="text-xs text-gray-500">{vectorWeight.toFixed(2)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 检索结果重排 */}
+            {searchSwitch && ( 
+                <div className="flex items-center justify-between pl-4 pr-4">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-500">检索结果重排</span>
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p className="max-w-xs">开启后，将使用重排模型对检索结果进行二次排序</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
+                    <Switch
+                        checked={rerankEnabled}
+                        onCheckedChange={setRerankEnabled}
+                        disabled={!searchSwitch} 
+                    />
+                </div>
+            )}
+
+            {/* 重排模型选择（仅在重排开启时显示） */}
+            {rerankEnabled && searchSwitch && ( 
+                <div className="pl-4 pr-4">
+                    <Select
+                        value={selectedRerankModel}
+                        onValueChange={setSelectedRerankModel}
+                    >
+                        <SelectTrigger className="w-full">
+                            <SelectValue placeholder="请选择重排模型" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {rerankModels.map(model => (
+                                <SelectItem key={model.value} value={model.value}>
+                                    {model.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            )}
+
+            {/* 检索结果长度 */}
+            {searchSwitch && (
+                <div className="space-y-2 pl-4 pr-4">
+                    <div className="flex items-center gap-2">
+                        <label className="text-sm font-medium text-gray-500">检索结果长度</label>
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p className="max-w-xs">设置检索返回结果的最大长度（字符数）</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
+                    <Input
+                        type="number"
+                        value={resultLength}
+                        onChange={handleResultLengthChange}
+                        min={1000}
+                        max={50000}
+                        className="w-full"
+                    />
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default RetrievalConfig;

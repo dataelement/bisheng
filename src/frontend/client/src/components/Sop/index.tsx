@@ -9,14 +9,19 @@ import { LoadingBox } from './components/SopLoading';
 import { Header } from './Header';
 import { SOPEditor, SopStatus } from './SOPEditor';
 import { TaskFlow } from './TaskFlow';
+import { useLocalize } from '~/hooks';
+import { CheckIcon, MousePointerClick } from 'lucide-react';
+import { Button } from '../ui';
 
-export default function index() {
+export default function index({ id = '', vid = '', shareToken = '' }) {
     // 获取url参数
-    const { conversationId, sopId: sid } = useParams();
+    const { conversationId: cid, sopId: sid } = useParams();
+    const conversationId = cid || id;
+    const [isSharePage] = useState(!!vid);
     // 兼容历史链接 case开头
     const sopId = conversationId ? (conversationId.match(/case(\d+)/)?.[1] || '') : sid; // Compatible with historical cases 
 
-    const { loading, versionId, setVersionId, switchVersion, versions, setVersions, checkQueueStatus } = useLinsightData(conversationId, sopId);
+    const { loading, versionId, setVersionId, switchVersion, versions, setVersions, checkQueueStatus } = useLinsightData({ conversationId, sopId, vid, shareToken });
     const [isLoading, error] = useGenerateSop(versionId, setVersionId, setVersions)
 
     return (
@@ -26,25 +31,55 @@ export default function index() {
                     <LoadingIcon />
                 </div>
             }
-            <Header isLoading={isLoading} setVersionId={switchVersion} versionId={versionId} versions={versions} />
+            <Header
+                isLoading={isLoading}
+                chatId={conversationId}
+                setVersionId={switchVersion}
+                versionId={versionId}
+                isSharePage={isSharePage}
+                versions={versions}
+            />
 
             {isLoading ? <LoadingBox /> : <div className='w-full h-[calc(100vh-68px)] p-2 pt-0'>
                 <div className='h-full flex gap-2'>
                     <SOPEditor
                         sopError={error}
+                        isSharePage={isSharePage}
                         versionId={versionId}
                         onRun={checkQueueStatus}
                     />
 
-                    <TaskFlow versionId={versionId} setVersions={setVersions} setVersionId={setVersionId} />
+                    <TaskFlow
+                        isSharePage={isSharePage}
+                        versionId={versionId}
+                        setVersions={setVersions}
+                        setVersionId={setVersionId}
+                    />
                 </div>
             </div>}
         </div>
     );
 }
 
+// 分享页做同款
+export const ShareSameSopControls = ({ name }) => {
+    const localize = useLocalize();
 
-export const useLinsightData = (conversationId: string | undefined, sopId?: string) => {
+    return <div className="px-4 pb-6">
+        <div className="flex gap-3 p-4 px-6 justify-between items-center bg-white rounded-3xl border border-gray-100 relative">
+            <div className="flex items-center gap-2">
+            </div>
+            <Button className="px-6" onClick={() => window.open(`${__APP_ENV__.BASE_URL}/c/new?name=${encodeURIComponent(name)}&path=${encodeURIComponent(location.pathname)}`)} >
+                <MousePointerClick className="w-3.5 h-3.5" />
+                {localize('com_make_samestyle')}
+            </Button>
+        </div>
+    </div >
+}
+
+
+export const useLinsightData = ({ vid, sopId, conversationId, shareToken }
+    : { conversationId: string | undefined, sopId?: string, vid?: string, shareToken?: string }) => {
     // 获取工具列表
     const { data: linsightTools } = useGetLinsightToolList();
     const { data: PersonalTool } = useGetPersonalToolList();
@@ -63,7 +98,7 @@ export const useLinsightData = (conversationId: string | undefined, sopId?: stri
         setLoading(true);
         try {
             // 1. 获取会话版本列表
-            const data = await getLinsightSessionVersionList(_conversationId);
+            const data = await getLinsightSessionVersionList(_conversationId, shareToken);
             if (!versionId) {
                 const formattedVersions = data.map((item) => ({
                     id: item.id,
@@ -73,10 +108,11 @@ export const useLinsightData = (conversationId: string | undefined, sopId?: stri
             }
 
             // 2. 默认选中第一个版本，并加载其任务
-            const firstVersion = versionId ? data.find(el => el.id === versionId) : data[0];
+            const _versionId = vid || versionId;
+            const firstVersion = _versionId ? data.find(el => el.id === (_versionId)) : data[0];
             if (firstVersion) {
                 const taskRes = await getLinsightTaskList(firstVersion.id, firstVersion);
-                setVersionId(firstVersion.id);
+                setVersionId(vid || firstVersion.id);
                 console.log('firstVersion :>> ', firstVersion, taskRes);
                 switchAndUpdateLinsight(firstVersion.id, { ...firstVersion, tasks: taskRes });
             }

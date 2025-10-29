@@ -9,7 +9,7 @@ from PIL.Image import Image
 from langchain.base_language import BaseLanguageModel
 
 from bisheng.chat.config import ChatConfig
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils.logger import logger
 
 
@@ -66,7 +66,7 @@ def extract_input_variables_from_prompt(prompt: str) -> list[str]:
 def setup_llm_caching():
     """Setup LLM caching."""
 
-    from bisheng.settings import settings
+    from bisheng.common.services.config_service import settings
 
     try:
         set_langchain_cache(settings)

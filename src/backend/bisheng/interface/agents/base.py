@@ -4,7 +4,7 @@ from bisheng.custom.customs import get_custom_nodes
 from bisheng.interface.agents.custom import CUSTOM_AGENTS
 from bisheng.interface.base import LangChainTypeCreator
 from bisheng.interface.importing.utils import import_class
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.template.frontend_node.agents import AgentFrontendNode
 from bisheng.utils.logger import logger
 from bisheng.utils.util import build_template_from_class, build_template_from_method

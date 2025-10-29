@@ -35,9 +35,14 @@ customAxios.interceptors.response.use(function (response) {
     if (response.data.status_code === 403) {
         // 修改不跳转
         if (response.config.method === 'get') {
-            console.error('无权访问 :>> ', response.request.responseURL);
+            localStorage.setItem('noAccessUrl', response.request.responseURL)
             location.href = __APP_ENV__.BASE_URL + '/403'
         }
+        return Promise.reject(errorMessage);
+    }
+    // 应用无编辑权限
+    if (response.data.status_code === 10599) {
+        location.href = __APP_ENV__.BASE_URL + '/build/apps?error=10599'
         return Promise.reject(errorMessage);
     }
     // 异地登录

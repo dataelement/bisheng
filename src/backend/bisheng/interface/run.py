@@ -1,7 +1,7 @@
 from typing import Dict, Optional, Tuple, Union
 from uuid import UUID
 
-from bisheng.cache.utils import memoize_dict
+from bisheng.core.cache.utils import memoize_dict
 from bisheng.graph import Graph
 from bisheng.utils.logger import logger
 

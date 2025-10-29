@@ -11,7 +11,6 @@ from bisheng.common.errcode.qa import BackendProcessingError
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.knowledge_file import KnowledgeFileDao
 from bisheng.database.models.recall_chunk import RecallChunk
-from bisheng.utils.minio_client import MinioClient
 
 # build router
 router = APIRouter(prefix='/qa', tags=['QA'])
@@ -56,7 +55,6 @@ def get_original_file(message_id: Annotated[int, Body(embed=True)],
     # keywords
     keywords = keys.split(';') if keys else []
     result = []
-    minio_client = MinioClient()
     for index, chunk in enumerate(chunks):
         file = id2file.get(chunk.file_id)
 

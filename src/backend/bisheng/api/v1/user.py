@@ -19,10 +19,10 @@ from bisheng.api.services.captcha import verify_captcha
 from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_user_role, get_login_user,
                                                get_admin_user, UserService)
 from bisheng.api.v1.schemas import resp_200, CreateUserReq
-from bisheng.cache.redis import redis_client
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.common.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
                                          UserValidateError, UserPasswordError, UserForbiddenError)
+from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.group import GroupDao
@@ -32,7 +32,7 @@ from bisheng.database.models.role_access import RoleRefresh, RoleAccessDao, Acce
 from bisheng.database.models.user import User, UserCreate, UserDao, UserLogin, UserRead, UserUpdate
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRole, UserRoleCreate, UserRoleDao
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_PASSWORD_ERROR, USER_CURRENT_SESSION
@@ -102,7 +102,9 @@ async def sso(*, request: Request, user: UserCreate):
         access_token, refresh_token, _, _ = gen_user_jwt(user_exist)
 
         # 设置登录用户当前的cookie, 比jwt有效期多一个小时
-        redis_client.set(USER_CURRENT_SESSION.format(user_exist.user_id), access_token, ACCESS_TOKEN_EXPIRE_TIME + 3600)
+        redis_client = await get_redis_client()
+        await redis_client.aset(USER_CURRENT_SESSION.format(user_exist.user_id), access_token,
+                                ACCESS_TOKEN_EXPIRE_TIME + 3600)
 
         # 记录审计日志
         AuditLogService.user_login(UserPayload(**{
@@ -121,7 +123,7 @@ def get_error_password_key(username: str):
 def clear_error_password_key(username: str):
     # 清理密码错误次数的计数
     error_key = get_error_password_key(username)
-    redis_client.delete(error_key)
+    get_redis_client_sync().delete(error_key)
 
 
 @router.post('/user/login')
@@ -143,16 +145,18 @@ async def login(*, request: Request, user: UserLogin, Authorize: AuthJWT = Depen
 
     password_conf = settings.get_password_conf()
 
+    redis_client = await get_redis_client()
+
     if db_user.password and db_user.password != password:
         # 判断是否需要记录错误次数
         if not password_conf.login_error_time_window or not password_conf.max_error_times:
             return UserValidateError.return_resp()
         # 错误次数加1
         error_key = get_error_password_key(user.user_name)
-        error_num = redis_client.incr(error_key)
+        error_num = await redis_client.aincr(error_key)
         if error_num == 1:
             # 首次设置key的过期时间
-            redis_client.expire_key(error_key, password_conf.login_error_time_window * 60)
+            await redis_client.aexpire_key(error_key, password_conf.login_error_time_window * 60)
         if error_num and int(error_num) >= password_conf.max_error_times:
             # 错误次数到达上限，封禁账号
             db_user.delete = 1
@@ -172,7 +176,7 @@ async def login(*, request: Request, user: UserLogin, Authorize: AuthJWT = Depen
     Authorize.set_refresh_cookies(refresh_token)
 
     # 设置登录用户当前的cookie, 比jwt有效期多一个小时
-    redis_client.set(USER_CURRENT_SESSION.format(db_user.user_id), access_token, ACCESS_TOKEN_EXPIRE_TIME + 3600)
+    await redis_client.aset(USER_CURRENT_SESSION.format(db_user.user_id), access_token, ACCESS_TOKEN_EXPIRE_TIME + 3600)
 
     # 记录审计日志
     AuditLogService.user_login(UserPayload(**{
@@ -631,7 +635,10 @@ async def access_list(*, role_id: int, type: Optional[int] = None, login_user: U
     if not await login_user.async_check_group_admin(db_role.group_id):
         return UnAuthorizedError.return_resp()
 
-    res = await RoleAccessDao.aget_role_access([role_id], AccessType(type))
+    access_type = None
+    if type:
+        access_type = AccessType(type)
+    res = await RoleAccessDao.aget_role_access([role_id], access_type)
 
     return resp_200({
         'data': res,
@@ -653,7 +660,8 @@ async def get_captcha():
     logger.info('get_captcha captcha_char={}', chr_4)
     # generate key, 生成简单的唯一id，
     key = CAPTCHA_PREFIX + generate_uuid()[:8]
-    redis_client.set(key, chr_4, expiration=300)
+    redis_client = await get_redis_client()
+    await redis_client.aset(key, chr_4, expiration=300)
 
     # 增加配置，是否必须使用验证码
     return resp_200({
@@ -667,15 +675,16 @@ async def get_captcha():
 async def get_rsa_publish_key():
     # redis 存储
     key = RSA_KEY
+    redis_client = await get_redis_client()
     # redis lock
-    if redis_client.setNx(key, 1):
+    if await redis_client.asetNx(key, 1):
         # Generate a key pair
         (pubkey, privkey) = rsa.newkeys(512)
 
         # Save the keys to strings
-        redis_client.set(key, (pubkey, privkey), 3600)
+        await redis_client.aset(key, (pubkey, privkey), 3600)
     else:
-        pubkey, privkey = redis_client.get(key)
+        pubkey, privkey = await redis_client.aget(key)
 
     pubkey_str = pubkey.save_pkcs1().decode()
 

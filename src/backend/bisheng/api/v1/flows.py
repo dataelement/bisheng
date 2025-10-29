@@ -15,7 +15,7 @@ from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.flow import (Flow, FlowCreate, FlowDao, FlowRead, FlowType, FlowUpdate)
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils.logger import logger
 from fastapi_jwt_auth import AuthJWT
 

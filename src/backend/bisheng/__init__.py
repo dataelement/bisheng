@@ -1,6 +1,6 @@
 from importlib import metadata
 
-from bisheng.cache import cache_manager  # noqa: E402
+from bisheng.core.cache import cache_manager
 from bisheng.interface.custom.custom_component import CustomComponent
 
 # from bisheng.processing.process import load_flow_from_json  # noqa: E402

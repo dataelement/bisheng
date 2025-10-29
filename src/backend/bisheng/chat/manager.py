@@ -13,9 +13,8 @@ from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse, FileResponse
-from bisheng.cache import cache_manager
-from bisheng.cache.flow import InMemoryCache
-from bisheng.cache.manager import Subject
+from bisheng.core.cache.flow import InMemoryCache
+from bisheng.core.cache.manager import Subject, cache_manager
 from bisheng.chat.client import ChatClient
 from bisheng.chat.clients.workflow_client import WorkflowClient
 from bisheng.chat.types import IgnoreException, WorkType

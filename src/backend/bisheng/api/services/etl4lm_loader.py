@@ -13,7 +13,7 @@ from PIL import Image
 from langchain_community.docstore.document import Document
 from langchain_community.document_loaders.pdf import BasePDFLoader
 
-from bisheng.utils.minio_client import minio_client
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ def crop_image(image_file, item, cropped_imag_base_dir):
 def extract_pdf_images(file_name, page_dict, doc_id, knowledge_id):
     from bisheng.api.services.knowledge_imp import put_images_to_minio
     from bisheng.api.services.knowledge_imp import KnowledgeUtils
-    from bisheng.cache.utils import CACHE_DIR
+    from bisheng.core.cache.utils import CACHE_DIR
 
     result = {}
     base_dir = f"{CACHE_DIR}/{doc_id}"
@@ -71,6 +71,9 @@ def extract_pdf_images(file_name, page_dict, doc_id, knowledge_id):
         os.makedirs(cropped_image_base_dir)
 
     pdf_document = fitz.open(file_name)
+
+    minio_client = get_minio_storage_sync()
+
     for page_number, items in page_dict.items():
         page = pdf_document[page_number]
         pix = page.get_pixmap()

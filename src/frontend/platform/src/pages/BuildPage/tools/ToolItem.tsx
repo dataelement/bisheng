@@ -46,7 +46,7 @@ export default function ToolItem({
                             ><SettingIcon /></div>
                         }
                         {
-                            onSetClick && data.write && <div
+                            onSetClick && data.write &&!['mcp'].includes(type)&& <div
                                 className="group-hover:opacity-100 opacity-0 hover:bg-[#EAEDF3] rounded cursor-pointer"
                                 onClick={onSetClick}
                             ><SettingIcon /></div>

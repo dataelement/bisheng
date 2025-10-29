@@ -111,7 +111,8 @@ export const ERROR_CODES = {
     "13005": "error_llm_skill_execution_error",
     "13006": "error_document_parse_failure",
     "13007": "error_input_data_parse_fail",
-    "14001": "error_backend_processing_try_later"
+    "14001": "error_backend_processing_try_later",
+    "11403": "error_no_permission_to_view"
 } as const
 
 /**

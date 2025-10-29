@@ -14,7 +14,7 @@ from bisheng.database.models.knowledge_file import (
     KnowledgeFileStatus
 )
 from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.worker import bisheng_celery
 
 

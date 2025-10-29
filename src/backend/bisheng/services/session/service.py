@@ -1,5 +1,5 @@
 from bisheng.api.utils import build_flow_no_yield
-from bisheng.cache.redis import redis_client
+from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.services.base import Service
 from bisheng.services.session.utils import compute_dict_hash, session_id_generator
 
@@ -11,12 +11,12 @@ class SessionService(Service):
     name = 'session_service'
 
     def __init__(self):
-        self.cache_service = redis_client
+        self.cache_service = get_redis_client_sync()
 
     async def load_session(self, key, data_graph, **kwargs):
         # Check if the data is cached
         if key in self.cache_service:
-            return self.cache_service.get(key)
+            return await self.cache_service.aget(key)
 
         if key is None:
             key = self.generate_key(session_id=None, data_graph=data_graph)
@@ -27,7 +27,7 @@ class SessionService(Service):
         artifacts = {}
         graph = await build_flow_no_yield(graph_data=data_graph, **kwargs)
 
-        self.cache_service.set(key, (graph, artifacts))
+        await self.cache_service.aset(key, (graph, artifacts))
 
         return graph, artifacts
 

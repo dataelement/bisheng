@@ -1,6 +1,6 @@
-import { ArrowRight, CircleX } from "lucide-react"
-import { atom, useRecoilState } from "recoil"
-import { Button } from "~/components/ui"
+import { ArrowRight, CircleX } from "lucide-react";
+import { atom, useRecoilState } from "recoil";
+import { Button } from "~/components/ui";
 import { useLocalize } from "~/hooks";
 
 export default function SameSopSpan() {
@@ -12,7 +12,8 @@ export default function SameSopSpan() {
     }
 
     const handleCardClick = () => {
-        window.open(`${__APP_ENV__.BASE_URL}/linsight/case/${sameSopLabel.id}`)
+        sameSopLabel.url ? window.open(sameSopLabel.url) :
+            window.open(`${__APP_ENV__.BASE_URL}/linsight/case/${sameSopLabel.id}`)
     }
 
     if (!sameSopLabel) return null
@@ -46,7 +47,8 @@ export default function SameSopSpan() {
 
 export type SameSopLabel = {
     id: string
-    name: string
+    name: string,
+    url?: string
 } | null
 
 export const sameSopLabelState = atom<SameSopLabel>({

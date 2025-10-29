@@ -14,7 +14,6 @@ from ...models.llm_server import LLMModel, LLMServer, LLMModelType
 
 
 def _get_ollama_params(params: dict, server_config: dict, model_config: dict) -> dict:
-    params['query_instruction'] = 'passage: '
     params['base_url'] = server_config.get('base_url', '').rstrip('/')
 
     user_kwargs = model_config.get('user_kwargs', {})

@@ -13,9 +13,11 @@ import store from '~/store';
 
 export default function MessagesView({
   messagesTree: _messagesTree,
+  readOnly,
   Header,
 }: {
   messagesTree?: TMessage[] | null;
+  readOnly?: boolean;
   Header?: ReactNode;
 }) {
   const { newConversation: newConvo } = useNewConvo(0);
@@ -84,7 +86,7 @@ export default function MessagesView({
         </div>
         {/* 开启新对话 */}
         <div className='absolute bottom-12 h-0 w-full flex justify-center'>
-          <button
+          {!readOnly && <button
             className="flex items-center h-8 justify-center gap-2 rounded-2xl bg-blue-100 px-4 py-1 font-medium text-blue-main hover:bg-blue-200"
             onClick={() => {
               newConvo();
@@ -94,7 +96,7 @@ export default function MessagesView({
           >
             <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/chat.png'} alt="" />
             <span className="text-sm">{localize('com_ui_new_chat')}</span>
-          </button>
+          </button>}
         </div>
         {/* 返回底部 */}
         <CSSTransition

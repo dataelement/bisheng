@@ -1,5 +1,5 @@
 from celery import Celery
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils.logger import configure
 from bisheng.interface.utils import setup_llm_caching
 

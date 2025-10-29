@@ -7,6 +7,7 @@ import { useLocalize } from '~/hooks';
 import { Button, Textarea } from '../ui';
 import SopMarkdown from './SopMarkdown';
 import ErrorDisplay from './components/ErrorDisplay';
+import { ShareSameSopControls } from '.';
 
 export const enum SopStatus {
     /* 未开始 */
@@ -68,7 +69,7 @@ const SOPEditorArea = ({ setOpenAreaText, onsubmit }) => {
     </div>
 }
 
-export const SOPEditor = ({ versionId, sopError, onRun }) => {
+export const SOPEditor = ({ versionId, isSharePage, sopError, onRun }) => {
     const [openAreaText, setOpenAreaText] = useState(false)
     const { getLinsight, updateLinsight } = useLinsightManager()
     const markdownRef = useRef(null)
@@ -177,10 +178,10 @@ export const SOPEditor = ({ versionId, sopError, onRun }) => {
                 </div>
             }
             <div className={`p-8 linsight-markdown flex-1 min-h-0 ${linsight.sopError && 'hidden'}`}>
-                <SopMarkdown ref={markdownRef} linsight={linsight} edit={showSopEdit} onChange={handleChange} />
+                <SopMarkdown ref={markdownRef} linsight={linsight} disable={showSopEdit || isSharePage} onChange={handleChange} />
             </div>
 
-            {linsight.status === SopStatus.SopGenerated && (
+            {linsight.status === SopStatus.SopGenerated && !isSharePage && (
                 <AnimatePresence>
                     <motion.div
                         className='absolute bottom-6 w-full'
@@ -211,6 +212,10 @@ export const SOPEditor = ({ versionId, sopError, onRun }) => {
                     </motion.div>
                 </AnimatePresence>
             )}
+
+            {
+                linsight.status === SopStatus.SopGenerated && isSharePage && <ShareSameSopControls name={linsight.title} />
+            }
         </motion.div>
     );
 };

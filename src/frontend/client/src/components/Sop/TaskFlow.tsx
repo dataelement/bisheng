@@ -12,8 +12,9 @@ import { TaskControls } from './TaskControls';
 import { TaskFlowContent } from './TaskFlowContent';
 import { formatTime } from '~/utils';
 import { useAutoScroll } from '~/hooks/useAutoScroll';
+import { ShareSameSopControls } from '.';
 
-export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
+export const TaskFlow = ({ versionId, isSharePage, setVersions, setVersionId }) => {
     const { data: bsConfig } = useGetBsConfig();
     const { createLinsight, getLinsight, updateLinsight } = useLinsightManager()
     const { showToast } = useToastContext();
@@ -136,16 +137,20 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
                 }
             </div>
 
-            <TaskControls
-                key={versionId}
-                current={currentTask}
-                tasks={linsight.tasks}
-                status={linsight.status}
-                queueCount={linsight.queueCount}
-                feedbackProvided={!!linsight.execute_feedback}
-                onStop={stop}
-                onFeedback={handleFeedback}
-            />
+            {
+                isSharePage ?
+                    [SopStatus.completed, SopStatus.Stoped].includes(linsight.status) && <ShareSameSopControls name={linsight.title} />
+                    : <TaskControls
+                        key={versionId}
+                        current={currentTask}
+                        tasks={linsight.tasks}
+                        status={linsight.status}
+                        queueCount={linsight.queueCount}
+                        feedbackProvided={!!linsight.execute_feedback}
+                        onStop={stop}
+                        onFeedback={handleFeedback}
+                    />
+            }
         </motion.div>
     );
 };

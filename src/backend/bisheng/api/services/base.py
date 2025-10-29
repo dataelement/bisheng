@@ -1,7 +1,6 @@
-from bisheng.cache import InMemoryCache
-from bisheng.cache.redis import redis_client
-from bisheng.settings import settings
-from bisheng.utils.minio_client import MinioClient
+from bisheng.core.cache import InMemoryCache
+from bisheng.core.cache.redis_manager import get_redis_client_sync
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 
 
 class BaseService:
@@ -9,6 +8,8 @@ class BaseService:
 
     @classmethod
     def get_logo_share_link(cls, logo_path: str):
+
+        redis_client = get_redis_client_sync()
         if not logo_path:
             return ''
         cache_key = f'logo_cache:{logo_path}'
@@ -23,7 +24,7 @@ class BaseService:
             cls.LogoMemoryCache.set(cache_key, share_url)
             return share_url
 
-        minio_client = MinioClient()
+        minio_client = get_minio_storage_sync()
         share_url = minio_client.get_share_link(logo_path)
         # 去除前缀通过nginx访问，防止访问不到文件
         share_url = minio_client.clear_minio_share_host(share_url)

@@ -11,7 +11,6 @@ from sqlalchemy import text
 
 from bisheng.core.context import BaseContextManager
 from bisheng.core.database import DatabaseConnectionManager
-from bisheng.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +31,7 @@ class DatabaseManager(BaseContextManager[DatabaseConnectionManager]):
             **kwargs
     ):
         super().__init__(self.name, **kwargs)
-        self.database_url = database_url or getattr(settings, 'database_url', None)
+        self.database_url = database_url
         if not self.database_url:
             raise ValueError("Database URL is required. Please provide via parameter or settings.database_url")
         self.engine_config = engine_config or {}
@@ -51,15 +50,15 @@ class DatabaseManager(BaseContextManager[DatabaseConnectionManager]):
             **self.engine_config
         )
 
-    async def _sync_cleanup(self) -> None:
-        """同步清理数据库资源"""
-        if self._instance:
-            await self._instance.close()
-
     async def _async_cleanup(self) -> None:
         """清理数据库资源"""
         if self._instance:
             await self._instance.close()
+
+    def _sync_cleanup(self) -> None:
+        """同步清理数据库资源"""
+        if self._instance:
+            self._instance.close_sync()
 
     async def health_check(self) -> bool:
         """数据库健康检查
@@ -110,7 +109,8 @@ async def get_database_connection() -> DatabaseConnectionManager:
     except KeyError:
         logger.warning(f"Database context not found, registering default instance")
         try:
-            app_context.register_context(DatabaseManager())
+            from bisheng.common.services.config_service import settings
+            app_context.register_context(DatabaseManager(settings.database_url))
             return await app_context.async_get_instance(DatabaseManager.name)
         except Exception as e:
             logger.error(f"Failed to register and initialize database context: {e}")
@@ -132,7 +132,8 @@ def sync_get_database_connection() -> DatabaseConnectionManager:
     except KeyError:
         logger.warning(f"Database context not found, registering default instance")
         try:
-            app_context.register_context(DatabaseManager())
+            from bisheng.common.services.config_service import settings
+            app_context.register_context(DatabaseManager(settings.database_url))
             return app_context.sync_get_instance(DatabaseManager.name)
         except Exception as e:
             logger.error(f"Failed to register and initialize database context: {e}")
