@@ -49,9 +49,8 @@ def create_evaluation(*,
 
     try:
         # 尝试做下转码操作
-        output_file = io.BytesIO()
-        file.file = convert_encoding_cchardet(file.file, output_file)
-        csv_data = EvaluationService.parse_csv(file_data=io.BytesIO(file.file.read()))
+        output_file = convert_encoding_cchardet(file_io=io.BytesIO(file.file.read()))
+        csv_data = EvaluationService.parse_csv(file_data=output_file)
         data_samples = {
             "question": [one.get('question') for one in csv_data],
             "answer": [one.get('answer') for one in csv_data],

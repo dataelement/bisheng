@@ -61,7 +61,7 @@ async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask],
             minio_client = await get_minio_storage()
             object_name = f"linsight/session_files/{execution_tasks[0].session_version_id}/{file_info['file_name']}"
             # Use async upload if available, otherwise wrap sync call
-            await sync_func_to_async(minio_client.put_object)(
+            await minio_client.put_object(
                 bucket_name=minio_client.bucket,
                 object_name=object_name,
                 file=file_info["file_path"]
@@ -147,7 +147,7 @@ async def get_final_result_file(session_model: LinsightSessionVersion, file_deta
             object_name = f"linsight/final_result/{session_model.id}/{final_file_info['file_name']}"
             # Use async upload if available, otherwise wrap sync call
             minio_client = await get_minio_storage()
-            await sync_func_to_async(minio_client.put_object)(
+            await minio_client.put_object(
                 bucket_name=minio_client.bucket,
                 object_name=object_name,
                 file=final_file_info["file_path"]
@@ -233,7 +233,7 @@ async def handle_step_event_extra(event: ExecStep, task_exec_obj) -> ExecStep:
 
             minio_client = await get_minio_storage()
             # 上传文件到MinIO
-            await sync_func_to_async(minio_client.put_object)(
+            await minio_client.put_object(
                 bucket_name=minio_client.bucket,
                 object_name=object_name,
                 file=file_path

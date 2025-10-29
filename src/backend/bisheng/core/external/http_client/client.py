@@ -1,9 +1,18 @@
 import logging
 from typing import Dict, Optional, Union, Any, AsyncGenerator, Literal
 
+import aiohttp
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
+
+class ResponseData(BaseModel):
+    status_code: int
+    body: Optional[Union[Dict[str, Any], str, bytes]] = None
+    error: Optional[str] = None
+    headers: Optional[Dict[str, str]] = None
 
 
 class AsyncHttpClient(object):
@@ -64,8 +73,9 @@ class AsyncHttpClient(object):
             body: Optional[Union[Dict[str, Any], str, bytes, Any]] = None,
             data_type: Literal["json", "text", "binary"] = "json",
             destroy_session: bool = False,
-            clear_headers: bool = False
-    ) -> Dict[str, Any]:
+            clear_headers: bool = False,
+            **kwargs,
+    ) -> ResponseData:
         """
         Execute an HTTP request.
         :param method: HTTP method (GET, POST, PUT, DELETE, etc.)
@@ -79,7 +89,7 @@ class AsyncHttpClient(object):
         :return: Response as a dictionary with status_code, body, and error.
         """
         client = await self.get_aiohttp_client()
-        response: Dict[str, Any] = {"status_code": None, "body": None, "error": None}
+        response: ResponseData = ResponseData(status_code=0)
         headers = headers or self.headers
         try:
             async with client.request(
@@ -89,19 +99,27 @@ class AsyncHttpClient(object):
                     params=params,
                     json=body if isinstance(body, dict) else None,
                     data=body if isinstance(body, str) or isinstance(body, bytes) else None,
+                    **kwargs,
             ) as http_response:
-                response["status_code"] = http_response.status
+                response.status_code = http_response.status
+                response.headers = dict(http_response.headers)
                 if data_type == "json":
-                    response["body"] = await http_response.json()
+                    response.body = await http_response.json()
                 elif data_type == "text":
-                    response["body"] = await http_response.text()
+                    response.body = await http_response.text()
                 elif data_type == "binary":
-                    response["body"] = await http_response.read()
+                    response.body = await http_response.read()
                 http_response.raise_for_status()
+
+        except aiohttp.ClientResponseError as cre:
+            logger.error(f"Client response error during {method} request to {url}: {cre}")
+            response.error = str(cre)
+            response.status_code = cre.status
+
         except Exception as error:
             logger.error(f"Error during {method} request to {url}: {error}")
-            response["error"] = str(error)
-            response["status_code"] = 500
+            response.error = str(error)
+            response.status_code = 500
         finally:
             if destroy_session:
                 await self.close_aiohttp_client()
@@ -112,33 +130,33 @@ class AsyncHttpClient(object):
 
     async def get(self, url: str, params: Optional[Dict[str, Union[str, int]]] = None,
                   data_type: Literal["json", "text", "binary"] = "json", destroy_session: bool = False,
-                  headers: Dict = None, clear_headers: bool = False) -> Dict[str, Any]:
+                  headers: Dict = None, clear_headers: bool = False, **kwargs) -> ResponseData:
         return await self._execute_request("GET", url=url, headers=headers, params=params, data_type=data_type,
-                                           destroy_session=destroy_session, clear_headers=clear_headers)
+                                           destroy_session=destroy_session, clear_headers=clear_headers, **kwargs)
 
     async def post(self, url: str, body: Optional[Union[Dict[str, Any], str, bytes, Any]] = None,
                    data_type: Literal["json", "text", "binary"] = "json", destroy_session: bool = False,
-                   headers: Dict = None, clear_headers: bool = False) -> Dict[str, Any]:
+                   headers: Dict = None, clear_headers: bool = False, **kwargs) -> ResponseData:
         return await self._execute_request("POST", url=url, headers=headers, body=body, data_type=data_type,
-                                           destroy_session=destroy_session, clear_headers=clear_headers)
+                                           destroy_session=destroy_session, clear_headers=clear_headers, **kwargs)
 
     async def put(self, url: str, body: Optional[Union[Dict[str, Any], str, bytes, Any]] = None,
                   data_type: Literal["json", "text", "binary"] = "json", destroy_session: bool = False,
-                  headers: Dict = None, clear_headers: bool = False) -> Dict[str, Any]:
+                  headers: Dict = None, clear_headers: bool = False, **kwargs) -> ResponseData:
         return await self._execute_request("PUT", url=url, headers=headers, body=body, data_type=data_type,
-                                           destroy_session=destroy_session, clear_headers=clear_headers)
+                                           destroy_session=destroy_session, clear_headers=clear_headers, **kwargs)
 
     async def patch(self, url: str, body: Optional[Union[Dict[str, Any], str, bytes, Any]] = None,
                     data_type: Literal["json", "text", "binary"] = "json", destroy_session: bool = False,
-                    headers: Dict = None, clear_headers: bool = False) -> Dict[str, Any]:
+                    headers: Dict = None, clear_headers: bool = False, **kwargs) -> ResponseData:
         return await self._execute_request("PATCH", url=url, headers=headers, body=body, data_type=data_type,
-                                           destroy_session=destroy_session, clear_headers=clear_headers)
+                                           destroy_session=destroy_session, clear_headers=clear_headers, **kwargs)
 
     async def delete(self, url: str, params: Optional[Dict[str, Union[str, int]]] = None,
                      data_type: Literal["json", "text", "binary"] = "json", destroy_session: bool = False,
-                     headers: Dict = None, clear_headers: bool = False) -> Dict[str, Any]:
+                     headers: Dict = None, clear_headers: bool = False, **kwargs) -> ResponseData:
         return await self._execute_request("DELETE", url=url, headers=headers, params=params, data_type=data_type,
-                                           destroy_session=destroy_session, clear_headers=clear_headers)
+                                           destroy_session=destroy_session, clear_headers=clear_headers, **kwargs)
 
     async def stream(
             self, method: Literal["GET", "POST", "PUT", "PATCH"],
@@ -147,7 +165,8 @@ class AsyncHttpClient(object):
             params: Optional[Dict[str, Union[str, int]]] = None,
             body: Optional[Union[Dict[str, Any], str]] = None, chunk_size: int = 1024 * 1024 * 10,
             destroy_session: bool = False,
-            clear_headers: bool = False
+            clear_headers: bool = False,
+            **kwargs
     ) -> AsyncGenerator[bytes, None]:
         """
         流式请求
@@ -160,7 +179,7 @@ class AsyncHttpClient(object):
                                       headers=headers or self.headers,
                                       params=params,
                                       json=body if isinstance(body, dict) else None,
-                                      data=body if isinstance(body, str) else None, ) as response:
+                                      data=body if isinstance(body, str) else None, **kwargs) as response:
                 response.raise_for_status()
                 async for chunk in response.content.iter_chunked(chunk_size):
                     yield chunk

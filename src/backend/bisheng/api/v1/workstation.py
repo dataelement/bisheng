@@ -194,7 +194,7 @@ async def upload_file(
     """
     # 读取文件内容
     # 保存文件
-    file_path = await save_uploaded_file(file.file, 'bisheng', unquote(file.filename))
+    file_path = await save_uploaded_file(file, 'bisheng', unquote(file.filename))
 
     # 返回文件路径
     return resp_200(

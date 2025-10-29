@@ -226,6 +226,12 @@ class ConfigService(Settings):
         ret = all_config.get('knowledges', {})
         return ret
 
+    async def async_get_knowledge(self):
+        # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
+        all_config =  await self.aget_all_config()
+        ret = all_config.get('knowledges', {})
+        return ret
+
     def get_minio_conf(self) -> MinioConf:
         return self.object_storage.minio
 

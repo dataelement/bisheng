@@ -66,14 +66,14 @@ class RedisClient:
                 if not result:
                     raise ValueError('RedisCache could not set the value.')
             else:
-                logger.error('pickle error, value={}', value)
+                logger.error(f'pickle error, value={value}')
         except TypeError as exc:
             raise TypeError('RedisCache only accepts values that can be pickled. ') from exc
 
     async def aset(self, key, value, expiration=3600):
         try:
             if pickled := pickle.dumps(value):
-                # await self.acluster_nodes(key)
+                await self.acluster_nodes(key)
                 if expiration:
                     result = await self.async_connection.setex(name=key, value=pickled, time=expiration)
                 else:
@@ -81,7 +81,7 @@ class RedisClient:
                 if not result:
                     raise ValueError('RedisCache could not set the value.')
             else:
-                logger.error('pickle error, value={}', value)
+                logger.error(f'pickle error, value={value}')
         except TypeError as exc:
             raise TypeError('RedisCache only accepts values that can be pickled. ') from exc
 
@@ -117,7 +117,7 @@ class RedisClient:
                 if not result:
                     raise ValueError('RedisCache could not set the value.')
             else:
-                logger.error('pickle error, value={}', value)
+                logger.error(f'pickle error, value={value}')
         except TypeError as exc:
             raise TypeError('RedisCache only accepts values that can be pickled. ') from exc
 
@@ -129,7 +129,7 @@ class RedisClient:
                 if not result:
                     raise ValueError('RedisCache could not set the value.')
             else:
-                logger.error('pickle error, value={}', value)
+                logger.error(f'pickle error, value={value}')
         except TypeError as exc:
             raise TypeError('RedisCache only accepts values that can be pickled. ') from exc
 

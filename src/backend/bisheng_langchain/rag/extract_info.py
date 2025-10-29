@@ -38,6 +38,23 @@ def extract_title(llm, text, max_length=7000, abstract_prompt: str = None) -> st
     ans = chain.run(context=text[:max_length])
     return ans
 
+async def async_extract_title(llm, text, max_length=7000, abstract_prompt: str = None) -> str:
+    """
+    此方法在bisheng_langchain模型的还有两处调用用，在不能提供abstract_propmpt的情况下
+    使用原来现有提示词.
+    """
+    if abstract_prompt:
+        updated_messages = [
+            SystemMessagePromptTemplate.from_template(abstract_prompt),
+            HumanMessagePromptTemplate.from_template(human_template),
+        ]
+        updated_title_extract_prompt = ChatPromptTemplate.from_messages(updated_messages)
+        chain = LLMChain(llm=llm, prompt=updated_title_extract_prompt)
+    else:
+        chain = LLMChain(llm=llm, prompt=title_extract_prompt)
+    ans = await chain.arun(context=text[:max_length])
+    return ans
+
 
 if __name__ == "__main__":
     llm = ChatQWen(model_name="qwen1.5-72b-chat", api_key="", temperature=0.01)

@@ -16,7 +16,7 @@ from bisheng.api.services.knowledge_imp import (
     decide_vectorstores,
     delete_knowledge_file_vectors,
     process_file_task,
-    read_chunk_text,
+    async_read_chunk_text,
 )
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.knowledge import KnowledgeFileResp
@@ -28,15 +28,15 @@ from bisheng.api.v1.schemas import (
     KnowledgeFileProcess,
     UpdatePreviewFileChunk, ExcelRule, KnowledgeFileReProcess,
 )
-from bisheng.core.cache.utils import file_download
+from bisheng.core.cache.utils import file_download, async_file_download
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
 from bisheng.common.errcode.knowledge import (
     KnowledgeChunkError,
     KnowledgeExistError,
     KnowledgeNoEmbeddingError,
 )
-from bisheng.core.cache.redis_manager import get_redis_client_sync
-from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
+from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
 from bisheng.database.models.group_resource import (
     GroupResource,
     GroupResourceDao,
@@ -64,7 +64,7 @@ from bisheng.llm.const import LLMModelType
 from bisheng.llm.domain.services import LLMService
 from bisheng.llm.models import LLMDao
 from bisheng.common.services.config_service import settings
-from bisheng.utils import generate_uuid
+from bisheng.utils import generate_uuid, util
 from bisheng.utils import get_request_ip
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.worker.knowledge import file_worker
@@ -379,7 +379,7 @@ class KnowledgeService(KnowledgeUtils):
         return original_file_name
 
     @classmethod
-    def save_upload_file_original_name(cls, original_file_name: str) -> str:
+    async def save_upload_file_original_name(cls, original_file_name: str) -> str:
         """
         保存上传文件的原始名称到redis，生成一个uuid的文件名
         """
@@ -388,11 +388,12 @@ class KnowledgeService(KnowledgeUtils):
         file_ext = original_file_name.split(".")[-1]
         # 生成一个唯一的uuid作为key
         uuid_file_name = generate_uuid()
-        get_redis_client_sync().set(f"file_name:{uuid_file_name}", original_file_name, expiration=86400)
+        redis_client = await get_redis_client()
+        await redis_client.aset(f"file_name:{uuid_file_name}", original_file_name, expiration=86400)
         return f"{uuid_file_name}.{file_ext}"
 
     @classmethod
-    def get_preview_file_chunk(
+    async def get_preview_file_chunk(
             cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileProcess
     ) -> (str, str, List[FileChunk], Any):
         """
@@ -401,8 +402,8 @@ class KnowledgeService(KnowledgeUtils):
         2：切分后的chunk列表
         3: ocr识别后的bbox
         """
-        knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
-        if not login_user.access_check(
+        knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
+        if not await login_user.async_access_check(
                 knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
         ):
             raise UnAuthorizedError.http_exception()
@@ -411,14 +412,14 @@ class KnowledgeService(KnowledgeUtils):
         excel_rule = req_data.file_list[0].excel_rule
         cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path)
 
-        redis_client = get_redis_client_sync()
+        redis_client = await get_redis_client()
 
         # 尝试从缓存获取
         if req_data.cache:
-            if cache_value := cls.get_preview_cache(cache_key):
-                parse_type = redis_client.get(f"{cache_key}_parse_type")
-                file_share_url = redis_client.get(f"{cache_key}_file_path")
-                partitions = redis_client.get(f"{cache_key}_partitions")
+            if cache_value := await cls.async_get_preview_cache(cache_key):
+                parse_type = await redis_client.aget(f"{cache_key}_parse_type")
+                file_share_url = await redis_client.aget(f"{cache_key}_file_path")
+                partitions = await redis_client.aget(f"{cache_key}_partitions")
                 res = []
 
                 # 根据分段顺序排序
@@ -428,12 +429,12 @@ class KnowledgeService(KnowledgeUtils):
                     res.append(FileChunk(text=val["text"], metadata=val["metadata"]))
                 return parse_type, file_share_url, res, partitions
 
-        filepath, file_name = file_download(file_path)
+        filepath, file_name = await async_file_download(file_path)
         file_ext = file_name.split(".")[-1].lower()
         file_name = cls.get_upload_file_original_name(file_name)
 
         # 切分文本
-        texts, metadatas, parse_type, partitions = read_chunk_text(
+        texts, metadatas, parse_type, partitions = await async_read_chunk_text(
             filepath,
             file_name,
             req_data.separator,
@@ -460,36 +461,36 @@ class KnowledgeService(KnowledgeUtils):
         if file_ext in ['doc', 'ppt', 'pptx']:
             file_share_url = ''
             new_file_name = KnowledgeUtils.get_tmp_preview_file_object_name(filepath)
-            minio_client = get_minio_storage_sync()
-            if minio_client.object_exists_sync(minio_client.tmp_bucket, new_file_name):
+            minio_client = await get_minio_storage()
+            if await minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
                 file_share_url = minio_client.get_share_link(
                     new_file_name, minio_client.tmp_bucket
                 )
 
         # 存入缓存
-        cls.save_preview_cache(cache_key, mapping=cache_map)
-        redis_client.set(f"{cache_key}_parse_type", parse_type)
-        redis_client.set(f"{cache_key}_file_path", file_share_url)
-        redis_client.set(f"{cache_key}_partitions", partitions)
+        await cls.async_save_preview_cache(cache_key, mapping=cache_map)
+        await redis_client.aset(f"{cache_key}_parse_type", parse_type)
+        await redis_client.aset(f"{cache_key}_file_path", file_share_url)
+        await redis_client.aset(f"{cache_key}_partitions", partitions)
         return parse_type, file_share_url, res, partitions
 
     @classmethod
-    def update_preview_file_chunk(
+    async def update_preview_file_chunk(
             cls, request: Request, login_user: UserPayload, req_data: UpdatePreviewFileChunk
     ):
-        knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
-        if not login_user.access_check(
+        knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
+        if not await login_user.async_access_check(
                 knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
         ):
             raise UnAuthorizedError.http_exception()
 
         cache_key = cls.get_preview_cache_key(req_data.knowledge_id, req_data.file_path)
-        chunk_info = cls.get_preview_cache(cache_key, req_data.chunk_index)
+        chunk_info = await cls.async_get_preview_cache(cache_key, req_data.chunk_index)
         if not chunk_info:
             raise NotFoundError.http_exception()
         chunk_info["text"] = req_data.text
         chunk_info["metadata"]["bbox"] = req_data.bbox
-        cls.save_preview_cache(
+        await cls.async_save_preview_cache(
             cache_key, chunk_index=req_data.chunk_index, value=chunk_info
         )
 

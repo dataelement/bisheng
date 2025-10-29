@@ -341,7 +341,7 @@ async def create_upload_file(file: UploadFile, flow_id: str):
     try:
         if len(file.filename) > 80:
             file.filename = file.filename[-80:]
-        file_path = await save_uploaded_file(file.file, folder_name=flow_id, file_name=file.filename)
+        file_path = await save_uploaded_file(file, folder_name=flow_id, file_name=file.filename)
         if not isinstance(file_path, str):
             file_path = str(file_path)
         return resp_200(UploadFileResponse(

@@ -1,8 +1,7 @@
 import asyncio
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 
 from bisheng.prompts.prompt_loader import PromptLoader
-from bisheng.utils.http_client import AsyncHttpClient
 
 
 class AppContext:
@@ -11,16 +10,6 @@ class AppContext:
         # 缓存字典 用于存储以初始化的对象
         self.cache: Dict[str, Any] = {}
 
-    async def get_http_client(self, loop: Optional[asyncio.AbstractEventLoop] = None) -> AsyncHttpClient:
-        """
-        获取HTTP客户端，如果未初始化则进行初始化。
-        :return: AsyncHttpClient 实例
-        """
-        key = "HTTP_CLIENT"
-        if key not in self.cache:
-            self.cache[key] = AsyncHttpClient()
-            await self.cache[key].get_aiohttp_client(loop=loop)
-        return self.cache[key]
 
     def get_event_loop(self) -> asyncio.AbstractEventLoop:
         """
@@ -53,8 +42,6 @@ async def init_app_context():
     初始化应用上下文。
     :param loop: 可选的事件循环
     """
-    loop = app_ctx.get_event_loop()
-    await app_ctx.get_http_client(loop=loop)
     app_ctx.get_prompt_loader()
 
 
