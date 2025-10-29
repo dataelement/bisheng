@@ -13,7 +13,7 @@ from langchain_core.tools import BaseTool
 from loguru import logger
 
 from bisheng.api.services.assistant_agent import AssistantAgent
-from bisheng.api.services.knowledge_imp import read_chunk_text, decide_vectorstores, async_read_chunk_text
+from bisheng.api.services.knowledge_imp import decide_vectorstores, async_read_chunk_text
 from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.user_service import UserPayload
@@ -24,9 +24,9 @@ from bisheng.core.cache.utils import save_file_to_folder, CACHE_DIR
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.linsight import LinsightToolInitError, LinsightBishengLLMError, LinsightGenerateSopError
-from bisheng.core.app_context import app_ctx
 from bisheng.core.cache.redis_manager import get_redis_client
-from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
+from bisheng.core.prompts.manager import get_prompt_manager
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao
@@ -40,8 +40,7 @@ from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.services import LLMService
 from bisheng.common.services.config_service import settings
 from bisheng.utils import util
-from bisheng.utils.embedding import decide_embeddings
-from bisheng.utils.util import calculate_md5, async_calculate_md5
+from bisheng.utils.util import async_calculate_md5
 from bisheng_langchain.linsight.const import ExecConfig
 
 
@@ -281,7 +280,7 @@ class LinsightWorkbenchImpl:
     @classmethod
     async def _generate_title_prompt(cls, question: str) -> List[Tuple[str, str]]:
         """生成标题生成的prompt"""
-        prompt_service = app_ctx.get_prompt_loader()
+        prompt_service = await get_prompt_manager()
         prompt_obj = prompt_service.render_prompt(
             namespace="gen_title",
             prompt_name="linsight",

@@ -12,9 +12,8 @@ from loguru import logger
 from bisheng.api import router, router_rpc
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.services.config_service import settings
-from bisheng.core.app_context import init_app_context
 from bisheng.common.init_data import init_default_data
-from bisheng.core.context import initialize_app_context
+from bisheng.core.context import initialize_app_context, close_app_context
 from bisheng.interface.utils import setup_llm_caching
 from bisheng.services.utils import initialize_services, teardown_services
 from bisheng.utils.http_middleware import CustomMiddleware
@@ -57,14 +56,13 @@ _EXCEPTION_HANDLERS = {
 async def lifespan(app: FastAPI):
     await initialize_app_context(config=settings.model_dump())
     initialize_services()
-    await init_app_context()
     setup_llm_caching()
     await init_default_data()
     # LangfuseInstance.update()
     yield
     teardown_services()
     thread_pool.tear_down()
-
+    await close_app_context()
 
 def create_app():
     """Create the FastAPI app and include the router."""

@@ -24,7 +24,7 @@ from bisheng.common.errcode.linsight import (
 from bisheng.common.errcode.server import (
     NoEmbeddingModelError, EmbeddingModelNotExistError, EmbeddingModelTypeError
 )
-from bisheng.core.app_context import app_ctx
+from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.models.linsight_sop import LinsightSOP, LinsightSOPDao, LinsightSOPRecord
 from bisheng.database.models.user import UserDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
@@ -55,7 +55,7 @@ class SOPManageService:
                 workbench_conf = await LLMService.get_workbench_llm()
                 linsight_conf = settings.get_linsight_conf()
                 llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=linsight_conf.default_temperature)
-            prompt_service = app_ctx.get_prompt_loader()
+            prompt_service = await get_prompt_manager()
             prompt_obj = prompt_service.render_prompt(
                 namespace="sop",
                 prompt_name="gen_sop_summary",

@@ -13,7 +13,6 @@ from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.v1.schema.linsight_schema import UserInputEventSchema
 from bisheng.core.cache.utils import create_cache_folder_async, CACHE_DIR
-from bisheng.core.app_context import app_ctx
 from bisheng.core.external.http_client.http_client_manager import get_http_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models import LinsightExecuteTask
