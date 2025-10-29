@@ -3,8 +3,6 @@ import * as mammoth from "mammoth";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
 const DocxPreview = ({ filePath }) => {
-    console.log(filePath, 445);
-    
     // 检查文件路径是否以.doc结尾（不区分大小写）
     const isDocFile = filePath.toLowerCase().endsWith('.doc');
     

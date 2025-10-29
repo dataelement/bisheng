@@ -34,7 +34,6 @@ export default function ComponentParameter({ disabled = false, flow, node, templ
     }, [template])
 
     const handleOnNewValue = (newValue: any, name) => {
-        // console.log('object :>> ', object);
         // 引用更新
         node.data.node.template[name].value = newValue;
         // 手动修改知识库，collection_id 清空

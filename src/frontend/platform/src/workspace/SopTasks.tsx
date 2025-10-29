@@ -896,7 +896,6 @@ const useFoucsInput = (tasks: any) => {
     useEffect(() => {
         if (currentFocusId) {
             const dom = document.getElementById(currentFocusId);
-            console.log('dom :>> ', dom);
             if (dom) {
                 dom?.focus();
                 // 平滑滚动到输入框位置

@@ -269,8 +269,7 @@ export interface AdvancedParams {
   
   // 获取指定模型类型和模型类别的模板
   export const getAdvancedParamsTemplate = (modelType: string, modelCategory: 'llm' | 'embedding'): AdvancedParams => {
-    console.log(modelCategory,89);
-    
+
     // 根据模型类别选择对应的映射表
     const templateMap = modelCategory === 'llm' ? llmModelTypeToTemplateKey : embeddingModelTypeToTemplateKey;
     const templates = modelCategory === 'llm' ? llmTemplates : embeddingTemplates;

@@ -216,7 +216,6 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
 
         const currentTool: any = ((allToolsConfig as any)[selectedTool] as any) || ({} as any);
         const currentToolMap: Record<string, any> = currentTool as Record<string, any>;
-        console.log(currentTool, 111);
 
         if (!currentTool) return null;
 

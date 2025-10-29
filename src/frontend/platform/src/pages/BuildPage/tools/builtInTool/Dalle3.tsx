@@ -30,7 +30,6 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
         
         // 根据provider类型决定显示哪个API Key
         let displayApiKey = '';
-        console.log(provider,222);
         setPro(provider)
         
         if (provider === 'openai') {

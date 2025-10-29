@@ -5,6 +5,7 @@ import CodePythonItem from "./component/CodePythonItem";
 import ConditionItem from "./component/ConditionItem";
 import FileTypeSelect from "./component/FileTypeSelect";
 import HistoryNumItem from "./component/HistoryNumItem";
+import ImagePromptItem from "./component/ImagePromptItem";
 import InputFormItem from "./component/InputFormItem";
 import InputItem from "./component/InputItem";
 import InputListItem from "./component/InputListItem";
@@ -13,6 +14,7 @@ import KnowledgeSelectItem from "./component/KnowledgeSelectItem";
 import ModelItem from "./component/ModelItem";
 import OutputItem from "./component/OutputItem";
 import ReportItem from "./component/ReportItem";
+import RetrievalWeightSlider from "./component/RetrievalWeightSlider";
 import SliderItem, { SwitchSliderItem } from "./component/SliderItem";
 import SqlConfigItem from "./component/SqlConfigItem";
 import SwitchItem from "./component/SwitchItem";
@@ -22,8 +24,6 @@ import VarItem from "./component/VarItem";
 import VarSelectItem, { VarSelectSingleItem } from "./component/VarSelectItem";
 import VarTextareaItem from "./component/VarTextareaItem";
 import VarTextareaUploadItem from "./component/VarTextareaUploadItem";
-import ImagePromptItem from "./component/ImagePromptItem";
-import RetrievalWeightSlider from "./component/RetrievalWeightSlider";
 
 // 节点表单项
 export default function Parameter({ node, nodeId, item, onOutPutChange, onStatusChange, onFouceUpdate, onVarEvent }
@@ -38,17 +38,8 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
     }) {
 
     const handleOnNewValue = (newValue: any, validate?: any) => {
-        
         // 更新by引用(视图更新再组件内部完成)
         item.value = newValue;
-        
-        // 处理linkage属性，当值改变时触发联动更新
-        if ((item as any).linkage) {
-            onOutPutChange((item as any).linkage, newValue);
-        }
-        
-        // 触发重新渲染以更新visibleOn控制的组件
-        onFouceUpdate();
     }
 
     const bindValidate = (validate) => {

@@ -14,7 +14,6 @@ export default function FileUploadStep4({ data ,kId}) {
     const [finish, setFinish] = useState(true)
     const navigate = useNavigate()
     const { id: kid } = useParams()
-    console.log(data,kId,44);
 
     const [files, setFiles] = useState([])
     const timerRef = useRef(null); // 轮询定时器引用
@@ -26,7 +25,6 @@ export default function FileUploadStep4({ data ,kId}) {
     // 初始化文件状态（只执行一次）
 useEffect(() => {
     if (data.length > 0 && !hasInitialized.current) { 
-        console.log(data, 111);
         
         const initialFiles = data.map(item => ({
             id: item.id || item.fileId, // 前端文件唯一标识
@@ -35,7 +33,6 @@ useEffect(() => {
             reason: '',
             progress: 'await'
         }));
-        console.log(initialFiles, 45);
         
         setFiles(initialFiles);
         
@@ -153,13 +150,11 @@ useEffect(() => {
     if (kId) {
         finalId = kId.replace(/\D/g, '');
     }
-    console.log(finalId,333);
     
     const [details] = useKnowledgeDetails([finalId])
     
     const handleCreateFlow = async (params) => {
         const model = await getLlmDefaultModel()
-        console.log(details,9999);
         
         const flow = await getKnowledgeDefaultFlowTemplate(finalId, details[0]?.name || '', model.model_id)
         const res = await captureAndAlertRequestErrorHoc(createWorkflowApi(

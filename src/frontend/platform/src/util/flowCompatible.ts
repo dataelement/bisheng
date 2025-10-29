@@ -1,6 +1,6 @@
 import { generateUUID } from "@/components/bs-ui/utils";
 
-// 历史版本工作流转换脚本(最新v2)
+// 历史版本工作流转换脚本
 export const flowVersionCompatible = (flow) => {
 
     flow.nodes.forEach((node) => {

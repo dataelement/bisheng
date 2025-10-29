@@ -123,7 +123,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
     // 新增：模型管理容器的ref
     const modelManagementContainerRef = useRef<HTMLDivElement>(null);
-    
+
     const { t } = useTranslation()
     const {
         formData,
@@ -168,7 +168,6 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     };
     const handleWebSearchSave = async (config) => {
         const res = await getAssistantToolsApi('default');
-        console.log(res, 222);
         const webSearchTool = res.find(tool => tool.name === "联网搜索");
 
         if (!webSearchTool) {
@@ -439,7 +438,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     <DialogHeader>
                         <DialogTitle>{t('chatConfig.webSearchConfig')}</DialogTitle>
                     </DialogHeader>
-                    <WebSearchForm isApi={true}/>
+                    <WebSearchForm isApi={true} />
                 </DialogContent>
             </Dialog>
         </div>
@@ -510,26 +509,26 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
 {question}`,
         },
     });
-  // 简单深比较，避免父子相互 set 导致的循环刷新
-  const isDeepEqual = (a: any, b: any) => {
-      try {
-          return JSON.stringify(a) === JSON.stringify(b);
-      } catch {
-          return a === b;
-      }
-  };
+    // 简单深比较，避免父子相互 set 导致的循环刷新
+    const isDeepEqual = (a: any, b: any) => {
+        try {
+            return JSON.stringify(a) === JSON.stringify(b);
+        } catch {
+            return a === b;
+        }
+    };
 
-  useEffect(() => {
-      if (parentFormData && !isDeepEqual(formData, parentFormData)) {
-          setFormData(parentFormData);
-      }
-  }, [parentFormData]);
+    useEffect(() => {
+        if (parentFormData && !isDeepEqual(formData, parentFormData)) {
+            setFormData(parentFormData);
+        }
+    }, [parentFormData]);
 
-  useEffect(() => {
-      if (parentSetFormData && !isDeepEqual(formData, parentFormData)) {
-          parentSetFormData(formData);
-      }
-  }, [formData, parentFormData]);
+    useEffect(() => {
+        if (parentSetFormData && !isDeepEqual(formData, parentFormData)) {
+            parentSetFormData(formData);
+        }
+    }, [formData, parentFormData]);
 
     useEffect(() => {
         if (!parentFormData) {
@@ -655,8 +654,8 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
             newErrors.model = t('chatConfig.errors.atLeastOneModel');
             if (!firstErrorRef) {
                 // 修改：使用模型管理容器ref作为优先滚动目标
-                firstErrorRef = refs.modelManagementContainerRef.current 
-                    ? { current: refs.modelManagementContainerRef.current } 
+                firstErrorRef = refs.modelManagementContainerRef.current
+                    ? { current: refs.modelManagementContainerRef.current }
                     : refs.sidebarSloganRef; // 保留默认回退
             }
             isValid = false;

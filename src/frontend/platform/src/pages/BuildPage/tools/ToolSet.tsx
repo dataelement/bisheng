@@ -39,11 +39,9 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     useImperativeHandle(ref, () => ({
 
         edit: (item) => {
-            console.log(item,333);
             
             setName(item.name);
             idRef.current = item.id;
-            console.log(item, webSearchData, 222);
              let config = {};
             try {
                 if (item.extra) {

@@ -74,7 +74,6 @@ const KnowledgeUploadComponent = ({
 
     // beforeupload
     const handleDrop = (acceptedFiles) => {
-        console.log(acceptedFiles,33);
         const sizeLimit = appConfig.uploadFileMaxSize * 1024 * 1024;
         
         const [ bigFiles, files] = acceptedFiles.reduce(

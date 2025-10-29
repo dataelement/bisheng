@@ -29,7 +29,6 @@ export default function AdjustFilesUpload() {
 
   // 从路由状态获取调整模式的初始数据（必须传文件数据）
   const initFileData = location.state?.fileData;
-  console.log(initFileData, 33);
   useEffect(() => {
     // 如果没有初始化数据，说明是直接访问，跳转到/filelib
     if (!initFileData) {

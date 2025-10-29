@@ -1,13 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { Slider } from '@/components/bs-ui/slider';
-import { HelpCircle } from 'lucide-react';
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger
-} from '@/components/bs-ui/tooltip';
-import { Switch } from '@/components/bs-ui/switch';
+import { Input } from '@/components/bs-ui/input';
 import {
     Select,
     SelectContent,
@@ -15,8 +6,17 @@ import {
     SelectTrigger,
     SelectValue
 } from '@/components/bs-ui/select';
-import { Input } from '@/components/bs-ui/input';
+import { Slider } from '@/components/bs-ui/slider';
+import { Switch } from '@/components/bs-ui/switch';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger
+} from '@/components/bs-ui/tooltip';
 import { WorkflowNodeParam } from '@/types/flow';
+import { HelpCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 
 // 重排模型类型定义
 interface RerankModel {
@@ -37,7 +37,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
     // 初始化状态值，将原retrievalEnabled改为search_switch
     const [keywordWeight, setKeywordWeight] = useState(data.value?.keyword_weight || 0.5);
     const [vectorWeight, setVectorWeight] = useState(data.value?.vector_weight || 0.5);
-    const [searchSwitch, setSearchSwitch] = useState(data.value?.search_switch ?? true); 
+    const [searchSwitch, setSearchSwitch] = useState(data.value?.search_switch ?? true);
     const [rerankEnabled, setRerankEnabled] = useState(data.value?.rerank_enabled ?? false);
     const [selectedRerankModel, setSelectedRerankModel] = useState(data.value?.rerank_model || '');
     const [resultLength, setResultLength] = useState(data.value?.result_length || 15000);
@@ -59,7 +59,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
         onChange({
             keyword_weight: keywordWeight,
             vector_weight: vectorWeight,
-            user_auth: userAuth, 
+            user_auth: userAuth,
             search_switch: searchSwitch,
             rerank_flag: rerankEnabled,
             rerank_model: selectedRerankModel,
@@ -72,7 +72,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
         rerankEnabled,
         selectedRerankModel,
         resultLength,
-        userAuth 
+        userAuth
     ]);
 
     // 处理权重滑块变化
@@ -87,7 +87,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
     // 处理检索开关变化（键名变更）
     const handleSearchToggle = (checked: boolean) => {
         // 注释：原逻辑中"if (checked) return"可能有误，这里保留原逻辑
-        if (checked) return; 
+        if (checked) return;
         setSearchSwitch(checked);
     };
 
@@ -108,20 +108,20 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
     };
 
     return (
-        <div className="space-y-2 rounded-lg">
+        <div className="space-y-2 rounded-lg mb-4">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-gray-500">高级检索设置</span>
                 </div>
                 <Switch
-                    checked={searchSwitch} 
-                    onCheckedChange={handleSearchToggle} 
+                    checked={searchSwitch}
+                    onCheckedChange={handleSearchToggle}
                 />
             </div>
 
             {/* 用户知识库权限校验 - 绑定到user_auth */}
             {searchSwitch && (
-                <div className="flex items-center justify-between pl-4 pr-4">
+                <div className="flex items-center justify-between pl-4">
                     <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-gray-500">用户知识库权限校验</span>
                         <TooltipProvider>
@@ -143,8 +143,8 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
             )}
 
             {/* 检索器权重设置（仅在检索开启时显示） */}
-            {searchSwitch && ( 
-                <div className="space-y-4 pl-4 pr-4">
+            {searchSwitch && (
+                <div className="space-y-4 pl-4">
                     <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-gray-500">检索器权重设置</span>
                         <TooltipProvider>
@@ -187,8 +187,8 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
             )}
 
             {/* 检索结果重排 */}
-            {searchSwitch && ( 
-                <div className="flex items-center justify-between pl-4 pr-4">
+            {searchSwitch && (
+                <div className="flex items-center justify-between pl-4">
                     <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-gray-500">检索结果重排</span>
                         <TooltipProvider>
@@ -205,14 +205,14 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
                     <Switch
                         checked={rerankEnabled}
                         onCheckedChange={setRerankEnabled}
-                        disabled={!searchSwitch} 
+                        disabled={!searchSwitch}
                     />
                 </div>
             )}
 
             {/* 重排模型选择（仅在重排开启时显示） */}
-            {rerankEnabled && searchSwitch && ( 
-                <div className="pl-4 pr-4">
+            {rerankEnabled && searchSwitch && (
+                <div className="pl-4">
                     <Select
                         value={selectedRerankModel}
                         onValueChange={setSelectedRerankModel}
@@ -233,7 +233,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
 
             {/* 检索结果长度 */}
             {searchSwitch && (
-                <div className="space-y-2 pl-4 pr-4">
+                <div className="space-y-2 pl-4">
                     <div className="flex items-center gap-2">
                         <label className="text-sm font-medium text-gray-500">检索结果长度</label>
                         <TooltipProvider>

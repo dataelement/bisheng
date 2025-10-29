@@ -126,9 +126,10 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
         node.group_params.some(group => {
             return group.params.some(param => {
                 if (param.key === key) {
+                    const prefix = key.split('_')[0]
                     param.value = value.map(item => ({
-                        key: 'output_' + item.key,
-                        label: 'output_' + item.label
+                        key: `${prefix}_${item.key}`,
+                        label: `${prefix}_${item.label}`
                     }))
                     return true
                 }

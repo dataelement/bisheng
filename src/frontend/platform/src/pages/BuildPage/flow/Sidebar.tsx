@@ -166,7 +166,6 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
                 {/* base */}
                 <TabsContent value="base">
                     <TooltipProvider delayDuration={100}>
-                        {console.log(nodeTemps,34343)}
                         {
                             nodeTemps.map((item, index) =>
                                 <Tooltip key={item.type}>

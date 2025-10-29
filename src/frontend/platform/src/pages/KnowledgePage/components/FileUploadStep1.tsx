@@ -17,7 +17,6 @@ export default function FileUploadStep1({ hidden, onNext, onSave,initialFiles })
     const failFilesRef = useRef<any>([])
 
     const handleFileChange = (files, failFiles) => {
-        console.log(files,77);
         
         filesRef.current = files.map(file => ({
             ...file,
