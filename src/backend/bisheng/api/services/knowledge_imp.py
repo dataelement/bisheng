@@ -582,7 +582,7 @@ def add_file_embedding(
             db_file.id
         )
         minio_client.put_object_sync(
-            bucket_name=db_file.bucket_name,
+            bucket_name=minio_client.bucket,
             object_name=db_file.bbox_object_name,
             file=partition_data, content_type="application/json",
         )

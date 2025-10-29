@@ -295,7 +295,7 @@ class Etl4lmLoader(BasePDFLoader):
                 logger.error(f"Request to etl4lm API timed out: {e}")
                 raise Exception("etl4lm服务繁忙，请升级etl4lm服务的算力")
             raise e
-        if resp.status_code != 200 and resp.body.get("status_code") != 200:
+        if (resp.status_code != 200) or (resp.body and resp.body.get("status_code") != 200):
             logger.info(
                 f"file partition {os.path.basename(self.file_name)} error resp={resp}"
             )
