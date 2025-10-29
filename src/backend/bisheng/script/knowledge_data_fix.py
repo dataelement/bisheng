@@ -64,7 +64,8 @@ def get_all_knowledge_files(knowledge_id: int) -> List[KnowledgeFile]:
 def _get_es_chunks_data(knowledge: Knowledge, es_obj=None, source: bool = False):
     if not es_obj:
         embedding = decide_embeddings(knowledge.model)
-        es_obj = decide_vectorstores(knowledge.index_name, "ElasticKeywordsSearch", embedding)
+        es_obj = decide_vectorstores(knowledge.index_name or knowledge.collection_name, "ElasticKeywordsSearch",
+                                     embedding)
     es_client = es_obj.client
     all_chunks = []
 
@@ -78,7 +79,7 @@ def _get_es_chunks_data(knowledge: Knowledge, es_obj=None, source: bool = False)
                 "_source": hit['_source'] if source else None,
             })
 
-    result = es_client.search(index=knowledge.index_name,
+    result = es_client.search(index=knowledge.index_name or knowledge.collection_name,
                               query={"match_all": {}},
                               size=5000,
                               scroll="5m",
@@ -240,7 +241,8 @@ def _init_knowledge_obj(knowledge: Knowledge):
             f"!!!! skip knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name} because milvus connection error: {e}")
         raise Exception(f"跳过该知识库，原因：Milvus连接错误: {e}")
     try:
-        es_obj = decide_vectorstores(knowledge.index_name, "ElasticKeywordsSearch", embedding)
+        es_obj = decide_vectorstores(knowledge.index_name or knowledge.collection_name, "ElasticKeywordsSearch",
+                                     embedding)
     except Exception as e:
         print(
             f"!!!! skip knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name} because es connection error: {e}")
@@ -341,10 +343,13 @@ def scan_knowledge_error_data():
 def _sync_milvus_new_collection_name(knowledge: Knowledge, milvus_obj) -> bool:
     """ copy knowledge data to new milvus collection name """
     embedding = decide_embeddings(knowledge.model)
+    new_collection_name = knowledge.index_name or knowledge.collection_name
+    if new_collection_name == knowledge.collection_name:
+        return milvus_obj
     # create new collection name
-    new_col = Collection(name=knowledge.index_name, schema=milvus_obj.col.schema, using=milvus_obj.alias,
+    new_col = Collection(name=new_collection_name, schema=milvus_obj.col.schema, using=milvus_obj.alias,
                          consistency_level=milvus_obj.consistency_level)
-    new_milvus_obj = decide_vectorstores(knowledge.index_name, "Milvus", embedding)
+    new_milvus_obj = decide_vectorstores(new_collection_name, "Milvus", embedding)
 
     output_fields = [s.name for s in milvus_obj.col.schema.fields if s.name != "pk"]
 
@@ -352,7 +357,7 @@ def _sync_milvus_new_collection_name(knowledge: Knowledge, milvus_obj) -> bool:
         # get old chunks
         all_chunks = _get_milvus_chunks_data(knowledge, milvus_obj, all_fields_expect_pk=True)
         insert_milvus(all_chunks, output_fields, new_milvus_obj)
-        knowledge.collection_name = knowledge.index_name
+        knowledge.collection_name = new_collection_name
         knowledge = KnowledgeDao.update_one(knowledge)
         return new_milvus_obj
     except Exception as e:
@@ -423,7 +428,8 @@ def _fix_knowledge_data(knowledge: Knowledge, milvus_obj, es_obj, all_files: Lis
     if remove_id:
         print(
             f"----remove extra es data knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name} _id: {remove_id}")
-        es_obj.client.delete_by_query(index=knowledge.index_name, query={"terms": {"_id": remove_id}})
+        es_obj.client.delete_by_query(index=knowledge.index_name or knowledge.collection_name,
+                                      query={"terms": {"_id": remove_id}})
 
     if all_milvus_chunk_map:
         print(f"---- fix knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name} milvus extra data found")
@@ -431,7 +437,7 @@ def _fix_knowledge_data(knowledge: Knowledge, milvus_obj, es_obj, all_files: Lis
             milvus_obj.col.delete(expr=f"file_id=={file_id}")
     if all_es_chunk_map:
         print(f"---- fix knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name} es extra data found")
-        es_obj.client.delete_by_query(index=knowledge.index_name,
+        es_obj.client.delete_by_query(index=knowledge.index_name or knowledge.collection_name,
                                       query={"terms": {"metadata.file_id": list(all_es_chunk_map.keys())}})
 
     return no_data, no_milvus_data, no_es_data, old_all_milvus_chunk_map, old_all_es_chunk_map, milvus_obj
@@ -505,6 +511,9 @@ def fix_one_knowledge(knowledge: Knowledge = None, knowledge_id: int = None):
         print(
             f"!!!! skip knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name} because error: {e}")
         return
+    if not knowledge.index_name:
+        knowledge.index_name = knowledge.collection_name
+        KnowledgeDao.update_one(knowledge)
     print(f"---- start fix knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name}")
     if knowledge.type == KnowledgeTypeEnum.QA.value:
         fix_qa_knowledge_data(knowledge, milvus_obj, es_obj)
