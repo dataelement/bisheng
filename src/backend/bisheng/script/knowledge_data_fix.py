@@ -1,6 +1,5 @@
 import argparse
-import os.path
-import os.path
+import os
 from typing import List
 
 import openpyxl
@@ -374,7 +373,7 @@ def _fix_knowledge_data(knowledge: Knowledge, milvus_obj, es_obj, all_files: Lis
 
     all_milvus_chunk = _get_milvus_chunks_data(knowledge, milvus_obj, all_fields_expect_pk=True)
     all_milvus_chunk_map = {}
-    all_es_chunk = _get_es_chunks_data(knowledge, es_obj)
+    all_es_chunk = _get_es_chunks_data(knowledge, es_obj, source=True)
     all_es_chunk_map = {}
 
     judge_qa_chunk = lambda x: not x.get("source")
