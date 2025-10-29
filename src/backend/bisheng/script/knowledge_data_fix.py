@@ -429,7 +429,7 @@ def _fix_knowledge_data(knowledge: Knowledge, milvus_obj, es_obj, all_files: Lis
     if all_milvus_chunk_map:
         print(f"---- fix knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name} milvus extra data found")
         for file_id, chunks in all_milvus_chunk_map.items():
-            milvus_obj.col.delete(expr=f"file_id=='{file_id}'")
+            milvus_obj.col.delete(expr=f"file_id=={file_id}")
     if all_es_chunk_map:
         print(f"---- fix knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name} es extra data found")
         es_obj.client.delete_by_query(index=knowledge.index_name,
