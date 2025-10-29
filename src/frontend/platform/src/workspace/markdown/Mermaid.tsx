@@ -202,9 +202,6 @@ export default function MermaidBlock({ children }: { children: string }) {
                     </div>
                     {mode === "chart" && (
                         <div className="flex items-center">
-                            <Button onClick={handleZoomIn} variant="ghost" size="icon" className="text-xs h-8" disabled={zoom >= 3}>
-                                <ZoomIn size={16} />
-                            </Button>
                             <Button
                                 onClick={handleZoomOut}
                                 variant="ghost"
@@ -213,6 +210,15 @@ export default function MermaidBlock({ children }: { children: string }) {
                                 disabled={zoom <= 0.5}
                             >
                                 <ZoomOut size={16} />
+                            </Button>
+                            <Button
+                                onClick={handleZoomIn}
+                                variant="ghost"
+                                size="icon"
+                                className="text-xs h-8"
+                                disabled={zoom >= 3}
+                            >
+                                <ZoomIn size={16} />
                             </Button>
                             <Separator orientation="vertical" className="h-4 mx-1" />
                             <Button onClick={handleDownload} variant="ghost" className="text-xs h-8">

@@ -9,7 +9,7 @@ import { generateUUID, getFileExtension } from "~/utils";
 import useLocalize from "~/hooks/useLocalize";
 
 // @accepts '.png,.jpg'
-export default function InputFiles({ v, accepts, size, onChange }) {
+export default function InputFiles({ v, showVoice, accepts, size, onChange }) {
     const t = useLocalize()
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
@@ -180,7 +180,10 @@ export default function InputFiles({ v, accepts, size, onChange }) {
             </div>}
 
             {/* File Upload Button */}
-            <div className="absolute right-14 bottom-3 cursor-pointer p-1 hover:bg-gray-200 rounded-full" onClick={() => fileInputRef.current.click()}>
+            <div
+                className={`absolute bottom-3 cursor-pointer p-1 hover:bg-gray-200 rounded-full ${showVoice ? 'right-[92px]' : 'right-14'}`}
+                onClick={() => fileInputRef.current.click()}
+            >
                 <AttachmentIcon />
             </div>
 
