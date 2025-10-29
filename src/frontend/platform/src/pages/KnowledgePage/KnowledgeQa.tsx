@@ -11,7 +11,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import Tip from "@/components/bs-ui/tooltip/tip";
 import { userContext } from "@/contexts/userContext";
-import { copyLibDatabase, createFileLib, deleteFileLib, readFileLibDatabase, updateKnowledge } from "@/controllers/API";
+import { copyQaDatabase, createFileLib, deleteFileLib, readFileLibDatabase, updateKnowledge } from "@/controllers/API";
 import { getKnowledgeModelConfig } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ModelSelect } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
@@ -346,7 +346,7 @@ export default function KnowledgeQa(params) {
         doing[elem.id] = true;
 
         try {
-            await captureAndAlertRequestErrorHoc(copyLibDatabase(elem.id));
+            await captureAndAlertRequestErrorHoc(copyQaDatabase(elem.id));
             reload();
         } catch (error) {
             toast({ variant: 'error', description: '复制失败' });

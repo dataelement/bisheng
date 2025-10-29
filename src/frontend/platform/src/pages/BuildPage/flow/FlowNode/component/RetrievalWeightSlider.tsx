@@ -40,7 +40,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
     const [searchSwitch, setSearchSwitch] = useState(data.value?.search_switch ?? true);
     const [rerankEnabled, setRerankEnabled] = useState(data.value?.rerank_enabled ?? false);
     const [selectedRerankModel, setSelectedRerankModel] = useState(data.value?.rerank_model || '');
-    const [resultLength, setResultLength] = useState(data.value?.result_length || 15000);
+    const [resultLength, setResultLength] = useState(data.value?.max_chunk_size || 15000);
     const [userAuth, setUserAuth] = useState(data.value?.user_auth ?? true);
 
     // 确保权重和为1
@@ -63,7 +63,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
             search_switch: searchSwitch,
             rerank_flag: rerankEnabled,
             rerank_model: selectedRerankModel,
-            result_length: resultLength,
+            max_chunk_size: resultLength,
         });
     }, [
         keywordWeight,

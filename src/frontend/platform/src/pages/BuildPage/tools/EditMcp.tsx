@@ -145,6 +145,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
     const [isLoading, setIsLoading] = useState(false); // 加载状态
     const latestFormData = useRef(initialFormState); // 存储最新表单数据
     const parseBeforeSaveRef = useRef(false); // 保存前需要解析
+    const [isWrite, setIsWrite] = useState(false)
     useEffect(() => {
         latestFormData.current = formData;
     }, [formData]);
@@ -187,6 +188,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                 latestFormData.current = newFormData;
                 serverRef.current = serverData;
                 setIsSelf(serverData.user_id === user.user_id);
+                setIsWrite(serverData.write)
                 originalName.current = serverData.name;
                 setIsEditMode(true);
                 loadToolsFromSchema(serverData.openapi_schema);
@@ -434,7 +436,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
 
                     {/* 底部操作按钮 */}
                     <SheetFooter className="absolute bottom-0 right-0 w-full px-6 py-4">
-                        {isEditMode && (user.role === 'admin' || isSelf) && (
+                        {isEditMode && (user.role === 'admin' || isSelf || isWrite) && (
                             <Button
                                 variant="destructive"
                                 className="mr-auto"

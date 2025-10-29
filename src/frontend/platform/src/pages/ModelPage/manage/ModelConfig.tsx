@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { getAdvancedParamsTemplate, templateToJsonString } from "@/util/advancedParamsTemplates";
 
 function ModelItem({ data, type, onDelete, onInput, onConfig }) {
+
     const { t } = useTranslation('model')
     const [model, setModel] = useState({
         ...data,
@@ -209,7 +210,7 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
             initTemplate();
         }
     };
-    
+    const showAsrTtsTypes = ['azure_openai', 'openai', 'qwen', 'qianfan'];
     return (
         <div className="group w-full border rounded-sm p-4 mb-2">
             <div className="flex items-center justify-between">
@@ -285,8 +286,12 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                                 <SelectItem value="llm">LLM</SelectItem>
                                 <SelectItem value="embedding">Embedding</SelectItem>
                                 <SelectItem value="rerank">Rerank</SelectItem>
-                                <SelectItem value="asr">ASR</SelectItem>
-                                <SelectItem value="tts">TTS</SelectItem>
+                                {showAsrTtsTypes.includes(type) && (
+                                    <>
+                                        <SelectItem value="asr">ASR</SelectItem>
+                                        <SelectItem value="tts">TTS</SelectItem>
+                                    </>
+                                )}
                             </SelectGroup>
                         </SelectContent>
                     </Select>
