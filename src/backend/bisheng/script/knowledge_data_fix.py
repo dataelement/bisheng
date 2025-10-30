@@ -482,7 +482,12 @@ def fix_normal_knowledge_data(knowledge: Knowledge, milvus_obj, es_obj):
         for chunk in es_chunks:
             texts.append(chunk["_source"]["text"])
             metadatas.append(chunk["_source"]["metadata"])
-        milvus_obj.add_texts(texts=texts, metadatas=metadatas)
+        try:
+            milvus_obj.add_texts(texts=texts, metadatas=metadatas)
+        except Exception as e:
+            file.status = KnowledgeFileStatus.FAILED.value
+            file.remark = str(e)
+            KnowledgeFileDao.update(file)
     for file in no_es_data:
         milvus_chunks = all_milvus.get(file.id, [])
         if not milvus_chunks:
