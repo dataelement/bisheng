@@ -114,7 +114,7 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
                     </div>
                 )}
 
-                <SheetHeader className="">
+                <SheetHeader className="px-3">
                     <div className="flex items-center justify-between">
                         <SheetTitle>{localize('com_sop_view_all_files')}</SheetTitle>
                     </div>

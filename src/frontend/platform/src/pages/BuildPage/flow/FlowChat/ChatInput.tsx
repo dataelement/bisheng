@@ -486,7 +486,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         inputRef.current.dispatchEvent(event);
     };
 
-    return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
+    return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B] z-10">
         
         <div className={`relative pr-4 ${clear && 'pl-9'}`}>
        
