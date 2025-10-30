@@ -11,7 +11,7 @@ from bisheng.database.models.base import SQLModelSerializable
 
 
 class RoleAccessBase(SQLModelSerializable):
-    role_id: str = Field(index=True)
+    role_id: int = Field(index=True)
     third_id: str = Field(index=False)
     type: int = Field(index=False)
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
