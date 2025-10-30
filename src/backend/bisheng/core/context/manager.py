@@ -74,6 +74,12 @@ class ApplicationContextManager:
             from bisheng.core.storage.minio.minio_manager import MinioManager
             self.register_context(MinioManager(minio_config=config.get('object_storage').get('minio')))
 
+            from bisheng.core.external.http_client.http_client_manager import HttpClientManager
+            self.register_context(HttpClientManager())
+
+            from bisheng.core.prompts.manager import PromptManager
+            self.register_context(PromptManager())
+
             logger.debug("Default contexts registered")
         except ImportError as e:
             logger.warning(f"Failed to import default context managers: {e}")

@@ -1,6 +1,7 @@
 from typing import List
 
 from loguru import logger
+from pymilvus import Collection
 
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import QA_save_knowledge, decide_vectorstores
@@ -10,7 +11,6 @@ from bisheng.database.models.knowledge_file import (
 )
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.llm.domain import LLMService
-from bisheng.common.services.config_service import settings
 from bisheng.worker import bisheng_celery
 from bisheng_langchain.vectorstores import Milvus, ElasticKeywordsSearch
 
@@ -54,6 +54,11 @@ def copy_qa_knowledge_celery(source_knowledge_id: int, target_knowledge_id: int,
             return
 
         source_milvus: Milvus = decide_vectorstores(source_knowledge.collection_name, "Milvus", FakeEmbedding())
+
+        # create new collection name for target knowledge
+        new_col = Collection(name=target_knowledge.collection_name, schema=source_milvus.col.schema,
+                             using=source_milvus.alias,
+                             consistency_level=source_milvus.consistency_level)
 
         target_milvus: Milvus = decide_vectorstores(target_knowledge.collection_name, "Milvus", FakeEmbedding())
 
@@ -185,12 +190,9 @@ def rebuild_qa_knowledge_celery(knowledge_id: int, embedding_model_id: str):
         # 删除milvus中对应数据
         KnowledgeService.delete_knowledge_file_in_vector(knowledge=knowledge_info, del_es=False)
 
-        suffix_id = settings.get_vectors_conf().milvus.partition_suffix
-        new_collection_name = f"partition_{embedding_model_id}_knowledge_{suffix_id}"
-        knowledge_info.collection_name = new_collection_name
         embeddings = LLMService.get_bisheng_embedding_sync(model_id=embedding_model_id)
         milvus_db: Milvus = decide_vectorstores(
-            new_collection_name, "Milvus", embeddings
+            knowledge_info.collection_name, "Milvus", embeddings
         )
 
         # 分批 重建QA知识库 从第一页开始
@@ -209,7 +211,6 @@ def rebuild_qa_knowledge_celery(knowledge_id: int, embedding_model_id: str):
                 "from": (page - 1) * batch_size,
                 "size": batch_size
             }, filter_path=["hits.hits._source"])
-
 
             hits = es_result.get("hits", {}).get("hits", [])
 

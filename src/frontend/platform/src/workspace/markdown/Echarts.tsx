@@ -40,7 +40,7 @@ export default function ECharts({ option }: { option: string }) {
             setTimeout(() => {
                 if (domRef.current && echartsLib) {
                     chartRef.current = echartsLib.init(domRef.current)
-                    const getOption = new Function("myChart", "echarts", `return ${option}`)
+                    const getOption = new Function("myChart", "echarts", `return ${option.trim()}`)
                     try {
                         chartRef.current.setOption(getOption(chartRef.current, echartsLib))
                     } catch (e) {

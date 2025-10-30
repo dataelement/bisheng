@@ -28,8 +28,8 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
 from bisheng.common.errcode.workstation import WebSearchToolNotFoundError, ConversationNotFoundError, \
     AgentAlreadyExistsError
-from bisheng.core.app_context import app_ctx
 from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
@@ -194,7 +194,7 @@ async def upload_file(
     """
     # 读取文件内容
     # 保存文件
-    file_path = await save_uploaded_file(file.file, 'bisheng', unquote(file.filename))
+    file_path = await save_uploaded_file(file, 'bisheng', unquote(file.filename))
 
     # 返回文件路径
     return resp_200(
@@ -414,7 +414,7 @@ async def chat_completions(
                     prompt = wsConfig.knowledgeBase.prompt.format(
                         retrieved_file_content='\n'.join(chunks)[:max_token], question=data.text)
                 else:
-                    prompt_service = app_ctx.get_prompt_loader()
+                    prompt_service = await get_prompt_manager()
                     prompt = prompt_service.render_prompt('qa', 'simple_qa', context='\n'.join(chunks)[:max_token],
                                                           question=data.text).prompt
 

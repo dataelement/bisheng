@@ -444,7 +444,6 @@ export default function Files({ onPreview }) {
                                     </div>
                                 </TableCell>
                                 <TableCell>
-                                    {console.log(el, 33)}
                                     {el.strategy[0] ? (
                                         <TooltipProvider delayDuration={100}>
                                             <Tooltip>

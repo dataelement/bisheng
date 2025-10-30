@@ -56,7 +56,6 @@ export default function RuleFile({
   showPreview =false,
   isEtl4lm = false
 }: RuleFileProps) {
-  console.log(showPreview,199);
   
   const { appConfig } = useContext(locationContext);
   const { t } = useTranslation('knowledge');

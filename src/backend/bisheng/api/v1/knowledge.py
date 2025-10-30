@@ -39,8 +39,8 @@ async def upload_file(*, file: UploadFile = File(...)):
     try:
         file_name = file.filename
         # 缓存本地
-        uuid_file_name = KnowledgeService.save_upload_file_original_name(file_name)
-        file_path = await save_uploaded_file(file.file, 'bisheng', uuid_file_name)
+        uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
+        file_path = await save_uploaded_file(file, 'bisheng', uuid_file_name)
         if not isinstance(file_path, str):
             file_path = str(file_path)
         return resp_200(UploadFileResponse(file_path=file_path))
@@ -50,13 +50,13 @@ async def upload_file(*, file: UploadFile = File(...)):
 
 
 @router.post('/preview')
-def preview_file_chunk(*,
-                       request: Request,
-                       login_user: UserPayload = Depends(get_login_user),
-                       req_data: KnowledgeFileProcess):
+async def preview_file_chunk(*,
+                             request: Request,
+                             login_user: UserPayload = Depends(get_login_user),
+                             req_data: KnowledgeFileProcess):
     """ 获取某个文件的分块预览内容 """
     try:
-        parse_type, file_share_url, res, partitions = KnowledgeService.get_preview_file_chunk(
+        parse_type, file_share_url, res, partitions = await KnowledgeService.get_preview_file_chunk(
             request, login_user, req_data)
         return resp_200(
             data={
@@ -80,7 +80,7 @@ async def update_preview_file_chunk(*,
                                     req_data: UpdatePreviewFileChunk):
     """ 更新某个文件的分块预览内容 """
 
-    res = KnowledgeService.update_preview_file_chunk(request, login_user, req_data)
+    res = await KnowledgeService.update_preview_file_chunk(request, login_user, req_data)
     return resp_200(res)
 
 
@@ -496,7 +496,10 @@ async def get_export_url():
     with pd.ExcelWriter(bio, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="Sheet1", index=False)
     file_name = f"QA知识库导入模板.xlsx"
-    file_path = await save_uploaded_file(bio, 'bisheng', file_name)
+
+    file = UploadFile(filename=file_name, file=bio)
+
+    file_path = await save_uploaded_file(file, 'bisheng', file_name)
     return resp_200({"url": file_path})
 
 

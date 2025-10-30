@@ -61,7 +61,7 @@ async def get_minio_storage() -> MinioStorage:
         try:
             from bisheng.common.services.config_service import settings
             app_context.register_context(MinioManager(
-                minio_config=settings.minio
+                minio_config=settings.object_storage.minio
             ))
             return await app_context.async_get_instance(MinioManager.name)
         except Exception as e:
@@ -79,7 +79,7 @@ def get_minio_storage_sync() -> MinioStorage:
         try:
             from bisheng.common.services.config_service import settings
             app_context.register_context(MinioManager(
-                minio_config=settings.minio
+                minio_config=settings.object_storage.minio
             ))
             return app_context.sync_get_instance(MinioManager.name)
         except Exception as e:

@@ -167,10 +167,10 @@ export default function HoverButtons({
           <ContinueIcon className="h-4 w-4 hover:text-gray-500 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400" />
         </button>
       ) : null}
-      {regenerateEnabled && <TextToSpeechButton
+      {regenerateEnabled && message.text && <TextToSpeechButton
         className={!isLast ? 'md:opacity-0 md:group-hover:opacity-100' : ''}
         messageId={message.messageId}
-        text={(message.content ?? message.text).replace(/:::([\s\S]*?):::/g, '')}
+        text={message.text.replace(/:::([\s\S]*?):::/g, '')}
       />}
     </div>
   );

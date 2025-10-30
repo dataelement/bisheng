@@ -187,6 +187,7 @@ const EditTool = forwardRef((props: any, ref) => {
     const [isSelf, setIsSelf] = useState(false);
     // 表格数据（api接口列表）
     const [tableData, setTableData] = useApiTableData()
+    const [isWrite, setIsWrite] = useState(false)
 
     useImperativeHandle(ref, () => ({
         open: () => {
@@ -204,6 +205,8 @@ const EditTool = forwardRef((props: any, ref) => {
                 apiLocation: tool.api_location || "query",
                 parameter: tool.parameter_name || ""
             })
+            setIsWrite(tool.write)
+            
             setIsSelf(tool.user_id === user.user_id);
             setEditShow(true)
             setDelShow(true)
@@ -600,7 +603,7 @@ const EditTool = forwardRef((props: any, ref) => {
                     )}
                 </div>
                 <SheetFooter className="absolute bottom-0 right-0 w-full px-6 py-4">
-                    {delShow && (user.role === 'admin' || isSelf) && (
+                    {delShow && (user.role === 'admin' || isSelf || isWrite)&&(
                         <Button
                             size="sm"
                             variant="destructive"

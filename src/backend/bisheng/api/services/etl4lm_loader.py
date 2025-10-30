@@ -6,13 +6,16 @@ import os
 from typing import List
 from uuid import uuid4
 
+import aiofiles
 import cv2
 import fitz
 import requests
 from PIL import Image
+from aiohttp import ClientTimeout
 from langchain_community.docstore.document import Document
 from langchain_community.document_loaders.pdf import BasePDFLoader
 
+from bisheng.core.external.http_client.http_client_manager import get_http_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 
 logger = logging.getLogger(__name__)
@@ -257,6 +260,75 @@ class Etl4lmLoader(BasePDFLoader):
         if resp.get("b64_pdf"):
             with open(self.file_path, "wb") as f:
                 f.write(base64.b64decode(resp["b64_pdf"]))
+
+        metadata["source"] = self.file_name
+        doc = Document(page_content=content, metadata=metadata)
+        return [doc]
+
+    async def aload(self) -> List[Document]:
+        """Asynchronously load given path as pages."""
+        async with aiofiles.open(self.file_path, "rb") as f:
+            file_data = await f.read()
+        b64_data = base64.b64encode(file_data).decode()
+        parameters = {"start": self.start, "n": self.n}
+        parameters.update(self.extra_kwargs)
+        # TODO: add filter_page_header_footer into payload when elt4llm is ready.
+        payload = dict(
+            filename=os.path.basename(self.file_name),
+            b64_data=[b64_data],
+            mode="partition",
+            force_ocr=self.force_ocr,
+            enable_formula=self.enable_formular,
+            ocr_sdk_url=self.ocr_sdk_url,
+            parameters=parameters,
+        )
+        try:
+
+            http_client = await get_http_client()
+
+            resp = await http_client.post(
+                url=self.unstructured_api_url, headers=self.headers, body=payload,
+                timeout=ClientTimeout(total=self.timemout)
+            )
+        except Exception as e:
+            if str(e).find("Timeout") != -1:
+                logger.error(f"Request to etl4lm API timed out: {e}")
+                raise Exception("etl4lm服务繁忙，请升级etl4lm服务的算力")
+            raise e
+        if (resp.status_code != 200) or (resp.body and resp.body.get("status_code") != 200):
+            logger.info(
+                f"file partition {os.path.basename(self.file_name)} error resp={resp}"
+            )
+            raise Exception(
+                f"file partition error {os.path.basename(self.file_name)} error resp={resp}"
+            )
+
+        partitions = resp.body.get("partitions")
+        if partitions:
+            logger.info(f"content_from_partitions")
+            self.partitions = partitions
+            content, metadata = merge_partitions(
+                self.file_path, partitions, self.knowledge_id
+            )
+        elif resp.body.get("text"):
+            logger.info(f"content_from_text")
+            content = resp.body["text"]
+            metadata = {
+                "bboxes": [],
+                "pages": [],
+                "indexes": [],
+                "types": [],
+            }
+        else:
+            logger.warning(f"content_is_empty resp={resp.body}")
+            content = ""
+            metadata = {}
+
+        logger.info(f'unstruct_return code={resp.body.get("status_code")}')
+
+        if resp.body.get("b64_pdf"):
+            with open(self.file_path, "wb") as f:
+                f.write(base64.b64decode(resp.body["b64_pdf"]))
 
         metadata["source"] = self.file_name
         doc = Document(page_content=content, metadata=metadata)

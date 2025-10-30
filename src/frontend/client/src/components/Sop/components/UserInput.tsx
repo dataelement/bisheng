@@ -330,7 +330,7 @@ export default function UserInput({ taskId, history = {}, disable = false, onSen
                     <Textarea
                         id={taskId}
                         placeholder={localize("com_sop_please_input")}
-                        className="border-none bg-transparent ![box-shadow:initial] pl-0 pr-2 pt-2 h-auto"
+                        className="border-none bg-transparent ![box-shadow:initial] pl-0 pr-2 pt-2 h-auto resize-none"
                         rows={1}
                         value={inputValue}
                         maxLength={10000}

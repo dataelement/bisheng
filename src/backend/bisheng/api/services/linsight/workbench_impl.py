@@ -13,7 +13,7 @@ from langchain_core.tools import BaseTool
 from loguru import logger
 
 from bisheng.api.services.assistant_agent import AssistantAgent
-from bisheng.api.services.knowledge_imp import read_chunk_text, decide_vectorstores
+from bisheng.api.services.knowledge_imp import decide_vectorstores, async_read_chunk_text
 from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.user_service import UserPayload
@@ -24,9 +24,9 @@ from bisheng.core.cache.utils import save_file_to_folder, CACHE_DIR
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.linsight import LinsightToolInitError, LinsightBishengLLMError, LinsightGenerateSopError
-from bisheng.core.app_context import app_ctx
 from bisheng.core.cache.redis_manager import get_redis_client
-from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
+from bisheng.core.prompts.manager import get_prompt_manager
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao
@@ -40,8 +40,7 @@ from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.services import LLMService
 from bisheng.common.services.config_service import settings
 from bisheng.utils import util
-from bisheng.utils.embedding import decide_embeddings
-from bisheng.utils.util import calculate_md5
+from bisheng.utils.util import async_calculate_md5
 from bisheng_langchain.linsight.const import ExecConfig
 
 
@@ -281,7 +280,7 @@ class LinsightWorkbenchImpl:
     @classmethod
     async def _generate_title_prompt(cls, question: str) -> List[Tuple[str, str]]:
         """生成标题生成的prompt"""
-        prompt_service = app_ctx.get_prompt_loader()
+        prompt_service = await get_prompt_manager()
         prompt_obj = prompt_service.render_prompt(
             namespace="gen_title",
             prompt_name="linsight",
@@ -732,8 +731,8 @@ class LinsightWorkbenchImpl:
             collection_name = f"{cls.COLLECTION_NAME_PREFIX}{workbench_conf.embedding_model.id}"
 
             # 异步执行文件解析
-            parse_result = await util.sync_func_to_async(cls._parse_file_sync)(file_id, file_path, original_filename,
-                                                                               collection_name, workbench_conf)
+            parse_result = await cls._parse_file_sync(file_id, file_path, original_filename,
+                                                      collection_name, workbench_conf)
 
             # 缓存解析结果
             await cls._cache_parse_result(file_id, parse_result)
@@ -752,8 +751,8 @@ class LinsightWorkbenchImpl:
         return parse_result
 
     @classmethod
-    def _parse_file_sync(cls, file_id: str, file_path: str, original_filename: str,
-                         collection_name: str, workbench_conf) -> Dict:
+    async def _parse_file(cls, file_id: str, file_path: str, original_filename: str,
+                          collection_name: str, workbench_conf) -> Dict:
         """
         同步解析文件
 
@@ -769,7 +768,7 @@ class LinsightWorkbenchImpl:
         """
         # 读取文件内容
         try:
-            texts, _, parse_type, _ = read_chunk_text(
+            texts, _, parse_type, _ = await async_read_chunk_text(
                 input_file=file_path,
                 file_name=original_filename,
                 separator=['\n\n', '\n'],
@@ -785,12 +784,12 @@ class LinsightWorkbenchImpl:
 
             # 保存markdown文件
             markdown_filename = f"{file_id}.md"
-            minio_client = get_minio_storage_sync()
-            minio_client.put_object_tmp_sync(markdown_filename, markdown_bytes)
-            markdown_md5 = calculate_md5(markdown_bytes)
+            minio_client = await get_minio_storage()
+            await minio_client.put_object_tmp(markdown_filename, markdown_bytes)
+            markdown_md5 = await async_calculate_md5(markdown_bytes)
 
             # 处理向量存储
-            cls._process_vector_storage(texts, file_id, collection_name, workbench_conf)
+            await cls._process_vector_storage(texts, file_id, collection_name, workbench_conf)
 
             return {
                 "file_id": file_id,
@@ -813,11 +812,11 @@ class LinsightWorkbenchImpl:
             }
 
     @classmethod
-    def _process_vector_storage(cls, texts: List[str], file_id: str,
-                                collection_name: str, workbench_conf) -> None:
+    async def _process_vector_storage(cls, texts: List[str], file_id: str,
+                                      collection_name: str, workbench_conf) -> None:
         """处理向量存储"""
         # 创建embeddings
-        embeddings = decide_embeddings(workbench_conf.embedding_model.id)
+        embeddings = await LLMService.get_bisheng_embedding(workbench_conf.embedding_model.id)
 
         # 创建向量存储
         vector_client = decide_vectorstores(collection_name, "Milvus", embeddings)
@@ -825,8 +824,8 @@ class LinsightWorkbenchImpl:
 
         # 添加文本到向量存储
         metadatas = [{"file_id": file_id} for _ in texts]
-        vector_client.add_texts(texts, metadatas=metadatas)
-        es_client.add_texts(texts, metadatas=metadatas)
+        await vector_client.aadd_texts(texts, metadatas=metadatas)
+        await es_client.aadd_texts(texts, metadatas=metadatas)
 
     @classmethod
     async def _cache_parse_result(cls, file_id: str, parse_result: Dict) -> None:
@@ -1007,7 +1006,7 @@ class LinsightWorkbenchImpl:
             bytes_io = BytesIO()
 
             file_byte = await minio_client.get_object(bucket_name=minio_client.bucket,
-                                                                               object_name=object_name)
+                                                      object_name=object_name)
             bytes_io.write(file_byte)
 
             bytes_io.seek(0)

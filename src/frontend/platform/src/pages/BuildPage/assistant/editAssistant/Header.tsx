@@ -11,8 +11,6 @@ import EditAssistantDialog from "./EditAssistantDialog";
 
 export default function Header({ loca, onSave, onLine, onTabChange }) {
     const { t } = useTranslation()
-    console.log(loca);
-
     const navigate = useNavigate()
 
     const { assistantState, dispatchAssistant } = useAssistantStore()

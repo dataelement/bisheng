@@ -89,7 +89,7 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
     return (
         <Sheet open={isOpen} onOpenChange={onOpenChange}>
             <SheetContent className="w-[600px] sm:max-w-[600px] px-2">
-                <SheetHeader className="">
+                <SheetHeader className="p-3">
                     <div className="flex items-center justify-between">
                         <SheetTitle>{localize('com_sop_view_all_files')}</SheetTitle>
                     </div>
@@ -102,7 +102,7 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
                                 checked={isAllSelected}
                                 onCheckedChange={handleSelectAll}
                                 tabIndex="-1"
-                                className="rounded-full" 
+                                className="rounded-full"
                                 ref={(ref) => {
                                     if (ref) {
                                         ref.indeterminate = isIndeterminate
@@ -130,8 +130,8 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
                 {/* 文件列表 */}
                 <div className="space-y-1 h-[calc(100vh-100px)] overflow-auto pb-10">
                     {files.map((file) => (
-                        <div 
-                            key={file.file_id} 
+                        <div
+                            key={file.file_id}
                             className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50"
                             // 鼠标移入：记录当前文件ID
                             onMouseEnter={() => setHoveredId(file.file_id)}
@@ -150,7 +150,7 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
                                 checked={selectedFiles.has(file.file_id)}
                                 onCheckedChange={(checked) => handleFileSelect(file.file_id, checked as boolean)}
                                 className="rounded-full "
-                                 tabIndex="-1"
+                                tabIndex="-1"
                             />
 
                             <div className="flex items-center space-x-3 flex-1">
@@ -176,23 +176,23 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
                                 </Button>
 
                                 {/* Download图标：与Eye图标显示逻辑完全一致 */}
-                                <span  style={{ visibility: shouldShowIcon(file.file_id) ? 'visible' : 'hidden' }}>
-                                <DownloadResultFileBtn 
-                                    file={file} 
-                                    onDownloadFile={downloadFile}
-                                   
-                                    // 接收弹窗状态，控制是否保持显示
-                                    onTooltipOpenChange={(isOpen) => {
-                                        const newIds = new Set(tooltipOpenIds);
-                                        if (isOpen) {
-                                            newIds.add(file.file_id);
-                                        } else {
-                                            // 弹窗关闭，立即移除ID（关键修复）
-                                            newIds.delete(file.file_id);
-                                        }
-                                        setTooltipOpenIds(newIds);
-                                    }}
-                                />
+                                <span style={{ visibility: shouldShowIcon(file.file_id) ? 'visible' : 'hidden' }}>
+                                    <DownloadResultFileBtn
+                                        file={file}
+                                        onDownloadFile={downloadFile}
+
+                                        // 接收弹窗状态，控制是否保持显示
+                                        onTooltipOpenChange={(isOpen) => {
+                                            const newIds = new Set(tooltipOpenIds);
+                                            if (isOpen) {
+                                                newIds.add(file.file_id);
+                                            } else {
+                                                // 弹窗关闭，立即移除ID（关键修复）
+                                                newIds.delete(file.file_id);
+                                            }
+                                            setTooltipOpenIds(newIds);
+                                        }}
+                                    />
                                 </span>
                             </div>
                         </div>

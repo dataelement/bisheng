@@ -49,11 +49,10 @@ export function TabsProvider({ children }: { children: ReactNode }) {
 
   async function saveFlow(flow: FlowType) {
     // save api
-    const {data, ...info} = flow
+    const { data, ...info } = flow
     const newFlow = await captureAndAlertRequestErrorHoc(updateFlowApi(info))
     if (!newFlow) return null;
-    console.log('action :>> ', 'save');
-    setFlow((flow) => ({...newFlow, data: flow.data}))
+    setFlow((flow) => ({ ...newFlow, data: flow.data }))
     setTabsState((prev) => {
       return {
         ...prev,
@@ -304,7 +303,6 @@ export function TabsProvider({ children }: { children: ReactNode }) {
       value={{
         flow,
         setFlow: (action, flow) => {
-          console.log('action :>> ', action);
           if (action === "flow_init") {
             // 按模板矫正数据格式
             processFlowEdges(flow);

@@ -183,7 +183,6 @@ export const publicRouter = createBrowserRouter([
   { path: "/chat/assistant/:id/", element: <ChatAssitantShare /> },
   { path: "/resouce/:cid/:mid", element: <ResoucePage /> },
   { path: "/403", element: <Page403 /> },
-  { path: "/404", element: <Page404 /> },
-  { path: "*", element: <Navigate to="/404" replace /> }
+  { path: "*", element: <Navigate to="/" replace /> }
 ],
   baseConfig)

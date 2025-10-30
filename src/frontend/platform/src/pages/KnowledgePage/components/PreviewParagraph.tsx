@@ -148,7 +148,6 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
 });
 
 const EditMarkdown = ({ data, active, fileSuffix, onClick, onDel, onChange, onPositionClick }) => {
-    // console.log(data, active, fileSuffix ,5555555555555555);
     
     const [edit, setEdit] = useState(false); // 编辑原始格式
     const { appConfig } = useContext(locationContext)
@@ -162,7 +161,6 @@ const EditMarkdown = ({ data, active, fileSuffix, onClick, onDel, onChange, onPo
     const vditorRef = useRef(null);
     useEffect(() => {
         const { index, txt } = needCoverData
-        console.log(data.chunkIndex,index,3333);
         if (data.chunkIndex === index) {
             vditorRef.current.setValue(txt)
             onChange(data.chunkIndex, txt)
@@ -171,7 +169,6 @@ const EditMarkdown = ({ data, active, fileSuffix, onClick, onDel, onChange, onPo
 
     const { toast } = useToast()
     const handleBlur = (newValue, restore) => {
-        console.log(12);
         if (!value.trim() || newValue.trim() === '') {
             setValue(data.text)
             restore?.()

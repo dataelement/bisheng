@@ -123,18 +123,20 @@ class MinioStorage(BaseStorage, ABC):
 
     async def put_object(self, bucket_name: str, object_name: str, file: Union[bytes, BinaryIO, Path, str],
                          content_type: str = "application/octet-stream", **kwargs) -> None:
-        if isinstance(file, (bytes, BinaryIO)):
+        if isinstance(file, (bytes, BinaryIO, BytesIO)):
             if isinstance(file, bytes):
                 file = BytesIO(file)
-                length = len(file.getbuffer())
-                await self.minio_client.put_object(
-                    bucket_name=bucket_name,
-                    object_name=object_name,
-                    data=file,
-                    length=length,
-                    content_type=content_type,
-                    **kwargs
-                )
+            length = len(file.getbuffer())
+
+            file.seek(0)
+            await self.minio_client.put_object(
+                bucket_name=bucket_name,
+                object_name=object_name,
+                data=file,
+                length=length,
+                content_type=content_type,
+                **kwargs
+            )
         elif isinstance(file, (Path, str)):
             file_path = str(file)
             await self.minio_client.fput_object(

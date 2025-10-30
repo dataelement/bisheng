@@ -193,7 +193,6 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
         window.flow_version = Number(versionId)
         // 加载选中版本data
         const res = await getVersionDetails(versionId)
-        // console.log('res :>> ', res)
         // 自动触发 page的 clone flow
         forceUpdateFlow({ ...f, ...res.data })
 

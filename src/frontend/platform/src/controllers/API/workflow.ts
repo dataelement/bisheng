@@ -782,7 +782,7 @@ const workflowTemplate = [
                         "help": "一般在问答等场景开启，文档审核、报告生成等场景可关闭。"
                     },
                     {
-                        "key": "result_user_input",
+                        "key": "output_user_input",
                         "label": "输出变量",
                         "type": "var",
                         "help": "模型输出内容将会存储在该变量中。",
@@ -810,7 +810,7 @@ const workflowTemplate = [
                         "type": "user_question",
                         "test": "var",
                         "help": "当选择多个问题时，将会多次运行本节点，每次运行时从批量问题中取一项进行处理。",
-                        "linkage": "output_user_input",
+                        "linkage": "retrieved_result",
                         "value": [],
                         "placeholder": "请选择用户问题",
                         "required": true
@@ -838,10 +838,9 @@ const workflowTemplate = [
                 "name": "输出",
                 "params": [
                     {
-                        "key": "output_user_input",
-                        "label": "输出变量",
+                        "key": "retrieved_result",
+                        "label": "检索结果",
                         "type": "var",
-                        "help": "模型输出内容将会存储在该变量中。",
                         "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
                         "value": []
                     }

@@ -15,8 +15,10 @@ import cchardet
 import requests
 from appdirs import user_cache_dir
 from fastapi import UploadFile
+from tornado.httpclient import AsyncHTTPClient
 
-from bisheng.core.storage.minio.minio_manager import get_minio_storage
+from bisheng.core.external.http_client.http_client_manager import get_http_client
+from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 
 CACHE: Dict[str, Any] = {}
 
@@ -158,31 +160,27 @@ def save_binary_file(content: str, file_name: str, accepted_types: list[str]) ->
     return file_path
 
 
-def detect_encoding_cchardet(file_obj, num_bytes=1024):
+def detect_encoding_cchardet(file_bytes: bytes, num_bytes=1024):
     """使用cchardet检测文件的编码"""
-    raw_data = file_obj.read(num_bytes)
-    result = cchardet.detect(raw_data)
+    result = cchardet.detect(file_bytes)
     encoding = result['encoding']
     confidence = result['confidence']
-    file_obj.seek(0)
     return encoding, confidence
 
 
-def convert_encoding_cchardet(input_file, output_file, target_encoding='utf-8'):
+def convert_encoding_cchardet(file_io: BytesIO, target_encoding='utf-8'):
     """将文件转换为目标编码"""
-    source_encoding, confidence = detect_encoding_cchardet(input_file)
+    source_encoding, confidence = detect_encoding_cchardet(file_io.read())
+    file_io.seek(0)
     if confidence is None or confidence < 0.5 or source_encoding.lower() == target_encoding:  # 检测不出来不做任何处理
-        output_file.close()
-        output_file = input_file
-        return output_file
+        return file_io
 
     try:
-        source_content = input_file.read().decode(source_encoding)
+        source_content = file_io.read().decode(source_encoding)
     except (UnicodeDecodeError, LookupError):
-        input_file.seek(0)
-        source_content = input_file.read().decode(target_encoding, errors='replace')
-    output_file.write(source_content.encode(target_encoding))
-    output_file.seek(0)
+        file_io.seek(0)
+        source_content = file_io.read().decode(target_encoding, errors='replace')
+    output_file = BytesIO(source_content.encode(target_encoding))
     return output_file
 
 
@@ -218,7 +216,7 @@ async def save_file_to_folder(file: UploadFile, folder_name: str, file_name: str
 
 
 @create_cache_folder
-async def save_uploaded_file(file, folder_name, file_name, bucket_name: str = None):
+async def save_uploaded_file(file: UploadFile, folder_name, file_name, bucket_name: str = None):
     """
     Save an uploaded file to the specified folder with a hash of its content as the file name.
 
@@ -244,20 +242,15 @@ async def save_uploaded_file(file, folder_name, file_name, bucket_name: str = No
         folder_path.mkdir()
 
     # Reset the file cursor to the beginning of the file
-    file.seek(0)
 
-    output_file = file
+    file_io = BytesIO(await file.read())
     # convert no utf-8 file to utf-8
     file_ext = file_name.split('.')[-1].lower()
     if file_ext in ('txt', 'md', 'csv'):
-        output_file = BytesIO()
-        output_file = convert_encoding_cchardet(file, output_file)
+        file_io = convert_encoding_cchardet(file_io)
 
-    # 存储到minio
-    file_byte = output_file.read()
-    await minio_client.put_object_tmp(object_name=file_name, file=file_byte)
+    await minio_client.put_object_tmp(object_name=file_name, file=file_io)
     file_path = minio_client.get_share_link(file_name, bucket_name)
-    output_file.close()
     return file_path
 
 
@@ -300,6 +293,11 @@ def save_download_file(file_byte, folder_name, filename):
 def file_download(file_path: str):
     """download file and return path"""
     if not os.path.isfile(file_path) and _is_valid_url(file_path):
+
+        minio_client = get_minio_storage_sync()
+
+        file_path = file_path.replace(minio_client.minio_config.sharepoint, minio_client.minio_config.endpoint)
+
         r = requests.get(file_path, verify=False)
 
         if r.status_code != 200:
@@ -312,6 +310,37 @@ def file_download(file_path: str):
         if not filename:
             filename = unquote(urlparse(file_path).path.split('/')[-1])
         file_path = save_download_file(r.content, 'bisheng', filename)
+        return file_path, filename
+    elif not os.path.isfile(file_path):
+        raise ValueError('File path %s is not a valid file or url' % file_path)
+    file_name = os.path.basename(file_path)
+    # 处理下是否包含了md5的逻辑
+    file_name = file_name.split('_', 1)[-1] if '_' in file_name else file_name
+    return file_path, file_name
+
+
+async def async_file_download(file_path: str):
+    """download file and return path"""
+    if not os.path.isfile(file_path) and _is_valid_url(file_path):
+
+        http_client = await get_http_client()
+
+        minio_client = await get_minio_storage()
+
+        file_path = file_path.replace(minio_client.minio_config.sharepoint, minio_client.minio_config.endpoint)
+
+        r = await http_client.get(url=file_path, data_type="binary")
+
+        if r.status_code != 200:
+            raise ValueError('Check the url of your file; returned status code %s' % r.status_code)
+        # 检查Content-Disposition头来找出文件名
+        content_disposition = r.headers.get('Content-Disposition') if r.headers else None
+        filename = ''
+        if content_disposition:
+            filename = unquote(content_disposition).split('filename=')[-1].strip("\"'")
+        if not filename:
+            filename = unquote(urlparse(file_path).path.split('/')[-1])
+        file_path = save_download_file(r.body, 'bisheng', filename)
         return file_path, filename
     elif not os.path.isfile(file_path):
         raise ValueError('File path %s is not a valid file or url' % file_path)

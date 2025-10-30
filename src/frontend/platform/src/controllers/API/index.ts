@@ -160,7 +160,12 @@ export async function readFileLibDatabase({ page = 1, pageSize = 20, name = '', 
 export async function copyLibDatabase(knowledge_id) {
   await axios.post(`/api/v1/knowledge/copy`, { knowledge_id });
 }
-
+/**
+ * 复制qa知识库
+ */
+export async function copyQaDatabase(knowledge_id) {
+  await axios.post(`/api/v1/knowledge/qa/copy`, { knowledge_id });
+}
 /**
  * 获取知识库下文件列表
  */

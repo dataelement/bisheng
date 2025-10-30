@@ -21,7 +21,7 @@ from bisheng.interface.types import get_all_types_dict
 from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.services.deps import get_session_service, get_task_service
 from bisheng.services.task.service import TaskService
-from bisheng.common.services.config_service import settings as bisheng_settings, settings
+from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 from bisheng.utils.logger import logger
@@ -56,19 +56,19 @@ def get_env():
         uns_support.extend(['png', 'jpg', 'jpeg', 'bmp'])
 
     env = {}
-    if isinstance(settings.settings.environment, str):
-        env['env'] = settings.settings.environment
+    if isinstance(bisheng_settings.environment, str):
+        env['env'] = bisheng_settings.environment
     else:
-        env = copy.deepcopy(settings.settings.environment)
+        env = copy.deepcopy(bisheng_settings.environment)
 
     env['uns_support'] = uns_support
-    if settings.settings.get_from_db('office_url'):
-        env['office_url'] = settings.settings.get_from_db('office_url')
+    if bisheng_settings.get_from_db('office_url'):
+        env['office_url'] = bisheng_settings.get_from_db('office_url')
     # add tips from settings
-    env['dialog_tips'] = settings.settings.get_from_db('dialog_tips')
+    env['dialog_tips'] = bisheng_settings.get_from_db('dialog_tips')
     # add env dict from settings
-    env.update(settings.settings.get_from_db('env') or {})
-    env['pro'] = settings.settings.get_system_login_method().bisheng_pro
+    env.update(bisheng_settings.get_from_db('env') or {})
+    env['pro'] = bisheng_settings.get_system_login_method().bisheng_pro
     env['version'] = __version__
     env['enable_etl4lm'] = bool(etl_for_lm_url)
 
@@ -341,7 +341,7 @@ async def create_upload_file(file: UploadFile, flow_id: str):
     try:
         if len(file.filename) > 80:
             file.filename = file.filename[-80:]
-        file_path = await save_uploaded_file(file.file, folder_name=flow_id, file_name=file.filename)
+        file_path = await save_uploaded_file(file, folder_name=flow_id, file_name=file.filename)
         if not isinstance(file_path, str):
             file_path = str(file_path)
         return resp_200(UploadFileResponse(

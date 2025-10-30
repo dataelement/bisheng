@@ -32,8 +32,6 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
 
     useImperativeHandle(ref, () => ({
         load(data, files) {
-            console.log(111, data, files);
-
             paramsRef.current = data
             fileCachesRef.current = {}
 
@@ -57,8 +55,6 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
 
     // 加载文件分段结果
     const loadchunks = async (fileValue) => {
-        console.log(fileValue, '5555');
-
         if (!fileValue) return
         setLoading(true)
         setFileValue(fileValue)

@@ -148,7 +148,6 @@ export default function EvaluationPage() {
                     </TableCell>
 
                     <TableCell>
-                      {console.log(el, 33)}
                       {!!el.status && (
                         <div className="flex items-center">
                           <Badge
@@ -188,8 +187,6 @@ export default function EvaluationPage() {
                       <div className="flex flex-wrap">
                         {el.result_score
                           ? map(el.result_score, (value, key) => {
-                            console.log(key, 222);
-
                             return (
                               <span className="whitespace-nowrap">
                                 {EvaluationScoreLabelMap[EvaluationScore[key]]?.label ?? key}

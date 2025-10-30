@@ -126,7 +126,6 @@ azure-cognitiveservices-speech = "^1.46.0"
 playwright = "^1.55.0"
 xinference = "^1.11.0.post1"
 miniopy-async = "^1.23.4"
-onnxruntime = "^1.23.2"
 
 
 [tool.poetry.dev-dependencies]
