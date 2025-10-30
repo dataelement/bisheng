@@ -60,9 +60,6 @@ class ConfigService(Settings):
 
     def __init__(self, **data):
 
-        # 注册自定义的YAML构造器以处理环境变量
-        yaml.SafeLoader.add_constructor('!env', self.env_var_constructor)
-
         super().__init__(**data)
 
     @staticmethod
@@ -74,8 +71,10 @@ class ConfigService(Settings):
             raise ValueError(f'Environment variable {var_name} not found')
         return env_val
 
-    @staticmethod
-    def load_settings_from_yaml(file_path: str) -> 'ConfigService':
+    @classmethod
+    def load_settings_from_yaml(cls, file_path: str) -> 'ConfigService':
+        # 注册自定义的YAML构造器以处理环境变量
+        yaml.SafeLoader.add_constructor('!env', cls.env_var_constructor)
         # Get current path
         current_path = os.path.dirname(os.path.abspath(__file__))
         # 向前两级目录查找
@@ -228,7 +227,7 @@ class ConfigService(Settings):
 
     async def async_get_knowledge(self):
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
-        all_config =  await self.aget_all_config()
+        all_config = await self.aget_all_config()
         ret = all_config.get('knowledges', {})
         return ret
 
