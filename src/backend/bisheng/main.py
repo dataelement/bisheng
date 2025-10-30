@@ -14,10 +14,10 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.services.config_service import settings
 from bisheng.common.init_data import init_default_data
 from bisheng.core.context import initialize_app_context, close_app_context
+from bisheng.core.logger import set_logger_config
 from bisheng.interface.utils import setup_llm_caching
 from bisheng.services.utils import initialize_services, teardown_services
 from bisheng.utils.http_middleware import CustomMiddleware
-from bisheng.utils.logger import configure
 from bisheng.utils.threadpool import thread_pool
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
@@ -63,6 +63,7 @@ async def lifespan(app: FastAPI):
     teardown_services()
     thread_pool.tear_down()
     await close_app_context()
+
 
 def create_app():
     """Create the FastAPI app and include the router."""
@@ -148,13 +149,11 @@ def setup_promethues(app: FastAPI):
     app.mount('/metrics', metrics_app)
 
 
-
-
 app = create_app()
 
 if __name__ == '__main__':
     import uvicorn
 
-    configure(settings.logger_conf)
+    set_logger_config(settings.logger_conf)
 
-    uvicorn.run(app, host='0.0.0.0', port=7860, workers=1)
+    uvicorn.run(app, host='0.0.0.0', port=7860, workers=1, log_config=None)

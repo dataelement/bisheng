@@ -24,7 +24,7 @@ from bisheng.database.models.finetune import (Finetune, FinetuneChangeModelName,
 from bisheng.database.models.model_deploy import ModelDeploy, ModelDeployDao, ModelDeployInfo
 from bisheng.database.models.server import Server, ServerDao
 from bisheng.database.models.sft_model import SftModelDao
-from bisheng.utils.logger import logger
+from loguru import logger
 
 sync_job_thread_pool = ThreadPoolExecutor(3)
 

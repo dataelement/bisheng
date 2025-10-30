@@ -16,7 +16,7 @@ from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.interface.utils import try_setting_streaming_options
 from bisheng.llm.domain.services import LLMService
 from bisheng.processing.base import get_result_and_steps
-from bisheng.utils.logger import logger
+from loguru import logger
 
 
 class SourceType(Enum):

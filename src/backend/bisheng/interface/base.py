@@ -5,7 +5,7 @@ from bisheng.common.services.config_service import settings
 from bisheng.template.field.base import TemplateField
 from bisheng.template.frontend_node.base import FrontendNode
 from bisheng.template.template.base import Template
-from bisheng.utils.logger import logger
+from loguru import logger
 from langchain.agents import AgentExecutor
 from langchain.chains.base import Chain
 from pydantic import BaseModel

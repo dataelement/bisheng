@@ -2,7 +2,7 @@ from typing import ClassVar, Dict, List, Optional, Type
 
 from bisheng.interface.base import LangChainTypeCreator
 from bisheng.template.frontend_node.wrappers import WrappersFrontendNode
-from bisheng.utils.logger import logger
+from loguru import logger
 from bisheng.utils.util import build_template_from_class, build_template_from_method
 from bisheng_langchain.utils.azure_dalle_image_generator import AzureDallEWrapper as DallEAPIWrapper
 from langchain_community.utilities import requests, sql_database

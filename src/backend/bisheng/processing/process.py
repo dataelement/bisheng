@@ -11,7 +11,7 @@ from bisheng.interface.run import build_sorted_vertices, get_memory_key, update_
 from bisheng.services.deps import get_session_service
 from bisheng.template.field.base import TemplateField
 from bisheng.utils.docx_temp import test_replace_string
-from bisheng.utils.logger import logger
+from loguru import logger
 from bisheng_langchain.input_output import Report
 from langchain.chains.base import Chain
 from langchain.schema import AgentAction, Document

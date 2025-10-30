@@ -4,7 +4,7 @@ from bisheng.interface.base import LangChainTypeCreator
 from bisheng.interface.importing.utils import import_class
 from bisheng.common.services.config_service import settings
 from bisheng.template.frontend_node.retrievers import RetrieverFrontendNode
-from bisheng.utils.logger import logger
+from loguru import logger
 from bisheng.utils.util import build_template_from_class, build_template_from_method
 from bisheng_langchain import retrievers as bisheng_retrievers
 from langchain.retrievers import MultiQueryRetriever

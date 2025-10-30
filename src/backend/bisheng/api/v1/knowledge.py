@@ -27,7 +27,7 @@ from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.llm.const import LLMModelType
 from bisheng.llm.models import LLMDao
-from bisheng.utils.logger import logger
+from loguru import logger
 from bisheng.worker.knowledge.qa import insert_qa_celery
 
 # build router

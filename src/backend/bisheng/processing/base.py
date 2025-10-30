@@ -3,7 +3,7 @@ from typing import Tuple, Union
 
 from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler, StreamingLLMCallbackHandler
 from bisheng.processing.process import fix_memory_inputs, format_actions
-from bisheng.utils.logger import logger
+from loguru import logger
 
 
 async def get_result_and_steps(langchain_object, inputs: Union[dict, str], **kwargs):

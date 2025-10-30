@@ -3,7 +3,7 @@ from bisheng.core.database import get_sync_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.report import Report
 from bisheng.utils import generate_uuid
-from bisheng.utils.logger import logger
+from loguru import logger
 from bisheng_langchain.utils.requests import Requests
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import or_

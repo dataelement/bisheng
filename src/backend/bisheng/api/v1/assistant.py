@@ -23,7 +23,7 @@ from bisheng.database.models.gpts_tools import GptsToolsTypeRead
 from bisheng.mcp_manage.langchain.tool import McpTool
 from bisheng.mcp_manage.manager import ClientManager
 from bisheng.utils import generate_uuid
-from bisheng.utils.logger import logger
+from loguru import logger
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 from fastapi_jwt_auth import AuthJWT
 

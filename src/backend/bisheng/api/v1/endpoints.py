@@ -24,7 +24,7 @@ from bisheng.services.task.service import TaskService
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
-from bisheng.utils.logger import logger
+from loguru import logger
 
 try:
     from bisheng.worker import process_graph_cached_task

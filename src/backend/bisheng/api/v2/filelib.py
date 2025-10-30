@@ -22,7 +22,7 @@ from bisheng.database.models.knowledge_file import (QAKnoweldgeDao, QAKnowledgeU
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.common.services.config_service import settings
-from bisheng.utils.logger import logger
+from loguru import logger
 
 # build router
 router = APIRouter(prefix='/filelib', tags=['OpenAPI', 'Knowledge'])
