@@ -317,6 +317,8 @@ def scan_one_knowledge(knowledge: Knowledge = None, knowledge_id: int = None) ->
         rows.append(_parse_one_row(one, "否", "是"))
     for one in no_es_data:
         rows.append(_parse_one_row(one, "是", "否"))
+    if not rows and note:
+        return [one_common_row]
     return rows
 
 
