@@ -1,7 +1,11 @@
+import asyncio
+import os
 import tempfile
+import uuid
 from abc import ABC, abstractmethod
 from typing import Optional, Union, BinaryIO, Sequence
 
+import aiofiles
 from langchain_core.callbacks import Callbacks
 from langchain_core.documents import BaseDocumentCompressor, Document
 from pydantic import ConfigDict
@@ -40,11 +44,31 @@ class BaseASRClient(ABC):
             audio_bytes = audio.read()
         else:
             raise ValueError("Invalid audio input type")
+        tmp_dir = tempfile.gettempdir()
 
-        with tempfile.NamedTemporaryFile(delete=True, suffix=".wav") as f:
-            f.write(audio_bytes)
-            f.flush()
-            return await self._transcribe(f.name, language=language, model=model, **kwargs)
+        tmp_file_path = os.path.join(tmp_dir, uuid.uuid4().hex + '.wav')
+        # ffmpeg 转换为16k采样率单声道wav文件
+        converted_file_path = os.path.join(tmp_dir, uuid.uuid4().hex + '_16k_mono.wav')
+
+        try:
+            async with aiofiles.open(tmp_file_path, 'wb') as f:
+                await f.write(audio_bytes)
+
+            command = f'ffmpeg -y -i "{tmp_file_path}" -ar 16000 -ac 1 "{converted_file_path}"'
+            process = await asyncio.create_subprocess_shell(
+                command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+
+            await process.communicate()
+
+            return await self._transcribe(converted_file_path, language=language, model=model, **kwargs)
+        finally:
+            if os.path.exists(tmp_file_path):
+                os.remove(tmp_file_path)
+            if os.path.exists(converted_file_path):
+                os.remove(converted_file_path)
 
     @abstractmethod
     async def _transcribe(self, audio: str, language: Optional[str] = None, model: Optional[str] = None,

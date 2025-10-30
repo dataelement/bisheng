@@ -1,6 +1,5 @@
 # Define a custom middleware class
 from time import time
-from uuid import uuid4
 
 from fastapi import Request
 from loguru import logger
@@ -34,6 +33,6 @@ class CustomMiddleware(BaseHTTPMiddleware):
         ip = ip.split(',')[-1]
         path = request.url
         response.headers["X-Process-Time"] = str(process_time)
-        response.headers["X-Trace-Id"] = trace_id
+        response.headers["X-Trace-ID"] = trace_id
         logger.info(f"| {ip} | {path}：process_time={process_time}s")
         return response

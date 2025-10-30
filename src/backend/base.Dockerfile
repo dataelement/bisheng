@@ -11,7 +11,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     gcc g++ curl build-essential libreoffice \
     wget procps vim fonts-wqy-zenhei \
-    libglib2.0-0 libsm6 libxrender1 libxext6 libgl1 \
+    libglib2.0-0 libsm6 libxrender1 libxext6 libgl1 ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 
