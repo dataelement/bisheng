@@ -127,7 +127,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <HelpCircle className="h-4 w-4 text-gray-400" />
+                                    <HelpCircle className="h-4 w-4 text-gray-400 cursor-pointer" />
                                 </TooltipTrigger>
                                 <TooltipContent>
                                     <p className="max-w-xs">开启后将验证用户对知识库的访问权限</p>
@@ -150,7 +150,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <HelpCircle className="h-4 w-4 text-gray-400" />
+                                    <HelpCircle className="h-4 w-4 text-gray-400 cursor-pointer" />
                                 </TooltipTrigger>
                                 <TooltipContent>
                                     <p className="max-w-xs">通过调整权重，确定优先使用向量检索还是优先使用关键词检索。</p>
@@ -194,7 +194,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
+                                    <HelpCircle className="h-4 w-4 text-gray-400 cursor-pointer" />
                                 </TooltipTrigger>
                                 <TooltipContent>
                                     <p className="max-w-xs">开启后，将使用重排模型对检索结果进行二次排序</p>
@@ -239,10 +239,10 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
+                                    <HelpCircle className="h-4 w-4 text-gray-400 cursor-pointer" />
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                    <p className="max-w-xs">设置检索返回结果的最大长度（字符数）</p>
+                                    <p className="max-w-xs">通过此参数控制最终传给模型的知识库检案结果文本长度，超过模型支持的最大上下文长度可能会导致报错。</p>
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>

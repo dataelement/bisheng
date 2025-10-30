@@ -12,6 +12,9 @@ import { useMemo, useRef, useState } from "react";
 import ChatFile from "./ChatFileFile";
 import MessageMarkDown from "./MessageMarkDown";
 import { useMessageStore } from "./messageStore";
+import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
+import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
+
 
 // 颜色列表
 const colorList = [
@@ -63,6 +66,7 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
+    const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
     const message = useMemo(() => {
         return typeof data.message === 'string' ? data.message : data.message.msg
     }, [data.message])
@@ -100,6 +104,14 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                             }</div>
                         }
                     </div>
+                </div>
+                <div className={`text-right group-hover:opacity-100 opacity-0`}>
+                    {linsightConfig?.tts_model?.id && (
+                        <AudioPlayComponent
+                            messageId={String(data.message_id)}
+                            msg={message}
+                        />
+                    )}
                 </div>
             </>}
             {/* 附加信息 */}

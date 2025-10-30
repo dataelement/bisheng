@@ -10,6 +10,9 @@ import { useMemo, useRef, useState } from "react";
 import MessageButtons from "./MessageButtons";
 import SourceEntry from "./SourceEntry";
 import { useMessageStore } from "./messageStore";
+import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
+import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
+
 
 // 颜色列表
 const colorList = [
@@ -69,6 +72,7 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
         // api data.id
         copyText(messageRef.current)
     }
+    const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
 
     const chatId = useMessageStore(state => state.chatId)
 
@@ -97,6 +101,15 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                         }
                     </div>
                 </div>
+                <div className={`text-right group-hover:opacity-100 opacity-0`}>
+                    {linsightConfig?.tts_model?.id && (
+                        <AudioPlayComponent
+                            messageId={String(data.id)}
+                            msg={message}
+                        />
+                    )}
+                </div>
+
             </>}
             {/* 附加信息 */}
             {
