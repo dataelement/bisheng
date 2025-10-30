@@ -24,6 +24,13 @@ from ...const import LLMModelType, LLMServerType
 from ...models import LLMServer, LLMModel
 
 
+def _get_user_kwargs(model_config: dict) -> dict:
+    user_kwargs = model_config.get('user_kwargs', {})
+    if isinstance(user_kwargs, str):
+        return json.loads(user_kwargs)
+    return user_kwargs
+
+
 # 需要注意初始化参数的优先级。实例化传入的最高 -> 前端界面配置的其次 -> 前端界面的高级参数优先级最低
 def _get_ollama_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params['base_url'] = server_config.get('base_url', '').rstrip('/')
@@ -34,7 +41,7 @@ def _get_ollama_params(params: dict, server_config: dict, model_config: dict) ->
         params['num_ctx'] = params.pop('max_tokens', None)
 
     # 用户高级自定义配置
-    user_kwargs = model_config.get('user_kwargs', {})
+    user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
     return user_kwargs
 
@@ -44,7 +51,7 @@ def _get_xinference_params(params: dict, server_config: dict, model_config: dict
     if not params.get('api_key', None):
         params['api_key'] = 'Empty'
 
-    user_kwargs = model_config.get('user_kwargs', {})
+    user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
     return user_kwargs
 
@@ -59,7 +66,7 @@ def _get_openai_params(params: dict, server_config: dict, model_config: dict) ->
     if server_config.get('openai_proxy'):
         params['openai_proxy'] = server_config.get('openai_proxy')
 
-    user_kwargs = model_config.get('user_kwargs', {})
+    user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
     return user_kwargs
 
@@ -73,7 +80,7 @@ def _get_azure_openai_params(params: dict, server_config: dict, model_config: di
         'stream_usage': True,
     })
 
-    user_kwargs = model_config.get('user_kwargs', {})
+    user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
     return user_kwargs
 
@@ -92,7 +99,7 @@ def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> d
     if params.get('max_tokens'):
         params['model_kwargs']['max_tokens'] = params.pop('max_tokens')
 
-    user_kwargs = model_config.get('user_kwargs', {})
+    user_kwargs = _get_user_kwargs(model_config)
     if user_model_kwargs := user_kwargs.get('model_kwargs'):
         user_model_kwargs.update(params['model_kwargs'])
         params['model_kwargs'] = user_model_kwargs
@@ -110,7 +117,7 @@ def _get_minimax_params(params: dict, server_config: dict, model_config: dict) -
     if '/chat/completions' not in params['base_url']:
         params['base_url'] = f"{params['base_url']}/chat/completions"
 
-    user_kwargs = model_config.get('user_kwargs', {})
+    user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
     return user_kwargs
 
@@ -118,7 +125,7 @@ def _get_minimax_params(params: dict, server_config: dict, model_config: dict) -
 def _get_anthropic_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params.update(server_config)
 
-    user_kwargs = model_config.get('user_kwargs', {})
+    user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
     return user_kwargs
 
@@ -129,7 +136,7 @@ def _get_zhipu_params(params: dict, server_config: dict, model_config: dict) -> 
     if 'chat/completions' not in params['zhipuai_api_base']:
         params['zhipuai_api_base'] = f"{params['zhipuai_api_base'].rstrip('/')}/chat/completions"
 
-    user_kwargs = model_config.get('user_kwargs', {})
+    user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
     return params
 
@@ -140,7 +147,7 @@ def _get_spark_params(params: dict, server_config: dict, model_config: dict) -> 
         'base_url': server_config.get('openai_api_base').rstrip('/'),
     })
 
-    user_kwargs = model_config.get('user_kwargs', {})
+    user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
     return params
 
@@ -253,10 +260,11 @@ class BishengLLM(BishengBase, BaseChatModel):
         if self.streaming is not None:
             default_params['streaming'] = self.streaming
         else:
-            if model_config.get('user_kwargs', {}).get('streaming', None) is None:
+            user_kwargs = _get_user_kwargs(model_config)
+            if user_kwargs.get('streaming', None) is None:
                 default_params['streaming'] = True
             else:
-                default_params['streaming'] = model_config.get('user_kwargs', {}).get('streaming', None)
+                default_params['streaming'] = user_kwargs.get('streaming', None)
 
         if self.temperature is not None:
             default_params['temperature'] = self.temperature

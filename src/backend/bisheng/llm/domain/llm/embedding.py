@@ -1,3 +1,4 @@
+import json
 from typing import Optional, Dict, List
 
 import numpy as np
@@ -13,10 +14,17 @@ from ...const import LLMServerType
 from ...models.llm_server import LLMModel, LLMServer, LLMModelType
 
 
+def _get_user_kwargs(model_config: dict) -> dict:
+    user_kwargs = model_config.get('user_kwargs', {})
+    if isinstance(user_kwargs, str):
+        return json.loads(user_kwargs)
+    return user_kwargs
+
+
 def _get_ollama_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params['base_url'] = server_config.get('base_url', '').rstrip('/')
 
-    user_kwargs = model_config.get('user_kwargs', {})
+    user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
     return user_kwargs
 
@@ -31,7 +39,7 @@ def _get_openai_params(params: dict, server_config: dict, model_config: dict) ->
     if server_config.get('openai_proxy'):
         params['openai_proxy'] = server_config.get('openai_proxy')
 
-    user_kwargs = model_config.get('user_kwargs', {})
+    user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
     return user_kwargs
 
@@ -44,7 +52,7 @@ def _get_azure_openai_params(params: dict, server_config: dict, model_config: di
         'azure_deployment': params.pop('model'),
     })
 
-    user_kwargs = model_config.get('user_kwargs', {})
+    user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
     return user_kwargs
 
@@ -52,7 +60,7 @@ def _get_azure_openai_params(params: dict, server_config: dict, model_config: di
 def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params['dashscope_api_key'] = server_config.get('openai_api_key', '')
 
-    user_kwargs = model_config.get('user_kwargs', {})
+    user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
     return user_kwargs
 
