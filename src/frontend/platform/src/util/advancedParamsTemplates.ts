@@ -99,19 +99,15 @@ export interface AdvancedParams {
       }
     },
   
-    'qianfan-llm': {
-      "temperature": 0.95,
-      "top_p": 0.8,
-      "model": null,
-      "endpoint": null,
-      "request_timeout": 60,
-      "streaming": false,
-      "disable_streaming": false,
+    'qianfan-llm':{
       "cache": null,
-      "model_kwargs": {
-        "enable_search": false
-      }
-    },
+      "extra_body": null,
+      "request_timeout": null,
+      "seed": null,
+      "streaming": false,
+      "temperature": 0.7,
+      "top_p": 1
+  },
   
     'zhipu-llm': {
       "temperature": 0.95,
@@ -140,8 +136,7 @@ export interface AdvancedParams {
       "model_kwargs": null
     },
   
-    'deepseek-llm': {
-      "api_base": null,
+    'deepseek-llm':{
       "cache": null,
       "default_headers": null,
       "disable_streaming": false,
@@ -151,11 +146,11 @@ export interface AdvancedParams {
       "service_tier": null,
       "streaming": false,
       "temperature": null,
-      "top_p": null
-    },
+      "top_p": null,
+  },
+  
   
     'moonshot-llm': {
-      "base_url": "https://api.moonshot.cn/v1",
       "cache": null,
       "disable_streaming": false,
       "http_client": null,
@@ -166,7 +161,8 @@ export interface AdvancedParams {
       "tags": null,
       "temperature": 0.3,
       "tiktoken_model_name": null
-    }
+  }
+    
   };
   
   // Embedding模型模板

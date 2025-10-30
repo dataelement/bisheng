@@ -1,4 +1,6 @@
+import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
 import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
+import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 import Echarts from "@/workspace/markdown/Echarts";
 import MermaidBlock from "@/workspace/markdown/Mermaid";
 import React, { useMemo } from "react";
@@ -29,7 +31,8 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message }) {
     }, [message]);
 
     return (
-        <div className="bs-mkdown inline-block break-all max-w-full text-sm text-text-answer">
+        <>
+              <div className="bs-mkdown inline-block break-all max-w-full text-sm text-text-answer">
             <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkMath]}
                 rehypePlugins={[rehypeMathjax]}
@@ -55,6 +58,8 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message }) {
                 {processedMessage}
             </ReactMarkdown>
         </div>
+        </>
+      
     );
 });
 

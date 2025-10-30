@@ -105,14 +105,6 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                         }
                     </div>
                 </div>
-                <div className={`text-right group-hover:opacity-100 opacity-0`}>
-                    {linsightConfig?.tts_model?.id && (
-                        <AudioPlayComponent
-                            messageId={String(data.message_id)}
-                            msg={message}
-                        />
-                    )}
-                </div>
             </>}
             {/* 附加信息 */}
             {
@@ -135,6 +127,7 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
                         onMarkClick={onMarkClick}
+                        text={data.message.msg || data.thought}
                     ></MessageButtons>}
                 </div>
             }

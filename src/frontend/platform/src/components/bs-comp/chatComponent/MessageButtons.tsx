@@ -13,7 +13,7 @@ const enum ThumbsState {
     ThumbsDown
 }
 
-export default function MessageButtons({ mark = false, id, onCopy, data, onUnlike, onMarkClick, text = '' }) {
+export default function MessageButtons({debug, mark = false, id, onCopy, data, onUnlike, onMarkClick, text = '' }) {
     const { t } = useTranslation()
     const [state, setState] = useState<ThumbsState>(data)
     const [copied, setCopied] = useState(false)
@@ -52,7 +52,9 @@ export default function MessageButtons({ mark = false, id, onCopy, data, onUnlik
                 msg={text}
             />
         )}
-        <ThunmbIcon
+        {debug && 
+        <>
+          <ThunmbIcon
             type='copy'
             className={`cursor-pointer ${copied && 'text-primary hover:text-primary'}`}
             onClick={handleCopy}
@@ -66,6 +68,8 @@ export default function MessageButtons({ mark = false, id, onCopy, data, onUnlik
             type='unLike'
             className={`cursor-pointer ${state === ThumbsState.ThumbsDown && 'text-primary hover:text-primary'}`}
             onClick={() => handleClick(ThumbsState.ThumbsDown)}
-        />
+        /></>
+        }
+      
     </div>
 };
