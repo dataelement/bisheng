@@ -8,9 +8,9 @@ from typing import Optional, Union
 
 from bisheng.core.cache.redis_conn import RedisClient
 from bisheng.core.cache.redis_manager import get_redis_client_sync
+from bisheng.core.logger import set_logger_config
 from bisheng.linsight.task_exec import LinsightWorkflowTask
 from bisheng.common.services.config_service import settings
-from bisheng.utils.logger import configure
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +123,7 @@ class ScheduleCenterProcess(Process):
         :return:
         """
 
-        configure(settings.logger_conf)
+        set_logger_config(settings.logger_conf)
 
         if self.max_concurrency is not None:
             self.max_concurrency = self.max_concurrency.value  # 获取 ValueProxy 的实际值

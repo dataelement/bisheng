@@ -6,7 +6,7 @@ from enum import Enum
 from threading import Lock, Event
 from contextlib import asynccontextmanager, contextmanager
 
-from bisheng.utils.logger import logger
+from loguru import logger
 
 T = TypeVar('T')
 

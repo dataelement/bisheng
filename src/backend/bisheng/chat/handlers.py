@@ -16,7 +16,7 @@ from bisheng.interface.importing.utils import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm
 from bisheng.common.services.config_service import settings
 from bisheng.utils.docx_temp import test_replace_string
-from bisheng.utils.logger import logger
+from loguru import logger
 from bisheng.utils.threadpool import thread_pool
 from bisheng.utils.util import get_cache_key
 from bisheng_langchain.chains.autogen.auto_gen import AutoGenChain

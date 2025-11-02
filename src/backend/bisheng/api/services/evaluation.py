@@ -32,7 +32,7 @@ from bisheng.database.models.user import UserDao
 from bisheng.graph.graph.base import Graph
 from bisheng.llm.domain.services import LLMService
 from bisheng.utils import generate_uuid
-from bisheng.utils.logger import logger
+from loguru import logger
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow
 from bisheng.workflow.common.workflow import WorkflowStatus

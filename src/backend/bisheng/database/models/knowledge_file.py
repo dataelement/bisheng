@@ -406,12 +406,12 @@ class QAKnoweldgeDao(QAKnowledgeBase):
 
     @classmethod
     async def total_count(cls, sql):
-        with get_async_db_session() as session:
+        async with get_async_db_session() as session:
             return await async_get_count(session, sql)
 
     @classmethod
     async def query_by_condition(cls, sql):
-        with get_async_db_session() as session:
+        async with get_async_db_session() as session:
             result = await session.exec(sql)
             return result.all()
 

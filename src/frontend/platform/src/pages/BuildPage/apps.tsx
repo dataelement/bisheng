@@ -315,6 +315,10 @@ const useErrorPrompt = () => {
     useEffect(() => {
         if (error) {
             toast({ description: t(`errors.${error}`), variant: 'error' });
+
+            // Clear the 'error' parameter from the URL
+            const newUrl = window.location.origin + window.location.pathname;
+            window.history.replaceState({}, '', newUrl);
         }
     }, [])
 }

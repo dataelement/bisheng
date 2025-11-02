@@ -265,42 +265,49 @@ export function importFlow() {
             if ((e.target as HTMLInputElement).files[0].type === "application/json") {
                 const currentfile = (e.target as HTMLInputElement).files[0];
                 currentfile.text().then(async (text) => {
-                    let flow = JSON.parse(text);
+                    try {
+                        let flow = JSON.parse(text);
 
-                    // 使用 Promise.all 等待所有的 copyReportTemplate 完成
-                    await Promise.all(flow.nodes.map(async (node) => {
-                        await copyReportTemplate(node.data);
-                    }));
+                        if (!flow || !Array.isArray(flow.nodes)) {
+                            return reject("flow.nodes 不存在或不是数组");
+                        }
+                        // 使用 Promise.all 等待所有的 copyReportTemplate 完成
+                        await Promise.all(flow.nodes.map(async (node) => {
+                            await copyReportTemplate(node.data);
+                        }));
 
-                    // 夸环境模型自动更新为默认模型, 并清空知识库和工具
-                    if (flow.source !== location.host) {
-                        const [workflow, assistant] = await Promise.all([getLlmDefaultModel(), getAssistantModelConfig()])
-                        const workflowModelId = workflow.model_id
-                        const assistantModelId = assistant.llm_list.find(item => item.default).model_id
-                        delete flow.source
+                        // 夸环境模型自动更新为默认模型, 并清空知识库和工具
+                        if (flow.source !== location.host) {
+                            const [workflow, assistant] = await Promise.all([getLlmDefaultModel(), getAssistantModelConfig()])
+                            const workflowModelId = workflow.model_id
+                            const assistantModelId = assistant.llm_list.find(item => item.default).model_id
+                            delete flow.source
 
-                        flow.nodes.forEach(node => {
-                            if (['rag', 'llm', 'agent', 'qa_retriever'].includes(node.data.type)) {
-                                node.data.group_params.forEach(group =>
-                                    group.params.forEach(param => {
-                                        if (param.type === 'bisheng_model') {
-                                            param.value = workflowModelId
-                                        } else if (param.type === 'agent_model') {
-                                            param.value = assistantModelId
-                                        } else if (param.type === 'knowledge_select_multi' && param.value.type !== 'tmp') {
-                                            param.value.value = []
-                                        } else if (param.type === 'qa_select_multi') {
-                                            param.value = []
-                                        } else if (param.type === 'add_tool') {
-                                            param.value = []
-                                        }
-                                    })
-                                )
-                            }
-                        })
+                            flow.nodes.forEach(node => {
+                                if (['rag', 'llm', 'agent', 'qa_retriever'].includes(node.data.type)) {
+                                    node.data.group_params.forEach(group =>
+                                        group.params.forEach(param => {
+                                            if (param.type === 'bisheng_model') {
+                                                param.value = workflowModelId
+                                            } else if (param.type === 'agent_model') {
+                                                param.value = assistantModelId
+                                            } else if (param.type === 'knowledge_select_multi' && param.value.type !== 'tmp') {
+                                                param.value.value = []
+                                            } else if (param.type === 'qa_select_multi') {
+                                                param.value = []
+                                            } else if (param.type === 'add_tool') {
+                                                param.value = []
+                                            }
+                                        })
+                                    )
+                                }
+                            })
+                        }
+
+                        resolve(flow)
+                    } catch (error) {
+                        reject(error)
                     }
-
-                    resolve(flow)
                 });
             }
         };

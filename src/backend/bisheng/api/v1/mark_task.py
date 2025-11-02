@@ -15,7 +15,7 @@ from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.utils.linked_list import DoubleLinkList
-from bisheng.utils.logger import logger
+from loguru import logger
 
 router = APIRouter(prefix='/mark', tags=['Mark'])
 

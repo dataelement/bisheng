@@ -17,7 +17,7 @@ from bisheng.database.models.model_deploy import (ModelDeploy, ModelDeployDao, M
                                                   ModelDeployUpdate)
 from bisheng.database.models.server import Server, ServerCreate, ServerRead
 from bisheng.database.models.sft_model import SftModelDao
-from bisheng.utils.logger import logger
+from loguru import logger
 
 # build router
 router = APIRouter(prefix='/server', tags=['server'], dependencies=[Depends(get_login_user)])

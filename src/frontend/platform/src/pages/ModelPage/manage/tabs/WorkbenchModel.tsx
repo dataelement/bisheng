@@ -72,7 +72,6 @@ export default function WorkbenchModel({ onBack }) {
         const { extractModelId, sourceModelId, executionMode, asrModelId, ttsModelId } = form;
         const errors = [];
         if (errors.length) return message({ variant: 'error', description: errors });
-
         setSaveLoad(true);
         try {
             const data = {
@@ -173,7 +172,8 @@ export default function WorkbenchModel({ onBack }) {
             <LoadingIcon />
         </div>
     );
-
+    console.log('ASR Model Options structure:', JSON.stringify(asrModel, null, 2));
+    console.log('TTS Model Options structure:', JSON.stringify(ttsModel, null, 2));
     return (
         <div className="max-w-[520px] mx-auto gap-y-4 flex flex-col mt-16 relative">
             <ModelSelect
@@ -221,6 +221,7 @@ export default function WorkbenchModel({ onBack }) {
             </div>
             <h3 className="bisheng-label">{t('工作台语音模型')}</h3>
             <div className="border rounded-lg p-4 -mt-3 space-y-4">
+                {console.log(form.asrModelId,77)}
                 <ModelSelect
                     close
                     label={t('语音转文字（ASR）模型')}

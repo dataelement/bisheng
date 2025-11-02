@@ -41,7 +41,7 @@ class OutputMsgData(BaseModel):
     node_id: str = Field(..., description='Node unique id')
     name: str = Field(..., description='Node name')
     msg: str = Field('', description='Output msg')
-    files: List[dict] = Field([], description='Output files', exclude=True)
+    files: List[dict] = Field(default_factory=list, description='Output files', exclude=True)
     output_key: str = Field(..., description='Whether the message is stream')
     source_documents: Optional[Any] = Field(None, description='Source documents')
 

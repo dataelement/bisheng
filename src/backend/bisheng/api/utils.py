@@ -13,7 +13,7 @@ from bisheng.api.v1.schemas import StreamData
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.variable_value import Variable
 from bisheng.graph.graph.base import Graph
-from bisheng.utils.logger import logger
+from loguru import logger
 from fastapi_jwt_auth import AuthJWT
 
 API_WORDS = ['api', 'key', 'token']

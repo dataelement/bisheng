@@ -41,7 +41,7 @@ from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
-from bisheng.utils.logger import logger
+from loguru import logger
 from bisheng.utils.util import get_cache_key
 from fastapi_jwt_auth import AuthJWT
 

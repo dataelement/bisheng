@@ -17,22 +17,26 @@ import { useTranslation } from "react-i18next";
 import CustomForm from "./CustomForm";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
 import { getAdvancedParamsTemplate, templateToJsonString } from "@/util/advancedParamsTemplates";
+import { useLinsightConfig } from "./tabs/WorkbenchModel";
 
 function ModelItem({ data, type, onDelete, onInput, onConfig }) {
-
     const { t } = useTranslation('model')
     const [model, setModel] = useState({
         ...data,
-        voice: data.config?.voice || '' 
+        voice: data.config?.voice || ''
     })
     const [error, setError] = useState('')
     const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(data.config?.enable_web_search || false)
     const [maxTokens, setMaxTokens] = useState(data.config?.max_tokens ?? '')
     const [voiceError, setVoiceError] = useState('')
     const [dialogOpen, setDialogOpen] = useState(false);
-    // 从 config 读取 user_kwargs 作为高级参数
-    const [advancedParams, setAdvancedParams] = useState(data.config?.user_kwargs || '');
-    const [originalAdvancedParams, setOriginalAdvancedParams] = useState(data.config?.user_kwargs || '');
+    const [inputAdvancedParams, setInputAdvancedParams] = useState('');
+    const [savedInputParams, setSavedInputParams] = useState(data.config?.user_kwargs || '');
+    const [advancedParams, setAdvancedParams] = useState(() => {
+        const template = getAdvancedParamsTemplate(type, model.model_type as 'llm' | 'embedding') || {};
+        return templateToJsonString(template)
+    });
+    const [originalAdvancedParams, setOriginalAdvancedParams] = useState(advancedParams);
     const [jsonError, setJsonError] = useState(false);
 
     const prevDepsRef = useRef({
@@ -46,16 +50,20 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
             ...data,
             voice: data.config?.voice || ''
         });
-        // 同步 user_kwargs 参数
-        const newParams = data.config?.user_kwargs || '';
-        setAdvancedParams(newParams);
-        setOriginalAdvancedParams(newParams);
-        
-        if (dialogOpen && newParams !== advancedParams) {
+        const userSavedParams = data.config?.user_kwargs || '';
+        setSavedInputParams(userSavedParams);
+
+        const template = getAdvancedParamsTemplate(type, model.model_type as 'llm' | 'embedding') || {};
+        const newPlaceholder = templateToJsonString(template) || '{"temperature": 0.7, "top_p": 0.9}';
+        setAdvancedParams(newPlaceholder);
+        setOriginalAdvancedParams(newPlaceholder);
+
+        if (dialogOpen) {
+            setInputAdvancedParams(userSavedParams);
             initTemplate();
         }
         setJsonError(false);
-    }, [data, dialogOpen]);
+    }, [data, dialogOpen, type, model.model_type]);
 
     const initTemplate = () => {
         if (!['llm', 'embedding'].includes(model.model_type)) return;
@@ -63,13 +71,13 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
         try {
             const template = getAdvancedParamsTemplate(type, model.model_type as 'llm' | 'embedding');
             const templateStr = templateToJsonString(template);
-            
+
             if (templateStr !== advancedParams) {
                 setAdvancedParams(templateStr);
+                setInputAdvancedParams(templateStr);
                 if (!originalAdvancedParams) {
                     setOriginalAdvancedParams(templateStr);
                 }
-                // 模板参数存入 user_kwargs
                 onConfig({
                     ...model.config,
                     user_kwargs: templateStr
@@ -87,7 +95,7 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                 modelType: model.model_type,
                 dialogOpen: dialogOpen
             };
-            
+
             if (
                 currentDeps.type !== prevDepsRef.current.type ||
                 currentDeps.modelType !== prevDepsRef.current.modelType ||
@@ -139,7 +147,7 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
 
         setIsWebSearchEnabled(false)
         setMaxTokens('')
-        
+
         if (dialogOpen && oldType !== val) {
             initTemplate();
         }
@@ -157,9 +165,8 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
 
     const handleSwitchChange = (checked) => {
         setIsWebSearchEnabled(checked)
-        // 保留 user_kwargs 平级传递
-        onConfig({ 
-            enable_web_search: checked, 
+        onConfig({
+            enable_web_search: checked,
             max_tokens: maxTokens,
             ...(model.config?.user_kwargs && { user_kwargs: model.config.user_kwargs })
         })
@@ -170,41 +177,42 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
         setMaxTokens(value)
 
         if (value === '') {
-            onConfig({ 
+            onConfig({
                 enable_web_search: isWebSearchEnabled,
                 ...(model.config?.user_kwargs && { user_kwargs: model.config.user_kwargs })
             })
         } else {
-            onConfig({ 
-                enable_web_search: isWebSearchEnabled, 
+            onConfig({
+                enable_web_search: isWebSearchEnabled,
                 max_tokens: parseInt(value, 10),
                 ...(model.config?.user_kwargs && { user_kwargs: model.config.user_kwargs })
             })
         }
     }
-    
+
     const handleSaveAdvancedParams = () => {
-        if (advancedParams && !validateJsonFormat(advancedParams)) {
+        const currentInput = inputAdvancedParams.trim();
+        if (currentInput && !validateJsonFormat(currentInput)) {
             setJsonError(true);
             return;
         }
-        
-        // 高级参数存入 user_kwargs（与 max_tokens 平级）
+
         onConfig({
             ...model.config,
-            user_kwargs: advancedParams
+            user_kwargs: currentInput
         });
-        setOriginalAdvancedParams(advancedParams);
+        setSavedInputParams(currentInput);
+        setInputAdvancedParams(currentInput);
         setDialogOpen(false);
         setJsonError(false);
     };
-    
+
     const handleCloseDialog = () => {
-        setAdvancedParams(originalAdvancedParams);
+        setInputAdvancedParams(savedInputParams);
         setJsonError(false);
         setDialogOpen(false);
     };
-    
+
     const refreshTemplate = () => {
         if (dialogOpen) {
             initTemplate();
@@ -216,7 +224,7 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
             <div className="flex items-center justify-between">
                 <span className="flex">{model.name.replace('model', t('model.model'))}
 
-                { (model.model_type === 'llm' || model.model_type === 'embedding') && (
+                    {(model.model_type === 'llm' || model.model_type === 'embedding') && (
                         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                             <DialogTrigger asChild>
                                 <div className="flex items-center cursor-pointer ml-2">
@@ -224,7 +232,7 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                                     <span className="ml-1 text-blue-500 text-xs">高级参数配置</span>
                                 </div>
                             </DialogTrigger>
-                            
+
                             <DialogContent className="sm:max-w-[625px]">
                                 <DialogHeader>
                                     <DialogTitle>高级参数配置</DialogTitle>
@@ -232,16 +240,16 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                                 <div className="mt-4 text-gray-500">
                                     <Label>请在下方的文本框中粘贴或输入你的高级参数配置</Label>
                                     <Textarea
-                                        value={advancedParams}
+                                        value={inputAdvancedParams}
                                         onChange={(e) => {
-                                            setAdvancedParams(e.target.value);
+                                            setInputAdvancedParams(e.target.value);
                                             if (jsonError) {
                                                 setJsonError(false);
                                             }
                                         }}
                                         className={`mt-1 font-mono text-sm ${jsonError ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                                         rows={10}
-                                        placeholder="请输入高级参数配置..."
+                                        placeholder={advancedParams}
                                     />
                                     {jsonError && (
                                         <span className="text-red-500 text-xs mt-1 inline-block">
@@ -257,7 +265,7 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                         </Dialog>
                     )}
                 </span>
-              
+
                 <Trash2Icon
                     onClick={handleDelClick}
                     className="w-[16px] h-[16px] opacity-0 group-hover:opacity-100 cursor-pointer text-gray-500"
@@ -267,7 +275,7 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                 <div>
                     <Label className="bisheng-label">
                         <span>{t('model.modelName')}</span>
-                    <QuestionTooltip
+                        <QuestionTooltip
                             className="relative top-0.5 ml-1"
                             content={t('model.modelNameTooltip')}
                         ><span /></QuestionTooltip>
@@ -296,7 +304,7 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                         </SelectContent>
                     </Select>
                 </div>
-                { model.model_type === 'tts' && (
+                {model.model_type === 'tts' && (
                     <div>
                         <Label className="bisheng-label">
                             <span>{t('model.voiceType')}</span>
@@ -306,12 +314,12 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                                 content={t('model.voiceTypeTooltip')}
                             ><span /></QuestionTooltip>
                         </Label>
-                        <Input 
-                            value={model.voice || ''} 
-                            onChange={handleVoiceInput} 
+                        <Input
+                            value={model.voice || ''}
+                            onChange={handleVoiceInput}
                             className="h-8"
                         ></Input>
-                        
+
                         {voiceError && <span className="text-red-500 text-xs">{voiceError}</span>}
                     </div>
                 )}
@@ -340,7 +348,6 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
 }
 
 
-// 模型提供方枚举
 export const modelProvider = [
     { "name": "OpenAI", "value": "openai" },
     { "name": "Azure OpenAI", "value": "azure_openai" },
@@ -363,7 +370,6 @@ export const modelProvider = [
 ]
 const bishengModelProvider = { "name": "bishengRT", "value": "bisheng_rt" }
 
-// 默认表单项
 const defaultForm = {
     id: null as any,
     type: '',
@@ -376,6 +382,7 @@ const defaultForm = {
 
 export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforSave, onAfterSave }) {
     const { t } = useTranslation('model')
+    const { refetch: refetchConfig } = useLinsightConfig();
 
     const [formData, setFormData] = useState(id === -1 ? { ...defaultForm } : null)
     const [modelRefs, setModelRefs] = useState({});
@@ -442,13 +449,13 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
             voice: type === 'tts' ? (el.voice || '') : ''
         } : el)
         setFormData({ ...formData, models })
-        
+
         setTimeout(() => {
             if (modelRefs[models[index].id]?.refreshTemplate) {
                 modelRefs[models[index].id].refreshTemplate();
             }
         }, 0);
-        
+
         return formData.models.find((el, i) => index !== i && el.model_name === name)
     }
 
@@ -471,85 +478,86 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
     const { message } = useToast()
     const formRef = useRef(null)
     const [isLoading, setIsLoading] = useState(false);
-const handleSave = async () => {
-    setIsLoading(true)
-    try {
-        const exists = onBerforSave(formData.id, formData.name)
-        if (exists) {
-            return message({
-                variant: 'warning',
-                description: t('model.duplicateServiceProviderName')
-            })
-        }
-        if (!formData.name || formData.name.length > 100) {
-            return message({
-                variant: 'warning',
-                description: t('model.duplicateServiceProviderNameValidation')
-            })
-        }
-        const [config, errorKey] = formRef.current.getData();
-        if (errorKey) {
-            return message({
-                variant: 'warning',
-                description: `${errorKey} ${t('model.notBeEmpty')}`
-            })
-        }
-
-        const map = {}
-        let repeat = false
-        let hasTTSVoiceError = false
-       
-        const error = formData.models.some(model => {
-            if (map[model.model_name]) repeat = true
-            map[model.model_name] = true
-            
-            if (model.model_type === 'tts' && !model.config?.voice) {
-                hasTTSVoiceError = true
+    const handleSave = async () => {
+        setIsLoading(true)
+        try {
+            const exists = onBerforSave(formData.id, formData.name)
+            if (exists) {
+                return message({
+                    variant: 'warning',
+                    description: t('model.duplicateServiceProviderName')
+                })
             }
-            
-            return !model.model_name || model.model_name.length > 100
-        })
-        if (error) {
-            return message({
-                variant: 'warning',
-                description: t('model.modelNameValidation')
-            })
-        }
-        if (repeat) {
-            return message({
-                variant: 'warning',
-                description: t('model.modelDuplicate')
-            })
-        }
-        if (hasTTSVoiceError) {
-            return message({
-                variant: 'warning',
-                description: t('model.voiceTypeRequired')
-            })
-        }
+            if (!formData.name || formData.name.length > 100) {
+                return message({
+                    variant: 'warning',
+                    description: t('model.duplicateServiceProviderNameValidation')
+                })
+            }
+            const [config, errorKey] = formRef.current.getData();
+            if (errorKey) {
+                return message({
+                    variant: 'warning',
+                    description: `${errorKey} ${t('model.notBeEmpty')}`
+                })
+            }
 
-        const saveData = {
-            ...formData,
-            config
-        }
+            const map = {}
+            let repeat = false
+            let hasTTSVoiceError = false
 
-        if (id === -1) {
-            await captureAndAlertRequestErrorHoc(addLLmServer(saveData).then(res => {
-                onAfterSave(res.code === 10803 ? res.msg : t('model.addSuccess'))
-                onBack()
-            }))
-        } else {
-            await captureAndAlertRequestErrorHoc(updateLLmServer(saveData).then(res => {
-                onAfterSave(t('model.updateSuccess'))
-                onBack()
-            }))
+            const error = formData.models.some(model => {
+                if (map[model.model_name]) repeat = true
+                map[model.model_name] = true
+
+                if (model.model_type === 'tts' && !model.config?.voice) {
+                    hasTTSVoiceError = true
+                }
+
+                return !model.model_name || model.model_name.length > 100
+            })
+            if (error) {
+                return message({
+                    variant: 'warning',
+                    description: t('model.modelNameValidation')
+                })
+            }
+            if (repeat) {
+                return message({
+                    variant: 'warning',
+                    description: t('model.modelDuplicate')
+                })
+            }
+            if (hasTTSVoiceError) {
+                return message({
+                    variant: 'warning',
+                    description: t('model.voiceTypeRequired')
+                })
+            }
+
+            const saveData = {
+                ...formData,
+                config
+            }
+
+            if (id === -1) {
+                await captureAndAlertRequestErrorHoc(addLLmServer(saveData).then(res => {
+                    onAfterSave(res.code === 10803 ? res.msg : t('model.addSuccess'))
+                    onBack()
+                }))
+            } else {
+                await captureAndAlertRequestErrorHoc(updateLLmServer(saveData).then(res => {
+                    onAfterSave(t('model.updateSuccess'))
+                    onBack()
+                }))
+            }
+            refetchConfig()
+        } catch (error) {
+            console.error('Save error:', error);
+        } finally {
+            setIsLoading(false);
         }
-    } catch (error) {
-        console.error('Save error:', error);
-    } finally {
-        setIsLoading(false);
-    }
-};
+    };
 
     const handleModelDel = () => {
         bsConfirm({
@@ -557,8 +565,8 @@ const handleSave = async () => {
             onOk(next) {
                 captureAndAlertRequestErrorHoc(deleteLLmServer(id).then(res => {
                     onAfterSave(t('model.deleteSuccess'))
+                    refetchConfig()
                 }))
-
                 onBack()
                 next()
             }

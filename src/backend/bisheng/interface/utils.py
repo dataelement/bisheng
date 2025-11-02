@@ -10,7 +10,7 @@ from langchain.base_language import BaseLanguageModel
 
 from bisheng.chat.config import ChatConfig
 from bisheng.common.services.config_service import settings
-from bisheng.utils.logger import logger
+from loguru import logger
 
 
 def load_file_into_dict(file_path: str) -> dict:

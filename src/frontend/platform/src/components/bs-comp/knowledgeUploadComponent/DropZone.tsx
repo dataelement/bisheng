@@ -10,12 +10,12 @@ export default function DropZone({ onDrop }) {
     const { appConfig } = useContext(locationContext)
 
     // 1. 定义支持的文件格式（用于显示提示文本，不用于过滤）
-    const supportedFormats = appConfig.enableEtl4lm 
+    const supportedFormats = appConfig.enableEtl4lm
         ? ['.PDF', '.TXT', '.DOCX', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.PNG', '.JPG', '.JPEG', '.BMP']
         : ['.PDF', '.TXT', '.DOCX', '.DOC', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV'];
-        const allowedExts = new Set(
-            supportedFormats.map(ext => ext.toLowerCase().replace('.', ''))
-        );
+    const allowedExts = new Set(
+        supportedFormats.map(ext => ext.toLowerCase().replace('.', ''))
+    );
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         // 2. 关闭默认过滤：accept设为null，允许所有文件进入onDrop
         accept: null,
@@ -34,9 +34,15 @@ export default function DropZone({ onDrop }) {
             );
 
             if (invalidFiles.length > 0) {
+                // @ts-ignore
+                const uniqueExtensions = [...new Set(
+                    invalidFiles
+                        .map(f => f.name.split('.').pop()?.toLowerCase())
+                        .filter(Boolean)
+                )];
                 message({
                     title: t('prompt'),
-                    description: `不支持文件类型:${invalidFiles.map(f => f.name)}`,
+                    description: `不支持文件类型:${uniqueExtensions}`,
                     variant: 'error'
                 });
             }

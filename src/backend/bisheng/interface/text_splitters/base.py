@@ -5,7 +5,7 @@ from bisheng.interface.custom_lists import textsplitter_type_to_cls_dict
 from bisheng.common.services.config_service import settings
 from bisheng.template.frontend_node.textsplitters import \
     TextSplittersFrontendNode
-from bisheng.utils.logger import logger
+from loguru import logger
 from bisheng.utils.util import build_template_from_class
 
 

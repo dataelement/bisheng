@@ -15,7 +15,6 @@ import cchardet
 import requests
 from appdirs import user_cache_dir
 from fastapi import UploadFile
-from tornado.httpclient import AsyncHTTPClient
 
 from bisheng.core.external.http_client.http_client_manager import get_http_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync

@@ -9,6 +9,8 @@ import { THOUGHTS_ICON } from "../../../constants";
 import { ChatMessageType } from "../../../types/chat";
 import { classNames } from "../../../utils";
 import FileCard from "../fileComponent";
+import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
+import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 export default function ChatMessage({
   chat,
   lockChat,
@@ -20,6 +22,8 @@ export default function ChatMessage({
 }) {
   const convert = new Convert({ newline: true });
   const [hidden, setHidden] = useState(true);
+  const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
+
   const template = chat.template;
   const [promptOpen, setPromptOpen] = useState(false);
   return (
@@ -51,7 +55,7 @@ export default function ChatMessage({
         )}
       </div>
       {!chat.isSend ? (
-        <div className="form-modal-chat-text-position">
+        <div className="form-modal-chat-text-position group">
           <div className="form-modal-chat-text">
             {hidden && chat.thought && chat.thought !== "" && (
               <div
@@ -78,6 +82,14 @@ export default function ChatMessage({
                     ),
                     [chat.message, chat.message.toString()]
                   )}
+                </div>
+              <div className={`text-right opacity-0 group-hover:opacity-100 transition-opacity`}>
+                    {linsightConfig?.tts_model?.id && (
+                        <AudioPlayComponent
+                            messageId={String()}
+                            msg={chat.message.toString()}
+                        />
+                    )}
                 </div>
                 {chat.files && (
                   <div className="my-2 w-full">

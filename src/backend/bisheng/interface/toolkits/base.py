@@ -3,7 +3,7 @@ from typing import Callable, Dict, List, Optional
 from bisheng.interface.base import LangChainTypeCreator
 from bisheng.interface.importing.utils import import_class, import_module
 from bisheng.common.services.config_service import settings
-from bisheng.utils.logger import logger
+from loguru import logger
 from bisheng.utils.util import build_template_from_class
 from langchain.agents.agent_toolkits.vectorstore.toolkit import (VectorStoreInfo,
                                                                  VectorStoreRouterToolkit,

@@ -7,13 +7,14 @@ import asyncio
 from typing import Optional, Dict, Any, TypeVar, List, Union
 from contextlib import asynccontextmanager, contextmanager
 
+from loguru import logger
+
 from bisheng.core.context.base import (
     ContextRegistry,
     BaseContextManager,
     ContextState,
     ContextError
 )
-from bisheng.utils.logger import logger
 
 T = TypeVar('T')
 

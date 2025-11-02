@@ -10,7 +10,7 @@ from bisheng.common.errcode.finetune import TrainFileNotExistError
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.preset_train import PresetTrain, PresetTrainDao
 from bisheng.utils import generate_uuid
-from bisheng.utils.logger import logger
+from loguru import logger
 
 
 class FinetuneFileService(BaseModel):

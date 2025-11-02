@@ -36,7 +36,7 @@ from bisheng.common.services.config_service import settings
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_PASSWORD_ERROR, USER_CURRENT_SESSION
-from bisheng.utils.logger import logger
+from loguru import logger
 from fastapi_jwt_auth import AuthJWT
 
 # build router

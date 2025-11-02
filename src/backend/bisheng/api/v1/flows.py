@@ -16,7 +16,7 @@ from bisheng.database.models.flow import (Flow, FlowCreate, FlowDao, FlowRead, F
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
 from bisheng.common.services.config_service import settings
-from bisheng.utils.logger import logger
+from loguru import logger
 from fastapi_jwt_auth import AuthJWT
 
 # build router

@@ -72,10 +72,10 @@ export default function LabelShow({ data, user, all, type, onChange }) {
 
   return (
     <div className="w-full">
-         {hasWritePermission ? (
+      {!hasWritePermission ? (
         <LabelSelect onUpdate={handleUpdate} labels={labels} resource={resource} all={allData}>
-          <div 
-            onClick={(e) => e.stopPropagation()} 
+          <div
+            onClick={(e) => e.stopPropagation()}
             className="mb-[10px] flex place-items-center rounded-sm p-1 opacity-0 border border-transparent group-hover:bg-search-input group-hover:border-input group-hover:opacity-100"
           >
             <Bookmark className="w-4 h-4 mr-2 text-muted-foreground" />

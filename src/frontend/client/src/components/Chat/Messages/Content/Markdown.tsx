@@ -213,22 +213,34 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent }
   const LaTeXParsing = useRecoilValue<boolean>(store.LaTeXParsing);
   const isInitializing = content === '';
 
+  function filterMermaidBlocks(input) {
+    const closedMermaidPattern = /```mermaid[\s\S]*?```/g;
+    const openMermaidPattern = /```mermaid[\s\S]*$/g;
+
+    // 先删除未闭合的
+    if (!closedMermaidPattern.test(input)) {
+      input = input.replace(openMermaidPattern, "");
+    }
+
+    return input;
+  }
+
   const currentContent = useMemo(() => {
     if (isInitializing) {
       return '';
     }
     const message = LaTeXParsing ? preprocessLaTeX(content) : content;
-//         return `\`\`\`mermaid
-//             graph TD
-//               A[Next.js] --> B[Markdoc]
-//               B --> C[Mermaid Node]
-//               C --> D[渲染流程图]
-//               D --> E{交互式图表}
-// \`\`\``;
-//     return `\`\`\`echarts
-//     {"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]},"yAxis":{"type":"value"},"series":[{"data":[120,200,150,80,70,110,130],"type":"bar"}]}
-// \`\`\``
-    return message
+    //         return `\`\`\`mermaid
+    //             graph TD
+    //               A[Next.js] --> B[Markdoc]
+    //               B --> C[Mermaid Node]
+    //               C --> D[渲染流程图]
+    //               D --> E{交互式图表}
+    // \`\`\``;
+    //     return `\`\`\`echarts
+    //     {"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]},"yAxis":{"type":"value"},"series":[{"data":[120,200,150,80,70,110,130],"type":"bar"}]}
+    // \`\`\``
+    return filterMermaidBlocks(message)
       // .replaceAll(/(\n\s{4,})/g, '\n   ') // 禁止4空格转代码
       .replace(/(?<![\n\|])\n(?!\n)/g, '\n\n') // 单个换行符 处理不换行情况，例如：`Hello | There\nFriend
     // .replaceAll('(bisheng/', '(/bisheng/') // TODO 临时处理方案,以后需要改为markdown插件方式处理

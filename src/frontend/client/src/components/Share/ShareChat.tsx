@@ -39,7 +39,7 @@ export default function ShareChat({ type, chatId, flowId, versionId }: ShareDial
     }
 
     useEffect(() => {
-        getShareLinkApi(type, chatId, {
+        isOpen && getShareLinkApi(type, chatId, {
             flowId,
             versionId
         }).then(res => {

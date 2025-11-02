@@ -13,7 +13,7 @@ from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.processing.process import process_tweaks
 from bisheng.common.services.config_service import settings
 from bisheng.utils import generate_uuid
-from bisheng.utils.logger import logger
+from loguru import logger
 from fastapi import APIRouter, Body, WebSocket, status
 
 router = APIRouter(prefix='/chat', tags=['OpenAPI', 'Chat'])

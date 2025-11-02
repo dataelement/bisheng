@@ -9,9 +9,10 @@ from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import decide_vectorstores, read_chunk_text
 from bisheng.api.utils import md5_hash
 from bisheng.api.v1.schemas import FileProcessBase
-from bisheng.core.cache.utils import file_download
 from bisheng.chat.types import IgnoreException
+from bisheng.core.cache.utils import file_download
 from bisheng.llm.domain.services import LLMService
+from bisheng.utils import generate_uuid
 from bisheng.workflow.nodes.base import BaseNode
 
 
@@ -144,7 +145,7 @@ class InputNode(BaseNode):
             2: chunks list
             3: metadata list
         """
-        file_id = md5_hash(f'{file_url}')
+        file_id = generate_uuid()
         filepath, file_name = file_download(file_url)
         file_name = KnowledgeService.get_upload_file_original_name(file_name)
 

@@ -3,7 +3,7 @@ from uuid import UUID
 
 from bisheng.core.cache.utils import memoize_dict
 from bisheng.graph import Graph
-from bisheng.utils.logger import logger
+from loguru import logger
 
 
 @memoize_dict(maxsize=10)
