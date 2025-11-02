@@ -26,6 +26,7 @@ class RRFRerank(BaseRerank):
     retrievers: List[Any]
     weights: List[float]
     c: int = 60
+    remove_zero_score: bool = False
 
     @model_validator(mode='before')
     @classmethod
@@ -74,6 +75,9 @@ class RRFRerank(BaseRerank):
 
         # Map the sorted page_content back to the original document objects
         page_content_to_doc_map = {doc.page_content: doc for doc_list in documents for doc in doc_list}
-        sorted_docs = [page_content_to_doc_map[page_content] for page_content in sorted_documents]
-
+        if self.remove_zero_score:
+            sorted_docs = [page_content_to_doc_map[page_content] for page_content in sorted_documents if
+                           rrf_score_dic[page_content] > 0]
+        else:
+            sorted_docs = [page_content_to_doc_map[page_content] for page_content in sorted_documents]
         return sorted_docs

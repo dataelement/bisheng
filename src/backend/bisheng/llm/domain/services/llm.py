@@ -3,6 +3,7 @@ import os
 from typing import List, Optional, Dict
 
 from fastapi import Request, BackgroundTasks, UploadFile
+from langchain_core.documents import BaseDocumentCompressor
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from loguru import logger
@@ -20,6 +21,7 @@ from bisheng.database.models.knowledge import KnowledgeState
 from bisheng.utils import generate_uuid, md5_hash
 from bisheng.utils.embedding import decide_embeddings
 from ..llm import BishengASR, BishengLLM, BishengTTS, BishengEmbedding
+from ..llm.rerank import BishengRerank
 from ...const import LLMModelType
 from ...models import LLMDao, LLMServer, LLMModel
 from ...schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig, AssistantLLMConfig, \
@@ -394,6 +396,14 @@ class LLMService:
     async def get_bisheng_llm(cls, **kwargs) -> BaseChatModel:
         """ 初始化毕昇llm对话模型 """
         return await BishengLLM.get_bisheng_llm(**kwargs)
+
+    @classmethod
+    async def get_bisheng_rerank(cls, **kwargs) -> BaseDocumentCompressor:
+        return await BishengRerank.get_bisheng_rerank(**kwargs)
+
+    @classmethod
+    def get_bisheng_rerank_sync(cls, **kwargs) -> BaseDocumentCompressor:
+        return BishengRerank(**kwargs)
 
     @classmethod
     def get_bisheng_llm_sync(cls, **kwargs) -> BaseChatModel:

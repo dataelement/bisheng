@@ -1,3 +1,4 @@
+import ast
 import json
 import os
 import re
@@ -80,7 +81,13 @@ class ElasticsearchConf(BaseModel):
     """ elasticsearch 配置 """
     elasticsearch_url: Optional[str] = Field(default='http://127.0.0.1:9200', alias='url',
                                              description='elasticsearch访问地址')
-    ssl_verify: Optional[str] = Field(default='{"basic_auth": ("elastic", "elastic")}', description='额外的参数')
+    ssl_verify: Optional[str | dict] = Field(default='{"basic_auth": ("elastic", "elastic")}', description='额外的参数')
+
+    @model_validator(mode='after')
+    def validate(self):
+        if isinstance(self.ssl_verify, str):
+            self.ssl_verify = ast.literal_eval(self.ssl_verify)
+        return self
 
 
 class VectorStores(BaseModel):

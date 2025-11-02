@@ -2,40 +2,25 @@ import json
 import time
 from typing import List, Any
 
+from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import (ChatPromptTemplate, HumanMessagePromptTemplate,
                                     SystemMessagePromptTemplate)
+from langchain_core.runnables import RunnableConfig
+from loguru import logger
 
 from bisheng.chat.types import IgnoreException
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
-from bisheng.database.models.user import UserDao
-from bisheng.interface.importing.utils import import_vectorstore
-from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.llm.domain.services import LLMService
 from bisheng.workflow.callback.event import OutputMsgData, StreamMsgOverData
 from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
-from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
-from bisheng_langchain.rag.bisheng_rag_chain import BishengRetrievalQA
+from bisheng.workflow.nodes.utils import RagUtils
 
 
-class RagNode(BaseNode):
+class RagNode(RagUtils):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # 判断是知识库还是临时文件列表
-        if 'knowledge' not in self.node_params:
-            raise IgnoreException(f'{self.name} -- node params is error')
-        self._knowledge_type = self.node_params['knowledge']['type']
-        self._knowledge_value = [
-            one['key'] for one in self.node_params['knowledge']['value']
-        ]
-
-        self._minio_client = get_minio_storage_sync()
-
-        self._knowledge_auth = self.node_params['user_auth']
-        self._max_chunk_size = int(self.node_params['max_chunk_size'])
-        self._sort_chunks = False
 
         # 解析prompt
         self._system_prompt = PromptTemplateParser(template=self.node_params['system_prompt'])
@@ -48,11 +33,11 @@ class RagNode(BaseNode):
         self._llm = LLMService.get_bisheng_llm_sync(model_id=self.node_params['model_id'],
                                                     temperature=self.node_params.get('temperature', 0.3),
                                                     cache=False)
-
-        self._user_info = UserDao.get_user(int(self.user_id))
+        self._minio_client = get_minio_storage_sync()
 
         # 是否输出结果给用户
         self._output_user = self.node_params.get('output_user', False)
+        self._output_keys = [one.get("key") for one in self.node_params.get('output_user_input', [])]
 
         # 运行日志数据
         self._log_source_documents = {}
@@ -64,66 +49,91 @@ class RagNode(BaseNode):
         self._es = None
 
     def _run(self, unique_id: str):
-        self._log_source_documents = {}
-        self._log_system_prompt = []
-        self._log_user_prompt = []
-        self._log_reasoning_content = {}
-
-        self.init_qa_prompt()
-        self.init_milvus()
-        self.init_es()
-
-        retriever = BishengRetrievalQA.from_llm(
-            llm=self._llm,
-            vector_store=self._milvus,
-            keyword_store=self._es,
-            QA_PROMPT=self._qa_prompt,
-            max_content=self._max_chunk_size,
-            sort_by_source_and_index=self._sort_chunks,
-            return_source_documents=True,
-        )
-        user_questions = self.init_user_question()
         ret = {}
-        for index, question in enumerate(user_questions):
-            output_key = self.node_params['output_user_input'][index]['key']
-            if question is None:
-                question = ''
-            # 因为rag需要溯源所以不能用通用llm callback来返回消息。需要拿到source_document之后在返回消息内容
-            llm_callback = LLMNodeCallbackHandler(callback=self.callback_manager,
-                                                  unique_id=unique_id,
-                                                  node_id=self.id,
-                                                  node_name=self.name,
-                                                  output=self._output_user,
-                                                  output_key=output_key,
-                                                  cancel_llm_end=True)
+        try:
+            self.init_user_info()
+            self._log_source_documents = {}
+            self._log_system_prompt = []
+            self._log_user_prompt = []
+            self._log_reasoning_content = {}
 
-            result = retriever._call({'query': question}, run_manager=llm_callback)
+            self.init_qa_prompt()
+            self.init_multi_retriever()
 
-            if self._output_user:
-                self.graph_state.save_context(content=result['result'], msg_sender='AI')
-                if llm_callback.output_len == 0:
-                    self.callback_manager.on_output_msg(
-                        OutputMsgData(node_id=self.id,
-                                      name=self.name,
-                                      msg=result['result'],
-                                      unique_id=unique_id,
-                                      output_key=output_key,
-                                      source_documents=result['source_documents']))
-                else:
-                    # 说明有流式输出，则触发流式结束事件, 因为需要source_document所以在此执行流式结束事件
-                    self.callback_manager.on_stream_over(StreamMsgOverData(
-                        node_id=self.id,
-                        name=self.name,
-                        msg=result['result'],
-                        reasoning_content=llm_callback.reasoning_content,
-                        unique_id=unique_id,
-                        source_documents=result['source_documents'],
-                        output_key=output_key,
-                    ))
-            ret[output_key] = result[retriever.output_key]
-            self._log_reasoning_content[output_key] = llm_callback.reasoning_content
-            self._log_source_documents[output_key] = result['source_documents']
+            self.user_questions = self.init_user_question()
+            for index, question in enumerate(self.user_questions):
+                output_key = self._output_keys[index]
+                if question is None:
+                    question = ''
+                try:
+                    question_answer = self.rag_one_question(question, output_key, unique_id)
+                except Exception as e:
+                    logger.exception(e)
+                    question_answer = str(e)
+                    self._log_source_documents[output_key] = []
+                    self._log_reasoning_content[output_key] = ''
+                ret[output_key] = question_answer
+        except Exception as e:
+            logger.exception(e)
+            for one in self._output_keys:
+                self._log_source_documents[one] = ''
+                self._log_reasoning_content[one] = ''
+                ret[one] = str(e)
         return ret
+
+    def rag_one_question(self, question: str, output_key: str, unique_id: str) -> str:
+        source_documents = self.retrieve_question(question)
+        same_file_id = set()
+        for one in source_documents:
+            file_id = one.metadata.get('file_id')
+            same_file_id.add(file_id)
+            if len(same_file_id) > 1:
+                break
+        if len(same_file_id) == 1:
+            # 来自同一个文件，则按照chunk_index排序
+            source_documents.sort(key=lambda x: x.metadata.get('chunk_index', 0))
+        qa_chain = create_stuff_documents_chain(llm=self._llm, prompt=self._qa_prompt)
+        inputs = {
+            "context": source_documents,
+        }
+        if "question" in self._qa_prompt.input_variables:
+            inputs["question"] = question
+
+        # 因为rag需要溯源所以不能用通用llm callback来返回消息。需要拿到source_document之后在返回消息内容
+        llm_callback = LLMNodeCallbackHandler(callback=self.callback_manager,
+                                              unique_id=unique_id,
+                                              node_id=self.id,
+                                              node_name=self.name,
+                                              output=self._output_user,
+                                              output_key=output_key,
+                                              cancel_llm_end=True)
+        result = qa_chain.invoke(inputs, config=RunnableConfig(callbacks=[llm_callback]))
+
+        if self._output_user:
+            self.graph_state.save_context(content=result, msg_sender='AI')
+            if llm_callback.output_len == 0:
+                self.callback_manager.on_output_msg(
+                    OutputMsgData(node_id=self.id,
+                                  name=self.name,
+                                  msg=result,
+                                  unique_id=unique_id,
+                                  output_key=output_key,
+                                  source_documents=source_documents))
+            else:
+                # 说明有流式输出，则触发流式结束事件, 因为需要source_document所以在此执行流式结束事件
+                self.callback_manager.on_stream_over(StreamMsgOverData(
+                    node_id=self.id,
+                    name=self.name,
+                    msg=result,
+                    reasoning_content=llm_callback.reasoning_content,
+                    unique_id=unique_id,
+                    source_documents=source_documents,
+                    output_key=output_key,
+                ))
+
+        self._log_reasoning_content[output_key] = llm_callback.reasoning_content
+        self._log_source_documents[output_key] = source_documents
+        return result
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
         ret = []
@@ -195,65 +205,3 @@ class RagNode(BaseNode):
             HumanMessagePromptTemplate.from_template(user_prompt),
         ]
         self._qa_prompt = ChatPromptTemplate.from_messages(messages_general)
-
-    def init_milvus(self):
-        if self._knowledge_type == 'knowledge':
-            node_type = 'MilvusWithPermissionCheck'
-            params = {
-                'user_name': self._user_info.user_name,
-                'collection_name': [{
-                    'key': one
-                } for one in self._knowledge_value],  # 知识库id列表
-                '_is_check_auth': self._knowledge_auth
-            }
-        else:
-            embeddings = LLMService.get_knowledge_default_embedding()
-            if not embeddings:
-                raise Exception('没有配置默认的embedding模型')
-            file_ids = ["0"]
-            for one in self._knowledge_value:
-                file_metadata = self.get_other_node_variable(one)
-                if not file_metadata:
-                    # 未找到对应的临时文件数据, 用户未上传文件
-                    continue
-                file_ids.append(file_metadata[0]['file_id'])
-            self._sort_chunks = len(file_ids) == 1
-            node_type = 'Milvus'
-            params = {
-                'collection_name': self.get_milvus_collection_name(getattr(embeddings, 'model_id')),
-                'partition_key': self.workflow_id,
-                'embedding': embeddings,
-                'metadata_expr': f'file_id in {file_ids}'
-            }
-
-        class_obj = import_vectorstore(node_type)
-        self._milvus = instantiate_vectorstore(node_type, class_object=class_obj, params=params)
-
-    def init_es(self):
-        if self._knowledge_type == 'knowledge':
-            node_type = 'ElasticsearchWithPermissionCheck'
-            params = {
-                'user_name': self._user_info.user_name,
-                'index_name': [{
-                    'key': one
-                } for one in self._knowledge_value],  # 知识库id列表
-                '_is_check_auth': self._knowledge_auth
-            }
-        else:
-            file_ids = ["0"]
-            for one in self._knowledge_value:
-                file_metadata = self.get_other_node_variable(one)
-                if not file_metadata:
-                    continue
-                file_ids.append(file_metadata[0]['file_id'])
-            node_type = 'ElasticKeywordsSearch'
-            params = {
-                'index_name': self.tmp_collection_name,
-                'post_filter': {
-                    'terms': {
-                        'metadata.file_id': file_ids
-                    }
-                }
-            }
-        class_obj = import_vectorstore(node_type)
-        self._es = instantiate_vectorstore(node_type, class_object=class_obj, params=params)
