@@ -4,8 +4,8 @@ from langchain_core.callbacks import Callbacks
 from langchain_core.documents import Document
 from pydantic import Field, model_validator
 from typing_extensions import Self
-from xinference.client import Client
 
+from .xinference.client import Client
 from ..base import BaseRerank
 
 

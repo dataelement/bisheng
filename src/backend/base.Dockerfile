@@ -11,8 +11,12 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     gcc g++ curl build-essential libreoffice \
     wget procps vim fonts-wqy-zenhei \
-    libglib2.0-0 libsm6 libxrender1 libxext6 libgl1 ffmpeg \
+    libglib2.0-0 libsm6 libxrender1 libxext6 libgl1 \
     && rm -rf /var/lib/apt/lists/*
+
+# 安装 FFmpeg
+RUN apt-get install -y ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
 
 
 # 安装 pandoc
@@ -27,16 +31,21 @@ RUN mkdir -p /opt/pandoc && \
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # 安装 Poetry
-RUN curl -sSL https://install.python-poetry.org | python3 - --version 1.8.2
+#RUN curl -sSL https://install.python-poetry.org | python3 - --version 1.8.2
 
 # 拷贝项目依赖文件
 COPY ./pyproject.toml ./
 
 # 安装 Python 依赖
 RUN python -m pip install --upgrade pip && \
-    pip install shapely==2.0.1 && \
-    poetry config virtualenvs.create false && \
-    poetry install --no-interaction --no-ansi --without dev
+    uv pip install -r <(uv pip compile pyproject.toml) --system --no-cache-dir && \
+    uv cache clean
+
+
+#RUN python -m pip install --upgrade pip && \
+#    pip install shapely==2.0.1 && \
+#    poetry config virtualenvs.create false && \
+#    poetry install --no-interaction --no-ansi --without dev
 
 # 安装 NLTK 数据
 RUN python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab'); nltk.download('averaged_perceptron_tagger'); nltk.download('averaged_perceptron_tagger_eng')"
