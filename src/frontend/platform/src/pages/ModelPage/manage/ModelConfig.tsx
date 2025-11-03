@@ -109,16 +109,6 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
         }
     }, [dialogOpen, type, model.model_type]);
 
-    const validateJsonFormat = (value) => {
-        if (!value) return true;
-        try {
-            JSON.parse(value);
-            return true;
-        } catch (err) {
-            return false;
-        }
-    };
-
     const handleInput = (e) => {
         const value = e.target.value
         const updatedModel = { ...model, model_name: value }
@@ -192,9 +182,18 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
 
     const handleSaveAdvancedParams = () => {
         const currentInput = inputAdvancedParams.trim();
-        if (currentInput && !validateJsonFormat(currentInput)) {
-            setJsonError(true);
-            return;
+        if (currentInput) {
+            try {
+                const parsed = JSON.parse(currentInput);
+                if (typeof parsed !== 'object' || parsed === null) {
+                    setJsonError(true);
+                    return;
+                }
+                setJsonError(false);
+            } catch (err) {
+                setJsonError(true);
+                return;
+            }
         }
 
         onConfig({
@@ -242,8 +241,21 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                                     <Textarea
                                         value={inputAdvancedParams}
                                         onChange={(e) => {
-                                            setInputAdvancedParams(e.target.value);
-                                            if (jsonError) {
+                                            const value = e.target.value;
+                                            setInputAdvancedParams(value);
+                                            
+                                            if (value.trim()) {
+                                                try {
+                                                    const parsed = JSON.parse(value.trim());
+                                                    if (typeof parsed !== 'object' || parsed === null) {
+                                                        setJsonError(true);
+                                                    } else {
+                                                        setJsonError(false);
+                                                    }
+                                                } catch (err) {
+                                                    setJsonError(true);
+                                                }
+                                            } else {
                                                 setJsonError(false);
                                             }
                                         }}
