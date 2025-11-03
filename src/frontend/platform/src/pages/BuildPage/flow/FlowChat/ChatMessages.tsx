@@ -23,7 +23,8 @@ export default function ChatMessages({
     useName,
     guideWord,
     loadMore,
-    onMarkClick = undefined
+    onMarkClick = undefined,
+    version,
 }) {
     const { t } = useTranslation()
     const { chatId, messages, inputForm } = useMessageStore()
@@ -137,6 +138,7 @@ export default function ChatMessages({
                             debug={debug}
                             mark={mark}
                             logo={logo}
+                            version={version}
                             key={msg.message_id}
                             data={msg}
                             onUnlike={(chatId) => { thumbRef.current?.openModal(chatId) }}

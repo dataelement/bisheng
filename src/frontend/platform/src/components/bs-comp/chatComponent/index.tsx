@@ -15,11 +15,12 @@ export default function ChatComponent({
     onBeforSend,
     onClickClear,
     chat,
-    loadMore = () => { }
+    loadMore = () => { },
+    version
 }) {
 
     return <div className="relative h-full">
-        <MessagePanne logo={logo} debug={debug} useName={useName} guideWord={guideWord} loadMore={loadMore} chat={chat}></MessagePanne>
+        <MessagePanne logo={logo} debug={debug} version={version} useName={useName} guideWord={guideWord} loadMore={loadMore} chat={chat}></MessagePanne>
         <ChatInput clear={clear} questions={questions} form={form} wsUrl={wsUrl} inputForm={inputForm} onBeforSend={onBeforSend} onClickClear={onClickClear}></ChatInput>
     </div>
 };

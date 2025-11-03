@@ -61,7 +61,7 @@ const ReasoningLog = ({ loading, msg = '' }) => {
 }
 
 
-export default function MessageBs({ debug, mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick }:
+export default function MessageBs({ debug, mark = false, logo, data, onUnlike = () => { }, onSource,version, onMarkClick }:
     { debug?: boolean, ogo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
@@ -122,6 +122,7 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                     />
                     {!debug && <MessageButtons
                         mark={mark}
+                        version={version}
                         id={data.id || data.message_id}
                         data={data.liked}
                         onUnlike={onUnlike}

@@ -273,6 +273,7 @@ export default function ChatPanne({ customWsHost = '', chatList, chat, appendHis
                     onBeforSend={getWsParamData}
                     loadMore={() => loadMoreHistoryMsg(assistant.id, appendHistory)}
                     inputForm={null}
+                    version={version}
                 />
                 {/* 强制提醒 */}
                 <ForcePrompt id={assistant.id} />
@@ -285,7 +286,7 @@ export default function ChatPanne({ customWsHost = '', chatList, chat, appendHis
                     <AppAvator id={workflow.name} url={workflow.logo} flowType={10} ></AppAvator>
                     <span className="text-sm">{workflow.name}</span>
                 </div>
-                <ChatPane  autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl} />
+                <ChatPane  autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl} version={version} />
             </div>
         }
     </div>
