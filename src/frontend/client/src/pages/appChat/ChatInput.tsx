@@ -35,10 +35,11 @@ export default function ChatInput({ readOnly, v }) {
     return <div className="absolute z-10 bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
         <div className="relative px-4 rounded-3xl bg-surface-tertiary ">
             {/* 附件 */}
-            {showUpload && !inputDisabled && !readOnly && <InputFiles
+            {showUpload && !inputDisabled && <InputFiles
                 v={v}
                 showVoice={showVoice}
                 accepts={accepts}
+                disabled={readOnly}
                 size={bishengConfig?.uploaded_files_maximum_size || 50}
                 onChange={(files => {
                     setFileUploading(!files)
