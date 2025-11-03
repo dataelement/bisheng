@@ -821,6 +821,7 @@
   "com_ui_select_search_provider": "名前でサービスを検索",
   "com_ui_select_search_region": "名前で地域を検索",
   "com_ui_share": "共有",
+  "no_text_recognized": "音声認識は利用できません。管理者に連絡してください。",
   "com_ui_share_create_message": "共有後に追加したメッセージやあなたの名前は非公開です。",
   "com_ui_share_delete_error": "共有リンクの削除中にエラーが発生しました",
   "com_ui_share_error": "チャットリンクの共有中にエラーが発生しました",

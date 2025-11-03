@@ -9,6 +9,7 @@ import { useToastContext } from "~/Providers"
 import { Button } from ".."
 import VoiceRecordingIcon from "../ui/icon/Voice"
 import { interruptAudioAtom, useParsingAudioLoading } from "./textToSpeechStore"
+import { useLocalize } from "~/hooks"
 
 // --- Core Audio Processing Logic ---
 
@@ -115,6 +116,8 @@ const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProp
     const { showToast } = useToastContext()
     const [isRecording, setIsRecording] = useState(false)
     const [isProcessing, setIsProcessing] = useState(false)
+    const localize = useLocalize();
+
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null)
     const audioChunksRef = useRef<Blob[]>([])
@@ -162,12 +165,12 @@ const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProp
 
                 // Pass recognized text to parent component
                 if (!transcript) {
-                    return showToast({ message: "No text recognized", status: "info" })
+                    return showToast({ message: localize('no_text_recognized'), status: "info" })
                 }
                 onChange(transcript)
             } catch (err) {
                 console.error("Speech recognition error:", err)
-                showToast({ message: "语音识别不可用，请联系管理员", status: "error" })
+                showToast({ message: localize('no_text_recognized'), status: "error" })
             } finally {
                 setIsProcessing(false)
                 setIsLoading(false)

@@ -35,6 +35,7 @@ export default function ChatMessages({ useName, readOnly, title, logo, disabledS
     return <div id="messageScrollPanne" ref={messageScrollRef} className="h-full overflow-y-auto scrollbar-hide pt-2 pb-96 px-4">
         {/* 助手开场白 */}
         {remark && <MessageRemark
+            readOnly={readOnly}
             logo={logo}
             title={title}
             message={remark}
@@ -59,6 +60,7 @@ export default function ChatMessages({ useName, readOnly, title, logo, disabledS
                         return null
                     case 'question':
                         return <MessageUser
+                            readOnly={readOnly}
                             key={msg.id}
                             useName={useName}
                             data={msg}
@@ -76,6 +78,7 @@ export default function ChatMessages({ useName, readOnly, title, logo, disabledS
                     case 'stream_msg':
                     case "answer":
                         return <MessageBs
+                            readOnly={readOnly}
                             key={msg.id}
                             data={msg}
                             logo={logo}
@@ -130,7 +133,7 @@ export default function ChatMessages({ useName, readOnly, title, logo, disabledS
                 message={''}
             />}
         {/* 引导词 */}
-        {guideWord && !inputDisabled && !inputForm && <GuideWord data={guideWord} />}
+        {guideWord && !inputDisabled && !inputForm && !readOnly && <GuideWord data={guideWord} />}
         {/* 表单 */}
         {inputForm && (chatState?.flow.flow_type === 10 ?
             <InputForm data={inputForm} flow={chatState.flow} logo={logo} /> :

@@ -822,6 +822,7 @@
   "com_ui_select_search_provider": "以名称搜索服务商",
   "com_ui_select_search_region": "以名称搜索区域",
   "com_ui_share": "分享",
+  "no_text_recognized":"语音识别不可用，请联系管理员",
   "com_ui_share_create_message": "您的姓名以及您在共享后添加的任何消息将保持私密。",
   "com_ui_share_delete_error": "删除共享链接时出现错误",
   "com_ui_share_error": "共享聊天链接时发生错误",

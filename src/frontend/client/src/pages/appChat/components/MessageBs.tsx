@@ -42,7 +42,7 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
 }
 
 
-export default function MessageBs({ logo, title, data, onUnlike = () => { }, onSource }:
+export default function MessageBs({ logo, title, data, onUnlike = () => { },readOnly, onSource }:
     { logo: React.ReactNode, title: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
 
     const t = useLocalize()
@@ -109,7 +109,7 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { }, onS
                             message,
                         })}
                     />
-                    <MessageButtons
+                    {!readOnly && <MessageButtons
                         id={data.id}
                         data={data.liked}
                         text={message}
@@ -117,7 +117,7 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { }, onS
                         onCopy={handleCopyMessage}
                     >
                         <span className="text-slate-400 text-sm pt-0.5">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
-                    </MessageButtons>
+                    </MessageButtons>}
                 </div>
             }
         </div>
