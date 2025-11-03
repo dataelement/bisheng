@@ -677,6 +677,7 @@
   "com_ui_select_search_provider": "依名稱搜尋供應商",
   "com_ui_select_search_region": "依名稱搜尋區域",
   "com_ui_share": "分享",
+  "no_text_recognized":"语音识别不可用，请联系管理员",
   "com_ui_share_create_message": "您的姓名以及您在共享後新增的任何訊息都會保密。",
   "com_ui_share_delete_error": "刪除共享連結時發生錯誤。",
   "com_ui_share_error": "分享聊天連結時發生錯誤",

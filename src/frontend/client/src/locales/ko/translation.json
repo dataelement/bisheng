@@ -668,6 +668,7 @@
   "com_ui_select_search_provider": "이름으로 공급자 검색",
   "com_ui_select_search_region": "이름으로 지역 검색",
   "com_ui_share": "공유하기",
+  "no_text_recognized": "음성 인식을 사용할 수 없습니다. 관리자에게 문의하세요.",
   "com_ui_share_create_message": "이름과 공유 후에 추가하는 메시지는 비공개로 유지됩니다.",
   "com_ui_share_delete_error": "공유 링크를 삭제하는 중에 오류가 발생했습니다.",
   "com_ui_share_error": "채팅 링크를 공유하는 동안 오류가 발생했습니다",
