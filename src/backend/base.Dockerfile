@@ -36,7 +36,8 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 COPY ./pyproject.toml ./
 
 # 安装 Python 依赖
-RUN python -m pip install --upgrade pip && \
+RUN source $HOME/.local/bin/env && \
+    python -m pip install --upgrade pip && \
     uv pip install -r <(uv pip compile pyproject.toml) --system --no-cache-dir && \
     uv cache clean
 
