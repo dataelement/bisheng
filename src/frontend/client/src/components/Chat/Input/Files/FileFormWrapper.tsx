@@ -67,7 +67,7 @@ function FileFormWrapper({
         />
       );
     }
-    if (endpointSupportsFiles && !isUploadDisabled) {
+    if (endpointSupportsFiles) {
       // this
       return (
         <AttachFile

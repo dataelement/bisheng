@@ -234,7 +234,7 @@ const useFileHandling = (params?: UseFileHandling) => {
       replaceFile(extendedFile);
 
       await startUpload(extendedFile);
-      URL.revokeObjectURL(preview);
+      // URL.revokeObjectURL(preview);
     };
     img.src = preview;
   };

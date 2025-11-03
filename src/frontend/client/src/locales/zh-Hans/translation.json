@@ -1068,5 +1068,6 @@
   "com_addAnything": "添加任何内容",
   "com_dropAnyFileToAdd": "将任何文件拖放到此处以添加到对话中",
   "com_share_title": "分享对话",
-  "com_share_desc": "任何人只要拥有链接都可以查看此对话。"
+  "com_share_desc": "任何人只要拥有链接都可以查看此对话。",
+  "com_unsupported_file_type": "不支持的文件类型："
 }

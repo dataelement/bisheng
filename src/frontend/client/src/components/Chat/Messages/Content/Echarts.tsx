@@ -14,6 +14,7 @@ export default function ECharts({ option }: { option: string }) {
     const domRef = useRef<HTMLDivElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
     const localize = useLocalize();
+    const codeRef = useRef<HTMLElement>(null)
 
     useEffect(() => {
         loadScript("echarts")
@@ -101,7 +102,7 @@ export default function ECharts({ option }: { option: string }) {
     const [copySuccess, setCopySuccess] = useState(false)
     const handleCopy = async () => {
         try {
-            await copyText(option)
+            await copyText(codeRef.current)
             setCopySuccess(true)
             setTimeout(() => setCopySuccess(false), 2000)
         } catch (error) {
@@ -110,7 +111,7 @@ export default function ECharts({ option }: { option: string }) {
     }
 
     return (
-        <div className="w-full my-3 -ml-3.5" ref={containerRef}>
+        <div className="w-full my-3" ref={containerRef}>
             <div className="shadow-sm rounded-lg bg-muted overflow-hidden">
                 {/* 头部切换按钮 */}
                 <div className="flex items-center justify-between p-2 relative z-10 bg-muted">
@@ -148,7 +149,7 @@ export default function ECharts({ option }: { option: string }) {
                     <div ref={domRef} style={{ height: 400 }} className={mode === "chart" && echartsLib ? "block" : "hidden"} />
                     <div className={mode === "code" ? "block relative" : "hidden"}>
                         <pre className="p-4 overflow-x-auto text-sm leading-relaxed max-h-[500px] overflow-y-auto mt-0 bg-transparent">
-                            <code className="text-slate-500 font-mono whitespace-pre-wrap break-words">{codeStr}</code>
+                            <code ref={codeRef} className="text-slate-500 font-mono whitespace-pre-wrap break-words">{codeStr}</code>
                         </pre>
                     </div>
                 </div>

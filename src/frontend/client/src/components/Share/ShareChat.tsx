@@ -39,13 +39,13 @@ export default function ShareChat({ type, chatId, flowId, versionId }: ShareDial
     }
 
     useEffect(() => {
-        isOpen && getShareLinkApi(type, chatId, {
+        isOpen ? getShareLinkApi(type, chatId, {
             flowId,
             versionId
         }).then(res => {
             const shareUrl = `${location.origin}${__APP_ENV__.BASE_URL}/share/${res.data.share_token}${versionId ? '/' + versionId : ''}`;
             setShareUrl(shareUrl);
-        })
+        }) : setShareUrl('');
     }, [isOpen])
 
     return <div>
@@ -67,8 +67,14 @@ export default function ShareChat({ type, chatId, flowId, versionId }: ShareDial
                         {localize('com_share_desc')}
                     </p>
 
-                    <div className="flex items-center gap-2">
-                        <Input readOnly value={shareUrl} className="flex-1 bg-muted/50" />
+                    <div className="flex items-center gap-2 w-full">
+                        <Input
+                            readOnly
+                            value={shareUrl}
+                            className="flex-1 bg-muted/50 select-none"
+                            onMouseDown={(e) => {
+                                e.preventDefault();
+                            }} />
                         <Button onClick={handleCopy}>
                             {copied ? localize('com_ui_duplicated') : localize('com_ui_copy_link')}
                         </Button>

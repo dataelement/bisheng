@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { Button, SendIcon, Textarea } from "~/components";
+import SpeechToTextComponent from "~/components/Voice/SpeechToText";
+import { useGetWorkbenchModelsQuery } from "~/data-provider";
 import { useLocalize } from "~/hooks";
 import InputFiles from "./components/InputFiles";
 import { bishengConfState, currentRunningState } from "./store/atoms";
-import { useAreaText } from "./useAreaText";
 import { getErrorI18nKey } from "./store/constants";
-import SpeechToTextComponent from "~/components/Voice/SpeechToText";
-import { useGetWorkbenchModelsQuery } from "~/data-provider";
+import { useAreaText } from "./useAreaText";
 
 export default function ChatInput({ readOnly, v }) {
     const [bishengConfig] = useRecoilState(bishengConfState)
@@ -46,7 +46,7 @@ export default function ChatInput({ readOnly, v }) {
                 })} />}
             {/* send */}
             <div className="flex gap-2 absolute right-3 bottom-3 z-10">
-                {showVoice && <SpeechToTextComponent onChange={(e) => {
+                {showVoice && <SpeechToTextComponent disabled={readOnly} onChange={(e) => {
                     inputRef.current.value += e;
                 }} />}
                 {showStop ?

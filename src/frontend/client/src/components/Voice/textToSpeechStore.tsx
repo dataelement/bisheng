@@ -186,3 +186,41 @@ export function useAudioProgress(messageId: string) {
 
   return activeMessageId === messageId ? progress : 0
 }
+
+
+/**
+ * Interrupt audio playback
+ * Control the atomic state and hook for interrupting audio playback
+ */
+export const interruptAudioAtom = atom<boolean>({
+  key: "audioPlayer_interruptAudio",
+  default: false,
+})
+export function useInterruptAudio() {
+  const setInterruptAudio = useSetRecoilState(interruptAudioAtom)
+
+  const interruptAudio = useCallback(() => {
+    setInterruptAudio(true)
+    window.interruptAudio = true
+
+    setTimeout(() => {
+      setInterruptAudio(false)
+      delete window.interruptAudio
+    }, 500)
+  }, [setInterruptAudio])
+
+  return interruptAudio
+}
+
+/**
+ * Atomic state and hook for parsing audio loading state
+ */
+export const parsingAudioLoadingAtom = atom<boolean>({
+  key: "audioPlayer_parsingAudioLoading",
+  default: false,
+})
+
+export function useParsingAudioLoading() {
+  const [isLoading, setIsLoading] = useRecoilState(parsingAudioLoadingAtom)
+  return [isLoading, setIsLoading] as const
+}

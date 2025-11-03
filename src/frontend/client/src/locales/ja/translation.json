@@ -1067,5 +1067,6 @@
   "com_addAnything": "何でも追加",
   "com_dropAnyFileToAdd": "ここにファイルをドロップして会話に追加できます",
   "com_share_title": "会話を共有",
-  "com_share_desc": "リンクを持っている人は誰でもこの会話を閲覧できます。"
+  "com_share_desc": "リンクを持っている人は誰でもこの会話を閲覧できます。",
+  "com_unsupported_file_type": "サポートされていないファイルタイプ："
 }

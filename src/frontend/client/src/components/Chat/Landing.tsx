@@ -11,6 +11,7 @@ import type * as t from '~/data-provider/data-provider/src';
 import { Constants, EModelEndpoint } from '~/data-provider/data-provider/src';
 import { useLocalize, useSubmitMessage } from '~/hooks';
 import { cn, getEntity, getIconEndpoint } from '~/utils';
+import { useInterruptAudio } from '../Voice/textToSpeechStore';
 import ConvoStarter from './ConvoStarter';
 import SegmentSelector from './SegmentSelector';
 
@@ -21,6 +22,7 @@ export default function Landing({ Header, isNew, lingsi, setLingsi }: { Header?:
   const { data: startupConfig } = useGetStartupConfig();
   const { data: endpointsConfig } = useGetEndpointsQuery();
   const { data: bsConfig } = useGetBsConfig()
+  const interruptAudio = useInterruptAudio()
 
   const localize = useLocalize();
 
@@ -123,7 +125,10 @@ export default function Landing({ Header, isNew, lingsi, setLingsi }: { Header?:
 
         {/* 模式切换 */}
         <div className='mx-auto mb-6 mt-2'>
-          <SegmentSelector lingsi={lingsi} onChange={setLingsi} />
+          <SegmentSelector lingsi={lingsi} onChange={(bl) => {
+            setLingsi(bl);
+            interruptAudio();
+          }} />
         </div>
       </div>
     </div>

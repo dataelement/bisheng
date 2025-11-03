@@ -1147,5 +1147,6 @@
   "com_addAnything": "Add anything",
   "com_dropAnyFileToAdd": "Drop any file here to add it to the conversation",
   "com_share_title": "Share Conversation",
-  "com_share_desc": "Anyone with the link can view this conversation."
+  "com_share_desc": "Anyone with the link can view this conversation.",
+  "com_unsupported_file_type": "Unsupported file type:"
 }
