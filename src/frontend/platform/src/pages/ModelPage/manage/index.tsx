@@ -187,11 +187,13 @@ export function useModel(type = 'llm') {
             const embeddings = []
             const asrModel = []
             const ttsModel = []
+            const rerank = []
             data.forEach(server => {
                 const serverEmbItem = { value: server.id, label: server.name, children: [] }
                 const serverLlmItem = { value: server.id, label: server.name, children: [] }
                 const serverAsrItem = { value: server.id, label: server.name, children: [] }
                 const serverTtsItem = { value: server.id, label: server.name, children: [] }
+                const rerankItem = { value: server.id, label: server.name, children: [] }
                 server.models.forEach(model => {
                     const item = {
                         value: String(model.id),
@@ -204,8 +206,10 @@ export function useModel(type = 'llm') {
                         serverTtsItem.children.push(item)
                     } else if (model.model_type === 'embedding') {
                         serverEmbItem.children.push(item)
-                    } else {
+                    } else if (model.model_type === 'llm') {
                         serverLlmItem.children.push(item)
+                    } else {
+                        rerankItem.children.push(item)
                     }
                 })
 
@@ -213,9 +217,11 @@ export function useModel(type = 'llm') {
                 if (serverEmbItem.children.length) embeddings.push(serverEmbItem)
                 if (serverAsrItem.children.length) asrModel.push(serverAsrItem)
                 if (serverTtsItem.children.length) ttsModel.push(serverTtsItem)
+                if (rerankItem.children.length) rerank.push(rerankItem)
+
             });
 
-            return { llmOptions, embeddings, asrModel, ttsModel }
+            return { llmOptions, embeddings, asrModel, ttsModel, rerank }
         }
     });
 

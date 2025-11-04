@@ -83,7 +83,7 @@ export default function WorkbenchModel({ onBack }) {
             };
 
             // 提交更新并通过 refetch 获取最新配置（无需再次调用 getLinsightModelConfig）
-            await captureAndAlertRequestErrorHoc(updateLinsightModelConfig(data));
+            const response = await captureAndAlertRequestErrorHoc(updateLinsightModelConfig(data));
             const updatedConfig = await refetchConfig();
 
             // 直接使用 refetch 返回的最新数据更新状态
@@ -104,8 +104,9 @@ export default function WorkbenchModel({ onBack }) {
                 asr_model: { id: newConfig?.asr_model?.id },
                 tts_model: { id: newConfig?.tts_model?.id }
             };
-
-            message({ variant: 'success', description: '保存成功！' });
+            if(response !== false){
+                message({ variant: 'success', description: '保存成功！' });
+            }
         } catch (err) {
             message({ variant: 'error', description: '保存失败，请重试！' });
         } finally {
