@@ -111,7 +111,7 @@ export const useLinsightData = ({ vid, sopId, conversationId, shareToken }
             const _versionId = vid || versionId;
             const firstVersion = _versionId ? data.find(el => el.id === (_versionId)) : data[0];
             if (firstVersion) {
-                const taskRes = await getLinsightTaskList(firstVersion.id, firstVersion);
+                const taskRes = await getLinsightTaskList(firstVersion.id, firstVersion, shareToken);
                 setVersionId(vid || firstVersion.id);
                 console.log('firstVersion :>> ', firstVersion, taskRes);
                 switchAndUpdateLinsight(firstVersion.id, { ...firstVersion, tasks: taskRes });

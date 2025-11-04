@@ -255,7 +255,7 @@ class MinioStorage(BaseStorage, ABC):
         await self.minio_client.copy_object(
             bucket_name=dest_bucket,
             object_name=dest_object,
-            object_source=source
+            source=source
         )
 
     def copy_object_sync(self, source_bucket: str = None, source_object: str = None,
@@ -274,7 +274,7 @@ class MinioStorage(BaseStorage, ABC):
         self.minio_client_sync.copy_object(
             bucket_name=dest_bucket,
             object_name=dest_object,
-            object_source=source
+            source=source
         )
 
     async def remove_object(self, bucket_name: str, object_name: str) -> None:

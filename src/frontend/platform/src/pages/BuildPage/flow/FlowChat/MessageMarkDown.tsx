@@ -9,7 +9,8 @@ import rehypeMathjax from "rehype-mathjax";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 
-const MessageMarkDown = React.memo(function MessageMarkDown({ message,version }) {
+const MessageMarkDown = React.memo(function MessageMarkDown({ message,version,chat }) {
+
     function filterMermaidBlocks(input) {
         const closedMermaidPattern = /```mermaid[\s\S]*?```/g;
         const openMermaidPattern = /```mermaid[\s\S]*$/g;

@@ -17,7 +17,7 @@ from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.utils import build_flow, build_input_keys_response
 from bisheng.api.v1.schema.base_schema import PageList
-from bisheng.api.v1.schema.chat_schema import APIChatCompletion, AppChatList
+from bisheng.api.v1.schema.chat_schema import APIChatCompletion, AppChatList, ChatMessageHistoryResponse
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import (AddChatMessages, BuildStatus, BuiltResponse, ChatInput,
                                     ChatList, InitResponse, StreamData,
@@ -26,7 +26,7 @@ from bisheng.chat.manager import ChatManager
 from bisheng.common.errcode.chat import ChatServiceError, SkillDeletedError, SkillNotBuildError, SkillNotOnlineError
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
 from bisheng.core.cache.redis_manager import get_redis_client
-from bisheng.core.database import get_sync_db_session
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao
@@ -176,30 +176,35 @@ def get_app_chat_list(*,
 
 
 @router.get('/chat/history')
-def get_chatmessage(*,
-                    chat_id: str,
-                    flow_id: str,
-                    id: Optional[str] = None,
-                    page_size: Optional[int] = 20,
-                    login_user: UserPayload = Depends(get_login_user),
-                    share_link: Union['ShareLink', None] = Depends(header_share_token_parser)):
+async def get_chat_message(*,
+                           chat_id: str,
+                           flow_id: str,
+                           id: Optional[str] = None,
+                           page_size: Optional[int] = 20,
+                           login_user: UserPayload = Depends(get_login_user),
+                           share_link: Union['ShareLink', None] = Depends(header_share_token_parser)):
     if not chat_id or not flow_id:
-        return ServerError()
+        raise NotFoundError()
 
     where = select(ChatMessage).where(ChatMessage.flow_id == flow_id,
                                       ChatMessage.chat_id == chat_id)
 
     if id:
         where = where.where(ChatMessage.id < int(id))
-    with get_sync_db_session() as session:
-        db_message = session.exec(where.order_by(ChatMessage.id.desc()).limit(page_size)).all()
+    async with get_async_db_session() as session:
+        db_message = await session.exec(where.order_by(ChatMessage.id.desc()).limit(page_size))
+        db_message = db_message.all()
 
-    # Authorization check
-    if db_message and login_user.user_id != db_message[0].user_id:
-        if not share_link or share_link.resource_id != chat_id:
-            return UnAuthorizedError.return_resp()
+    # # Authorization check
+    # if db_message and login_user.user_id != db_message[0].user_id:
+    #     if not share_link or share_link.resource_id != chat_id:
+    #         return UnAuthorizedError.return_resp()
+    chat_message_history = []
+    if db_message:
+        user_model = await UserDao.aget_user(db_message[0].user_id)
+        chat_message_history = ChatMessageHistoryResponse.from_chat_message_objs(db_message,user_model.user_name)
 
-    return resp_200(db_message)
+    return resp_200(chat_message_history)
 
 
 @router.get('/chat/info')
@@ -231,26 +236,6 @@ def copy(conversationId: str = Body(..., description='会话id', embed=True), ):
             msg.chat_id = conversation.chat_id
             msg.id = None
             ChatMessageDao.insert_one(msg)
-
-
-@router.get('/chat/history',
-            response_model=UnifiedResponseModel[List[ChatMessageRead]],
-            status_code=200)
-def get_chatmessage(*,
-                    chat_id: str,
-                    flow_id: str,
-                    id: Optional[str] = None,
-                    page_size: Optional[int] = 20,
-                    login_user: UserPayload = Depends(get_login_user)):
-    if not chat_id or not flow_id:
-        return ServerError.return_resp()
-    where = select(ChatMessage).where(ChatMessage.flow_id == flow_id,
-                                      ChatMessage.chat_id == chat_id)
-    if id:
-        where = where.where(ChatMessage.id < int(id))
-    with get_sync_db_session() as session:
-        db_message = session.exec(where.order_by(ChatMessage.id.desc()).limit(page_size)).all()
-    return resp_200(db_message)
 
 
 @router.delete('/chat/{chat_id}', status_code=200)
@@ -672,9 +657,9 @@ async def stream_build(flow_id: str,
             except Exception as e:
                 logger.error(f'Build flow error: {e}')
                 await flow_data_store.ahsetkey(flow_data_key,
-                                        'status',
-                                        BuildStatus.FAILURE.value,
-                                        expiration=expire)
+                                               'status',
+                                               BuildStatus.FAILURE.value,
+                                               expiration=expire)
                 yield str(StreamData(event='error', data={'error': str(e)}))
                 return
 

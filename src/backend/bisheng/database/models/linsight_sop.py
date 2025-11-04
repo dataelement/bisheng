@@ -292,7 +292,7 @@ class LinsightSOPDao(LinsightSOPBase):
         """
         statement = update(LinsightSOPRecord).where(
             col(LinsightSOPRecord.linsight_version_id) == linsight_version_id).values(execute_feedback=execute_feedback)
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             await session.exec(statement)
             await session.commit()
             return True

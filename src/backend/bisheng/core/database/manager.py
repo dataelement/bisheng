@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional, AsyncGenerator
 from contextlib import asynccontextmanager, contextmanager
 
 from sqlalchemy import text
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.core.context import BaseContextManager
 from bisheng.core.database import DatabaseConnectionManager
@@ -141,7 +142,7 @@ def sync_get_database_connection() -> DatabaseConnectionManager:
 
 
 @asynccontextmanager
-async def get_async_db_session() -> AsyncGenerator:
+async def get_async_db_session() -> AsyncGenerator[AsyncSession, None]:
     """获取异步数据库会话的便捷方法
 
     Example:

@@ -4,6 +4,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, field_validator
 
+from bisheng.database.models.message import ChatMessage, ChatMessageQuery
+
 
 class AppChatList(BaseModel):
     flow_name: str
@@ -65,3 +67,13 @@ class SSEResponse(BaseModel):
 
     def toString(self) -> str:
         return f'event: message\ndata: {json.dumps(self.dict())}\n\n'
+
+
+class ChatMessageHistoryResponse(ChatMessageQuery):
+    user_name: Optional[str] = None
+
+    @classmethod
+    def from_chat_message_objs(cls, chat_messages: List[ChatMessage], user_name: Optional[str] = None):
+        return [
+            cls.model_validate(obj).model_copy(update={"user_name": user_name}) for obj in chat_messages
+        ]

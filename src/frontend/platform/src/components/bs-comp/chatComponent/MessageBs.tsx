@@ -57,7 +57,7 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
     </div>
 }
 
-export default function MessageBs({ debug,version, mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick, chat }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
+export default function MessageBs({ debug,start,version, mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick, chat }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
@@ -109,6 +109,19 @@ export default function MessageBs({ debug,version, mark = false, logo, data, onU
                         />
                     )}
                 </div>
+                <div className="flex justify-end mt-2">
+                    {start && <MessageButtons
+                            mark={mark}
+                            id={data.id}
+                            data={data.liked}
+                            onUnlike={onUnlike}
+                            onCopy={handleCopyMessage}
+                            onMarkClick={onMarkClick}
+                            version={version}
+                            debug={debug}
+                            text={data?.message || data.thought}
+                        ></MessageButtons>}
+                </div>
 
             </>}
             {/* 附加信息 */}
@@ -133,7 +146,7 @@ export default function MessageBs({ debug,version, mark = false, logo, data, onU
                         onMarkClick={onMarkClick}
                         version={version}
                         debug={debug}
-                        text={data.message || data.thought}
+                        text={data?.message || data.thought}
                     ></MessageButtons>}
                 </div>
             }

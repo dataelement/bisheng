@@ -38,6 +38,7 @@ def _get_openai_params(params: dict, server_config: dict, model_config: dict) ->
         params['base_url'] = params['base_url'].rstrip('/')
     if server_config.get('openai_proxy'):
         params['openai_proxy'] = server_config.get('openai_proxy')
+    params["check_embedding_ctx_length"] = False
 
     user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)

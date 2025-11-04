@@ -199,15 +199,15 @@ def create_versions(*,
 
 
 @router.put('/versions/{version_id}', status_code=200)
-def update_versions(*,
-                    request: Request,
-                    version_id: int,
-                    flow_version: FlowVersionCreate,
-                    login_user: UserPayload = Depends(get_login_user)):
+async def update_versions(*,
+                          request: Request,
+                          version_id: int,
+                          flow_version: FlowVersionCreate,
+                          login_user: UserPayload = Depends(get_login_user)):
     """
     更新版本
     """
-    return FlowService.update_version_info(request, login_user, version_id, flow_version)
+    return await FlowService.update_version_info(request, login_user, version_id, flow_version)
 
 
 @router.delete('/versions/{version_id}', status_code=200)

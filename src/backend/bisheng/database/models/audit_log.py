@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, JSON
 
-from bisheng.core.database import get_sync_db_session
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.utils import generate_uuid
 
@@ -135,7 +135,7 @@ class AuditLogDao(AuditLogBase):
 
     @classmethod
     async def ainsert_audit_logs(cls, audit_logs: List[AuditLog]):
-        async with get_sync_db_session() as session:
+        async with get_async_db_session() as session:
             session.add_all(audit_logs)
             await session.commit()
 

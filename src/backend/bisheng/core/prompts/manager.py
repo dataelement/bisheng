@@ -45,13 +45,13 @@ async def get_prompt_manager() -> PromptLoader:
     """获取提示词管理器实例（异步方式）"""
     from bisheng.core.context.manager import app_context
     try:
-        return app_context.async_get_instance(PromptManager.name)
+        return await app_context.async_get_instance(PromptManager.name)
     except KeyError:
         logger.warning(f"PromptManager not found in context. Registering...")
         try:
             from bisheng.common.services.config_service import settings
             app_context.register_context(PromptManager())
-            return app_context.async_get_instance(PromptManager.name)
+            return await  app_context.async_get_instance(PromptManager.name)
         except Exception as e:
             logger.error(f"Failed to register PromptManager: {e}")
             raise

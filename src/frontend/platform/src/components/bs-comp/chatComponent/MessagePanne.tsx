@@ -103,6 +103,7 @@ export default function MessagePanne({ debug = false, mark = false, logo, useNam
         {guideWord && <MessageBs
             key={9999}
             version={version}
+            start
             data={{ message: guideWord, isSend: false, chatKey: '', end: true, user_name: '' }} />}
         {
             messagesList.map((msg, index) => {

@@ -496,9 +496,8 @@ async def get_export_url():
     with pd.ExcelWriter(bio, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="Sheet1", index=False)
     file_name = f"QA知识库导入模板.xlsx"
-
+    bio.seek(0)
     file = UploadFile(filename=file_name, file=bio)
-
     file_path = await save_uploaded_file(file, 'bisheng', file_name)
     return resp_200({"url": file_path})
 
@@ -576,7 +575,9 @@ async def get_export_url(*,
             df.to_excel(writer, sheet_name="Sheet1", index=False)
         file_name = f"{file_pr}_{file_index}.xlsx"
         file_index = file_index + 1
-        file_path = await save_uploaded_file(bio, 'bisheng', file_name)
+        bio.seek(0)
+        file_io = UploadFile(filename=file_name, file=bio)
+        file_path = await save_uploaded_file(file_io, 'bisheng', file_name)
         file_list.append(file_path)
         total_num += len(qa_list)
         if len(qa_list) < page_size or total_num >= total_count:

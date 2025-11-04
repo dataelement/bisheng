@@ -3,14 +3,13 @@
 from datetime import datetime
 from typing import Dict, List, Optional
 
+# if TYPE_CHECKING:
+from pydantic import field_validator
 from sqlalchemy import func
+from sqlmodel import JSON, Field, select, update, text, Column, DateTime
 
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.base import SQLModelSerializable
-# if TYPE_CHECKING:
-from pydantic import field_validator
-from sqlmodel import JSON, Field, select, update, text, Column, DateTime
-
 from bisheng.database.models.flow import Flow
 
 
@@ -90,7 +89,7 @@ class FlowVersionDao(FlowVersionBase):
         """
         异步更新版本信息，同时更新技能表里的data数据
         """
-        async with get_sync_db_session() as session:
+        async with get_async_db_session() as session:
             session.add(version)
             await session.commit()
             # 如果是当前版本，则更新技能表里的数据
@@ -129,7 +128,7 @@ class FlowVersionDao(FlowVersionBase):
         """
         根据版本ID获取技能版本的信息（异步）
         """
-        async with get_sync_db_session() as session:
+        async with get_async_db_session() as session:
             statement = select(FlowVersion).where(FlowVersion.id == version_id)
             if not include_delete:
                 statement = statement.where(FlowVersion.is_delete == 0)

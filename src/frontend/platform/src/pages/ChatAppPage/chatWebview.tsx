@@ -20,5 +20,5 @@ export default function ChatPro({ type = AppNumType.SKILL }) {
     if (!flowId) return <div>请选择会话</div>
     if (!data) return null
 
-    return <ChatPanne data={data} />
+    return <ChatPanne data={data} version="v2"/>
 };

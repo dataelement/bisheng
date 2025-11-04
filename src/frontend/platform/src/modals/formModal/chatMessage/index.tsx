@@ -78,18 +78,10 @@ export default function ChatMessage({
                 <div className="w-full">
                   {useMemo(
                     () => (
-                      <MessageMarkDown message={chat.message.toString()} />
+                      <MessageMarkDown message={chat.message.toString()} chat ={chat}/>
                     ),
                     [chat.message, chat.message.toString()]
                   )}
-                </div>
-              <div className={`text-right opacity-0 group-hover:opacity-100 transition-opacity`}>
-                    {linsightConfig?.tts_model?.id && (
-                        <AudioPlayComponent
-                            messageId={String()}
-                            msg={chat.message.toString()}
-                        />
-                    )}
                 </div>
                 {chat.files && (
                   <div className="my-2 w-full">

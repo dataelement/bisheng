@@ -61,10 +61,9 @@ class ChatMessageRead(MessageBase):
     id: Optional[int] = None
 
 
-class ChatMessageQuery(BaseModel):
+class ChatMessageQuery(MessageBase):
     id: Optional[int] = None
-    flow_id: str
-    chat_id: str
+    receiver: Optional[Dict] = None
 
 
 class ChatMessageCreate(MessageBase):
@@ -202,6 +201,19 @@ class ChatMessageDao(MessageBase):
             return session.exec(statement).all()
 
     @classmethod
+    async def aget_messages_by_chat_id(cls,
+                                       chat_id: str,
+                                       category_list: list = None,
+                                       limit: int = 10) -> List[ChatMessage]:
+        async with get_async_db_session() as session:
+            statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
+            if category_list:
+                statement = statement.where(ChatMessage.category.in_(category_list))
+            statement = statement.limit(limit).order_by(ChatMessage.create_time.asc())
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
     def get_last_msg_by_flow_id(cls, flow_id: List[str], chat_id: List[str]):
         with get_sync_db_session() as session:
             statement = select(ChatMessage.chat_id,
@@ -265,6 +277,14 @@ class ChatMessageDao(MessageBase):
             session.add(message)
             session.commit()
             session.refresh(message)
+        return message
+
+    @classmethod
+    async def ainsert_one(cls, message: ChatMessage) -> ChatMessage:
+        async with get_async_db_session() as session:
+            session.add(message)
+            await session.commit()
+            await session.refresh(message)
         return message
 
     @classmethod
