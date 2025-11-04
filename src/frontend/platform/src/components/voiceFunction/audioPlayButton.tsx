@@ -27,7 +27,7 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
     setCurrentPlayingId,
   } = useAudioPlayerStore();
 
-  const API_BASE_URL = '';
+  const API_BASE_URL = __APP_ENV__.BASE_URL || '';
 
   const getAudioUrl = async (text: string) => {
     console.log('请求TTS的文本:', text);

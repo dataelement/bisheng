@@ -29,11 +29,13 @@ export function getLinsightSessionVersionList(ConversationId: string, shareToken
 }
 
 // 获取灵思任务信息
-export function getLinsightTaskList(versionId: string, linsight: LinsightInfo): Promise<any> {
+export function getLinsightTaskList(versionId: string, linsight: LinsightInfo, shareToken: string): Promise<any> {
+  const headers = shareToken ? { 'share-token': shareToken } : {}
   return request.get('/api/v1/linsight/workbench/execute-task-detail', {
     params: {
       session_version_id: versionId
     },
+    headers
   }).then(res => {
     if (linsight.status === 'terminated') {
       // 任务手动终止后，后端返回的数据status为in_progress的任务，需要修改为terminated
