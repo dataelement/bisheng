@@ -20,11 +20,12 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
     SubmitFileSchema
-from bisheng.core.cache.utils import save_file_to_folder, CACHE_DIR
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.linsight import LinsightToolInitError, LinsightBishengLLMError, LinsightGenerateSopError
+from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.cache.utils import save_file_to_folder, CACHE_DIR
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models import LinsightSessionVersion
@@ -38,7 +39,6 @@ from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.services import LLMService
-from bisheng.common.services.config_service import settings
 from bisheng.utils import util
 from bisheng.utils.util import async_calculate_md5
 from bisheng_langchain.linsight.const import ExecConfig
@@ -731,8 +731,8 @@ class LinsightWorkbenchImpl:
             collection_name = f"{cls.COLLECTION_NAME_PREFIX}{workbench_conf.embedding_model.id}"
 
             # 异步执行文件解析
-            parse_result = await cls._parse_file_sync(file_id, file_path, original_filename,
-                                                      collection_name, workbench_conf)
+            parse_result = await cls._parse_file(file_id, file_path, original_filename,
+                                                 collection_name, workbench_conf)
 
             # 缓存解析结果
             await cls._cache_parse_result(file_id, parse_result)
