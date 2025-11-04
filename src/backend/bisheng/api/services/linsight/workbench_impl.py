@@ -816,7 +816,7 @@ class LinsightWorkbenchImpl:
                                       collection_name: str, workbench_conf) -> None:
         """处理向量存储"""
         # 创建embeddings
-        embeddings = await LLMService.get_bisheng_embedding(workbench_conf.embedding_model.id)
+        embeddings = await LLMService.get_bisheng_embedding(model_id=workbench_conf.embedding_model.id)
 
         # 创建向量存储
         vector_client = decide_vectorstores(collection_name, "Milvus", embeddings)

@@ -15,6 +15,7 @@ dependencies = [
     "captcha>=0.7.1",
     "cchardet>=2.1.7",
     "celery>=5.5.3",
+    "chardet>=5.2.0",
     "cryptography>=46.0.3",
     "dashscope>=1.24.9",
     "datasets>=4.3.0",
