@@ -212,9 +212,9 @@ class WorkStationService(BaseService):
         return formatted_results
 
     @classmethod
-    def get_chat_history(cls, chat_id: str, size: int = 4):
+    async def get_chat_history(cls, chat_id: str, size: int = 4):
         chat_history = []
-        messages = ChatMessageDao.get_messages_by_chat_id(chat_id, ['question', 'answer'], size)
+        messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id, ['question', 'answer'], size)
         for one in messages:
             # bug fix When constructing multi-turn dialogues, the input and response of
             # the user and the assistant were reversed, leading to incorrect question-and-answer sequences.

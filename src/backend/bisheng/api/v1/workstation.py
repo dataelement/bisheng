@@ -233,9 +233,7 @@ async def gen_title(conversationId: str = Body(..., description='', embed=True),
         await redis_client.adelete(redis_key)
         return resp_200({'title': title})
     else:
-        # 如果标题不存在，则返回空值
-        raise ServerError(
-            exception=Exception("Title not found or method not implemented for the conversation's endpoint"))
+        return resp_200({'title': 'New Chat'})
 
 
 @router.get('/messages/{conversationId}')
@@ -314,7 +312,7 @@ async def chat_completions(
         login_user: UserPayload = Depends(get_login_user),
 ):
     try:
-        wsConfig = WorkStationService.get_config()
+        wsConfig = await WorkStationService.aget_config()
         conversationId = data.conversationId
         model = [model for model in wsConfig.models if model.id == data.model][0]
         modelName = model.displayName
@@ -322,7 +320,7 @@ async def chat_completions(
         # 如果没有传入会话ID，则使用默认的会话ID
         if not conversationId:
             conversationId = uuid4().hex
-            MessageSessionDao.insert_one(
+            await MessageSessionDao.async_insert_one(
                 MessageSession(
                     chat_id=conversationId,
                     flow_id='',
@@ -331,16 +329,16 @@ async def chat_completions(
                     user_id=login_user.user_id,
                 ))
 
-        conversaiton = MessageSessionDao.get_one(conversationId)
+        conversaiton = await MessageSessionDao.async_get_one(conversationId)
         if conversaiton is None:
             return EventSourceResponse(
                 iter([ConversationNotFoundError().to_sse_event_instance()])
             )
         # 存储用户消息
         if data.overrideParentMessageId:
-            message = ChatMessageDao.get_message_by_id(data.overrideParentMessageId)
+            message = await ChatMessageDao.aget_message_by_id(data.overrideParentMessageId)
         else:
-            message = ChatMessageDao.insert_one(
+            message = await ChatMessageDao.ainsert_one(
                 ChatMessage(
                     user_id=login_user.user_id,
                     chat_id=conversationId,
@@ -431,9 +429,9 @@ async def chat_completions(
                 extra = json.loads(message.extra)
                 extra['prompt'] = prompt
                 message.extra = json.dumps(extra, ensure_ascii=False)
-                ChatMessageDao.insert_one(message)
+                await ChatMessageDao.ainsert_one(message)
 
-            messages = WorkStationService.get_chat_history(conversationId, 8)[:-1]
+            messages = await WorkStationService.get_chat_history(conversationId, 8)[:-1]
             inputs = [*messages, HumanMessage(content=prompt)]
             if wsConfig.systemPrompt:
                 system_content = wsConfig.systemPrompt.format(cur_date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
