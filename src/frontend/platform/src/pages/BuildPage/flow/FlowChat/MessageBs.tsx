@@ -128,7 +128,7 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
                         onMarkClick={onMarkClick}
-                        text={data.message.msg || data.thought}
+                        text={data.message.msg || data.message}
                     ></MessageButtons>}
                 </div>
             }
