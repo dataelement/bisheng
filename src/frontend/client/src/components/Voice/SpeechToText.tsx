@@ -1,12 +1,15 @@
 "use client"
 
-import { AudioLines, Loader, LoaderCircle, Mic, Square } from "lucide-react"
-import { useRef, useState, useCallback } from "react"
+import { LoaderCircle, Mic } from "lucide-react"
+import PropTypes from "prop-types"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { useRecoilState } from "recoil"
 import { getVoice2TextApi } from "~/api"
 import { useToastContext } from "~/Providers"
-import PropTypes from "prop-types"
-import { Button } from "../ui"
+import { Button } from ".."
 import VoiceRecordingIcon from "../ui/icon/Voice"
+import { interruptAudioAtom, useParsingAudioLoading } from "./textToSpeechStore"
+import { useLocalize } from "~/hooks"
 
 // --- Core Audio Processing Logic ---
 
@@ -105,18 +108,27 @@ const convertBlobToWav = async (blob: Blob): Promise<Blob> => {
 // --- Main Component ---
 
 interface SpeechToTextComponentProps {
+    disabled?: boolean
     onChange: (text: string) => void
 }
 
-const SpeechToTextComponent = ({ onChange }: SpeechToTextComponentProps) => {
+const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProps) => {
     const { showToast } = useToastContext()
     const [isRecording, setIsRecording] = useState(false)
     const [isProcessing, setIsProcessing] = useState(false)
+    const localize = useLocalize();
+
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null)
     const audioChunksRef = useRef<Blob[]>([])
     const audioContextRef = useRef<AudioContext | null>(null)
     const streamRef = useRef<MediaStream | null>(null)
+
+    const [interruptAudio] = useRecoilState(interruptAudioAtom)
+    const [_, setIsLoading] = useParsingAudioLoading()
+    useEffect(() => {
+        stopRecording(null)
+    }, [interruptAudio])
 
     /**
      * Cleans up all audio resources
@@ -144,6 +156,7 @@ const SpeechToTextComponent = ({ onChange }: SpeechToTextComponentProps) => {
     const convertSpeechToText = useCallback(
         async (audioBlob: Blob) => {
             try {
+                setIsLoading(true)
                 const formData = new FormData()
                 formData.append("file", audioBlob, "recording.wav")
                 const res = await getVoice2TextApi(formData)
@@ -152,14 +165,15 @@ const SpeechToTextComponent = ({ onChange }: SpeechToTextComponentProps) => {
 
                 // Pass recognized text to parent component
                 if (!transcript) {
-                    return showToast({ message: "No text recognized", status: "info" })
+                    return showToast({ message: localize('no_text_recognized'), status: "info" })
                 }
                 onChange(transcript)
             } catch (err) {
                 console.error("Speech recognition error:", err)
-                showToast({ message: "语音识别不可用，请联系管理员", status: "error" })
+                showToast({ message: localize('no_text_recognized'), status: "error" })
             } finally {
                 setIsProcessing(false)
+                setIsLoading(false)
             }
         },
         [onChange, showToast],
@@ -213,6 +227,10 @@ const SpeechToTextComponent = ({ onChange }: SpeechToTextComponentProps) => {
 
             // Handle recording stop
             mediaRecorder.onstop = async () => {
+                if (window.interruptAudio) {
+                    setIsProcessing(false)
+                    return cleanupResources()
+                }
                 try {
                     setIsProcessing(true)
 
@@ -239,13 +257,13 @@ const SpeechToTextComponent = ({ onChange }: SpeechToTextComponentProps) => {
             showToast({ message: "Microphone access denied", status: "error" })
             await cleanupResources()
         }
-    }, [convertSpeechToText, showToast, cleanupResources])
+    }, [convertSpeechToText, showToast, cleanupResources, interruptAudio])
 
     /**
      * Stops the current recording
      */
     const stopRecording = useCallback((e) => {
-        e.preventDefault();
+        e?.preventDefault();
         if (isProcessing) return
 
         if (mediaRecorderRef.current && isRecording) {
@@ -258,7 +276,7 @@ const SpeechToTextComponent = ({ onChange }: SpeechToTextComponentProps) => {
     return (
         <div className="relative z-10">
             {/* Recording control button */}
-            <div className="cursor-pointer">
+            <div className={disabled ? 'cursor-not-allowed' : ''}>
                 {isProcessing && <LoaderCircle size={30} className="animate-spin p-1" />}
                 {!isProcessing && isRecording && (
                     <Button size={'icon'} variant='outline' onClick={stopRecording} className="rounded-full w-8 h-8">
@@ -267,7 +285,7 @@ const SpeechToTextComponent = ({ onChange }: SpeechToTextComponentProps) => {
                     </Button>
                 )}
                 {!isProcessing && !isRecording && (
-                    <Button size={'icon'} onClick={startRecording} className="rounded-full w-8 h-8">
+                    <Button size={'icon'} disabled={disabled} onClick={startRecording} className="rounded-full w-8 h-8">
                         <Mic size={18} className="" />
                     </Button>
                 )}

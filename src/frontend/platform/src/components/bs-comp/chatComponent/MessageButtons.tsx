@@ -13,7 +13,8 @@ const enum ThumbsState {
     ThumbsDown
 }
 
-export default function MessageButtons({debug, mark = false, id, onCopy, data, onUnlike, onMarkClick, text = '' }) {
+export default function MessageButtons({debug, mark = false, id, onCopy, data, onUnlike, onMarkClick,version, text = '' }) {
+    
     const { t } = useTranslation()
     const [state, setState] = useState<ThumbsState>(data)
     const [copied, setCopied] = useState(false)
@@ -52,7 +53,8 @@ export default function MessageButtons({debug, mark = false, id, onCopy, data, o
                 msg={text}
             />
         )}
-        {debug && 
+
+        {!debug && (version === 'v2') &&
         <>
           <ThunmbIcon
             type='copy'

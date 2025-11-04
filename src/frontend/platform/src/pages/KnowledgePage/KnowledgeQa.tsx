@@ -12,7 +12,7 @@ import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import Tip from "@/components/bs-ui/tooltip/tip";
 import { userContext } from "@/contexts/userContext";
 import { copyQaDatabase, createFileLib, deleteFileLib, readFileLibDatabase, updateKnowledge } from "@/controllers/API";
-import { getKnowledgeModelConfig } from "@/controllers/API/finetune";
+import { getKnowledgeModelConfig, getModelListApi } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ModelSelect } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 import { useTable } from "@/util/hook";
@@ -21,6 +21,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useModel } from "../ModelPage/manage";
+import Cascader from "@/components/bs-ui/select/cascader";
 
 // 知识库状态
 const enum KnowledgeBaseStatus {
@@ -34,7 +35,8 @@ const enum KnowledgeBaseStatus {
 function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create', currentLib = null }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
-
+    const [modal, setModal] = useState(null)
+    const [options, setOptions] = useState([])
     const nameRef = useRef(null)
     const descRef = useRef(null)
     const [modelId, setModelId] = useState('')
@@ -119,15 +121,19 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
         setIsSubmitting(true);
         try {
             if (mode === 'create') {
-                const res = await createFileLib({
+                await captureAndAlertRequestErrorHoc(createFileLib({
                     name,
                     description: desc,
                     model: modelId,
                     type: 1
+                }).then((res)=>{
+                    window.libname = [name, desc];
+                    navigate(isImport ? `/filelib/qalib/upload/${res.id}` : `/filelib/qalib/${res.id}`);
+                    onOpenChange(false);
+                })).finally(() => {
+                    setIsSubmitting(false)
                 });
-                window.libname = [name, desc];
-                navigate(isImport ? `/filelib/qalib/upload/${res.id}` : `/filelib/qalib/${res.id}`);
-                onOpenChange(false);
+             
             } else {
                 await updateKnowledge({
                     model_id: modelId,
@@ -220,20 +226,20 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                 </div>
                 <DialogFooter>
                     <DialogClose>
-                        <Button variant="outline" className="px-8 h-8">{t('cancel')}</Button>
+                        <Button variant="outline" className="px-11">{t('cancel')}</Button>
                     </DialogClose>
                     {mode === 'create' ? (
                         <>
                             <Button
-                                variant="outline"
-                                className="px-8 h-8 flex"
+                                type="submit"
+                                className="px-11 flex"
                                 onClick={(e) => handleCreate(e, false)}
                                 disabled={isSubmitting}
                             >
                                 {isSubmitting && <LoadIcon className="mr-1" />}
                                 完成创建
                             </Button>
-                            <Button
+                            {/* <Button
                                 type="submit"
                                 className="px-8 h-8 flex"
                                 onClick={(e) => handleCreate(e, true)}
@@ -241,7 +247,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                             >
                                 {isSubmitting && <LoadIcon className="mr-1" />}
                                 {t('createImport')}
-                            </Button>
+                            </Button> */}
                         </>
                     ) : (
                         <Button

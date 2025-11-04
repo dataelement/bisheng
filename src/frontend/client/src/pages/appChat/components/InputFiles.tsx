@@ -4,12 +4,12 @@ import { useRef, useState } from "react";
 import { uploadChatFile } from "~/api/apps";
 import { AttachmentIcon } from "~/components/svg";
 import { FileIcon, getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
-import { useToastContext } from "~/Providers";
-import { generateUUID, getFileExtension } from "~/utils";
 import useLocalize from "~/hooks/useLocalize";
+import { useToastContext } from "~/Providers";
+import { cn, generateUUID, getFileExtension } from "~/utils";
 
 // @accepts '.png,.jpg'
-export default function InputFiles({ v, showVoice, accepts, size, onChange }) {
+export default function InputFiles({ v, showVoice, accepts, disabled = false, size, onChange }) {
     const t = useLocalize()
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
@@ -179,10 +179,14 @@ export default function InputFiles({ v, showVoice, accepts, size, onChange }) {
                 ))}
             </div>}
 
-            {/* File Upload Button */}
+            {/* File Upload Button disabled */}
             <div
-                className={`absolute bottom-3 cursor-pointer p-1 hover:bg-gray-200 rounded-full ${showVoice ? 'right-[92px]' : 'right-14'}`}
-                onClick={() => fileInputRef.current.click()}
+                className={cn(
+                    'absolute bottom-3 cursor-pointer p-1 hover:bg-gray-200 rounded-full',
+                    showVoice ? 'right-[92px]' : 'right-14',
+                    disabled ? 'pointer-events-none opacity-40' : ''
+                )}
+                onClick={() => !disabled && fileInputRef.current.click()}
             >
                 <AttachmentIcon />
             </div>

@@ -692,6 +692,7 @@
   "com_ui_select_search_provider": "Rechercher un fournisseur par nom",
   "com_ui_select_search_region": "Rechercher une région par nom",
   "com_ui_share": "Partager",
+  "no_text_recognized": "La reconnaissance vocale n'est pas disponible. Veuillez contacter l'administrateur.",
   "com_ui_share_create_message": "Votre nom et tout message que vous ajoutez après le partage restent privés.",
   "com_ui_share_delete_error": "Une erreur est survenue lors de la suppression du lien partagé.",
   "com_ui_share_error": "Une erreur est survenue lors du partage du lien de la discussion",

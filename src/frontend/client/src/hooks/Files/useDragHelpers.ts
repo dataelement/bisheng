@@ -16,6 +16,7 @@ import {
 import store from '~/store';
 import useFileHandling from './useFileHandling';
 import { useToastContext } from '~/Providers';
+import useLocalize from '../useLocalize';
 
 export default function useDragHelpers(isLingsi) {
   const queryClient = useQueryClient();
@@ -23,6 +24,7 @@ export default function useDragHelpers(isLingsi) {
   const [showModal, setShowModal] = useState(false);
   const [draggedFiles, setDraggedFiles] = useState<File[]>([]);
   const conversation = useRecoilValue(store.conversationByIndex(0)) || undefined;
+  const localize = useLocalize();
 
   const handleOptionSelect = (toolResource: string | undefined) => {
     handleFiles(draggedFiles, toolResource);
@@ -61,8 +63,12 @@ export default function useDragHelpers(isLingsi) {
         });
 
         if (invalidFiles.length > 0) {
-          console.log('Invalid files:', invalidFiles);
-          showToast({ message: 'Unsupported file type', status: 'error' });
+          const uniqueExtensions = [...new Set(
+            invalidFiles
+              .map(f => f.name.split('.').pop()?.toLowerCase())
+              .filter(Boolean)
+          )];
+          showToast({ message: localize('com_unsupported_file_type') + uniqueExtensions.join(','), status: 'error' });
           return;
         }
         if (!isAgents) {

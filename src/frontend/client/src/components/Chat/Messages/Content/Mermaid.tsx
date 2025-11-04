@@ -45,6 +45,7 @@ export default function MermaidBlock({ children }: { children: string }) {
     const [isDragging, setIsDragging] = useState(false)
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
     const [copySuccess, setCopySuccess] = useState(false)
+    const codeRef = useRef<HTMLElement>(null)
 
     useEffect(() => {
         loadScript('mermaid').then((mermaid) => {
@@ -83,14 +84,14 @@ export default function MermaidBlock({ children }: { children: string }) {
             const clonedSvg = svgElement.cloneNode(true) as SVGElement
 
             // Get computed styles and inline them to avoid CORS issues
-            const allElements = clonedSvg.querySelectorAll("*")
-            allElements.forEach((el) => {
-                const computedStyle = window.getComputedStyle(el as Element)
-                const styleString = Array.from(computedStyle)
-                    .map((key) => `${key}:${computedStyle.getPropertyValue(key)}`)
-                    .join(";")
-                    ; (el as HTMLElement).setAttribute("style", styleString)
-            })
+            // const allElements = clonedSvg.querySelectorAll("*")
+            // allElements.forEach((el) => {
+            //     const computedStyle = window.getComputedStyle(el as Element)
+            //     const styleString = Array.from(computedStyle)
+            //         .map((key) => `${key}:${computedStyle.getPropertyValue(key)}`)
+            //         .join(";")
+            //         ; (el as HTMLElement).setAttribute("style", styleString)
+            // })
 
             // Get SVG dimensions
             const bbox = svgElement.getBBox()
@@ -147,7 +148,7 @@ export default function MermaidBlock({ children }: { children: string }) {
     }
     const handleCopy = async () => {
         try {
-            await copyText(children)
+            await copyText(codeRef.current)
             setCopySuccess(true)
             setTimeout(() => setCopySuccess(false), 2000)
         } catch (error) {
@@ -180,7 +181,7 @@ export default function MermaidBlock({ children }: { children: string }) {
     }
 
     return (
-        <div className="w-full my-3 -ml-3.5" ref={containerRef}>
+        <div className="w-full my-3" ref={containerRef}>
             <div className="shadow-sm rounded-lg bg-muted overflow-hidden">
                 {/* 头部切换按钮 */}
                 <div className="flex items-center justify-between p-2 relative z-10 bg-muted">
@@ -255,7 +256,7 @@ export default function MermaidBlock({ children }: { children: string }) {
                     />
                     <div className={mode === "code" ? "block relative" : "hidden"}>
                         <pre className="p-4 overflow-x-auto text-sm leading-relaxed max-h-[500px] overflow-y-auto">
-                            <code className="text-slate-500 text-foreground font-mono whitespace-pre-wrap break-words">{children}</code>
+                            <code ref={codeRef} className="text-slate-500 text-foreground font-mono whitespace-pre-wrap break-words">{children}</code>
                         </pre>
                     </div>
                 </div>

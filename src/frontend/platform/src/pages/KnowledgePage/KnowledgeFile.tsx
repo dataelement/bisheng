@@ -239,7 +239,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                     />
                 </div>
                 <div className="">
-                    <label htmlFor="model" className="bisheng-label">知识库embedding模型选择2</label>
+                    <label htmlFor="model" className="bisheng-label">知识库embedding模型选择</label>
                     {isLoading ? (
                         <div className="flex items-center gap-2 p-3 border rounded-md bg-gray-50">
                             <LoadIcon className="w-4 h-4 animate-spin" />

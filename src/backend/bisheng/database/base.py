@@ -1,12 +1,10 @@
 import uuid
-from sqlalchemy import func
+from sqlalchemy import func, Select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlmodel.sql.expression import SelectBase
 from sqlmodel import Session
 
 
-
-def get_count(session: Session, q: SelectBase) -> int:
+def get_count(session: Session, q: Select) -> int:
     """
     获取查询结果的数量
     :param session:
@@ -20,7 +18,7 @@ def get_count(session: Session, q: SelectBase) -> int:
     return 0
 
 
-async def async_get_count(session: AsyncSession, q: SelectBase) -> int:
+async def async_get_count(session: AsyncSession, q: Select) -> int:
     """
     获取异步查询结果的数量
     :param session:

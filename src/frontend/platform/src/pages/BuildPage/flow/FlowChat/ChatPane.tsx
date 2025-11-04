@@ -4,8 +4,9 @@ import Chat from "./Chat";
 import { useMessageStore } from "./messageStore";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 
-export default function ChatPane({ debug = false, autoRun = false, chatId, flow, wsUrl = '' }: { debug?: boolean, autoRun?: boolean, chatId: string, flow: any, wsUrl?: string }) {
+export default function ChatPane({ debug = false, autoRun = false, chatId, flow, wsUrl = '',version }: { debug?: boolean, autoRun?: boolean, chatId: string, flow: any, wsUrl?: string }) {
     const { changeChatId } = useMessageStore()
+console.log(version,333);
 
     useEffect(() => {
         changeChatId(chatId)
@@ -102,6 +103,7 @@ export default function ChatPane({ debug = false, autoRun = false, chatId, flow,
         clear
         wsUrl={wsUrl}
         onBeforSend={getMessage}
+        version = {version}
     ></Chat>
 
 };

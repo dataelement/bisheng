@@ -822,6 +822,7 @@
   "com_ui_select_search_provider": "以名称搜索服务商",
   "com_ui_select_search_region": "以名称搜索区域",
   "com_ui_share": "分享",
+  "no_text_recognized":"语音识别不可用，请联系管理员",
   "com_ui_share_create_message": "您的姓名以及您在共享后添加的任何消息将保持私密。",
   "com_ui_share_delete_error": "删除共享链接时出现错误",
   "com_ui_share_error": "共享聊天链接时发生错误",
@@ -1068,5 +1069,6 @@
   "com_addAnything": "添加任何内容",
   "com_dropAnyFileToAdd": "将任何文件拖放到此处以添加到对话中",
   "com_share_title": "分享对话",
-  "com_share_desc": "任何人只要拥有链接都可以查看此对话。"
+  "com_share_desc": "任何人只要拥有链接都可以查看此对话。",
+  "com_unsupported_file_type": "不支持的文件类型："
 }

@@ -57,7 +57,7 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
     </div>
 }
 
-export default function MessageBs({ debug, mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick, chat }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
+export default function MessageBs({ debug,version, mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick, chat }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
@@ -91,7 +91,7 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                         {logo}
                         {data.message.toString() ?
                             <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
-                                {<MessageMarkDown message={message} />}
+                                {<MessageMarkDown message={message} version={version}/>}
                                 {/* @user */}
                                 {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}
                                 {/* 光标 */}
@@ -102,7 +102,7 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                     </div>
                 </div>
                 <div className={`text-right group-hover:opacity-100 opacity-0`}>
-                    {linsightConfig?.tts_model?.id && (
+                    {linsightConfig?.tts_model?.id && (version !== 'v2')&& (
                         <AudioPlayComponent
                             messageId={String(data.id)}
                             msg={message}
@@ -131,6 +131,7 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
                         onMarkClick={onMarkClick}
+                        version={version}
                         debug={debug}
                         text={data.message || data.thought}
                     ></MessageButtons>}

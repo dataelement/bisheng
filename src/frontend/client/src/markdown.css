@@ -579,7 +579,8 @@
     margin-bottom: 0;
 }
 
-.bs-mkdown svg g[data-mml-node="merror"], .bs-mkdown .mathjax-error {
+.bs-mkdown svg g[data-mml-node="merror"],
+.bs-mkdown .mathjax-error {
     opacity: 0;
 }
 

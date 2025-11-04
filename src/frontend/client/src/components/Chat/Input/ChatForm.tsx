@@ -6,6 +6,7 @@ import { File_Accept } from '~/common';
 import { Button, TextareaAutosize } from '~/components/ui';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '~/components/ui/Select';
 import SpeechToTextComponent from '~/components/Voice/SpeechToText';
+import { useParsingAudioLoading } from '~/components/Voice/textToSpeechStore';
 import { useGetBsConfig, useGetFileConfig, useGetUserLinsightCountQuery, useGetWorkbenchModelsQuery } from '~/data-provider';
 import {
   BsConfig,
@@ -210,6 +211,8 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
   const { data: modelData } = useGetWorkbenchModelsQuery()
   const showVoice = modelData?.asr_model.id
 
+  const [audioLoading] = useParsingAudioLoading()
+
   return (
     <form
       onSubmit={methods.handleSubmit((data) => {
@@ -263,7 +266,7 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
             showVoice={showVoice}
             fileTip={!isLingsi}
             noUpload={!bsConfig?.fileUpload.enabled}
-            disableInputs={disableInputs}
+            disableInputs={disableInputs || audioLoading}
             disabledSearch={isSearch && !isLingsi}
           >
             {endpoint && (
@@ -312,7 +315,7 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
           {/* 发送和停止 */}
           <div className="absolute bottom-2 right-3 flex gap-2 items-center">
             {showVoice && <SpeechToTextComponent onChange={(e) => {
-              textAreaRef.current.value += e;
+              methods.setValue('text', e, { shouldValidate: true });
             }} />}
             {(isSubmitting || isSubmittingAdded) && (showStopButton || showStopAdded) ? (
               <StopButton stop={handleStopGenerating} setShowStopButton={setShowStopButton} />

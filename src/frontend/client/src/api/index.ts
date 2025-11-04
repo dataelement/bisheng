@@ -13,6 +13,7 @@ export async function getKnowledgeStatusApi(): Promise<any> {
  */
 export async function getVoice2TextApi(data: any): Promise<any> {
     return await request.postMultiPart(`/api/v1/llm/workbench/asr`, data)
+    // return Promise.resolve({ data: '测试语音转文字内容' })
 }
 
 /**

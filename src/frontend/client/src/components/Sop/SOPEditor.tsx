@@ -177,8 +177,8 @@ export const SOPEditor = ({ versionId, isSharePage, sopError, onRun }) => {
                     <ErrorDisplay title={localize('com_sop_sop_generation_failed')} taskError={linsight.sopError} />
                 </div>
             }
-            <div className={`p-8 linsight-markdown flex-1 min-h-0 ${linsight.sopError && 'hidden'}`}>
-                <SopMarkdown ref={markdownRef} linsight={linsight} disable={showSopEdit || isSharePage} onChange={handleChange} />
+            <div className={`p-8 linsight-markdown flex-1 min-h-0 ${linsight.sopError && 'visible-none'}`}>
+                <SopMarkdown ref={markdownRef} linsight={linsight} hidden={linsight.sopError} disable={showSopEdit || isSharePage} onChange={handleChange} />
             </div>
 
             {linsight.status === SopStatus.SopGenerated && !isSharePage && (

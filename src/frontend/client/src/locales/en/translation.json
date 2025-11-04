@@ -892,6 +892,7 @@
   "com_ui_select_search_provider": "Search provider by name",
   "com_ui_select_search_region": "Search region by name",
   "com_ui_share": "Share",
+  "no_text_recognized":"Speech recognition is unavailable. Please contact the administrator",
   "com_ui_share_create_message": "Your name and any messages you add after sharing stay private.",
   "com_ui_share_delete_error": "There was an error deleting the shared link",
   "com_ui_share_error": "There was an error sharing the chat link",
@@ -1147,5 +1148,6 @@
   "com_addAnything": "Add anything",
   "com_dropAnyFileToAdd": "Drop any file here to add it to the conversation",
   "com_share_title": "Share Conversation",
-  "com_share_desc": "Anyone with the link can view this conversation."
+  "com_share_desc": "Anyone with the link can view this conversation.",
+  "com_unsupported_file_type": "Unsupported file type:"
 }
