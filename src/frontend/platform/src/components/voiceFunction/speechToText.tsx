@@ -159,7 +159,7 @@ const SpeechToTextComponent = ({ onChange }) => {
           toast({
             title: i18next.t('prompt'),
             variant: 'error',
-            description: '音频格式转换失败，请重试'
+            description: '语音识别不可用，请联系管理员'
           });
         } finally {
           setIsProcessing(false);
@@ -264,7 +264,7 @@ const SpeechToTextComponent = ({ onChange }) => {
       toast({
         title: i18next.t('prompt'),
         variant: 'error',
-        description: '语音识别失败'
+        description: '语音识别不可用，请联系管理员'
       });
     } finally {
       setIsProcessing(false);

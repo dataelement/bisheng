@@ -165,6 +165,30 @@ class AuditLogService:
         )
         AuditLogDao.insert_audit_logs([audit_log])
 
+    async def _build_log_async(cls, user: UserPayload, ip_address: str, event_type: EventType, object_type: ObjectType,
+                         object_id: str,
+                         object_name: str, resource_type: ResourceTypeEnum):
+        """
+        构建模块的审计日志
+        """
+        # 获取资源属于哪些用户组
+        groups = await GroupResourceDao.aget_resource_group(resource_type, object_id)
+        group_ids = [one.group_id for one in groups]
+
+        # 插入审计日志
+        audit_log = AuditLog(
+            operator_id=user.user_id,
+            operator_name=user.user_name,
+            group_ids=group_ids,
+            system_id=SystemId.BUILD.value,
+            event_type=event_type.value,
+            object_type=object_type.value,
+            object_id=object_id,
+            object_name=object_name,
+            ip_address=ip_address,
+        )
+        await AuditLogDao.ainsert_audit_logs([audit_log])
+
     @classmethod
     def create_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_type: Optional[int] = None):
         """
@@ -181,7 +205,7 @@ class AuditLogService:
                        flow_info.id, flow_info.name, rs_type)
 
     @classmethod
-    def update_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_type: Optional[int] = None):
+    async def update_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_type: Optional[int] = None):
         """
         更新技能的审计日志
         """
@@ -191,8 +215,8 @@ class AuditLogService:
             obj_type = ObjectType.WORK_FLOW
             rs_type = ResourceTypeEnum.WORK_FLOW
         logger.info(f"act=update_build_flow user={user.user_name} ip={ip_address} flow={flow_id}")
-        flow_info = FlowDao.get_flow_by_id(flow_id)
-        cls._build_log(user, ip_address, EventType.UPDATE_BUILD, obj_type,
+        flow_info = await FlowDao.aget_flow_by_id(flow_id)
+        await cls._build_log_async(user, ip_address, EventType.UPDATE_BUILD, obj_type,
                        flow_info.id, flow_info.name, rs_type)
 
     @classmethod

@@ -1,5 +1,5 @@
 import json
-from typing import Any
+from typing import Any, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlmodel import select
@@ -11,12 +11,15 @@ from bisheng.api.utils import build_flow_no_yield, remove_api_keys
 from bisheng.api.v1.schemas import (FlowCompareReq, FlowListRead, FlowVersionCreate, StreamData, resp_200)
 from bisheng.common.errcode.flow import FlowOnlineEditError, FlowNameExistsError
 from bisheng.common.errcode.http_error import UnAuthorizedError, ServerError, NotFoundError
-from bisheng.core.database import get_sync_db_session
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.flow import (Flow, FlowCreate, FlowDao, FlowRead, FlowType, FlowUpdate)
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
 from bisheng.common.services.config_service import settings
 from loguru import logger
+
+from bisheng.share_link.api.dependencies import header_share_token_parser
+from bisheng.share_link.domain.models.share_link import ShareLink
 from fastapi_jwt_auth import AuthJWT
 
 # build router
@@ -70,7 +73,7 @@ def create_versions(*,
 
 
 @router.put('/versions/{version_id}', status_code=200)
-def update_versions(*,
+async def update_versions(*,
                     request: Request,
                     version_id: int,
                     flow_version: FlowVersionCreate,
@@ -78,7 +81,7 @@ def update_versions(*,
     """
     更新版本
     """
-    return FlowService.update_version_info(request, login_user, version_id, flow_version)
+    return await FlowService.update_version_info(request, login_user, version_id, flow_version)
 
 
 @router.delete('/versions/{version_id}', status_code=200)
@@ -135,9 +138,10 @@ def read_flows(*,
 
 
 @router.get('/{flow_id}')
-def read_flow(*, flow_id: str, login_user: UserPayload = Depends(get_login_user)):
+async def read_flow(*, flow_id: str, login_user: UserPayload = Depends(get_login_user),
+                    share_link: Union['ShareLink', None] = Depends(header_share_token_parser)):
     """Read a flow."""
-    return FlowService.get_one_flow(login_user, flow_id)
+    return await FlowService.get_one_flow(login_user, flow_id, share_link)
 
 
 @router.patch('/{flow_id}')
@@ -147,11 +151,11 @@ async def update_flow(*,
                       flow: FlowUpdate,
                       login_user: UserPayload = Depends(get_login_user)):
     """Update a flow."""
-    db_flow = FlowDao.get_flow_by_id(flow_id)
+    db_flow = await FlowDao.aget_flow_by_id(flow_id)
     if not db_flow:
         raise HTTPException(status_code=404, detail='Flow not found')
 
-    if not login_user.access_check(db_flow.user_id, flow_id, AccessType.FLOW_WRITE):
+    if not await login_user.async_access_check(db_flow.user_id, flow_id, AccessType.FLOW_WRITE):
         return UnAuthorizedError.return_resp()
 
     flow_data = flow.model_dump(exclude_unset=True)
@@ -177,11 +181,11 @@ async def update_flow(*,
         if key in ['data', 'create_time', 'update_time']:
             continue
         setattr(db_flow, key, value)
-    with get_sync_db_session() as session:
+    async with get_async_db_session() as session:
         session.add(db_flow)
-        session.commit()
-        session.refresh(db_flow)
-    FlowService.update_flow_hook(request, login_user, db_flow)
+        await session.commit()
+        await session.refresh(db_flow)
+    await FlowService.update_flow_hook(request, login_user, db_flow)
     return resp_200(db_flow)
 
 

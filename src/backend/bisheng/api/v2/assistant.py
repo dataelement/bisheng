@@ -46,7 +46,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
     except Exception as e:
         return ORJSONResponse(status_code=500, content=str(e), media_type='application/json')
     # 查找助手信息
-    res = AssistantService.get_assistant_info(assistant_id, login_user)
+    res = await AssistantService.get_assistant_info(assistant_id, login_user)
     if res.status_code != 200:
         return ORJSONResponse(status_code=500,
                               content=res.status_message,
@@ -237,7 +237,7 @@ async def get_assistant_info(request: Request, assistant_id: UUID):
     if not settings.get_from_db("default_operator").get("enable_guest_access"):
         raise HTTPException(status_code=403, detail="无权限访问")
     login_user = get_default_operator()
-    return AssistantService.get_assistant_info(assistant_id, login_user)
+    return await AssistantService.get_assistant_info(assistant_id, login_user)
 
 
 @router.get('/list', status_code=200)

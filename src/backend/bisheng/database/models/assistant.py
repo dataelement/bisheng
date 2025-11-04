@@ -273,10 +273,11 @@ class AssistantLinkDao(AssistantLink):
             session.commit()
 
     @classmethod
-    def get_assistant_link(cls, assistant_id: str) -> List[AssistantLink]:
-        with get_sync_db_session() as session:
+    async def get_assistant_link(cls, assistant_id: str) -> List[AssistantLink]:
+        async with get_async_db_session() as session:
             statement = select(AssistantLink).where(AssistantLink.assistant_id == assistant_id)
-            return session.exec(statement).all()
+            result = await session.exec(statement)
+            return result.all()
 
     @classmethod
     def update_assistant_tool(cls, assistant_id: str, tool_list: List[int]):

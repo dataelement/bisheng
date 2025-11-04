@@ -134,6 +134,12 @@ class AuditLogDao(AuditLogBase):
             session.commit()
 
     @classmethod
+    async def ainsert_audit_logs(cls, audit_logs: List[AuditLog]):
+        async with get_sync_db_session() as session:
+            session.add_all(audit_logs)
+            await session.commit()
+
+    @classmethod
     def get_all_operators(cls, group_ids: List[int]):
         statement = select(AuditLog.operator_id, AuditLog.operator_name).distinct()
         if group_ids:

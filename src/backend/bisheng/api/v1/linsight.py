@@ -521,8 +521,11 @@ async def get_linsight_session_version_list(
     if linsight_session_version_models and login_user.user_id != linsight_session_version_models[0].user_id:
         # 通过分享链接访问
         session_version_ids = [model.id for model in linsight_session_version_models]
-        if not share_link or (
-                share_link.meta_data and share_link.meta_data.get("versionId") not in session_version_ids):
+
+        # 通过分享链接访问
+        if (share_link is None or
+                share_link.meta_data is None or
+                share_link.meta_data.get("versionId") not in session_version_ids):
             return UnAuthorizedError.return_resp()
 
         # 仅返回分享的灵思会话版本
@@ -556,8 +559,9 @@ async def get_execute_task_detail(
 
     if login_user.user_id != linsight_session_version_model.user_id:
         # 通过分享链接访问
-        if not share_link or (
-                share_link.meta_data and share_link.meta_data.get("versionId") != session_version_id):
+        if (share_link is None or
+                share_link.meta_data is None or
+                share_link.meta_data.get("versionId") != session_version_id):
             return UnAuthorizedError.return_resp()
 
     return resp_200(execute_task_models)

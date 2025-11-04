@@ -344,7 +344,7 @@ class AssistantAgent(AssistantUtils):
         """通过名称获取tool 列表
            tools_name_param:: {name: params}
         """
-        links: List[AssistantLink] = AssistantLinkDao.get_assistant_link(
+        links: List[AssistantLink] = await AssistantLinkDao.get_assistant_link(
             assistant_id=self.assistant.id)
         # tool
         tools: List[BaseTool] = []

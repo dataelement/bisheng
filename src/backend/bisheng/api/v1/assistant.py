@@ -1,5 +1,5 @@
 import json
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from fastapi import (APIRouter, Body, Depends, HTTPException, Query, Request, WebSocket,
                      WebSocketException)
@@ -22,6 +22,8 @@ from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.gpts_tools import GptsToolsTypeRead
 from bisheng.mcp_manage.langchain.tool import McpTool
 from bisheng.mcp_manage.manager import ClientManager
+from bisheng.share_link.api.dependencies import header_share_token_parser
+from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import generate_uuid
 from loguru import logger
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
@@ -44,9 +46,10 @@ def get_assistant(*,
 
 # 获取某个助手的详细信息
 @router.get('/info/{assistant_id}')
-def get_assistant_info(*, assistant_id: str, login_user: UserPayload = Depends(get_login_user)):
+async def get_assistant_info(*, assistant_id: str, login_user: UserPayload = Depends(get_login_user),
+                             share_link: Union['ShareLink', None] = Depends(header_share_token_parser)):
     """获取助手信息"""
-    return AssistantService.get_assistant_info(assistant_id, login_user)
+    return await AssistantService.get_assistant_info(assistant_id, login_user, share_link)
 
 
 @router.post('/delete')
