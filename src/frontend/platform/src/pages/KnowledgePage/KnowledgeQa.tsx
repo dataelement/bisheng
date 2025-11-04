@@ -427,6 +427,7 @@ export default function KnowledgeQa(params) {
                                             key={`${el.id}-${modalKey}`}
                                             open={selectOpenId === el.id}
                                             onOpenChange={(isOpen) => {
+                                                if (el.state === 2 || el.state === 0) return;
                                                 if (copyLoadingId !== el.id) {
                                                     setSelectOpenId(isOpen ? el.id : null);
                                                 } else if (!isOpen) {
