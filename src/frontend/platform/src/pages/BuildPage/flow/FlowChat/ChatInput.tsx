@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import Tip from "@/components/bs-ui/tooltip/tip";
 import SpeechToTextComponent from "@/components/voiceFunction/speechToText";
 import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Volume2 } from "lucide-react";
 import useFlowStore from "../flowStore";
 import ChatFiles from "./ChatFiles";
 import GuideQuestions from "./GuideQuestions";
@@ -24,7 +24,7 @@ export const FileTypes = {
     FILE: ['.PDF', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.DOCX', '.PPT', '.PPTX'],
 }
 
-export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, onLoad }) {
+export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBeforSend, onLoad }) {
     const { toast } = useToast()
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
@@ -498,7 +498,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             />
             {/* restart */}
             <div className="flex absolute left-0 top-3 z-10">
-                <Tip side='top-right' content={"重新运行"}>
+                <Tip side={`${version=== 'v2'?'right':'top-right'}`} content={"重新运行"}>
                     <Button className="rounded-full" disabled={restarted} variant="ghost" size="icon" onClick={handleRestartClick}><RefreshCw size={18} /></Button>
                 </Tip>
             </div>
