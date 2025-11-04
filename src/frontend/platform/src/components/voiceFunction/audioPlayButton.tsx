@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { useAudioPlayerStore } from './audioPlayerStore';
 import { Loader, Volume2 } from 'lucide-react';
 import { textToSpeech } from '@/controllers/API/workbench';
-import { message } from '../bs-ui/toast/use-toast';
+import { message, toast } from '../bs-ui/toast/use-toast';
+import i18next from 'i18next';
 
 interface AudioPlayButtonProps {
   messageId: string;
@@ -56,7 +57,7 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
       return audioUrl;
     } else {
       // 如果无法解析路径，抛出异常
-      throw new Error(`TTS服务失败: 无法解析返回的音频路径`);
+      throw new Error(`播放功能不可用，请联系管理员`);
     }
   };
 
@@ -95,9 +96,10 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
       });
     } catch (err) {
       console.error('播放请求异常详情:', err);
-      message({
+      toast({
+        title: i18next.t('prompt'),
         variant: 'error',
-        description: '音频生成或播放失败，请稍后再试'
+        description: '播放功能不可用，请联系管理员'
       });
       setLoading(false);
       setCurrentPlayingId(null);
