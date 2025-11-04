@@ -170,17 +170,17 @@ class WorkFlowService(BaseService):
         return res
 
     @classmethod
-    def update_flow_status(cls, login_user: UserPayload, flow_id: str, version_id: int, status: int):
+    async def update_flow_status(cls, login_user: UserPayload, flow_id: str, version_id: int, status: int):
         """
         修改工作流状态, 同时修改工作流的当前版本
         """
-        db_flow = FlowDao.get_flow_by_id(flow_id)
+        db_flow = await FlowDao.aget_flow_by_id(flow_id)
         if not db_flow:
             raise NotFoundError()
-        if not login_user.access_check(db_flow.user_id, flow_id, AccessType.WORKFLOW_WRITE):
+        if not await login_user.async_access_check(db_flow.user_id, flow_id, AccessType.WORKFLOW_WRITE):
             raise UnAuthorizedError()
 
-        version_info = FlowVersionDao.get_version_by_id(version_id)
+        version_info =await FlowVersionDao.aget_version_by_id(version_id)
         if not version_info or version_info.flow_id != flow_id:
             raise NotFoundError()
         if status == FlowStatus.ONLINE.value:
@@ -193,9 +193,9 @@ class WorkFlowService(BaseService):
             except Exception as e:
                 raise WorkFlowInitError(msg=str(e))
 
-            FlowVersionDao.change_current_version(flow_id, version_info)
+            await FlowVersionDao.change_current_version(flow_id, version_info)
         db_flow.status = status
-        FlowDao.update_flow(db_flow)
+        await FlowDao.aupdate_flow(db_flow)
         return
 
     @classmethod

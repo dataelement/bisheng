@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Union
 
 from fastapi import Request
 from loguru import logger
@@ -32,6 +32,7 @@ from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.llm.domain.services import LLMService
+from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import get_request_ip
 
 
@@ -108,19 +109,24 @@ class AssistantService(BaseService, AssistantUtils):
         return AssistantSimpleInfo(**simple_dict)
 
     @classmethod
-    def get_assistant_info(cls, assistant_id: str, login_user: UserPayload):
-        assistant = AssistantDao.get_one_assistant(assistant_id)
+    async def get_assistant_info(cls, assistant_id: str, login_user: UserPayload,
+                                 share_link: Union['ShareLink', None] = None):
+        assistant = await AssistantDao.aget_one_assistant(assistant_id)
         if not assistant or assistant.is_delete:
             return AssistantNotExistsError.return_resp()
         # 检查是否有权限获取信息
-        if not login_user.access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_READ):
-            return UnAuthorizedError.return_resp()
+        if not await login_user.async_access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_READ):
+
+            if (share_link is None
+                    or share_link.meta_data is None
+                    or share_link.meta_data.get("flowId") != assistant.id):
+                return UnAuthorizedError.return_resp()
 
         tool_list = []
         flow_list = []
         knowledge_list = []
 
-        links = AssistantLinkDao.get_assistant_link(assistant_id)
+        links = await AssistantLinkDao.get_assistant_link(assistant_id)
         for one in links:
             if one.tool_id:
                 tool_list.append(one.tool_id)
@@ -132,7 +138,7 @@ class AssistantService(BaseService, AssistantUtils):
                 logger.error(f'not expect link info: {one.dict()}')
         tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list,
                                                                  knowledge_list)
-        assistant.logo = cls.get_logo_share_link(assistant.logo)
+        assistant.logo = await cls.get_logo_share_link_async(assistant.logo)
         return resp_200(data=AssistantInfo(**assistant.dict(),
                                            tool_list=tool_list,
                                            flow_list=flow_list,

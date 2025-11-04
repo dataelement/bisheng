@@ -62,6 +62,8 @@ class GroupResourceDao(GroupResourceBase):
             session.commit()
             return group_resources
 
+
+
     @classmethod
     def get_group_resource(cls,
                            group_id: int,

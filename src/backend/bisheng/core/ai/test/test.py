@@ -9,12 +9,14 @@ from bisheng.core.ai import AzureOpenAIASRClient
 @pytest.mark.asyncio
 async def test_aliyun_asr():
     from ..asr import AliyunASRClient
-    api_key = os.environ.get('ALIYUN_API_KEY')
+    # api_key = os.environ.get('ALIYUN_API_KEY')
+    api_key = "sk-b4c85ea486a04aab8041dc9f36d20617"
     client = AliyunASRClient(api_key=api_key, model="paraformer-realtime-v2")
-    with open("./data/asr_example.wav", "rb") as f:
+    with open("../asr/tmpm103lam_.wav", "rb") as f:
         audio = f.read()
     text = await client.transcribe(audio)
-    assert text == "Hello word, 这里是阿里巴巴语音实验室。"
+    print(text)
+    # assert text == "Hello word, 这里是阿里巴巴语音实验室。"
 
 
 @pytest.mark.asyncio

@@ -11,7 +11,7 @@ router = APIRouter(prefix='/flows', tags=['OpenAPI', 'FlowV2'])
 
 
 @router.get('/{flow_id}', status_code=200)
-def get_flow(request: Request, flow_id: UUID):
+async def get_flow(request: Request, flow_id: UUID):
     """
     公开的获取技能信息的接口
     """
@@ -27,7 +27,7 @@ def get_flow(request: Request, flow_id: UUID):
         'role': ''
     })
 
-    return FlowService.get_one_flow(login_user, flow_id)
+    return await FlowService.get_one_flow(login_user, flow_id)
 
 
 @router.get('', status_code=200)

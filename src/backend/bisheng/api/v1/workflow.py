@@ -1,6 +1,6 @@
 import json
 import time
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import APIRouter, Body, Depends, Query, WebSocket, WebSocketException, Request, \
     status as http_status
@@ -22,6 +22,8 @@ from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, Fl
     FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
+from bisheng.share_link.api.dependencies import header_share_token_parser
+from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import generate_uuid
 from bisheng_langchain.utils.requests import Requests
 from fastapi_jwt_auth import AuthJWT
@@ -243,9 +245,10 @@ def change_version(*,
 
 
 @router.get('/get_one_flow/{flow_id}')
-def read_flow(*, flow_id: str, login_user: UserPayload = Depends(get_login_user)):
+async def read_flow(*, flow_id: str, login_user: UserPayload = Depends(get_login_user),
+                    share_link: Union['ShareLink', None] = Depends(header_share_token_parser)):
     """Read a flow."""
-    return FlowService.get_one_flow(login_user, flow_id)
+    return await FlowService.get_one_flow(login_user, flow_id, share_link)
 
 
 @router.patch('/update/{flow_id}')
@@ -255,11 +258,11 @@ async def update_flow(*,
                       flow: FlowUpdate,
                       login_user: UserPayload = Depends(get_login_user)):
     """online offline"""
-    db_flow = FlowDao.get_flow_by_id(flow_id)
+    db_flow = await FlowDao.aget_flow_by_id(flow_id)
     if not db_flow:
         raise NotFoundError()
 
-    if not login_user.access_check(db_flow.user_id, flow_id, AccessType.WORKFLOW_WRITE):
+    if not await login_user.async_access_check(db_flow.user_id, flow_id, AccessType.WORKFLOW_WRITE):
         return UnAuthorizedError.return_resp()
 
     flow_data = flow.model_dump(exclude_unset=True)
@@ -274,8 +277,8 @@ async def update_flow(*,
         if key in ['data', 'create_time', 'update_time']:
             continue
         setattr(db_flow, key, value)
-    db_flow = FlowDao.update_flow(db_flow)
-    FlowService.update_flow_hook(request, login_user, db_flow)
+    db_flow = await FlowDao.aupdate_flow(db_flow)
+    await FlowService.update_flow_hook(request, login_user, db_flow)
     return resp_200(db_flow)
 
 
@@ -284,7 +287,7 @@ async def update_flow_status(request: Request, login_user: UserPayload = Depends
                              flow_id: str = Body(..., description='技能ID'),
                              version_id: int = Body(..., description='版本ID'),
                              status: int = Body(..., description='状态')):
-    WorkFlowService.update_flow_status(login_user, flow_id, version_id, status)
+    await WorkFlowService.update_flow_status(login_user, flow_id, version_id, status)
     return resp_200()
 
 

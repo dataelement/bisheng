@@ -344,6 +344,14 @@ class FlowDao(FlowBase):
         return flow
 
     @classmethod
+    async def aupdate_flow(cls, flow: Flow) -> Flow:
+        async with get_async_db_session() as session:
+            session.add(flow)
+            await session.commit()
+            await session.refresh(flow)
+        return flow
+
+    @classmethod
     def get_all_apps(cls,
                      name: str = None,
                      status: int = None,
