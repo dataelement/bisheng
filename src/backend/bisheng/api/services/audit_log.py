@@ -10,6 +10,7 @@ from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.services.config_service import settings
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.assistant import AssistantDao, Assistant
 from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
@@ -23,7 +24,6 @@ from bisheng.database.models.role import Role
 from bisheng.database.models.session import MessageSessionDao, SensitiveStatus
 from bisheng.database.models.user import UserDao, User
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.common.services.config_service import settings
 from bisheng.utils import generate_uuid
 
 
@@ -165,9 +165,10 @@ class AuditLogService:
         )
         AuditLogDao.insert_audit_logs([audit_log])
 
+    @classmethod
     async def _build_log_async(cls, user: UserPayload, ip_address: str, event_type: EventType, object_type: ObjectType,
-                         object_id: str,
-                         object_name: str, resource_type: ResourceTypeEnum):
+                               object_id: str,
+                               object_name: str, resource_type: ResourceTypeEnum):
         """
         构建模块的审计日志
         """
@@ -216,8 +217,8 @@ class AuditLogService:
             rs_type = ResourceTypeEnum.WORK_FLOW
         logger.info(f"act=update_build_flow user={user.user_name} ip={ip_address} flow={flow_id}")
         flow_info = await FlowDao.aget_flow_by_id(flow_id)
-        await cls._build_log_async(user, ip_address, EventType.UPDATE_BUILD, obj_type,
-                       flow_info.id, flow_info.name, rs_type)
+        await cls._build_log_async(user, ip_address, EventType.UPDATE_BUILD, obj_type, flow_info.id, flow_info.name,
+                                   rs_type)
 
     @classmethod
     def delete_build_flow(cls, user: UserPayload, ip_address: str, flow_info: Flow, flow_type: Optional[int] = None):
