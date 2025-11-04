@@ -82,7 +82,6 @@ def copy_qa_knowledge_celery(source_knowledge_id: int, target_knowledge_id: int,
                     qa_dict.pop("update_time")
                     qa_dict["user_id"] = login_user_id
                     qa_dict["knowledge_id"] = target_knowledge_id
-                    qa_dict["status"] = KnowledgeFileStatus.PROCESSING.value
                     new_qa = QAKnowledgeUpsert(**qa_dict)
                     new_qa_list.append(new_qa)
 
@@ -91,7 +90,7 @@ def copy_qa_knowledge_celery(source_knowledge_id: int, target_knowledge_id: int,
                 id_mapping = {qa_list[i].id: result[i].id for i in range(len(qa_list))}
 
                 # 复制向量
-                source_ids = [int(qa.id) for qa in qa_list]
+                source_ids = [int(qa.id) for qa in qa_list if qa.status == QAStatus.ENABLED]
                 fields = [s.name for s in source_milvus.col.schema.fields if s.name != "pk"]
                 vectors = source_milvus.col.query(
                     expr=f"file_id in {source_ids} && knowledge_id == '{source_knowledge_id}'",
