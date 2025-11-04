@@ -61,10 +61,9 @@ class ChatMessageRead(MessageBase):
     id: Optional[int] = None
 
 
-class ChatMessageQuery(BaseModel):
+class ChatMessageQuery(MessageBase):
     id: Optional[int] = None
-    flow_id: str
-    chat_id: str
+    receiver: Optional[Dict] = None
 
 
 class ChatMessageCreate(MessageBase):
@@ -203,9 +202,9 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     async def aget_messages_by_chat_id(cls,
-                                chat_id: str,
-                                category_list: list = None,
-                                limit: int = 10) -> List[ChatMessage]:
+                                       chat_id: str,
+                                       category_list: list = None,
+                                       limit: int = 10) -> List[ChatMessage]:
         async with get_async_db_session() as session:
             statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
             if category_list:
