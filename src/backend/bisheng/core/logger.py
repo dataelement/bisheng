@@ -75,6 +75,6 @@ def set_logger_config(logger_config: LoggerConf):
     for handler in logger_config.handlers:
         log_file = Path(handler['sink'])
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        logger.add(**handler, filter=TraceIdFilter())
+        logger.add(**{k: v for k, v in handler.items() if k != 'filter'}, filter=TraceIdFilter())
 
     logger.debug(f'Logger set up with log level: {logger_config.level}')
