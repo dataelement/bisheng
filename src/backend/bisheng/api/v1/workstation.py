@@ -86,9 +86,9 @@ def step_message(stepId, runId, index, msgId):
     return f'event: message\ndata: {msg}\n\n'
 
 
-def final_message(conversation: MessageSession, title: str, requestMessage: ChatMessage, text: str,
-                  error: bool, modelName: str):
-    responseMessage = ChatMessageDao.insert_one(
+async def final_message(conversation: MessageSession, title: str, requestMessage: ChatMessage, text: str,
+                        error: bool, modelName: str):
+    responseMessage = await ChatMessageDao.ainsert_one(
         ChatMessage(
             user_id=conversation.user_id,
             chat_id=conversation.chat_id,
@@ -109,8 +109,8 @@ def final_message(conversation: MessageSession, title: str, requestMessage: Chat
             'final': True,
             'conversation': WorkstationConversation.from_chat_session(conversation).model_dump(),
             'title': title,
-            'requestMessage': WorkstationMessage.from_chat_message(requestMessage).model_dump(),
-            'responseMessage': WorkstationMessage.from_chat_message(responseMessage).model_dump(),
+            'requestMessage': (await WorkstationMessage.from_chat_message(requestMessage)).model_dump(),
+            'responseMessage': (await WorkstationMessage.from_chat_message(requestMessage)).model_dump(),
         },
         default=custom_json_serializer)
     return f'event: message\ndata: {msg}\n\n'
@@ -237,11 +237,11 @@ async def gen_title(conversationId: str = Body(..., description='', embed=True),
 
 
 @router.get('/messages/{conversationId}')
-def get_chat_history(conversationId: str,
-                     login_user: UserPayload = Depends(get_login_user),
-                     share_link: Union['ShareLink', None] = Depends(header_share_token_parser)
-                     ):
-    messages = ChatMessageDao.get_messages_by_chat_id(chat_id=conversationId, limit=1000)
+async def get_chat_history(conversationId: str,
+                           login_user: UserPayload = Depends(get_login_user),
+                           share_link: Union['ShareLink', None] = Depends(header_share_token_parser)
+                           ):
+    messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=conversationId, limit=1000)
     if messages:
 
         if login_user.user_id != messages[0].user_id:
@@ -249,7 +249,7 @@ def get_chat_history(conversationId: str,
             if not share_link or share_link.resource_id != conversationId:
                 return UnAuthorizedError.return_resp()
 
-        return resp_200([WorkstationMessage.from_chat_message(message) for message in messages])
+        return resp_200([await WorkstationMessage.from_chat_message(message) for message in messages])
     else:
         return resp_200([])
 

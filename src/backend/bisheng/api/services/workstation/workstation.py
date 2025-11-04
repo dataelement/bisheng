@@ -21,6 +21,7 @@ from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession
+from bisheng.database.models.user import UserDao
 from bisheng.llm.domain.services import LLMService
 from bisheng.utils.embedding import create_knowledge_keyword_store, decide_embeddings
 from bisheng.utils.embedding import create_knowledge_vector_store
@@ -235,6 +236,7 @@ class WorkstationMessage(BaseModel):
     isCreatedByUser: bool
     model: Optional[str]
     parentMessageId: Optional[str]
+    user_name: Optional[str]
     sender: str
     text: str
     updateAt: datetime
@@ -257,10 +259,11 @@ class WorkstationMessage(BaseModel):
         return str(value)
 
     @classmethod
-    def from_chat_message(cls, message: ChatMessage):
+    async def from_chat_message(cls, message: ChatMessage):
         files = json.loads(message.files) if message.files else []
+        user_model = await UserDao.aget_user(message.user_id)
         return cls(
-            messageId=message.id,
+            messageId=str(message.id),
             conversationId=message.chat_id,
             createdAt=message.create_time,
             updateAt=message.update_time,
@@ -269,6 +272,7 @@ class WorkstationMessage(BaseModel):
             parentMessageId=json.loads(message.extra).get('parentMessageId'),
             error=json.loads(message.extra).get('error', False),
             unfinished=json.loads(message.extra).get('unfinished', False),
+            user_name=user_model.user_name,
             sender=message.sender,
             text=message.message,
             files=files,
@@ -287,7 +291,7 @@ class WorkstationConversation(BaseModel):
     def from_chat_session(cls, session: MessageSession):
         return cls(
             conversationId=session.chat_id,
-            user=session.user_id,
+            user=str(session.user_id),
             createdAt=session.create_time,
             updateAt=session.update_time,
             model=None,
