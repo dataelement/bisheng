@@ -114,17 +114,20 @@ def copy_normal(
 
         # 拷贝源文件
         if minio_client.object_exists_sync(minio_client.bucket, source_file):
-            minio_client.copy_object_sync(source_object=source_file, dest_object=target_source_file)
+            minio_client.copy_object_sync(source_bucket=minio_client.bucket, source_object=source_file,
+                                          dest_object=target_source_file, dest_bucket=minio_client.bucket)
         knowledge_new.object_name = target_source_file
 
         # 拷贝生成的pdf文件
         if minio_client.object_exists_sync(minio_client.bucket, f"{source_file_pdf}"):
-            minio_client.copy_object_sync(source_object=source_file, dest_object=f"{knowledge_new.id}")
+            minio_client.copy_object_sync(source_bucket=minio_client.bucket, source_object=source_file,
+                                          dest_object=f"{knowledge_new.id}", dest_bucket=minio_client.bucket)
 
         # 拷贝bbox文件
         if minio_client.object_exists_sync("bisheng", bbox_file):
             target_bbox_file = KnowledgeUtils.get_knowledge_bbox_file_object_name(knowledge_new.id)
-            minio_client.copy_object_sync(source_object=bbox_file, dest_object=target_bbox_file)
+            minio_client.copy_object_sync(source_bucket=minio_client.bucket, source_object=bbox_file,
+                                          dest_object=target_bbox_file, dest_bucket=minio_client.bucket)
             knowledge_new.bbox_object_name = target_bbox_file
 
         preview_file = None
