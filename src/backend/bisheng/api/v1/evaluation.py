@@ -5,7 +5,6 @@ from typing import Optional
 from datasets import Dataset
 from fastapi import APIRouter, Depends, Query, UploadFile, Form, BackgroundTasks
 from loguru import logger
-from shapely.lib import get_m
 
 from bisheng.api.services.evaluation import EvaluationService, add_evaluation_task
 from bisheng.api.services.user_service import UserPayload, get_login_user

@@ -43,13 +43,13 @@ async def check_app_write_auth(
     if flow_type == FlowType.ASSISTANT.value:
         check_auth_type = AccessType.ASSISTANT_WRITE
         flow_info = await AssistantDao.aget_one_assistant(flow_id)
-        owner_id = flow_info.user_id
     else:
         flow_info = await FlowDao.aget_flow_by_id(flow_id)
-        owner_id = flow_info.user_id
-        if flow_info.flow_type == FlowType.WORKFLOW.value:
+        if flow_info and flow_info.flow_type == FlowType.WORKFLOW.value:
             check_auth_type = AccessType.WORKFLOW_WRITE
-
+    if not flow_info:
+        raise NotFoundError.http_exception()
+    owner_id = flow_info.user_id
     if await login_user.async_access_check(owner_id, flow_id, check_auth_type):
         return resp_200()
     return AppWriteAuthError.return_resp()
