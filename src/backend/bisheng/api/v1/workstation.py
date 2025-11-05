@@ -23,19 +23,19 @@ from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import FrequentlyUsedChat
 from bisheng.api.v1.schemas import WorkstationConfig, resp_200, WSPrompt, ExcelRule, UnifiedResponseModel
-from bisheng.core.cache.utils import file_download, save_download_file, save_uploaded_file
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
 from bisheng.common.errcode.workstation import WebSearchToolNotFoundError, ConversationNotFoundError, \
     AgentAlreadyExistsError
+from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.cache.utils import file_download, save_download_file, save_uploaded_file
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.llm.domain.llm import BishengLLM
-from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 
@@ -431,7 +431,7 @@ async def chat_completions(
                 message.extra = json.dumps(extra, ensure_ascii=False)
                 await ChatMessageDao.ainsert_one(message)
 
-            messages = await WorkStationService.get_chat_history(conversationId, 8)[:-1]
+            messages = (await WorkStationService.get_chat_history(conversationId, 8))[:-1]
             inputs = [*messages, HumanMessage(content=prompt)]
             if wsConfig.systemPrompt:
                 system_content = wsConfig.systemPrompt.format(cur_date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
