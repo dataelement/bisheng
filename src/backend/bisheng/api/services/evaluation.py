@@ -4,6 +4,7 @@ import json
 import os
 from collections import defaultdict
 from copy import deepcopy
+from io import BytesIO
 from typing import List
 
 import numpy as np
@@ -14,6 +15,7 @@ from bisheng_ragas.metrics import AnswerCorrectnessBisheng
 from datasets import Dataset
 from fastapi import UploadFile, HTTPException
 from fastapi.encoders import jsonable_encoder
+from loguru import logger
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.flow import FlowService
@@ -32,7 +34,6 @@ from bisheng.database.models.user import UserDao
 from bisheng.graph.graph.base import Graph
 from bisheng.llm.domain.services import LLMService
 from bisheng.utils import generate_uuid
-from loguru import logger
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow
 from bisheng.workflow.common.workflow import WorkflowStatus
@@ -144,7 +145,7 @@ class EvaluationService:
 
         file_ext = os.path.basename(file.filename).split('.')[-1]
         file_path = f'evaluation/dataset/{file_id}.{file_ext}'
-        minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=file_path, file=file.file,
+        minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=file_path, file=file.file.read(),
                                      content_type=file.content_type)
         return file_name, file_path
 
@@ -168,10 +169,10 @@ class EvaluationService:
     @classmethod
     def read_csv_file(cls, file_path: str):
         minio_client = get_minio_storage_sync()
-        resp = minio_client.get_object_sync(file_path)
+        resp = minio_client.get_object_sync(bucket_name=minio_client.bucket, object_name=file_path)
         if resp is None:
             return None
-        return resp
+        return BytesIO(resp)
 
     @classmethod
     def parse_csv(cls, file_data: io.BytesIO):
