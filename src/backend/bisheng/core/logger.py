@@ -18,7 +18,8 @@ def trace_id_generator() -> str:
 
 class TraceIdFilter:
     def __call__(self, record):
-        record["extra"]["trace_id"] = trace_id_var.get()
+        if trace_id_var.get() is not None:
+            record["extra"]["trace_id"] = trace_id_var.get()
         return True
 
 
