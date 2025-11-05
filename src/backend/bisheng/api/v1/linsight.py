@@ -29,6 +29,7 @@ from bisheng.common.errcode.linsight import LinsightQuestionError, LinsightUseUp
     LinsightStartTaskError, LinsightSessionVersionRunningError, LinsightQueueStatusError, FileUploadError, \
     SopShowcaseError
 from bisheng.common.errcode.server import InvalidOperationError, ResourceDownloadError
+from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.knowledge import KnowledgeTypeEnum, KnowledgeDao
@@ -36,7 +37,6 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
     LinsightSessionVersion
 from bisheng.database.models.linsight_sop import LinsightSOPDao, LinsightSOPRecord
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
-from bisheng.common.services.config_service import settings
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import util
@@ -175,6 +175,7 @@ async def generate_sop(
         feedback_content: str = Body(None, description="用户反馈内容"),
         reexecute: bool = Body(False, description="是否重新执行生成SOP"),
         sop_id: int = Body(None, description="精选案例的ID"),
+        example_session_version_id: str = Body(default=None, description="参考案例的linsight_version_id"),
         login_user: UserPayload = Depends(get_login_user)) -> EventSourceResponse:
     """
     生成与重新规划灵思SOP
@@ -195,6 +196,13 @@ async def generate_sop(
     if not session_version:
         raise NotFoundError.http_exception()
 
+    example_sop = None
+    if sop_id:
+        sop_db = await SOPManageService.get_sop_by_id(sop_id)
+        example_sop = sop_db.content if sop_db else None
+    elif example_session_version_id:
+        example_session_version = await LinsightSessionVersionDao.get_by_id(example_session_version_id)
+        example_sop = example_session_version.sop if example_session_version else None
     res = []
     linsight_conf = settings.get_linsight_conf()
     if session_version.org_knowledge_enabled and linsight_conf.max_knowledge_num > 0:
@@ -218,7 +226,7 @@ async def generate_sop(
             reexecute=reexecute,
             login_user=login_user,
             knowledge_list=res,
-            sop_id=sop_id
+            example_sop=example_sop
         )
 
         async for event in sop_generate:
