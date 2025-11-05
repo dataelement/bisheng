@@ -14,8 +14,9 @@ const FileContainer = ({
   onDelete?: () => void;
 }) => {
 
+  // 聊天框兼容展示文件名
   const currentFile = useMemo(() => {
-    if (!file.filename) {
+    if (!file.filename && file.filepath) {
       const fileName = file.filepath.split('/').pop();
       return {
         ...file,
