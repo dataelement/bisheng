@@ -171,7 +171,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                     )}
                     style={{ width: inputFloat ? `${inputWidth}px` : '100%' }} // Dynamically set width
                   >
-                    {!shareToken && <ChatForm isLingsi={isLingsi} setShowCode={setShowCode} index={index} />}
+                    <ChatForm isLingsi={isLingsi} setShowCode={setShowCode} index={index} readOnly={shareToken} />
                     {!inputFloat && <div className="h-[2vh]"></div>}
                   </div>
                 </div>

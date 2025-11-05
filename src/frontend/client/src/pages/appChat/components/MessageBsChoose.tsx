@@ -63,7 +63,7 @@ export default function MessageBsChoose({ type = 'choose', disabled, logo, data,
     }, [data.files])
 
     return <MessageWarper flow={flow} logo={logo} >
-        <div className="">
+        <div className="group">
             <div className="text-base text-[#0D1638] dark:text-[#CFD5E8]">
                 {/* message */}
                 <div><Markdown content={data.message.msg} isLatestMessage={false} webContent={undefined} /></div>
@@ -113,7 +113,7 @@ export default function MessageBsChoose({ type = 'choose', disabled, logo, data,
                             }
                         </div>
                     }
-                    <div className="flex justify-end py-2">
+                    <div className="flex justify-end py-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         {data.message.msg && <TextToSpeechButton messageId={String(data.id)} text={data.message.msg} />}
                     </div>
                 </div>

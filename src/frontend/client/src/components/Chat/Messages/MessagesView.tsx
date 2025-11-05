@@ -10,6 +10,7 @@ import ScrollToBottom from '~/components/Messages/ScrollToBottom';
 import MultiMessage from './MultiMessage';
 import { cn } from '~/utils';
 import store from '~/store';
+import { Button } from '~/components/ui';
 
 export default function MessagesView({
   messagesTree: _messagesTree,
@@ -86,8 +87,9 @@ export default function MessagesView({
         </div>
         {/* 开启新对话 */}
         <div className='absolute bottom-12 h-0 w-full flex justify-center'>
-          {!readOnly && <button
+          {<Button
             className="flex items-center h-8 justify-center gap-2 rounded-2xl bg-blue-100 px-4 py-1 font-medium text-blue-main hover:bg-blue-200"
+            disabled={readOnly}
             onClick={() => {
               newConvo();
               navigate('/c/new');
@@ -96,7 +98,7 @@ export default function MessagesView({
           >
             <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/chat.png'} alt="" />
             <span className="text-sm">{localize('com_ui_new_chat')}</span>
-          </button>}
+          </Button>}
         </div>
         {/* 返回底部 */}
         <CSSTransition

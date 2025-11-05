@@ -1,4 +1,4 @@
-import { FileText, MessageCircleMoreIcon, Share2Icon } from 'lucide-react';
+import { FileText, MessageCircleMoreIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '~/components/ui/Select';
@@ -6,10 +6,10 @@ import { useConversationsInfiniteQuery } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { getFileExtension } from '~/utils';
+import ShareChat from '../Share/ShareChat';
 import { Button, Skeleton } from '../ui';
 import FileIcon from '../ui/icon/File';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
-import ShareChat from '../Share/ShareChat';
 
 export const Header = ({ isLoading, chatId, isSharePage, setVersionId, versionId, versions }) => {
     const { getLinsight } = useLinsightManager()
@@ -34,7 +34,7 @@ export const Header = ({ isLoading, chatId, isSharePage, setVersionId, versionId
             }
 
             <div className="flex items-center gap-3">
-                {!isSharePage && <ShareChat type='linsight_session' chatId={chatId} versionId={versionId} />}
+                {!isSharePage && <ShareChat type='linsight_session' chatId={linsight?.session_id} versionId={versionId} />}
 
                 <Popover>
                     <PopoverTrigger asChild>
@@ -91,7 +91,7 @@ export const Header = ({ isLoading, chatId, isSharePage, setVersionId, versionId
                 </Popover>
 
                 {
-                    versions.length > 0 && !isSharePage && <Select value={versionId} onValueChange={setVersionId}>
+                    versions.length > 0 && <Select value={versionId} disabled={isSharePage} onValueChange={setVersionId}>
                         <SelectTrigger className="h-7 rounded-lg px-3 border bg-white hover:bg-gray-50 data-[state=open]:border-blue-500">
                             <div className="flex items-center gap-2">
                                 <span className="text-xs font-normal text-gray-600">{localize('com_sop_task_version')} {versions.find(task => task.id === versionId)?.name}</span>

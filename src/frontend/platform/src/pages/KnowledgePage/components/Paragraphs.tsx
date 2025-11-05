@@ -744,7 +744,7 @@ export default function Paragraphs({ fileId, onBack }) {
                                 fileId={selectedFileId}
                                 previewCount={datalist.length}
                                 edit={isEditable}
-                                className="h-[calc(100vh-206px)]"
+                                className="h-[calc(100vh-206px)] pb-6"
                                 fileSuffix={currentFile?.suffix || ''}
                                 loading={loading}
                                 chunks={safeChunks}

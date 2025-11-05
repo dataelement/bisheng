@@ -1,20 +1,13 @@
 "use client"
 
-import { Howl } from "howler"
 import { Loader2, Pause, Volume2 } from "lucide-react"
-import { useCallback } from "react"
-import { useRecoilState, useRecoilValue, useSetRecoilState } from "recoil"
 import { textToSpeech } from "~/api"
-import { useToastContext } from "~/Providers"
-import {
-    activeMessageIdAtom,
-    audioInstanceAtom,
-    isLoadingAudioAtom,
-    isPlayingAtom,
-    playbackProgressAtom,
-} from "./textToSpeechStore"
 import { useGetWorkbenchModelsQuery } from "~/data-provider"
+import { useToastContext } from "~/Providers"
 import { cn } from "~/utils"
+import {
+    useAudioPlayer
+} from "./textToSpeechStore"
 
 
 interface TextToSpeechButtonProps {
@@ -24,7 +17,7 @@ interface TextToSpeechButtonProps {
 }
 
 export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechButtonProps) => {
-    const { activeMessageId, isLoadingAudio, isPlaying, playAudio, pauseAudio, resumeAudio, stopAudio, setIsLoadingAudio } = useAudioPlayer()
+    const { activeMessageId, isLoadingAudio, isPlaying, playAudio, setActiveMessageId, pauseAudio, resumeAudio, stopAudio, setIsLoadingAudio } = useAudioPlayer()
     const { showToast } = useToastContext()
 
     // Check current message playback state
@@ -70,6 +63,7 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
                 return
             }
 
+            setActiveMessageId(messageId)
             setIsLoadingAudio(true)
             // If this is a new message, fetch audio and play
             const audioUrl = await fetchAudioUrl(text)
@@ -128,155 +122,3 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
 
 
 
-let progressAnimationId: number | null = null
-
-export function useAudioPlayer() {
-    const [activeMessageId, setActiveMessageId] = useRecoilState(activeMessageIdAtom)
-    const [audioInstance, setAudioInstance] = useRecoilState(audioInstanceAtom)
-    const [isPlaying, setIsPlaying] = useRecoilState(isPlayingAtom)
-    const [isLoadingAudio, setIsLoadingAudio] = useRecoilState(isLoadingAudioAtom)
-    const setPlaybackProgress = useSetRecoilState(playbackProgressAtom)
-
-    // Clean up audio resources
-    const cleanupAudio = useCallback(() => {
-        if (progressAnimationId !== null) {
-            cancelAnimationFrame(progressAnimationId)
-            progressAnimationId = null
-        }
-
-        if (audioInstance) {
-            audioInstance.unload()
-            setAudioInstance(null)
-        }
-
-        setIsPlaying(false)
-        setPlaybackProgress(0)
-    }, [audioInstance, setAudioInstance, setIsPlaying, setPlaybackProgress])
-
-    // Update playback progress
-    const updateProgress = useCallback(
-        (sound: Howl) => {
-            if (!sound.playing()) {
-                return
-            }
-
-            const seek = sound.seek() as number
-            const duration = sound.duration()
-            const progress = duration > 0 ? (seek / duration) * 100 : 0
-
-            setPlaybackProgress(progress)
-
-            progressAnimationId = requestAnimationFrame(() => updateProgress(sound))
-        },
-        [setPlaybackProgress],
-    )
-
-    // Play audio from URL
-    const playAudio = useCallback(
-        (messageId: string, audioUrl: string) => {
-            // Stop current audio if playing
-            if (audioInstance) {
-                cleanupAudio()
-            }
-
-            setActiveMessageId(messageId)
-            setIsLoadingAudio(true)
-
-            const sound = new Howl({
-                src: [audioUrl],
-                html5: true,
-                onload: () => {
-                    // Check if this is still the active message
-                    setIsLoadingAudio(false)
-                    sound.play()
-                    setIsPlaying(true)
-                    updateProgress(sound)
-                },
-                onplay: () => {
-                    setIsPlaying(true)
-                    updateProgress(sound)
-                },
-                onpause: () => {
-                    setIsPlaying(false)
-                    if (progressAnimationId !== null) {
-                        cancelAnimationFrame(progressAnimationId)
-                        progressAnimationId = null
-                    }
-                },
-                onend: () => {
-                    cleanupAudio()
-                    setActiveMessageId(null)
-                },
-                onstop: () => {
-                    cleanupAudio()
-                },
-                onloaderror: (_id, error) => {
-                    console.error("[v0] Audio load error:", error)
-                    setIsLoadingAudio(false)
-                    cleanupAudio()
-                    setActiveMessageId(null)
-                },
-                onplayerror: (_id, error) => {
-                    console.error("[v0] Audio play error:", error)
-                    cleanupAudio()
-                    setActiveMessageId(null)
-                },
-            })
-
-            setAudioInstance(sound)
-        },
-        [
-            audioInstance,
-            cleanupAudio,
-            setActiveMessageId,
-            setIsLoadingAudio,
-            setAudioInstance,
-            setIsPlaying,
-            updateProgress,
-        ],
-    )
-
-    // Pause current audio
-    const pauseAudio = useCallback(() => {
-        if (audioInstance && isPlaying) {
-            audioInstance.pause()
-            setIsPlaying(false)
-        }
-    }, [audioInstance, isPlaying, setIsPlaying])
-
-    // Resume current audio
-    const resumeAudio = useCallback(() => {
-        if (audioInstance && !isPlaying) {
-            audioInstance.play()
-            setIsPlaying(true)
-        }
-    }, [audioInstance, isPlaying, setIsPlaying])
-
-    // Stop and cleanup
-    const stopAudio = useCallback(() => {
-        if (audioInstance) {
-            audioInstance.stop()
-        }
-        cleanupAudio()
-        setActiveMessageId(null)
-    }, [audioInstance, cleanupAudio, setActiveMessageId])
-
-    return {
-        activeMessageId,
-        isPlaying,
-        isLoadingAudio,
-        playAudio,
-        pauseAudio,
-        resumeAudio,
-        stopAudio,
-        setIsLoadingAudio
-    }
-}
-
-// Hook to get progress for a specific message
-export function useAudioProgress(messageId: string) {
-    const activeMessageId = useRecoilValue(activeMessageIdAtom)
-    const progress = useRecoilValue(playbackProgressAtom)
-
-    return activeMessageId === messageId ? progress : 0
-}

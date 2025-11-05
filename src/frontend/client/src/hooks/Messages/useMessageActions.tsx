@@ -99,6 +99,7 @@ export default function useMessageActions(props: TMessageActions) {
   const copyToClipboard = useCopyToClipboard({ text, content });
 
   const messageLabel = useMemo(() => {
+    if (message?.user_name) return message.user_name
     if (message?.isCreatedByUser === true) {
       return UsernameDisplay ? (user?.name ?? '') || user?.username : localize('com_user_message');
     } else if (agent) {

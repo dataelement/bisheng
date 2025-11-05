@@ -314,6 +314,8 @@ export default function useEventHandlers({
             title,
           }) as TConversation;
 
+          // hack
+          update.flowType = submission.conversation?.flowType;
           return update;
         });
 
@@ -585,9 +587,9 @@ export default function useEventHandlers({
         } else {
           throw new Error(
             'Unexpected response from server; Status: ' +
-              response.status +
-              ' ' +
-              response.statusText,
+            response.status +
+            ' ' +
+            response.statusText,
           );
         }
       } catch (error) {
