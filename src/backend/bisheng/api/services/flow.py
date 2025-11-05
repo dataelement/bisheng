@@ -83,22 +83,27 @@ class FlowService(BaseService):
         return resp_200()
 
     @classmethod
-    async def change_current_version(cls, request: Request, login_user: UserPayload, flow_id: str, version_id: int) \
-            -> UnifiedResponseModel[None]:
-        """
-        修改当前版本
-        """
+    async def judge_flow_write_permission(cls, user: UserPayload, flow_id: str) -> Flow:
         flow_info = await FlowDao.aget_flow_by_id(flow_id)
         if not flow_info:
-            return NotFoundFlowError.return_resp()
+            raise NotFoundFlowError.http_exception()
 
         atype = AccessType.FLOW_WRITE
         if flow_info.flow_type == FlowType.WORKFLOW.value:
             atype = AccessType.WORKFLOW_WRITE
 
         # 判断权限
-        if not await login_user.async_access_check(flow_info.user_id, flow_info.id, atype):
-            return UnAuthorizedError.return_resp()
+        if not await user.async_access_check(flow_info.user_id, flow_info.id, atype):
+            raise UnAuthorizedError.http_exception()
+        return flow_info
+
+    @classmethod
+    async def change_current_version(cls, request: Request, login_user: UserPayload, flow_id: str, version_id: int) \
+            -> UnifiedResponseModel[None]:
+        """
+        修改当前版本
+        """
+        flow_info = await cls.judge_flow_write_permission(login_user, flow_id)
 
         # 技能上线状态不允许 切换版本
         if flow_info.status == FlowStatus.ONLINE:
@@ -118,18 +123,12 @@ class FlowService(BaseService):
         return resp_200()
 
     @classmethod
-    def create_new_version(cls, user: UserPayload, flow_id: str, flow_version: FlowVersionCreate) \
+    async def create_new_version(cls, user: UserPayload, flow_id: str, flow_version: FlowVersionCreate) \
             -> UnifiedResponseModel[FlowVersion]:
         """
         创建新版本
         """
-        flow_info = FlowDao.get_flow_by_id(flow_id)
-        if not flow_info:
-            return NotFoundFlowError.return_resp()
-
-        # 判断权限
-        if not user.access_check(flow_info.user_id, flow_info.id, AccessType.FLOW_WRITE):
-            return UnAuthorizedError.return_resp()
+        flow_info = await cls.judge_flow_write_permission(user, flow_id)
 
         exist_version = FlowVersionDao.get_version_by_name(flow_id, flow_version.name)
         if exist_version:
@@ -143,16 +142,15 @@ class FlowService(BaseService):
         # 创建新版本
         flow_version = FlowVersionDao.create_version(flow_version)
 
-        # 将原始版本的表单数据拷贝到新版本内
-        VariableDao.copy_variables(flow_version.flow_id, flow_version.original_version_id, flow_version.id)
-
-        try:
-            # 重新整理此版本的表单数据
-            if not get_L2_param_from_flow(flow_version.data, flow_version.flow_id, flow_version.id):
-                logger.error(f'flow_id={flow_version.id} version_id={flow_version.id} extract file_node fail')
-        except:
-            pass
-
+        if flow_info.flow_type == FlowType.FLOW.value:
+            # 将原始版本的表单数据拷贝到新版本内
+            VariableDao.copy_variables(flow_version.flow_id, flow_version.original_version_id, flow_version.id)
+            try:
+                # 重新整理此版本的表单数据
+                if not get_L2_param_from_flow(flow_version.data, flow_version.flow_id, flow_version.id):
+                    logger.error(f'flow_id={flow_version.id} version_id={flow_version.id} extract file_node fail')
+            except:
+                pass
         return resp_200(data=flow_version)
 
     @classmethod
@@ -166,16 +164,7 @@ class FlowService(BaseService):
         version_info = await FlowVersionDao.aget_version_by_id(version_id, include_delete=True)
         if not version_info:
             return NotFoundVersionError.return_resp()
-        flow_info = await FlowDao.aget_flow_by_id(version_info.flow_id)
-        if not flow_info:
-            return NotFoundFlowError.return_resp()
-
-        atype = AccessType.FLOW_WRITE
-        if flow_info.flow_type == FlowType.WORKFLOW.value:
-            atype = AccessType.WORKFLOW_WRITE
-        # 判断权限
-        if not await user.async_access_check(flow_info.user_id, flow_info.id, atype):
-            return UnAuthorizedError.return_resp()
+        flow_info = await cls.judge_flow_write_permission(user, version_info.flow_id)
 
         # 版本是当前版本, 且技能处于上线状态则不可编辑data数据，名称和描述可以编辑
         if version_info.is_current == 1 and flow_info.status == FlowStatus.ONLINE.value and flow_version.data:

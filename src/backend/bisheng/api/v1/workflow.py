@@ -184,18 +184,15 @@ def get_versions(*, flow_id: str, Authorize: AuthJWT = Depends()):
 
 
 @router.post('/versions', status_code=200)
-def create_versions(*,
-                    flow_id: str,
-                    flow_version: FlowVersionCreate,
-                    Authorize: AuthJWT = Depends()):
+async def create_versions(*,
+                          flow_id: str,
+                          flow_version: FlowVersionCreate,
+                          login_user: UserPayload = Depends(get_login_user)):
     """
     创建新的技能版本
     """
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**payload)
     flow_version.flow_type = FlowType.WORKFLOW.value
-    return FlowService.create_new_version(user, flow_id, flow_version)
+    return await FlowService.create_new_version(login_user, flow_id, flow_version)
 
 
 @router.put('/versions/{version_id}', status_code=200)
