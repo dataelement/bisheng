@@ -19,6 +19,7 @@ import store from '~/store';
 import temporaryStore from '~/store/temporary';
 import { getDefaultModelSpec, getModelSpecIconURL } from '~/utils';
 import useAuthRedirect from './useAuthRedirect';
+import { getDeleteFlowApi } from '~/api/apps';
 
 export default function ChatRoute() {
   useErrorPrompt()
@@ -79,13 +80,19 @@ export default function ChatRoute() {
 
       hasSetConversation.current = true;
     } else if (initialConvoQuery.data && endpointsQuery.data && modelsQuery.data) {
-      newConversation({
-        template: initialConvoQuery.data,
-        /* this is necessary to load all existing settings */
-        preset: initialConvoQuery.data as TPreset,
-        modelsData: modelsQuery.data,
-        keepLatestMessage: true,
-      });
+      // append chat info
+      getDeleteFlowApi(conversationId).then((res) => {
+        newConversation({
+          template: {
+            conversationId,
+            title: res.data.flow_name
+          },
+          /* this is necessary to load all existing settings */
+          preset: initialConvoQuery.data as TPreset,
+          modelsData: modelsQuery.data,
+          keepLatestMessage: true,
+        });
+      })
       hasSetConversation.current = true;
     } else if (
       conversationId === Constants.NEW_CONVO &&

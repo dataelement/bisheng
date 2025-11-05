@@ -242,6 +242,7 @@ export default function ChatPanne({ customWsHost = '', chatList, chat, appendHis
                     form={flowSate.isForm}
                     logo={<AppAvator id={flow.name} url={flow.logo} flowType={1} ></AppAvator>}
                     stop
+                    version={version}
                     // stop={flowSate.isReport || flowSate.isRoom}
                     useName={sendUserName}
                     guideWord={flow.guide_word}

@@ -58,27 +58,27 @@ function FileFormWrapper({
   const isUploadDisabled = (disableInputs || endpointFileConfig?.disabled) ?? false;
 
   const renderAttachFile = () => {
-    if (isAgents) {
-      return (
-        <AttachFileMenu
-          isRTL={isRTL}
-          disabled={disableInputs}
-          handleFileChange={handleFileChange}
-        />
-      );
-    }
-    if (endpointSupportsFiles) {
-      // this
-      return (
-        <AttachFile
-          isRTL={isRTL}
-          showVoice={showVoice}
-          accept={accept}
-          disabled={disableInputs || disabledSearch}
-          handleFileChange={handleFileChange}
-        />
-      );
-    }
+    // if (isAgents) {
+    //   return (
+    //     <AttachFileMenu
+    //       isRTL={isRTL}
+    //       disabled={disableInputs}
+    //       handleFileChange={handleFileChange}
+    //     />
+    //   );
+    // }
+    // if (endpointSupportsFiles) {
+    // this
+    return (
+      <AttachFile
+        isRTL={isRTL}
+        showVoice={showVoice}
+        accept={accept}
+        disabled={disableInputs || disabledSearch}
+        handleFileChange={handleFileChange}
+      />
+    );
+    // }
 
     return null;
   };

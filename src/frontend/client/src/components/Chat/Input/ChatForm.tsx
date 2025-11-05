@@ -39,7 +39,7 @@ import SameSopSpan, { sameSopLabelState } from './SameSopSpan';
 import SendButton from './SendButton';
 import StopButton from './StopButton';
 
-const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
+const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
   const submitButtonRef = useRef<HTMLButtonElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   useQueryParams({ textAreaRef });
@@ -136,10 +136,11 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
   );
   const disableInputs = useMemo(
     () => {
+      if (readOnly) return true
       if (!isLingsi && bsConfig?.models.length === 0) return true
       return !!((requiresKey ?? false) || invalidAssistant)
     },
-    [requiresKey, invalidAssistant, isLingsi, bsConfig],
+    [requiresKey, invalidAssistant, isLingsi, readOnly, bsConfig],
   );
 
   const { ref, ...registerProps } = methods.register('text', {
@@ -269,70 +270,66 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
             disableInputs={disableInputs || audioLoading}
             disabledSearch={isSearch && !isLingsi}
           >
-            {endpoint && (
-              <>
-                <CollapseChat
-                  isCollapsed={isCollapsed}
-                  isScrollable={isScrollable}
-                  setIsCollapsed={setIsCollapsed}
-                />
-                <TextareaAutosize
-                  {...registerProps}
-                  ref={(e) => {
-                    ref(e);
-                    textAreaRef.current = e;
-                  }}
-                  disabled={disableInputs}
-                  onPaste={handlePaste}
-                  onKeyDown={handleKeyDown}
-                  onKeyUp={handleKeyUp}
-                  onHeightChange={() => {
-                    if (textAreaRef.current) {
-                      const scrollable = checkIfScrollable(textAreaRef.current);
-                      setIsScrollable(scrollable);
-                    }
-                  }}
-                  onCompositionStart={handleCompositionStart}
-                  onCompositionEnd={handleCompositionEnd}
-                  tabIndex={0}
-                  data-testid="text-input"
-                  rows={2}
-                  onFocus={() => isCollapsed && setIsCollapsed(false)}
-                  onClick={() => isCollapsed && setIsCollapsed(false)}
-                  style={{ height: isLingsi ? 124 : 84, overflowY: 'auto' }}
-                  className={cn(
-                    baseClasses,
-                    speechClass,
-                    removeFocusRings,
-                    'transition-[max-height] duration-200',
-                    'transition-[height] duration-500',
-                    isLingsi ? 'min-h-32' : 'min-h-24'
-                  )}
-                />
-              </>
-            )}
+            <>
+              <CollapseChat
+                isCollapsed={isCollapsed}
+                isScrollable={isScrollable}
+                setIsCollapsed={setIsCollapsed}
+              />
+              <TextareaAutosize
+                {...registerProps}
+                ref={(e) => {
+                  ref(e);
+                  textAreaRef.current = e;
+                }}
+                disabled={disableInputs}
+                onPaste={handlePaste}
+                onKeyDown={handleKeyDown}
+                onKeyUp={handleKeyUp}
+                onHeightChange={() => {
+                  if (textAreaRef.current) {
+                    const scrollable = checkIfScrollable(textAreaRef.current);
+                    setIsScrollable(scrollable);
+                  }
+                }}
+                onCompositionStart={handleCompositionStart}
+                onCompositionEnd={handleCompositionEnd}
+                tabIndex={0}
+                data-testid="text-input"
+                rows={2}
+                onFocus={() => isCollapsed && setIsCollapsed(false)}
+                onClick={() => isCollapsed && setIsCollapsed(false)}
+                style={{ height: isLingsi ? 124 : 84, overflowY: 'auto' }}
+                className={cn(
+                  baseClasses,
+                  speechClass,
+                  removeFocusRings,
+                  'transition-[max-height] duration-200',
+                  'transition-[height] duration-500',
+                  isLingsi ? 'min-h-32' : 'min-h-24'
+                )}
+              />
+            </>
           </FileFormWrapper>
           {/* 发送和停止 */}
           <div className="absolute bottom-2 right-3 flex gap-2 items-center">
-            {showVoice && <SpeechToTextComponent onChange={(e) => {
+            {showVoice && <SpeechToTextComponent disabled={readOnly} onChange={(e) => {
               methods.setValue('text', e, { shouldValidate: true });
             }} />}
             {(isSubmitting || isSubmittingAdded) && (showStopButton || showStopAdded) ? (
               <StopButton stop={handleStopGenerating} setShowStopButton={setShowStopButton} />
             ) : (
-              endpoint && (
-                <SendButton
-                  ref={submitButtonRef}
-                  isLingsi={isLingsi}
-                  control={methods.control}
-                  disabled={!!(filesLoading || isSubmitting || disableInputs || isOutMaxToken)}
-                />
-              )
+              <SendButton
+                ref={submitButtonRef}
+                isLingsi={isLingsi}
+                control={methods.control}
+                disabled={!!(filesLoading || isSubmitting || disableInputs || isOutMaxToken)}
+              />
             )}
           </div>
           {/* 深度思考 联网 */}
           <div className="absolute bottom-2 left-3 flex gap-2">
-            {!isLingsi && <ModelSelect value={chatModel.id} options={bsConfig?.models} onChange={val => {
+            {!isLingsi && <ModelSelect disabled={readOnly} value={chatModel.id} options={bsConfig?.models} onChange={val => {
               setChatModel({ id: Number(val), name: bsConfig?.models?.find(item => item.id === val)?.displayName || '' })
             }} />}
             <ChatToolDown
@@ -342,7 +339,7 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
               config={bsConfig}
               searchType={searchType}
               setSearchType={setSearchType}
-              disabled={!!files.size}
+              disabled={!!files.size || readOnly}
             />
           </div>
         </div>
@@ -381,7 +378,7 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
   );
 };
 
-const ModelSelect = ({ options, value, onChange }: { options?: BsConfig['models'], value: number, onChange: (value: string) => void }) => {
+const ModelSelect = ({ options, value, disabled, onChange }: { options?: BsConfig['models'], disabled: boolean, value: number, onChange: (value: string) => void }) => {
 
   const label = useMemo(() => {
     if (!options) return ''
@@ -401,7 +398,7 @@ const ModelSelect = ({ options, value, onChange }: { options?: BsConfig['models'
     }
   }, [options, value])
 
-  return <Select value={useMemo(() => value + '', [value])} onValueChange={onChange}>
+  return <Select value={useMemo(() => value + '', [value])} disabled={disabled} onValueChange={onChange}>
     <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent">
       <div
         className='flex gap-2'

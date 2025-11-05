@@ -49,7 +49,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
             case FLOW_TYPES.WORK_FLOW:
                 // 获取详情和历史消息
                 const [flowRes, msgRes] = await Promise.all([
-                    getFlowApi(fid!, API_VERSION),
+                    getFlowApi(fid!, API_VERSION, shareToken),
                     getChatHistoryApi({ flowId: fid, chatId: cid, flowType: type, shareToken })
                 ])
 
@@ -85,7 +85,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
                 break;
             case FLOW_TYPES.ASSISTANT:
                 const [assistantRes, historyRes] = await Promise.all([
-                    getAssistantDetailApi(fid),
+                    getAssistantDetailApi(fid, shareToken),
                     getChatHistoryApi({ flowId: fid, chatId: cid, flowType: type, shareToken })
                 ]);
 

@@ -440,7 +440,7 @@ class LLMService:
     @classmethod
     async def update_workflow_llm(cls, data: EvaluationLLMConfig) -> EvaluationLLMConfig:
         """ 更新workflow的默认模型配置 """
-        await cls._base_update_llm_config(data=data.model_dump(), key=ConfigKeyEnum.EVALUATION_LLM)
+        await cls._base_update_llm_config(data=data.model_dump(), key=ConfigKeyEnum.WORKFLOW_LLM)
         return data
 
     @classmethod

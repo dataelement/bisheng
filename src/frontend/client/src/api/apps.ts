@@ -25,8 +25,10 @@ export async function updateHomeLabelApi(tag_ids) {
 /**
  * 技能 工作流详情
  */
-export async function getFlowApi(flowId: string, version: string = 'v1'): Promise<any> {
-    return await request.get(`/api/${version}/flows/${flowId}`)
+export async function getFlowApi(flowId: string, version: string = 'v1', shareToken?: string): Promise<any> {
+    const headers = shareToken ? { 'share-token': shareToken } : {}
+
+    return await request.get(`/api/${version}/flows/${flowId}`, { headers })
 }
 
 /**
@@ -40,8 +42,12 @@ export async function getDeleteFlowApi(chatId: string): Promise<any> {
 }
 
 // 获取助手详情
-export const getAssistantDetailApi = async (id: string, version: string = 'v1'): Promise<any> => {
-    return await request.get(`/api/${version}/assistant/info/${id}`)
+export const getAssistantDetailApi = async (id: string, shareToken?: string): Promise<any> => {
+    const headers = shareToken ? { 'share-token': shareToken } : {}
+
+    return await request.get(`/api/v1/assistant/info/${id}`, {
+        headers
+    })
 };
 
 export const baseMsgItem = {

@@ -9,8 +9,9 @@ import rehypeMathjax from "rehype-mathjax";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 
-const MessageMarkDown = React.memo(function MessageMarkDown({ message,version,chat }) {
-
+const MessageMarkDown = React.memo(function MessageMarkDown({ message,version,chat,flowType}) {
+    
+    const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
     function filterMermaidBlocks(input) {
         const closedMermaidPattern = /```mermaid[\s\S]*?```/g;
         const openMermaidPattern = /```mermaid[\s\S]*$/g;
@@ -58,6 +59,14 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message,version,ch
             >
                 {processedMessage}
             </ReactMarkdown>
+            {(flowType===1)&&<div className={`text-right group-hover:opacity-100 opacity-0`}>
+                {linsightConfig?.tts_model?.id && (
+                    <AudioPlayComponent
+                        messageId={String()}
+                        msg={processedMessage}
+                    />
+                )}
+            </div>}
         </div>
         </>
       

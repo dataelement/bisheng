@@ -216,6 +216,7 @@ const useNewConvo = (index = 0) => {
         title: 'New Chat',
         endpoint: null,
         ...template,
+        flowType: 15,
         createdAt: '',
         updatedAt: '',
       };

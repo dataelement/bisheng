@@ -7,7 +7,7 @@ import { SkillMethod } from "./appUtils/skillMethod"
 import { submitDataState } from "./store/atoms"
 import { getErrorI18nKey } from "./store/constants"
 
-export const AppLostMessage = '当前应用已被删除'
+export const AppLostMessage = '11111'
 const wsMap = new Map<string, WebSocket>()
 // 会话运行时信息
 const sessionInfoMap = new Map<string, any>()

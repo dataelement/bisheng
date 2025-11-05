@@ -43,6 +43,11 @@ class KnowledgeRebuildingError(BaseErrorCode):
     Msg: str = '知识库重新构建中，不允许修改embedding模型'
 
 
+class KnowledgePreviewError(BaseErrorCode):
+    Code: int = 10952
+    Msg: str = '文档解析失败'  # 预览文件解析失败
+
+
 # 不是QA知识库
 class KnowledgeNotQAError(BaseErrorCode):
     Code: int = 10960

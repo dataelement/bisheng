@@ -62,7 +62,7 @@ export default function ChatMessages({ useName, readOnly, title, logo, disabledS
                         return <MessageUser
                             readOnly={readOnly}
                             key={msg.id}
-                            useName={useName}
+                            useName={msg.user_name || useName}
                             data={msg}
                             disabledSearch={disabledSearch}
                             showButton={!inputDisabled && chatState?.flow.flow_type !== 10}

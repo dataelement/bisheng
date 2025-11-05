@@ -22,6 +22,9 @@ def get_request_ip(request: Request | WebSocket) -> str:
     x_forwarded_for = request.headers.get('X-Forwarded-For')
     if x_forwarded_for:
         return x_forwarded_for.split(',')[0]
+    ip = request.headers.get('X-Real-IP')
+    if ip:
+        return ip
     return request.client.host
 
 

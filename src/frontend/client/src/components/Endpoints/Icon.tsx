@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import type { TUser } from '~/data-provider/data-provider/src';
 import type { IconProps } from '~/common';
 import MessageEndpointIcon from './MessageEndpointIcon';
@@ -46,7 +46,11 @@ const UserAvatar = memo(({ size, user, avatarSrc, username, className }: UserAva
 UserAvatar.displayName = 'UserAvatar';
 
 const Icon: React.FC<IconProps> = memo((props) => {
-  const { user } = useAuthContext();
+  const { user: oldUser } = useAuthContext();
+  // Use the incoming avatar 
+  const user = useMemo(() => {
+    return { ...oldUser, username: props.name };
+  }, [oldUser, props.name]);
   const { size = 30, isCreatedByUser } = props;
 
   const avatarSrc = useAvatar(user);

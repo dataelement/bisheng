@@ -176,6 +176,8 @@ export function useAudioPlayer() {
     pauseAudio,
     resumeAudio,
     stopAudio,
+    setIsLoadingAudio,
+    setActiveMessageId
   }
 }
 
