@@ -341,7 +341,7 @@ class LinsightWorkbenchImpl:
                            reexecute: bool = False,
                            login_user: Optional[UserPayload] = None,
                            knowledge_list: List[KnowledgeRead] = None,
-                           sop_id: Optional[int] = None) -> AsyncGenerator[Dict, None]:
+                           example_sop: Optional[str] = None) -> AsyncGenerator[Dict, None]:
         """
         生成SOP内容
 
@@ -352,6 +352,7 @@ class LinsightWorkbenchImpl:
             reexecute: 是否重新执行
             login_user: 登录用户信息
             knowledge_list: 知识库列表
+            example_sop: 参考sop，做同款时传入的sop内容
 
         Yields:
             生成的SOP内容事件
@@ -382,11 +383,6 @@ class LinsightWorkbenchImpl:
 
             if previous_session_version_id:
                 session_version = await LinsightSessionVersionDao.get_by_id(previous_session_version_id)
-
-            example_sop = None
-            if sop_id:
-                sop_db = await SOPManageService.get_sop_by_id(sop_id)
-                example_sop = sop_db.content if sop_db else None
 
             content = ""
             async for res in cls._generate_sop_content(
