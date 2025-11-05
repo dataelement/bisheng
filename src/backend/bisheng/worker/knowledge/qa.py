@@ -90,7 +90,7 @@ def copy_qa_knowledge_celery(source_knowledge_id: int, target_knowledge_id: int,
                 id_mapping = {qa_list[i].id: result[i].id for i in range(len(qa_list))}
 
                 # 复制向量
-                source_ids = [int(qa.id) for qa in qa_list if qa.status == QAStatus.ENABLED]
+                source_ids = [int(qa.id) for qa in qa_list if qa.status == QAStatus.ENABLED.value]
                 fields = [s.name for s in source_milvus.col.schema.fields if s.name != "pk"]
                 vectors = source_milvus.col.query(
                     expr=f"file_id in {source_ids} && knowledge_id == '{source_knowledge_id}'",
@@ -101,7 +101,9 @@ def copy_qa_knowledge_celery(source_knowledge_id: int, target_knowledge_id: int,
                     vector["knowledge_id"] = str(target_knowledge_id)
                     vector.pop("pk")
 
-                target_milvus.col.insert(vectors)
+                if vectors.__len__() != 0:
+
+                    target_milvus.col.insert(vectors)
 
                 logger.info(f"Copied {len(qa_list)} QA knowledge from knowledge id {source_knowledge_id} "
                             f"to knowledge id {target_knowledge_id}.")
@@ -119,7 +121,8 @@ def copy_qa_knowledge_celery(source_knowledge_id: int, target_knowledge_id: int,
                     es_texts.append(text)
                     es_metadatas.append(vector)
 
-                es_db.add_texts(es_texts, es_metadatas)
+                if es_texts.__len__() != 0:
+                    es_db.add_texts(es_texts, es_metadatas)
 
                 # TODO 不需要修改状态 使用原有状态
                 # 批量更新状态为完成
