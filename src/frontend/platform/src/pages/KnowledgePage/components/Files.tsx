@@ -175,11 +175,11 @@ export default function Files({ onPreview }) {
     // 策略解析（原有逻辑不变）
     const dataSouce = useMemo(() => {
         return datalist.map(el => {
-            if(el.file_name.includes('xlsx','xls','csv')) {
+            if (el.file_name.includes('xlsx', 'xls', 'csv')&& el.parse_type !== "local" && el.parse_type !== "uns") {
                 const excel_rule = JSON.parse(el.split_rule).excel_rule
                 return {
                     ...el,
-                    strategy: ['', `每 ${excel_rule.slice_length} 行作为一个分段`]
+                    strategy: ['', `每 ${excel_rule?.slice_length} 行作为1一个分段`]
                 }
             }
             if (!el.split_rule) return {
