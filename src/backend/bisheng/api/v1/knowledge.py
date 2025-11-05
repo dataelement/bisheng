@@ -1,4 +1,6 @@
+import asyncio
 import json
+import time
 import urllib.parse
 from datetime import datetime
 from io import BytesIO
@@ -8,6 +10,8 @@ import pandas as pd
 from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request,
                      UploadFile)
 from fastapi.encoders import jsonable_encoder
+from loguru import logger
+from sse_starlette import EventSourceResponse
 
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
@@ -15,10 +19,11 @@ from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
                                     resp_200, resp_500, resp_501, resp_502, UpdateKnowledgeReq, KnowledgeFileReProcess)
-from bisheng.core.cache.utils import save_uploaded_file
+from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError, \
-    KnowledgeNotQAError
+    KnowledgeNotQAError, KnowledgePreviewError
+from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate)
 from bisheng.database.models.knowledge import KnowledgeState
 from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
@@ -27,7 +32,6 @@ from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.llm.const import LLMModelType
 from bisheng.llm.models import LLMDao
-from loguru import logger
 from bisheng.worker.knowledge.qa import insert_qa_celery
 
 # build router
@@ -55,22 +59,47 @@ async def preview_file_chunk(*,
                              login_user: UserPayload = Depends(get_login_user),
                              req_data: KnowledgeFileProcess):
     """ 获取某个文件的分块预览内容 """
-    try:
-        parse_type, file_share_url, res, partitions = await KnowledgeService.get_preview_file_chunk(
-            request, login_user, req_data)
-        return resp_200(
-            data={
-                'parse_type': parse_type,
-                'file_url': file_share_url,
-                'chunks': res,
-                'partitions': partitions
-            })
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        # productor hope raise this tips
-        logger.exception('preview_file_chunk_error')
-        return resp_500(message="文档解析失败")
+
+    async def exec_task():
+        return await KnowledgeService.get_preview_file_chunk(request, login_user, req_data)
+
+    async def sse_generator():
+        start_time = time.time()
+
+        task = asyncio.create_task(exec_task())
+
+        while True:
+            if time.time() - start_time > 1800:  # 30 minutes timeout
+                logger.error(f"Preview file chunk timeout after 30 minutes.")
+                yield KnowledgePreviewError.to_sse_event()
+                break
+            if not task.done():
+                yield {
+                    "event": "processing",
+                    "data": {}
+                }
+                await asyncio.sleep(5)
+                continue
+            if task.exception():
+                if isinstance(task.exception(), BaseErrorCode):
+                    yield task.exception().to_sse_event()
+                else:
+                    logger.error(f'Preview file chunk error: {task.exception()}')
+                    yield KnowledgePreviewError.to_sse_event()
+                break
+            parse_type, file_share_url, res, partitions = task.result()
+            yield {
+                "event": "completed",
+                "data": json.dumps({
+                    'parse_type': parse_type,
+                    'file_url': file_share_url,
+                    'chunks': [one.model_dump() for one in res],
+                    'partitions': partitions
+                }, ensure_ascii=False)
+            }
+            break
+
+    return EventSourceResponse(sse_generator())
 
 
 @router.put('/preview')

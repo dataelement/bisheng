@@ -6,6 +6,7 @@ from loguru import logger
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from bisheng.core.logger import trace_id_generator, trace_id_var
+from bisheng.utils import get_request_ip
 
 
 class CustomMiddleware(BaseHTTPMiddleware):
@@ -25,10 +26,7 @@ class CustomMiddleware(BaseHTTPMiddleware):
         process_time = round(time() - start_time, 4)
 
         # 有Nginx  二选一 得看NGINX 的配置
-        ip = request.headers.get('X-Real-IP')
-        # 因为有可能走多层代理 取最后一个
-        if not ip:
-            ip = request.client.host
+        ip = get_request_ip(request)
 
         ip = ip.split(',')[-1]
         path = request.url
