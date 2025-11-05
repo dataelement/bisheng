@@ -110,7 +110,7 @@ async def final_message(conversation: MessageSession, title: str, requestMessage
             'conversation': WorkstationConversation.from_chat_session(conversation).model_dump(),
             'title': title,
             'requestMessage': (await WorkstationMessage.from_chat_message(requestMessage)).model_dump(),
-            'responseMessage': (await WorkstationMessage.from_chat_message(requestMessage)).model_dump(),
+            'responseMessage': (await WorkstationMessage.from_chat_message(responseMessage)).model_dump(),
         },
         default=custom_json_serializer)
     return f'event: message\ndata: {msg}\n\n'
