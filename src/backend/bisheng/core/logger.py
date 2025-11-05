@@ -17,9 +17,14 @@ def trace_id_generator() -> str:
 
 
 class TraceIdFilter:
+    def __init__(self, filter_func=None):
+        self.filter_func = filter_func
+
     def __call__(self, record):
-        if trace_id_var.get() is not None:
+        if record["extra"].get("trace_id") is None:
             record["extra"]["trace_id"] = trace_id_var.get()
+        if self.filter_func is not None:
+            return self.filter_func(record)
         return True
 
 
@@ -76,6 +81,7 @@ def set_logger_config(logger_config: LoggerConf):
     for handler in logger_config.handlers:
         log_file = Path(handler['sink'])
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        logger.add(**{k: v for k, v in handler.items() if k != 'filter'}, filter=TraceIdFilter())
+        filter_func = handler.pop('filter', None)
+        logger.add(**handler, filter=TraceIdFilter(filter_func))
 
     logger.debug(f'Logger set up with log level: {logger_config.level}')
