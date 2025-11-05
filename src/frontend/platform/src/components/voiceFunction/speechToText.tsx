@@ -6,6 +6,7 @@ import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { speechToText } from '@/controllers/API/workbench';
 import VoiceRecordingIcon from '../bs-ui/voice';
+import { useAudioPlayerStore } from './audioPlayerStore';
 
 // --- 核心音频处理逻辑 ---
 const encodeWAV = (audioBuffer) => {
@@ -104,6 +105,8 @@ const SpeechToTextComponent = ({ onChange }) => {
   const audioContextRef = useRef(null);
   const timerRef = useRef(null); // 定时器引用
   const maxRecordTime = 600; // 最大录音时长：10分钟 = 600秒
+  const { stopAudio, setCurrentPlayingId } = useAudioPlayerStore();
+
 
   // 格式化时长为 "MM:SS" 格式
   const formatDuration = (seconds) => {
@@ -129,7 +132,8 @@ const SpeechToTextComponent = ({ onChange }) => {
           autoGainControl: true
         }
       });
-
+      stopAudio(); // 停止音频播放
+      setCurrentPlayingId(null); // 重置当前播放ID，避免状态残留
       // 初始化AudioContext（用于优化编码）
       const audioContext = new (window.AudioContext || window.webkitAudioContext)({
         sampleRate: 44100

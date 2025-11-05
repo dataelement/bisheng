@@ -15,6 +15,7 @@ export default function ChatMessage({
   chat,
   lockChat,
   lastMessage,
+  flowType
 }: {
   chat: ChatMessageType;
   lockChat: boolean;
@@ -78,7 +79,7 @@ export default function ChatMessage({
                 <div className="w-full">
                   {useMemo(
                     () => (
-                      <MessageMarkDown message={chat.message.toString()} chat ={chat}/>
+                      <MessageMarkDown message={chat.message.toString()} flowType={flowType} chat ={chat}/>
                     ),
                     [chat.message, chat.message.toString()]
                   )}
