@@ -509,8 +509,8 @@ async def chat_completions(
             final_res = json.dumps(e.to_dict())
             yield e.to_sse_event_instance_str()
 
-        yield final_message(conversaiton, conversaiton.flow_name, message, final_res, error,
-                            modelName)
+        yield await final_message(conversaiton, conversaiton.flow_name, message, final_res, error,
+                                  modelName)
 
         if not data.conversationId:
             # 生成title
