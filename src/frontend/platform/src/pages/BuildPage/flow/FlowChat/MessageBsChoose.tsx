@@ -9,6 +9,8 @@ import { CheckCircle } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import MessageMarkDown from "./MessageMarkDown";
+import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
+import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
 // 颜色列表
 const colorList = [
     "#111",
@@ -26,6 +28,8 @@ const colorList = [
 
 export default function MessageBsChoose({ type = 'choose', logo, data }: { type?: string, logo: string, data: WorkflowMessage }) {
     const { t } = useTranslation()
+    const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
+
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
@@ -138,6 +142,14 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
                         </div>
                     </div>
                 </div>
+            </div>
+            <div className={`text-right group-hover:opacity-100 opacity-0`}>
+                {linsightConfig?.tts_model?.id && (
+                    <AudioPlayComponent
+                        messageId={String(data.message.node_id)}
+                        msg={data.message.msg}
+                    />
+                )}
             </div>
         </div>
     </div>

@@ -16,35 +16,46 @@ export default function SystemModelConfig({ data, onBack }) {
         let embeddings = []
         let asrModel = []
         let ttsModel = []
+        const rerank = []
         data.forEach(server => {     
             const serverEmbItem = { value: server.id, label: server.name, children: [] }
             const serverLlmItem = { value: server.id, label: server.name, children: [] }
             const serverAsrItem = { value: server.id, label: server.name, children: [] }
             const serverTtsItem = { value: server.id, label: server.name, children: [] }
+            const rerankItem = { value: server.id, label: server.name, children: [] }
+console.log(data,878);
 
             server.models.forEach(model => {
+             
+                
                 const item = {
                     value: model.id,
                     label: model.model_name
                 }
                 if (!model.online) return
-                if(model.model_type === 'asr'){
+                if (model.model_type === 'asr') {
                     serverAsrItem.children.push(item)
-                }
-                if(model.model_type === 'tts'){
+                } else if (model.model_type === 'tts') {
                     serverTtsItem.children.push(item)
+                } else if (model.model_type === 'embedding') {
+                    serverEmbItem.children.push(item)
+                } else if (model.model_type === 'llm') {
+                    serverLlmItem.children.push(item)
+                } else {
+                    rerankItem.children.push(item)
                 }
-                model.model_type === 'embedding' ?
-                    serverEmbItem.children.push(item) : serverLlmItem.children.push(item)
             })
+            console.log(serverLlmItem,4223);
             if (serverLlmItem.children.length) llmOptions.push(serverLlmItem)
             if (serverEmbItem.children.length) embeddings.push(serverEmbItem)
             if (serverAsrItem.children.length) asrModel.push(serverAsrItem)
             if (serverTtsItem.children.length) ttsModel.push(serverTtsItem)
+            if (rerankItem.children.length) rerank.push(rerankItem)
+
 
         });
 
-        return { llmOptions, embeddings, asrModel, ttsModel}
+        return { llmOptions, embeddings, asrModel, ttsModel,rerank}
     }, [data])
 
     return <div className="px-2 py-4 size-full pb-20 relative overflow-y-auto">
