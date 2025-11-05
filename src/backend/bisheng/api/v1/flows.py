@@ -2,6 +2,7 @@ import json
 from typing import Any, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from loguru import logger
 from sqlmodel import select
 from starlette.responses import StreamingResponse
 
@@ -11,13 +12,11 @@ from bisheng.api.utils import build_flow_no_yield, remove_api_keys
 from bisheng.api.v1.schemas import (FlowCompareReq, FlowListRead, FlowVersionCreate, StreamData, resp_200)
 from bisheng.common.errcode.flow import FlowOnlineEditError, FlowNameExistsError
 from bisheng.common.errcode.http_error import UnAuthorizedError, ServerError, NotFoundError
+from bisheng.common.services.config_service import settings
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.flow import (Flow, FlowCreate, FlowDao, FlowRead, FlowType, FlowUpdate)
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
-from bisheng.common.services.config_service import settings
-from loguru import logger
-
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from fastapi_jwt_auth import AuthJWT
@@ -74,10 +73,10 @@ def create_versions(*,
 
 @router.put('/versions/{version_id}', status_code=200)
 async def update_versions(*,
-                    request: Request,
-                    version_id: int,
-                    flow_version: FlowVersionCreate,
-                    login_user: UserPayload = Depends(get_login_user)):
+                          request: Request,
+                          version_id: int,
+                          flow_version: FlowVersionCreate,
+                          login_user: UserPayload = Depends(get_login_user)):
     """
     更新版本
     """
@@ -199,7 +198,10 @@ def delete_flow(*,
     db_flow = FlowDao.get_flow_by_id(flow_id)
     if not db_flow:
         raise NotFoundError()
-    if not login_user.access_check(db_flow.user_id, flow_id, AccessType.FLOW_WRITE):
+    access_type = AccessType.FLOW_WRITE
+    if db_flow.flow_type == FlowType.WORKFLOW.value:
+        access_type = AccessType.WORKFLOW_WRITE
+    if not login_user.access_check(db_flow.user_id, flow_id, access_type):
         return UnAuthorizedError.return_resp()
     FlowDao.delete_flow(db_flow)
     FlowService.delete_flow_hook(request, login_user, db_flow)
