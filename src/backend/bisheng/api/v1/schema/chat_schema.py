@@ -5,6 +5,8 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, field_validator
 
 from bisheng.database.models.message import ChatMessage, ChatMessageQuery
+from bisheng.database.models.session import MessageSession
+from bisheng.database.models.user import User
 
 
 class AppChatList(BaseModel):
@@ -19,11 +21,11 @@ class AppChatList(BaseModel):
     dislike_count: Optional[int] = None
     copied_count: Optional[int] = None
     sensitive_status: Optional[int] = None  # 敏感词审查状态
-    user_groups: Optional[List[Any]] = None # 用户所属的分组
+    user_groups: Optional[List[Any]] = None  # 用户所属的分组
     mark_user: Optional[str] = None
     mark_status: Optional[int] = None
     mark_id: Optional[int] = None
-    messages: Optional[List[dict]] = None # 会话的所有消息列表数据
+    messages: Optional[List[dict]] = None  # 会话的所有消息列表数据
 
     @field_validator('user_name', mode='before')
     @classmethod
@@ -71,9 +73,13 @@ class SSEResponse(BaseModel):
 
 class ChatMessageHistoryResponse(ChatMessageQuery):
     user_name: Optional[str] = None
+    flow_name: Optional[str] = None
 
     @classmethod
-    def from_chat_message_objs(cls, chat_messages: List[ChatMessage], user_name: Optional[str] = None):
+    def from_chat_message_objs(cls, chat_messages: List[ChatMessage], user_model: User,
+                               message_session: MessageSession):
         return [
-            cls.model_validate(obj).model_copy(update={"user_name": user_name}) for obj in chat_messages
+            cls.model_validate(obj).model_copy(
+                update={"user_name": user_model.user_name, "flow_name": message_session.flow_name}) for obj in
+            chat_messages
         ]

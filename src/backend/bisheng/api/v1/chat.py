@@ -202,7 +202,9 @@ async def get_chat_message(*,
     chat_message_history = []
     if db_message:
         user_model = await UserDao.aget_user(db_message[0].user_id)
-        chat_message_history = ChatMessageHistoryResponse.from_chat_message_objs(db_message,user_model.user_name)
+        message_session = await MessageSessionDao.async_get_one(chat_id=chat_id)
+        chat_message_history = ChatMessageHistoryResponse.from_chat_message_objs(db_message, user_model,
+                                                                                 message_session)
 
     return resp_200(chat_message_history)
 

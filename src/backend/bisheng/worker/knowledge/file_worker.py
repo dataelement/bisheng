@@ -124,7 +124,7 @@ def copy_normal(
                                           dest_object=f"{knowledge_new.id}", dest_bucket=minio_client.bucket)
 
         # 拷贝bbox文件
-        if minio_client.object_exists_sync("bisheng", bbox_file):
+        if minio_client.object_exists_sync(object_name=bbox_file):
             target_bbox_file = KnowledgeUtils.get_knowledge_bbox_file_object_name(knowledge_new.id)
             minio_client.copy_object_sync(source_bucket=minio_client.bucket, source_object=bbox_file,
                                           dest_object=target_bbox_file, dest_bucket=minio_client.bucket)

@@ -20,7 +20,7 @@ from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
-from bisheng.database.models.session import MessageSession
+from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.database.models.user import UserDao
 from bisheng.llm.domain.services import LLMService
 from bisheng.utils.embedding import create_knowledge_keyword_store, decide_embeddings
@@ -243,6 +243,7 @@ class WorkstationMessage(BaseModel):
     files: Optional[list]
     error: Optional[bool] = False
     unfinished: Optional[bool] = False
+    flow_name: Optional[str] = None
 
     @field_validator('messageId', mode='before')
     @classmethod
@@ -262,6 +263,7 @@ class WorkstationMessage(BaseModel):
     async def from_chat_message(cls, message: ChatMessage):
         files = json.loads(message.files) if message.files else []
         user_model = await UserDao.aget_user(message.user_id)
+        message_session_model = await MessageSessionDao.async_get_one(chat_id=message.chat_id)
         return cls(
             messageId=str(message.id),
             conversationId=message.chat_id,
@@ -276,6 +278,7 @@ class WorkstationMessage(BaseModel):
             sender=message.sender,
             text=message.message,
             files=files,
+            flow_name=message_session_model.flow_name if message_session_model else None,
         )
 
 

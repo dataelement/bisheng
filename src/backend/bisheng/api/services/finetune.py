@@ -222,7 +222,7 @@ class FinetuneService:
     @classmethod
     def delete_job_log(cls, finetune: Finetune):
         minio_client = get_minio_storage_sync()
-        minio_client.remove_object_sync(f'/finetune/log/{finetune.id}')
+        minio_client.remove_object_sync(object_name=f'/finetune/log/{finetune.id}')
 
     @classmethod
     def upload_job_log(cls, finetune: Finetune, log_data: io.BytesIO, length: int) -> str:
@@ -234,7 +234,7 @@ class FinetuneService:
     @classmethod
     def get_job_log(cls, finetune: Finetune) -> str | None:
         minio_client = get_minio_storage_sync()
-        resp = minio_client.get_object_sync(finetune.log_path)
+        resp = minio_client.get_object_sync(object_name=finetune.log_path)
         if resp is None:
             return None
 

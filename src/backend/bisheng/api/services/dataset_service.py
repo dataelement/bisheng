@@ -70,6 +70,6 @@ class DatasetService(BaseService):
         object_name = dataset.object_name
         if object_name:
             minio_client = get_minio_storage_sync()
-            minio_client.remove_object_sync(object_name)
+            minio_client.remove_object_sync(object_name=object_name)
         DatasetDao.delete(dataset)
         return True

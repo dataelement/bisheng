@@ -345,9 +345,9 @@ class KnowledgeService(KnowledgeUtils):
                 knowledge_id, i + 1, page_size
             )
             for file in file_list:
-                minio_client.remove_object_sync(str(file[0]))
+                minio_client.remove_object_sync(object_name=str(file[0]))
                 if file[1]:
-                    minio_client.remove_object_sync(file[1])
+                    minio_client.remove_object_sync(object_name=file[1])
 
     @classmethod
     def get_upload_file_original_name(cls, file_name: str) -> str:
