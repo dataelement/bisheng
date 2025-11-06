@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 from fastapi import (APIRouter, Body, HTTPException, Query, Request, WebSocket, WebSocketException)
 from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
-from sqlalchemy.util import await_only
+from loguru import logger
 from sqlmodel import select
 
 from bisheng.api.services import chat_imp
@@ -32,7 +32,7 @@ from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.mark_record import MarkRecordDao, MarkRecordStatus
 from bisheng.database.models.mark_task import MarkTaskDao
-from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead, LikedType
+from bisheng.database.models.message import ChatMessage, ChatMessageDao, LikedType
 from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
@@ -41,7 +41,6 @@ from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
-from loguru import logger
 from bisheng.utils.util import get_cache_key
 from fastapi_jwt_auth import AuthJWT
 
@@ -196,9 +195,9 @@ async def get_chat_message(*,
         db_message = db_message.all()
 
     # # Authorization check
-    # if db_message and login_user.user_id != db_message[0].user_id:
-    #     if not share_link or share_link.resource_id != chat_id:
-    #         return UnAuthorizedError.return_resp()
+    if db_message and login_user.user_id != db_message[0].user_id:
+        if not share_link or share_link.resource_id != chat_id:
+            return UnAuthorizedError.return_resp()
     chat_message_history = []
     if db_message:
         user_model = await UserDao.aget_user(db_message[0].user_id)
