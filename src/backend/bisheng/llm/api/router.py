@@ -76,7 +76,7 @@ async def invoke_workbench_asr(request: Request, login_user: UserPayload = Depen
     return resp_200(data=text)
 
 
-@router.get('/workbench/tts')
+@router.post('/workbench/tts')
 async def invoke_workbench_tts(request: Request, login_user: UserPayload = Depends(get_login_user),
                                text: str = Body(..., embed=True, description="需要合成的文本")):
     """ 调用工作台的tts模型 将文字转为语音 """

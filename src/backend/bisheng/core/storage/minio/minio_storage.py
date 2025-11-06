@@ -2,14 +2,14 @@ import json
 from abc import ABC
 from io import BytesIO
 from pathlib import Path
-from typing import BinaryIO, Union
+from typing import BinaryIO, Union, Optional
 
 import minio
 import miniopy_async
 import miniopy_async.commonconfig as miniopy_async_commonconfig
 from minio.commonconfig import Filter
 from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration
-
+from loguru import logger
 from bisheng.core.config.settings import MinioConf
 from bisheng.core.storage.base import BaseStorage
 
@@ -121,8 +121,12 @@ class MinioStorage(BaseStorage, ABC):
         if self.minio_client_sync.bucket_exists(bucket_name):
             self.minio_client_sync.remove_bucket(bucket_name)
 
-    async def put_object(self, bucket_name: str, object_name: str, file: Union[bytes, BinaryIO, Path, str],
+    async def put_object(self, *, bucket_name: Optional[str] = None, object_name: str,
+                         file: Union[bytes, BinaryIO, Path, str],
                          content_type: str = "application/octet-stream", **kwargs) -> None:
+        if bucket_name is None:
+            bucket_name = self.bucket
+
         if isinstance(file, (bytes, BinaryIO, BytesIO)):
             if isinstance(file, bytes):
                 file = BytesIO(file)
@@ -147,8 +151,12 @@ class MinioStorage(BaseStorage, ABC):
                 **kwargs
             )
 
-    def put_object_sync(self, bucket_name: str, object_name: str, file: Union[bytes, BinaryIO, Path, str],
+    def put_object_sync(self, *, bucket_name: Optional[str] = None, object_name: str,
+                        file: Union[bytes, BinaryIO, Path, str],
                         content_type: str = "application/octet-stream", **kwargs) -> None:
+
+        if bucket_name is None:
+            bucket_name = self.bucket
 
         if isinstance(file, (bytes, BinaryIO)):
             if isinstance(file, bytes):
@@ -196,7 +204,14 @@ class MinioStorage(BaseStorage, ABC):
             **kwargs
         )
 
-    async def get_object(self, bucket_name: str, object_name: str) -> bytes | None:
+    async def get_object(self, bucket_name: Optional[str] = None, object_name: str = None) -> bytes | None:
+
+        if bucket_name is None:
+            bucket_name = self.bucket
+
+        if object_name is None:
+            raise ValueError("get_object: object_name must be provided")
+
         response = await self.minio_client.get_object(bucket_name, object_name)
 
         try:
@@ -208,7 +223,14 @@ class MinioStorage(BaseStorage, ABC):
         finally:
             response.close()
 
-    def get_object_sync(self, bucket_name: str, object_name: str) -> bytes | None:
+    def get_object_sync(self, bucket_name: Optional[str] = None, object_name: str = None) -> bytes | None:
+
+        if bucket_name is None:
+            bucket_name = self.bucket
+
+        if object_name is None:
+            raise ValueError("get_object_sync: object_name must be provided")
+
         response = self.minio_client_sync.get_object(bucket_name, object_name)
 
         try:
@@ -221,7 +243,15 @@ class MinioStorage(BaseStorage, ABC):
             response.close()
             response.release_conn()
 
-    async def object_exists(self, bucket_name: str, object_name: str) -> bool:
+    async def object_exists(self, bucket_name: Optional[str] = None, object_name: str = None) -> bool:
+
+        if bucket_name is None:
+            bucket_name = self.bucket
+
+        if object_name is None:
+            logger.warning("object_exists_sync: object_name must be provided")
+            return False
+
         try:
             await self.minio_client.stat_object(bucket_name, object_name)
             return True
@@ -230,7 +260,15 @@ class MinioStorage(BaseStorage, ABC):
                 return False
             raise e
 
-    def object_exists_sync(self, bucket_name: str, object_name: str) -> bool:
+    def object_exists_sync(self, bucket_name: Optional[str] = None, object_name: str = None) -> bool:
+
+        if bucket_name is None:
+            bucket_name = self.bucket
+
+        if object_name is None:
+            logger.warning("object_exists_sync: object_name must be provided")
+            return False
+
         try:
             self.minio_client_sync.stat_object(bucket_name, object_name)
             return True
@@ -277,10 +315,22 @@ class MinioStorage(BaseStorage, ABC):
             source=source
         )
 
-    async def remove_object(self, bucket_name: str, object_name: str) -> None:
+    async def remove_object(self, bucket_name: Optional[str] = None, object_name: str = None) -> None:
+        if bucket_name is None:
+            bucket_name = self.bucket
+
+        if object_name is None:
+            raise ValueError("remove_object: object_name must be provided")
+
         await self.minio_client.remove_object(bucket_name, object_name)
 
-    def remove_object_sync(self, bucket_name: str, object_name: str) -> None:
+    def remove_object_sync(self, bucket_name: Optional[str] = None, object_name: str = None) -> None:
+        if bucket_name is None:
+            bucket_name = self.bucket
+
+        if object_name is None:
+            raise ValueError("remove_object_sync: object_name must be provided")
+
         self.minio_client_sync.remove_object(bucket_name, object_name)
 
     def get_share_link(self, object_name, bucket=None) -> str:

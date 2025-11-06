@@ -16,11 +16,12 @@ export default function DropZone({ onDrop }) {
     const allowedExts = new Set(
         supportedFormats.map(ext => ext.toLowerCase().replace('.', ''))
     );
-    const { getRootProps, getInputProps, isDragActive } = useDropzone({
-        // 2. 关闭默认过滤：accept设为null，允许所有文件进入onDrop
-        accept: null,
+    const { getRootProps, getInputProps } = useDropzone({
+        accept: {
+            'application/*': supportedFormats
+        },
         useFsAccessApi: false,
-        onDrop: (acceptedFiles) => {
+        onDrop: (acceptedFiles, disAcceptedFiles) => {
             // 1. 过滤不符合格式的文件
             const validFiles = acceptedFiles.filter(file => {
                 // 获取文件后缀（无后缀则视为无效）
@@ -28,16 +29,11 @@ export default function DropZone({ onDrop }) {
                 return ext ? allowedExts.has(ext) : false;
             });
 
-            // 2. 计算无效文件并提示
-            const invalidFiles = acceptedFiles.filter(
-                file => !validFiles.includes(file)
-            );
-
-            if (invalidFiles.length > 0) {
+            if (disAcceptedFiles.length > 0) {
                 // @ts-ignore
                 const uniqueExtensions = [...new Set(
-                    invalidFiles
-                        .map(f => f.name.split('.').pop()?.toLowerCase())
+                    disAcceptedFiles
+                        .map(f => f.file.name.split('.').pop()?.toLowerCase())
                         .filter(Boolean)
                 )];
                 message({

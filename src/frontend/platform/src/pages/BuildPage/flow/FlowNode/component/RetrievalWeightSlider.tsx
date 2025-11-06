@@ -17,6 +17,7 @@ import {
 import { WorkflowNodeParam } from '@/types/flow';
 import { HelpCircle } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
+import InputItem from './InputItem';
 
 // 重排模型类型定义
 interface RerankModel {
@@ -33,11 +34,11 @@ interface RetrievalConfigProps {
     onChange: (value: any) => void;
 }
 
-const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => {
+const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => {    
     // 初始化状态值，将原retrievalEnabled改为search_switch
     const [keywordWeight, setKeywordWeight] = useState(data.value?.keyword_weight || 0.5);
     const [vectorWeight, setVectorWeight] = useState(data.value?.vector_weight || 0.5);
-    const [searchSwitch, setSearchSwitch] = useState(data.value?.search_switch ?? true);
+    const [searchSwitch, setSearchSwitch] = useState(data.value?.search_switch ?? false);
     const [rerankEnabled, setRerankEnabled] = useState(data.value?.rerank_enabled ?? false);
     const [selectedRerankModel, setSelectedRerankModel] = useState(data.value?.rerank_model || '');
     const [resultLength, setResultLength] = useState(data.value?.max_chunk_size || 15000);
@@ -86,12 +87,11 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
 
     // 处理检索开关变化（键名变更）
     const handleSearchToggle = (checked: boolean) => {
-        // 注释：原逻辑中"if (checked) return"可能有误，这里保留原逻辑
-        if (checked) return;
         setSearchSwitch(checked);
     };
 
     // 重排模型列表
+    //修改一下remark模型
     const rerankModels: RerankModel[] = [
         { value: 'bge-reranker-base', label: 'BGE Reranker Base' },
         { value: 'bge-reranker-large', label: 'BGE Reranker Large' },
@@ -242,17 +242,21 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
                                     <HelpCircle className="h-4 w-4 text-gray-400 cursor-pointer" />
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                    <p className="max-w-xs">通过此参数控制最终传给模型的知识库检案结果文本长度，超过模型支持的最大上下文长度可能会导致报错。</p>
+                                    <p className="max-w-xs">通过此参数控制最终传给模型的知识库检索结果文本长度，超过模型支持的最大上下文长度可能会导致报错。</p>
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
                     </div>
-                    <Input
+                  <InputItem
                         type="number"
-                        value={resultLength}
-                        onChange={handleResultLengthChange}
-                        min={1000}
-                        max={50000}
+                        linefeed
+                        data={{
+                            min: 0,
+                            max: 50000,
+                            value: resultLength,
+                            label: '' // 标签已在上方单独显示，此处留空
+                        }}
+                        onChange={(value) => setResultLength(Number(value))}
                         className="w-full"
                     />
                 </div>

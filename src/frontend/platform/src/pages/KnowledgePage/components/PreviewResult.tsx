@@ -62,40 +62,39 @@ export default function PreviewResult({ showPreview, previewCount, rules, step, 
     const [loading, setLoading] = useState(false)
     const prevPreviewCountMapRef = useRef({})
     useEffect(() => {
-        if (!selectId) return
+        if (!selectId) return;
+      
+        // 初始化状态（与原逻辑一致）
         setTimeout(() => {
-            setLoading(true)
+          setLoading(true);
         }, 0);
-        setFileViewUrl({ load: true, url: '' })
-        setChunks([])
-        // 合并配置
-        const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, knowledgeId
-            , retainImages, separator, separatorRule } = rules
-        const currentFile = fileList.find(file => file.id === selectId)
-
-        let preview_url
-
+        setFileViewUrl({ load: true, url: '' });
+        setChunks([]);
+      
+        // 合并配置（与原逻辑一致）
+        const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, knowledgeId, retainImages, separator, separatorRule } = rules;
+        const currentFile = fileList.find(file => file.id === selectId);
+        let preview_url;
         if (showPreview) {
-            preview_url = currentFile.previewUrl || currentFile?.filePath
+          preview_url = currentFile.previewUrl || currentFile?.filePath;
         } else {
-            preview_url = currentFile?.filePath
+          preview_url = currentFile?.filePath;
         }
-
-        // 将 UI 可见的 "\\n" 还原为真实 "\n"
         const normalizeSeparators = (arr) => (arr || []).map((s) =>
-            typeof s === 'string' ? s.replace(/\\n/g, '\n') : s
+          typeof s === 'string' ? s.replace(/\\n/g, '\n') : s
         );
-
-        captureAndAlertRequestErrorHoc(previewFileSplitApi({
-            // 缓存(修改规则后需要清空缓存, 切换文件使用缓存)
-            // previewCount变更时为重新预览分段操作,不使用缓存
+      
+        // 存储当前请求的 cancel 函数，用于组件卸载时取消
+        let cancelFn;
+      
+        // 调用 SSE 版本的接口
+        cancelFn = previewFileSplitApi(
+          {
             cache: prevPreviewCountMapRef.current[currentFile.id] === previewCount,
             knowledge_id: id || kId,
             file_list: [{
-                file_path: preview_url,
-                excel_rule: applyEachCell
-                    ? currentFile.excelRule
-                    : { ...cellGeneralConfig }
+              file_path: preview_url,
+              excel_rule: applyEachCell ? currentFile.excelRule : { ...cellGeneralConfig }
             }],
             separator: normalizeSeparators(separator),
             separator_rule: separatorRule,
@@ -105,36 +104,57 @@ export default function PreviewResult({ showPreview, previewCount, rules, step, 
             enable_formula: enableFormula,
             force_ocr: forceOcr,
             fileter_page_header_footer: pageHeaderFooter
-
-        }), err => {
-            // 解析失败时,使用支持的原文件预览
-            ["pdf", "txt", "md", "html", "docx", "png", "jpg", "jpeg", "bmp"].includes(currentFile.suffix)
-                && setFileViewUrl({ load: false, url: currentFile.filePath })
-        }).then(res => {
-
-            if (!res) {
+          },
+          (eventType, data) => {
+            switch (eventType) {
+              case 'processing':
+                // 处理中：保持 loading（无需额外操作）
+                break;
+              case 'completed':
+                // 解析完成：处理结果（对应原 .then(res) 逻辑）
+                handlePreviewResult(true);
+                setChunks(data.chunks.map(chunk => ({
+                  bbox: chunk.metadata.bbox,
+                  activeLabels: {},
+                  chunkIndex: chunk.metadata.chunk_index,
+                  page: chunk.metadata.page,
+                  text: chunk.text
+                })));
+                setSelectIdSyncChunks(selectId);
+                setFileViewUrl({ load: false, url: data.file_url });
+                setPartitions(data.partitions);
+                setLoading(false);
+                break;
+              case 'error':
+                // 解析错误：处理错误（对应原 error 回调逻辑）
                 handlePreviewResult(false);
-                setFileViewUrl({ load: false, url: '' })
-                return setLoading(false)
+                setFileViewUrl({ load: false, url: '' });
+                setLoading(false);
+                // 原错误处理逻辑：支持的文件类型显示原文件预览
+                if (["pdf", "txt", "md", "html", "docx", "png", "jpg", "jpeg", "bmp"].includes(currentFile.suffix)) {
+                  setFileViewUrl({ load: false, url: currentFile.filePath });
+                }
+                // 调用原错误提示高阶函数（如果需要）
+                // captureAndAlertRequestErrorHoc 可能需要调整为接收错误对象
+                // captureAndAlertRequestErrorHoc(null, data);
+                console.error('解析错误：', data.code, data.message);
+                break;
+              case 'canceled':
+                // 被新请求取消：关闭 loading
+                setLoading(false);
+                break;
             }
-            if (res === 'canceled') return
-            console.log("previewFileSplitApi:", res)
-            handlePreviewResult(true);
-            res && setChunks(res.chunks.map(chunk => ({
-                bbox: chunk.metadata.bbox,
-                activeLabels: {},
-                chunkIndex: chunk.metadata.chunk_index,
-                page: chunk.metadata.page,
-                text: chunk.text
-            })))
-            setSelectIdSyncChunks(selectId)
-            setFileViewUrl({ load: false, url: res.file_url })
-            setPartitions(res.partitions)
-            setLoading(false)
-        })
-
-        prevPreviewCountMapRef.current[currentFile.id] = previewCount
-    }, [selectId, previewCount])
+          }
+        );
+      
+        // 组件卸载时取消请求
+        return () => {
+          if (cancelFn) {
+            cancelFn(); // 取消当前 SSE 连接
+          }
+        };
+      
+      }, [selectId, previewCount]);
 
     const handleDelete = async (chunkIndex: number, text: string) => {
         await captureAndAlertRequestErrorHoc(delChunkInPreviewApi({

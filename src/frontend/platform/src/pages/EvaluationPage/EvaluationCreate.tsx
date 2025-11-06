@@ -141,15 +141,17 @@ export default function EvaluatingCreate() {
     if (errorlist.length) return handleError(errorlist);
     setLoading(true);
     try {
+      const formData = new FormData();
+      formData.append('exec_type', selectedType);       // 执行类型
+      formData.append('unique_id', selectedKeyId);     // 唯一ID
+      formData.append('version', selectedVersion);     // 版本号
+      formData.append('prompt', prompt);               // 提示词
+    
+      if (fileRef.current) {
+        formData.append('file', fileRef.current); // 键名 'file' 需与后端保持一致
+      }
       await captureAndAlertRequestErrorHoc(
-        createEvaluationApi({
-          // exec_type: selectedType === "flow" ? "workflow" : selectedType,
-          exec_type: selectedType,
-          unique_id: selectedKeyId,
-          version: selectedVersion,
-          prompt,
-          file: fileRef.current,
-        })
+        createEvaluationApi(formData)
       )
 
       navigate(-1);

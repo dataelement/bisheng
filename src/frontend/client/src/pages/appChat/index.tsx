@@ -200,12 +200,13 @@ const useBuild = () => {
         };
 
         eventSource.onerror = (error: any) => {
+            buildEnd = true
             console.error("EventSource failed:", error);
             eventSource.close();
-            if (error.data) {
-                const parsedData = JSON.parse(error.data);
-                showToast({ message: parsedData.error, status: 'error' });
-            }
+            // if (error.data) {
+            //     const parsedData = JSON.parse(error.data);
+            //     showToast({ message: parsedData.error, status: 'error' });
+            // }
         };
         // Step 3: Wait for the stream to finish
         while (!finished) {

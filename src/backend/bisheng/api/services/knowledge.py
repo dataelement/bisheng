@@ -345,9 +345,9 @@ class KnowledgeService(KnowledgeUtils):
                 knowledge_id, i + 1, page_size
             )
             for file in file_list:
-                minio_client.remove_object_sync(str(file[0]))
+                minio_client.remove_object_sync(object_name=str(file[0]))
                 if file[1]:
-                    minio_client.remove_object_sync(file[1])
+                    minio_client.remove_object_sync(object_name=file[1])
 
     @classmethod
     def get_upload_file_original_name(cls, file_name: str) -> str:
@@ -833,7 +833,8 @@ class KnowledgeService(KnowledgeUtils):
         for index, one in enumerate(res):
             finally_res.append(KnowledgeFileResp(**one.model_dump()))
             # 超过一天还在解析中的，将状态置为失败
-            if one.status == KnowledgeFileStatus.PROCESSING.value and (datetime.now() - one.update_time).days > 1:
+            if one.status == KnowledgeFileStatus.PROCESSING.value and (
+                    datetime.now() - one.update_time).total_seconds() > 86400:
                 timeout_files.append(one.id)
                 continue
             finally_res[index].title = file_title_map.get(str(one.id), "")

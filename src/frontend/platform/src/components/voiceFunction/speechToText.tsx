@@ -6,7 +6,7 @@ import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { speechToText } from '@/controllers/API/workbench';
 import VoiceRecordingIcon from '../bs-ui/voice';
-import { useAudioPlayerStore } from './audioPlayerStore';
+import { useAudioPlayerStore, useAudioStore } from './audioPlayerStore';
 
 // --- 核心音频处理逻辑 ---
 const encodeWAV = (audioBuffer) => {
@@ -106,7 +106,7 @@ const SpeechToTextComponent = ({ onChange }) => {
   const timerRef = useRef(null); // 定时器引用
   const maxRecordTime = 600; // 最大录音时长：10分钟 = 600秒
   const { stopAudio, setCurrentPlayingId } = useAudioPlayerStore();
-
+  const { isLoading, setIsLoading } = useAudioStore()
 
   // 格式化时长为 "MM:SS" 格式
   const formatDuration = (seconds) => {
@@ -118,6 +118,7 @@ const SpeechToTextComponent = ({ onChange }) => {
   // 开始录音（添加10分钟限制逻辑）
   const startRecording = async () => {
     try {
+      setIsLoading(true);
       audioChunksRef.current = [];
       setIsProcessing(false);
       setRecordDuration(0); // 重置时长
@@ -179,6 +180,7 @@ const SpeechToTextComponent = ({ onChange }) => {
             clearInterval(timerRef.current);
             timerRef.current = null;
           }
+          setIsLoading(false);
         }
       };
 
@@ -242,6 +244,7 @@ const SpeechToTextComponent = ({ onChange }) => {
       if (audioContextRef.current) {
         audioContextRef.current.close();
       }
+      setIsLoading(false);
     };
   }, []);
 
