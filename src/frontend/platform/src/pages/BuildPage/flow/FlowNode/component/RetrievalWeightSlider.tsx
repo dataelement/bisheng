@@ -18,6 +18,7 @@ import { WorkflowNodeParam } from '@/types/flow';
 import { HelpCircle } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import InputItem from './InputItem';
+import { useModel } from '@/pages/ModelPage/manage';
 
 // 重排模型类型定义
 interface RerankModel {
@@ -35,6 +36,8 @@ interface RetrievalConfigProps {
 }
 
 const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => {    
+    console.log(data,3434);
+    
     // 初始化状态值，将原retrievalEnabled改为search_switch
     const [keywordWeight, setKeywordWeight] = useState(data.value?.keyword_weight || 0.5);
     const [vectorWeight, setVectorWeight] = useState(data.value?.vector_weight || 0.5);
@@ -42,7 +45,8 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
     const [rerankEnabled, setRerankEnabled] = useState(data.value?.rerank_enabled ?? false);
     const [selectedRerankModel, setSelectedRerankModel] = useState(data.value?.rerank_model || '');
     const [resultLength, setResultLength] = useState(data.value?.max_chunk_size || 15000);
-    const [userAuth, setUserAuth] = useState(data.value?.user_auth ?? true);
+    const [userAuth, setUserAuth] = useState(data.value?.user_auth ?? false);
+    const { rerank } = useModel();
 
     // 确保权重和为1
     useEffect(() => {
@@ -89,15 +93,6 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
     const handleSearchToggle = (checked: boolean) => {
         setSearchSwitch(checked);
     };
-
-    // 重排模型列表
-    //修改一下remark模型
-    const rerankModels: RerankModel[] = [
-        { value: 'bge-reranker-base', label: 'BGE Reranker Base' },
-        { value: 'bge-reranker-large', label: 'BGE Reranker Large' },
-        { value: 'cross-encoder-ms-marco-MiniLM-L-6-v2', label: 'Cross Encoder (MiniLM)' },
-        { value: 'cross-encoder-ms-marco-TinyBERT-L-2-v2', label: 'Cross Encoder (TinyBERT)' },
-    ];
 
     // 处理结果长度变化
     const handleResultLengthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -221,7 +216,8 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
                             <SelectValue placeholder="请选择重排模型" />
                         </SelectTrigger>
                         <SelectContent>
-                            {rerankModels.map(model => (
+                            
+                            {rerank.map(model => (
                                 <SelectItem key={model.value} value={model.value}>
                                     {model.label}
                                 </SelectItem>
@@ -252,7 +248,6 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
                         linefeed
                         data={{
                             min: 0,
-                            max: 50000,
                             value: resultLength,
                             label: '' // 标签已在上方单独显示，此处留空
                         }}
