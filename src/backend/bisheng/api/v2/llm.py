@@ -13,7 +13,7 @@ async def invoke_workbench_asr(request: Request, file: UploadFile = None):
     return resp_200(data=text)
 
 
-@router.get('/workbench/tts')
+@router.post('/workbench/tts')
 async def invoke_workbench_tts(request: Request, text: str = Body(..., embed=True, description="需要合成的文本")):
     """ 调用工作台的tts模型 将文字转为语音 """
     audio_url = await LLMService.invoke_workbench_tts(text)
