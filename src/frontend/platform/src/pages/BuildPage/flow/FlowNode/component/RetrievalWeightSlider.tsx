@@ -37,7 +37,7 @@ interface RetrievalConfigProps {
     onChange: (value: any) => void;
 }
 
-const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => {
+const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onValidate }) => {
 
     // 初始化状态值，将原retrievalEnabled改为search_switch
     const [keywordWeight, setKeywordWeight] = useState(data.value?.keyword_weight || 0.5);
@@ -48,6 +48,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
     const [resultLength, setResultLength] = useState(data.value?.max_chunk_size || 15000);
     const [userAuth, setUserAuth] = useState(data.value?.user_auth ?? false);
     const { rerank } = useModel();
+    const [rerankError, setRerankError] = useState(false);
 
     // 确保权重和为1
     useEffect(() => {
@@ -59,7 +60,28 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
             setVectorWeight(normalizedVector);
         }
     }, [keywordWeight, vectorWeight]);
-
+    useEffect(() => {
+             // 仅当检索开关和重排开关都打开时，才校验模型是否选择
+               if (searchSwitch && rerankEnabled) {
+                  onValidate(() => {
+                      // 若未选择模型，标记错误并返回提示信息
+                      if (!selectedRerankModel) {
+                          setRerankError(true);
+                          return '请选择重排模型'; // 可替换为i18n翻译文本
+                       }
+                      // 校验通过
+                      setRerankError(false);
+                      return false;
+                  });
+           } else {
+                  // 开关关闭时，清除校验错误
+                  setRerankError(false);
+                  onValidate(() => false);
+              }
+        
+              // 组件卸载或依赖变化时清除校验
+              return () => onValidate(() => false);
+          }, [searchSwitch, rerankEnabled, selectedRerankModel, onValidate]);
     // 通知父组件值变化
     useEffect(() => {
         if (searchSwitch) {
@@ -198,7 +220,11 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
             {searchSwitch && (
                 <div className="flex items-center justify-between pl-4">
                     <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-500">检索结果重排</span>
+                      
+                        <span className="text-sm font-medium text-gray-500">
+                            <span className='text-red-500'>*</span>
+                            检索结果重排
+                        </span>
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
@@ -224,9 +250,9 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
                 <ModelSelect
                 close
                  placeholder="请选择重排模型"
-                value={selectedRerankModel} // 绑定重排模型选中值
-                options={rerank} // 使用重排模型列表作为选项
-                onChange={(val) => setSelectedRerankModel(val)} // 更新选中状态
+                value={selectedRerankModel}
+                options={rerank}
+                onChange={(val) => setSelectedRerankModel(val)}
                 />
             </div>
             )}
