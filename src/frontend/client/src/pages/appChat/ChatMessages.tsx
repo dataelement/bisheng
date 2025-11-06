@@ -18,7 +18,7 @@ import { currentChatState, currentRunningState } from "./store/atoms";
 import { useMessage } from "./useMessages";
 
 export default function ChatMessages({ useName, readOnly, title, logo, disabledSearch = false }) {
-    const { messageScrollRef, chatId, messages } = useMessage()
+    const { messageScrollRef, chatId, messages } = useMessage(readOnly)
     const { inputForm, guideWord, inputDisabled } = useRecoilValue(currentRunningState)
     const chatState = useRecoilValue(currentChatState)
     const localize = useLocalize()

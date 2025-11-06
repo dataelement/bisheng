@@ -74,8 +74,8 @@ export default function ChatInput({ readOnly, v }) {
                 is工作流 & 未展示停止按钮 & 没有错误消息
             */}
             <div className="absolute w-full flex justify-center left-0 -top-14">
-                {/* {!showStop && chatState?.flow?.flow_type === 10 && !inputMsg  */}
-                {showReRun && !inputMsg && <Button
+                {/* {!showStop && chatState?.flow?.flow_type === 10 && !inputMsg  & 运行结束展示 */}
+                {showReRun && !inputMsg && !showStop && <Button
                     className="rounded-full bg-primary/10 bg-blue-50 text-primary"
                     variant="ghost"
                     onClick={handleRestart}>
