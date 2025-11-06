@@ -252,20 +252,71 @@ export async function rebUploadFile(data) {
   return await axios.post(`/api/v1/knowledge/process/rebuild`, data);
 }
 /**
- * 查看文件切片
+ * 查看文件切片（SSE 版本）
+ * 取消逻辑基于 EventSource.close()，无需 CancelToken
  */
-let cancelTokenSource = originAxios.CancelToken.source();
-export async function previewFileSplitApi(data) {
-  // 取消之前的请求
-  cancelTokenSource.cancel('Operation canceled due to new request');
+let currentEventSource = null; // 仅保留此变量用于跟踪当前连接
 
-  // 创建新的取消令牌
-  cancelTokenSource = originAxios.CancelToken.source();
-  return await axios.post(`/api/v1/knowledge/preview`, data, {
-    cancelToken: cancelTokenSource.token
-  }).then(res => {
-    return res
+// 用 fetch 实现 POST 方式的 SSE
+export function previewFileSplitApi(data, onEvent) {
+  let controller = new AbortController(); // 用于取消请求
+  const signal = controller.signal;
+
+  fetch('/api/v1/knowledge/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data), // 传递 POST 体
+    signal, // 用于取消
+  }).then(response => {
+    console.log(response,343);
+    
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    // 循环读取流数据
+    const readStream = async () => {
+      const { done, value } = await reader.read();
+      if (done) {
+        onEvent('closed', { message: '连接已关闭' });
+        return;
+      }
+
+      // 解析 SSE 格式数据（需按 SSE 规范解析 event 和 data）
+      const chunk = decoder.decode(value, { stream: true });
+      const events = chunk.split('\n\n'); // SSE 事件以 \n\n 分隔
+      events.forEach(event => {
+        console.log(event,1);
+        
+        if (!event) return;
+        const lines = event.split('\n');
+        let eventType = 'message'; // 默认事件类型
+        let eventData = '';
+        lines.forEach(line => {
+          console.log(line,2);
+          
+          if (line.startsWith('event:')) {
+            eventType = line.slice(6).trim(); // 提取事件类型（processing/completed/error）
+          } else if (line.startsWith('data:')) {
+            eventData += line.slice(5).trim(); // 提取数据
+          }
+        });
+        if (eventData) {
+          onEvent(eventType, JSON.parse(eventData));
+        }
+      });
+
+      readStream(); // 继续读取下一块数据
+    };
+
+    readStream();
+  }).catch(err => {
+    if (err.name !== 'AbortError') {
+      onEvent('error', { code: 'CONNECT_ERROR', message: '连接失败' });
+    }
   });
+
+  // 返回取消函数
+  return () => controller.abort();
 }
 
 /**
