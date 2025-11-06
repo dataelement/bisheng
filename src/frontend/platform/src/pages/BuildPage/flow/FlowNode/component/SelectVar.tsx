@@ -111,7 +111,7 @@ const SelectVar = forwardRef(({
                 if (param.global.indexOf('code') === 0) {
                     let result = isMatch(param, param.global.replace('code:', ''));
                     // 没值 key补
-                    if (!result.length && param.key.startsWith('output')) {
+                    if (!result.length && (param.key.startsWith('output') || param.key.startsWith('retrieved'))) {
                         result = [{
                             label: param.key,
                             value: param.key
