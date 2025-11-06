@@ -38,7 +38,7 @@ class RagUtils(BaseNode):
 
         self._multi_milvus_retriever = None
         self._multi_es_retriever = None
-        self._retriever_kwargs = {"k": 100}
+        self._retriever_kwargs = {"k": 100, "params": {"ef": 110}}
         self._rerank_model = None
 
     def _run(self, unique_id: str) -> Dict[str, Any]:
@@ -60,7 +60,7 @@ class RagUtils(BaseNode):
                                weights=[self._keyword_weight, self._vector_weight], remove_zero_score=True)
         finally_docs = rrf_rerank.compress_documents(documents=[es_docs, milvus_docs], query=question)
 
-        logger.debug(f'retrieve rfr chunks: {finally_docs}')
+        logger.debug(f'retrieve rrf chunks: {finally_docs}')
         # 3: rerank documents
         if self._rerank_model:
             finally_docs = self._rerank_model.compress_documents(documents=finally_docs, query=question)

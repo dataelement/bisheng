@@ -218,7 +218,6 @@ export function useModel(type = 'llm') {
                 if (serverAsrItem.children.length) asrModel.push(serverAsrItem)
                 if (serverTtsItem.children.length) ttsModel.push(serverTtsItem)
                 if (rerankItem.children.length) rerank.push(rerankItem)
-
             });
 
             return { llmOptions, embeddings, asrModel, ttsModel, rerank }
@@ -229,7 +228,8 @@ export function useModel(type = 'llm') {
         llmOptions = [],
         embeddings = [],
         asrModel = [],
-        ttsModel = []
+        ttsModel = [],
+        rerank=[]
     } = data ?? {};
     return {
         llmOptions,
@@ -237,6 +237,7 @@ export function useModel(type = 'llm') {
         asrModel,
         ttsModel,
         isLoading,
+        rerank,
         refetch
     }
 }

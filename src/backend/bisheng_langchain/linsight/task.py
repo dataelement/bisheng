@@ -47,7 +47,7 @@ class BaseTask(BaseModel):
     # llm generate task field
     step_id: str = Field(default='', description='Step ID')
     target: str = Field(default='', description='任务目标')
-    display_target: str = Field(default='', validate_default=True, description='任务展示目标，给用户看的')
+    display_target: str = Field(default='', description='任务展示目标，给用户看的')
     sop: str = Field(default='', description='任务SOP，子任务的当前方法')
     node_loop: bool = Field(False, description='是否循环，循环的话需要生成子任务去执行')
     profile: str = Field(default='', description='任务角色')

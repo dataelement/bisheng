@@ -18,6 +18,9 @@ import { WorkflowNodeParam } from '@/types/flow';
 import { HelpCircle } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import InputItem from './InputItem';
+import { useModel } from '@/pages/ModelPage/manage';
+import { ModelSelect } from '@/pages/ModelPage/manage/tabs/WorkbenchModel';
+import { t } from 'i18next';
 
 // 重排模型类型定义
 interface RerankModel {
@@ -34,15 +37,17 @@ interface RetrievalConfigProps {
     onChange: (value: any) => void;
 }
 
-const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => {    
+const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => {
+
     // 初始化状态值，将原retrievalEnabled改为search_switch
     const [keywordWeight, setKeywordWeight] = useState(data.value?.keyword_weight || 0.5);
     const [vectorWeight, setVectorWeight] = useState(data.value?.vector_weight || 0.5);
     const [searchSwitch, setSearchSwitch] = useState(data.value?.search_switch ?? false);
-    const [rerankEnabled, setRerankEnabled] = useState(data.value?.rerank_enabled ?? false);
+    const [rerankEnabled, setRerankEnabled] = useState(data.value?.rerank_flag ?? false);
     const [selectedRerankModel, setSelectedRerankModel] = useState(data.value?.rerank_model || '');
     const [resultLength, setResultLength] = useState(data.value?.max_chunk_size || 15000);
-    const [userAuth, setUserAuth] = useState(data.value?.user_auth ?? true);
+    const [userAuth, setUserAuth] = useState(data.value?.user_auth ?? false);
+    const { rerank } = useModel();
 
     // 确保权重和为1
     useEffect(() => {
@@ -57,15 +62,27 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
 
     // 通知父组件值变化
     useEffect(() => {
-        onChange({
-            keyword_weight: keywordWeight,
-            vector_weight: vectorWeight,
-            user_auth: userAuth,
-            search_switch: searchSwitch,
-            rerank_flag: rerankEnabled,
-            rerank_model: selectedRerankModel,
-            max_chunk_size: resultLength,
-        });
+        if (searchSwitch) {
+            onChange({
+                keyword_weight: keywordWeight,
+                vector_weight: vectorWeight,
+                user_auth: userAuth,
+                search_switch: searchSwitch,
+                rerank_flag: rerankEnabled,
+                rerank_model: selectedRerankModel,
+                max_chunk_size: resultLength,
+            });
+        } else {
+            onChange({
+                keyword_weight: 0.5,
+                vector_weight: 0.5,
+                user_auth: false,
+                search_switch: false,
+                rerank_flag: false,
+                rerank_model: '',
+                max_chunk_size: 150000,
+            });
+        }
     }, [
         keywordWeight,
         vectorWeight,
@@ -89,15 +106,6 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
     const handleSearchToggle = (checked: boolean) => {
         setSearchSwitch(checked);
     };
-
-    // 重排模型列表
-    //修改一下remark模型
-    const rerankModels: RerankModel[] = [
-        { value: 'bge-reranker-base', label: 'BGE Reranker Base' },
-        { value: 'bge-reranker-large', label: 'BGE Reranker Large' },
-        { value: 'cross-encoder-ms-marco-MiniLM-L-6-v2', label: 'Cross Encoder (MiniLM)' },
-        { value: 'cross-encoder-ms-marco-TinyBERT-L-2-v2', label: 'Cross Encoder (TinyBERT)' },
-    ];
 
     // 处理结果长度变化
     const handleResultLengthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -212,23 +220,15 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
 
             {/* 重排模型选择（仅在重排开启时显示） */}
             {rerankEnabled && searchSwitch && (
-                <div className="pl-4">
-                    <Select
-                        value={selectedRerankModel}
-                        onValueChange={setSelectedRerankModel}
-                    >
-                        <SelectTrigger className="w-full">
-                            <SelectValue placeholder="请选择重排模型" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {rerankModels.map(model => (
-                                <SelectItem key={model.value} value={model.value}>
-                                    {model.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
+            <div className="pl-4">
+                <ModelSelect
+                close
+                 placeholder="请选择重排模型"
+                value={selectedRerankModel} // 绑定重排模型选中值
+                options={rerank} // 使用重排模型列表作为选项
+                onChange={(val) => setSelectedRerankModel(val)} // 更新选中状态
+                />
+            </div>
             )}
 
             {/* 检索结果长度 */}
@@ -247,12 +247,11 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange }) => 
                             </Tooltip>
                         </TooltipProvider>
                     </div>
-                  <InputItem
+                    <InputItem
                         type="number"
                         linefeed
                         data={{
                             min: 0,
-                            max: 50000,
                             value: resultLength,
                             label: '' // 标签已在上方单独显示，此处留空
                         }}
