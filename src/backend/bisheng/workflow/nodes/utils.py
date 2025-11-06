@@ -88,7 +88,7 @@ class RagUtils(BaseNode):
         return ret
 
     def init_rerank_model(self):
-        if not self._rerank_flag:
+        if not self._rerank_flag or not self._rerank_model_id:
             return
         if self._rerank_model:
             return
