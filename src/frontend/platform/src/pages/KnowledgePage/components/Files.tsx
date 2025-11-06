@@ -16,7 +16,7 @@ import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import { truncateString } from "@/util/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
-import { Filter, RotateCw, Trash2 } from "lucide-react";
+import { FileSearch2, Filter, RotateCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../../components/bs-ui/input";
@@ -26,12 +26,14 @@ import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import useKnowledgeStore from "../useKnowledgeStore";
 import Tip from "@/components/bs-ui/tooltip/tip";
+import { MetadataManagementDialog } from "./MetadataManagementDialog";
 
 export default function Files({ onPreview }) {
     const { t } = useTranslation('knowledge')
     const { id } = useParams()
 
     const { isEditable, setEditable } = useKnowledgeStore();
+    const [dialogOpen, setDialogOpen] = useState(false)
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData } = useTable({ cancelLoadingWhenReload: true }, (param) =>
         readFileByLibDatabase({ ...param, id, name: param.keyword }).then(res => {
             setEditable(res.writeable)
@@ -175,7 +177,7 @@ export default function Files({ onPreview }) {
     // 策略解析（原有逻辑不变）
     const dataSouce = useMemo(() => {
         return datalist.map(el => {
-            if (el.file_name.includes('xlsx', 'xls', 'csv')&& el.parse_type !== "local" && el.parse_type !== "uns") {
+            if (el.file_name.includes('xlsx', 'xls', 'csv') && el.parse_type !== "local" && el.parse_type !== "uns") {
                 const excel_rule = JSON.parse(el.split_rule).excel_rule
                 return {
                     ...el,
@@ -278,6 +280,10 @@ export default function Files({ onPreview }) {
                     setSelectedFileObjs([]);
                     setIsAllSelected(false);
                 }} />
+                {/* <Button variant="outline" onClick={() => setDialogOpen(true)} >
+                    <FileSearch2 size={16} />
+                    元数据
+                </Button> */}
                 {isEditable && (
                     <Link to={`/filelib/upload/${id}`}>
                         <Button className="px-8">{t('uploadFile')}</Button>
@@ -556,6 +562,13 @@ export default function Files({ onPreview }) {
                     />
                 </div>
             </div>
+
+            {/* 元数据管理弹窗 */}
+            <MetadataManagementDialog
+                open={dialogOpen}
+                onOpenChange={setDialogOpen}
+                hasManagePermission={true}
+            />
         </div>
     )
 }

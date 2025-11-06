@@ -3,6 +3,7 @@ import time
 from typing import List, Any
 
 from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.documents import Document
 from langchain_core.prompts import (ChatPromptTemplate, HumanMessagePromptTemplate,
                                     SystemMessagePromptTemplate)
 from langchain_core.runnables import RunnableConfig
@@ -50,49 +51,41 @@ class RagNode(RagUtils):
 
     def _run(self, unique_id: str):
         ret = {}
-        try:
-            self.init_user_info()
-            self._log_source_documents = {}
-            self._log_system_prompt = []
-            self._log_user_prompt = []
-            self._log_reasoning_content = {}
+        self.init_user_info()
+        self._log_source_documents = {}
+        self._log_system_prompt = []
+        self._log_user_prompt = []
+        self._log_reasoning_content = {}
 
-            self.init_qa_prompt()
-            self.init_multi_retriever()
-            self.init_rerank_model()
+        self.init_qa_prompt()
 
-            self.user_questions = self.init_user_question()
-            for index, question in enumerate(self.user_questions):
-                output_key = self._output_keys[index]
-                if question is None:
-                    question = ''
-                try:
-                    question_answer = self.rag_one_question(question, output_key, unique_id)
-                except Exception as e:
-                    logger.exception(e)
-                    question_answer = str(e)
-                    self._log_source_documents[output_key] = []
-                    self._log_reasoning_content[output_key] = ''
-                ret[output_key] = question_answer
-        except Exception as e:
-            logger.exception(e)
-            for one in self._output_keys:
-                self._log_source_documents[one] = ''
-                self._log_reasoning_content[one] = ''
-                ret[one] = str(e)
+        self.user_questions = self.init_user_question()
+        for index, question in enumerate(self.user_questions):
+            output_key = self._output_keys[index]
+            if question is None:
+                question = ''
+            question_answer = self.rag_one_question(question, output_key, unique_id)
+            ret[output_key] = question_answer
         return ret
 
     def rag_one_question(self, question: str, output_key: str, unique_id: str) -> str:
-        source_documents = self.retrieve_question(question)
-        same_file_id = set()
-        for one in source_documents:
-            file_id = one.metadata.get('file_id')
-            same_file_id.add(file_id)
-            if len(same_file_id) > 1:
-                break
-        if len(same_file_id) == 1:
-            # 来自同一个文件，则按照chunk_index排序
-            source_documents.sort(key=lambda x: x.metadata.get('chunk_index', 0))
+        try:
+            self.init_multi_retriever()
+            self.init_rerank_model()
+            source_documents = self.retrieve_question(question)
+            same_file_id = set()
+            for one in source_documents:
+                file_id = one.metadata.get('file_id')
+                same_file_id.add(file_id)
+                if len(same_file_id) > 1:
+                    break
+            if len(same_file_id) == 1:
+                # 来自同一个文件，则按照chunk_index排序
+                source_documents.sort(key=lambda x: x.metadata.get('chunk_index', 0))
+        except Exception as e:
+            logger.exception(f'RagNode retrieve_question error: ')
+            source_documents = [Document(page_content=str(e), metadata={})]
+
         qa_chain = create_stuff_documents_chain(llm=self._llm, prompt=self._qa_prompt)
         inputs = {
             "context": source_documents,
