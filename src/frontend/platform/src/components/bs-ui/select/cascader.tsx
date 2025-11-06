@@ -112,7 +112,7 @@ const resetCols = (values, options) => {
 }
 
 export default function Cascader({ error = false, selectClass = '', close = false, placeholder = '', defaultValue = [], options, loadData, onChange }: IProps) {
-    
+
     const [open, setOpen] = useState(false)
     const [values, setValues] = useState<any>(defaultValue)
     const [isHover, setIsHover] = useState(false)
@@ -126,11 +126,12 @@ export default function Cascader({ error = false, selectClass = '', close = fals
     useEffect(() => {
         if (defaultValue && defaultValue.length > 0) {
             setValues(defaultValue)
+            selectOptionsRef.current = [...defaultValue]
             setCols(resetCols(defaultValue, options))
         }
     }, [defaultValue, options])
 
-    const selectOptionsRef = useRef([...defaultValue])
+    const selectOptionsRef = useRef([])
     const handleHover = (option, isLeaf, colIndex) => {
         setIsHover(true)
         const isAsync = loadData && !(option.children && option.children.length !== 0)
