@@ -59,6 +59,7 @@ class RagNode(RagUtils):
 
             self.init_qa_prompt()
             self.init_multi_retriever()
+            self.init_rerank_model()
 
             self.user_questions = self.init_user_question()
             for index, question in enumerate(self.user_questions):
