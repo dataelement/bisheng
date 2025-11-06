@@ -3,7 +3,7 @@ import os
 from typing import List, Optional, Dict
 
 from fastapi import Request, BackgroundTasks, UploadFile
-from langchain_core.documents import BaseDocumentCompressor
+from langchain_core.documents import BaseDocumentCompressor, Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from loguru import logger
@@ -161,6 +161,10 @@ class LLMService:
                 with open(example_file_path, 'rb') as f:
                     bisheng_asr = await cls.get_bisheng_asr(model_id=model.id, ignore_online=True)
                     await bisheng_asr.ainvoke(f)
+            elif model.model_type == LLMModelType.RERANK.value:
+                bisheng_rerank = await cls.get_bisheng_rerank(model_id=model.id, ignore_online=True)
+                await bisheng_rerank.acompress_documents(documents=[Document(page_content="hello world")],
+                                                         query="hello")
         except Exception as e:
             LLMDao.update_model_status(model.id, 1, str(e))
             logger.exception(f'test model status: {model.id} {model.model_name}')

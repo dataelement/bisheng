@@ -1,5 +1,6 @@
 from typing import Dict, Optional, Sequence
 
+import dashscope
 from langchain_core.callbacks import Callbacks
 from langchain_core.documents import BaseDocumentCompressor, Document
 from loguru import logger
@@ -29,6 +30,7 @@ def _get_common_params(params: dict, server_config: dict, model_config: dict) ->
 def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params['dashscope_api_key'] = server_config.get('openai_api_key', '')
     params['top_n'] = None  # return all documents
+    params["client"] = dashscope.TextReRank
     return params
 
 
@@ -54,8 +56,8 @@ class BishengRerank(BishengBase, BaseDocumentCompressor):
     async def get_bisheng_rerank(cls, **kwargs) -> Self:
         return await cls.get_class_instance(**kwargs)
 
-    def __init__(self, model_id: int, **kwargs):
-        super().__init__(model_id=model_id, **kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.model_id = kwargs.get('model_id')
         if not self.model_id:
             raise Exception('没有找到rerank模型配置')
@@ -77,9 +79,9 @@ class BishengRerank(BishengBase, BaseDocumentCompressor):
             raise Exception(f'{server_info.name}下的{model_info.model_name}模型已下线，请联系管理员上线对应的模型')
         logger.debug(f'init_bisheng_rerank: server_id: {server_info.id}, model_id: {model_info.id}')
 
-        node_conf = _node_type.get(server_info.server_type)
+        node_conf = _node_type.get(server_info.type)
         if not node_conf:
-            raise Exception(f'不支持rerank的服务提供方：{server_info.server_type}')
+            raise Exception(f'不支持rerank的服务提供方：{server_info.type}')
         self.model_info = model_info
         self.model = model_info.model_name
         self.server_info = server_info
@@ -89,7 +91,7 @@ class BishengRerank(BishengBase, BaseDocumentCompressor):
         params = {
             "model": self.model,
         }
-        params = params_handler(params, server_info, model_info)
+        params = params_handler(params, self.get_server_info_config(), self.get_model_info_config())
         try:
             self.rerank = client_class(**params)
         except Exception as e:

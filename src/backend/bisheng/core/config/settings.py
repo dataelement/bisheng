@@ -193,9 +193,9 @@ class Settings(BaseModel):
     linsight_conf: LinsightConf = LinsightConf()
     logger_conf: LoggerConf = LoggerConf()
     password_conf: PasswordConf = PasswordConf()
-    system_login_method: SystemLoginMethod = {}
-    vector_stores: VectorStores = {}
-    object_storage: ObjectStore = {}
+    system_login_method: SystemLoginMethod = SystemLoginMethod()
+    vector_stores: VectorStores = VectorStores()
+    object_storage: ObjectStore = ObjectStore()
     workflow_conf: WorkflowConf = WorkflowConf()
     celery_task: CeleryConf = CeleryConf()
 
