@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next";
 import { useQuery } from "react-query";
 import { useModel } from "..";
 
-export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange }) => {
+export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange,placeholder = '' }) => {
     const defaultValue = useMemo(() => {
         let _defaultValue = []
         if (!value || !options || options.length === 0) return _defaultValue
@@ -45,6 +45,7 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
                 options={options}
                 close={close}
                 onChange={(val) => onChange(val?.[1])}
+                placeholder={placeholder}
             />
         </div>
     )
