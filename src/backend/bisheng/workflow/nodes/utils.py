@@ -38,7 +38,7 @@ class RagUtils(BaseNode):
 
         self._multi_milvus_retriever = None
         self._multi_es_retriever = None
-        self._retriever_kwargs = {"k": 100, "params": {"ef": 110}}
+        self._retriever_kwargs = {"k": 100, "param": {"ef": 110}}
         self._rerank_model = None
 
     def _run(self, unique_id: str) -> Dict[str, Any]:

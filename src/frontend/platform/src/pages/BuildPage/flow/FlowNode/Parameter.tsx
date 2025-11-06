@@ -151,7 +151,7 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
         case 'image_prompt':
             return <ImagePromptItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onVarEvent={bindVarValidate} />;
         case 'search_switch':
-            return <RetrievalWeightSlider data={item} onChange={handleOnNewValue} />;
+            return <RetrievalWeightSlider data={item} onChange={handleOnNewValue}  onValidate={bindValidate} />;
         default:
             return <div>Unsupported parameter type</div>;
     }
