@@ -1,4 +1,4 @@
-      
+
 // stores/audioPlayerStore.ts
 import { create } from 'zustand';
 import { Howl } from 'howler';
@@ -30,7 +30,7 @@ export const useAudioPlayerStore = create<AudioPlayerState>((set, get) => ({
 
   playAudio: ({ id, audioUrl, onEnd }) => {
     const { stopAudio, currentPlayingId } = get();
-    
+
     // 如果已经在播放，先停止
     if (currentPlayingId) {
       stopAudio();
@@ -104,4 +104,17 @@ export const useAudioPlayerStore = create<AudioPlayerState>((set, get) => ({
   setCurrentPlayingId: (id) => set({ currentPlayingId: id }),
 }));
 
-    
+
+/**
+ * 录音loading
+ * Atomic state and hook for recording audio loading state
+ * */
+interface AudioStore {
+  isLoading: boolean
+  setIsLoading: (loading: boolean) => void
+}
+
+export const useAudioStore = create<AudioStore>((set) => ({
+  isLoading: false,
+  setIsLoading: (loading: boolean) => set({ isLoading: loading }),
+}))

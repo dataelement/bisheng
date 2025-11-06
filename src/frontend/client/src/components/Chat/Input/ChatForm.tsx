@@ -6,7 +6,7 @@ import { File_Accept } from '~/common';
 import { Button, TextareaAutosize } from '~/components/ui';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '~/components/ui/Select';
 import SpeechToTextComponent from '~/components/Voice/SpeechToText';
-import { useParsingAudioLoading } from '~/components/Voice/textToSpeechStore';
+import { useRecordingAudioLoading } from '~/components/Voice/textToSpeechStore';
 import { useGetBsConfig, useGetFileConfig, useGetUserLinsightCountQuery, useGetWorkbenchModelsQuery } from '~/data-provider';
 import {
   BsConfig,
@@ -212,7 +212,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
   const { data: modelData } = useGetWorkbenchModelsQuery()
   const showVoice = modelData?.asr_model.id
 
-  const [audioLoading] = useParsingAudioLoading()
+  const [audioOpening] = useRecordingAudioLoading()
 
   return (
     <form
@@ -267,7 +267,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
             showVoice={showVoice}
             fileTip={!isLingsi}
             noUpload={!bsConfig?.fileUpload.enabled}
-            disableInputs={disableInputs || audioLoading}
+            disableInputs={disableInputs || audioOpening}
             disabledSearch={isSearch && !isLingsi}
           >
             <>
@@ -314,7 +314,8 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
           {/* 发送和停止 */}
           <div className="absolute bottom-2 right-3 flex gap-2 items-center">
             {showVoice && <SpeechToTextComponent disabled={readOnly} onChange={(e) => {
-              methods.setValue('text', e, { shouldValidate: true });
+              const text = textAreaRef.current.value + e
+              methods.setValue('text', text, { shouldValidate: true });
             }} />}
             {(isSubmitting || isSubmittingAdded) && (showStopButton || showStopAdded) ? (
               <StopButton stop={handleStopGenerating} setShowStopButton={setShowStopButton} />
@@ -323,7 +324,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
                 ref={submitButtonRef}
                 isLingsi={isLingsi}
                 control={methods.control}
-                disabled={!!(filesLoading || isSubmitting || disableInputs || isOutMaxToken)}
+                disabled={!!(filesLoading || isSubmitting || disableInputs || isOutMaxToken) || audioOpening}
               />
             )}
           </div>

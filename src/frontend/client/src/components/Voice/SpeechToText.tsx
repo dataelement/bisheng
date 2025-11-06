@@ -5,11 +5,11 @@ import PropTypes from "prop-types"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRecoilState } from "recoil"
 import { getVoice2TextApi } from "~/api"
+import { useLocalize } from "~/hooks"
 import { useToastContext } from "~/Providers"
 import { Button } from ".."
 import VoiceRecordingIcon from "../ui/icon/Voice"
-import { interruptAudioAtom, useParsingAudioLoading } from "./textToSpeechStore"
-import { useLocalize } from "~/hooks"
+import { interruptAudioAtom, useRecordingAudioLoading } from "./textToSpeechStore"
 
 // --- Core Audio Processing Logic ---
 
@@ -125,7 +125,8 @@ const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProp
     const streamRef = useRef<MediaStream | null>(null)
 
     const [interruptAudio] = useRecoilState(interruptAudioAtom)
-    const [_, setIsLoading] = useParsingAudioLoading()
+    const [_, setAudioOpening] = useRecordingAudioLoading()
+
     useEffect(() => {
         stopRecording(null)
     }, [interruptAudio])
@@ -148,6 +149,7 @@ const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProp
 
         // Clear media recorder
         mediaRecorderRef.current = null
+        setAudioOpening(false)
     }, [])
 
     /**
@@ -156,7 +158,6 @@ const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProp
     const convertSpeechToText = useCallback(
         async (audioBlob: Blob) => {
             try {
-                setIsLoading(true)
                 const formData = new FormData()
                 formData.append("file", audioBlob, "recording.wav")
                 const res = await getVoice2TextApi(formData)
@@ -164,16 +165,15 @@ const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProp
                 const transcript = responseData || ""
 
                 // Pass recognized text to parent component
-                if (!transcript) {
-                    return showToast({ message: localize('no_text_recognized'), status: "info" })
-                }
+                // if (!transcript) {
+                //     return showToast({ message: localize('no_text_recognized'), status: "info" })
+                // }
                 onChange(transcript)
             } catch (err) {
                 console.error("Speech recognition error:", err)
                 showToast({ message: localize('no_text_recognized'), status: "error" })
             } finally {
                 setIsProcessing(false)
-                setIsLoading(false)
             }
         },
         [onChange, showToast],
@@ -184,6 +184,7 @@ const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProp
      */
     const startRecording = useCallback(async (e) => {
         try {
+            setAudioOpening(true)
             e.preventDefault();
             audioChunksRef.current = []
             setIsProcessing(false)

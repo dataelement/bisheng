@@ -8,12 +8,15 @@ import InputFiles from "./components/InputFiles";
 import { bishengConfState, currentRunningState } from "./store/atoms";
 import { getErrorI18nKey } from "./store/constants";
 import { useAreaText } from "./useAreaText";
+import { useRecordingAudioLoading } from "~/components/Voice/textToSpeechStore";
 
 export default function ChatInput({ readOnly, v }) {
     const [bishengConfig] = useRecoilState(bishengConfState)
     const { inputDisabled, error: inputMsg, showUpload, showStop, showReRun } = useRecoilValue(currentRunningState)
     const { accepts, inputRef, setChatFiles, handleInput, handleRestart, handleSendClick, handleStopClick } = useAreaText()
     const [fileUploading, setFileUploading] = useState(false)
+    const [audioOpening] = useRecordingAudioLoading()
+
     const localize = useLocalize()
 
     const placholder = useMemo(() => {
@@ -39,7 +42,7 @@ export default function ChatInput({ readOnly, v }) {
                 v={v}
                 showVoice={showVoice}
                 accepts={accepts}
-                disabled={readOnly}
+                disabled={readOnly || audioOpening}
                 size={bishengConfig?.uploaded_files_maximum_size || 50}
                 onChange={(files => {
                     setFileUploading(!files)
@@ -60,7 +63,7 @@ export default function ChatInput({ readOnly, v }) {
                     <button
                         id="bs-send-btn"
                         className="size-8 flex items-center justify-center rounded-full bg-primary text-white transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-20"
-                        disabled={inputDisabled || fileUploading || readOnly}
+                        disabled={inputDisabled || fileUploading || readOnly || audioOpening}
                         onClick={() => { !inputDisabled && !fileUploading && handleSendClick() }}>
                         <SendIcon size={24} />
                     </button>

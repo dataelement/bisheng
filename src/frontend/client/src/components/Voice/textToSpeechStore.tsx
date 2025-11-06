@@ -215,14 +215,15 @@ export function useInterruptAudio() {
 }
 
 /**
- * Atomic state and hook for parsing audio loading state
- */
-export const parsingAudioLoadingAtom = atom<boolean>({
-  key: "audioPlayer_parsingAudioLoading",
+ * 录音loading
+ * Atomic state and hook for recording audio loading state
+ * */
+export const recordingAudioLoadingAtom = atom<boolean>({
+  key: "audioPlayer_recordingAudioLoading",
   default: false,
 })
 
-export function useParsingAudioLoading() {
-  const [isLoading, setIsLoading] = useRecoilState(parsingAudioLoadingAtom)
+export function useRecordingAudioLoading() {
+  const [isLoading, setIsLoading] = useRecoilState(recordingAudioLoadingAtom)
   return [isLoading, setIsLoading] as const
 }

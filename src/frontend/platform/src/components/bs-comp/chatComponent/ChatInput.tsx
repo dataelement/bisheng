@@ -4,6 +4,7 @@ import { SendIcon } from "@/components/bs-icons/send";
 import { Button } from "@/components/bs-ui/button";
 import { Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { useAudioStore } from "@/components/voiceFunction/audioPlayerStore";
 import SpeechToTextComponent from "@/components/voiceFunction/speechToText";
 import { locationContext } from "@/contexts/locationContext";
 import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
@@ -24,7 +25,8 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     const [inputLock, setInputLock] = useState({ locked: false, reason: '' })
     const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
 
-    
+    const { isLoading: audioOpening } = useAudioStore()
+
     const { messages, hisMessages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, destory, setShowGuideQuestion } = useMessageStore()
     const currentChatIdRef = useRef(null)
     const inputRef = useRef(null)
@@ -283,14 +285,14 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
 
     const handleSpeechRecognition = (text) => {
         console.log('text', text);
-        
+
         if (!showWhenLocked && inputLock.locked) return;
         if (!inputRef.current) return;
-        
+
         // 将识别结果追加到当前输入框内容后
         const currentValue = inputRef.current.value;
         inputRef.current.value = currentValue + text;
-        
+
         // 触发input事件以更新UI（如自动调整高度）
         const event = new Event('input', { bubbles: true, cancelable: true });
         inputRef.current.dispatchEvent(event);
@@ -349,7 +351,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                         id="bs-send-btn"
                         className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"
                         onClick={() => { !inputLock.locked && handleSendClick() }}>
-                        <SendIcon className={`${inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}`} />
+                        <SendIcon className={`${inputLock.locked || audioOpening ? 'text-muted-foreground' : 'text-foreground'}`} />
                     </div>
                 }
             </div>

@@ -16,6 +16,7 @@ import useFlowStore from "../flowStore";
 import ChatFiles from "./ChatFiles";
 import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
+import { useAudioStore } from "@/components/voiceFunction/audioPlayerStore";
 const GuideQuestionsAny = GuideQuestions as any;
 
 export const FileTypes = {
@@ -35,7 +36,9 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
     const messageIdRef = useRef('') // 当前输入框节点messageId
     const [accepts, setAccepts] = useState('*') // 接受文件类型
     const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
-    
+
+    const { isLoading: audioOpening } = useAudioStore()
+
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
 
     const __store: any = useMessageStore() as any
@@ -473,23 +476,23 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
     const { fileUploading, getFileIds, loadingChange } = useFileLoading(inputLock.locked)
     const handleSpeechRecognition = (text) => {
         console.log('text', text);
-        
+
         if (!showWhenLocked && inputLock.locked) return;
         if (!inputRef.current) return;
-        
+
         // 将识别结果追加到当前输入框内容后
         const currentValue = inputRef.current.value;
         inputRef.current.value = currentValue + text;
-        
+
         // 触发input事件以更新UI（如自动调整高度）
         const event = new Event('input', { bubbles: true, cancelable: true });
         inputRef.current.dispatchEvent(event);
     };
 
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B] z-10">
-        
+
         <div className={`relative pr-4 ${clear && 'pl-9'}`}>
-       
+
             {/* 引导问题 */}
             <GuideQuestionsAny
                 ref={questionsRef}
@@ -498,11 +501,11 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             />
             {/* restart */}
             <div className="flex absolute left-0 top-3 z-10">
-                <Tip side={`${version=== 'v2'?'right':'top-right'}`} content={"重新运行"}>
+                <Tip side={`${version === 'v2' ? 'right' : 'top-right'}`} content={"重新运行"}>
                     <Button className="rounded-full" disabled={restarted} variant="ghost" size="icon" onClick={handleRestartClick}><RefreshCw size={18} /></Button>
                 </Tip>
             </div>
-        
+
             {/* form switch */}
             <div className="flex absolute left-3 top-4 z-10">
                 {
@@ -516,16 +519,16 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             <div className={` ${!inputLock.locked && 'mr-4'}`}>
                 {linsightConfig?.asr_model?.id && <SpeechToTextComponent onChange={handleSpeechRecognition} />}
             </div>
-          
+
             {/* 附件 */}
-            {!inputLock.locked && <ChatFiles accepts={accepts} v={location.href.indexOf('/chat/flow/') === -1 ? 'v1' : 'v2'} onChange={loadingChange} />}
+            {!inputLock.locked && <ChatFiles accepts={accepts} disabled={audioOpening} v={location.href.indexOf('/chat/flow/') === -1 ? 'v1' : 'v2'} onChange={loadingChange} />}
             {/* send */}
             <div className="flex gap-2 absolute right-7 top-4 z-10">
                 <div
                     id="bs-send-btn"
                     className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"
-                    onClick={() => { !inputLock.locked && !fileUploading && handleSendClick() }}>
-                    <SendIcon className={`${inputLock.locked || fileUploading ? 'text-muted-foreground' : 'text-foreground'}`} />
+                    onClick={() => { !inputLock.locked && !fileUploading && !audioOpening && handleSendClick() }}>
+                    <SendIcon className={`${inputLock.locked || fileUploading || audioOpening ? 'text-muted-foreground' : 'text-foreground'}`} />
                 </div>
             </div>
             {/* stop & 重置 */}
