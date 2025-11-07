@@ -42,6 +42,7 @@ def xls_to_xlsx(xls_path):
         return xlsx_path
 
     except Exception as e:
+        logger.exception(f'xls_to_xlsx error: ')
         return None
 
 

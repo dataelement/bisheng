@@ -67,6 +67,7 @@ dependencies = [
     "transformers>=4.57.1",
     "uvicorn>=0.38.0",
     "websockets>=15.0.1",
+    "xlrd>=2.0.2",
     "zhipuai>=1.0.7",
 ]
 
