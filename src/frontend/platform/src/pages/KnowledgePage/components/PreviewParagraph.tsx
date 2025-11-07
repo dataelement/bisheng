@@ -305,7 +305,7 @@ export default function PreviewParagraph({ fileId, previewCount, edit, fileSuffi
                         : <MarkdownView key={fileId + previewCount + chunk.chunkIndex} data={chunk} />
                 ))}
                 {!(chunks.length || loading) && <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary transition-shadow text-sm text-gray-500 flex gap-2 mb-1"
-                >文档解析失败</div>}
+                >无解析结果</div>}
             </div>
         </div>
     </div>

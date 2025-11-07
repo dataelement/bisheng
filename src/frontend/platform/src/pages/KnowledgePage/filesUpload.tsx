@@ -229,53 +229,67 @@ export default function FilesUpload() {
               />
             )}
             {/* 步骤2：分段策略 */}
-           {currentStep === 2 && ( // 步骤2或3时，第二步始终挂载（仅控制显示）
-        <div className={currentStep === 2 ? "block" : "hidden"}>
-          <FileUploadStep2
-            ref={fileUploadStep2Ref}
-            step={currentStep}
-            resultFiles={resultFiles}
-            isSubmitting={isSubmitting}
-            onNext={handleStep2Next}
-            onPrev={handleBack}
-            kId={knowledgeId}
-          />
-        </div>
-      )}
+            {currentStep === 2 && ( // 步骤2或3时，第二步始终挂载（仅控制显示）
+              <div className={currentStep === 2 ? "block" : "hidden"}>
+                <FileUploadStep2
+                  ref={fileUploadStep2Ref}
+                  step={currentStep}
+                  resultFiles={resultFiles}
+                  isSubmitting={isSubmitting}
+                  onNext={handleStep2Next}
+                  onPrev={handleBack}
+                  kId={knowledgeId}
+                />
+              </div>
+            )}
 
 
             {/* 步骤3：原文对比 */}
-                {currentStep === 3 && segmentRules && (
-        <div className="block"> {/* 第三步显示时，第二步被隐藏但不卸载 */}
-          <PreviewResult
-            rules={segmentRules.rules}
-            resultFiles={resultFiles}
-            handlePreviewResult={handlePreviewResult}
-            onPrev={handleBack}
-            onNext={() => {
-              setCurrentStep(4);
-              handleSave(segmentRules);
-            }}
-            step={currentStep}
-            previewCount={0}
-            applyEachCell={segmentRules.applyEachCell}
-            cellGeneralConfig={segmentRules.cellGeneralConfig}
-            kId={knowledgeId}
-            showPreview={true}
-          />
+            {currentStep === 3 && segmentRules && (
+              <div className="block"> {/* 第三步显示时，第二步被隐藏但不卸载 */}
+                <PreviewResult
+                  rules={segmentRules.rules}
+                  resultFiles={resultFiles}
+                  handlePreviewResult={handlePreviewResult}
+                  onPrev={handleBack}
+                  onNext={() => {
+                    setCurrentStep(4);
+                    handleSave(segmentRules);
+                  }}
+                  onDeleteFile={(filePath) => {
+                    setSegmentRules(prev => (
+                      {
+                        ...prev,
+                        rules: {
+                          ...prev.rules,
+                          fileList: prev.rules.fileList.filter(file => file.filePath !== filePath)
+                        }
+                      }
+                    ))
+                    setResultFiles(prev => (
+                      prev.filter(file => file.file_path !== filePath)
+                    ))
+                  }}
+                  step={currentStep}
+                  previewCount={0}
+                  applyEachCell={segmentRules.applyEachCell}
+                  cellGeneralConfig={segmentRules.cellGeneralConfig}
+                  kId={knowledgeId}
+                  showPreview={true}
+                />
 
-          {/* 步骤3底部按钮 */}
-          <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
-            <Button variant="outline" onClick={handleBack}>
-              {t('previousStep')}
-            </Button>
-            <Button onClick={handleNext} disabled={isNextDisabled || isSubmitting}>
-              {isSubmitting ? <LoadingIcon className="h-4 w-4 mr-1" /> : null}
-              {t('nextStep')}
-            </Button>
-          </div>
-        </div>
-      )}
+                {/* 步骤3底部按钮 */}
+                <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
+                  <Button variant="outline" onClick={handleBack}>
+                    {t('previousStep')}
+                  </Button>
+                  <Button onClick={handleNext} disabled={isNextDisabled || isSubmitting || resultFiles.length === 0}>
+                    {isSubmitting ? <LoadingIcon className="h-4 w-4 mr-1" /> : null}
+                    {t('nextStep')}
+                  </Button>
+                </div>
+              </div>
+            )}
 
 
             {/* 步骤4：数据处理 */}

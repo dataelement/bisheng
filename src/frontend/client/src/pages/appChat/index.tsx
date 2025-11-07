@@ -55,8 +55,6 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
 
                 if (flowRes.status_code !== 200) {
                     error = AppLostMessage
-                }
-                if (!flowRes.data) {
                     const lostFlow = await getDeleteFlowApi(cid)
                     flowRes.data = {
                         id: lostFlow.data.flow_id,
@@ -91,8 +89,6 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
 
                 if (assistantRes.status_code !== 200) {
                     error = AppLostMessage;
-                }
-                if (!assistantRes.data) {
                     const lostFlow = await getDeleteFlowApi(cid)
                     assistantRes.data = {
                         name: lostFlow.data.flow_name,

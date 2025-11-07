@@ -27,11 +27,13 @@ export default function editAssistant() {
     // assistant data
     const { assistantState, changed, loadAssistantState, changeStatus, saveAfter, destroy } = useAssistantStore()
     const { startNewRound, insetSystemMsg, insetBsMsg, destory, setShowGuideQuestion } = useMessageStore()
+    const [checking, setChecking] = useState(true)
 
     const flowInit = async () => {
         await checkAppEditPermission(assisId, 5)
-
+        
         loadAssistantState(assisId, 'v1').then((res) => {
+            setChecking(false)
             setShowGuideQuestion(true)
             setGuideQuestion(res.guide_question?.filter((item) => item) || [])
             res.guide_word && insetBsMsg(res.guide_word)
@@ -141,11 +143,13 @@ export default function editAssistant() {
 
     const [showApiPage, setShowApiPage] = useState(false)
     // 离开保存
-    const blocker = useBeforeUnload(changed)
+    const blocker = useBeforeUnload(changed, checking)
     const handleSaveAndClose = async () => {
         await handleSave(true)
         blocker.proceed?.()
     }
+
+    if (checking) return null
 
     return <div className="bg-background-main">
         <Header loca={loca} onSave={() => handleSave(true)} onLine={handleOnline} onTabChange={(t) => setShowApiPage(t === 'api')}></Header>
@@ -196,11 +200,12 @@ export default function editAssistant() {
 
 
 // 离开页面保存提示
-const useBeforeUnload = (changed) => {
+const useBeforeUnload = (changed, checking) => {
     const { t } = useTranslation()
 
     // 离开提示保存
     useEffect(() => {
+        if (checking) return // 检查是否有权限中不提示
         const fun = (e) => {
             var confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
             (e || window.event).returnValue = confirmationMessage; // Compatible with different browsers
@@ -208,7 +213,7 @@ const useBeforeUnload = (changed) => {
         }
         window.addEventListener('beforeunload', fun);
         return () => { window.removeEventListener('beforeunload', fun) }
-    }, [])
+    }, [checking])
 
     return useBlocker(changed);
 }

@@ -35,9 +35,11 @@ export default function l2Edit() {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [guideWords, setGuideWords] = useState('');
+    const [checking, setChecking] = useState(true)
 
     const flowInit = async () => {
         await checkAppEditPermission(id, 1)
+        
         getFlowApi(id).then(_flow => {
             setFlow('l2 flow init', _flow);
             setIsL2(true);
@@ -45,6 +47,7 @@ export default function l2Edit() {
             setDescription(_flow.description);
             setGuideWords(_flow.guide_word);
             setLogo(_flow.logo);
+            setChecking(false)
         });
     }
     useEffect(() => {
@@ -155,6 +158,8 @@ export default function l2Edit() {
     const previewAvatar = useMemo(() =>
         logo ? __APP_ENV__.BASE_URL + logo : '',
         [logo])
+
+    if (checking) return null
 
     return <div className="relative box-border h-full overflow-auto">
         <div className="p-6 pb-48 h-full overflow-y-auto">
