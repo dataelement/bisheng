@@ -1,6 +1,6 @@
 import { checkAppEditPermission, getFlowApi } from "@/controllers/API/flow";
 import { flowVersionCompatible } from "@/util/flowCompatible";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import Panne from "./Panne";
 import useFlowStore from "./flowStore";
@@ -18,11 +18,13 @@ export default function FlowPage() {
     // }, [])
 
     const { flow, setFlow, clearRunCache, clearNotifications } = useFlowStore()
+    const [checking, setChecking] = useState(true)
 
     const flowInit = async () => {
         await checkAppEditPermission(id, 10)
-
+        
         getFlowApi(id).then(f => {
+            setChecking(false)
             clearRunCache();
 
             if (f.data) {
@@ -68,6 +70,8 @@ export default function FlowPage() {
         }
         return []
     }, [flow, id])
+
+    if (checking) return null
 
     return (
         <div className="flow-page-positioning">
