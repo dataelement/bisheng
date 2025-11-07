@@ -1,5 +1,5 @@
 import { ArrowRight, MousePointerClick } from 'lucide-react';
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
@@ -61,6 +61,12 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const methods = useForm<ChatFormValues>({
     defaultValues: { text: '' },
   });
+
+  // 提取title in messagesTree
+  const conversation = useMemo(() => ({
+    ...chatHelpers?.conversation,
+    title: messagesTree?.[0]?.flow_name || '',
+  }), [chatHelpers]);
 
   useEffect(() => {
     if (messagesTree && messagesTree.length !== 0) {
@@ -132,7 +138,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
       </div>
     );
   } else if (messagesTree && messagesTree.length !== 0) {
-    content = <MessagesView readOnly={shareToken} messagesTree={messagesTree} Header={<HeaderTitle readOnly={shareToken} conversation={chatHelpers?.conversation} logo={null} />} />;
+    content = <MessagesView readOnly={shareToken} messagesTree={messagesTree} Header={<HeaderTitle readOnly={shareToken} conversation={conversation} logo={null} />} />;
   } else {
     content = <Landing lingsi={isLingsi} setLingsi={setIsLingsi} isNew={isNew} />;
   }

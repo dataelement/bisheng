@@ -36,7 +36,7 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
                 chatId={conversationId}
                 setVersionId={switchVersion}
                 versionId={versionId}
-                isSharePage={isSharePage}
+                isSharePage={isSharePage || sid} // when case sharebutton is hide 
                 versions={versions}
             />
 

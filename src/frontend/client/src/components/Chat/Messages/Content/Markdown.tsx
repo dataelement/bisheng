@@ -274,9 +274,10 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent }
     [],
   );
 
+  // Cursor
   if (isInitializing) {
     return (
-      <div className="absolute">
+      <div className="absolute top-10">
         <p className="relative">
           <span className={isLatestMessage ? 'result-thinking' : ''} />
         </p>

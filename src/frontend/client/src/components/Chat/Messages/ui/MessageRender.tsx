@@ -1,3 +1,4 @@
+import type { TMessage } from '~/data-provider/data-provider/src';
 import { memo, useCallback, useMemo } from 'react';
 import { useRecoilValue } from 'recoil';
 import type { TMessageIcon, TMessageProps } from '~/common';
@@ -8,7 +9,6 @@ import SiblingSwitch from '~/components/Chat/Messages/SiblingSwitch';
 import SubRow from '~/components/Chat/Messages/SubRow';
 import PlaceholderRow from '~/components/Chat/Messages/ui/PlaceholderRow';
 import { Plugin } from '~/components/Messages/Content';
-import type { TMessage } from '~/data-provider/data-provider/src';
 import { useMessageActions } from '~/hooks';
 import { MessageContext } from '~/Providers';
 import store from '~/store';
