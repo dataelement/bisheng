@@ -1,6 +1,5 @@
-import asyncio
 import json
-import time
+import json
 import urllib.parse
 from datetime import datetime
 from io import BytesIO
@@ -11,7 +10,6 @@ from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPExcept
                      UploadFile)
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
-from sse_starlette import EventSourceResponse
 
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
@@ -19,10 +17,10 @@ from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
                                     resp_200, resp_500, resp_501, resp_502, UpdateKnowledgeReq, KnowledgeFileReProcess)
-from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError, \
     KnowledgeNotQAError, KnowledgePreviewError
+from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate)
 from bisheng.database.models.knowledge import KnowledgeState
@@ -32,6 +30,7 @@ from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.llm.const import LLMModelType
 from bisheng.llm.models import LLMDao
+from bisheng.utils import generate_uuid
 from bisheng.worker.knowledge.qa import insert_qa_celery
 
 # build router
@@ -57,49 +56,54 @@ async def upload_file(*, file: UploadFile = File(...)):
 async def preview_file_chunk(*,
                              request: Request,
                              login_user: UserPayload = Depends(get_login_user),
+                             background_tasks: BackgroundTasks,
                              req_data: KnowledgeFileProcess):
     """ 获取某个文件的分块预览内容 """
 
+    preview_file_id = generate_uuid()
+    redis_key = f'preview_file:{preview_file_id}'
+    redis_client = await get_redis_client()
+    await redis_client.aset(redis_key, {"status": "processing"})
+
     async def exec_task():
-        return await KnowledgeService.get_preview_file_chunk(request, login_user, req_data)
-
-    async def sse_generator():
-        start_time = time.time()
-
-        task = asyncio.create_task(exec_task())
-
-        while True:
-            if time.time() - start_time > 1800:  # 30 minutes timeout
-                logger.error(f"Preview file chunk timeout after 30 minutes.")
-                yield KnowledgePreviewError.to_sse_event()
-                break
-            if not task.done():
-                yield {
-                    "event": "processing",
-                    "data": {}
-                }
-                await asyncio.sleep(5)
-                continue
-            if task.exception():
-                if isinstance(task.exception(), BaseErrorCode):
-                    yield task.exception().to_sse_event()
-                else:
-                    logger.error(f'Preview file chunk error: {task.exception()}')
-                    yield KnowledgePreviewError.to_sse_event()
-                break
-            parse_type, file_share_url, res, partitions = task.result()
-            yield {
-                "event": "completed",
-                "data": json.dumps({
+        try:
+            parse_type, file_share_url, res, partitions = await KnowledgeService.get_preview_file_chunk(request,
+                                                                                                        login_user,
+                                                                                                        req_data)
+            await redis_client.aset(redis_key, {
+                "status": "completed",
+                "data": {
                     'parse_type': parse_type,
                     'file_url': file_share_url,
                     'chunks': [one.model_dump() for one in res],
                     'partitions': partitions
-                }, ensure_ascii=False)
-            }
-            break
+                }
+            })
+        except Exception as exc:
+            logger.exception(f'Preview file chunk error: {exc}')
+            await redis_client.aset(redis_key, {
+                "status": "error"
+            })
 
-    return EventSourceResponse(sse_generator())
+    background_tasks.add_task(exec_task)
+    return resp_200(data={'preview_file_id': preview_file_id})
+
+
+@router.get('/preview/status')
+async def get_preview_file_status(
+        request: Request,
+        login_user: UserPayload = Depends(get_login_user),
+        preview_file_id: str = Query(..., description='预览接口返回的文件ID')):
+    redis_key = f'preview_file:{preview_file_id}'
+    redis_client = await get_redis_client()
+    file_status = await redis_client.aget(redis_key)
+    if not file_status:
+        raise KnowledgePreviewError.http_exception()
+    if file_status.get('status') == 'error':
+        raise KnowledgePreviewError.http_exception()
+    if file_status.get('status') == 'completed':
+        await redis_client.expire_key(redis_key, 10)
+    return resp_200(data=file_status)
 
 
 @router.put('/preview')
