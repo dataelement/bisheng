@@ -8,7 +8,7 @@ import { getChatHistoryApi } from "~/api/apps";
 import { useAutoScroll } from "~/hooks/useAutoScroll";
 import { chatIdState, chatsState, currentChatState } from "./store/atoms";
 
-export const useMessage = () => {
+export const useMessage = (shareToken) => {
     const { conversationId } = useParams();
     const chatState = useRecoilValue(currentChatState)
     const [chatId] = useRecoilState(chatIdState)
@@ -18,7 +18,7 @@ export const useMessage = () => {
     const messageScrollRef = useRef<HTMLDivElement>(null)
     // 自动滚动
     useAutoScroll(messageScrollRef, messages)
-    useLoadMessage(chatId, chatState, messageScrollRef)
+    useLoadMessage({ chatId, chatState, messageScrollRef, shareToken })
 
 
     return {
@@ -29,7 +29,8 @@ export const useMessage = () => {
 }
 
 
-const useLoadMessage = (chatId: string, chatState: any, messageScrollRef: React.RefObject<HTMLDivElement>) => {
+const useLoadMessage = ({ chatId, chatState, messageScrollRef, shareToken }
+    : { chatId: string, chatState: any, messageScrollRef: React.RefObject<HTMLDivElement>, shareToken: string }) => {
     const [chats, setChats] = useRecoilState(chatsState)
     const { flow, messages, running, historyEnd } = chatState || {}
 
@@ -51,7 +52,7 @@ const useLoadMessage = (chatId: string, chatState: any, messageScrollRef: React.
         // u-开头的消息表示新建会话，新建会话无需加载历史消息
         if (typeof messageId === 'string' && messageId.startsWith('u-')) return
 
-        const msgs = await getChatHistoryApi({ flowId: flow.id, chatId, flowType: flow.flow_type, id: messages[0].id || 0 })
+        const msgs = await getChatHistoryApi({ flowId: flow.id, chatId, flowType: flow.flow_type, id: messages[0].id || 0, shareToken })
         setChats((prev) => {
             const chatData = prev[chatId]
             const param = msgs.length ?
@@ -87,5 +88,5 @@ const useLoadMessage = (chatId: string, chatState: any, messageScrollRef: React.
 
         messageScrollRef.current?.addEventListener('scroll', handleScroll);
         return () => messageScrollRef.current?.removeEventListener('scroll', handleScroll)
-    }, [messageScrollRef.current, chatState, chatId]);
+    }, [messageScrollRef.current, chatState, chatId, shareToken]);
 }

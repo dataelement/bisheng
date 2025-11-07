@@ -40,8 +40,8 @@ interface RetrievalConfigProps {
 const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onValidate }) => {
 
     // 初始化状态值，将原retrievalEnabled改为search_switch
-    const [keywordWeight, setKeywordWeight] = useState(data.value?.keyword_weight || 0.5);
-    const [vectorWeight, setVectorWeight] = useState(data.value?.vector_weight || 0.5);
+    const [keywordWeight, setKeywordWeight] = useState( data.value?.keyword_weight ?? 0.5);
+    const [vectorWeight, setVectorWeight] = useState(1 - (data.value?.keyword_weight ?? 0.5));
     const [searchSwitch, setSearchSwitch] = useState(data.value?.search_switch ?? false);
     const [rerankEnabled, setRerankEnabled] = useState(data.value?.rerank_flag ?? false);
     const [selectedRerankModel, setSelectedRerankModel] = useState(data.value?.rerank_model || '');

@@ -38,11 +38,11 @@ export default function ChatInput({ readOnly, v }) {
     return <div className="absolute z-10 bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
         <div className="relative px-4 rounded-3xl bg-surface-tertiary ">
             {/* 附件 */}
-            {showUpload && !inputDisabled && <InputFiles
+            {showUpload && <InputFiles
                 v={v}
                 showVoice={showVoice}
                 accepts={accepts}
-                disabled={readOnly || audioOpening}
+                disabled={readOnly || audioOpening || inputDisabled}
                 size={bishengConfig?.uploaded_files_maximum_size || 50}
                 onChange={(files => {
                     setFileUploading(!files)
@@ -74,10 +74,11 @@ export default function ChatInput({ readOnly, v }) {
                 is工作流 & 未展示停止按钮 & 没有错误消息
             */}
             <div className="absolute w-full flex justify-center left-0 -top-14">
-                {/* {!showStop && chatState?.flow?.flow_type === 10 && !inputMsg  */}
-                {showReRun && !inputMsg && <Button
+                {/* {!showStop && chatState?.flow?.flow_type === 10 && !inputMsg  & 运行结束展示 */}
+                {showReRun && !inputMsg && !showStop && <Button
                     className="rounded-full bg-primary/10 bg-blue-50 text-primary"
                     variant="ghost"
+                    disabled={readOnly}
                     onClick={handleRestart}>
                     <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/chat.png'} alt="" />{localize('com_ui_restart')}
                 </Button>

@@ -1,6 +1,6 @@
 {
   "name": "bisheng",
-  "version": "2.3-beta1",
+  "version": "2.2.0",
   "private": true,
   "dependencies": {
     "@headlessui/react": "^2.0.4",

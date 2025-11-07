@@ -20,8 +20,8 @@ export async function getVoice2TextApi(data: any): Promise<any> {
  * 文字转语音
  */
 export const textToSpeech = (text: string): Promise<{ audio: string }> => {
-    const encodedText = encodeURIComponent(text);
-    return request.get(`/api/v1/llm/workbench/tts?text=${encodedText}`);
+    // const encodedText = encodeURIComponent(text);
+    return request.post(`/api/v1/llm/workbench/tts`, { text });
 };
 
 

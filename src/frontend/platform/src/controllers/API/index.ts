@@ -259,21 +259,27 @@ let currentEventSource = null; // 仅保留此变量用于跟踪当前连接
 
 // 用 fetch 实现 POST 方式的 SSE
 export function previewFileSplitApi(data, onEvent) {
-  let controller = new AbortController(); // 用于取消请求
+  let controller = new AbortController();
   const signal = controller.signal;
 
   fetch('/api/v1/knowledge/preview', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data), // 传递 POST 体
-    signal, // 用于取消
+    body: JSON.stringify(data),
+    signal,
   }).then(response => {
-    console.log(response,343);
-    
+    // 如果 HTTP 响应状态不是成功（如 4xx/5xx），直接触发解析失败错误
+    if (!response.ok) {
+      onEvent('error', { 
+        code: 10952,  // 新增错误码
+        message: '文档解析失败'  // 新增错误消息
+      });
+      return;
+    }
+
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
-    // 循环读取流数据
     const readStream = async () => {
       const { done, value } = await reader.read();
       if (done) {
@@ -281,41 +287,48 @@ export function previewFileSplitApi(data, onEvent) {
         return;
       }
 
-      // 解析 SSE 格式数据（需按 SSE 规范解析 event 和 data）
       const chunk = decoder.decode(value, { stream: true });
-      const events = chunk.split('\n\n'); // SSE 事件以 \n\n 分隔
+      const events = chunk.split('\n\n');
       events.forEach(event => {
-        console.log(event,1);
-        
         if (!event) return;
         const lines = event.split('\n');
-        let eventType = 'message'; // 默认事件类型
+        let eventType = 'message';
         let eventData = '';
         lines.forEach(line => {
-          console.log(line,2);
-          
           if (line.startsWith('event:')) {
-            eventType = line.slice(6).trim(); // 提取事件类型（processing/completed/error）
+            eventType = line.slice(6).trim();
           } else if (line.startsWith('data:')) {
-            eventData += line.slice(5).trim(); // 提取数据
+            eventData += line.slice(5).trim();
           }
         });
         if (eventData) {
-          onEvent(eventType, JSON.parse(eventData));
+          const parsedData = JSON.parse(eventData);
+          // 若后端返回 error 事件，补充默认错误码（如果后端未返回 code）
+          if (eventType === 'error') {
+            onEvent(eventType, {
+              code: parsedData.code || 10952,  // 优先使用后端返回的 code，否则默认 10952
+              message: parsedData.message || '文档解析失败'  // 优先使用后端消息
+            });
+          } else {
+            onEvent(eventType, parsedData);
+          }
         }
       });
 
-      readStream(); // 继续读取下一块数据
+      readStream();
     };
 
     readStream();
   }).catch(err => {
     if (err.name !== 'AbortError') {
-      onEvent('error', { code: 'CONNECT_ERROR', message: '连接失败' });
+      // 网络错误或连接失败时，也返回解析失败错误
+      onEvent('error', {
+        code: 10952,
+        message: '文档解析失败'
+      });
     }
   });
 
-  // 返回取消函数
   return () => controller.abort();
 }
 
