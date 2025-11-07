@@ -32,11 +32,22 @@ interface RerankModel {
  * 检索配置组件
  * 包含权限校验、开关控制、权重调整和结果设置
  */
+/**
+ * 高级检索配置 Props
+ * @property {WorkflowNodeParam} data 表单项数据
+ * @property {(value: any) => void} onChange 值变更回调
+ * @property {(validate: () => string | false) => void} [onValidate] 绑定校验回调
+ */
 interface RetrievalConfigProps {
     data: WorkflowNodeParam;
     onChange: (value: any) => void;
+    onValidate?: (validate: () => string | false) => void;
 }
 
+/**
+ * 高级检索配置组件
+ * 兼容老版本仅包含 `user_auth` 与 `max_chunk_size` 的数据结构。
+ */
 const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onValidate }) => {
 
     // 初始化状态值，将原retrievalEnabled改为search_switch
@@ -249,6 +260,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
             <div className="pl-4">
                 <ModelSelect
                 close
+                label="重排模型"
                  placeholder="请选择重排模型"
                 value={selectedRerankModel}
                 options={rerank}
@@ -282,7 +294,6 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
                             label: '' // 标签已在上方单独显示，此处留空
                         }}
                         onChange={(value) => setResultLength(Number(value))}
-                        className="w-full"
                     />
                 </div>
             )}
