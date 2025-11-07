@@ -29,7 +29,7 @@ class BaseExecutor(ABC):
             endpoint=self.minio.get('endpoint'),
             access_key=self.minio.get('access_key'),
             secret_key=self.minio.get('secret_key'),
-            secure=self.minio.get('schema'),
+            secure=self.minio.get('schema') or self.minio.get('secure'),
             cert_check=self.minio.get('cert_check'),
         )
         minio_share = Minio(
