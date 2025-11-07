@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import func
+from sqlalchemy import func, String
 from sqlmodel import JSON, Field, select, update, text, Column, DateTime
 
 from bisheng.core.database import get_sync_db_session, get_async_db_session
@@ -18,7 +18,7 @@ class FlowVersionBase(SQLModelSerializable):
     flow_id: str = Field(index=True, max_length=32, description="所属的技能ID")
     name: str = Field(index=True, description="版本的名字")
     data: Optional[Dict] = Field(default=None, description="版本的数据")
-    description: Optional[str] = Field(default=None, index=False, description="版本的描述")
+    description: Optional[str] = Field(default=None, sa_column=Column(String(length=1000)))
     user_id: Optional[int] = Field(default=None, index=True, description="创建者")
     flow_type: Optional[int] = Field(default=1, description="版本的类型")
     is_current: Optional[int] = Field(default=0, description="是否为正在使用版本")

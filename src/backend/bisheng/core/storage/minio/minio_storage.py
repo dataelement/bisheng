@@ -7,9 +7,10 @@ from typing import BinaryIO, Union, Optional
 import minio
 import miniopy_async
 import miniopy_async.commonconfig as miniopy_async_commonconfig
+from loguru import logger
 from minio.commonconfig import Filter
 from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration
-from loguru import logger
+
 from bisheng.core.config.settings import MinioConf
 from bisheng.core.storage.base import BaseStorage
 
@@ -26,7 +27,7 @@ class MinioStorage(BaseStorage, ABC):
             endpoint=minio_config.endpoint,
             access_key=minio_config.access_key,
             secret_key=minio_config.secret_key,
-            secure=minio_config.schema,
+            secure=minio_config.secure,
             cert_check=minio_config.cert_check
         )
 
@@ -34,7 +35,7 @@ class MinioStorage(BaseStorage, ABC):
             endpoint=minio_config.endpoint,
             access_key=minio_config.access_key,
             secret_key=minio_config.secret_key,
-            secure=minio_config.schema,
+            secure=minio_config.secure,
             cert_check=minio_config.cert_check
         )
         self._init_bucket_conf()
@@ -245,10 +246,10 @@ class MinioStorage(BaseStorage, ABC):
 
     async def object_exists(self, bucket_name: Optional[str] = None, object_name: str = None) -> bool:
 
-        if bucket_name is None:
+        if not bucket_name:
             bucket_name = self.bucket
 
-        if object_name is None:
+        if not object_name:
             logger.warning("object_exists_sync: object_name must be provided")
             return False
 
@@ -262,10 +263,10 @@ class MinioStorage(BaseStorage, ABC):
 
     def object_exists_sync(self, bucket_name: Optional[str] = None, object_name: str = None) -> bool:
 
-        if bucket_name is None:
+        if not bucket_name:
             bucket_name = self.bucket
 
-        if object_name is None:
+        if not object_name:
             logger.warning("object_exists_sync: object_name must be provided")
             return False
 

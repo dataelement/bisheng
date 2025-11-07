@@ -98,7 +98,7 @@ class VectorStores(BaseModel):
 
 class MinioConf(BaseModel):
     """ minio 配置 """
-    schema: Optional[bool] = Field(default=False, description="是否使用https", alias="schema")
+    secure: Optional[bool] = Field(default=False, description="是否使用https", alias="schema")
     cert_check: Optional[bool] = Field(default=False, description="是否校验证书")
     endpoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio 地址")
     sharepoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio 公开访问地址")

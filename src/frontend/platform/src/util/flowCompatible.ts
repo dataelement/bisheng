@@ -15,15 +15,21 @@ export const flowVersionCompatible = (flow) => {
     })
     return flow
 }
-const comptibleRag = (node) => {
+const comptibleRag = (node) => {  
     if (!node.v) {
         node.v = 1
     }
     if (node.v == 1) {
         const knowledgeGroup = node.group_params[0];
+        // 先读取旧参数值，再进行移除，避免丢失数据
+        const oldUserAuthParam = knowledgeGroup.params.find(p => p.key === 'user_auth');
+        const oldMaxChunkSizeParam = knowledgeGroup.params.find(p => p.key === 'max_chunk_size');
+
+        // 移除旧的拆散参数
         knowledgeGroup.params = knowledgeGroup.params.filter(param =>
             !['user_auth', 'max_chunk_size'].includes(param.key)
         );
+
         const knowledgeIndex = knowledgeGroup.params.findIndex(p => p.key === 'knowledge');
         // 构造高级检索配置参数
         const advancedParam = {
@@ -40,15 +46,12 @@ const comptibleRag = (node) => {
                 max_chunk_size: 15000,
             }
         };
-        const userAuthParam = node.group_params[0].params.find(p => p.key === 'user_auth');
-        if (userAuthParam) {
-            advancedParam.value.user_auth = userAuthParam.value;
+        // 从 v1 的 user_auth 与 max_chunk_size 继承值到新参数
+        if (oldUserAuthParam) {
+            advancedParam.value.user_auth = oldUserAuthParam.value;
         }
-
-        // 从 v1 的 max_chunk_size 继承值到新参数
-        const maxChunkParam = node.group_params[0].params.find(p => p.key === 'max_chunk_size');
-        if (maxChunkParam) {
-            advancedParam.value.max_chunk_size = maxChunkParam.value;
+        if (oldMaxChunkSizeParam) {
+            advancedParam.value.max_chunk_size = oldMaxChunkSizeParam.value;
         }
         knowledgeGroup.params.splice(knowledgeIndex + 1, 0, advancedParam);
 

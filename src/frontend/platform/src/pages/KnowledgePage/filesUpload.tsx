@@ -229,7 +229,7 @@ export default function FilesUpload() {
               />
             )}
             {/* 步骤2：分段策略 */}
-           {currentStep >= 2 && ( // 步骤2或3时，第二步始终挂载（仅控制显示）
+           {currentStep === 2 && ( // 步骤2或3时，第二步始终挂载（仅控制显示）
         <div className={currentStep === 2 ? "block" : "hidden"}>
           <FileUploadStep2
             ref={fileUploadStep2Ref}

@@ -73,15 +73,6 @@ class RagNode(RagUtils):
             self.init_multi_retriever()
             self.init_rerank_model()
             source_documents = self.retrieve_question(question)
-            same_file_id = set()
-            for one in source_documents:
-                file_id = one.metadata.get('file_id')
-                same_file_id.add(file_id)
-                if len(same_file_id) > 1:
-                    break
-            if len(same_file_id) == 1:
-                # 来自同一个文件，则按照chunk_index排序
-                source_documents.sort(key=lambda x: x.metadata.get('chunk_index', 0))
         except Exception as e:
             logger.exception(f'RagNode retrieve_question error: ')
             source_documents = [Document(page_content=str(e), metadata={})]

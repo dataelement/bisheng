@@ -33,6 +33,7 @@ export default function LabelShow({ data, user, all, type, onChange }) {
         if (user.admin_groups.includes(element)) return true
       })
       if (data.user_id === user.user_id) return true
+      if(data.write) return true
     }
     return false
   }, [data, user])

@@ -103,15 +103,15 @@ def get_version_info(*, version_id: int, Authorize: AuthJWT = Depends()):
 
 
 @router.post('/change_version', status_code=200)
-def change_version(*,
-                   request: Request,
-                   flow_id: str = Query(default=None, description='技能唯一ID'),
-                   version_id: int = Query(default=None, description='需要设置的当前版本ID'),
-                   login_user: UserPayload = Depends(get_login_user)):
+async def change_version(*,
+                         request: Request,
+                         flow_id: str = Query(default=None, description='技能唯一ID'),
+                         version_id: int = Query(default=None, description='需要设置的当前版本ID'),
+                         login_user: UserPayload = Depends(get_login_user)):
     """
     修改当前版本
     """
-    return FlowService.change_current_version(request, login_user, flow_id, version_id)
+    return await FlowService.change_current_version(request, login_user, flow_id, version_id)
 
 
 @router.get('/', status_code=200)
