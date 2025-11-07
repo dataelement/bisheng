@@ -34,8 +34,8 @@ customAxios.interceptors.response.use(function (response) {
     // 无权访问
     if ([403, 404].includes(response.data.status_code)) {
         // 修改不跳转
+        localStorage.setItem('noAccessUrl', response.request.responseURL)
         if (response.config.method === 'get') {
-            localStorage.setItem('noAccessUrl', response.request.responseURL)
             location.href = __APP_ENV__.BASE_URL + '/' + response.data.status_code
         }
         return Promise.reject(errorMessage);

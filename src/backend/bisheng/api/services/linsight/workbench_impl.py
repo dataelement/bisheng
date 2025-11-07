@@ -850,10 +850,10 @@ class LinsightWorkbenchImpl:
             code_config["config"] = {}
         if "local" not in code_config["config"]:
             code_config["config"]["local"] = {}
-        code_config["config"]["local"] = {"local_sync_path": file_dir}
+        code_config["config"]["local"]["local_sync_path"] = file_dir
         if "e2b" not in code_config["config"]:
             code_config["config"]["e2b"] = {}
-        code_config["config"]["e2b"] = {"local_sync_path": file_dir}
+        code_config["config"]["e2b"]["local_sync_path"] = file_dir
         # 默认60分钟的有效期
         code_config["config"]["e2b"]["timeout"] = 3600
         code_config["config"]["e2b"]["keep_sandbox"] = True

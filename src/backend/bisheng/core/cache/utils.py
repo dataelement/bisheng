@@ -295,20 +295,24 @@ def file_download(file_path: str):
 
         minio_client = get_minio_storage_sync()
 
-        file_path = file_path.replace(minio_client.minio_config.sharepoint, minio_client.minio_config.endpoint)
+        minio_share_host = minio_client.get_minio_share_host()
+        filename = unquote(urlparse(file_path).path.split('/')[-1])
 
-        r = requests.get(file_path, verify=False)
-
-        if r.status_code != 200:
-            raise ValueError('Check the url of your file; returned status code %s' % r.status_code)
-        # 检查Content-Disposition头来找出文件名
-        content_disposition = r.headers.get('Content-Disposition')
-        filename = ''
-        if content_disposition:
+        if file_path.startswith(minio_share_host):
+            # download file from minio sdk
+            bucket_name, object_name = file_path.replace(minio_share_host, "", 1).lstrip("/").split('/', 1)
+            file_content = minio_client.get_object_sync(bucket_name, object_name)
+        else:
+            # download file from http url
+            r = requests.get(file_path, verify=False)
+            if r.status_code != 200:
+                raise ValueError('Check the url of your file; returned status code %s' % r.status_code)
+            # 检查Content-Disposition头来找出文件名
+            content_disposition = r.headers.get('Content-Disposition')
             filename = unquote(content_disposition).split('filename=')[-1].strip("\"'")
-        if not filename:
-            filename = unquote(urlparse(file_path).path.split('/')[-1])
-        file_path = save_download_file(r.content, 'bisheng', filename)
+            file_content = r.content
+
+        file_path = save_download_file(file_content, 'bisheng', filename)
         return file_path, filename
     elif not os.path.isfile(file_path):
         raise ValueError('File path %s is not a valid file or url' % file_path)
