@@ -76,8 +76,16 @@ class RagUtils(BaseNode):
         finally_docs = finally_docs[:doc_num]
 
         logger.debug(f'retrieve finally chunks: {finally_docs}')
-
-        # 4: return dict
+        same_file_id = set()
+        for one in finally_docs:
+            file_id = one.metadata.get('file_id')
+            same_file_id.add(file_id)
+            if len(same_file_id) > 1:
+                break
+        if len(same_file_id) == 1:
+            # 来自同一个文件，则按照chunk_index排序
+            finally_docs.sort(key=lambda x: x.metadata.get('chunk_index', 0))
+            logger.debug(f'retrieve sort by chunk index: {finally_docs}')
         return finally_docs
 
     def init_user_question(self) -> List[str]:
