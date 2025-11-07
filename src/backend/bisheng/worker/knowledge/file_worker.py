@@ -139,7 +139,8 @@ def copy_normal(
                                                                                         knowledge_new.file_name)
         if preview_file and target_preview_file:
             if minio_client.object_exists_sync(minio_client.bucket, preview_file):
-                minio_client.copy_object_sync(source_object=preview_file, dest_object=target_preview_file)
+                minio_client.copy_object_sync(source_bucket=minio_client.bucket, source_object=preview_file,
+                                              dest_object=target_preview_file, dest_bucket=minio_client.bucket)
 
     except Exception as e:
         logger.exception(f"copy_file_error file_id={knowledge_new.id}")

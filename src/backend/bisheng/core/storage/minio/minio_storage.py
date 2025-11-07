@@ -246,10 +246,10 @@ class MinioStorage(BaseStorage, ABC):
 
     async def object_exists(self, bucket_name: Optional[str] = None, object_name: str = None) -> bool:
 
-        if bucket_name is None:
+        if not bucket_name:
             bucket_name = self.bucket
 
-        if object_name is None:
+        if not object_name:
             logger.warning("object_exists_sync: object_name must be provided")
             return False
 
@@ -263,10 +263,10 @@ class MinioStorage(BaseStorage, ABC):
 
     def object_exists_sync(self, bucket_name: Optional[str] = None, object_name: str = None) -> bool:
 
-        if bucket_name is None:
+        if not bucket_name:
             bucket_name = self.bucket
 
-        if object_name is None:
+        if not object_name:
             logger.warning("object_exists_sync: object_name must be provided")
             return False
 
