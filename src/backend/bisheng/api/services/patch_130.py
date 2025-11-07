@@ -58,6 +58,7 @@ def convert_file_to_md(
         append_header:
         knowledge_id:
     """
+    file_name = file_name.lower()
     md_file_name = None
     local_image_dir = None
     include_cache_dir = True
@@ -91,6 +92,8 @@ def convert_file_to_md(
     elif file_name.endswith("pdf"):
         md_file_name, local_image_dir, doc_id = pdf_handler(CACHE_DIR, input_file_name)
         include_cache_dir = True
+    else:
+        raise ValueError(f"unsupported file type {file_name} for conversion to markdown.")
 
     return replace_image_url(
         md_file_name,
