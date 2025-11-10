@@ -42,3 +42,8 @@ class DocumentParseError(BaseErrorCode):
 class InputDataParseError(BaseErrorCode):
     Code = 13007
     Msg = "Input data is parsed fail. error={error}"
+
+
+class WorkflowOfflineError(BaseErrorCode):
+    Code = 13010
+    Msg = "当前工作流未上线，无法直接对话"
