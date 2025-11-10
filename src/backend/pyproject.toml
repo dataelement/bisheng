@@ -10,7 +10,7 @@ dependencies = [
     "aiomysql>=0.3.2",
     "appdirs>=1.4.4",
     "asyncpg>=0.30.0",
-    "autogen>=0.10.0",
+    "bisheng_pyautogen==0.3.2",
     "bisheng-ragas>=1.0.3",
     "bs4>=0.0.2",
     "captcha>=0.7.1",
