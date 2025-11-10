@@ -797,7 +797,7 @@ def update_knowledge_model(*,
         if not login_user.access_check(
                 knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
         ):
-            raise UnAuthorizedError()
+            return UnAuthorizedError.return_resp()
 
         old_model_id = knowledge.model
 
@@ -813,7 +813,8 @@ def update_knowledge_model(*,
                 message="知识库模型未更改，无需重建"
             )
         if knowledge.state == KnowledgeState.REBUILDING.value:
-            raise KnowledgeRebuildingError()
+            return KnowledgeRebuildingError.return_resp()
+
         knowledge.state = KnowledgeState.REBUILDING.value
         KnowledgeDao.update_one(knowledge)
 
