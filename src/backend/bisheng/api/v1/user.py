@@ -10,34 +10,33 @@ from typing import Annotated, Dict, List, Optional
 import rsa
 from captcha.image import ImageCaptcha
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
-from fastapi.encoders import jsonable_encoder
 from fastapi.security import OAuth2PasswordBearer
-from sqlmodel import delete, select, func
+from sqlmodel import select
 
 from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
-from bisheng.api.errcode.http_error import UnAuthorizedError
-from bisheng.api.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
-                                      UserValidateError, UserPasswordError, UserForbiddenError)
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.captcha import verify_captcha
 from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_user_role, get_login_user,
                                                get_admin_user, UserService)
-from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import resp_200, CreateUserReq
-from bisheng.cache.redis import redis_client
-from bisheng.database.base import session_getter
+from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
+from bisheng.common.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
+                                         UserValidateError, UserPasswordError, UserForbiddenError)
+from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
-from bisheng.database.models.role_access import RoleAccess, RoleRefresh
+from bisheng.database.models.role_access import RoleRefresh, RoleAccessDao, AccessType
 from bisheng.database.models.user import User, UserCreate, UserDao, UserLogin, UserRead, UserUpdate
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRole, UserRoleCreate, UserRoleDao
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils import generate_uuid
+from bisheng.utils import get_request_ip
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_PASSWORD_ERROR, USER_CURRENT_SESSION
-from bisheng.utils.logger import logger
+from loguru import logger
 from fastapi_jwt_auth import AuthJWT
 
 # build router
@@ -103,7 +102,9 @@ async def sso(*, request: Request, user: UserCreate):
         access_token, refresh_token, _, _ = gen_user_jwt(user_exist)
 
         # 设置登录用户当前的cookie, 比jwt有效期多一个小时
-        redis_client.set(USER_CURRENT_SESSION.format(user_exist.user_id), access_token, ACCESS_TOKEN_EXPIRE_TIME + 3600)
+        redis_client = await get_redis_client()
+        await redis_client.aset(USER_CURRENT_SESSION.format(user_exist.user_id), access_token,
+                                ACCESS_TOKEN_EXPIRE_TIME + 3600)
 
         # 记录审计日志
         AuditLogService.user_login(UserPayload(**{
@@ -122,7 +123,7 @@ def get_error_password_key(username: str):
 def clear_error_password_key(username: str):
     # 清理密码错误次数的计数
     error_key = get_error_password_key(username)
-    redis_client.delete(error_key)
+    get_redis_client_sync().delete(error_key)
 
 
 @router.post('/user/login')
@@ -144,16 +145,18 @@ async def login(*, request: Request, user: UserLogin, Authorize: AuthJWT = Depen
 
     password_conf = settings.get_password_conf()
 
+    redis_client = await get_redis_client()
+
     if db_user.password and db_user.password != password:
         # 判断是否需要记录错误次数
         if not password_conf.login_error_time_window or not password_conf.max_error_times:
             return UserValidateError.return_resp()
         # 错误次数加1
         error_key = get_error_password_key(user.user_name)
-        error_num = redis_client.incr(error_key)
+        error_num = await redis_client.aincr(error_key)
         if error_num == 1:
             # 首次设置key的过期时间
-            redis_client.expire_key(error_key, password_conf.login_error_time_window * 60)
+            await redis_client.aexpire_key(error_key, password_conf.login_error_time_window * 60)
         if error_num and int(error_num) >= password_conf.max_error_times:
             # 错误次数到达上限，封禁账号
             db_user.delete = 1
@@ -173,7 +176,7 @@ async def login(*, request: Request, user: UserLogin, Authorize: AuthJWT = Depen
     Authorize.set_refresh_cookies(refresh_token)
 
     # 设置登录用户当前的cookie, 比jwt有效期多一个小时
-    redis_client.set(USER_CURRENT_SESSION.format(db_user.user_id), access_token, ACCESS_TOKEN_EXPIRE_TIME + 3600)
+    await redis_client.aset(USER_CURRENT_SESSION.format(db_user.user_id), access_token, ACCESS_TOKEN_EXPIRE_TIME + 3600)
 
     # 记录审计日志
     AuditLogService.user_login(UserPayload(**{
@@ -357,7 +360,7 @@ async def update(*,
     # check if user already exist
     if db_user and user.delete is not None:
         # 判断是否是管理员
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             admin = session.exec(
                 select(UserRole).where(UserRole.role_id == 1,
                                        UserRole.user_id == user.user_id)).first()
@@ -369,7 +372,7 @@ async def update(*,
     if db_user.delete == 0:  # 启用用户
         # 清理密码错误次数的计数
         clear_error_password_key(db_user.user_name)
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         session.add(db_user)
         session.commit()
         session.refresh(db_user)
@@ -401,7 +404,7 @@ async def create_role(*,
 
     db_role = Role.model_validate(role)
     try:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(db_role)
             session.commit()
             session.refresh(db_role)
@@ -435,7 +438,7 @@ async def update_role(*,
             db_role.role_name = role.role_name
         if role.remark:
             db_role.remark = role.remark
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(db_role)
             session.commit()
             session.refresh(db_role)
@@ -584,11 +587,11 @@ async def get_user_role(*, user_id: int, Authorize: AuthJWT = Depends()):
     if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
         raise HTTPException(status_code=500, detail='无设置权限')
 
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         db_userroles = session.exec(select(UserRole).where(UserRole.user_id == user_id)).all()
 
     role_ids = [role.role_id for role in db_userroles]
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         db_role = session.exec(select(Role).where(Role.id.in_(role_ids))).all()
     role_name_dict = {role.id: role.role_name for role in db_role}
 
@@ -606,56 +609,40 @@ async def get_user_role(*, user_id: int, Authorize: AuthJWT = Depends()):
 
 @router.post('/role_access/refresh', status_code=200)
 async def access_refresh(*, request: Request, data: RoleRefresh, login_user: UserPayload = Depends(get_login_user)):
-    db_role = RoleDao.get_role_by_id(data.role_id)
+    db_role = await RoleDao.aget_role_by_id(data.role_id)
     if not db_role:
-        raise HTTPException(status_code=500, detail='角色不存在')
+        raise NotFoundError().http_exception()
     if db_role.id == AdminRole:
-        raise HTTPException(status_code=500, detail='系统管理员不允许编辑')
-
-    if not login_user.check_group_admin(db_role.group_id):
-        return UnAuthorizedError.return_resp()
+        raise UnAuthorizedError.http_exception()
+    if not await login_user.async_check_group_admin(db_role.group_id):
+        raise UnAuthorizedError.http_exception()
 
     role_id = data.role_id
     access_type = data.type
     access_id = data.access_id
-    # delete old access
-    with session_getter() as session:
-        session.exec(
-            delete(RoleAccess).where(RoleAccess.role_id == role_id,
-                                     RoleAccess.type == access_type))
-        session.commit()
-    # 添加新的权限
-    with session_getter() as session:
-        for third_id in access_id:
-            role_access = RoleAccess(role_id=role_id, third_id=str(third_id), type=access_type)
-            session.add(role_access)
-        session.commit()
+    await RoleAccessDao.update_role_access_all(role_id, AccessType(access_type), access_id)
+
     update_role_hook(request, login_user, db_role)
     return resp_200()
 
 
 @router.get('/role_access/list', status_code=200)
 async def access_list(*, role_id: int, type: Optional[int] = None, login_user: UserPayload = Depends(get_login_user)):
-    db_role = RoleDao.get_role_by_id(role_id)
+    db_role = await RoleDao.aget_role_by_id(role_id)
     if not db_role:
-        raise HTTPException(status_code=500, detail='角色不存在')
+        raise NotFoundError().http_exception()
 
-    if not login_user.check_group_admin(db_role.group_id):
+    if not await login_user.async_check_group_admin(db_role.group_id):
         return UnAuthorizedError.return_resp()
 
-    sql = select(RoleAccess).where(RoleAccess.role_id == role_id)
-    count_sql = select(func.count(RoleAccess.id)).where(RoleAccess.role_id == role_id)
+    access_type = None
     if type:
-        sql.where(RoleAccess.type == type)
-        count_sql.where(RoleAccess.type == type)
-
-    with session_getter() as session:
-        db_role_access = session.exec(sql).all()
-        total_count = session.scalar(count_sql)
+        access_type = AccessType(type)
+    res = await RoleAccessDao.aget_role_access([role_id], access_type)
 
     return resp_200({
-        'data': [jsonable_encoder(access) for access in db_role_access],
-        'total': total_count
+        'data': res,
+        'total': len(res)
     })
 
 
@@ -673,7 +660,8 @@ async def get_captcha():
     logger.info('get_captcha captcha_char={}', chr_4)
     # generate key, 生成简单的唯一id，
     key = CAPTCHA_PREFIX + generate_uuid()[:8]
-    redis_client.set(key, chr_4, expiration=300)
+    redis_client = await get_redis_client()
+    await redis_client.aset(key, chr_4, expiration=300)
 
     # 增加配置，是否必须使用验证码
     return resp_200({
@@ -687,15 +675,16 @@ async def get_captcha():
 async def get_rsa_publish_key():
     # redis 存储
     key = RSA_KEY
+    redis_client = await get_redis_client()
     # redis lock
-    if redis_client.setNx(key, 1):
+    if await redis_client.asetNx(key, 1):
         # Generate a key pair
         (pubkey, privkey) = rsa.newkeys(512)
 
         # Save the keys to strings
-        redis_client.set(key, (pubkey, privkey), 3600)
+        await redis_client.aset(key, (pubkey, privkey), 3600)
     else:
-        pubkey, privkey = redis_client.get(key)
+        pubkey, privkey = await redis_client.aget(key)
 
     pubkey_str = pubkey.save_pkcs1().decode()
 

@@ -10,28 +10,29 @@ from langchain_core.embeddings import Embeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from loguru import logger
 
-from bisheng.api.errcode import BaseErrorCode
-from bisheng.api.errcode.http_error import NotFoundError
-from bisheng.api.errcode.linsight import (
-    LinsightAddSopError, LinsightUpdateSopError, LinsightDeleteSopError,
-    LinsightVectorModelError, LinsightDocSearchError, LinsightDocNotFoundError, SopFileError
-)
-from bisheng.api.errcode.server import (
-    NoEmbeddingModelError, EmbeddingModelNotExistError, EmbeddingModelTypeError
-)
 from bisheng.api.services.knowledge_imp import decide_vectorstores, extract_code_blocks
-from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
 from bisheng.api.v1.schema.linsight_schema import SopRecordRead
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
-from bisheng.core.app_context import app_ctx
+from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.errcode.linsight import (
+    LinsightAddSopError, LinsightUpdateSopError, LinsightDeleteSopError,
+    LinsightVectorModelError, LinsightDocSearchError, LinsightDocNotFoundError, SopFileError
+)
+from bisheng.common.errcode.server import (
+    NoEmbeddingModelError, EmbeddingModelNotExistError, EmbeddingModelTypeError
+)
+from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.models.linsight_sop import LinsightSOP, LinsightSOPDao, LinsightSOPRecord
-from bisheng.database.models.llm_server import LLMDao, LLMModelType
 from bisheng.database.models.user import UserDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.interface.llms.custom import BishengLLM
-from bisheng.settings import settings
+from bisheng.llm.const import LLMModelType
+from bisheng.llm.domain.llm import BishengLLM
+from bisheng.llm.domain.services import LLMService
+from bisheng.llm.models import LLMDao
+from bisheng.common.services.config_service import settings
 from bisheng.utils import util
 from bisheng.utils.embedding import decide_embeddings
 from bisheng_langchain.rag.init_retrievers import KeywordRetriever, BaselineVectorRetriever
@@ -54,7 +55,7 @@ class SOPManageService:
                 workbench_conf = await LLMService.get_workbench_llm()
                 linsight_conf = settings.get_linsight_conf()
                 llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=linsight_conf.default_temperature)
-            prompt_service = app_ctx.get_prompt_loader()
+            prompt_service = await get_prompt_manager()
             prompt_obj = prompt_service.render_prompt(
                 namespace="sop",
                 prompt_name="gen_sop_summary",

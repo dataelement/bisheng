@@ -9,9 +9,11 @@ from typing import Optional
 
 import httpx
 import typer
+from loguru import logger
+
+from bisheng.core.logger import set_logger_config
 from bisheng.main import setup_app
-from bisheng.settings import settings
-from bisheng.utils.logger import configure, logger
+from bisheng.common.services.config_service import settings
 from dotenv import load_dotenv
 from multiprocess import Process, cpu_count  # type: ignore
 from rich import box
@@ -175,7 +177,7 @@ def serve(
     if jcloud:
         return serve_on_jcloud()
 
-    configure(log_level=log_level, log_file=log_file)
+    set_logger_config(logger_config=settings.logger_conf)
     update_settings(
         config,
         dev=dev,

@@ -2,7 +2,7 @@ import hashlib
 import random
 import string
 
-from bisheng.cache.utils import filter_json
+from bisheng.core.cache.utils import filter_json
 from bisheng.database.models.base import orjson_dumps
 
 

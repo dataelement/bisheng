@@ -100,7 +100,6 @@ export default function Paragraphs({ fileId, onBack }) {
             try {
                 const firstChunk = response.data?.[0];
                 if (firstChunk?.metadata?.bbox) {
-                    console.log(JSON.parse(firstChunk?.metadata?.bbox).chunk_bboxes, 6666666666666);
 
                     // 先判断bbox是否为空字符串
                     if (typeof firstChunk.metadata.bbox === 'string' && JSON.parse(firstChunk?.metadata?.bbox).chunk_bboxes === '') {
@@ -147,11 +146,9 @@ export default function Paragraphs({ fileId, onBack }) {
             const hasOriginalUrl = typeof res.original_url === 'string' && res.original_url.trim() !== '';
 
             if (currentFile) {
-                console.log(currentFile, 3);
 
                 // 判断是否为UNS或LOCAL类型
                 const isUnsOrLocal = currentFile.parse_type === "uns" || currentFile.parse_type === "local";
-                console.log(isUnsOrLocal, currentFile, 4444444);
 
 
                 if (isUnsOrLocal) {
@@ -160,18 +157,12 @@ export default function Paragraphs({ fileId, onBack }) {
                     const isBboxesEmpty = !hasChunkBboxes;
                     if (!isBboxesEmpty && hasPreviewUrl) {
                         // 有有效bbox且有preview_url → 使用preview_url
-                        console.log(1111);
-
                         finalUrl = res.preview_url.trim();
                         finalPreviewUrl = res.preview_url.trim();
-                        console.log('UNS/LOCAL类型（有有效bbox）：使用preview_url');
                     } else {
                         // 无有效bbox（为空数组/字符串）或无preview_url → 强制使用original_url
-                        console.log(2222);
-
                         finalUrl = hasOriginalUrl ? res.original_url.trim() : '';
                         finalPreviewUrl = finalUrl;
-                        console.log('UNS/LOCAL类型（无有效bbox或无preview_url）：使用original_url');
                     }
                 } else {
                     // 其他类型：优先使用preview_url，无则使用original_url
@@ -179,19 +170,16 @@ export default function Paragraphs({ fileId, onBack }) {
                         // 有preview_url → 优先使用
                         finalUrl = res.preview_url.trim();
                         finalPreviewUrl = res.preview_url.trim();
-                        console.log('其他类型：使用preview_url');
                     } else {
                         // 无preview_url → 使用original_url或备选URL
                         finalUrl = hasOriginalUrl ? res.original_url.trim() : '';
                         finalPreviewUrl = finalUrl;
-                        console.log('其他类型（无preview_url）：使用original_url');
                     }
                 }
             } else {
                 // 如果没有找到当前文件，使用默认策略
                 finalUrl = hasPreviewUrl ? res.preview_url.trim() : (hasOriginalUrl ? res.original_url.trim() : '');
                 finalPreviewUrl = finalUrl;
-                console.log('未找到文件信息，使用默认URL策略');
             }
 
             if (finalUrl) {
@@ -366,10 +354,16 @@ export default function Paragraphs({ fileId, onBack }) {
 
     // 处理分段修改（完全保留原始逻辑）
     const handleChunkChange = useCallback((chunkIndex, text) => {
-        const bbox = { chunk_bboxes: selectedBbox };
-        // selectedBbox空数组时，使用safeChunks的bbox
-        const bboxStr = selectedBbox.length ? JSON.stringify(bbox) : safeChunks[chunkIndex].bbox;
+        let chunkIndexPage = chunkIndex % pageSize;
+        console.log('转换后的localIndex:', chunkIndexPage);
 
+        // if(chunkIndex > 19){
+        //     chunkIndexPage = chunkIndex % pageSize;
+        // }
+        const bbox = { chunk_bboxes: selectedBbox };
+
+        // selectedBbox空数组时，使用safeChunks的bbox
+        const bboxStr = selectedBbox.length ? JSON.stringify(bbox) : safeChunks[chunkIndexPage].bbox;
         captureAndAlertRequestErrorHoc(updateChunkApi({
             knowledge_id: Number(id),
             file_id: selectedFileId || currentFile?.id || '',
@@ -750,7 +744,7 @@ export default function Paragraphs({ fileId, onBack }) {
                                 fileId={selectedFileId}
                                 previewCount={datalist.length}
                                 edit={isEditable}
-                                className="h-[calc(100vh-206px)]"
+                                className="h-[calc(100vh-206px)] pb-6"
                                 fileSuffix={currentFile?.suffix || ''}
                                 loading={loading}
                                 chunks={safeChunks}
@@ -787,7 +781,6 @@ export default function Paragraphs({ fileId, onBack }) {
                     <DialogHeader>
                         <h3 className="text-lg font-semibold">{t('文档元数据')}</h3>
                     </DialogHeader>
-                    {console.log(metadataDialog.file, 67678)}
                     <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
                         <div className="space-y-2">
                             {[

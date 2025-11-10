@@ -2,7 +2,7 @@ from fastapi.exceptions import HTTPException
 
 from bisheng.api.services.user_service import UserPayload
 from bisheng.database.models.user import UserDao, User
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 
 
 def get_default_operator() -> UserPayload:

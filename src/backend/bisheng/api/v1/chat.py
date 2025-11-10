@@ -1,15 +1,12 @@
 import json
-from typing import List, Optional
+from typing import List, Optional, Union
 from uuid import UUID, uuid4
 
-from fastapi import (APIRouter, Body, HTTPException, Query, Request, WebSocket, WebSocketException,
-                     status)
+from fastapi import (APIRouter, Body, HTTPException, Query, Request, WebSocket, WebSocketException)
 from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
-from sqlmodel import select
+from loguru import logger
 
-from bisheng.api.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
-from bisheng.api.errcode.chat import ChatServiceError, SkillDeletedError, SkillNotBuildError, SkillNotOnlineError
 from bisheng.api.services import chat_imp
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
@@ -17,34 +14,38 @@ from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.services.knowledge_imp import delete_es, delete_vector
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.services.workflow import WorkFlowService
-from bisheng.api.utils import build_flow, build_input_keys_response, get_request_ip
+from bisheng.api.utils import build_flow, build_input_keys_response
 from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import (AddChatMessages, BuildStatus, BuiltResponse, ChatInput,
                                     ChatList, InitResponse, StreamData,
                                     UnifiedResponseModel, resp_200)
-from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
-from bisheng.database.base import session_getter
+from bisheng.chat_session.domain.chat import ChatSessionService
+from bisheng.common.errcode.chat import ChatServiceError, SkillDeletedError, SkillNotBuildError, SkillNotOnlineError
+from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
+from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.mark_record import MarkRecordDao, MarkRecordStatus
 from bisheng.database.models.mark_task import MarkTaskDao
-from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead, LikedType
+from bisheng.database.models.message import ChatMessage, ChatMessageDao, LikedType
 from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.graph.graph.base import Graph
+from bisheng.share_link.api.dependencies import header_share_token_parser
+from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import generate_uuid
-from bisheng.utils.logger import logger
+from bisheng.utils import get_request_ip
 from bisheng.utils.util import get_cache_key
 from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(tags=['Chat'])
 chat_manager = ChatManager()
-flow_data_store = redis_client
 expire = 600  # reids 60s 过期
 
 
@@ -174,21 +175,20 @@ def get_app_chat_list(*,
 
 
 @router.get('/chat/history')
-def get_chatmessage(*,
-                    chat_id: str,
-                    flow_id: str,
-                    id: Optional[str] = None,
-                    page_size: Optional[int] = 20,
-                    login_user: UserPayload = Depends(get_login_user)):
-    if not chat_id or not flow_id:
-        return ServerError()
-    where = select(ChatMessage).where(ChatMessage.flow_id == flow_id,
-                                      ChatMessage.chat_id == chat_id)
-    if id:
-        where = where.where(ChatMessage.id < int(id))
-    with session_getter() as session:
-        db_message = session.exec(where.order_by(ChatMessage.id.desc()).limit(page_size)).all()
-    return resp_200(db_message)
+async def get_chat_message(*,
+                           chat_id: str,
+                           flow_id: str,
+                           id: Optional[str] = None,
+                           page_size: Optional[int] = 20,
+                           login_user: UserPayload = Depends(get_login_user),
+                           share_link: Union['ShareLink', None] = Depends(header_share_token_parser)):
+    history = await ChatSessionService.get_chat_history(chat_id, flow_id, id, page_size)
+
+    # # Authorization check
+    if history and login_user.user_id != history[0].user_id:
+        if not share_link or share_link.resource_id != chat_id:
+            return UnAuthorizedError.return_resp()
+    return resp_200(history)
 
 
 @router.get('/chat/info')
@@ -220,26 +220,6 @@ def copy(conversationId: str = Body(..., description='会话id', embed=True), ):
             msg.chat_id = conversation.chat_id
             msg.id = None
             ChatMessageDao.insert_one(msg)
-
-
-@router.get('/chat/history',
-            response_model=UnifiedResponseModel[List[ChatMessageRead]],
-            status_code=200)
-def get_chatmessage(*,
-                    chat_id: str,
-                    flow_id: str,
-                    id: Optional[str] = None,
-                    page_size: Optional[int] = 20,
-                    login_user: UserPayload = Depends(get_login_user)):
-    if not chat_id or not flow_id:
-        return ServerError.return_resp()
-    where = select(ChatMessage).where(ChatMessage.flow_id == flow_id,
-                                      ChatMessage.chat_id == chat_id)
-    if id:
-        where = where.where(ChatMessage.id < int(id))
-    with session_getter() as session:
-        db_message = session.exec(where.order_by(ChatMessage.id.desc()).limit(page_size)).all()
-    return resp_200(db_message)
 
 
 @router.delete('/chat/{chat_id}', status_code=200)
@@ -504,6 +484,9 @@ async def chat(
 ):
     """Websocket endpoint for chat."""
     flow_id = flow_id.hex
+
+    redis_client = await get_redis_client()
+
     try:
         if t:
             Authorize.jwt_required(auth_from='websocket', token=t)
@@ -513,7 +496,7 @@ async def chat(
         login_user = await get_login_user(Authorize)
         user_id = login_user.user_id
         if chat_id:
-            with session_getter() as session:
+            with get_sync_db_session() as session:
                 db_flow = session.get(Flow, flow_id)
             if not db_flow:
                 await websocket.accept()
@@ -526,13 +509,13 @@ async def chat(
             flow_data_key = 'flow_data_' + flow_id
             if version_id:
                 flow_data_key = flow_data_key + '_' + str(version_id)
-            if not flow_data_store.exists(flow_data_key) or str(
-                    flow_data_store.hget(flow_data_key, 'status'),
+            if not await redis_client.aexists(flow_data_key) or str(
+                    await redis_client.ahget(flow_data_key, 'status'),
                     'utf-8') != BuildStatus.SUCCESS.value:
                 await websocket.accept()
                 await SkillNotBuildError().websocket_close_message(websocket=websocket)
                 return
-            graph_data = json.loads(flow_data_store.hget(flow_data_key, 'graph_data'))
+            graph_data = json.loads(await redis_client.ahget(flow_data_key, 'graph_data'))
 
         if not chat_id:
             # 调试时，每次都初始化对象
@@ -562,8 +545,10 @@ async def init_build(*,
     chat_id = graph_data.get('chat_id')
     flow_data_key = 'flow_data_' + flow_id
 
+    flow_data_store = await get_redis_client()
+
     if chat_id:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             graph_data = session.get(Flow, flow_id).data
     elif version_id:
         flow_data_key = flow_data_key + '_' + str(version_id)
@@ -572,16 +557,16 @@ async def init_build(*,
         if flow_id is None:
             raise ValueError('No ID provided')
         # Check if already building
-        if flow_data_store.hget(flow_data_key, 'status') == BuildStatus.IN_PROGRESS.value:
+        if await flow_data_store.ahget(flow_data_key, 'status') == BuildStatus.IN_PROGRESS.value:
             return resp_200(InitResponse(flowId=flow_id))
 
         # Delete from cache if already exists
-        flow_data_store.hset(flow_data_key,
-                             mapping={
-                                 'graph_data': json.dumps(graph_data),
-                                 'status': BuildStatus.STARTED.value
-                             },
-                             expiration=expire)
+        await flow_data_store.ahset(flow_data_key,
+                                    mapping={
+                                        'graph_data': json.dumps(graph_data),
+                                        'status': BuildStatus.STARTED.value
+                                    },
+                                    expiration=expire)
 
         return resp_200(InitResponse(flowId=flow_id))
     except Exception as exc:
@@ -595,10 +580,11 @@ async def build_status(flow_id: str,
                        version_id: Optional[int] = Query(default=None, description='技能版本ID')):
     """Check the flow_id is in the flow_data_store."""
     try:
+        flow_data_store = await get_redis_client()
         flow_data_key = 'flow_data_' + flow_id
         if not chat_id and version_id:
             flow_data_key = flow_data_key + '_' + str(version_id)
-        built = (flow_data_store.hget(flow_data_key, 'status') == BuildStatus.SUCCESS.value)
+        built = (await flow_data_store.ahget(flow_data_key, 'status') == BuildStatus.SUCCESS.value)
         return resp_200(BuiltResponse(built=built, ))
 
     except Exception as exc:
@@ -615,21 +601,22 @@ async def stream_build(flow_id: str,
     async def event_stream(flow_id, chat_id: str, version_id: Optional[int] = None):
         final_response = {'end_of_stream': True}
         artifacts = {}
+        flow_data_store = await get_redis_client()
         try:
             flow_data_key = 'flow_data_' + flow_id
             if not chat_id and version_id:
                 flow_data_key = flow_data_key + '_' + str(version_id)
-            if not flow_data_store.exists(flow_data_key):
+            if not await flow_data_store.aexists(flow_data_key):
                 error_message = 'Invalid session ID'
                 yield str(StreamData(event='error', data={'error': error_message}))
                 return
 
-            if flow_data_store.hget(flow_data_key, 'status') == BuildStatus.IN_PROGRESS.value:
+            if await flow_data_store.ahget(flow_data_key, 'status') == BuildStatus.IN_PROGRESS.value:
                 error_message = 'Already building'
                 yield str(StreamData(event='error', data={'error': error_message}))
                 return
 
-            graph_data = json.loads(flow_data_store.hget(flow_data_key, 'graph_data'))
+            graph_data = json.loads(await flow_data_store.ahget(flow_data_key, 'graph_data'))
 
             if not graph_data:
                 error_message = 'No data provided'
@@ -637,7 +624,7 @@ async def stream_build(flow_id: str,
                 return
 
             logger.debug('Building langchain object')
-            flow_data_store.hsetkey(flow_data_key, 'status', BuildStatus.IN_PROGRESS.value, expire)
+            await flow_data_store.ahsetkey(flow_data_key, 'status', BuildStatus.IN_PROGRESS.value, expire)
 
             # L1 用户，采用build流程
             try:
@@ -653,10 +640,10 @@ async def stream_build(flow_id: str,
 
             except Exception as e:
                 logger.error(f'Build flow error: {e}')
-                flow_data_store.hsetkey(flow_data_key,
-                                        'status',
-                                        BuildStatus.FAILURE.value,
-                                        expiration=expire)
+                await flow_data_store.ahsetkey(flow_data_key,
+                                               'status',
+                                               BuildStatus.FAILURE.value,
+                                               expiration=expire)
                 yield str(StreamData(event='error', data={'error': str(e)}))
                 return
 
@@ -686,11 +673,11 @@ async def stream_build(flow_id: str,
             # We need to reset the chat history
             chat_manager.chat_history.empty_history(flow_id, chat_id)
             chat_manager.set_cache(get_cache_key(flow_id=flow_id, chat_id=chat_id), None)
-            flow_data_store.hsetkey(flow_data_key, 'status', BuildStatus.SUCCESS.value, expire)
+            await flow_data_store.ahsetkey(flow_data_key, 'status', BuildStatus.SUCCESS.value, expire)
         except Exception as exc:
             logger.exception(exc)
             logger.error('Error while building the flow: %s', exc)
-            flow_data_store.hsetkey(flow_data_key, 'status', BuildStatus.FAILURE.value, expire)
+            await flow_data_store.ahsetkey(flow_data_key, 'status', BuildStatus.FAILURE.value, expire)
             yield str(StreamData(event='error', data={'error': str(exc)}))
         finally:
             yield str(StreamData(event='message', data=final_response))

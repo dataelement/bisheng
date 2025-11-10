@@ -1,12 +1,13 @@
 from typing import Any
 
-from bisheng.api.services.llm import LLMService
-from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
-from bisheng.workflow.nodes.base import BaseNode
-from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
+
+from bisheng.llm.domain.services import LLMService
+from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
+from bisheng.workflow.nodes.base import BaseNode
+from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 
 
 class LLMNode(BaseNode):
@@ -34,12 +35,9 @@ class LLMNode(BaseNode):
         self._log_reasoning_content = []
 
         # 初始化llm对象
-        self._stream = True
-        self._llm = LLMService.get_bisheng_llm(model_id=self.node_params['model_id'],
-                                               temperature=self.node_params.get(
-                                                   'temperature', 0.3),
-                                               params={'stream': self._stream},
-                                               cache=False)
+        self._llm = LLMService.get_bisheng_llm_sync(model_id=self.node_params['model_id'],
+                                                    temperature=self.node_params.get('temperature', 0.3),
+                                                    cache=False)
 
     def _run(self, unique_id: str):
         self._system_prompt_list = []
@@ -75,7 +73,8 @@ class LLMNode(BaseNode):
                 one_ret.append({"key": "思考内容", "value": self._log_reasoning_content[index], "type": "params"})
             one_ret.append({"key": f'{self.id}.{k}', "value": v, "type": "variable"})
             if self._batch_variable_list:
-                one_ret.insert(0, {"key": f"{self.id}.batch_variable", "value": self._batch_variable_list[index], "type": "variable"})
+                one_ret.insert(0, {"key": f"{self.id}.batch_variable", "value": self._batch_variable_list[index],
+                                   "type": "variable"})
             index += 1
             ret.append(one_ret)
         return ret

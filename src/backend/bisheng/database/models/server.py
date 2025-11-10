@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy import Column, DateTime, text
 from sqlmodel import Field, select
 
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -27,13 +27,13 @@ class Server(ServerBase, table=True):
 class ServerDao(ServerBase):
     @classmethod
     def find_server(cls, server_id: int) -> Server | None:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(Server).where(Server.id == server_id)
             return session.exec(statement).first()
 
     @classmethod
     def find_all_server(cls):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(Server)
             return session.exec(statement).all()
 

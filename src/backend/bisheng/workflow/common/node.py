@@ -20,6 +20,7 @@ class NodeType(Enum):
     RAG = "rag"
     REPORT = "report"
     TOOL = "tool"
+    KNOWLEDGE_RETRIEVER = "knowledge_retriever"
 
     NOTE = 'note'  # 备注节点 知识用来显示注释，非实际执行节点
 

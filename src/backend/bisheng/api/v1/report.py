@@ -1,8 +1,9 @@
 from bisheng.api.v1.schemas import resp_200
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.report import Report
-from bisheng.utils import minio_client, generate_uuid
-from bisheng.utils.logger import logger
+from bisheng.utils import generate_uuid
+from loguru import logger
 from bisheng_langchain.utils.requests import Requests
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import or_
@@ -24,11 +25,12 @@ async def callback(data: dict):
         logger.info(f'office_callback url={file_url}')
         file = Requests().get(url=file_url)
         object_name = mino_prefix + key + '.docx'
-        minio_client.MinioClient().upload_minio_data(
-            object_name, file._content, len(file._content),
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document')  # noqa
+        minio_client = await get_minio_storage()
+        await minio_client.put_object(bucket_name=minio_client.bucket,
+                                      object_name=object_name, file=file._content,
+                                      content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')  # noqa
         # 重复保存，key 不更新
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             db_report = session.exec(
                 select(Report).where(or_(Report.version_key == key,
                                          Report.newversion_key == key))).first()
@@ -38,7 +40,7 @@ async def callback(data: dict):
         db_report.object_name = object_name
         db_report.version_key = key
         db_report.newversion_key = None
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(db_report)
             session.commit()
     return {'error': 0}
@@ -46,7 +48,7 @@ async def callback(data: dict):
 
 @router.get('/report_temp')
 async def get_template(*, flow_id: str):
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         db_report = session.exec(
             select(Report).where(Report.flow_id == flow_id,
                                  Report.del_yn == 0).order_by(Report.update_time.desc())).first()
@@ -54,12 +56,13 @@ async def get_template(*, flow_id: str):
     if not db_report:
         db_report = Report(flow_id=flow_id)
     elif db_report.object_name:
-        file_url = minio_client.MinioClient().get_share_link(db_report.object_name)
+        minio_client = await get_minio_storage()
+        file_url = minio_client.get_share_link(db_report.object_name)
 
     if not db_report.newversion_key or not db_report.object_name:
         version_key = generate_uuid()
         db_report.newversion_key = version_key
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(db_report)
             session.commit()
             session.refresh(db_report)

@@ -11,13 +11,13 @@ from sqlmodel import select
 
 from bisheng.api.services.user_service import get_login_user
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.model_deploy import (ModelDeploy, ModelDeployDao, ModelDeployInfo,
                                                   ModelDeployQuery, ModelDeployRead,
                                                   ModelDeployUpdate)
 from bisheng.database.models.server import Server, ServerCreate, ServerRead
 from bisheng.database.models.sft_model import SftModelDao
-from bisheng.utils.logger import logger
+from loguru import logger
 
 # build router
 router = APIRouter(prefix='/server', tags=['server'], dependencies=[Depends(get_login_user)])
@@ -30,7 +30,7 @@ required_param = ['type', 'pymodel_type', 'gpu_memory', 'instance_groups']
 async def add_server(*, server: ServerCreate):
     try:
         db_server = Server.from_orm(server)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(db_server)
             session.commit()
             session.refresh(db_server)
@@ -45,7 +45,7 @@ async def add_server(*, server: ServerCreate):
 @router.get('/list_server')
 async def list_server():
     try:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             rt_server = session.exec(select(Server)).all()
         if rt_server:
             return resp_200(rt_server)
@@ -59,7 +59,7 @@ async def list_server():
 @router.delete('/{server_id}', status_code=200)
 async def delete_server(*, server_id: int):
     try:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             rt_server = session.get(Server, server_id)
             if rt_server:
                 session.delete(rt_server)
@@ -77,7 +77,7 @@ async def delete_server(*, server_id: int):
 async def list(*, query: ModelDeployQuery = None):
     try:
         # 更新模型
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             servers = session.exec(select(Server)).all()
         id2server = {server.id: server for server in servers}
         name2server = {server.server: server for server in servers}
@@ -88,7 +88,7 @@ async def list(*, query: ModelDeployQuery = None):
         sql = select(ModelDeploy)
         if query and query.server:
             sql = sql.where(ModelDeploy.server == str(name2server.get(query.server).id))
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             db_model = session.exec(sql.order_by(ModelDeploy.model)).all()
         res = []
         for model in db_model:
@@ -120,7 +120,7 @@ async def get_model_deploy(*, deploy_id: int):
 @router.post('/update')
 async def update_deploy(*, deploy: ModelDeployUpdate):
     try:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             db_deploy = session.get(ModelDeploy, deploy.id)
         if not db_deploy:
             raise HTTPException(status_code=404, detail='配置不存在')
@@ -128,7 +128,7 @@ async def update_deploy(*, deploy: ModelDeployUpdate):
         deploy_data = deploy.model_dump(exclude_unset=True)
         for key, value in deploy_data.items():
             setattr(db_deploy, key, value)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(db_deploy)
             session.commit()
             session.refresh(db_deploy)
@@ -140,7 +140,7 @@ async def update_deploy(*, deploy: ModelDeployUpdate):
 
 @router.post('/load', status_code=201)
 async def load(*, deploy_id: dict):
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         db_deploy = session.get(ModelDeploy, deploy_id.get('deploy_id'))
     if not db_deploy:
         raise HTTPException(status_code=404, detail='配置不存在')
@@ -157,7 +157,7 @@ async def load(*, deploy_id: dict):
         # 先设置为上线中
         logger.info(f'load_model=success url={url} config={data}')
         db_deploy.status = '上线中'
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(db_deploy)
             session.commit()
             session.refresh(db_deploy)
@@ -169,7 +169,7 @@ async def load(*, deploy_id: dict):
         logger.error(f'Error load model: {exc}')
         db_deploy.status = '异常'
         db_deploy.remark = error_translate(str(exc))
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(db_deploy)
             session.commit()
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -179,7 +179,7 @@ async def load(*, deploy_id: dict):
 async def unload(*, deploy_id: dict):
     try:
         # 缓存本地
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             db_deploy = session.get(ModelDeploy, deploy_id.get('deploy_id'))
         if not db_deploy:
             raise HTTPException(status_code=404, detail='配置不存在')
@@ -189,7 +189,7 @@ async def unload(*, deploy_id: dict):
         logger.info(f'unload_model=success url={url} code={resp.status_code}')
         # 更新状态
         db_deploy.status = '下线中'
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(db_deploy)
             session.commit()
             session.refresh(db_deploy)
@@ -204,7 +204,7 @@ async def unload(*, deploy_id: dict):
 async def get_gpu():
     try:
         # 缓存本地
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             db_service = session.exec(select(Server)).all()
         if not db_service:
             raise HTTPException(status_code=404, detail='配置不存在')
@@ -233,7 +233,7 @@ def load_model(url: str, data: str, deploy_id: int):
     if response.status_code == 200:
         logger.info(f'load_model={url} result=success')
     else:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             logger.error(f'load_model=fail code={response.status_code}, return={response.text}')
             db_deploy = session.get(ModelDeploy, deploy_id)
             db_deploy.status = '异常'
@@ -306,7 +306,7 @@ async def update_model(endpoint: str, server_id: int):
     except Exception as e:
         logger.error(f'{str(e)}')
         return []
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         db_deploy = session.exec(
             select(ModelDeploy).where(ModelDeploy.server == str(server_id))).all()
         model_dict = {deploy.model: deploy for deploy in db_deploy}

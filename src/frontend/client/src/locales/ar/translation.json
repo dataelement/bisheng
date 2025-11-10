@@ -668,6 +668,7 @@
   "com_ui_select_search_provider": "ابحث عن مزود الخدمة باسمه",
   "com_ui_select_search_region": "ابحث عن المنطقة بالاسم",
   "com_ui_share": "مشاركة",
+  "no_text_recognized": "التعرف على الصوت غير متوفر. يرجى الاتصال بالمسؤول.",
   "com_ui_share_create_message": "سيظل اسمك وأي رسائل تضيفها بعد المشاركة خاصة.",
   "com_ui_share_delete_error": "حدث خطأ أثناء حذف الرابط المشترك.",
   "com_ui_share_error": "حدث خطأ أثناء مشاركة رابط الدردشة",

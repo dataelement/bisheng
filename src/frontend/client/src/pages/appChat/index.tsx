@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { ChatMessageType, FlowData } from "~/@types/chat";
@@ -15,8 +15,12 @@ export const enum FLOW_TYPES {
     SKILL = 1,
 }
 
-export default function index() {
-    const { conversationId: cid, fid, type } = useParams();
+export default function index({ chatId = '', flowId = '', shareToken = '', flowType = '' }) {
+    const { conversationId: _cid, fid: _fid, type: _type } = useParams();
+    const cid = _cid || chatId;
+    const fid = _fid || flowId;
+    const type = _type || flowType;
+    const [readOnly] = useState(shareToken);
     const [chats, setChats] = useRecoilState(chatsState)
     const [__, setRunningState] = useRecoilState(runningState)
     const [_, setChatId] = useRecoilState(chatIdState)
@@ -45,14 +49,12 @@ export default function index() {
             case FLOW_TYPES.WORK_FLOW:
                 // 获取详情和历史消息
                 const [flowRes, msgRes] = await Promise.all([
-                    getFlowApi(fid!, API_VERSION),
-                    getChatHistoryApi(fid, cid, type)
+                    getFlowApi(fid!, API_VERSION, shareToken),
+                    getChatHistoryApi({ flowId: fid, chatId: cid, flowType: type, shareToken })
                 ])
 
                 if (flowRes.status_code !== 200) {
                     error = AppLostMessage
-                }
-                if (!flowRes.data) {
                     const lostFlow = await getDeleteFlowApi(cid)
                     flowRes.data = {
                         id: lostFlow.data.flow_id,
@@ -81,14 +83,12 @@ export default function index() {
                 break;
             case FLOW_TYPES.ASSISTANT:
                 const [assistantRes, historyRes] = await Promise.all([
-                    getAssistantDetailApi(fid),
-                    getChatHistoryApi(fid, cid, type)
+                    getAssistantDetailApi(fid, shareToken),
+                    getChatHistoryApi({ flowId: fid, chatId: cid, flowType: type, shareToken })
                 ]);
 
                 if (assistantRes.status_code !== 200) {
                     error = AppLostMessage;
-                }
-                if (!assistantRes.data) {
                     const lostFlow = await getDeleteFlowApi(cid)
                     assistantRes.data = {
                         name: lostFlow.data.flow_name,
@@ -98,7 +98,6 @@ export default function index() {
                 }
                 messages = historyRes.reverse();
                 flowData = { ...assistantRes.data, flow_type: FLOW_TYPES.ASSISTANT, isNew: !messages.length };
-
                 break;
             default:
         }
@@ -112,6 +111,9 @@ export default function index() {
             }
         }));
 
+        if (shareToken) {
+            error = ''
+        }
         // 更新状态
         // !!flow.data?.nodes.find(node => ["VariableNode", "InputFileNode"].includes(node.data.type))
         setRunningState((prev) => {
@@ -138,7 +140,7 @@ export default function index() {
 
     if (!cid || !chatState?.flow) return null;
 
-    return <ChatView data={chatState.flow} v={API_VERSION} />
+    return <ChatView data={chatState.flow} cid={cid} v={API_VERSION} readOnly={readOnly} />
 };
 
 /**
@@ -194,12 +196,13 @@ const useBuild = () => {
         };
 
         eventSource.onerror = (error: any) => {
+            buildEnd = true
             console.error("EventSource failed:", error);
             eventSource.close();
-            if (error.data) {
-                const parsedData = JSON.parse(error.data);
-                showToast({ message: parsedData.error, status: 'error' });
-            }
+            // if (error.data) {
+            //     const parsedData = JSON.parse(error.data);
+            //     showToast({ message: parsedData.error, status: 'error' });
+            // }
         };
         // Step 3: Wait for the stream to finish
         while (!finished) {

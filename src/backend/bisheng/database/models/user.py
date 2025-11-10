@@ -5,7 +5,7 @@ from pydantic import field_validator
 from sqlalchemy import Column, DateTime, func, text
 from sqlmodel import Field, select
 
-from bisheng.database.base import session_getter, async_session_getter
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.user_group import UserGroup
@@ -75,32 +75,39 @@ class UserDao(UserBase):
 
     @classmethod
     def get_user(cls, user_id: int) -> User | None:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(User).where(User.user_id == user_id)
             return session.exec(statement).first()
 
     @classmethod
+    async def aget_user(cls, user_id: int) -> User | None:
+        async with get_async_db_session() as session:
+            statement = select(User).where(User.user_id == user_id)
+            result = await session.exec(statement)
+            return result.first()
+
+    @classmethod
     def get_user_by_ids(cls, user_ids: List[int]) -> List[User] | None:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(User).where(User.user_id.in_(user_ids))
             return session.exec(statement).all()
 
     @classmethod
     async def aget_user_by_ids(cls, user_ids: List[int]) -> List[User] | None:
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             statement = select(User).where(User.user_id.in_(user_ids))
             result = await session.exec(statement)
             return result.all()
 
     @classmethod
     def get_user_by_username(cls, username: str) -> User | None:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(User).where(User.user_name == username)
             return session.exec(statement).first()
 
     @classmethod
     def update_user(cls, user: User) -> User:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(user)
             session.commit()
             session.refresh(user)
@@ -130,7 +137,7 @@ class UserDao(UserBase):
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(User.user_id.desc())
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
@@ -144,25 +151,25 @@ class UserDao(UserBase):
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(User.user_id.desc())
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.all()
 
     @classmethod
     def get_unique_user_by_name(cls, user_name: str) -> User | None:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(User).where(User.user_name == user_name)
             return session.exec(statement).first()
 
     @classmethod
     def search_user_by_name(cls, user_name: str) -> List[User] | None:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(User).where(User.user_name.like('%{}%'.format(user_name)))
             return session.exec(statement).all()
 
     @classmethod
     def create_user(cls, db_user: User) -> User:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(db_user)
             session.commit()
             session.refresh(db_user)
@@ -173,7 +180,7 @@ class UserDao(UserBase):
         """
         新增用户，并添加默认角色
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(user)
             session.commit()
             session.refresh(user)
@@ -188,7 +195,7 @@ class UserDao(UserBase):
         """
         新增用户，并添加超级管理员角色
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(user)
             session.commit()
             session.refresh(user)
@@ -201,7 +208,7 @@ class UserDao(UserBase):
     @classmethod
     def add_user_with_groups_and_roles(cls, user: User, group_ids: List[int],
                                        role_ids: List[int]) -> User:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(user)
             session.flush()
             for group_id in group_ids:
@@ -222,5 +229,5 @@ class UserDao(UserBase):
         statement = select(User)
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()

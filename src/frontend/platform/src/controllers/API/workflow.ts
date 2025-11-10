@@ -676,7 +676,7 @@ const workflowTemplate = [
         "name": "文档知识库问答",
         "description": "根据用户问题从知识库中检索相关内容，结合检索结果调用大模型生成最终结果，支持多个问题并行执行。",
         "type": "rag",
-        "v": "1",
+        "v": "2",
         "group_params": [
             {
                 "name": "知识库检索设置",
@@ -705,19 +705,25 @@ const workflowTemplate = [
                         "required": true
                     },
                     {
-                        "key": "user_auth",
-                        "label": "用户知识库权限校验",
-                        "type": "switch",
-                        "value": false,
-                        "help": "开启后，只会对用户有使用权限的知识库进行检索。"
+                        "key": "advanced_retrieval_switch",
+                        "label": "高级检索配置",
+                        "type": "search_switch",//searchSwitch
+                        "value": {},
                     },
-                    {
-                        "key": "max_chunk_size",
-                        "label": "检索结果长度",
-                        "type": "number",
-                        "value": 15000,
-                        "help": "通过此参数控制最终传给模型的知识库检索结果文本长度，超过模型支持的最大上下文长度可能会导致报错。"
-                    },
+                    // {
+                    //     "key": "user_auth",
+                    //     "label": "用户知识库权限校验",
+                    //     "type": "switch",
+                    //     "value": false,
+                    //     "help": "开启后，只会对用户有使用权限的知识库进行检索。"
+                    // },
+                    // {
+                    //     "key": "max_chunk_size",
+                    //     "label": "检索结果长度",
+                    //     "type": "number",
+                    //     "value": 15000,
+                    //     "help": "通过此参数控制最终传给模型的知识库检索结果文本长度，超过模型支持的最大上下文长度可能会导致报错。"
+                    // },
                     {
                         "key": "retrieved_result",
                         "label": "检索结果",
@@ -780,6 +786,61 @@ const workflowTemplate = [
                         "label": "输出变量",
                         "type": "var",
                         "help": "模型输出内容将会存储在该变量中。",
+                        "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
+                        "value": []
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "knowledge_retriever_xxx",
+        "name": "文档知识库检索",
+        "description": "根据用户问题从知识库中检索相关内容，结合检索结果调用大模型生成最终结果，支持多个问题并行执行。",
+        "type": "knowledge_retriever",
+        "v": "1",
+        "group_params": [
+            {
+                "name": "知识库检索设置",
+                "params": [
+                    {
+                        "key": "user_question",
+                        "label": "用户问题",
+                        "global": "self=user_prompt",
+                        "type": "user_question",
+                        "test": "var",
+                        "help": "当选择多个问题时，将会多次运行本节点，每次运行时从批量问题中取一项进行处理。",
+                        "linkage": "retrieved_result",
+                        "value": [],
+                        "placeholder": "请选择用户问题",
+                        "required": true
+                    },
+                    {
+                        "key": "knowledge",
+                        "label": "检索范围",
+                        "type": "knowledge_select_multi",
+                        "placeholder": "请选择知识库",
+                        "value": {
+                            "type": "knowledge",
+                            "value": []
+                        },
+                        "required": true
+                    },
+                    {
+                        "key": "advanced_retrieval_switch",
+                        "label": "高级检索配置",
+                        "type": "search_switch",//searchSwitch
+                        "value": {},
+                    },
+                ]
+            },
+            {
+                "name": "输出",
+                "params": [
+                    {
+                        "key": "retrieved_result",
+                        "label": "检索结果",
+                        "type": "var",
                         "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
                         "value": []
                     }
@@ -1505,6 +1566,122 @@ const workflowTemplateEN = [
                         "key": "output_user_input",
                         "label": "Output Variable",
                         "type": "var",
+                        "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
+                        "value": []
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "file_retriever_xxx",
+        "name": "Document Knowledge Base Retrieval",
+        "description": "Retrieve relevant content from the knowledge base based on user questions and generate final results by calling a large model with the retrieved results. Supports parallel execution of multiple questions.",
+        "type": "file_retriever",
+        "v": "1",
+        "group_params": [
+            {
+                "name": "Knowledge Base Retrieval Settings",
+                "params": [
+                    {
+                        "key": "user_question",
+                        "label": "User Question",
+                        "global": "self=user_prompt",
+                        "type": "user_question",
+                        "test": "var",
+                        "help": "When multiple questions are selected, this node will run multiple times, each time taking one item from the batch of questions for processing.",
+                        "linkage": "output_user_input",
+                        "value": [],
+                        "placeholder": "Please select user question",
+                        "required": true
+                    },
+                    {
+                        "key": "knowledge",
+                        "label": "Retrieval Scope",
+                        "type": "knowledge_select_multi",
+                        "placeholder": "Please select knowledge base",
+                        "value": {
+                            "type": "knowledge",
+                            "value": []
+                        },
+                        "required": true
+                    },
+                    {
+                        "key": "advanced_retrieval_switch",
+                        "label": "Advanced Retrieval Configuration",
+                        "type": "switch",
+                        "value": false,
+                        "help": "Enable to customize retrieval weight, result length and reordering strategy; use system defaults when disabled"
+                    },
+                    {
+                        "key": "retrieval_weight",
+                        "label": "Retrieval Weight Adjustment",
+                        "type": "slide",
+                        "scope": [0.1, 2.0],
+                        "step": 0.1,
+                        "value": 1.0,
+                        "help": "Adjust the weight coefficient of retrieval relevance; larger values mean higher priority for relevance ranking",
+                        "linkage": "advanced_retrieval_switch",
+                        "visibleOn": "advanced_retrieval_switch"
+                    },
+                    {
+                        "key": "max_retrieval_count",
+                        "label": "Maximum Retrieval Count",
+                        "type": "number",
+                        "min": 1,
+                        "max": 50,
+                        "value": 10,
+                        "help": "Control the maximum number of results returned per retrieval; too many may affect response speed",
+                        "linkage": "advanced_retrieval_switch",
+                        "visibleOn": "advanced_retrieval_switch"
+                    },
+                    {
+                        "key": "result_reorder_strategy",
+                        "label": "Result Reorder Strategy",
+                        "type": "select",
+                        "value": "default",
+                        "options": [
+                            {
+                                "label": "Default (Relevance First)",
+                                "key": "default"
+                            },
+                            {
+                                "label": "Time Descending (Newest First)",
+                                "key": "time_desc"
+                            },
+                            {
+                                "label": "Weight Descending (High Weight First)",
+                                "key": "weight_desc"
+                            }
+                        ],
+                        "help": "Select the reordering method for retrieval results to optimize display order",
+                        "linkage": "advanced_retrieval_switch",
+                        "visibleOn": "advanced_retrieval_switch"
+                    },
+                    {
+                        "key": "user_auth",
+                        "label": "User Knowledge Base Permission Validation",
+                        "type": "switch",
+                        "value": false,
+                        "help": "When enabled, only knowledge bases accessible to the user will be searched."
+                    },
+                    {
+                        "key": "max_chunk_size",
+                        "label": "Retrieval Result Length",
+                        "type": "number",
+                        "value": 15000,
+                        "help": "Control the length of the retrieved text passed to the model. Exceeding the model's maximum context length may cause errors."
+                    }
+                ]
+            },
+            {
+                "name": "Output",
+                "params": [
+                    {
+                        "key": "output_user_input",
+                        "label": "Output Variable",
+                        "type": "var",
+                        "help": "The model output will be stored in this variable.",
                         "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
                         "value": []
                     }

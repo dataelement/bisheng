@@ -22,7 +22,8 @@ function FileFormWrapper({
   fileTip = false,
   disableInputs,
   disabledSearch,
-  noUpload = false
+  noUpload = false,
+  showVoice = false,
 }: {
   disableInputs: boolean;
   children?: React.ReactNode;
@@ -30,6 +31,7 @@ function FileFormWrapper({
   fileTip?: boolean;
   accept?: string;
   noUpload: boolean;
+  showVoice?: boolean;
 }) {
   const t = useLocalize();
   const [fileTotalTokens, setFileTotalTokens] = useState(0);
@@ -56,26 +58,27 @@ function FileFormWrapper({
   const isUploadDisabled = (disableInputs || endpointFileConfig?.disabled) ?? false;
 
   const renderAttachFile = () => {
-    if (isAgents) {
-      return (
-        <AttachFileMenu
-          isRTL={isRTL}
-          disabled={disableInputs}
-          handleFileChange={handleFileChange}
-        />
-      );
-    }
-    if (endpointSupportsFiles && !isUploadDisabled) {
-      // this
-      return (
-        <AttachFile
-          isRTL={isRTL}
-          accept={accept}
-          disabled={disableInputs || disabledSearch}
-          handleFileChange={handleFileChange}
-        />
-      );
-    }
+    // if (isAgents) {
+    //   return (
+    //     <AttachFileMenu
+    //       isRTL={isRTL}
+    //       disabled={disableInputs}
+    //       handleFileChange={handleFileChange}
+    //     />
+    //   );
+    // }
+    // if (endpointSupportsFiles) {
+    // this
+    return (
+      <AttachFile
+        isRTL={isRTL}
+        showVoice={showVoice}
+        accept={accept}
+        disabled={disableInputs || disabledSearch}
+        handleFileChange={handleFileChange}
+      />
+    );
+    // }
 
     return null;
   };

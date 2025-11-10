@@ -150,7 +150,7 @@ const MessageRender = memo(
           <div>
             <div className="pt-0.5">
               <div className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full">
-                <MessageIcon iconData={iconData} assistant={assistant} />
+                <MessageIcon iconData={iconData} name={messageLabel} assistant={assistant} />
               </div>
             </div>
           </div>
@@ -162,7 +162,7 @@ const MessageRender = memo(
           )}
         >
           {/* name */}
-          <h2 className={cn('select-none font-semibold', fontSize)}>{messageLabel}</h2>
+          <h2 className={cn('rc-name select-none font-semibold', fontSize)}>{messageLabel}</h2>
           <div className="flex-col gap-1 md:gap-3">
             <div className="flex max-w-full flex-grow flex-col gap-0">
               <MessageContext.Provider

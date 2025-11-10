@@ -5,6 +5,7 @@ import CodePythonItem from "./component/CodePythonItem";
 import ConditionItem from "./component/ConditionItem";
 import FileTypeSelect from "./component/FileTypeSelect";
 import HistoryNumItem from "./component/HistoryNumItem";
+import ImagePromptItem from "./component/ImagePromptItem";
 import InputFormItem from "./component/InputFormItem";
 import InputItem from "./component/InputItem";
 import InputListItem from "./component/InputListItem";
@@ -13,6 +14,7 @@ import KnowledgeSelectItem from "./component/KnowledgeSelectItem";
 import ModelItem from "./component/ModelItem";
 import OutputItem from "./component/OutputItem";
 import ReportItem from "./component/ReportItem";
+import RetrievalWeightSlider from "./component/RetrievalWeightSlider";
 import SliderItem, { SwitchSliderItem } from "./component/SliderItem";
 import SqlConfigItem from "./component/SqlConfigItem";
 import SwitchItem from "./component/SwitchItem";
@@ -22,7 +24,6 @@ import VarItem from "./component/VarItem";
 import VarSelectItem, { VarSelectSingleItem } from "./component/VarSelectItem";
 import VarTextareaItem from "./component/VarTextareaItem";
 import VarTextareaUploadItem from "./component/VarTextareaUploadItem";
-import ImagePromptItem from "./component/ImagePromptItem";
 
 // 节点表单项
 export default function Parameter({ node, nodeId, item, onOutPutChange, onStatusChange, onFouceUpdate, onVarEvent }
@@ -39,7 +40,6 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
     const handleOnNewValue = (newValue: any, validate?: any) => {
         // 更新by引用(视图更新再组件内部完成)
         item.value = newValue;
-        // Set state to pending
     }
 
     const bindValidate = (validate) => {
@@ -122,7 +122,7 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
         case 'code':
             return <CodePythonItem data={item} onChange={handleOnNewValue} />;
         case 'code_output':
-            return <CodeOutputItem data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
+            return <CodeOutputItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
         case 'add_tool':
             return <ToolItem data={item} onChange={handleOnNewValue} />;
         case 'condition':
@@ -150,6 +150,8 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
             }} />;
         case 'image_prompt':
             return <ImagePromptItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onVarEvent={bindVarValidate} />;
+        case 'search_switch':
+            return <RetrievalWeightSlider data={item} onChange={handleOnNewValue}  onValidate={bindValidate} />;
         default:
             return <div>Unsupported parameter type</div>;
     }

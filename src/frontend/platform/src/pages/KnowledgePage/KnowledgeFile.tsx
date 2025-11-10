@@ -10,14 +10,16 @@ import {
     TableRow
 } from "../../components/bs-ui/table";
 
+import { BookIcon } from "@/components/bs-icons/knowledge";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { toast, useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
-import { getKnowledgeModelConfig, getLLmServerDetail, getModelListApi } from "@/controllers/API/finetune";
-import { BookCopy, CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Trash2 } from "lucide-react";
+import Tip from "@/components/bs-ui/tooltip/tip";
+import { getKnowledgeModelConfig } from "@/controllers/API/finetune";
+import { CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Trash2 } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Textarea } from "../../components/bs-ui/input";
@@ -26,9 +28,8 @@ import { userContext } from "../../contexts/userContext";
 import { copyLibDatabase, createFileLib, deleteFileLib, readFileLibDatabase, updateKnowledge } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useTable } from "../../util/hook";
+import { useModel } from "../ModelPage/manage";
 import { ModelSelect } from "../ModelPage/manage/tabs/WorkbenchModel";
-import { BookIcon } from "@/components/bs-icons/knowledge";
-import Tip from "@/components/bs-ui/tooltip/tip";
 
 // 知识库状态
 const enum KnowledgeBaseStatus {
@@ -45,73 +46,31 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
 
     const nameRef = useRef(null)
     const descRef = useRef(null)
-    const [modal, setModal] = useState(null)
-    const [options, setOptions] = useState([])
+    const [modelId, setModelId] = useState('')
+
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isModelChanged, setIsModelChanged] = useState(false)
-    const [isLoadingModels, setIsLoadingModels] = useState(false)
 
+    const { embeddings, isLoading } = useModel()
     // 统一处理模型数据获取
     useEffect(() => {
         if (!open) return;
 
         const fetchModelData = async () => {
-            setIsLoadingModels(true);
             try {
-                const [config, data] = await Promise.all([getKnowledgeModelConfig(), getModelListApi()]);
-                const { embedding_model_id } = config;
-                let embeddings = [];
-                let models = {};
-                let _model = null;
-
-                data.forEach(server => {
-                    const serverItem = { value: server.id, label: server.name, children: [] };
-                    serverItem.children = server.models.reduce((res, model) => {
-                        if (model.model_type !== 'embedding' || !model.online) return res;
-                        const modelItem = { value: model.id, label: model.model_name };
-                        models[model.id] = server.name + '/' + model.model_name;
-
-                        if (mode === 'edit' && currentLib && model.id === Number(currentLib.model)) {
-                            _model = [serverItem, modelItem];
-                        } else if (mode === 'create' && model.id === embedding_model_id && !_model) {
-                            _model = [serverItem, modelItem];
-                        }
-                        return [...res, modelItem];
-                    }, []);
-
-                    if (serverItem.children.length) embeddings.push(serverItem);
-                });
-
-                setOptions(embeddings);
-                onLoadEnd(models);
+                if (mode === 'create') {
+                    const config = await getKnowledgeModelConfig();
+                    setModelId(config.embedding_model_id);
+                } else {
+                    setModelId(currentLib.model);
+                }
 
                 if (mode === 'edit' && currentLib) {
-                    // 清空旧值（防止残留）
-                    if (nameRef.current) nameRef.current.value = '';
-                    if (descRef.current) descRef.current.value = '';
-                    setIsModelChanged(false);
-
-                    // 重新赋值当前库数据（确保是最新值）
-                    if (nameRef.current) nameRef.current.value = currentLib.name || '';
-                    if (descRef.current) descRef.current.value = currentLib.description || '';
-
-                    if (_model) {
-                        setModal(_model);
-                    } else {
-                        // try {
-                        //     const res = await getLLmServerDetail(currentLib.model);
-                        //     if (res.data) {
-                        //         setModal(res.data);
-                        //     }
-                        // } catch (error) {
-                        //     console.warn('Failed to get server detail, using fallback');
-                        //     if (embeddings.length > 0 && embeddings[0].children.length > 0) {
-                        //         setModal([embeddings[0], embeddings[0].children[0]]);
-                        //     }
-                        // }
-                    }
-                } else if (mode === 'create' && _model) {
-                    setModal(_model);
+                    // 使用 setTimeout 确保 DOM 已经渲染
+                    setTimeout(() => {
+                        if (nameRef.current) nameRef.current.value = currentLib.name || '';
+                        if (descRef.current) descRef.current.value = currentLib.description || '';
+                    }, 0);
                 }
             } catch (error) {
                 console.error('Failed to load model data:', error);
@@ -119,8 +78,6 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                     variant: "error",
                     description: '加载模型出错'
                 });
-            } finally {
-                setIsLoadingModels(false);
             }
         };
 
@@ -130,10 +87,9 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
     useEffect(() => {
         // 当弹窗关闭时，清空所有内部状态
         if (!open) {
-            setModal(null);
+            setModelId('');
             setIsSubmitting(false);
             setIsModelChanged(false);
-            setIsLoadingModels(false);
             setError({ name: false, desc: false });
         }
     }, [open]);
@@ -174,7 +130,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
             handleError('知识库名称不能超过200字');
             return;
         }
- 
+
 
         // 修复：名称重复校验逻辑
         // 编辑模式且名称未变更时，不进行重复校验
@@ -197,7 +153,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
             await captureAndAlertRequestErrorHoc(createFileLib({
                 name,
                 description: desc,
-                model: modal[1].value,
+                model: modelId,
                 type: 0
             }).then(res => {
                 window.libname = [name, desc]
@@ -211,7 +167,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
             })
         } else {
             const data = {
-                "model_id": modal[1].value,
+                "model_id": modelId,
                 "model_type": "embedding",
                 "knowledge_id": currentLib.id,
                 "knowledge_name": name,
@@ -225,7 +181,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                 onOpenChange(false); // 修复：用onOpenChange关闭弹窗（替代原setOpen）
                 onLoadEnd()
             }).catch(error => {
-                toast({ variant: "error", description: '更新失败，请重试' });
+                toast({ variant: "error", description: error || '更新失败，请重试' });
                 onOpenChange(false); // 错误时也关闭弹窗，避免状态卡住
             })).finally(() => {
                 setIsSubmitting(false)
@@ -284,33 +240,21 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                 </div>
                 <div className="">
                     <label htmlFor="model" className="bisheng-label">知识库embedding模型选择</label>
-                    {isLoadingModels ? (
+                    {isLoading ? (
                         <div className="flex items-center gap-2 p-3 border rounded-md bg-gray-50">
                             <LoadIcon className="w-4 h-4 animate-spin" />
                             <span className="text-sm text-gray-600">正在加载模型列表...</span>
                         </div>
-                    ) : options.length > 0 ? (
+                    ) : embeddings.length > 0 ? (
                         <ModelSelect
-                            key={`model-select-${modal ? modal[1]?.value : 'default'}-${options.length}`}
+                            key={`model-select-${modelId}`}
                             label=""
                             close
-                            value={modal ? modal[1]?.value : (mode === 'edit' && currentLib ? currentLib.model : null)}
-                            options={options}
+                            value={modelId}
+                            options={embeddings}
                             onChange={(modelId) => {
-                                let serverItem = null;
-                                let modelItem = null;
-                                options.forEach(server => {
-                                    const foundModel = server.children?.find(child => child.value == modelId);
-                                    if (foundModel) {
-                                        serverItem = { value: server.value, label: server.label };
-                                        modelItem = foundModel;
-                                    }
-                                });
-
-                                if (serverItem && modelItem) {
-                                    setModal([serverItem, modelItem]);
-                                    if (mode === 'edit') setIsModelChanged(true);
-                                }
+                                setModelId(modelId);
+                                if (mode === 'edit') setIsModelChanged(true);
                             }}
                         />
                     ) : (
@@ -593,6 +537,7 @@ export default function KnowledgeFile() {
                                             key={`${el.id}-${modalKey}`}
                                             open={selectOpenId === el.id}
                                             onOpenChange={(isOpen) => {
+                                                if (el.state === 2 || el.state === 0) return;
                                                 if (copyLoadingId !== el.id) {
                                                     setSelectOpenId(isOpen ? el.id : null);
                                                 } else if (!isOpen) {

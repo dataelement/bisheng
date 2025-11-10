@@ -2,7 +2,7 @@ import { Check, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "~/utils";
 import { Badge } from "./Badge";
-import { Input, SearchInput } from "./Input";
+import { SearchInput } from "./Input";
 import { Select, SelectContent, SelectTrigger } from "./Select";
 
 export function useDebounce(func: any, wait: number, immediate: boolean, callback?: any,): (any?: any) => any {

@@ -1,7 +1,7 @@
 from typing import Any, List
 
-from bisheng.api.errcode.component import ComponentExistError, ComponentNotExistError
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.common.errcode.component import ComponentExistError, ComponentNotExistError
 from bisheng.database.models.component import Component, ComponentDao
 
 

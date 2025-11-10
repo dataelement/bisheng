@@ -9,22 +9,22 @@ from loguru import logger
 from openai import BaseModel
 from pydantic import field_validator
 
-from bisheng.api.errcode.server import EmbeddingModelStatusError
-from bisheng.api.services import llm
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge import mixed_retrieval_recall
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig
+from bisheng.common.errcode.server import EmbeddingModelStatusError
 from bisheng.database.constants import MessageCategory
-from bisheng.database.models.config import Config, ConfigDao, ConfigKeyEnum
+from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
-from bisheng.database.models.session import MessageSession
+from bisheng.database.models.session import MessageSession, MessageSessionDao
+from bisheng.database.models.user import UserDao
+from bisheng.llm.domain.services import LLMService
 from bisheng.utils.embedding import create_knowledge_keyword_store, decide_embeddings
 from bisheng.utils.embedding import create_knowledge_vector_store
-from bisheng.utils.exceptions import MessageException
 
 
 class WorkStationService(BaseService):
@@ -115,7 +115,7 @@ class WorkStationService(BaseService):
         knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None,
                                                     KnowledgeTypeEnum.PRIVATE)
         if not knowledge:
-            model = llm.LLMService.get_knowledge_llm()
+            model = LLMService.get_knowledge_llm()
             knowledgeCreate = KnowledgeCreate(name='个人知识库',
                                               type=KnowledgeTypeEnum.PRIVATE.value,
                                               user_id=login_user.user_id,
@@ -188,7 +188,6 @@ class WorkStationService(BaseService):
         max_tokens = config.maxTokens if config else 1500
 
         # 获取知识库溯源模型 ID，如果没有配置则使用知识库的嵌入模型 ID
-        from bisheng.api.services.llm import LLMService
         knowledge_llm = LLMService.get_knowledge_llm()
         model_id = knowledge_llm.source_model_id
 
@@ -214,9 +213,9 @@ class WorkStationService(BaseService):
         return formatted_results
 
     @classmethod
-    def get_chat_history(cls, chat_id: str, size: int = 4):
+    async def get_chat_history(cls, chat_id: str, size: int = 4):
         chat_history = []
-        messages = ChatMessageDao.get_messages_by_chat_id(chat_id, ['question', 'answer'], size)
+        messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id, ['question', 'answer'], size)
         for one in messages:
             # bug fix When constructing multi-turn dialogues, the input and response of
             # the user and the assistant were reversed, leading to incorrect question-and-answer sequences.
@@ -237,12 +236,14 @@ class WorkstationMessage(BaseModel):
     isCreatedByUser: bool
     model: Optional[str]
     parentMessageId: Optional[str]
+    user_name: Optional[str]
     sender: str
     text: str
     updateAt: datetime
     files: Optional[list]
     error: Optional[bool] = False
     unfinished: Optional[bool] = False
+    flow_name: Optional[str] = None
 
     @field_validator('messageId', mode='before')
     @classmethod
@@ -259,10 +260,12 @@ class WorkstationMessage(BaseModel):
         return str(value)
 
     @classmethod
-    def from_chat_message(cls, message: ChatMessage):
+    async def from_chat_message(cls, message: ChatMessage):
         files = json.loads(message.files) if message.files else []
+        user_model = await UserDao.aget_user(message.user_id)
+        message_session_model = await MessageSessionDao.async_get_one(chat_id=message.chat_id)
         return cls(
-            messageId=message.id,
+            messageId=str(message.id),
             conversationId=message.chat_id,
             createdAt=message.create_time,
             updateAt=message.update_time,
@@ -271,9 +274,11 @@ class WorkstationMessage(BaseModel):
             parentMessageId=json.loads(message.extra).get('parentMessageId'),
             error=json.loads(message.extra).get('error', False),
             unfinished=json.loads(message.extra).get('unfinished', False),
+            user_name=user_model.user_name,
             sender=message.sender,
             text=message.message,
             files=files,
+            flow_name=message_session_model.flow_name if message_session_model else None,
         )
 
 
@@ -289,7 +294,7 @@ class WorkstationConversation(BaseModel):
     def from_chat_session(cls, session: MessageSession):
         return cls(
             conversationId=session.chat_id,
-            user=session.user_id,
+            user=str(session.user_id),
             createdAt=session.create_time,
             updateAt=session.update_time,
             model=None,

@@ -104,8 +104,6 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
             })
         }, 200);
     }
-    // console.log('files :>> ', files);
-
     useEffect(() => {
         loadFiles()
     }, [words])

@@ -1,5 +1,5 @@
 import { ArrowRight, MousePointerClick } from 'lucide-react';
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
@@ -24,9 +24,10 @@ import MessagesView from './Messages/MessagesView';
 import Presentation from './Presentation';
 
 
-const ChatView = ({ index = 0 }: { index?: number }) => {
+const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?: number, shareToken?: string }) => {
   const t = useLocalize();
-  const { conversationId } = useParams();
+  const { conversationId: cid } = useParams();
+  const conversationId = cid ?? id;
   const rootSubmission = useRecoilValue(store.submissionByIndex(index));
   const addedSubmission = useRecoilValue(store.submissionByIndex(index + 1));
   const [showCode, setShowCode] = useState(false);
@@ -36,7 +37,7 @@ const ChatView = ({ index = 0 }: { index?: number }) => {
   const navigate = useNavigate();
   const fileMap = useFileMapContext();
 
-  const { data: messagesTree = null, isLoading } = useGetMessagesByConvoId(conversationId ?? '', {
+  const { data: messagesTree = null, isLoading } = useGetMessagesByConvoId(conversationId ?? '', shareToken, {
     select: useCallback(
       (data: TMessage[]) => {
         const dataTree = buildTree({ messages: data, fileMap });
@@ -60,6 +61,12 @@ const ChatView = ({ index = 0 }: { index?: number }) => {
   const methods = useForm<ChatFormValues>({
     defaultValues: { text: '' },
   });
+
+  // 提取title in messagesTree
+  const conversation = useMemo(() => ({
+    ...chatHelpers?.conversation,
+    title: messagesTree?.[0]?.flow_name || '',
+  }), [chatHelpers]);
 
   useEffect(() => {
     if (messagesTree && messagesTree.length !== 0) {
@@ -131,7 +138,7 @@ const ChatView = ({ index = 0 }: { index?: number }) => {
       </div>
     );
   } else if (messagesTree && messagesTree.length !== 0) {
-    content = <MessagesView messagesTree={messagesTree} Header={<HeaderTitle conversation={chatHelpers?.conversation} />} />;
+    content = <MessagesView readOnly={shareToken} messagesTree={messagesTree} Header={<HeaderTitle readOnly={shareToken} conversation={conversation} logo={null} />} />;
   } else {
     content = <Landing lingsi={isLingsi} setLingsi={setIsLingsi} isNew={isNew} />;
   }
@@ -170,7 +177,7 @@ const ChatView = ({ index = 0 }: { index?: number }) => {
                     )}
                     style={{ width: inputFloat ? `${inputWidth}px` : '100%' }} // Dynamically set width
                   >
-                    <ChatForm isLingsi={isLingsi} setShowCode={setShowCode} index={index} />
+                    <ChatForm isLingsi={isLingsi} setShowCode={setShowCode} index={index} readOnly={shareToken} />
                     {!inputFloat && <div className="h-[2vh]"></div>}
                   </div>
                 </div>
@@ -198,6 +205,8 @@ const Cases = forwardRef(({ t, isLingsi, setIsLingsi }, ref) => {
 
   const queryParams = typeof window !== "undefined" ? new URLSearchParams(location.search) : null
   const sopid = queryParams?.get("sopid")
+  const sopName = queryParams?.get("name")
+  const sopSharePath = queryParams?.get("path")
 
   const handleCardClick = (sopId: string) => {
     window.open(`${__APP_ENV__.BASE_URL}/linsight/case/${sopId}`)
@@ -246,6 +255,9 @@ const Cases = forwardRef(({ t, isLingsi, setIsLingsi }, ref) => {
             setSameSopLabel({ ...caseItem }) // Uncomment if you have this state
             setIsLingsi(true)
           }
+        } else if (sopName && sopSharePath) {
+          setSameSopLabel({ id: '', name: decodeURIComponent(sopName), url: decodeURIComponent(sopSharePath) })
+          setIsLingsi(true)
         }
       } catch (error) {
         console.error("Error loading initial cases:", error)

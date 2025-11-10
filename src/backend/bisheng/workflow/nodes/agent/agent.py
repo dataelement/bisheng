@@ -8,10 +8,10 @@ from loguru import logger
 from pydantic import BaseModel, field_validator, Field
 
 from bisheng.api.services.assistant_agent import AssistantAgent
-from bisheng.api.services.llm import LLMService
 from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
+from bisheng.llm.domain.services import LLMService
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.workflow.callback.event import StreamMsgOverData
 from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
@@ -73,10 +73,10 @@ class AgentNode(BaseNode):
         self._chat_history_flag = self.node_params['chat_history_flag']['value'] > 0
         self._chat_history_num = self.node_params['chat_history_flag']['value']
 
-        self._llm = LLMService.get_bisheng_llm(model_id=self.node_params['model_id'],
-                                               temperature=self.node_params.get(
-                                                   'temperature', 0.3),
-                                               cache=False)
+        self._llm = LLMService.get_bisheng_llm_sync(model_id=self.node_params['model_id'],
+                                                    temperature=self.node_params.get(
+                                                        'temperature', 0.3),
+                                                    cache=False)
 
         # 是否输出结果给用户
         self._output_user = self.node_params.get('output_user', False)
@@ -106,7 +106,7 @@ class AgentNode(BaseNode):
 
     def _init_agent(self, system_prompt: str):
         # 获取配置的助手模型列表
-        assistant_llm = LLMService.get_assistant_llm()
+        assistant_llm = LLMService.sync_get_assistant_llm()
         if not assistant_llm.llm_list:
             raise Exception('助手推理模型列表为空')
         default_llm = [

@@ -1,17 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { Button, SendIcon, Textarea } from "~/components";
+import SpeechToTextComponent from "~/components/Voice/SpeechToText";
+import { useGetWorkbenchModelsQuery } from "~/data-provider";
 import { useLocalize } from "~/hooks";
 import InputFiles from "./components/InputFiles";
 import { bishengConfState, currentRunningState } from "./store/atoms";
-import { useAreaText } from "./useAreaText";
 import { getErrorI18nKey } from "./store/constants";
+import { useAreaText } from "./useAreaText";
+import { useRecordingAudioLoading } from "~/components/Voice/textToSpeechStore";
 
-export default function ChatInput({ v }) {
+export default function ChatInput({ readOnly, v }) {
     const [bishengConfig] = useRecoilState(bishengConfState)
     const { inputDisabled, error: inputMsg, showUpload, showStop, showReRun } = useRecoilValue(currentRunningState)
-    const { accepts, chatState, inputRef, setChatFiles, handleInput, handleRestart, handleSendClick, handleStopClick } = useAreaText()
+    const { accepts, inputRef, setChatFiles, handleInput, handleRestart, handleSendClick, handleStopClick } = useAreaText()
     const [fileUploading, setFileUploading] = useState(false)
+    const [audioOpening] = useRecordingAudioLoading()
+
     const localize = useLocalize()
 
     const placholder = useMemo(() => {
@@ -27,12 +32,17 @@ export default function ChatInput({ v }) {
         }, 60)
     }, [inputDisabled])
 
-    return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
+    const { data: modelData } = useGetWorkbenchModelsQuery()
+    const showVoice = modelData?.asr_model.id
+
+    return <div className="absolute z-10 bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
         <div className="relative px-4 rounded-3xl bg-surface-tertiary ">
             {/* 附件 */}
-            {showUpload && !inputDisabled && <InputFiles
+            {showUpload && <InputFiles
                 v={v}
+                showVoice={showVoice}
                 accepts={accepts}
+                disabled={readOnly || audioOpening || inputDisabled}
                 size={bishengConfig?.uploaded_files_maximum_size || 50}
                 onChange={(files => {
                     setFileUploading(!files)
@@ -40,6 +50,9 @@ export default function ChatInput({ v }) {
                 })} />}
             {/* send */}
             <div className="flex gap-2 absolute right-3 bottom-3 z-10">
+                {showVoice && <SpeechToTextComponent disabled={inputDisabled || readOnly || showStop} onChange={(e) => {
+                    inputRef.current.value += e;
+                }} />}
                 {showStop ?
                     <div
                         className="w-8 h-8 bg-primary rounded-full cursor-pointer flex justify-center items-center"
@@ -50,7 +63,7 @@ export default function ChatInput({ v }) {
                     <button
                         id="bs-send-btn"
                         className="size-8 flex items-center justify-center rounded-full bg-primary text-white transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-20"
-                        disabled={inputDisabled || fileUploading}
+                        disabled={inputDisabled || fileUploading || readOnly || audioOpening}
                         onClick={() => { !inputDisabled && !fileUploading && handleSendClick() }}>
                         <SendIcon size={24} />
                     </button>
@@ -61,10 +74,11 @@ export default function ChatInput({ v }) {
                 is工作流 & 未展示停止按钮 & 没有错误消息
             */}
             <div className="absolute w-full flex justify-center left-0 -top-14">
-                {/* {!showStop && chatState?.flow?.flow_type === 10 && !inputMsg  */}
-                {showReRun && !inputMsg && <Button
+                {/* {!showStop && chatState?.flow?.flow_type === 10 && !inputMsg  & 运行结束展示 */}
+                {showReRun && !inputMsg && !showStop && <Button
                     className="rounded-full bg-primary/10 bg-blue-50 text-primary"
                     variant="ghost"
+                    disabled={readOnly}
                     onClick={handleRestart}>
                     <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/chat.png'} alt="" />{localize('com_ui_restart')}
                 </Button>
@@ -75,7 +89,7 @@ export default function ChatInput({ v }) {
                 ref={inputRef}
                 rows={2}
                 style={{ height: 56 }}
-                disabled={inputDisabled}
+                disabled={readOnly || inputDisabled}
                 onInput={handleInput}
                 onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {

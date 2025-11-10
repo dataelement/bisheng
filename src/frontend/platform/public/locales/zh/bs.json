@@ -61,6 +61,9 @@
     "roleName": "角色名称",
     "skillAuthorization": "技能授权",
     "knowledgeAuthorization": "知识库授权",
+    "libraryName": "知识库名称",
+    "flowName": "工作流名称",
+    "flowAuthorization": "工作流授权",
     "skillName": "技能名称",
     "creator": "创建人",
     "usePermission": "使用权限",
@@ -329,7 +332,7 @@
     "nameExists": "该名称已存在",
     "descriptionLimit": "知识库描述字数不得超过200字",
     "createLibrary": "创建知识库",
-    "libraryName": "知识库简介",
+    "libraryName": "知识库名称",
     "description": "描述",
     "model": "模型",
     "fileData": "文档知识库",
@@ -582,6 +585,7 @@
       "modelNameRequired": "模型显示名称不能为空",
       "modelRequired": "模型不能为空",
       "modelDuplicate": "模型不能重复",
+      "voiceTypeRequired": "音色类型不可为空",
       "modelNameDuplicate": "显示名称不能重复",
       "required": "不能为空"
     }
@@ -854,6 +858,9 @@
     "createRole": "新建角色",
     "deleteRole": "删除角色",
     "updateRole": "编辑角色",
+    "addTool": "创建工具",
+    "updateTool": "修改工具",
+    "deleteTool": "删除工具",
     "userLogin": "用户登录",
     "chat": "会话",
     "build": "构建",
@@ -1101,7 +1108,9 @@
     "10532": "工作流版本已升级,请联系创建者重新编排",
     "10540": "服务器线程数已满，请稍候再试",
     "10541": "工作流任务执行失败：{{exception}}",
-    "10620": "该账号已被禁用，请联系管理员"
+    "10620": "该账号已被禁用，请联系管理员",
+    "10599": "暂无查看权限",
+    "13010": "应用未上线，无法直接对话"
   },
   "all": "全部",
   "confirmButton": "确定",
@@ -1142,7 +1151,6 @@
   "addQa": "添加QA",
   "inserVar": "插入变量",
   "download": "下载",
-  "chatTips": "1. 请遵守《中华人民共和国网络安全法》《中华人民共和国数据安全法》《中华人民共和国个人信息保护法》及《生成式人工智能服务安全基本要求》；\n2. 禁止上传涉及公司保密管理规定范围内的保密数据；\n3. 禁止上传包含个人隐私信息的数据；\n4. 禁止上传包含恶意程序或病毒的文件；\n5. 禁止使用 AI 生成攻击性代码；\n6. 禁止向 AI 提问包括但不限于涉爆涉恐涉黄及危害国家安全及公共安全的违法不良信息；\n7. AI 生成内容受到公司保密管理规定约束。用户应根据实际情况判断生成内容的合理性，避免 AI 幻觉造成的风险。",
   "com_sop_web_search": "正在联网搜索",
   "com_sop_search_knowledge_base": "正在检索知识库",
   "com_sop_list_files": "正在查询目录",
@@ -1171,5 +1179,7 @@
   "com_sop_file_load_error": "文件加载错误",
   "com_sop_empty_file": "空文件",
   "com_sop_select_file": "选择文件",
+  "more": "更多",
+  "chatTips": "1. 请遵守《中华人民共和国网络安全法》《中华人民共和国数据安全法》《中华人民共和国个人信息保护法》及《生成式人工智能服务安全基本要求》；\n2. 禁止上传涉及公司保密管理规定范围内的保密数据；\n3. 禁止上传包含个人隐私信息的数据；\n4. 禁止上传包含恶意程序或病毒的文件；\n5. 禁止使用 AI 生成攻击性代码；\n6. 禁止向 AI 提问包括但不限于涉爆涉恐涉黄及危害国家安全及公共安全的违法不良信息；\n7. AI 生成内容受到公司保密管理规定约束。用户应根据实际情况判断生成内容的合理性，避免 AI 幻觉造成的风险。",
   "com_preview_type_unsupported": "此文件暂不支持预览"
 }

@@ -1,7 +1,7 @@
 import json
 from typing import Any
 
-from bisheng.utils.minio_client import MinioClient
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.workflow.callback.event import OutputMsgChooseData, OutputMsgData, OutputMsgInputData
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
@@ -13,7 +13,7 @@ class OutputNode(BaseNode):
         super().__init__(*args, **kwargs)
 
         # minio
-        self._minio_client = MinioClient()
+        self._minio_client = get_minio_storage_sync()
         # 交互类型
         self._output_type = self.node_params['output_result']['type']
         self._output_result = self.node_params['output_result']['value']

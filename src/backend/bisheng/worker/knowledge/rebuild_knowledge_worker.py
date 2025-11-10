@@ -14,7 +14,6 @@ from bisheng.database.models.knowledge_file import (
     KnowledgeFileStatus
 )
 from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.settings import settings
 from bisheng.worker import bisheng_celery
 
 
@@ -45,15 +44,12 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: str) -> str:
                 knowledge_id,
                 [KnowledgeFileStatus.SUCCESS.value, KnowledgeFileStatus.REBUILDING.value]
             )
+            # 2. 根据拿到collection_name去milvus中删除向量存储
+            KnowledgeService.delete_knowledge_file_in_vector(knowledge=knowledge, del_es=False)
 
             if not files:
                 logger.info(f"knowledge_id={knowledge_id} has no success files")
                 # 直接更新知识库状态为成功
-                embedding = knowledge.model
-                suffix_id = settings.get_vectors_conf().milvus.partition_suffix
-                knowledge.collection_name = (
-                    f"partition_{embedding}_knowledge_{suffix_id}"
-                )
                 knowledge.state = KnowledgeState.PUBLISHED.value
                 KnowledgeDao.update_one(knowledge)
                 return f"knowledge {knowledge_id} rebuild completed (no files)"
@@ -63,17 +59,6 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: str) -> str:
             KnowledgeFileDao.update_status_bulk(file_ids, KnowledgeFileStatus.REBUILDING)
 
             logger.info(f"Updated {len(files)} files to rebuilding status")
-
-            # 2. 根据拿到collection_name去milvus中删除向量存储
-            KnowledgeService.delete_knowledge_file_in_vector(knowledge=knowledge, del_es=False)
-
-            embedding = knowledge.model
-            suffix_id = settings.get_vectors_conf().milvus.partition_suffix
-            knowledge.collection_name = (
-                f"partition_{embedding}_knowledge_{suffix_id}"
-            )
-
-            KnowledgeDao.update_one(knowledge)
 
             # 3. 根据index_name从es中拿到chunk信息，重新embedding插入milvus
             success_files, failed_files = _rebuild_embeddings(knowledge, files, new_model_id)

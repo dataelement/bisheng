@@ -25,8 +25,10 @@ export async function updateHomeLabelApi(tag_ids) {
 /**
  * 技能 工作流详情
  */
-export async function getFlowApi(flowId: string, version: string = 'v1'): Promise<any> {
-    return await request.get(`/api/${version}/flows/${flowId}`)
+export async function getFlowApi(flowId: string, version: string = 'v1', shareToken?: string): Promise<any> {
+    const headers = shareToken ? { 'share-token': shareToken } : {}
+
+    return await request.get(`/api/${version}/flows/${flowId}`, { headers })
 }
 
 /**
@@ -40,8 +42,12 @@ export async function getDeleteFlowApi(chatId: string): Promise<any> {
 }
 
 // 获取助手详情
-export const getAssistantDetailApi = async (id: string, version: string = 'v1'): Promise<any> => {
-    return await request.get(`/api/${version}/assistant/info/${id}`)
+export const getAssistantDetailApi = async (id: string, shareToken?: string): Promise<any> => {
+    const headers = shareToken ? { 'share-token': shareToken } : {}
+
+    return await request.get(`/api/v1/assistant/info/${id}`, {
+        headers
+    })
 };
 
 export const baseMsgItem = {
@@ -83,7 +89,8 @@ export const disLikeCommentApi = (message_id, comment) => {
 /**
  * 技能 工作流详情
  */
-export async function getChatHistoryApi(flowId: string, chatId: string, flowType: string, id?: number): Promise<any> {
+export async function getChatHistoryApi({ flowId, chatId, flowType, id, shareToken }
+    : { flowId: string, chatId: string, flowType: string, id?: number, shareToken?: string }): Promise<any> {
     const filterFlowMsg = (data) => {
         return data.filter(item =>
             ["question", "output_with_input_msg", "output_with_choose_msg", "stream_msg", "output_msg", "guide_question", "guide_word", "node_run", "answer"].includes(item.category)
@@ -96,7 +103,12 @@ export async function getChatHistoryApi(flowId: string, chatId: string, flowType
         )
     }
 
-    return await request.get(`/api/v1/chat/history?flow_id=${flowId}&chat_id=${chatId}&page_size=40&id=${id || ''}`).then(res => {
+    const headers = shareToken ? { 'share-token': shareToken } : {}
+
+    return await request.get(`/api/v1/chat/history?flow_id=${flowId}&chat_id=${chatId}&page_size=40&id=${id || ''}`, {
+        headers
+    }).then(res => {
+        if (res.status_code !== 200) return []
         const newData = Number(flowType) === 10 ? filterFlowMsg(res.data) : filterSkillMsg(res.data)
 
         return newData.map(item => {

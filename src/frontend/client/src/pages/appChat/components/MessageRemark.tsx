@@ -1,7 +1,8 @@
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
+import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
 
 // 开场白
-export default function MessageRemark({ logo, title, message }:
+export default function MessageRemark({readOnly, logo, title, message }:
     { logo: React.ReactNode, title: string, message: string }) {
 
     return <div className="flex w-full">
@@ -14,6 +15,15 @@ export default function MessageRemark({ logo, title, message }:
                         <div className="bs-mkdown text-base"><Markdown content={message} isLatestMessage={false} webContent={undefined} /></div>
                     </div>
                 </div>
+            </div>
+            <div className="flex justify-end pr-4">
+                {
+                    message && !readOnly && <TextToSpeechButton
+                        className={'md:opacity-0 md:group-hover:opacity-100'}
+                        messageId={message}
+                        text={message}
+                    />
+                }
             </div>
         </div>
     </div>

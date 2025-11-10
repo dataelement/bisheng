@@ -2,7 +2,7 @@ from bisheng.api.v1.base import (Code, CodeValidationResponse, PromptValidationR
                                  ValidatePromptRequest, validate_prompt)
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.template.field.base import TemplateField
-from bisheng.utils.logger import logger
+from loguru import logger
 from bisheng.utils.validate import validate_code
 from fastapi import APIRouter, HTTPException
 

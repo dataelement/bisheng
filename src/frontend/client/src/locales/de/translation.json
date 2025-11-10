@@ -751,6 +751,7 @@
   "com_ui_select_search_provider": "Provider nach Name suchen",
   "com_ui_select_search_region": "Region nach Name suchen",
   "com_ui_share": "Teilen",
+   "no_text_recognized": "Spracherkennung ist nicht verfügbar. Bitte kontaktieren Sie den Administrator.",
   "com_ui_share_create_message": "Ihr Name und alle Nachrichten, die du nach dem Teilen hinzufügst, bleiben privat.",
   "com_ui_share_delete_error": "Beim Löschen des geteilten Links ist ein Fehler aufgetreten",
   "com_ui_share_error": "Beim Teilen des Chat-Links ist ein Fehler aufgetreten",

@@ -8,8 +8,8 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel
 from websockets import connect
 
-from bisheng.api.errcode.http_error import ServerError
-from bisheng.database.base import session_getter
+from bisheng.common.errcode.http_error import ServerError
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.message import ChatMessage
 
 # 维护一个连接池
@@ -83,7 +83,7 @@ async def release_connection(identifier, websocket):
 
 
 def comment_answer(message_id: int, comment: str):
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         message = session.get(ChatMessage, message_id)
         if message:
             message.remark = comment[:4096]

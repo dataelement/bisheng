@@ -1,11 +1,12 @@
-from bisheng.cache.redis import redis_client
+from bisheng.core.cache.redis_manager import get_redis_client
 
 
 async def verify_captcha(captcha: str, captcha_key: str):
     # check captcha
-    captcha_value = redis_client.get(captcha_key)
+    redis_client = await get_redis_client()
+    captcha_value = await redis_client.aget(captcha_key)
     if captcha_value:
-        redis_client.delete(captcha_key)
+        await redis_client.adelete(captcha_key)
         return captcha_value.lower() == captcha.lower()
     else:
         return False

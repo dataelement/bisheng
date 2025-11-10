@@ -157,6 +157,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
         link.click();
     }
 
+    const { toast } = useToast()
     const handleImportClick = () => {
         setOpen(false)
         bsConfirm({
@@ -168,11 +169,16 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
         })
 
         const _importFlow = async () => {
-            const flow = await importFlow()
-            const newFlow = flowVersionCompatible(flow)
-            const { nodes, edges, viewport } = newFlow
-            onImportFlow(nodes, edges, viewport)
-            setFitView()
+            try {
+                const flow = await importFlow()
+                const newFlow = flowVersionCompatible(flow)
+                const { nodes, edges, viewport } = newFlow
+                onImportFlow(nodes, edges, viewport)
+                setFitView()
+            } catch (error) {
+                console.error("Import flow error:", error);
+                toast({ variant: 'error', description: '该文件无法识别，请导入正确的JSON文件' })
+            }
         }
     }
 
@@ -193,7 +199,6 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
         window.flow_version = Number(versionId)
         // 加载选中版本data
         const res = await getVersionDetails(versionId)
-        // console.log('res :>> ', res)
         // 自动触发 page的 clone flow
         forceUpdateFlow({ ...f, ...res.data })
 
@@ -270,7 +275,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                     <AppAvator id={flow.name} url={flow.logo || loca?.logo} flowType={10} className=""></AppAvator>
                     <div className="pl-3">
                         <h1 className="font-medium text-sm flex gap-2">
-                            <span className="truncate max-w-48 font-bold">{flow.name}</span>
+                            <span id="app-title" className="truncate max-w-48 font-bold">{flow.name}</span>
                             <Button
                                 size="icon"
                                 variant="ghost"

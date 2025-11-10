@@ -4,7 +4,13 @@ import LabelSelect, { UPDATETYPE } from "../selectComponent/LabelSelect";
 import { Bookmark } from "lucide-react";
 
 export default function LabelShow({ data, user, all, type, onChange }) {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
+
+  const hasWritePermission = useMemo(() => {
+    // 确保data存在且write属性明确为true
+    return !!data && data.write === true;
+  }, [data]);
+
   const [freshData, setFreshData] = useState(() =>
     data.tags.map(d => ({ label: d.name, value: d.id, selected: true, edit: false }))
   )
@@ -27,6 +33,7 @@ export default function LabelShow({ data, user, all, type, onChange }) {
         if (user.admin_groups.includes(element)) return true
       })
       if (data.user_id === user.user_id) return true
+      if(data.write) return true
     }
     return false
   }, [data, user])
@@ -66,7 +73,19 @@ export default function LabelShow({ data, user, all, type, onChange }) {
 
   return (
     <div className="w-full">
-      {isShow ? (
+      {!hasWritePermission ? (
+        <LabelSelect onUpdate={handleUpdate} labels={labels} resource={resource} all={allData}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="mb-[10px] flex place-items-center rounded-sm p-1 opacity-0 border border-transparent group-hover:bg-search-input group-hover:border-input group-hover:opacity-100"
+          >
+            <Bookmark className="w-4 h-4 mr-2 text-muted-foreground" />
+            <div className="text-sm text-muted-foreground">
+              <span>{t('tag.addLabel')}</span>
+            </div>
+          </div>
+        </LabelSelect>
+      ) : (isShow ? (
         isOperator ? (
           <LabelSelect onUpdate={handleUpdate} labels={labels} resource={resource} all={allData}>
             <div onClick={(e) => e.stopPropagation()} className="mb-[10px] max-w-[100%] flex place-items-center rounded-sm p-1 border border-transparent group-hover:bg-search-input group-hover:border-input">
@@ -97,7 +116,7 @@ export default function LabelShow({ data, user, all, type, onChange }) {
         ) : (
           <div></div>
         )
-      )}
+      ))}
     </div>
   )
 }

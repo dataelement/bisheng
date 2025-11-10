@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, List, Optional
 
-from bisheng.utils.logger import logger
+from loguru import logger
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:

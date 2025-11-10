@@ -2,13 +2,12 @@ from typing import Dict, List, Optional, Type
 
 from bisheng.interface.base import LangChainTypeCreator
 from bisheng.interface.custom_lists import llm_type_to_cls_dict
-from bisheng.interface.llms.custom import BishengLLM
-from bisheng.interface.llms.custom_ollama import CustomChatOllamaWithReasoning
-from bisheng.settings import settings
+from bisheng.llm.domain.llm import BishengLLM
+from bisheng.common.services.config_service import settings
 from bisheng.template.frontend_node.llms import LLMFrontendNode
-from bisheng.utils.logger import logger
+from loguru import logger
 from bisheng.utils.util import build_template_from_class
-from bisheng.interface.llms.chat_spark import ChatSparkOpenAI
+
 
 class LLMCreator(LangChainTypeCreator):
     type_name: str = 'llms'
@@ -23,8 +22,6 @@ class LLMCreator(LangChainTypeCreator):
             self.type_dict = llm_type_to_cls_dict
             self.type_dict.update({
                 'BishengLLM': BishengLLM,
-                'ChatSparkOpenAI': ChatSparkOpenAI,
-                'CustomChatOllamaWithReasoning': CustomChatOllamaWithReasoning
             })
         return self.type_dict
 

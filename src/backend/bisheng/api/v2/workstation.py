@@ -1,11 +1,12 @@
 from fastapi import APIRouter, BackgroundTasks, Body, File, Request, UploadFile
 
-from bisheng.api.services import knowledge_imp, llm
+from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, resp_200, ExcelRule
-from bisheng.cache.utils import save_download_file
+from bisheng.core.cache.utils import save_download_file
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
+from bisheng.llm.domain.services import LLMService
 
 router = APIRouter(prefix='/workstation', tags=['OpenAPI', 'Chat'])
 
@@ -20,7 +21,7 @@ async def knowledgeUpload(
     # 查询是否有个人知识库
     knowledge = KnowledgeDao.get_user_knowledge(uid, None, KnowledgeTypeEnum.PRIVATE)
     if not knowledge:
-        model = llm.LLMService.get_knowledge_llm()
+        model = LLMService.get_knowledge_llm()
         knowledgeCreate = KnowledgeCreate(name='个人知识库',
                                           type=KnowledgeTypeEnum.PRIVATE.value,
                                           user_id=uid,

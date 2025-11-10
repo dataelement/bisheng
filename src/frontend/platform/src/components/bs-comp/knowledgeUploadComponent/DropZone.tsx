@@ -1,3 +1,4 @@
+import { message } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
 import { UploadIcon } from "lucide-react";
 import { useContext } from "react";
@@ -9,15 +10,44 @@ export default function DropZone({ onDrop }) {
     const { appConfig } = useContext(locationContext)
 
     // 1. 定义支持的文件格式（用于显示提示文本，不用于过滤）
-    const supportedFormats = appConfig.enableEtl4lm 
+    const supportedFormats = appConfig.enableEtl4lm
         ? ['.PDF', '.TXT', '.DOCX', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.PNG', '.JPG', '.JPEG', '.BMP']
         : ['.PDF', '.TXT', '.DOCX', '.DOC', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV'];
-
-    const { getRootProps, getInputProps, isDragActive } = useDropzone({
-        // 2. 关闭默认过滤：accept设为null，允许所有文件进入onDrop
-        accept: null, 
+    const allowedExts = new Set(
+        supportedFormats.map(ext => ext.toLowerCase().replace('.', ''))
+    );
+    const { getRootProps, getInputProps } = useDropzone({
+        accept: {
+            'application/*': supportedFormats
+        },
         useFsAccessApi: false,
-        onDrop
+        onDrop: (acceptedFiles, disAcceptedFiles) => {
+            // 1. 过滤不符合格式的文件
+            const validFiles = acceptedFiles.filter(file => {
+                // 获取文件后缀（无后缀则视为无效）
+                const ext = file.name.split('.').pop()?.toLowerCase();
+                return ext ? allowedExts.has(ext) : false;
+            });
+
+            if (disAcceptedFiles.length > 0) {
+                // @ts-ignore
+                const uniqueExtensions = [...new Set(
+                    disAcceptedFiles
+                        .map(f => f.file.name.split('.').pop()?.toLowerCase())
+                        .filter(Boolean)
+                )];
+                message({
+                    title: t('prompt'),
+                    description: `不支持文件类型:${uniqueExtensions}`,
+                    variant: 'error'
+                });
+            }
+
+            // 3. 只传递有效文件给父组件
+            if (validFiles.length > 0) {
+                onDrop(validFiles);
+            }
+        }
     });
 
     const formatText = appConfig.enableEtl4lm

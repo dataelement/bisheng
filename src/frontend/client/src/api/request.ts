@@ -97,6 +97,13 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
 
 customAxios.interceptors.response.use(
   (response) => {
+    if (response.data.status_code === 403) {
+      // console.log('response :>> ', response);
+      localStorage.setItem('ERROR_REQUEST_PATH', response.config.url || '')
+      location.href = `${__APP_ENV__.BASE_URL}/c/new?error=11403`;
+      return response
+    }
+
     if (response.config.showError && response.data && response.data.status_code !== 200) {
       console.log('业务错误:>> ', response.config.url, response.data);
       window.showToast?.({ message: i18next.t(getErrorI18nKey(response.data.status_code), response.data.data), status: 'error' });
@@ -121,6 +128,7 @@ customAxios.interceptors.response.use(
       originalRequest._retry = true;
 
       if (import.meta.env.MODE === 'production') {
+        localStorage.setItem('LOGIN_PATHNAME', location.pathname)
         location.href = `${location.origin}/${__APP_ENV__.BISHENG_HOST}?from=workspace`
       }
       // } else {

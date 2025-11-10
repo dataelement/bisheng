@@ -3,7 +3,7 @@ import json
 import os
 import time
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Union
 from urllib import parse
 
 from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks, Request, HTTPException, Form
@@ -13,11 +13,6 @@ from sse_starlette import EventSourceResponse
 from starlette.responses import StreamingResponse
 from starlette.websockets import WebSocket
 
-from bisheng.api.errcode.http_error import UnAuthorizedError, NotFoundError
-from bisheng.api.errcode.linsight import LinsightQuestionError, LinsightUseUpError, LinsightModifySopError, \
-    LinsightStartTaskError, LinsightSessionVersionRunningError, LinsightQueueStatusError, FileUploadError, \
-    SopShowcaseError
-from bisheng.api.errcode.server import InvalidOperationError, ResourceDownloadError
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.linsight.message_stream_handle import MessageStreamHandle
@@ -29,15 +24,22 @@ from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPMan
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
     SubmitFileSchema, LinsightToolSchema, ToolChildrenSchema
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
-from bisheng.cache.redis import redis_client
+from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
+from bisheng.common.errcode.linsight import LinsightQuestionError, LinsightUseUpError, LinsightModifySopError, \
+    LinsightStartTaskError, LinsightSessionVersionRunningError, LinsightQueueStatusError, FileUploadError, \
+    SopShowcaseError
+from bisheng.common.errcode.server import InvalidOperationError, ResourceDownloadError
+from bisheng.common.services.config_service import settings
+from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.knowledge import KnowledgeTypeEnum, KnowledgeDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
     LinsightSessionVersion
 from bisheng.database.models.linsight_sop import LinsightSOPDao, LinsightSOPRecord
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
-from bisheng.settings import settings
+from bisheng.share_link.api.dependencies import header_share_token_parser
+from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import util
-from bisheng.utils.minio_client import minio_client
 from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(prefix="/linsight", tags=["灵思"])
@@ -92,6 +94,8 @@ async def get_file_parsing_status(
     key_prefix = LinsightWorkbenchImpl.FILE_INFO_REDIS_KEY_PREFIX
 
     file_ids = [f"{key_prefix}{file_id}" for file_id in file_ids]
+
+    redis_client = await get_redis_client()
 
     # 使用 Redis 的 amget 方法批量获取文件解析状态
     parsing_status = await redis_client.amget(file_ids)
@@ -171,6 +175,7 @@ async def generate_sop(
         feedback_content: str = Body(None, description="用户反馈内容"),
         reexecute: bool = Body(False, description="是否重新执行生成SOP"),
         sop_id: int = Body(None, description="精选案例的ID"),
+        example_session_version_id: str = Body(default=None, description="参考案例的linsight_version_id"),
         login_user: UserPayload = Depends(get_login_user)) -> EventSourceResponse:
     """
     生成与重新规划灵思SOP
@@ -191,6 +196,13 @@ async def generate_sop(
     if not session_version:
         raise NotFoundError.http_exception()
 
+    example_sop = None
+    if sop_id:
+        sop_db = await SOPManageService.get_sop_by_id(sop_id)
+        example_sop = sop_db.content if sop_db else None
+    elif example_session_version_id:
+        example_session_version = await LinsightSessionVersionDao.get_by_id(example_session_version_id)
+        example_sop = example_session_version.sop if example_session_version else None
     res = []
     linsight_conf = settings.get_linsight_conf()
     if session_version.org_knowledge_enabled and linsight_conf.max_knowledge_num > 0:
@@ -214,7 +226,7 @@ async def generate_sop(
             reexecute=reexecute,
             login_user=login_user,
             knowledge_list=res,
-            sop_id=sop_id
+            example_sop=example_sop
         )
 
         async for event in sop_generate:
@@ -287,6 +299,7 @@ async def start_execute_sop(
 
     from bisheng.linsight.worker import LinsightQueue
     try:
+        redis_client = await get_redis_client()
         queue = LinsightQueue('queue', namespace="linsight", redis=redis_client)
 
         await queue.put(data=linsight_session_version_id)
@@ -464,7 +477,7 @@ async def terminate_execute(
         return InvalidOperationError.return_resp()
 
     from bisheng.linsight.worker import LinsightQueue
-
+    redis_client = await get_redis_client()
     queue = LinsightQueue('queue', namespace="linsight", redis=redis_client)
 
     try:
@@ -500,15 +513,34 @@ async def terminate_execute(
 @router.get("/workbench/session-version-list", summary="获取当前会话所有灵思信息", response_model=UnifiedResponseModel)
 async def get_linsight_session_version_list(
         session_id: str = Query(..., description="会话ID"),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(get_login_user),
+        share_link: Union['ShareLink', None] = Depends(header_share_token_parser)
+) -> UnifiedResponseModel:
     """
     获取当前会话所有灵思信息
+    :param share_link:
     :param session_id:
     :param login_user:
     :return:
     """
 
     linsight_session_version_models = await LinsightWorkbenchImpl.get_linsight_session_version_list(session_id)
+
+    if linsight_session_version_models and login_user.user_id != linsight_session_version_models[0].user_id:
+        # 通过分享链接访问
+        session_version_ids = [model.id for model in linsight_session_version_models]
+
+        # 通过分享链接访问
+        if (share_link is None or
+                share_link.meta_data is None or
+                share_link.meta_data.get("versionId") not in session_version_ids):
+            return UnAuthorizedError.return_resp()
+
+        # 仅返回分享的灵思会话版本
+        linsight_session_version_models = [
+            model for model in linsight_session_version_models if model.id == share_link.meta_data.get("versionId")
+        ]
+
     return resp_200([model.model_dump() for model in linsight_session_version_models])
 
 
@@ -516,15 +548,30 @@ async def get_linsight_session_version_list(
 @router.get("/workbench/execute-task-detail", summary="获取执行任务详情", response_model=UnifiedResponseModel)
 async def get_execute_task_detail(
         session_version_id: str = Query(..., description="灵思会话版本ID"),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(get_login_user),
+        share_link: Union['ShareLink', None] = Depends(header_share_token_parser)) -> UnifiedResponseModel:
     """
     获取执行任务详情
+    :param share_link:
     :param session_version_id:
     :param login_user:
     :return:
     """
 
     execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(session_version_id)
+
+    if not execute_task_models:
+        return resp_200([])
+
+    linsight_session_version_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
+
+    if login_user.user_id != linsight_session_version_model.user_id:
+        # 通过分享链接访问
+        if (share_link is None or
+                share_link.meta_data is None or
+                share_link.meta_data.get("versionId") != session_version_id):
+            return UnAuthorizedError.return_resp()
+
     return resp_200(execute_task_models)
 
 
@@ -602,7 +649,7 @@ async def get_queue_status(
     :return:
     """
     from bisheng.linsight.worker import LinsightQueue
-
+    redis_client = await get_redis_client()
     queue = LinsightQueue('queue', namespace="linsight", redis=redis_client)
     try:
         index = await queue.index(session_version_id)
@@ -1145,7 +1192,7 @@ async def integrated_execute(
             # ======================== 开始执行 ========================
             try:
                 from bisheng.linsight.worker import LinsightQueue
-
+                redis_client = await get_redis_client()
                 queue = LinsightQueue('queue', namespace="linsight", redis=redis_client)
                 await queue.put(data=linsight_session_version_model.id)
 
@@ -1197,6 +1244,30 @@ async def integrated_execute(
                             timeout=10.0  # 10秒超时
                         )
                     except asyncio.TimeoutError:
+
+                        linsight_session_version_model = await state_message_manager.get_session_version_info()
+
+                        if linsight_session_version_model.status in [
+                            SessionVersionStatusEnum.COMPLETED,
+                            SessionVersionStatusEnum.TERMINATED,
+                            SessionVersionStatusEnum.FAILED
+                        ]:
+                            message = MessageData(
+                                event_type=MessageEventType.FINAL_RESULT if linsight_session_version_model.status == SessionVersionStatusEnum.COMPLETED else MessageEventType.TASK_TERMINATED,
+                                data=linsight_session_version_model.model_dump()
+                            )
+
+                            if message.event_type == MessageEventType.FINAL_RESULT:
+                                final_result_message = message
+
+                            yield {
+                                "event": "linsight_execute_message",
+                                "data": message.model_dump_json()
+                            }
+
+                            logger.info(f"用户 {login_user.user_id} 灵思执行已结束，停止获取消息")
+                            break
+
                         # 超时继续等待
                         continue
                     except Exception as e:
@@ -1236,6 +1307,8 @@ async def integrated_execute(
                             final_files = session_version_model.output_result.get("final_files", [])
                             all_from_session_files = session_version_model.output_result.get("all_from_session_files",
                                                                                              [])
+
+                            minio_client = await get_minio_storage()
 
                             # 生成文件分享链接
                             for final_file in final_files:

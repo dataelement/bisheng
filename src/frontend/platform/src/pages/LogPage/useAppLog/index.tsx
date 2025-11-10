@@ -67,7 +67,7 @@ export default function AppUseLog() {
         return getAuditAppListApi({
             page: page,
             page_size: param.pageSize,
-            flow_ids: param.appName?.length ? param.appName.map(el => el.value) : undefined,
+            flow_ids: param.appName?.length ? param.appName : undefined,
             user_ids: param.userName?.[0]?.value || undefined,
             group_ids: param.userGroup || undefined,
             start_date,

@@ -93,6 +93,16 @@ export const getAssistantToolsApi = async (type: 'all' | 'default' | 'custom' | 
     }
     return await axios.get(`/api/v1/assistant/tool_list${queryStr[type]}`)
 };
+//有管理权限
+export const getAssistantToolsWithManageApi = async (type: 'all' | 'default' | 'custom' | 'mcp'): Promise<any> => {
+    const queryStr = {
+        all: '',
+        default: '?is_preset=1',
+        custom: '?is_preset=0',
+        mcp: '?is_preset=2'
+    }
+    return await axios.get(`/api/v1/assistant/tool_list${queryStr[type]}`)
+};
 
 // 获取mcp服务集合
 export const getAssistantMcpApi = async (): Promise<any> => {

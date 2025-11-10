@@ -29,6 +29,9 @@ export function transformEvent(event: string): string {
         case 'delete_role': return '删除角色';
         case 'update_role': return '编辑角色';
         case 'user_login': return '用户登录';
+        case 'add_tool': return '创建工具';
+        case 'update_tool': return '修改工具';
+        case 'delete_tool': return '删除工具';
         default: return '转换失败'
     }
 }
@@ -44,6 +47,7 @@ export function transformObjectType(object: string): string {
         case 'user_conf': return '用户配置'
         case 'user_group_conf': return '用户组配置'
         case 'role_conf': return '角色配置'
+        case 'tool': return '工具'
         default: return '转换失败'
     }
 }

@@ -1,8 +1,6 @@
-import io
 import json
 import math
 import os
-import time
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -10,23 +8,15 @@ from fastapi import BackgroundTasks, Request
 from loguru import logger
 from pymilvus import Collection
 
-from bisheng.api.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
-from bisheng.api.errcode.knowledge import (
-    KnowledgeChunkError,
-    KnowledgeExistError,
-    KnowledgeNoEmbeddingError,
-)
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.knowledge_imp import (
     KnowledgeUtils,
     decide_vectorstores,
     delete_knowledge_file_vectors,
     process_file_task,
-    read_chunk_text,
+    async_read_chunk_text,
 )
-from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schema.knowledge import KnowledgeFileResp
 from bisheng.api.v1.schemas import (
     FileChunk,
@@ -36,8 +26,15 @@ from bisheng.api.v1.schemas import (
     KnowledgeFileProcess,
     UpdatePreviewFileChunk, ExcelRule, KnowledgeFileReProcess,
 )
-from bisheng.cache.redis import redis_client
-from bisheng.cache.utils import file_download
+from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeChunkError,
+    KnowledgeExistError,
+    KnowledgeNoEmbeddingError,
+)
+from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
+from bisheng.core.cache.utils import file_download, async_file_download
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
 from bisheng.database.models.group_resource import (
     GroupResource,
     GroupResourceDao,
@@ -56,16 +53,17 @@ from bisheng.database.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus, ParseType,
 )
-from bisheng.database.models.llm_server import LLMDao, LLMModelType
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.settings import settings
-from bisheng.utils import generate_uuid
+from bisheng.llm.const import LLMModelType
+from bisheng.llm.domain.services import LLMService
+from bisheng.llm.models import LLMDao
+from bisheng.utils import generate_uuid, generate_knowledge_index_name
+from bisheng.utils import get_request_ip
 from bisheng.utils.embedding import decide_embeddings
-from bisheng.utils.minio_client import minio_client
 from bisheng.worker.knowledge import file_worker
 from bisheng_langchain.rag.bisheng_rag_chain import BishengRAGTool
 
@@ -156,12 +154,6 @@ class KnowledgeService(KnowledgeUtils):
     def create_knowledge(
             cls, request: Request, login_user: UserPayload, knowledge: KnowledgeCreate
     ) -> Knowledge:
-        # 设置默认的is_partition
-        knowledge.is_partition = (
-            knowledge.is_partition
-            if knowledge.is_partition is not None
-            else settings.get_vectors_conf().milvus.is_partition
-        )
 
         # 判断知识库是否重名
         repeat_knowledge = KnowledgeDao.get_knowledge_by_name(
@@ -181,34 +173,26 @@ class KnowledgeService(KnowledgeUtils):
         if embed_info.model_type != LLMModelType.EMBEDDING.value:
             raise KnowledgeNoEmbeddingError.http_exception()
 
-        # 自动生成 es和milvus的 collection_name
-        if not db_knowledge.collection_name:
-            if knowledge.is_partition:
-                embedding = knowledge.model
-                suffix_id = settings.get_vectors_conf().milvus.partition_suffix
-                db_knowledge.collection_name = (
-                    f"partition_{embedding}_knowledge_{suffix_id}"
-                )
-            else:
-                # 默认collectionName
-                db_knowledge.collection_name = (
-                    f"col_{int(time.time())}_{generate_uuid()[:8]}"
-                )
-        db_knowledge.index_name = f"col_{int(time.time())}_{generate_uuid()[:8]}"
+        # generate index_name and collection_name
+        db_knowledge.index_name = generate_knowledge_index_name()
+        db_knowledge.collection_name = db_knowledge.index_name
 
         # 插入到数据库
         db_knowledge.user_id = login_user.user_id
         db_knowledge = KnowledgeDao.insert_one(db_knowledge)
 
-        # 创建milvus的collection_name和es的index_name
-        embeddings = decide_embeddings(db_knowledge.model)
-        vector_client = decide_vectorstores(
-            db_knowledge.collection_name, "Milvus", embeddings
-        )
-        embeddings = FakeEmbedding()
-        es_client = decide_vectorstores(
-            db_knowledge.index_name, "ElasticKeywordsSearch", embeddings
-        )
+        try:
+            # 创建milvus的collection_name和es的index_name
+            embeddings = decide_embeddings(db_knowledge.model)
+            vector_client = decide_vectorstores(
+                db_knowledge.collection_name, "Milvus", embeddings
+            )
+            embeddings = FakeEmbedding()
+            es_client = decide_vectorstores(
+                db_knowledge.index_name, "ElasticKeywordsSearch", embeddings
+            )
+        except Exception as e:
+            logger.exception("create knowledge index name error")
 
         # 处理创建知识库的后续操作
         cls.create_knowledge_hook(request, login_user, db_knowledge)
@@ -353,14 +337,17 @@ class KnowledgeService(KnowledgeUtils):
             return
         page_size = 1000
         page_num = math.ceil(count / page_size)
+
+        minio_client = get_minio_storage_sync()
+
         for i in range(page_num):
             file_list = KnowledgeFileDao.get_file_simple_by_knowledge_id(
                 knowledge_id, i + 1, page_size
             )
             for file in file_list:
-                minio_client.delete_minio(str(file[0]))
+                minio_client.remove_object_sync(object_name=str(file[0]))
                 if file[1]:
-                    minio_client.delete_minio(file[1])
+                    minio_client.remove_object_sync(object_name=file[1])
 
     @classmethod
     def get_upload_file_original_name(cls, file_name: str) -> str:
@@ -371,11 +358,11 @@ class KnowledgeService(KnowledgeUtils):
             raise ServerError.http_exception("file_name is empty")
         # 从redis内获取
         uuid_file_name = file_name.split(".")[0]
-        original_file_name = redis_client.get(f"file_name:{uuid_file_name}") or file_name
+        original_file_name = get_redis_client_sync().get(f"file_name:{uuid_file_name}") or file_name
         return original_file_name
 
     @classmethod
-    def save_upload_file_original_name(cls, original_file_name: str) -> str:
+    async def save_upload_file_original_name(cls, original_file_name: str) -> str:
         """
         保存上传文件的原始名称到redis，生成一个uuid的文件名
         """
@@ -384,11 +371,12 @@ class KnowledgeService(KnowledgeUtils):
         file_ext = original_file_name.split(".")[-1]
         # 生成一个唯一的uuid作为key
         uuid_file_name = generate_uuid()
-        redis_client.set(f"file_name:{uuid_file_name}", original_file_name, expiration=86400)
+        redis_client = await get_redis_client()
+        await redis_client.aset(f"file_name:{uuid_file_name}", original_file_name, expiration=86400)
         return f"{uuid_file_name}.{file_ext}"
 
     @classmethod
-    def get_preview_file_chunk(
+    async def get_preview_file_chunk(
             cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileProcess
     ) -> (str, str, List[FileChunk], Any):
         """
@@ -397,8 +385,8 @@ class KnowledgeService(KnowledgeUtils):
         2：切分后的chunk列表
         3: ocr识别后的bbox
         """
-        knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
-        if not login_user.access_check(
+        knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
+        if not await login_user.async_access_check(
                 knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
         ):
             raise UnAuthorizedError.http_exception()
@@ -407,12 +395,14 @@ class KnowledgeService(KnowledgeUtils):
         excel_rule = req_data.file_list[0].excel_rule
         cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path)
 
+        redis_client = await get_redis_client()
+
         # 尝试从缓存获取
         if req_data.cache:
-            if cache_value := cls.get_preview_cache(cache_key):
-                parse_type = redis_client.get(f"{cache_key}_parse_type")
-                file_share_url = redis_client.get(f"{cache_key}_file_path")
-                partitions = redis_client.get(f"{cache_key}_partitions")
+            if cache_value := await cls.async_get_preview_cache(cache_key):
+                parse_type = await redis_client.aget(f"{cache_key}_parse_type")
+                file_share_url = await redis_client.aget(f"{cache_key}_file_path")
+                partitions = await redis_client.aget(f"{cache_key}_partitions")
                 res = []
 
                 # 根据分段顺序排序
@@ -422,12 +412,12 @@ class KnowledgeService(KnowledgeUtils):
                     res.append(FileChunk(text=val["text"], metadata=val["metadata"]))
                 return parse_type, file_share_url, res, partitions
 
-        filepath, file_name = file_download(file_path)
+        filepath, file_name = await async_file_download(file_path)
         file_ext = file_name.split(".")[-1].lower()
         file_name = cls.get_upload_file_original_name(file_name)
 
         # 切分文本
-        texts, metadatas, parse_type, partitions = read_chunk_text(
+        texts, metadatas, parse_type, partitions = await async_read_chunk_text(
             filepath,
             file_name,
             req_data.separator,
@@ -454,35 +444,36 @@ class KnowledgeService(KnowledgeUtils):
         if file_ext in ['doc', 'ppt', 'pptx']:
             file_share_url = ''
             new_file_name = KnowledgeUtils.get_tmp_preview_file_object_name(filepath)
-            if minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
+            minio_client = await get_minio_storage()
+            if await minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
                 file_share_url = minio_client.get_share_link(
                     new_file_name, minio_client.tmp_bucket
                 )
 
         # 存入缓存
-        cls.save_preview_cache(cache_key, mapping=cache_map)
-        redis_client.set(f"{cache_key}_parse_type", parse_type)
-        redis_client.set(f"{cache_key}_file_path", file_share_url)
-        redis_client.set(f"{cache_key}_partitions", partitions)
+        await cls.async_save_preview_cache(cache_key, mapping=cache_map)
+        await redis_client.aset(f"{cache_key}_parse_type", parse_type)
+        await redis_client.aset(f"{cache_key}_file_path", file_share_url)
+        await redis_client.aset(f"{cache_key}_partitions", partitions)
         return parse_type, file_share_url, res, partitions
 
     @classmethod
-    def update_preview_file_chunk(
+    async def update_preview_file_chunk(
             cls, request: Request, login_user: UserPayload, req_data: UpdatePreviewFileChunk
     ):
-        knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
-        if not login_user.access_check(
+        knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
+        if not await login_user.async_access_check(
                 knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
         ):
             raise UnAuthorizedError.http_exception()
 
         cache_key = cls.get_preview_cache_key(req_data.knowledge_id, req_data.file_path)
-        chunk_info = cls.get_preview_cache(cache_key, req_data.chunk_index)
+        chunk_info = await cls.async_get_preview_cache(cache_key, req_data.chunk_index)
         if not chunk_info:
             raise NotFoundError.http_exception()
         chunk_info["text"] = req_data.text
         chunk_info["metadata"]["bbox"] = req_data.bbox
-        cls.save_preview_cache(
+        await cls.async_save_preview_cache(
             cache_key, chunk_index=req_data.chunk_index, value=chunk_info
         )
 
@@ -645,6 +636,9 @@ class KnowledgeService(KnowledgeUtils):
         res = []
 
         req_data["knowledge_id"] = knowledge.id
+
+        minio_client = get_minio_storage_sync()
+
         for file in db_files:
             input_file = id2input.get(file.id)
 
@@ -657,9 +651,9 @@ class KnowledgeService(KnowledgeUtils):
             if file.object_name.startswith('tmp'):
                 # 把临时文件移动到正式目录
                 new_object_name = KnowledgeUtils.get_knowledge_file_object_name(file.id, file.object_name)
-                minio_client.copy_object(file.object_name, new_object_name,
-                                         bucket_name=minio_client.tmp_bucket,
-                                         target_bucket_name=minio_client.bucket)
+                minio_client.copy_object_sync(source_object=file.object_name, dest_object=new_object_name,
+                                              source_bucket=minio_client.tmp_bucket,
+                                              dest_bucket=minio_client.bucket)
                 file.object_name = new_object_name
 
             if input_file["remark"] and "对应已存在文件" in input_file["remark"]:
@@ -729,6 +723,7 @@ class KnowledgeService(KnowledgeUtils):
             file_info.excel_rule = ExcelRule()
         split_rule["excel_rule"] = file_info.excel_rule.model_dump()
         str_split_rule = json.dumps(split_rule)
+        minio_client = get_minio_storage_sync()
 
         if content_repeat or name_repeat:
             db_file = content_repeat[0] if content_repeat else name_repeat[0]
@@ -739,7 +734,7 @@ class KnowledgeService(KnowledgeUtils):
             db_file.remark = f"{original_file_name} 对应已存在文件 {old_name}"
             # 上传到minio，不修改数据库，由前端决定是否覆盖，覆盖的话调用重试接口
             with open(filepath, "rb") as file:
-                minio_client.upload_tmp(db_file.object_name, file.read())
+                minio_client.put_object_tmp_sync(db_file.object_name, file.read())
             db_file.status = KnowledgeFileStatus.FAILED.value
             db_file.split_rule = str_split_rule
             # 更新文件大小信息
@@ -758,8 +753,9 @@ class KnowledgeService(KnowledgeUtils):
         db_file = KnowledgeFileDao.add_file(db_file)
         # 原始文件保存
         db_file.object_name = KnowledgeUtils.get_knowledge_file_object_name(db_file.id, db_file.file_name)
-        res = minio_client.upload_minio(db_file.object_name, filepath)
-        logger.info("upload_original_file path={} res={}", db_file.object_name, res)
+        minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=db_file.object_name,
+                                     file=filepath)
+        logger.info("upload_original_file path={}", db_file.object_name)
         KnowledgeFileDao.update(db_file)
         return db_file
 
@@ -837,12 +833,14 @@ class KnowledgeService(KnowledgeUtils):
         for index, one in enumerate(res):
             finally_res.append(KnowledgeFileResp(**one.model_dump()))
             # 超过一天还在解析中的，将状态置为失败
-            if one.status == KnowledgeFileStatus.PROCESSING.value and (datetime.now() - one.update_time).days > 1:
+            if one.status == KnowledgeFileStatus.PROCESSING.value and (
+                    datetime.now() - one.update_time).total_seconds() > 86400:
                 timeout_files.append(one.id)
                 continue
             finally_res[index].title = file_title_map.get(str(one.id), "")
         if timeout_files:
-            KnowledgeFileDao.update_file_status(timeout_files, KnowledgeFileStatus.FAILED, '文件处理时间超过24小时')
+            KnowledgeFileDao.update_file_status(timeout_files, KnowledgeFileStatus.FAILED,
+                                                'Parsing time exceeds 24 hours')
 
         return (
             finally_res,
@@ -1123,6 +1121,7 @@ class KnowledgeService(KnowledgeUtils):
         if not file:
             raise NotFoundError.http_exception()
         file = file[0]
+        minio_client = get_minio_storage_sync()
         # 130版本以前的文件解析
         if file.parse_type in [ParseType.LOCAL.value, ParseType.UNS.value]:
             original_url = minio_client.get_share_link(cls.get_knowledge_file_object_name(file.id, file.file_name))
@@ -1143,7 +1142,8 @@ class KnowledgeService(KnowledgeUtils):
         :param object_name: 文件在minio中的对象名称
         :return: 文件的分享链接
         """
-        if minio_client.object_exists(minio_client.bucket, object_name):
+        minio_client = get_minio_storage_sync()
+        if minio_client.object_exists_sync(minio_client.bucket, object_name):
             return minio_client.get_share_link(object_name, minio_client.bucket)
         return ""
 
@@ -1156,15 +1156,11 @@ class KnowledgeService(KnowledgeUtils):
         if not file_info.bbox_object_name:
             return None
 
+        minio_client = get_minio_storage_sync()
+
         # download bbox file
-        resp = minio_client.download_minio(file_info.bbox_object_name)
-        new_data = io.BytesIO()
-        for d in resp.stream(32 * 1024):
-            new_data.write(d)
-        resp.close()
-        resp.release_conn()
-        new_data.seek(0)
-        return json.loads(new_data.read().decode("utf-8"))
+        resp = minio_client.get_object_sync(bucket_name=minio_client.bucket, object_name=file_info.bbox_object_name)
+        return json.loads(resp.decode("utf-8"))
 
     @classmethod
     async def copy_knowledge(
@@ -1180,7 +1176,8 @@ class KnowledgeService(KnowledgeUtils):
         knowldge_dict.pop("create_time")
         knowldge_dict.pop("update_time", None)
         knowldge_dict["user_id"] = login_user.user_id
-        knowldge_dict["index_name"] = f"col_{int(time.time())}_{generate_uuid()[:8]}"
+        knowldge_dict["index_name"] = generate_knowledge_index_name()
+        knowldge_dict["collection_name"] = knowldge_dict["index_name"]
         knowldge_dict["name"] = f"{knowledge.name} 副本"[:30]
         knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
         knowledge_new = Knowledge(**knowldge_dict)
@@ -1194,6 +1191,35 @@ class KnowledgeService(KnowledgeUtils):
         cls.create_knowledge_hook(request, login_user, target_knowlege)
         file_worker.file_copy_celery.delay(params)
         return target_knowlege
+
+    @classmethod
+    async def copy_qa_knowledge(
+            cls,
+            request,
+            login_user: UserPayload,
+            qa_knowledge: Knowledge,
+    ) -> Any:
+        await KnowledgeDao.async_update_state(qa_knowledge.id, KnowledgeState.COPYING,
+                                              update_time=qa_knowledge.update_time)
+        qa_knowldge_dict = qa_knowledge.model_dump()
+        qa_knowldge_dict.pop("id")
+        qa_knowldge_dict.pop("create_time")
+        qa_knowldge_dict.pop("update_time", None)
+        qa_knowldge_dict["user_id"] = login_user.user_id
+        qa_knowldge_dict["index_name"] = generate_knowledge_index_name()
+        qa_knowldge_dict["collection_name"] = qa_knowldge_dict["index_name"]
+        qa_knowldge_dict["name"] = f"{qa_knowledge.name} 副本"[:30]
+        qa_knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
+        qa_knowledge_new = Knowledge(**qa_knowldge_dict)
+        target_qa_knowlege = await KnowledgeDao.async_insert_one(qa_knowledge_new)
+
+        cls.create_knowledge_hook(request, login_user, target_qa_knowlege)
+
+        from bisheng.worker.knowledge.qa import copy_qa_knowledge_celery
+        copy_qa_knowledge_celery.delay(source_knowledge_id=qa_knowledge.id, target_knowledge_id=target_qa_knowlege.id,
+                                       login_user_id=login_user.user_id)
+
+        return target_qa_knowlege
 
     @classmethod
     def judge_qa_knowledge_write(
@@ -1226,9 +1252,9 @@ def mixed_retrieval_recall(question: str, vector_store, keyword_store, max_conte
         dict: 包含检索结果和源文档的字典
     """
     try:
-        llm = LLMService.get_bisheng_llm(model_id=model_id,
-                                         temperature=0.01,
-                                         cache=False)
+        llm = LLMService.get_bisheng_llm_sync(model_id=model_id,
+                                              temperature=0.01,
+                                              cache=False)
         # 创建混合检索器
         rag_tool = BishengRAGTool(
             llm=llm,

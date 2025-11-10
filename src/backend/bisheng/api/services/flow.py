@@ -1,22 +1,22 @@
 import asyncio
 import copy
-from typing import List, Dict, AsyncGenerator, Optional
+from typing import List, Dict, AsyncGenerator, Optional, Union
 
 from fastapi import Request
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
 
-from bisheng.api.errcode.http_error import UnAuthorizedError
-from bisheng.api.errcode.flow import NotFoundVersionError, CurVersionDelError, VersionNameExistsError, \
-    NotFoundFlowError, \
-    FlowOnlineEditError, WorkFlowOnlineEditError
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.utils import get_L2_param_from_flow, get_request_ip
+from bisheng.api.utils import get_L2_param_from_flow
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq, resp_500, \
     StreamData
 from bisheng.chat.utils import process_node_data
+from bisheng.common.errcode.flow import NotFoundVersionError, CurVersionDelError, VersionNameExistsError, \
+    NotFoundFlowError, \
+    FlowOnlineEditError, WorkFlowOnlineEditError
+from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.database.models.flow import FlowDao, FlowStatus, Flow, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead, FlowVersion
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum, GroupResource
@@ -28,6 +28,8 @@ from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.database.models.variable_value import VariableDao
 from bisheng.processing.process import process_graph_cached, process_tweaks
+from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.utils import get_request_ip
 
 
 class FlowService(BaseService):
@@ -68,7 +70,7 @@ class FlowService(BaseService):
 
         atype = AccessType.FLOW_WRITE
         if flow_info.flow_type == FlowType.WORKFLOW.value:
-            atype = AccessType.WORK_FLOW_WRITE
+            atype = AccessType.WORKFLOW_WRITE
 
         # 判断权限
         if not user.access_check(flow_info.user_id, flow_info.id, atype):
@@ -81,53 +83,52 @@ class FlowService(BaseService):
         return resp_200()
 
     @classmethod
-    def change_current_version(cls, request: Request, login_user: UserPayload, flow_id: str, version_id: int) \
+    async def judge_flow_write_permission(cls, user: UserPayload, flow_id: str) -> Flow:
+        flow_info = await FlowDao.aget_flow_by_id(flow_id)
+        if not flow_info:
+            raise NotFoundFlowError.http_exception()
+
+        atype = AccessType.FLOW_WRITE
+        if flow_info.flow_type == FlowType.WORKFLOW.value:
+            atype = AccessType.WORKFLOW_WRITE
+
+        # 判断权限
+        if not await user.async_access_check(flow_info.user_id, flow_info.id, atype):
+            raise UnAuthorizedError.http_exception()
+        return flow_info
+
+    @classmethod
+    async def change_current_version(cls, request: Request, login_user: UserPayload, flow_id: str, version_id: int) \
             -> UnifiedResponseModel[None]:
         """
         修改当前版本
         """
-        flow_info = FlowDao.get_flow_by_id(flow_id)
-        if not flow_info:
-            return NotFoundFlowError.return_resp()
-
-        atype = AccessType.FLOW_WRITE
-        if flow_info.flow_type == FlowType.WORKFLOW.value:
-            atype = AccessType.WORK_FLOW_WRITE
-
-        # 判断权限
-        if not login_user.access_check(flow_info.user_id, flow_info.id, atype):
-            return UnAuthorizedError.return_resp()
+        flow_info = await cls.judge_flow_write_permission(login_user, flow_id)
 
         # 技能上线状态不允许 切换版本
         if flow_info.status == FlowStatus.ONLINE:
             return FlowOnlineEditError.return_resp()
 
         # 切换版本
-        version_info = FlowVersionDao.get_version_by_id(version_id)
+        version_info = await FlowVersionDao.aget_version_by_id(version_id)
         if not version_info:
             return NotFoundVersionError.return_resp()
         if version_info.is_current == 1:
             return resp_200()
 
         # 修改当前版本为用户选择的版本
-        FlowVersionDao.change_current_version(flow_id, version_info)
+        await FlowVersionDao.change_current_version(flow_id, version_info)
 
-        cls.update_flow_hook(request, login_user, flow_info)
+        await cls.update_flow_hook(request, login_user, flow_info)
         return resp_200()
 
     @classmethod
-    def create_new_version(cls, user: UserPayload, flow_id: str, flow_version: FlowVersionCreate) \
+    async def create_new_version(cls, user: UserPayload, flow_id: str, flow_version: FlowVersionCreate) \
             -> UnifiedResponseModel[FlowVersion]:
         """
         创建新版本
         """
-        flow_info = FlowDao.get_flow_by_id(flow_id)
-        if not flow_info:
-            return NotFoundFlowError.return_resp()
-
-        # 判断权限
-        if not user.access_check(flow_info.user_id, flow_info.id, AccessType.FLOW_WRITE):
-            return UnAuthorizedError.return_resp()
+        flow_info = await cls.judge_flow_write_permission(user, flow_id)
 
         exist_version = FlowVersionDao.get_version_by_name(flow_id, flow_version.name)
         if exist_version:
@@ -141,38 +142,29 @@ class FlowService(BaseService):
         # 创建新版本
         flow_version = FlowVersionDao.create_version(flow_version)
 
-        # 将原始版本的表单数据拷贝到新版本内
-        VariableDao.copy_variables(flow_version.flow_id, flow_version.original_version_id, flow_version.id)
-
-        try:
-            # 重新整理此版本的表单数据
-            if not get_L2_param_from_flow(flow_version.data, flow_version.flow_id, flow_version.id):
-                logger.error(f'flow_id={flow_version.id} version_id={flow_version.id} extract file_node fail')
-        except:
-            pass
-
+        if flow_info.flow_type == FlowType.FLOW.value:
+            # 将原始版本的表单数据拷贝到新版本内
+            VariableDao.copy_variables(flow_version.flow_id, flow_version.original_version_id, flow_version.id)
+            try:
+                # 重新整理此版本的表单数据
+                if not get_L2_param_from_flow(flow_version.data, flow_version.flow_id, flow_version.id):
+                    logger.error(f'flow_id={flow_version.id} version_id={flow_version.id} extract file_node fail')
+            except:
+                pass
         return resp_200(data=flow_version)
 
     @classmethod
-    def update_version_info(cls, request: Request, user: UserPayload, version_id: int, flow_version: FlowVersionCreate) \
+    async def update_version_info(cls, request: Request, user: UserPayload, version_id: int,
+                                  flow_version: FlowVersionCreate) \
             -> UnifiedResponseModel[FlowVersion]:
         """
         更新版本信息
         """
         # 包含已删除的版本，若版本已删除，则重新恢复此版本
-        version_info = FlowVersionDao.get_version_by_id(version_id, include_delete=True)
+        version_info = await FlowVersionDao.aget_version_by_id(version_id, include_delete=True)
         if not version_info:
             return NotFoundVersionError.return_resp()
-        flow_info = FlowDao.get_flow_by_id(version_info.flow_id)
-        if not flow_info:
-            return NotFoundFlowError.return_resp()
-
-        atype = AccessType.FLOW_WRITE
-        if flow_info.flow_type == FlowType.WORKFLOW.value:
-            atype = AccessType.WORK_FLOW_WRITE
-        # 判断权限
-        if not user.access_check(flow_info.user_id, flow_info.id, atype):
-            return UnAuthorizedError.return_resp()
+        flow_info = await cls.judge_flow_write_permission(user, version_info.flow_id)
 
         # 版本是当前版本, 且技能处于上线状态则不可编辑data数据，名称和描述可以编辑
         if version_info.is_current == 1 and flow_info.status == FlowStatus.ONLINE.value and flow_version.data:
@@ -187,7 +179,7 @@ class FlowService(BaseService):
         # 恢复此技能版本
         version_info.is_delete = 0
 
-        flow_version = FlowVersionDao.update_version(version_info)
+        flow_version = await FlowVersionDao.aupdate_version(version_info)
 
         if flow_version.flow_type == FlowType.FLOW.value:
             try:
@@ -196,23 +188,28 @@ class FlowService(BaseService):
                     logger.error(f'flow_id={flow_version.id} version_id={flow_version.id} extract file_node fail')
             except:
                 pass
-        cls.update_flow_hook(request, user, flow_info)
+        await cls.update_flow_hook(request, user, flow_info)
         return resp_200(data=flow_version)
 
     @classmethod
-    def get_one_flow(cls, login_user: UserPayload, flow_id: str) -> UnifiedResponseModel[Flow]:
+    async def get_one_flow(cls, login_user: UserPayload, flow_id: str, share_link: Union['ShareLink', None] = None) -> \
+            UnifiedResponseModel[Flow]:
         """
         获取单个技能的详情
         """
-        flow_info = FlowDao.get_flow_by_id(flow_id)
+        flow_info = await FlowDao.aget_flow_by_id(flow_id)
         if not flow_info:
             raise NotFoundFlowError()
         atype = AccessType.FLOW
         if flow_info.flow_type == FlowType.WORKFLOW.value:
-            atype = AccessType.WORK_FLOW
-        if not login_user.access_check(flow_info.user_id, flow_info.id, atype):
-            raise UnAuthorizedError()
-        flow_info.logo = cls.get_logo_share_link(flow_info.logo)
+            atype = AccessType.WORKFLOW
+        if not await login_user.async_access_check(flow_info.user_id, flow_info.id, atype):
+            if (share_link is None
+                    or share_link.meta_data is None
+                    or share_link.meta_data.get("flowId") != flow_info.id):
+                raise UnAuthorizedError()
+
+        flow_info.logo = await cls.get_logo_share_link_async(flow_info.logo)
 
         return resp_200(data=flow_info)
 
@@ -240,7 +237,7 @@ class FlowService(BaseService):
         else:
             user_role = UserRoleDao.get_user_roles(user.user_id)
             role_ids = [role.role_id for role in user_role]
-            role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.FLOW, AccessType.WORK_FLOW])
+            role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.FLOW, AccessType.WORKFLOW])
             flow_id_extra = []
             if role_access:
                 flow_id_extra = [access.third_id for access in role_access]
@@ -445,13 +442,13 @@ class FlowService(BaseService):
         return True
 
     @classmethod
-    def update_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:
+    async def update_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:
         # 写入审计日志
-        AuditLogService.update_build_flow(login_user, get_request_ip(request), flow_info.id,
-                                          flow_type=flow_info.flow_type)
+        await AuditLogService.update_build_flow(login_user, get_request_ip(request), flow_info.id,
+                                                flow_type=flow_info.flow_type)
 
         # 写入logo缓存
-        cls.get_logo_share_link(flow_info.logo)
+        await cls.get_logo_share_link_async(flow_info.logo)
         return True
 
     @classmethod

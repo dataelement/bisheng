@@ -1,13 +1,13 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { useRecoilValue } from 'recoil';
 import Vditor from "vditor";
 import "vditor/dist/index.css";
 import { useGetBsConfig, useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/data-provider';
 import { useLocalize } from '~/hooks';
+import store from '~/store';
 import { LinsightInfo } from "~/store/linsight";
 import { SopStatus } from "./SOPEditor";
 import SopToolsDown from "./SopToolsDown";
-import { useRecoilValue } from 'recoil';
-import store from '~/store';
 
 // 错误工具toolip提示
 const ToolErrorTip = () => {
@@ -99,7 +99,8 @@ const ToolErrorTip = () => {
 
 interface MarkdownProps {
     linsight: LinsightInfo,
-    edit?: boolean;
+    disable?: boolean;
+    hidden?: boolean;
 }
 
 interface MarkdownRef {
@@ -107,7 +108,7 @@ interface MarkdownRef {
 }
 
 const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
-    const { linsight, edit, onChange } = props;
+    const { linsight, disable, hidden = false, onChange } = props;
     const { sop: value = '', inputSop, files, tools } = linsight
     const localize = useLocalize()
 
@@ -163,7 +164,7 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
             input: (val) => onChange(replaceBracesToMarkers(val, nameToValueRef.current)),
             hint: {
                 parse: false, // 必须
-                placeholder: {
+                placeholder: hidden ? {} : {
                     delay: 2000,
                     text: localize('com_agent_input_knowledge_tool'),
                 },
@@ -215,12 +216,12 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
 
     // 开启/禁用
     useEffect(() => {
-        if (edit) {
+        if (disable) {
             veditorRef.current?.disabled()
         } else {
             veditorRef.current?.enable()
         }
-    }, [edit, RenderingCompleted])
+    }, [disable, RenderingCompleted])
 
     // 暴露方法给父组件
     useImperativeHandle(ref, () => ({

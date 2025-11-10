@@ -12,7 +12,7 @@ class TemplateSkillBase(SQLModelSerializable):
     name: str = Field(index=True)
     description: str = Field(index=False)
     data: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
-    order_num: Optional[int] = Field(default=True)
+    order_num: Optional[int] = Field(default=True, index=True)
     # 1 flow 5 assistant 10 workflow
     flow_type: Optional[int] = Field(default=1)
     flow_id: Optional[str] = Field(default=None, index=False)

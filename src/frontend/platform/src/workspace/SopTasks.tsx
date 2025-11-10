@@ -385,8 +385,8 @@ const Task = ({
             <div className={isExpanded ? 'block' : 'hidden'}>
                 {children}
                 {/* 任务总结 */}
-                {lvl1 && task.status !== 'failed' && task.result.answer && <div className='bs-mkdown max-w-full relative mb-6 text-sm px-4 py-3 rounded-lg bg-[#F8F9FB] text-[#303133] leading-6 break-all'>
-                    <MessageMarkDown message={task.result.answer} />
+                {lvl1 && task.status !== 'failed' && task.result?.answer && <div className='bs-mkdown max-w-full relative mb-6 text-sm px-4 py-3 rounded-lg bg-[#F8F9FB] text-[#303133] leading-6 break-all'>
+                    <MessageMarkDown message={task.result?.answer} />
                     <div className='bg-gradient-to-t w-full h-10 from-[#F8F9FB] from-0% to-transparent to-100% absolute bottom-0'></div>
                 </div>}
             </div>
@@ -896,7 +896,6 @@ const useFoucsInput = (tasks: any) => {
     useEffect(() => {
         if (currentFocusId) {
             const dom = document.getElementById(currentFocusId);
-            console.log('dom :>> ', dom);
             if (dom) {
                 dom?.focus();
                 // 平滑滚动到输入框位置

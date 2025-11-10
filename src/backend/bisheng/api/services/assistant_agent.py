@@ -15,21 +15,21 @@ from langchain_core.vectorstores import VectorStoreRetriever
 from langgraph.prebuilt import create_react_agent
 from loguru import logger
 
-from bisheng.api.errcode.assistant import AssistantModelEmptyError, AssistantModelNotConfigError
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.knowledge_imp import decide_vectorstores
-from bisheng.api.services.llm import LLMService
 from bisheng.api.services.openapi import OpenApiSchema
 from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import InputRequest
+from bisheng.common.errcode.assistant import AssistantModelEmptyError, AssistantModelNotConfigError
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
 from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
+from bisheng.llm.domain.services import LLMService
 from bisheng.mcp_manage.langchain.tool import McpTool
 from bisheng.mcp_manage.manager import ClientManager
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils.embedding import decide_embeddings
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
 from bisheng_langchain.gpts.auto_optimization import (generate_breif_description,
@@ -85,7 +85,7 @@ class AssistantAgent(AssistantUtils):
 
     async def init_llm(self):
         # 获取配置的助手模型列表
-        assistant_llm = LLMService.get_assistant_llm()
+        assistant_llm = await LLMService.get_assistant_llm()
         if not assistant_llm.llm_list:
             raise AssistantModelEmptyError()
         default_llm = None
@@ -105,19 +105,19 @@ class AssistantAgent(AssistantUtils):
         }
 
         # 初始化llm
-        self.llm = LLMService.get_bisheng_llm(model_id=default_llm.model_id,
-                                              temperature=self.assistant.temperature,
-                                              streaming=default_llm.streaming)
+        self.llm = await LLMService.get_bisheng_llm(model_id=default_llm.model_id,
+                                                    temperature=self.assistant.temperature,
+                                                    streaming=default_llm.streaming)
 
     async def init_auto_update_llm(self):
         """ 初始化自动优化prompt等信息的llm实例 """
-        assistant_llm = LLMService.get_assistant_llm()
+        assistant_llm = await LLMService.get_assistant_llm()
         if not assistant_llm.auto_llm:
             raise Exception('未配置助手画像自动优化模型')
 
-        self.llm = LLMService.get_bisheng_llm(model_id=assistant_llm.auto_llm.model_id,
-                                              temperature=self.assistant.temperature,
-                                              streaming=assistant_llm.auto_llm.streaming)
+        self.llm = await LLMService.get_bisheng_llm(model_id=assistant_llm.auto_llm.model_id,
+                                                    temperature=self.assistant.temperature,
+                                                    streaming=assistant_llm.auto_llm.streaming)
 
     @staticmethod
     def parse_tool_params(tool: GptsTools) -> Dict:
@@ -344,7 +344,7 @@ class AssistantAgent(AssistantUtils):
         """通过名称获取tool 列表
            tools_name_param:: {name: params}
         """
-        links: List[AssistantLink] = AssistantLinkDao.get_assistant_link(
+        links: List[AssistantLink] = await AssistantLinkDao.get_assistant_link(
             assistant_id=self.assistant.id)
         # tool
         tools: List[BaseTool] = []

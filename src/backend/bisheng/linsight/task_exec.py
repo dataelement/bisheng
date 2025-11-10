@@ -10,21 +10,21 @@ from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
-from bisheng.api.services.llm import LLMService
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.v1.schema.linsight_schema import UserInputEventSchema
-from bisheng.cache.utils import create_cache_folder_async, CACHE_DIR
-from bisheng.core.app_context import app_ctx
+from bisheng.core.cache.utils import create_cache_folder_async, CACHE_DIR
+from bisheng.core.external.http_client.http_client_manager import get_http_client
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models import LinsightExecuteTask
 from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao, ExecuteTaskStatusEnum, \
     ExecuteTaskTypeEnum
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
     LinsightSessionVersion
-from bisheng.interface.llms.custom import BishengLLM
 from bisheng.linsight import utils as linsight_execute_utils
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
-from bisheng.settings import settings
-from bisheng.utils.minio_client import minio_client
+from bisheng.llm.domain.llm import BishengLLM
+from bisheng.llm.domain.services import LLMService
+from bisheng.common.services.config_service import settings
 from bisheng_langchain.linsight.agent import LinsightAgent
 from bisheng_langchain.linsight.const import TaskStatus, ExecConfig
 from bisheng_langchain.linsight.event import NeedUserInput, GenerateSubTask, ExecStep, TaskStart, TaskEnd, BaseEvent
@@ -227,10 +227,10 @@ class LinsightWorkflowTask:
         object_name = file_info["markdown_file_path"]
         file_name = file_info.get("markdown_filename", os.path.basename(object_name))
         file_path = os.path.join(target_dir, file_name)
-
+        minio_client = await get_minio_storage()
         try:
             file_url = minio_client.get_share_link(object_name)
-            http_client = await app_ctx.get_http_client()
+            http_client = await get_http_client()
 
             with open(file_path, "wb") as f:
                 async for chunk in http_client.stream(method="GET", url=str(file_url)):

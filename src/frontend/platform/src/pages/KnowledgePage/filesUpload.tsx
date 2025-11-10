@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import FileUploadStep1 from "./components/FileUploadStep1";
-import FileUploadStep2 from "./components/FileUploadStep2";
+import FileUploadStep2, { Step2PersistState } from "./components/FileUploadStep2";
 import FileUploadStep4 from "./components/FileUploadStep4";
 import PreviewResult from "./components/PreviewResult";
 import { LoadingIcon } from "@/components/bs-icons/loading";
@@ -38,11 +38,19 @@ export default function FilesUpload() {
   const [repeatFiles, setRepeatFiles] = useState([]); // 重复文件提醒
   const [retryLoad, setRetryLoad] = useState(false);
 
+  // 关键新增：托管 Step2 的持久化状态
+  const [step2PersistState, setStep2PersistState] = useState<Step2PersistState | undefined>();
+
   // Ref管理
   const fileUploadStep2Ref = useRef(null); // Step2（分段策略）组件引用
   const _tempConfigRef = useRef({}); // 临时存储API配置
   const submittingRef = useRef(false); // 防止重复提交
   const repeatCallBackRef = useRef(() => setCurrentStep(4)); // 重复文件处理后跳转步骤（4：数据处理）
+
+  // 关键新增：接收 Step2 的状态更新，保存到父组件
+  const handleStep2StateChange = (state: Step2PersistState) => {
+    setStep2PersistState(state);
+  };
 
   // 步骤1：文件上传完成，跳转步骤2
   const handleStep1Next = (files) => {
@@ -228,54 +236,70 @@ export default function FilesUpload() {
                 initialFiles={resultFiles}
               />
             )}
-            {/* 步骤2：分段策略 */}
-           {currentStep >= 2 && ( // 步骤2或3时，第二步始终挂载（仅控制显示）
-        <div className={currentStep === 2 ? "block" : "hidden"}>
-          <FileUploadStep2
-            ref={fileUploadStep2Ref}
-            step={currentStep}
-            resultFiles={resultFiles}
-            isSubmitting={isSubmitting}
-            onNext={handleStep2Next}
-            onPrev={handleBack}
-            kId={knowledgeId}
-          />
-        </div>
-      )}
+            {/* 步骤2：分段策略 - 仅新增2个props传递 */}
+            {currentStep === 2 && (
+              <div className={currentStep === 2 ? "block" : "hidden"}>
+                <FileUploadStep2
+                  ref={fileUploadStep2Ref}
+                  step={currentStep}
+                  resultFiles={resultFiles}
+                  isSubmitting={isSubmitting}
+                  onNext={handleStep2Next}
+                  onPrev={handleBack}
+                  kId={knowledgeId}
+                  persistState={step2PersistState} // 新增：传递保存的状态
+                  onPersistStateChange={handleStep2StateChange} // 新增：传递状态更新回调
+                />
+              </div>
+            )}
 
 
             {/* 步骤3：原文对比 */}
-                {currentStep === 3 && segmentRules && (
-        <div className="block"> {/* 第三步显示时，第二步被隐藏但不卸载 */}
-          <PreviewResult
-            rules={segmentRules.rules}
-            resultFiles={resultFiles}
-            handlePreviewResult={handlePreviewResult}
-            onPrev={handleBack}
-            onNext={() => {
-              setCurrentStep(4);
-              handleSave(segmentRules);
-            }}
-            step={currentStep}
-            previewCount={0}
-            applyEachCell={segmentRules.applyEachCell}
-            cellGeneralConfig={segmentRules.cellGeneralConfig}
-            kId={knowledgeId}
-            showPreview={true}
-          />
+            {currentStep === 3 && segmentRules && (
+              <div className="block"> {/* 第三步显示时，第二步被隐藏但不卸载 */}
+                <PreviewResult
+                  rules={segmentRules.rules}
+                  resultFiles={resultFiles}
+                  handlePreviewResult={handlePreviewResult}
+                  onPrev={handleBack}
+                  onNext={() => {
+                    setCurrentStep(4);
+                    handleSave(segmentRules);
+                  }}
+                  onDeleteFile={(filePath) => {
+                    setSegmentRules(prev => (
+                      {
+                        ...prev,
+                        rules: {
+                          ...prev.rules,
+                          fileList: prev.rules.fileList.filter(file => file.filePath !== filePath)
+                        }
+                      }
+                    ))
+                    setResultFiles(prev => (
+                      prev.filter(file => file.file_path !== filePath)
+                    ))
+                  }}
+                  step={currentStep}
+                  previewCount={0}
+                  applyEachCell={segmentRules.applyEachCell}
+                  cellGeneralConfig={segmentRules.cellGeneralConfig}
+                  kId={knowledgeId}
+                  showPreview={true}
+                />
 
-          {/* 步骤3底部按钮 */}
-          <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
-            <Button variant="outline" onClick={handleBack}>
-              {t('previousStep')}
-            </Button>
-            <Button onClick={handleNext} disabled={isNextDisabled || isSubmitting}>
-              {isSubmitting ? <LoadingIcon className="h-4 w-4 mr-1" /> : null}
-              {t('nextStep')}
-            </Button>
-          </div>
-        </div>
-      )}
+                {/* 步骤3底部按钮 */}
+                <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
+                  <Button variant="outline" onClick={handleBack}>
+                    {t('previousStep')}
+                  </Button>
+                  <Button onClick={handleNext} disabled={isNextDisabled || isSubmitting || resultFiles.length === 0}>
+                    {isSubmitting ? <LoadingIcon className="h-4 w-4 mr-1" /> : null}
+                    {t('nextStep')}
+                  </Button>
+                </div>
+              </div>
+            )}
 
 
             {/* 步骤4：数据处理 */}

@@ -4,6 +4,8 @@ import { Button } from "@/components/bs-ui/button";
 import { copyTrackingApi, likeChatApi } from "@/controllers/API";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
+import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 
 const enum ThumbsState {
     Default = 0,
@@ -11,11 +13,13 @@ const enum ThumbsState {
     ThumbsDown
 }
 
-export default function MessageButtons({ mark = false, id, onCopy, data, onUnlike, onMarkClick }) {
+export default function MessageButtons({debug, mark = false, id, onCopy, data, onUnlike, onMarkClick,version, text = '' }) {
+    
     const { t } = useTranslation()
     const [state, setState] = useState<ThumbsState>(data)
     const [copied, setCopied] = useState(false)
 
+    const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
     const handleClick = (type: ThumbsState) => {
         if (mark) return
         setState(_type => {
@@ -43,7 +47,16 @@ export default function MessageButtons({ mark = false, id, onCopy, data, onUnlik
             <FlagIcon width={12} height={12} className="cursor-pointer" />
             <span>{t('addQa')}</span>
         </Button>}
-        <ThunmbIcon
+        {linsightConfig?.tts_model?.id && (
+            <AudioPlayComponent
+                messageId={String(id)}
+                msg={text}
+            />
+        )}
+
+        {!debug && (version === 'v2') &&
+        <>
+          <ThunmbIcon
             type='copy'
             className={`cursor-pointer ${copied && 'text-primary hover:text-primary'}`}
             onClick={handleCopy}
@@ -57,6 +70,8 @@ export default function MessageButtons({ mark = false, id, onCopy, data, onUnlik
             type='unLike'
             className={`cursor-pointer ${state === ThumbsState.ThumbsDown && 'text-primary hover:text-primary'}`}
             onClick={() => handleClick(ThumbsState.ThumbsDown)}
-        />
+        /></>
+        }
+      
     </div>
 };

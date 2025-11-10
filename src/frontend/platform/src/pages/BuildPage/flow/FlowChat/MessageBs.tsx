@@ -12,6 +12,9 @@ import { useMemo, useRef, useState } from "react";
 import ChatFile from "./ChatFileFile";
 import MessageMarkDown from "./MessageMarkDown";
 import { useMessageStore } from "./messageStore";
+import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
+import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
+
 
 // 颜色列表
 const colorList = [
@@ -58,11 +61,12 @@ const ReasoningLog = ({ loading, msg = '' }) => {
 }
 
 
-export default function MessageBs({ debug, mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick }:
+export default function MessageBs({ debug, mark = false, logo, data, onUnlike = () => { }, onSource,version, onMarkClick }:
     { debug?: boolean, ogo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
+    const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
     const message = useMemo(() => {
         return typeof data.message === 'string' ? data.message : data.message.msg
     }, [data.message])
@@ -73,7 +77,7 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
         copyText(messageRef.current)
     }
     const chatId = useMessageStore(state => state.chatId)
-    return <div className="flex w-full">
+    return <div className="bisheng-message flex w-full">
         <div className="w-fit group max-w-[90%]">
             <ReasoningLog loading={!data.end && data.reasoning_log} msg={data.reasoning_log} />
             {!(data.reasoning_log && !message && !data.files.length) && <>
@@ -118,11 +122,13 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                     />
                     {!debug && <MessageButtons
                         mark={mark}
+                        version={version}
                         id={data.id || data.message_id}
                         data={data.liked}
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
                         onMarkClick={onMarkClick}
+                        text={data.message.msg || data.message}
                     ></MessageButtons>}
                 </div>
             }

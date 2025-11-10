@@ -9,9 +9,9 @@ from langchain_community.vectorstores import (FAISS, Chroma, Milvus, MongoDBAtla
 from loguru import logger
 from sqlmodel import select
 
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils.embedding import decide_embeddings
 
 
@@ -219,7 +219,7 @@ def initial_milvus(class_object: Type[Milvus], params: dict, search_kwargs: dict
         # 匹配知识库的embedding
         col = params['collection_name']
         collection_id = params.pop('collection_id', '')
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             if collection_id:
                 knowledge = session.get(Knowledge, collection_id)
                 params['collection_name'] = knowledge.collection_name
@@ -249,7 +249,7 @@ def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict, sea
 
     collection_id = params.pop('collection_id', '')
     if collection_id:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             knowledge = session.get(Knowledge, collection_id)
         index_name = knowledge.index_name or knowledge.collection_name
         params['index_name'] = index_name

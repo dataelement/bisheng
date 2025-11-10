@@ -4,13 +4,14 @@ from base64 import b64decode
 from typing import List, Dict
 
 import rsa
-from bisheng.api.errcode.http_error import UnAuthorizedError
-from bisheng.api.errcode.user import (UserLoginOfflineError, UserNameAlreadyExistError,
-                                      UserNeedGroupAndRoleError)
+from fastapi import Depends, HTTPException, Request
+
 from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
-from bisheng.api.utils import md5_hash
 from bisheng.api.v1.schemas import CreateUserReq
-from bisheng.cache.redis import redis_client
+from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.errcode.user import (UserLoginOfflineError, UserNameAlreadyExistError,
+                                         UserNeedGroupAndRoleError)
+from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.assistant import Assistant, AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowRead
@@ -20,9 +21,9 @@ from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
+from bisheng.utils import md5_hash
 from bisheng.utils.constants import RSA_KEY, USER_CURRENT_SESSION
-from fastapi import Depends, HTTPException, Request
 from fastapi_jwt_auth import AuthJWT
 
 
@@ -61,6 +62,21 @@ class UserPayload:
 
         return wrapper
 
+    @staticmethod
+    def async_wrapper_access_check(func):
+        """
+        异步权限检查的装饰器
+        如果是admin用户则不执行后续具体的检查逻辑
+        """
+
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            if args[0].is_admin():
+                return True
+            return await func(*args, **kwargs)
+
+        return wrapper
+
     @wrapper_access_check
     def access_check(self, owner_user_id: int, target_id: str, access_type: AccessType) -> bool:
         """
@@ -73,6 +89,13 @@ class UserPayload:
         if RoleAccessDao.judge_role_access(self.user_role, target_id, access_type):
             return True
         return False
+
+    @async_wrapper_access_check
+    async def async_access_check(self, owner_user_id: int, target_id: str, access_type: AccessType) -> bool:
+        if self.user_id == owner_user_id:
+            return True
+        flag = await RoleAccessDao.ajudge_role_access(self.user_role, target_id, access_type)
+        return True if flag else False
 
     @wrapper_access_check
     def copiable_check(self, owner_user_id: int) -> bool:
@@ -91,6 +114,20 @@ class UserPayload:
         """
         # 判断是否是用户组的管理员
         user_group = UserGroupDao.get_user_admin_group(self.user_id)
+        if not user_group:
+            return False
+        for one in user_group:
+            if one.group_id == group_id:
+                return True
+        return False
+
+    @async_wrapper_access_check
+    async def async_check_group_admin(self, group_id: int) -> bool:
+        """
+            异步检查用户是否是某个组的管理员
+        """
+        # 判断是否是用户组的管理员
+        user_group = await UserGroupDao.aget_user_admin_group(self.user_id, group_id)
         if not user_group:
             return False
         for one in user_group:
@@ -126,11 +163,19 @@ class UserPayload:
                 res.append(self.group_cache.get(group_info.id))
         return res
 
+    def get_user_access_resource_ids(self, access_types: List[AccessType]) -> List[str]:
+        """ 查询用户有对应权限的资源ID列表 """
+        user_role = UserRoleDao.get_user_roles(self.user_id)
+        role_ids = [role.role_id for role in user_role]
+        role_access = RoleAccessDao.get_role_access_batch(role_ids, access_types)
+        return list(set([one.third_id for one in role_access]))
+
+
 class UserService:
 
     @classmethod
     def decrypt_md5_password(cls, password: str):
-        if value := redis_client.get(RSA_KEY):
+        if value := get_redis_client_sync().get(RSA_KEY):
             private_key = value[1]
             password = md5_hash(rsa.decrypt(b64decode(password), private_key).decode('utf-8'))
         else:
@@ -229,7 +274,7 @@ def get_knowledge_list_by_access(role_id: int, name: str, page_num: int, page_si
             }) for access in db_role_access
         ],
         'total':
-        total_count
+            total_count
     }
 
 
@@ -256,7 +301,7 @@ def get_flow_list_by_access(role_id: int, name: str, page_num: int, page_size: i
             }) for access in db_role_access
         ],
         'total':
-        total_count
+            total_count
     }
 
 
@@ -281,7 +326,7 @@ def get_assistant_list_by_access(role_id: int, name: str, page_num: int, page_si
             'id': access[0].id
         } for access in db_role_access],
         'total':
-        total_count
+            total_count
     }
 
 
@@ -298,7 +343,7 @@ async def get_login_user(authorize: AuthJWT = Depends()) -> UserPayload:
     # 判断是否允许多点登录
     if not settings.get_system_login_method().allow_multi_login:
         # 获取access_token
-        current_token = redis_client.get(USER_CURRENT_SESSION.format(user.user_id))
+        current_token = get_redis_client_sync().get(USER_CURRENT_SESSION.format(user.user_id))
         # 登录被挤下线了，http状态码是200, status_code是特殊code
         if current_token != authorize._token:
             raise UserLoginOfflineError.http_exception()

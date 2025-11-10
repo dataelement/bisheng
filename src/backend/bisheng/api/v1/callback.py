@@ -15,7 +15,7 @@ from langchain_core.messages import ToolMessage
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.database.models.message import ChatMessage as ChatMessageModel
 from bisheng.database.models.message import ChatMessageDao
-from bisheng.utils.logger import logger
+from loguru import logger
 
 
 # https://github.com/hwchase17/chat-langchain/blob/master/callback.py

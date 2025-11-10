@@ -8,8 +8,8 @@ from bisheng.api.services.md_from_html import handler as html_handler
 from bisheng.api.services.md_from_pdf import handler as pdf_handler
 from bisheng.api.services.md_from_pptx import handler as pptx_handler
 from bisheng.api.services.md_post_processing import post_processing
-from bisheng.cache.utils import CACHE_DIR
-from bisheng.utils.minio_client import minio_client
+from bisheng.core.cache.utils import CACHE_DIR
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 
 
 def combine_multiple_md_files_to_raw_texts(
@@ -58,6 +58,7 @@ def convert_file_to_md(
         append_header:
         knowledge_id:
     """
+    file_name = file_name.lower()
     md_file_name = None
     local_image_dir = None
     include_cache_dir = True
@@ -91,6 +92,8 @@ def convert_file_to_md(
     elif file_name.endswith("pdf"):
         md_file_name, local_image_dir, doc_id = pdf_handler(CACHE_DIR, input_file_name)
         include_cache_dir = True
+    else:
+        raise ValueError(f"unsupported file type {file_name} for conversion to markdown.")
 
     return replace_image_url(
         md_file_name,
@@ -123,7 +126,7 @@ def replace_image_url(
     """
     from bisheng.api.services.knowledge_imp import KnowledgeUtils
 
-    minio_image_path = f"/{minio_client.bucket}/{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}"
+    minio_image_path = f"/{get_minio_storage_sync().bucket}/{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}"
     url_for_replacement = local_image_dir
     if not include_cache_dir:
         url_for_replacement = doc_id

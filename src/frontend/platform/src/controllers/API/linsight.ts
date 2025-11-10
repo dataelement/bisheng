@@ -52,6 +52,9 @@ export const sopApi = {
     return axios.post(`/api/v1/linsight/sop/showcase`, data);
   },
   getSopShowcaseDetail: (data: { sop_id: string; linsight_version_id: string }) => {
+    if (!data.sop_id && !data.linsight_version_id) {
+      return Promise.reject('缺少必要参数');
+    }
     return axios.get(`/api/v1/linsight/sop/showcase/result`, { params: data });
   },
   batchDownload: async (data: {

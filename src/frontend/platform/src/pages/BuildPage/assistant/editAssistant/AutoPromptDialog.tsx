@@ -167,8 +167,8 @@ export default function AutoPromptDialog({ onOpenChange }) {
         onOpenChange(false)
     }
 
-
-    return <DialogContent className="sm:max-w-[925px] bg-background-login">
+    return <DialogContent className="sm:max-w-[925px] bg-background-login max-h-[90vh] overflow-hidden flex flex-col" close={false}>
+    <div className="flex-1 overflow-y-auto">
         <div className="flex">
             {/* 提示词 */}
             <div className="w-[50%] relative pr-6">
@@ -188,7 +188,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                 <div>
                     <span className="text-lg font-semibold leading-none tracking-tight">{t('build.automaticallyConfigurations')}</span>
                 </div>
-                <div className="max-h-[660px] overflow-y-auto">
+                <div className="">
                     {/* 开场白 */}
                     <div className="group relative pb-12 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
                         <div className="text-md mb-2 font-medium leading-none flex">{t('build.openingRemarks')}{LoadType.GuideWord === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
@@ -247,11 +247,13 @@ export default function AutoPromptDialog({ onOpenChange }) {
                 </div>
             </div>
         </div>
-        <DialogFooter>
-            <DialogClose>
-                <Button variant="outline" className="px-11" type="button">{t('cancle')}</Button>
-            </DialogClose>
-            <Button type="submit" className="px-11" disabled={!!loading} onClick={handleUseAll}>{t('build.useAll')}</Button>
-        </DialogFooter>
-    </DialogContent>
+    </div>
+    {/* 底部按钮区域 - 固定在底部 */}
+    <DialogFooter className="border-t mt-2">
+        <DialogClose>
+            <Button variant="outline" className="px-11" type="button">{t('cancle')}</Button>
+        </DialogClose>
+        <Button type="submit" className="px-11" disabled={!!loading} onClick={handleUseAll}>{t('build.useAll')}</Button>
+    </DialogFooter>
+</DialogContent>
 };

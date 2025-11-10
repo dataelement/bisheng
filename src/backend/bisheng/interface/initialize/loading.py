@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Sequence, Type
 
 import httpx
 import openai
-from bisheng.cache.utils import file_download
+from bisheng.core.cache.utils import file_download
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.interface.agents.base import agent_creator
 from bisheng.interface.chains.base import chain_creator
@@ -21,7 +21,7 @@ from bisheng.interface.retrievers.base import retriever_creator
 from bisheng.interface.toolkits.base import toolkits_creator
 from bisheng.interface.utils import load_file_into_dict
 from bisheng.interface.wrappers.base import wrapper_creator
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils import validate
 from bisheng.utils.constants import NODE_ID_DICT, PRESET_QUESTION
 from bisheng.utils.embedding import decide_embeddings

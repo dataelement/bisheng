@@ -1,12 +1,10 @@
 import json
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from fastapi import (APIRouter, Body, Depends, HTTPException, Query, Request, WebSocket,
                      WebSocketException)
 from fastapi import status as http_status
 from fastapi.responses import StreamingResponse
-
-from bisheng.api.errcode.http_error import NotFoundError
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.openapi import OpenApiSchema
@@ -15,16 +13,19 @@ from bisheng.api.services.user_service import UserPayload, get_admin_user, get_l
 from bisheng.api.v1.schemas import (AssistantCreateReq, AssistantUpdateReq,
                                     DeleteToolTypeReq, StreamData, TestToolReq,
                                     resp_200, resp_500)
-from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.chat.types import WorkType
+from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.gpts_tools import GptsToolsTypeRead
 from bisheng.mcp_manage.langchain.tool import McpTool
 from bisheng.mcp_manage.manager import ClientManager
+from bisheng.share_link.api.dependencies import header_share_token_parser
+from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import generate_uuid
-from bisheng.utils.logger import logger
+from loguru import logger
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 from fastapi_jwt_auth import AuthJWT
 
@@ -45,9 +46,10 @@ def get_assistant(*,
 
 # 获取某个助手的详细信息
 @router.get('/info/{assistant_id}')
-def get_assistant_info(*, assistant_id: str, login_user: UserPayload = Depends(get_login_user)):
+async def get_assistant_info(*, assistant_id: str, login_user: UserPayload = Depends(get_login_user),
+                             share_link: Union['ShareLink', None] = Depends(header_share_token_parser)):
     """获取助手信息"""
-    return AssistantService.get_assistant_info(assistant_id, login_user)
+    return await AssistantService.get_assistant_info(assistant_id, login_user, share_link)
 
 
 @router.post('/delete')
@@ -97,7 +99,8 @@ async def auto_update_assistant_task(*, request: Request, login_user: UserPayloa
                                      prompt: str = Body(description='用户填写的提示词')):
     # 存入缓存
     task_id = generate_uuid()
-    redis_client.set(f'auto_update_task:{task_id}', {
+    redis_client = await get_redis_client()
+    await redis_client.aset(f'auto_update_task:{task_id}', {
         'assistant_id': assistant_id,
         'prompt': prompt,
     })
@@ -109,7 +112,8 @@ async def auto_update_assistant_task(*, request: Request, login_user: UserPayloa
 # 自动优化prompt和工具选择
 @router.get('/auto', response_class=StreamingResponse)
 async def auto_update_assistant(*, task_id: str = Query(description='优化任务唯一ID')):
-    task = redis_client.get(f'auto_update_task:{task_id}')
+    redis_client = await get_redis_client()
+    task = await redis_client.aget(f'auto_update_task:{task_id}')
     if not task:
         raise NotFoundError()
     assistant_id = task['assistant_id']
@@ -260,26 +264,28 @@ async def refresh_all_mcp_tools(request: Request, login_user: UserPayload = Depe
 
 @router.post('/tool_list')
 async def add_tool_type(*,
+                        request: Request,
                         req: Dict = Body(default={}, description='openapi解析后的工具对象'),
                         login_user: UserPayload = Depends(get_login_user)):
     """ 新增自定义tool """
     req = GptsToolsTypeRead(**req)
-    return await AssistantService.add_gpts_tools(login_user, req)
+    return await AssistantService.add_gpts_tools(request, login_user, req)
 
 
 @router.put('/tool_list')
 async def update_tool_type(*,
+                           request: Request,
                            login_user: UserPayload = Depends(get_login_user),
                            req: Dict = Body(default={}, description='通过openapi 解析后的内容，包含类别的唯一ID')):
     """ 更新自定义tool """
     req = GptsToolsTypeRead(**req)
-    return resp_200(data=await ToolServices.update_gpts_tools(login_user, req))
+    return resp_200(data=await ToolServices.update_gpts_tools(request, login_user, req))
 
 
 @router.delete('/tool_list')
-def delete_tool_type(*, login_user: UserPayload = Depends(get_login_user), req: DeleteToolTypeReq):
+def delete_tool_type(*, request: Request, login_user: UserPayload = Depends(get_login_user), req: DeleteToolTypeReq):
     """ 删除自定义工具 """
-    return AssistantService.delete_gpts_tools(login_user, req.tool_type_id)
+    return AssistantService.delete_gpts_tools(request, login_user, req.tool_type_id)
 
 
 @router.post('/tool_test')

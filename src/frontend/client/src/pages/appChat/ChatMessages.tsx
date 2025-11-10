@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { useRecoilValue } from "recoil";
+import { useLocalize } from "~/hooks";
 import GuideWord from "./components/GuideWord";
 import InputForm from "./components/InputForm";
 import InputFormSkill from "./components/InputFormSkill";
@@ -15,10 +16,9 @@ import MessageUser from "./components/MessageUser";
 import ResouceModal from "./components/ResouceModal";
 import { currentChatState, currentRunningState } from "./store/atoms";
 import { useMessage } from "./useMessages";
-import { useLocalize } from "~/hooks";
 
-export default function ChatMessages({ useName, title, logo, disabledSearch = false }) {
-    const { messageScrollRef, chatId, messages } = useMessage()
+export default function ChatMessages({ useName, readOnly, title, logo, disabledSearch = false }) {
+    const { messageScrollRef, chatId, messages } = useMessage(readOnly)
     const { inputForm, guideWord, inputDisabled } = useRecoilValue(currentRunningState)
     const chatState = useRecoilValue(currentChatState)
     const localize = useLocalize()
@@ -35,6 +35,7 @@ export default function ChatMessages({ useName, title, logo, disabledSearch = fa
     return <div id="messageScrollPanne" ref={messageScrollRef} className="h-full overflow-y-auto scrollbar-hide pt-2 pb-96 px-4">
         {/* 助手开场白 */}
         {remark && <MessageRemark
+            readOnly={readOnly}
             logo={logo}
             title={title}
             message={remark}
@@ -59,8 +60,9 @@ export default function ChatMessages({ useName, title, logo, disabledSearch = fa
                         return null
                     case 'question':
                         return <MessageUser
+                            readOnly={readOnly}
                             key={msg.id}
-                            useName={useName}
+                            useName={msg.user_name || useName}
                             data={msg}
                             disabledSearch={disabledSearch}
                             showButton={!inputDisabled && chatState?.flow.flow_type !== 10}
@@ -76,6 +78,7 @@ export default function ChatMessages({ useName, title, logo, disabledSearch = fa
                     case 'stream_msg':
                     case "answer":
                         return <MessageBs
+                            readOnly={readOnly}
                             key={msg.id}
                             data={msg}
                             logo={logo}
@@ -88,9 +91,22 @@ export default function ChatMessages({ useName, title, logo, disabledSearch = fa
                             ----------- {localize(msg.message)} -----------
                         </div>
                     case 'output_with_choose_msg':
-                        return <MessageBsChoose key={msg.id} data={msg} logo={logo} flow={chatState.flow} />;
+                        return <MessageBsChoose
+                            key={msg.id}
+                            data={msg}
+                            logo={logo}
+                            disabled={readOnly}
+                            flow={chatState.flow}
+                        />;
                     case 'output_with_input_msg':
-                        return <MessageBsChoose type='input' key={msg.id} data={msg} logo={logo} flow={chatState.flow} />;
+                        return <MessageBsChoose
+                            type='input'
+                            key={msg.id}
+                            data={msg}
+                            logo={logo}
+                            disabled={readOnly}
+                            flow={chatState.flow}
+                        />;
                     case 'node_run':
                         return <MessageNodeRun key={msg.id} data={msg} />;
                     case 'system':
@@ -117,7 +133,7 @@ export default function ChatMessages({ useName, title, logo, disabledSearch = fa
                 message={''}
             />}
         {/* 引导词 */}
-        {guideWord && !inputDisabled && !inputForm && <GuideWord data={guideWord} />}
+        {guideWord && !inputDisabled && !inputForm && !readOnly && <GuideWord data={guideWord} />}
         {/* 表单 */}
         {inputForm && (chatState?.flow.flow_type === 10 ?
             <InputForm data={inputForm} flow={chatState.flow} logo={logo} /> :

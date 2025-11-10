@@ -3,7 +3,7 @@ from uuid import UUID
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v2.assistant import get_default_operator
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from fastapi import APIRouter, HTTPException, Query, Request
 from loguru import logger
 
@@ -11,7 +11,7 @@ router = APIRouter(prefix='/flows', tags=['OpenAPI', 'FlowV2'])
 
 
 @router.get('/{flow_id}', status_code=200)
-def get_flow(request: Request, flow_id: UUID):
+async def get_flow(request: Request, flow_id: UUID):
     """
     公开的获取技能信息的接口
     """
@@ -27,7 +27,7 @@ def get_flow(request: Request, flow_id: UUID):
         'role': ''
     })
 
-    return FlowService.get_one_flow(login_user, flow_id)
+    return await FlowService.get_one_flow(login_user, flow_id)
 
 
 @router.get('', status_code=200)

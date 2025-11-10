@@ -3,9 +3,9 @@ from typing import Dict, List, Optional, Type
 from bisheng.custom.customs import get_custom_nodes
 from bisheng.interface.base import LangChainTypeCreator
 from bisheng.interface.importing.utils import import_class
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.template.frontend_node.utilities import UtilitiesFrontendNode
-from bisheng.utils.logger import logger
+from loguru import logger
 from bisheng.utils.util import build_template_from_class
 from langchain_community import utilities
 from langchain_community.utilities.sql_database import SQLDatabase

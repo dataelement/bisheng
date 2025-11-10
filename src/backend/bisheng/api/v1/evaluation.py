@@ -9,10 +9,10 @@ from loguru import logger
 from bisheng.api.services.evaluation import EvaluationService, add_evaluation_task
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import resp_200, resp_500
-from bisheng.cache.utils import convert_encoding_cchardet
-from bisheng.database.base import session_getter
+from bisheng.core.cache.utils import convert_encoding_cchardet
+from bisheng.core.database import get_sync_db_session
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.evaluation import EvaluationCreate, Evaluation
-from bisheng.utils.minio_client import MinioClient
 from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(prefix='/evaluation', tags=['Evaluation'], dependencies=[Depends(get_login_user)])
@@ -48,9 +48,8 @@ def create_evaluation(*,
 
     try:
         # 尝试做下转码操作
-        output_file = io.BytesIO()
-        file.file = convert_encoding_cchardet(file.file, output_file)
-        csv_data = EvaluationService.parse_csv(file_data=io.BytesIO(file.file.read()))
+        output_file = convert_encoding_cchardet(file_io=io.BytesIO(file.file.read()))
+        csv_data = EvaluationService.parse_csv(file_data=output_file)
         data_samples = {
             "question": [one.get('question') for one in csv_data],
             "answer": [one.get('answer') for one in csv_data],
@@ -73,7 +72,7 @@ def create_evaluation(*,
                                                                user_id=user_id,
                                                                file_name=file_name,
                                                                file_path=file_path))
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         session.add(db_evaluation)
         session.commit()
         session.refresh(db_evaluation)
@@ -98,7 +97,7 @@ async def get_download_url(*,
                            Authorize: AuthJWT = Depends()):
     """ 获取文件下载地址. """
     Authorize.jwt_required()
-    minio_client = MinioClient()
+    minio_client = await get_minio_storage()
     download_url = minio_client.get_share_link(file_url)
     return resp_200(data={
         'url': download_url

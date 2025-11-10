@@ -9,7 +9,7 @@ import { useContext, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 // @accepts '.png,.jpg'
-export default function ChatFiles({ v, accepts, onChange }) {
+export default function ChatFiles({ v, accepts, disabled, onChange }) {
     const { t } = useTranslation();
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
@@ -187,7 +187,10 @@ export default function ChatFiles({ v, accepts, onChange }) {
             </div>}
 
             {/* File Upload Button */}
-            <div className="absolute right-10 top-5 cursor-pointer" onClick={() => fileInputRef.current.click()}>
+            <div
+                className={`absolute right-10 top-5 cursor-pointer ${disabled ? 'text-gray-400 cursor-not-allowed' : ''}`}
+                onClick={() => !disabled && fileInputRef.current.click()}
+            >
                 <PaperclipIcon size={18} />
             </div>
 

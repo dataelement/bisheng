@@ -5,7 +5,7 @@ from typing import List, Optional
 from sqlalchemy import Column, DateTime, text
 from sqlmodel import Field
 
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -29,7 +29,7 @@ class MarkAppUserDao(MarkAppUserBase):
 
     @classmethod
     def create_task(cls, task_info: List[MarkAppUser]) -> List[MarkAppUser]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add_all(task_info)
             session.commit()
             return task_info

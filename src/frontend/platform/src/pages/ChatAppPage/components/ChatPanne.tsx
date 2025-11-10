@@ -40,6 +40,7 @@ export default function ChatPanne({ customWsHost = '', chatList, chat, appendHis
     // console.log('autoRun :>> ', autoRun);
     const init = async () => {
         const isV1 = version === 'v1';
+        window.chat_version = version
 
         if (type === AppNumType.SKILL) {
             setAssistant(null)
@@ -241,6 +242,7 @@ export default function ChatPanne({ customWsHost = '', chatList, chat, appendHis
                     form={flowSate.isForm}
                     logo={<AppAvator id={flow.name} url={flow.logo} flowType={1} ></AppAvator>}
                     stop
+                    version={version}
                     // stop={flowSate.isReport || flowSate.isRoom}
                     useName={sendUserName}
                     guideWord={flow.guide_word}
@@ -272,6 +274,7 @@ export default function ChatPanne({ customWsHost = '', chatList, chat, appendHis
                     onBeforSend={getWsParamData}
                     loadMore={() => loadMoreHistoryMsg(assistant.id, appendHistory)}
                     inputForm={null}
+                    version={version}
                 />
                 {/* 强制提醒 */}
                 <ForcePrompt id={assistant.id} />
@@ -284,7 +287,7 @@ export default function ChatPanne({ customWsHost = '', chatList, chat, appendHis
                     <AppAvator id={workflow.name} url={workflow.logo} flowType={10} ></AppAvator>
                     <span className="text-sm">{workflow.name}</span>
                 </div>
-                <ChatPane autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl} />
+                <ChatPane  autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl} version={version} />
             </div>
         }
     </div>

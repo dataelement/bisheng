@@ -1,6 +1,5 @@
-import MultiSelect from "@/components/bs-ui/select/multi";
+import { MultiSelect } from "@/components/bs-ui/multiSelect.tsx";
 import { getGroupsApi } from "@/controllers/API/log";
-import debounce from "lodash-es/debounce";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface AppOption {
@@ -11,18 +10,22 @@ interface AppOption {
 export default function FilterByApp({ value, onChange }) {
     const { apps, loadApps, searchApps, loadMoreApps } = useApps();
 
+    useEffect(() => {
+        loadApps("");
+    }, [])
+
     return (
         <div className="w-[200px] relative">
             <MultiSelect
-                contentClassName="max-w-[200px]"
-                options={apps}
-                value={value}
                 multiple
+                value={value}
+                options={apps}
+                onValueChange={onChange}
+                hasMore
+                onSearch={searchApps}
+                onLoadMore={loadMoreApps}
+                contentClassName="max-w-[320px]"
                 placeholder="应用名称"
-                onLoad={() => loadApps("")} // 初始加载
-                onSearch={searchApps} // 搜索时触发
-                onScrollLoad={loadMoreApps} // 滚动加载更多
-                onChange={onChange} // 选择项变化时触发
             />
         </div>
     );
@@ -126,19 +129,11 @@ const useApps = () => {
     }, []);
 
     /**
-     * 搜索应用（带防抖）
-     */
-    const searchApps = useCallback(
-        debounce((keyword: string) => loadApps(keyword), 500), // 500ms 防抖
-        [loadApps]
-    );
-
-    /**
      * 组件卸载时取消未完成的请求
      */
     useEffect(() => {
         return () => abortControllerRef.current?.abort();
     }, []);
 
-    return { apps, loadApps, searchApps, loadMoreApps };
+    return { apps, loadApps, searchApps: loadApps, loadMoreApps };
 };

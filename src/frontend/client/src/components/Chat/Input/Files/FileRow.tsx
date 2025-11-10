@@ -110,6 +110,7 @@ export default function FileRow({
                 abortUpload(file);
               }
               deleteFile({ file, setFiles });
+              file.preview && URL.revokeObjectURL(file.preview);
             };
             const isImage = file.type?.startsWith('image') ?? false;
 

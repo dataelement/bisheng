@@ -1,7 +1,7 @@
 import asyncio
 import json
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 from urllib.parse import unquote
 from uuid import uuid4
 
@@ -12,10 +12,6 @@ from langchain_core.runnables import RunnableConfig
 from loguru import logger
 from sse_starlette import EventSourceResponse
 
-from bisheng.api.errcode import BaseErrorCode
-from bisheng.api.errcode.http_error import ServerError
-from bisheng.api.errcode.workstation import WebSearchToolNotFoundError, ConversationNotFoundError, \
-    AgentAlreadyExistsError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.knowledge import KnowledgeService
@@ -27,15 +23,21 @@ from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import FrequentlyUsedChat
 from bisheng.api.v1.schemas import WorkstationConfig, resp_200, WSPrompt, ExcelRule, UnifiedResponseModel
-from bisheng.cache.redis import redis_client
-from bisheng.cache.utils import file_download, save_download_file, save_uploaded_file
-from bisheng.core.app_context import app_ctx
+from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
+from bisheng.common.errcode.workstation import WebSearchToolNotFoundError, ConversationNotFoundError, \
+    AgentAlreadyExistsError
+from bisheng.common.services.config_service import settings as bisheng_settings
+from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.cache.utils import file_download, save_download_file, save_uploaded_file
+from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.interface.llms.custom import BishengLLM
-from bisheng.settings import settings as bisheng_settings
+from bisheng.llm.domain.llm import BishengLLM
+from bisheng.share_link.api.dependencies import header_share_token_parser
+from bisheng.share_link.domain.models.share_link import ShareLink
 
 router = APIRouter(prefix='/workstation', tags=['WorkStation'])
 
@@ -84,9 +86,9 @@ def step_message(stepId, runId, index, msgId):
     return f'event: message\ndata: {msg}\n\n'
 
 
-def final_message(conversation: MessageSession, title: str, requestMessage: ChatMessage, text: str,
-                  error: bool, modelName: str):
-    responseMessage = ChatMessageDao.insert_one(
+async def final_message(conversation: MessageSession, title: str, requestMessage: ChatMessage, text: str,
+                        error: bool, modelName: str):
+    responseMessage = await ChatMessageDao.ainsert_one(
         ChatMessage(
             user_id=conversation.user_id,
             chat_id=conversation.chat_id,
@@ -107,8 +109,8 @@ def final_message(conversation: MessageSession, title: str, requestMessage: Chat
             'final': True,
             'conversation': WorkstationConversation.from_chat_session(conversation).model_dump(),
             'title': title,
-            'requestMessage': WorkstationMessage.from_chat_message(requestMessage).model_dump(),
-            'responseMessage': WorkstationMessage.from_chat_message(responseMessage).model_dump(),
+            'requestMessage': (await WorkstationMessage.from_chat_message(requestMessage)).model_dump(),
+            'responseMessage': (await WorkstationMessage.from_chat_message(responseMessage)).model_dump(),
         },
         default=custom_json_serializer)
     return f'event: message\ndata: {msg}\n\n'
@@ -192,7 +194,7 @@ async def upload_file(
     """
     # 读取文件内容
     # 保存文件
-    file_path = save_uploaded_file(file.file, 'bisheng', unquote(file.filename))
+    file_path = await save_uploaded_file(file, 'bisheng', unquote(file.filename))
 
     # 返回文件路径
     return resp_200(
@@ -219,26 +221,35 @@ async def gen_title(conversationId: str = Body(..., description='', embed=True),
     """
     # 获取会话消息
     redis_key = f'workstation_title_{conversationId}'
-    title = redis_client.get(redis_key)
+    redis_client = await get_redis_client()
+
+    title = await redis_client.aget(redis_key)
     if not title:
         await asyncio.sleep(5)
         # 如果标题已经存在，则直接返回
-        title = redis_client.get(redis_key)
+        title = await redis_client.aget(redis_key)
     if title:
         # 如果标题已经存在，则直接返回
-        redis_client.delete(redis_key)
+        await redis_client.adelete(redis_key)
         return resp_200({'title': title})
     else:
-        # 如果标题不存在，则返回空值
-        raise ServerError(
-            exception=Exception("Title not found or method not implemented for the conversation's endpoint"))
+        return resp_200({'title': 'New Chat'})
 
 
 @router.get('/messages/{conversationId}')
-def get_chat_history(conversationId: str):
-    messages = ChatMessageDao.get_messages_by_chat_id(chat_id=conversationId, limit=1000)
+async def get_chat_history(conversationId: str,
+                           login_user: UserPayload = Depends(get_login_user),
+                           share_link: Union['ShareLink', None] = Depends(header_share_token_parser)
+                           ):
+    messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=conversationId, limit=1000)
     if messages:
-        return resp_200([WorkstationMessage.from_chat_message(message) for message in messages])
+
+        if login_user.user_id != messages[0].user_id:
+            # 校验分享链接权限
+            if not share_link or share_link.resource_id != conversationId:
+                return UnAuthorizedError.return_resp()
+
+        return resp_200([await WorkstationMessage.from_chat_message(message) for message in messages])
     else:
         return resp_200([])
 
@@ -252,7 +263,8 @@ async def genTitle(human: str, assistant: str, llm: BishengLLM, conversationId: 
     logger.info(f'convo: {convo}')
     res = await llm.ainvoke(prompt)
     title = res.content
-    redis_client.set(f'workstation_title_{conversationId}', title)
+    redis_client = await get_redis_client()
+    await redis_client.aset(f'workstation_title_{conversationId}', title)
     session = await MessageSessionDao.async_get_one(conversationId)
     if session:
         session.flow_name = title[:200]
@@ -300,7 +312,7 @@ async def chat_completions(
         login_user: UserPayload = Depends(get_login_user),
 ):
     try:
-        wsConfig = WorkStationService.get_config()
+        wsConfig = await WorkStationService.aget_config()
         conversationId = data.conversationId
         model = [model for model in wsConfig.models if model.id == data.model][0]
         modelName = model.displayName
@@ -308,7 +320,7 @@ async def chat_completions(
         # 如果没有传入会话ID，则使用默认的会话ID
         if not conversationId:
             conversationId = uuid4().hex
-            MessageSessionDao.insert_one(
+            await MessageSessionDao.async_insert_one(
                 MessageSession(
                     chat_id=conversationId,
                     flow_id='',
@@ -317,16 +329,16 @@ async def chat_completions(
                     user_id=login_user.user_id,
                 ))
 
-        conversaiton = MessageSessionDao.get_one(conversationId)
+        conversaiton = await MessageSessionDao.async_get_one(conversationId)
         if conversaiton is None:
             return EventSourceResponse(
                 iter([ConversationNotFoundError().to_sse_event_instance()])
             )
         # 存储用户消息
         if data.overrideParentMessageId:
-            message = ChatMessageDao.get_message_by_id(data.overrideParentMessageId)
+            message = await ChatMessageDao.aget_message_by_id(data.overrideParentMessageId)
         else:
-            message = ChatMessageDao.insert_one(
+            message = await ChatMessageDao.ainsert_one(
                 ChatMessage(
                     user_id=login_user.user_id,
                     chat_id=conversationId,
@@ -400,7 +412,7 @@ async def chat_completions(
                     prompt = wsConfig.knowledgeBase.prompt.format(
                         retrieved_file_content='\n'.join(chunks)[:max_token], question=data.text)
                 else:
-                    prompt_service = app_ctx.get_prompt_loader()
+                    prompt_service = await get_prompt_manager()
                     prompt = prompt_service.render_prompt('qa', 'simple_qa', context='\n'.join(chunks)[:max_token],
                                                           question=data.text).prompt
 
@@ -417,9 +429,9 @@ async def chat_completions(
                 extra = json.loads(message.extra)
                 extra['prompt'] = prompt
                 message.extra = json.dumps(extra, ensure_ascii=False)
-                ChatMessageDao.insert_one(message)
+                await ChatMessageDao.ainsert_one(message)
 
-            messages = WorkStationService.get_chat_history(conversationId, 8)[:-1]
+            messages = (await WorkStationService.get_chat_history(conversationId, 8))[:-1]
             inputs = [*messages, HumanMessage(content=prompt)]
             if wsConfig.systemPrompt:
                 system_content = wsConfig.systemPrompt.format(cur_date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
@@ -497,8 +509,8 @@ async def chat_completions(
             final_res = json.dumps(e.to_dict())
             yield e.to_sse_event_instance_str()
 
-        yield final_message(conversaiton, conversaiton.flow_name, message, final_res, error,
-                            modelName)
+        yield await final_message(conversaiton, conversaiton.flow_name, message, final_res, error,
+                                  modelName)
 
         if not data.conversationId:
             # 生成title

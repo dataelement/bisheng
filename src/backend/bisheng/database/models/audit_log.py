@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, JSON
 
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.utils import generate_uuid
 
@@ -41,6 +41,10 @@ class EventType(Enum):
     DELETE_ROLE = "delete_role"  # 删除角色
     UPDATE_ROLE = "update_role"  # 编辑角色
 
+    ADD_TOOL = "add_tool"  # 添加工具
+    UPDATE_TOOL = "update_tool"
+    DELETE_TOOL = "delete_tool"
+
     USER_LOGIN = "user_login"  # 用户登录
 
 
@@ -55,6 +59,7 @@ class ObjectType(Enum):
     USER_CONF = "user_conf"  # 用户配置
     USER_GROUP_CONF = "user_group_conf"  # 用户组配置
     ROLE_CONF = "role_conf"  # 角色配置
+    TOOL = "tool"
 
 
 class AuditLogBase(SQLModelSerializable):
@@ -63,7 +68,7 @@ class AuditLogBase(SQLModelSerializable):
     """
     operator_id: int = Field(index=True, description="操作用户的ID")
     operator_name: Optional[str] = Field(description="用户名")
-    group_ids: Optional[List[int]] = Field(sa_column=Column(JSON), description="所属用户组的ID列表")
+    group_ids: Optional[List[int | str]] = Field(sa_column=Column(JSON), description="所属用户组的ID列表")
     system_id: Optional[str] = Field(index=True, description="系统模块")
     event_type: Optional[str] = Field(index=True, description="操作行为")
     object_type: Optional[str] = Field(index=True, description="操作对象类型")
@@ -119,14 +124,20 @@ class AuditLogDao(AuditLogBase):
             count_statement = count_statement.where(AuditLog.event_type == event_type)
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit).order_by(AuditLog.create_time.desc())
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
     def insert_audit_logs(cls, audit_logs: List[AuditLog]):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add_all(audit_logs)
             session.commit()
+
+    @classmethod
+    async def ainsert_audit_logs(cls, audit_logs: List[AuditLog]):
+        async with get_async_db_session() as session:
+            session.add_all(audit_logs)
+            await session.commit()
 
     @classmethod
     def get_all_operators(cls, group_ids: List[int]):
@@ -137,5 +148,5 @@ class AuditLogDao(AuditLogBase):
                 group_filters.append(func.json_contains(AuditLog.group_ids, str(one)))
             statement = statement.where(or_(*group_filters))
 
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()

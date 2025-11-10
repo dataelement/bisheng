@@ -1,8 +1,7 @@
 import { generateUUID } from "@/components/bs-ui/utils";
 
-// 历史版本工作流转换脚本(最新v2)
+// 历史版本工作流转换脚本
 export const flowVersionCompatible = (flow) => {
-
     flow.nodes.forEach((node) => {
 
         switch (node.data.type) {
@@ -11,17 +10,61 @@ export const flowVersionCompatible = (flow) => {
             case 'agent': comptibleAgent(node.data); break;
             case 'output': comptibleOutput(node.data); break;
             case 'llm': comptibleLLM(node.data); break;
-
+            case 'rag': comptibleRag(node.data); break;
         }
     })
     return flow
 }
+const comptibleRag = (node) => {  
+    if (!node.v) {
+        node.v = 1
+    }
+    if (node.v == 1) {
+        const knowledgeGroup = node.group_params[0];
+        // 先读取旧参数值，再进行移除，避免丢失数据
+        const oldUserAuthParam = knowledgeGroup.params.find(p => p.key === 'user_auth');
+        const oldMaxChunkSizeParam = knowledgeGroup.params.find(p => p.key === 'max_chunk_size');
+
+        // 移除旧的拆散参数
+        knowledgeGroup.params = knowledgeGroup.params.filter(param =>
+            !['user_auth', 'max_chunk_size'].includes(param.key)
+        );
+
+        const knowledgeIndex = knowledgeGroup.params.findIndex(p => p.key === 'knowledge');
+        // 构造高级检索配置参数
+        const advancedParam = {
+            key: "advanced_retrieval_switch",
+            label: "高级检索配置",
+            type: "search_switch",
+            value: {
+                keyword_weight: 0.5,
+                vector_weight: 0.5,
+                user_auth: false,
+                search_switch: true,
+                rerank_flag: false,
+                rerank_model: "",
+                max_chunk_size: 15000,
+            }
+        };
+        // 从 v1 的 user_auth 与 max_chunk_size 继承值到新参数
+        if (oldUserAuthParam) {
+            advancedParam.value.user_auth = oldUserAuthParam.value;
+        }
+        if (oldMaxChunkSizeParam) {
+            advancedParam.value.max_chunk_size = oldMaxChunkSizeParam.value;
+        }
+        knowledgeGroup.params.splice(knowledgeIndex + 1, 0, advancedParam);
+
+        node.v = 2;
+    }
+}
+
+
 
 
 const comptibleStart = (node) => {
     if (!node.v) {
         node.group_params[1].params[2].global = 'item:input_list'
-
         node.group_params[1].params[2].value = node.group_params[1].params[2].value.map((item) => ({
             key: generateUUID(6),
             value: item

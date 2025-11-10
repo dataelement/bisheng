@@ -10,13 +10,13 @@ from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
 from langchain.schema.document import Document
 
-from bisheng.api.services.llm import LLMService
 from bisheng.api.v1.schemas import ChatMessage
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.interface.utils import try_setting_streaming_options
+from bisheng.llm.domain.services import LLMService
 from bisheng.processing.base import get_result_and_steps
-from bisheng.utils.logger import logger
+from loguru import logger
 
 
 class SourceType(Enum):
@@ -174,7 +174,7 @@ def sync_process_source_document(source_document: List[Document], chat_id, messa
                                        message_id=message_id)
             batch_insert.append(recall_chunk)
     if batch_insert:
-        with session_getter() as db_session:
+        with get_sync_db_session() as db_session:
             db_session.add_all(batch_insert)
             db_session.commit()
 

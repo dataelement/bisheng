@@ -8,15 +8,15 @@ from bisheng.api.utils import build_input_keys_response
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.manager import ChatManager
 from bisheng.chat.utils import judge_source, process_graph, process_source_document
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.report import Report
 from bisheng.database.models.message import ChatMessage as ChatMessageDB, ChatMessageDao
 from bisheng.interface.importing.utils import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils.docx_temp import test_replace_string
-from bisheng.utils.logger import logger
-from bisheng.utils.minio_client import MinioClient
+from loguru import logger
 from bisheng.utils.threadpool import thread_pool
 from bisheng.utils.util import get_cache_key
 from bisheng_langchain.chains.autogen.auto_gen import AutoGenChain
@@ -87,7 +87,8 @@ class Handler:
                                              is_bot=True)
                 if chat_id:
                     db_message = ChatMessageDao.insert_one(chat_message)
-                    await session.send_json(client_id, chat_id, ChatMessage(**db_message.model_dump(), message_id=db_message.id), add=False)
+                    await session.send_json(client_id, chat_id,
+                                            ChatMessage(**db_message.model_dump(), message_id=db_message.id), add=False)
 
             if answer.strip():
                 chat_message = ChatMessageDB(flow_id=client_id, chat_id=chat_id,
@@ -99,7 +100,8 @@ class Handler:
                                              is_bot=True)
                 if chat_id:
                     db_message = ChatMessageDao.insert_one(chat_message)
-                    await session.send_json(client_id, chat_id, ChatMessage(**db_message.model_dump(), message_id=db_message.id), add=False)
+                    await session.send_json(client_id, chat_id,
+                                            ChatMessage(**db_message.model_dump(), message_id=db_message.id), add=False)
             # 普通技能的stop
             res = thread_pool.cancel_task([key])  # 将进行中的任务进行cancel
             if res[0]:
@@ -149,14 +151,14 @@ class Handler:
             await session.send_json(client_id, chat_id, response)
 
         # build report
-        with session_getter() as db_session:
+        with get_sync_db_session() as db_session:
             template = db_session.exec(
                 select(Report).where(Report.flow_id == client_id).order_by(
                     Report.id.desc())).first()
         if not template:
             logger.error('template not support')
             return
-        minio_client = MinioClient()
+        minio_client = await get_minio_storage()
         template_muban = minio_client.get_share_link(template.object_name)
         report_name = langchain_object.report_name
         report_name = report_name if report_name.endswith('.docx') else f'{report_name}.docx'

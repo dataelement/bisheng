@@ -10,7 +10,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
 import { TabsContext } from "@/contexts/tabsContext";
 import { userContext } from "@/contexts/userContext";
-import { createCustomFlowApi, getFlowApi, updateVersion } from "@/controllers/API/flow";
+import { checkAppEditPermission, createCustomFlowApi, getFlowApi, updateVersion } from "@/controllers/API/flow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import { useHasForm } from "@/util/hook";
@@ -35,10 +35,11 @@ export default function l2Edit() {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [guideWords, setGuideWords] = useState('');
+    const [checking, setChecking] = useState(true)
 
-    useEffect(() => {
-        if (!id) return;
-
+    const flowInit = async () => {
+        await checkAppEditPermission(id, 1)
+        
         getFlowApi(id).then(_flow => {
             setFlow('l2 flow init', _flow);
             setIsL2(true);
@@ -46,7 +47,13 @@ export default function l2Edit() {
             setDescription(_flow.description);
             setGuideWords(_flow.guide_word);
             setLogo(_flow.logo);
+            setChecking(false)
         });
+    }
+    useEffect(() => {
+        if (!id) return setChecking(false);
+
+        flowInit()
     }, [id]);
 
 
@@ -151,6 +158,8 @@ export default function l2Edit() {
     const previewAvatar = useMemo(() =>
         logo ? __APP_ENV__.BASE_URL + logo : '',
         [logo])
+
+    if (checking) return null
 
     return <div className="relative box-border h-full overflow-auto">
         <div className="p-6 pb-48 h-full overflow-y-auto">

@@ -2,16 +2,15 @@ import asyncio
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body
 from sqlmodel import select
 
-from bisheng.api.errcode.qa import BackendProcessingError
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.v1.schemas import resp_200
-from bisheng.database.base import session_getter
+from bisheng.common.errcode.qa import BackendProcessingError
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.knowledge_file import KnowledgeFileDao
 from bisheng.database.models.recall_chunk import RecallChunk
-from bisheng.utils.minio_client import MinioClient
 
 # build router
 router = APIRouter(prefix='/qa', tags=['QA'])
@@ -22,7 +21,7 @@ async def get_answer_keyword(message_id: int):
     # 获取命中的key
     conter = 3
     while True:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             chunks = session.exec(
                 select(RecallChunk).where(RecallChunk.message_id == message_id)).first()
         # keywords
@@ -42,7 +41,7 @@ async def get_answer_keyword(message_id: int):
 def get_original_file(message_id: Annotated[int, Body(embed=True)],
                       keys: Annotated[str, Body(embed=True)]):
     # 获取命中的key
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         chunks = session.exec(
             select(RecallChunk).where(RecallChunk.message_id == message_id)).all()
 
@@ -56,7 +55,6 @@ def get_original_file(message_id: Annotated[int, Body(embed=True)],
     # keywords
     keywords = keys.split(';') if keys else []
     result = []
-    minio_client = MinioClient()
     for index, chunk in enumerate(chunks):
         file = id2file.get(chunk.file_id)
 

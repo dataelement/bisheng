@@ -15,7 +15,7 @@ export default function LoginBridge({ onHasLdap }) {
 
     useEffect(() => {
         getSSOurlApi().then((urls: any) => {
-            setSsoUrl(urls.sso)
+            setSsoUrl(urls.sso) // TODO: 携带重定向链接：localStorage.getItem('LOGIN_PATHNAME')
             setWxUrl(urls.wx)
             urls.ldap && onHasLdap(true)
         })

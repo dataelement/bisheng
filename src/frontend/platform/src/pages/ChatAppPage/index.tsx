@@ -150,7 +150,7 @@ export default function SkillChatPage() {
     {
     location
         ? <HomePage onSelect={handlerSelectFlow}></HomePage>
-        : <ChatPanne 
+        : <ChatPanne
             appendHistory 
             chatList={chatList}  
             chat={tchat} // 获取当前选中的chat

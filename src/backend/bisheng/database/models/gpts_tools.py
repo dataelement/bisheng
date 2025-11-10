@@ -1,11 +1,13 @@
+import json
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
 
+from pydantic import model_validator
 from sqlalchemy import JSON, Column, DateTime, String, text, func
-from sqlmodel import Field, or_, select, Text, update
+from sqlmodel import Field, or_, select, Text, update, col
 
-from bisheng.database.base import session_getter, async_session_getter
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.utils import md5_hash, generate_uuid
@@ -70,8 +72,8 @@ class GptsToolsTypeBase(SQLModelSerializable):
 class GptsTools(GptsToolsBase, table=True):
     __tablename__ = 't_gpts_tools'
     extra: Optional[str | dict] = Field(default=None, sa_column=Column(Text, index=False),
-                                 description='用来存储额外信息，比如参数需求等，包含 &initdb_conf_key 字段'
-                                             '表示配置信息从系统配置里获取,多层级用.隔开')
+                                        description='用来存储额外信息，比如参数需求等，包含 &initdb_conf_key 字段'
+                                                    '表示配置信息从系统配置里获取,多层级用.隔开')
     id: Optional[int] = Field(default=None, primary_key=True)
 
 
@@ -86,6 +88,14 @@ class GptsToolsTypeRead(GptsToolsTypeBase):
     children: Optional[List[GptsTools]] = Field(default_factory=list, description="工具类别下的工具列表")
     parameter_name: Optional[str] = Field(default="", description="自定义请求头参数名")
     api_location: Optional[str] = Field(default="", description="自定义请求头参数位置 header or query")
+    write: Optional[bool] = Field(default=False, description="是否有写权限")
+
+    @model_validator(mode="after")
+    def validate(self):
+        if self.extra:
+            result = json.loads(self.extra)
+            self.api_location = result.get('api_location')
+            self.parameter_name = result.get('parameter_name')
 
 
 class GptsToolsRead(GptsToolsBase):
@@ -96,7 +106,7 @@ class GptsToolsDao(GptsToolsBase):
 
     @classmethod
     def insert(cls, obj: GptsTools):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(obj)
             session.commit()
             session.refresh(obj)
@@ -104,13 +114,13 @@ class GptsToolsDao(GptsToolsBase):
 
     @classmethod
     def query_by_name(cls, name: str) -> List[GptsTools]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(GptsTools).where(GptsTools.name.like(f'%{name}%'))
             return session.exec(statement).all()
 
     @classmethod
     def update_tools(cls, data: GptsTools) -> GptsTools:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(data)
             session.commit()
             session.refresh(data)
@@ -118,7 +128,7 @@ class GptsToolsDao(GptsToolsBase):
 
     @classmethod
     def update_tool_list(cls, data: List[GptsTools]) -> List[GptsTools]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             for one in data:
                 session.add(one)
             session.commit()
@@ -131,21 +141,21 @@ class GptsToolsDao(GptsToolsBase):
 
     @classmethod
     def delete_tool_by_ids(cls, tool_ids: List[int]) -> None:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = update(GptsTools).where(GptsTools.id.in_(tool_ids)).values(is_delete=1)
             session.exec(statement)
             session.commit()
 
     @classmethod
     def get_one_tool(cls, tool_id: int) -> GptsTools:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(GptsTools).where(GptsTools.id == tool_id)
             return session.exec(statement).first()
 
     @classmethod
     def get_list_by_ids(cls, tool_ids: List[int]) -> List[GptsTools]:
         statement = select(GptsTools).where(GptsTools.id.in_(tool_ids)).where(GptsTools.is_delete == 0)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
@@ -153,7 +163,7 @@ class GptsToolsDao(GptsToolsBase):
         """
         获得用户可用的所有工具
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(GptsTools).where(
                 or_(GptsTools.user_id == user_id,
                     GptsTools.is_preset == ToolPresetType.PRESET.value)).where(GptsTools.is_delete == 0)
@@ -168,18 +178,30 @@ class GptsToolsDao(GptsToolsBase):
         """
         获得工具类别下的所有的工具
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(GptsTools).where(
                 GptsTools.type.in_(tool_type_ids)).where(
                 GptsTools.is_delete == 0).order_by(GptsTools.create_time.desc())
             return session.exec(statement).all()
 
     @classmethod
+    async def aget_list_by_type(cls, tool_type_ids: List[int]) -> List[GptsTools]:
+        """
+        异步获得工具类别下的所有的工具
+        """
+        statement = select(GptsTools).where(
+            GptsTools.type.in_(tool_type_ids)).where(
+            GptsTools.is_delete == 0).order_by(GptsTools.create_time.desc())
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
     def get_all_tool_type(cls, tool_type_ids: List[int]) -> List[GptsToolsType]:
         """
         获得所有的工具类别
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(GptsToolsType).filter(
                 GptsToolsType.is_delete == 0,
                 GptsToolsType.id.in_(tool_type_ids)
@@ -191,17 +213,30 @@ class GptsToolsDao(GptsToolsBase):
         """
         获得所有的预置工具类别
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(GptsToolsType).where(GptsToolsType.is_preset == ToolPresetType.PRESET.value,
                                                     GptsToolsType.is_delete == 0)
             statement = statement.order_by(GptsToolsType.update_time.desc())
             return session.exec(statement).all()
 
     @classmethod
-    def get_user_tool_type(cls, user_id: int, extra_tool_type_ids: List[int] = None, include_preset: bool = True,
-                           is_preset: ToolPresetType = None) -> List[GptsToolsType]:
+    async def aget_preset_tool_type(cls) -> List[GptsToolsType]:
         """
-        获取用户可见的所有工具类别
+        异步获得所有的预置工具类别
+        """
+        statement = select(GptsToolsType).where(GptsToolsType.is_preset == ToolPresetType.PRESET.value,
+                                                GptsToolsType.is_delete == 0)
+        statement = statement.order_by(GptsToolsType.update_time.desc())
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
+    def _get_user_tool_type_statement(cls, user_id: int, extra_tool_type_ids: List[int] = None,
+                                      include_preset: bool = True,
+                                      is_preset: ToolPresetType = None):
+        """
+        获取用户可见的所有工具类别的statement
         """
         statement = select(GptsToolsType).where(GptsToolsType.is_delete == 0)
         filters = []
@@ -218,9 +253,30 @@ class GptsToolsDao(GptsToolsBase):
             statement = statement.where(GptsToolsType.is_preset == is_preset.value)
         statement = statement.where(or_(*filters))
         statement = statement.order_by(func.field(GptsToolsType.is_preset,
-                                                  ToolPresetType.PRESET.value).desc(), GptsToolsType.update_time.desc())
-        with session_getter() as session:
+                                                  ToolPresetType.PRESET.value).desc(),
+                                       GptsToolsType.update_time.desc())
+        return statement
+
+    @classmethod
+    def get_user_tool_type(cls, user_id: int, extra_tool_type_ids: List[int] = None, include_preset: bool = True,
+                           is_preset: ToolPresetType = None) -> List[GptsToolsType]:
+        """
+        获取用户可见的所有工具类别
+        """
+        statement = cls._get_user_tool_type_statement(user_id, extra_tool_type_ids, include_preset, is_preset)
+        with get_sync_db_session() as session:
             return session.exec(statement).all()
+
+    @classmethod
+    async def aget_user_tool_type(cls, user_id: int, extra_tool_type_ids: List[int] = None, include_preset: bool = True,
+                                  is_preset: ToolPresetType = None) -> List[GptsToolsType]:
+        """
+        获取用户可见的所有工具类别
+        """
+        statement = cls._get_user_tool_type_statement(user_id, extra_tool_type_ids, include_preset, is_preset)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
 
     @classmethod
     def filter_tool_types_by_ids(cls, tool_type_ids: List[int], keyword: Optional[str] = None, page: int = 0,
@@ -251,7 +307,7 @@ class GptsToolsDao(GptsToolsBase):
             statement = statement.offset(
                 (page - 1) * limit
             ).limit(limit).order_by(GptsToolsType.update_time.desc())
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
@@ -259,7 +315,7 @@ class GptsToolsDao(GptsToolsBase):
         """
         获取某个类别的详情，包含openapi的schema协议内容
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(GptsToolsType).where(GptsToolsType.id == tool_type_id)
             return session.exec(statement).first()
 
@@ -268,7 +324,7 @@ class GptsToolsDao(GptsToolsBase):
         """
         获取某个工具类别的详细信息
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(GptsToolsType).filter(
                 GptsToolsType.name == tool_type_name,
                 GptsToolsType.user_id == user_id,
@@ -284,12 +340,12 @@ class GptsToolsDao(GptsToolsBase):
         children = data.children
         gpts_tool_type = GptsToolsType(**data.model_dump(exclude={'children'}))
         # 插入工具类别
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(gpts_tool_type)
             session.commit()
             session.refresh(gpts_tool_type)
         if children:
-            with session_getter() as session:
+            with get_sync_db_session() as session:
                 # 插入工具列表
                 for one in children:
                     one.type = gpts_tool_type.id
@@ -312,7 +368,7 @@ class GptsToolsDao(GptsToolsBase):
         param update_tool_list: 需要更新的工具列表
         """
         finally_children = []
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             # 更新工具类别的数据
             session.add(data)
             # 删除不存在的工具列表
@@ -337,19 +393,15 @@ class GptsToolsDao(GptsToolsBase):
         """
         删除工具类别
         """
-        with session_getter() as session:
-            session.exec(
-                update(GptsToolsType).filter(
-                    GptsToolsType.id == tool_type_id,
-                    GptsToolsType.is_preset != ToolPresetType.PRESET.value,
-                ).values(is_delete=1)
-            )
-            session.exec(
-                update(GptsTools).filter(
-                    GptsTools.type == tool_type_id,
-                    GptsToolsType.is_preset != ToolPresetType.PRESET.value
-                ).values(is_delete=1)
-            )
+        statement = update(GptsToolsType).where(col(GptsToolsType.id) == tool_type_id,
+                                                col(GptsToolsType.is_preset) != ToolPresetType.PRESET.value).values(
+            is_delete=1)
+        tool_statement = update(GptsTools).where(col(GptsTools.type) == tool_type_id,
+                                                 col(GptsTools.is_preset) != ToolPresetType.PRESET.value).values(
+            is_delete=1)
+        with get_sync_db_session() as session:
+            session.exec(statement)
+            session.exec(tool_statement)
             session.commit()
 
     @classmethod
@@ -363,7 +415,7 @@ class GptsToolsDao(GptsToolsBase):
 
     @classmethod
     def update_tools_extra(cls, tool_type_id: int, extra: str) -> bool:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = update(GptsToolsType).where(GptsToolsType.id == tool_type_id).values(extra=extra)
             session.exec(statement)
             statement = update(GptsTools).where(GptsTools.type == tool_type_id).values(extra=extra)
@@ -373,13 +425,13 @@ class GptsToolsDao(GptsToolsBase):
 
     @classmethod
     def get_tool_by_tool_key(cls, tool_key: str) -> GptsTools:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(GptsTools).where(GptsTools.tool_key == tool_key)
             return session.exec(statement).first()
 
     @classmethod
     async def aget_tool_by_tool_key(cls, tool_key: str) -> GptsTools:
         statement = select(GptsTools).where(GptsTools.tool_key == tool_key)
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.first()

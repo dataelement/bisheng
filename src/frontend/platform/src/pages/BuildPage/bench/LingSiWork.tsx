@@ -798,7 +798,6 @@ export default function index({ formData: parentFormData, setFormData: parentSet
 
 
                 if (res?.repeat_name) {
-                    console.log(1111);
                     const formData = new FormData();
 
                     formData.append('file', importFiles[0]);
@@ -829,7 +828,6 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         }
     };
     const handleValidationDialogConfirm = async () => {
-        console.log(111);
         const formData = new FormData();
         importFilesData.forEach(file => {
             formData.append('file', file);
@@ -1028,8 +1026,6 @@ const useChatConfig = (
 
     const handleSave = async (formData: ChatConfigForm) => {
         // 保留所有必要的字段
-        console.log(formData, 'formData', selectedTools, 22);
-
         const processedTools = selectedTools.map(tool => ({
             id: tool.id,
             name: tool.name,

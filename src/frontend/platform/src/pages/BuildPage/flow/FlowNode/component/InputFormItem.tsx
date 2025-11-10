@@ -683,7 +683,6 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
         const errors = data.value.reduce((acc, value) => {
             if (value.type === 'text') {
                 value.value.replace(/{{#(.*?)#}}/g, (a, part) => {
-                    console.log('a, part :>> ', a, part);
                     const _error = isVarInFlow(nodeId, flow.nodes, part, data.varZh?.[part])
                     _error && acc.push(_error)
                 })

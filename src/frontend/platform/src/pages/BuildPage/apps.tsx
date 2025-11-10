@@ -66,6 +66,8 @@ const TypeNames = {
 }
 export default function apps() {
     const { t, i18n } = useTranslation()
+    useErrorPrompt();
+
     useEffect(() => {
         i18n.loadNamespaces('flow');
     }, [i18n]);
@@ -73,7 +75,7 @@ export default function apps() {
     const { message } = useToast()
     const navigate = useNavigate()
 
-    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<FlowType>({ pageSize: 14 }, (param) =>
+    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<FlowType>({ pageSize: 14, managed: true }, (param) =>
         getAppsApi(param)
     )
 
@@ -301,4 +303,22 @@ const useCreateTemp = () => {
             setOpen(!open)
         }
     }
+}
+
+const useErrorPrompt = () => {
+    const search = location.search;
+    const params = new URLSearchParams(search);
+    const error = params.get('error');
+    const { toast } = useToast()
+    const { t } = useTranslation()
+
+    useEffect(() => {
+        if (error) {
+            toast({ description: t(`errors.${error}`), variant: 'error' });
+
+            // Clear the 'error' parameter from the URL
+            const newUrl = window.location.origin + window.location.pathname;
+            window.history.replaceState({}, '', newUrl);
+        }
+    }, [])
 }

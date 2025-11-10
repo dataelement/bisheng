@@ -9,12 +9,14 @@ import Icon from '~/components/Endpoints/Icon';
 const MessageIcon = memo(
   ({
     iconData,
+    name,
     assistant,
     agent,
   }: {
     iconData?: TMessageIcon;
     assistant?: Assistant;
     agent?: Agent;
+    name?: string;
   }) => {
     logger.log('icon_data', iconData, assistant, agent);
     const { data: endpointsConfig } = useGetEndpointsQuery();
@@ -66,6 +68,7 @@ const MessageIcon = memo(
       <Icon
         isCreatedByUser={iconData?.isCreatedByUser ?? false}
         endpoint={endpoint}
+        name={name}
         iconURL={avatarURL || endpointIconURL}
         model={iconData?.model}
         assistantName={assistantName}

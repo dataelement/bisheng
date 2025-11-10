@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy import Column, DateTime, delete, text, update
 from sqlmodel import Field, select
 
-from bisheng.database.base import session_getter
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -25,19 +25,19 @@ class SftModelDao(SftModel):
 
     @classmethod
     def get_sft_model(cls, model_name: str) -> SftModel | None:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(SftModel).where(SftModel.model_name == model_name)
             return session.exec(statement).first()
 
     @classmethod
     def get_all_sft_model(cls):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(SftModel)
             return session.exec(statement).all()
 
     @classmethod
     def insert_sft_model(cls, model_name: str) -> SftModel:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             model = SftModel(model_name=model_name)
             session.add(model)
             session.commit()
@@ -46,7 +46,7 @@ class SftModelDao(SftModel):
 
     @classmethod
     def delete_sft_model(cls, model_name: str) -> bool:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = delete(SftModel).where(SftModel.model_name == model_name)
             session.exec(statement)
             session.commit()
@@ -54,7 +54,7 @@ class SftModelDao(SftModel):
 
     @classmethod
     def change_sft_model(cls, old_model_name, model_name) -> bool:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             update_statement = update(SftModel).where(SftModel.model_name == old_model_name).values(
                 model_name=model_name)
             update_ret = session.exec(update_statement)

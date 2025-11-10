@@ -8,24 +8,29 @@ import pandas as pd
 from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request,
                      UploadFile)
 from fastapi.encoders import jsonable_encoder
+from loguru import logger
 
-from bisheng.api.errcode.http_error import UnAuthorizedError
-from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
                                     resp_200, resp_500, resp_501, resp_502, UpdateKnowledgeReq, KnowledgeFileReProcess)
-from bisheng.cache.utils import save_uploaded_file
+from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError, \
+    KnowledgeNotQAError, KnowledgePreviewError, KnowledgeNotExistError, KnowledgeNoEmbeddingError
+from bisheng.common.errcode.server import NoLlmModelConfigError
+from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate)
 from bisheng.database.models.knowledge import KnowledgeState
 from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
                                                     QAKnoweldgeDao, QAKnowledgeUpsert, QAStatus)
-from bisheng.database.models.llm_server import LLMDao, LLMModelType
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
-from bisheng.utils.logger import logger
+from bisheng.llm.const import LLMModelType
+from bisheng.llm.models import LLMDao
+from bisheng.utils import generate_uuid
 from bisheng.worker.knowledge.qa import insert_qa_celery
 
 # build router
@@ -37,8 +42,8 @@ async def upload_file(*, file: UploadFile = File(...)):
     try:
         file_name = file.filename
         # 缓存本地
-        uuid_file_name = KnowledgeService.save_upload_file_original_name(file_name)
-        file_path = save_uploaded_file(file.file, 'bisheng', uuid_file_name)
+        uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
+        file_path = await save_uploaded_file(file, 'bisheng', uuid_file_name)
         if not isinstance(file_path, str):
             file_path = str(file_path)
         return resp_200(UploadFileResponse(file_path=file_path))
@@ -48,27 +53,57 @@ async def upload_file(*, file: UploadFile = File(...)):
 
 
 @router.post('/preview')
-def preview_file_chunk(*,
-                       request: Request,
-                       login_user: UserPayload = Depends(get_login_user),
-                       req_data: KnowledgeFileProcess):
+async def preview_file_chunk(*,
+                             request: Request,
+                             login_user: UserPayload = Depends(get_login_user),
+                             background_tasks: BackgroundTasks,
+                             req_data: KnowledgeFileProcess):
     """ 获取某个文件的分块预览内容 """
-    try:
-        parse_type, file_share_url, res, partitions = KnowledgeService.get_preview_file_chunk(
-            request, login_user, req_data)
-        return resp_200(
-            data={
-                'parse_type': parse_type,
-                'file_url': file_share_url,
-                'chunks': res,
-                'partitions': partitions
+
+    preview_file_id = generate_uuid()
+    redis_key = f'preview_file:{preview_file_id}'
+    redis_client = await get_redis_client()
+    await redis_client.aset(redis_key, {"status": "processing"})
+
+    async def exec_task():
+        try:
+            parse_type, file_share_url, res, partitions = await KnowledgeService.get_preview_file_chunk(request,
+                                                                                                        login_user,
+                                                                                                        req_data)
+            await redis_client.aset(redis_key, {
+                "status": "completed",
+                "data": {
+                    'parse_type': parse_type,
+                    'file_url': file_share_url,
+                    'chunks': [one.model_dump() for one in res],
+                    'partitions': partitions
+                }
             })
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        # productor hope raise this tips
-        logger.exception('preview_file_chunk_error')
-        return resp_500(message="文档解析失败")
+        except Exception as exc:
+            logger.exception(f'Preview file chunk error: {exc}')
+            await redis_client.aset(redis_key, {
+                "status": "error"
+            })
+
+    background_tasks.add_task(exec_task)
+    return resp_200(data={'preview_file_id': preview_file_id})
+
+
+@router.get('/preview/status')
+async def get_preview_file_status(
+        request: Request,
+        login_user: UserPayload = Depends(get_login_user),
+        preview_file_id: str = Query(..., description='预览接口返回的文件ID')):
+    redis_key = f'preview_file:{preview_file_id}'
+    redis_client = await get_redis_client()
+    file_status = await redis_client.aget(redis_key)
+    if not file_status:
+        raise KnowledgePreviewError.http_exception()
+    if file_status.get('status') == 'error':
+        raise KnowledgePreviewError.http_exception()
+    if file_status.get('status') == 'completed':
+        await redis_client.aexpire_key(redis_key, 10)
+    return resp_200(data=file_status)
 
 
 @router.put('/preview')
@@ -78,7 +113,7 @@ async def update_preview_file_chunk(*,
                                     req_data: UpdatePreviewFileChunk):
     """ 更新某个文件的分块预览内容 """
 
-    res = KnowledgeService.update_preview_file_chunk(request, login_user, req_data)
+    res = await KnowledgeService.update_preview_file_chunk(request, login_user, req_data)
     return resp_200(res)
 
 
@@ -146,6 +181,36 @@ async def copy_knowledge(*,
     if knowledge.state != KnowledgeState.PUBLISHED.value or knowledge_count > 0:
         return KnowledgeCPError.return_resp()
     knowledge = await KnowledgeService.copy_knowledge(request, background_tasks, login_user, knowledge)
+    return resp_200(knowledge)
+
+
+@router.post("/qa/copy")
+async def copy_qa_knowledge(*,
+                            request: Request,
+                            login_user: UserPayload = Depends(get_login_user),
+                            knowledge_id: int = Body(..., embed=True)):
+    """
+    复制QA知识库.
+    :param request:
+    :param login_user:
+    :param knowledge_id:
+    :return:
+    """
+
+    qa_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+    if not login_user.is_admin and qa_knowledge.user_id != login_user.user_id:
+        return UnAuthorizedError.return_resp()
+
+    if qa_knowledge.type != KnowledgeTypeEnum.QA.value:
+        return KnowledgeNotQAError.return_resp()
+
+    qa_knowledge_count = await QAKnoweldgeDao.async_count_by_id(qa_id=qa_knowledge.id)
+
+    if qa_knowledge.state != KnowledgeState.PUBLISHED.value or qa_knowledge_count == 0:
+        return KnowledgeCPError.return_resp()
+
+    knowledge = await KnowledgeService.copy_qa_knowledge(request, login_user, qa_knowledge)
+
     return resp_200(knowledge)
 
 
@@ -229,21 +294,21 @@ def get_filelist(*,
 
 
 @router.get('/qa/list/{qa_knowledge_id}', status_code=200)
-def get_QA_list(*,
-                qa_knowledge_id: int,
-                page_size: int = 10,
-                page_num: int = 1,
-                question: Optional[str] = None,
-                answer: Optional[str] = None,
-                keyword: Optional[str] = None,
-                status: Optional[int] = None,
-                login_user: UserPayload = Depends(get_login_user)):
+async def get_QA_list(*,
+                      qa_knowledge_id: int,
+                      page_size: int = 10,
+                      page_num: int = 1,
+                      question: Optional[str] = None,
+                      answer: Optional[str] = None,
+                      keyword: Optional[str] = None,
+                      status: Optional[int] = None,
+                      login_user: UserPayload = Depends(get_login_user)):
     """ 获取知识库文件信息. """
     db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_knowledge_id)
 
-    qa_list, total_count = knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
-                                                                 page_num, question, answer,
-                                                                 keyword, status)
+    qa_list, total_count = await knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
+                                                                       page_num, question, answer,
+                                                                       keyword, status)
     user_list = UserDao.get_user_by_ids([qa.user_id for qa in qa_list])
     user_map = {user.user_id: user.user_name for user in user_list}
     data = [jsonable_encoder(qa) for qa in qa_list]
@@ -457,26 +522,28 @@ def qa_auto_question(
 
 
 @router.get('/qa/export/template', status_code=200)
-def get_export_url():
+async def get_export_url():
     data = [{"问题": "", "答案": "", "相似问题1": "", "相似问题2": ""}]
     df = pd.DataFrame(data)
     bio = BytesIO()
     with pd.ExcelWriter(bio, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="Sheet1", index=False)
     file_name = f"QA知识库导入模板.xlsx"
-    file_path = save_uploaded_file(bio, 'bisheng', file_name)
+    bio.seek(0)
+    file = UploadFile(filename=file_name, file=bio)
+    file_path = await save_uploaded_file(file, 'bisheng', file_name)
     return resp_200({"url": file_path})
 
 
 @router.get('/qa/export/{qa_knowledge_id}', status_code=200)
-def get_export_url(*,
-                   qa_knowledge_id: int,
-                   question: Optional[str] = None,
-                   answer: Optional[str] = None,
-                   keyword: Optional[str] = None,
-                   status: Optional[int] = None,
-                   max_lines: Optional[int] = 10000,
-                   login_user: UserPayload = Depends(get_login_user)):
+async def get_export_url(*,
+                         qa_knowledge_id: int,
+                         question: Optional[str] = None,
+                         answer: Optional[str] = None,
+                         keyword: Optional[str] = None,
+                         status: Optional[int] = None,
+                         max_lines: Optional[int] = 10000,
+                         login_user: UserPayload = Depends(get_login_user)):
     # 查询当前知识库，是否有写入权限
     db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_knowledge_id)
 
@@ -507,9 +574,9 @@ def get_export_url(*,
     file_pr = datetime.now().strftime('%Y%m%d%H%M%S')
     file_index = 1
     while True:
-        qa_list, total_count = knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
-                                                                     page_num, question, answer,
-                                                                     status)
+        qa_list, total_count = await knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
+                                                                           page_num, question, answer,
+                                                                           status)
 
         data = [jsonable_encoder(qa) for qa in qa_list]
         qa_dict_list = []
@@ -541,7 +608,9 @@ def get_export_url(*,
             df.to_excel(writer, sheet_name="Sheet1", index=False)
         file_name = f"{file_pr}_{file_index}.xlsx"
         file_index = file_index + 1
-        file_path = save_uploaded_file(bio, 'bisheng', file_name)
+        bio.seek(0)
+        file_io = UploadFile(filename=file_name, file=bio)
+        file_path = await save_uploaded_file(file_io, 'bisheng', file_name)
         file_list.append(file_path)
         total_num += len(qa_list)
         if len(qa_list) < page_size or total_num >= total_count:
@@ -712,23 +781,23 @@ def update_knowledge_model(*,
         # 1. 验证是否为embedding模型
         model_info = LLMDao.get_model_by_id(req_data.model_id)
         if not model_info:
-            return resp_501(message="模型不存在")
+            return NoLlmModelConfigError.return_resp()
 
         # 如果前端没有传model_type，使用数据库中的model_type
         model_type = req_data.model_type if req_data.model_type else model_info.model_type
 
         if model_type != LLMModelType.EMBEDDING.value:
-            return resp_501(message="不是embedding模型")
+            return KnowledgeNoEmbeddingError.return_resp()
 
         # 处理指定的知识库
         knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
         if not knowledge:
-            return resp_501(message="指定的知识库不存在")
+            return KnowledgeNotExistError.return_resp()
 
         if not login_user.access_check(
                 knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
         ):
-            raise UnAuthorizedError.http_exception()
+            return UnAuthorizedError.return_resp()
 
         old_model_id = knowledge.model
 
@@ -744,14 +813,25 @@ def update_knowledge_model(*,
                 message="知识库模型未更改，无需重建"
             )
         if knowledge.state == KnowledgeState.REBUILDING.value:
-            raise KnowledgeRebuildingError.http_exception()
+            return KnowledgeRebuildingError.return_resp()
+
         knowledge.state = KnowledgeState.REBUILDING.value
         KnowledgeDao.update_one(knowledge)
 
         # 发起异步任务
-        # 延迟导入以避免循环导入
-        from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
-        rebuild_knowledge_celery.delay(knowledge.id, str(req_data.model_id))
+
+        if knowledge.type == KnowledgeTypeEnum.NORMAL.value:
+
+            # 延迟导入以避免循环导入
+            from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
+            rebuild_knowledge_celery.delay(knowledge.id, str(req_data.model_id))
+
+        elif knowledge.type == KnowledgeTypeEnum.QA.value:
+
+            # 延迟导入以避免循环导入
+            from bisheng.worker.knowledge.qa import rebuild_qa_knowledge_celery
+            rebuild_qa_knowledge_celery.delay(knowledge.id, str(req_data.model_id))
+
         logger.info(f"Started rebuild task for knowledge_id={knowledge.id} with model_id={req_data.model_id}")
 
         return resp_200(

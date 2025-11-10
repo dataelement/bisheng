@@ -3,12 +3,14 @@ import { useMemo, useRef, useState } from "react";
 import { ChatMessageType } from "~/@types/chat";
 import { Button, Textarea } from "~/components";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
+import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
+import useLocalize from "~/hooks/useLocalize";
 import { downloadFile } from "~/utils";
 import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
 import { changeMinioUrl } from "./ResouceModal";
-import useLocalize from "~/hooks/useLocalize";
 
-export default function MessageBsChoose({ type = 'choose', logo, data, flow }: { type?: string, logo: React.ReactNode, data: ChatMessageType }) {
+export default function MessageBsChoose({ type = 'choose', disabled, logo, data, flow }
+    : { type?: string, disabled?: Boolean, logo: React.ReactNode, data: ChatMessageType }) {
     const t = useLocalize()
     const [selected, setSelected] = useState(data.message.hisValue || '')
     const handleSelect = (obj) => {
@@ -61,7 +63,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data, flow }: {
     }, [data.files])
 
     return <MessageWarper flow={flow} logo={logo} >
-        <div className="">
+        <div className="group">
             <div className="text-base text-[#0D1638] dark:text-[#CFD5E8]">
                 {/* message */}
                 <div><Markdown content={data.message.msg} isLatestMessage={false} webContent={undefined} /></div>
@@ -86,13 +88,13 @@ export default function MessageBsChoose({ type = 'choose', logo, data, flow }: {
                             <Textarea
                                 className="w-full"
                                 ref={textRef}
-                                disabled={inputSended}
+                                disabled={inputSended || disabled}
                                 defaultValue={data.message.input_msg || data.message.hisValue}
                             />
                             <div className="flex justify-end mt-2">
                                 <Button
                                     className="h-8"
-                                    disabled={inputSended}
+                                    disabled={inputSended || disabled}
                                     onClick={handleSend}
                                 >{inputSended ? t('com_bschoose_confirmed') : t('com_bschoose_confirm')}</Button>
                             </div>
@@ -111,6 +113,9 @@ export default function MessageBsChoose({ type = 'choose', logo, data, flow }: {
                             }
                         </div>
                     }
+                    <div className="flex justify-end py-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {data.message.msg && <TextToSpeechButton messageId={String(data.id)} text={data.message.msg} />}
+                    </div>
                 </div>
             </div>
         </div>

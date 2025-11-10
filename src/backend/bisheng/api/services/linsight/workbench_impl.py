@@ -12,21 +12,22 @@ from fastapi import UploadFile
 from langchain_core.tools import BaseTool
 from loguru import logger
 
-from bisheng.api.errcode import BaseErrorCode
-from bisheng.api.errcode.http_error import UnAuthorizedError
-from bisheng.api.errcode.linsight import LinsightToolInitError, LinsightBishengLLMError, LinsightGenerateSopError
 from bisheng.api.services.assistant_agent import AssistantAgent
-from bisheng.api.services.knowledge_imp import read_chunk_text, decide_vectorstores
+from bisheng.api.services.knowledge_imp import decide_vectorstores, async_read_chunk_text
 from bisheng.api.services.linsight.sop_manage import SOPManageService
-from bisheng.api.services.llm import LLMService
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
     SubmitFileSchema
-from bisheng.cache.redis import redis_client
-from bisheng.cache.utils import save_file_to_folder, CACHE_DIR
-from bisheng.core.app_context import app_ctx
+from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.errcode.linsight import LinsightToolInitError, LinsightBishengLLMError, LinsightGenerateSopError
+from bisheng.common.services.config_service import settings
+from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.cache.utils import save_file_to_folder, CACHE_DIR
+from bisheng.core.prompts.manager import get_prompt_manager
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao
@@ -36,12 +37,10 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
 from bisheng.database.models.linsight_sop import LinsightSOPRecord
 from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.interface.llms.custom import BishengLLM
-from bisheng.settings import settings
+from bisheng.llm.domain.llm import BishengLLM
+from bisheng.llm.domain.services import LLMService
 from bisheng.utils import util
-from bisheng.utils.embedding import decide_embeddings
-from bisheng.utils.minio_client import minio_client
-from bisheng.utils.util import calculate_md5
+from bisheng.utils.util import async_calculate_md5
 from bisheng_langchain.linsight.const import ExecConfig
 
 
@@ -194,7 +193,7 @@ class LinsightWorkbenchImpl:
             file_ids.append(file.file_id)
 
         redis_keys = [f"{cls.FILE_INFO_REDIS_KEY_PREFIX}{file_id}" for file_id in file_ids]
-
+        redis_client = await get_redis_client()
         processed_files = await redis_client.amget(redis_keys)
 
         for file_info in processed_files:
@@ -217,11 +216,12 @@ class LinsightWorkbenchImpl:
             original_filename = file_info.get("original_filename")
             markdown_filename = f"{original_filename.rsplit('.', 1)[0]}.md"
             new_object_name = f"linsight/{chat_id}/{source_object_name}"
-            minio_client.copy_object(
-                source_object_name=source_object_name,
-                target_object_name=new_object_name,
-                bucket_name=minio_client.tmp_bucket,
-                target_bucket_name=minio_client.bucket
+            minio_client = await get_minio_storage()
+            await minio_client.copy_object(
+                source_object=source_object_name,
+                dest_object=new_object_name,
+                source_bucket=minio_client.tmp_bucket,
+                dest_bucket=minio_client.bucket
             )
             file_info["markdown_file_path"] = new_object_name
             file_info["markdown_filename"] = markdown_filename
@@ -280,7 +280,7 @@ class LinsightWorkbenchImpl:
     @classmethod
     async def _generate_title_prompt(cls, question: str) -> List[Tuple[str, str]]:
         """生成标题生成的prompt"""
-        prompt_service = app_ctx.get_prompt_loader()
+        prompt_service = await get_prompt_manager()
         prompt_obj = prompt_service.render_prompt(
             namespace="gen_title",
             prompt_name="linsight",
@@ -341,7 +341,7 @@ class LinsightWorkbenchImpl:
                            reexecute: bool = False,
                            login_user: Optional[UserPayload] = None,
                            knowledge_list: List[KnowledgeRead] = None,
-                           sop_id: Optional[int] = None) -> AsyncGenerator[Dict, None]:
+                           example_sop: Optional[str] = None) -> AsyncGenerator[Dict, None]:
         """
         生成SOP内容
 
@@ -352,6 +352,7 @@ class LinsightWorkbenchImpl:
             reexecute: 是否重新执行
             login_user: 登录用户信息
             knowledge_list: 知识库列表
+            example_sop: 参考sop，做同款时传入的sop内容
 
         Yields:
             生成的SOP内容事件
@@ -382,11 +383,6 @@ class LinsightWorkbenchImpl:
 
             if previous_session_version_id:
                 session_version = await LinsightSessionVersionDao.get_by_id(previous_session_version_id)
-
-            example_sop = None
-            if sop_id:
-                sop_db = await SOPManageService.get_sop_by_id(sop_id)
-                example_sop = sop_db.content if sop_db else None
 
             content = ""
             async for res in cls._generate_sop_content(
@@ -731,8 +727,8 @@ class LinsightWorkbenchImpl:
             collection_name = f"{cls.COLLECTION_NAME_PREFIX}{workbench_conf.embedding_model.id}"
 
             # 异步执行文件解析
-            parse_result = await util.sync_func_to_async(cls._parse_file_sync)(file_id, file_path, original_filename,
-                                                                               collection_name, workbench_conf)
+            parse_result = await cls._parse_file(file_id, file_path, original_filename,
+                                                 collection_name, workbench_conf)
 
             # 缓存解析结果
             await cls._cache_parse_result(file_id, parse_result)
@@ -751,8 +747,8 @@ class LinsightWorkbenchImpl:
         return parse_result
 
     @classmethod
-    def _parse_file_sync(cls, file_id: str, file_path: str, original_filename: str,
-                         collection_name: str, workbench_conf) -> Dict:
+    async def _parse_file(cls, file_id: str, file_path: str, original_filename: str,
+                          collection_name: str, workbench_conf) -> Dict:
         """
         同步解析文件
 
@@ -768,7 +764,7 @@ class LinsightWorkbenchImpl:
         """
         # 读取文件内容
         try:
-            texts, _, parse_type, _ = read_chunk_text(
+            texts, _, parse_type, _ = await async_read_chunk_text(
                 input_file=file_path,
                 file_name=original_filename,
                 separator=['\n\n', '\n'],
@@ -784,11 +780,12 @@ class LinsightWorkbenchImpl:
 
             # 保存markdown文件
             markdown_filename = f"{file_id}.md"
-            minio_client.upload_tmp(markdown_filename, markdown_bytes)
-            markdown_md5 = calculate_md5(markdown_bytes)
+            minio_client = await get_minio_storage()
+            await minio_client.put_object_tmp(markdown_filename, markdown_bytes)
+            markdown_md5 = await async_calculate_md5(markdown_bytes)
 
             # 处理向量存储
-            cls._process_vector_storage(texts, file_id, collection_name, workbench_conf)
+            await cls._process_vector_storage(texts, file_id, collection_name, workbench_conf)
 
             return {
                 "file_id": file_id,
@@ -811,11 +808,11 @@ class LinsightWorkbenchImpl:
             }
 
     @classmethod
-    def _process_vector_storage(cls, texts: List[str], file_id: str,
-                                collection_name: str, workbench_conf) -> None:
+    async def _process_vector_storage(cls, texts: List[str], file_id: str,
+                                      collection_name: str, workbench_conf) -> None:
         """处理向量存储"""
         # 创建embeddings
-        embeddings = decide_embeddings(workbench_conf.embedding_model.id)
+        embeddings = await LLMService.get_bisheng_embedding(model_id=workbench_conf.embedding_model.id)
 
         # 创建向量存储
         vector_client = decide_vectorstores(collection_name, "Milvus", embeddings)
@@ -823,12 +820,13 @@ class LinsightWorkbenchImpl:
 
         # 添加文本到向量存储
         metadatas = [{"file_id": file_id} for _ in texts]
-        vector_client.add_texts(texts, metadatas=metadatas)
-        es_client.add_texts(texts, metadatas=metadatas)
+        await vector_client.aadd_texts(texts, metadatas=metadatas)
+        await es_client.aadd_texts(texts, metadatas=metadatas)
 
     @classmethod
     async def _cache_parse_result(cls, file_id: str, parse_result: Dict) -> None:
         """缓存解析结果"""
+        redis_client = await get_redis_client()
         key = f"{cls.FILE_INFO_REDIS_KEY_PREFIX}{file_id}"
         await redis_client.aset(
             key=key,
@@ -852,10 +850,10 @@ class LinsightWorkbenchImpl:
             code_config["config"] = {}
         if "local" not in code_config["config"]:
             code_config["config"]["local"] = {}
-        code_config["config"]["local"] = {"local_sync_path": file_dir}
+        code_config["config"]["local"]["local_sync_path"] = file_dir
         if "e2b" not in code_config["config"]:
             code_config["config"]["e2b"] = {}
-        code_config["config"]["e2b"] = {"local_sync_path": file_dir}
+        code_config["config"]["e2b"]["local_sync_path"] = file_dir
         # 默认60分钟的有效期
         code_config["config"]["e2b"]["timeout"] = 3600
         code_config["config"]["e2b"]["keep_sandbox"] = True
@@ -994,14 +992,17 @@ class LinsightWorkbenchImpl:
     @classmethod
     async def download_file(cls, file_info: DownloadFilesSchema) -> Tuple[str, bytes]:
         """下载单个文件"""
+
+        minio_client = await get_minio_storage()
+
         object_name = file_info.file_url
         object_name = object_name.replace(f"/{minio_client.bucket}/", "")
         try:
 
             bytes_io = BytesIO()
 
-            file_byte = await util.sync_func_to_async(minio_client.get_object)(bucket_name=minio_client.bucket,
-                                                                               object_name=object_name)
+            file_byte = await minio_client.get_object(bucket_name=minio_client.bucket,
+                                                      object_name=object_name)
             bytes_io.write(file_byte)
 
             bytes_io.seek(0)

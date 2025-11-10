@@ -6,7 +6,6 @@ from fastapi import (APIRouter, BackgroundTasks, Body, File, Form, HTTPException
                      UploadFile)
 from starlette.responses import FileResponse
 
-from bisheng.api.errcode.http_error import ServerError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import (decide_vectorstores, delete_es, delete_vector,
@@ -15,14 +14,15 @@ from bisheng.api.v1.schemas import (ChunkInput, KnowledgeFileOne, KnowledgeFileP
                                     resp_200, resp_500, ExcelRule)
 from bisheng.api.v2.schema.filelib import APIAddQAParam, APIAppendQAParam, QueryQAParam
 from bisheng.api.v2.utils import get_default_operator
-from bisheng.cache.utils import file_download, save_download_file
+from bisheng.core.cache.utils import file_download, save_download_file
+from bisheng.common.errcode.http_error import ServerError
 from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
                                                KnowledgeUpdate)
 from bisheng.database.models.knowledge_file import (QAKnoweldgeDao, QAKnowledgeUpsert)
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.settings import settings
-from bisheng.utils.logger import logger
+from bisheng.common.services.config_service import settings
+from loguru import logger
 
 # build router
 router = APIRouter(prefix='/filelib', tags=['OpenAPI', 'Knowledge'])
