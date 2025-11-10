@@ -129,7 +129,7 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
             },
         });
 
-         return () => {
+        return () => {
             // 1. 校验实例存在 + 初始化完成 + DOM节点存在
             if (vditorRef.current && readyRef.current && domRef.current) {
                 try {
@@ -147,8 +147,8 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
     return <div ref={domRef} className={`${hidden ? 'hidden' : ''} overflow-y-auto border-none file-vditor`}></div>;
 });
 
-const EditMarkdown = ({ data, active, fileSuffix, onClick, onDel, onChange, onPositionClick }) => {
-    
+const EditMarkdown = ({ data, active, oneLeft, fileSuffix, onClick, onDel, onChange, onPositionClick }) => {
+
     const [edit, setEdit] = useState(false); // 编辑原始格式
     const { appConfig } = useContext(locationContext)
 
@@ -219,14 +219,16 @@ const EditMarkdown = ({ data, active, fileSuffix, onClick, onDel, onChange, onPo
                         </Tip>}
                 </div>
             </div>
-            <Tip content={"点击删除分段"} side={"top"}  >
-                <Button
-                    size="icon"
-                    variant="ghost"
-                    className={cn("size-6 text-primary opacity-0 group-hover:opacity-100")}
-                    onClick={() => onDel(data.chunkIndex, data.text)}
-                ><CircleX size={18} /></Button>
-            </Tip>
+            {!oneLeft &&
+                <Tip content={"点击删除分段"} side={"top"}  >
+                    <Button
+                        size="icon"
+                        variant="ghost"
+                        className={cn("size-6 text-primary opacity-0 group-hover:opacity-100")}
+                        onClick={() => onDel(data.chunkIndex, data.text)}
+                    ><CircleX size={18} /></Button>
+                </Tip>
+            }
         </div>
 
         {/* 所见即所得Markdown编辑器 */}
@@ -299,6 +301,7 @@ export default function PreviewParagraph({ fileId, previewCount, edit, fileSuffi
                             active={selectedChunkIndex === chunk.chunkIndex}
                             onClick={setSelectedChunkIndex}
                             onPositionClick={setSelectedChunkDistanceFactor}
+                            oneLeft={chunks.length === 1}
                             onDel={onDel}
                             onChange={onChange}
                         />

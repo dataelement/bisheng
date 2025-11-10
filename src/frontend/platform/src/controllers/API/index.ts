@@ -320,14 +320,14 @@ export function previewFileSplitApi(
         const payload = result?.data;
         const code = result?.code;
         const message = result?.message;
-        
+
         if (!status || typeof status !== 'string') {
           console.error('轮询响应缺少 status 字段或格式异常:', result);
           isFinished = true;
           emitError({ message: '轮询响应格式异常' });
           return;
         }
-        
+
         switch (status) {
           case 'processing':
             onEvent('processing', payload || {});
@@ -370,22 +370,22 @@ export function previewFileSplitApi(
     .post('/api/v1/knowledge/preview', data, {
       signal: createSignal
     })
-      .then((result: any) => {
+    .then((result: any) => {
       console.log('preview 创建任务响应:', result);
-      
+
       if (!result || isFinished) {
         console.warn('预览任务创建响应为空或已结束');
         return;
       }
       const previewFileId = result?.preview_file_id || result?.previewFileId;
-      
+
       if (previewFileId) {
         console.log('获取到 preview_file_id:', previewFileId, '开始轮询');
         // 立即开始第一次轮询
         pollStatus(previewFileId);
         return;
       }
-      
+
       // 如果没有 preview_file_id，可能是响应格式异常
       console.error('任务创建失败：未找到 preview_file_id，响应数据:', JSON.stringify(result));
       isFinished = true;
@@ -783,7 +783,12 @@ export interface MessageDB {
 }
 
 export async function getChatHistory(flowId: string, chatId: string, pageSize: number, id?: number): Promise<MessageDB[]> {
-  return await axios.get(`/api/v1/chat/history?flow_id=${flowId}&chat_id=${chatId}&page_size=${pageSize}&id=${id || ''}`);
+  // hack Switch API URL based on routing 
+  let url = '/api/v1/chat/history'
+  if (location.pathname.indexOf('/log/chatlog') || location.pathname.indexOf('/label/chat')) {
+    url = '/api/v1/session/chat/history'
+  }
+  return await axios.get(`${url}?flow_id=${flowId}&chat_id=${chatId}&page_size=${pageSize}&id=${id || ''}`);
 }
 
 /**

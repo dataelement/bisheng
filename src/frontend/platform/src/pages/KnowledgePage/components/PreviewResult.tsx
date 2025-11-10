@@ -169,11 +169,6 @@ export default function PreviewResult({
     }))
     const res = chunks.filter(chunk => chunk.chunkIndex !== chunkIndex)
     setChunks(res)
-
-    // 分段删光处理
-    if (res.length === 0) {
-      onDeleteFile?.(filePath)
-    }
   }
 
   // 更新分段
