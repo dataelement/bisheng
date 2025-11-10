@@ -222,23 +222,23 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
                     // console.error('链接手动断开 event :>> ', event);
                     // setStop({ show: false, disable: false })
 
-                    if ([1005, 1008, 1009].includes(event.code)) {
-                        setInputLock({ locked: true, reason: event.reason })
-                    } else {
-                        if (event.reason) {
-                            toast({
-                                title: t('prompt'),
-                                variant: 'error',
-                                description: event.reason
-                            });
-                        }
-                        setInputLock({ locked: true, reason: '' })
-                    }
-                    event.reason && addNotification({
-                        type: 'error',
-                        title: '运行异常',
-                        description: event.reason
-                    })
+                    // if ([1005, 1008, 1009].includes(event.code)) {
+                    //     setInputLock({ locked: true, reason: event.reason })
+                    // } else {
+                    //     if (event.reason) {
+                    //         toast({
+                    //             title: t('prompt'),
+                    //             variant: 'error',
+                    //             description: event.reason
+                    //         });
+                    //     }
+                    //     setInputLock({ locked: true, reason: '' })
+                    // }
+                    // event.reason && addNotification({
+                    //     type: 'error',
+                    //     title: '运行异常',
+                    //     description: event.reason
+                    // })
                 };
                 ws.onerror = (ev) => {
                     wsRef.current = null
@@ -268,7 +268,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
     const handleWsMessage = (data) => {
         if (data.category === 'error') {
             const { status_code, status_message, data: params } = data.message
-            setInputLock({ locked: true, reason: '' })
+            setInputLock({ locked: true, reason: t(`errors.${status_code}`, params) })
 
             // 记录
             const errorMsg = status_code == 500 ? status_message : t(`errors.${status_code}`, params)
@@ -517,7 +517,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             </div>
             {/* 语音转文字 */}
             <div className={` ${!inputLock.locked && 'mr-4'}`}>
-                {linsightConfig?.asr_model?.id && <SpeechToTextComponent onChange={handleSpeechRecognition} />}
+                {linsightConfig?.asr_model?.id && <SpeechToTextComponent disabled={inputLock.locked} onChange={handleSpeechRecognition} />}
             </div>
 
             {/* 附件 */}

@@ -94,7 +94,7 @@ const convertBlobToWav = async (blob) => {
 };
 
 // --- 主组件---
-const SpeechToTextComponent = ({ onChange }) => {
+const SpeechToTextComponent = ({ disabled, onChange }) => {
   const [version] = useState(window.chat_version || 'v1');
   const { toast } = useToast();
   const [isRecording, setIsRecording] = useState(false);
@@ -117,6 +117,7 @@ const SpeechToTextComponent = ({ onChange }) => {
 
   // 开始录音（添加10分钟限制逻辑）
   const startRecording = async () => {
+    if (disabled) return
     try {
       setIsLoading(true);
       audioChunksRef.current = [];
@@ -290,7 +291,7 @@ const SpeechToTextComponent = ({ onChange }) => {
           <VoiceRecordingIcon size={18} onClick={stopRecording} />
         )}
         {!isProcessing && !isRecording && (
-          <Mic size={18} onClick={startRecording} />
+          <Mic size={18} className={disabled && 'cursor-not-allowed opacity-40'} onClick={startRecording} />
         )}
       </div>
 
