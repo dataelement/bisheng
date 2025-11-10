@@ -6,7 +6,6 @@ from fastapi import (APIRouter, Body, HTTPException, Query, Request, WebSocket, 
 from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
 from loguru import logger
-from sqlmodel import select
 
 from bisheng.api.services import chat_imp
 from bisheng.api.services.audit_log import AuditLogService
@@ -17,16 +16,17 @@ from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.utils import build_flow, build_input_keys_response
 from bisheng.api.v1.schema.base_schema import PageList
-from bisheng.api.v1.schema.chat_schema import APIChatCompletion, AppChatList, ChatMessageHistoryResponse
+from bisheng.api.v1.schema.chat_schema import APIChatCompletion, AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import (AddChatMessages, BuildStatus, BuiltResponse, ChatInput,
                                     ChatList, InitResponse, StreamData,
                                     UnifiedResponseModel, resp_200)
 from bisheng.chat.manager import ChatManager
+from bisheng.chat_session.domain.chat import ChatSessionService
 from bisheng.common.errcode.chat import ChatServiceError, SkillDeletedError, SkillNotBuildError, SkillNotOnlineError
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
 from bisheng.core.cache.redis_manager import get_redis_client
-from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao
@@ -182,30 +182,13 @@ async def get_chat_message(*,
                            page_size: Optional[int] = 20,
                            login_user: UserPayload = Depends(get_login_user),
                            share_link: Union['ShareLink', None] = Depends(header_share_token_parser)):
-    if not chat_id or not flow_id:
-        raise NotFoundError()
-
-    where = select(ChatMessage).where(ChatMessage.flow_id == flow_id,
-                                      ChatMessage.chat_id == chat_id)
-
-    if id:
-        where = where.where(ChatMessage.id < int(id))
-    async with get_async_db_session() as session:
-        db_message = await session.exec(where.order_by(ChatMessage.id.desc()).limit(page_size))
-        db_message = db_message.all()
+    history = await ChatSessionService.get_chat_history(chat_id, flow_id, id, page_size)
 
     # # Authorization check
-    if db_message and login_user.user_id != db_message[0].user_id:
+    if history and login_user.user_id != history[0].user_id:
         if not share_link or share_link.resource_id != chat_id:
             return UnAuthorizedError.return_resp()
-    chat_message_history = []
-    if db_message:
-        user_model = await UserDao.aget_user(db_message[0].user_id)
-        message_session = await MessageSessionDao.async_get_one(chat_id=chat_id)
-        chat_message_history = ChatMessageHistoryResponse.from_chat_message_objs(db_message, user_model,
-                                                                                 message_session)
-
-    return resp_200(chat_message_history)
+    return resp_200(history)
 
 
 @router.get('/chat/info')

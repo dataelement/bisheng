@@ -1,12 +1,12 @@
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
-from bisheng.core.database import get_sync_db_session, get_async_db_session
-from loguru import logger
-from pydantic import BaseModel
-from sqlmodel import (JSON, Column, DateTime, Field, String, Text, case, delete, func, not_, or_,
-                      select, text, update)
 
+from loguru import logger
+from sqlmodel import (JSON, Column, DateTime, Field, String, Text, case, delete, func, not_, or_,
+                      select, text, update, col)
+
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -355,3 +355,14 @@ class ChatMessageDao(MessageBase):
             ChatMessage.create_time.asc())
         with get_sync_db_session() as session:
             return session.exec(statement).all()
+
+    @classmethod
+    async def afilter_message_by_chat_id(cls, chat_id: str, flow_id: str, message_id: int = None, page_size: int = 20) \
+            -> List[ChatMessage]:
+        statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id).where(ChatMessage.flow_id == flow_id)
+        if message_id:
+            statement = statement.where(ChatMessage.id < message_id)
+        statement = statement.order_by(col(ChatMessage.id).desc()).limit(page_size)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
