@@ -4,6 +4,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List
 
+from loguru import logger
 from pydantic import ValidationError
 
 from bisheng.api.services.rt_backend import RTBackend
@@ -24,7 +25,6 @@ from bisheng.database.models.finetune import (Finetune, FinetuneChangeModelName,
 from bisheng.database.models.model_deploy import ModelDeploy, ModelDeployDao, ModelDeployInfo
 from bisheng.database.models.server import Server, ServerDao
 from bisheng.database.models.sft_model import SftModelDao
-from loguru import logger
 
 sync_job_thread_pool = ThreadPoolExecutor(3)
 
@@ -228,7 +228,8 @@ class FinetuneService:
     def upload_job_log(cls, finetune: Finetune, log_data: io.BytesIO, length: int) -> str:
         minio_client = get_minio_storage_sync()
         log_path = f'finetune/log/{finetune.id}'
-        minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=log_path, file=log_data)
+        minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=log_path, file=log_data,
+                                     length=length)
         return log_path
 
     @classmethod
