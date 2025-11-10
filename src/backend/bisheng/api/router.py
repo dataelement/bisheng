@@ -11,6 +11,7 @@ from bisheng.api.v2 import (assistant_router_rpc, chat_router_rpc, flow_router,
                             knowledge_router_rpc, rpc_router_rpc, workflow_router_rpc,
                             workstation_router_rpc)
 from bisheng.api.v2.llm import router as llm_router_rpc
+from bisheng.chat_session.api.router import router as session_router
 from bisheng.llm.api.router import router as llm_router
 from bisheng.share_link.api.router import router as share_link_router
 
@@ -40,6 +41,7 @@ router.include_router(workstation_router)
 router.include_router(linsight_router)
 router.include_router(tool_router)
 router.include_router(invite_code_router)
+router.include_router(session_router)
 router_rpc = APIRouter(prefix='/api/v2', )
 router_rpc.include_router(knowledge_router_rpc)
 router_rpc.include_router(chat_router_rpc)

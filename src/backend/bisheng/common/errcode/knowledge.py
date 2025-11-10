@@ -52,3 +52,9 @@ class KnowledgePreviewError(BaseErrorCode):
 class KnowledgeNotQAError(BaseErrorCode):
     Code: int = 10960
     Msg: str = '不是QA知识库'
+
+
+# 知识库不存在
+class KnowledgeNotExistError(BaseErrorCode):
+    Code: int = 10970
+    Msg: str = '知识库不存在'
