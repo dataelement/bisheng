@@ -108,6 +108,7 @@ export async function getChatHistoryApi({ flowId, chatId, flowType, id, shareTok
     return await request.get(`/api/v1/chat/history?flow_id=${flowId}&chat_id=${chatId}&page_size=40&id=${id || ''}`, {
         headers
     }).then(res => {
+        if (res.status_code !== 200) return []
         const newData = Number(flowType) === 10 ? filterFlowMsg(res.data) : filterSkillMsg(res.data)
 
         return newData.map(item => {
