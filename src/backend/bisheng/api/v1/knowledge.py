@@ -1,5 +1,4 @@
 import json
-import json
 import urllib.parse
 from datetime import datetime
 from io import BytesIO
@@ -102,7 +101,7 @@ async def get_preview_file_status(
     if file_status.get('status') == 'error':
         raise KnowledgePreviewError.http_exception()
     if file_status.get('status') == 'completed':
-        await redis_client.expire_key(redis_key, 10)
+        await redis_client.aexpire_key(redis_key, 10)
     return resp_200(data=file_status)
 
 
