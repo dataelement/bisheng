@@ -26,6 +26,8 @@ export default function FlowPage() {
     if (id && flow?.id !== id) {
       // 切换技能重新加载flow数据
       flowInit()
+    } else {
+      setChecking(false)
     }
     // return () => setFlow('destroy', null)
   }, [])
