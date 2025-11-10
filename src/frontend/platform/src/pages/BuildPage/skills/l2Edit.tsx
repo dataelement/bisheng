@@ -51,7 +51,7 @@ export default function l2Edit() {
         });
     }
     useEffect(() => {
-        if (!id) return;
+        if (!id) return setChecking(false);
 
         flowInit()
     }, [id]);
