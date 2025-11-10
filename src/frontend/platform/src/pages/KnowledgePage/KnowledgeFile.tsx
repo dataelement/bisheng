@@ -181,7 +181,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                 onOpenChange(false); // 修复：用onOpenChange关闭弹窗（替代原setOpen）
                 onLoadEnd()
             }).catch(error => {
-                toast({ variant: "error", description: '更新失败，请重试' });
+                toast({ variant: "error", description: error || '更新失败，请重试' });
                 onOpenChange(false); // 错误时也关闭弹窗，避免状态卡住
             })).finally(() => {
                 setIsSubmitting(false)
