@@ -454,3 +454,23 @@ class QAKnoweldgeDao(QAKnowledgeBase):
         with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
+
+    # 根据knowledge_id更新status
+    @classmethod
+    def update_status_by_knowledge_id(cls, knowledge_id: int, status: QAStatus
+                                        ) -> None:
+            """
+            根据knowledge_id更新status
+            :param knowledge_id: 知识库ID
+            :param status: 状态
+            :return:
+            """
+
+            statement = (
+                update(QAKnowledge).where(col(QAKnowledge.knowledge_id) == knowledge_id)
+            )
+
+            statement = statement.values(status=status.value)
+            with get_sync_db_session() as session:
+                session.exec(statement)
+                session.commit()
