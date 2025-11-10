@@ -157,7 +157,7 @@ export const useWebSocket = (helpers) => {
         } else if (data.category === 'guide_question') {
             return helpers.showGuideQuestion(helpers.chatId, data.message.guide_question.filter(q => q))
         } else if (data.category === 'stream_msg') {
-            helpers.flow.flow_type === 10 && helpers.reRunShow(true)
+            // helpers.flow.flow_type === 10 && helpers.reRunShow(true) // 成环的工作流不展示重跑按钮
             helpers.message.streamMsg(helpers.chatId, data)
         } else if (data.category === 'end_cover' && data.type === 'end_cover') {
             // helpers.handleMsgError('')
