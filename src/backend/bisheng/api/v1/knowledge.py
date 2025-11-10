@@ -18,7 +18,8 @@ from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk
                                     resp_200, resp_500, resp_501, resp_502, UpdateKnowledgeReq, KnowledgeFileReProcess)
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError, \
-    KnowledgeNotQAError, KnowledgePreviewError
+    KnowledgeNotQAError, KnowledgePreviewError, KnowledgeNotExistError, KnowledgeNoEmbeddingError
+from bisheng.common.errcode.server import NoLlmModelConfigError
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate)
@@ -780,23 +781,23 @@ def update_knowledge_model(*,
         # 1. 验证是否为embedding模型
         model_info = LLMDao.get_model_by_id(req_data.model_id)
         if not model_info:
-            return resp_501(message="模型不存在")
+            return NoLlmModelConfigError.return_resp()
 
         # 如果前端没有传model_type，使用数据库中的model_type
         model_type = req_data.model_type if req_data.model_type else model_info.model_type
 
         if model_type != LLMModelType.EMBEDDING.value:
-            return resp_501(message="不是embedding模型")
+            return KnowledgeNoEmbeddingError.return_resp()
 
         # 处理指定的知识库
         knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
         if not knowledge:
-            return resp_501(message="指定的知识库不存在")
+            return KnowledgeNotExistError.return_resp()
 
         if not login_user.access_check(
                 knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
         ):
-            raise UnAuthorizedError.http_exception()
+            raise UnAuthorizedError()
 
         old_model_id = knowledge.model
 
@@ -812,7 +813,7 @@ def update_knowledge_model(*,
                 message="知识库模型未更改，无需重建"
             )
         if knowledge.state == KnowledgeState.REBUILDING.value:
-            raise KnowledgeRebuildingError.http_exception()
+            raise KnowledgeRebuildingError()
         knowledge.state = KnowledgeState.REBUILDING.value
         KnowledgeDao.update_one(knowledge)
 
