@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import FileUploadStep1 from "./components/FileUploadStep1";
-import FileUploadStep2 from "./components/FileUploadStep2";
+import FileUploadStep2, { Step2PersistState } from "./components/FileUploadStep2";
 import FileUploadStep4 from "./components/FileUploadStep4";
 import PreviewResult from "./components/PreviewResult";
 import { LoadingIcon } from "@/components/bs-icons/loading";
@@ -38,11 +38,19 @@ export default function FilesUpload() {
   const [repeatFiles, setRepeatFiles] = useState([]); // 重复文件提醒
   const [retryLoad, setRetryLoad] = useState(false);
 
+  // 关键新增：托管 Step2 的持久化状态
+  const [step2PersistState, setStep2PersistState] = useState<Step2PersistState | undefined>();
+
   // Ref管理
   const fileUploadStep2Ref = useRef(null); // Step2（分段策略）组件引用
   const _tempConfigRef = useRef({}); // 临时存储API配置
   const submittingRef = useRef(false); // 防止重复提交
   const repeatCallBackRef = useRef(() => setCurrentStep(4)); // 重复文件处理后跳转步骤（4：数据处理）
+
+  // 关键新增：接收 Step2 的状态更新，保存到父组件
+  const handleStep2StateChange = (state: Step2PersistState) => {
+    setStep2PersistState(state);
+  };
 
   // 步骤1：文件上传完成，跳转步骤2
   const handleStep1Next = (files) => {
@@ -228,8 +236,8 @@ export default function FilesUpload() {
                 initialFiles={resultFiles}
               />
             )}
-            {/* 步骤2：分段策略 */}
-            {currentStep === 2 && ( // 步骤2或3时，第二步始终挂载（仅控制显示）
+            {/* 步骤2：分段策略 - 仅新增2个props传递 */}
+            {currentStep === 2 && (
               <div className={currentStep === 2 ? "block" : "hidden"}>
                 <FileUploadStep2
                   ref={fileUploadStep2Ref}
@@ -239,6 +247,8 @@ export default function FilesUpload() {
                   onNext={handleStep2Next}
                   onPrev={handleBack}
                   kId={knowledgeId}
+                  persistState={step2PersistState} // 新增：传递保存的状态
+                  onPersistStateChange={handleStep2StateChange} // 新增：传递状态更新回调
                 />
               </div>
             )}
