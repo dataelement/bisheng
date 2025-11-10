@@ -71,7 +71,7 @@ export default function AppChatDetail() {
             <div className="h-[calc(100vh-132px)]">
                 {type === AppNumType.FLOW
                     ? <ChatMessages logo={logo} debug useName={''} guideWord={''} loadMore={() => loadMoreFlowHistoryMsg(fid, true)} onMarkClick={null}></ChatMessages>
-                    : <MessagePanne logo={logo} useName='' guideWord=''
+                    : <MessagePanne logo={logo} debug useName='' guideWord=''
                         loadMore={() => loadMoreHistoryMsg(fid, true)}
                     ></MessagePanne>
                 }
