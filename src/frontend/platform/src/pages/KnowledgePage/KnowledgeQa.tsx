@@ -147,7 +147,11 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                 onLoadEnd();
             }
         } catch (error) {
-            toast({ variant: "error", description: mode === 'create' ? '创建失败' : '更新失败，请重试' });
+            if (error) {
+                toast({ variant: "error", description: error || '操作失败，请联系管理员' });
+            } else {
+                toast({ variant: "error", description: mode === 'create' ? '创建失败' : '更新失败，请重试' });
+            }
         } finally {
             setIsSubmitting(false);
         }

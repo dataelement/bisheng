@@ -91,7 +91,7 @@ async def copy_report_file(
     minio_client = await get_minio_storage()
     if await minio_client.object_exists(minio_client.bucket, object_name):
         await minio_client.copy_object(source_object=object_name, dest_object=new_object_name,
-                                       source_bucket=minio_client.tmp_bucket, dest_bucket=minio_client.bucket)
+                                       source_bucket=minio_client.bucket, dest_bucket=minio_client.bucket)
     return resp_200(data={
         'version_key': f'{new_version_key}',
     })

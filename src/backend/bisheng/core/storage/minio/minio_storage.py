@@ -158,19 +158,17 @@ class MinioStorage(BaseStorage, ABC):
 
         if bucket_name is None:
             bucket_name = self.bucket
-
-        if isinstance(file, (bytes, BinaryIO)):
-            if isinstance(file, bytes):
-                file = BytesIO(file)
-                length = len(file.getbuffer())
-                self.minio_client_sync.put_object(
-                    bucket_name=bucket_name,
-                    object_name=object_name,
-                    data=file,
-                    length=length,
-                    content_type=content_type,
-                    **kwargs
-                )
+        if isinstance(file, bytes):
+            file = BytesIO(file)
+            length = len(file.getbuffer())
+            self.minio_client_sync.put_object(
+                bucket_name=bucket_name,
+                object_name=object_name,
+                data=file,
+                length=length,
+                content_type=content_type,
+                **kwargs
+            )
 
         elif isinstance(file, (Path, str)):
             file_path = str(file)
@@ -181,9 +179,14 @@ class MinioStorage(BaseStorage, ABC):
                 content_type=content_type,
                 **kwargs
             )
-
         else:
-            raise TypeError("file must be bytes, BinaryIO, Path, or str")
+            self.minio_client_sync.put_object(
+                bucket_name=bucket_name,
+                object_name=object_name,
+                data=file,
+                content_type=content_type,
+                **kwargs
+            )
 
     async def put_object_tmp(self, object_name: str, file: Union[bytes, BinaryIO, Path, str],
                              content_type: str = "application/octet-stream", **kwargs) -> None:

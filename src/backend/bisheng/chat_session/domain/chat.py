@@ -16,8 +16,6 @@ class ChatSessionService:
         """Retrieve chat history for a user."""
         if not chat_id or not flow_id:
             raise NotFoundError()
-        if not chat_id or not flow_id:
-            raise NotFoundError()
         session_info = await MessageSessionDao.async_get_one(chat_id=chat_id)
         if not session_info or session_info.flow_id != flow_id:
             raise NotFoundError()

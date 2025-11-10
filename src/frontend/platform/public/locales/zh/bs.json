@@ -332,7 +332,7 @@
     "nameExists": "该名称已存在",
     "descriptionLimit": "知识库描述字数不得超过200字",
     "createLibrary": "创建知识库",
-    "libraryName": "知识库简介",
+    "libraryName": "知识库名称",
     "description": "描述",
     "model": "模型",
     "fileData": "文档知识库",
