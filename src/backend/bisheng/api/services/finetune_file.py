@@ -2,6 +2,7 @@ import os.path
 from typing import Any, List
 
 from fastapi import UploadFile
+from loguru import logger
 from pydantic import BaseModel
 
 from bisheng.api.v1.schema.base_schema import PageList
@@ -10,7 +11,6 @@ from bisheng.common.errcode.finetune import TrainFileNotExistError
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.preset_train import PresetTrain, PresetTrainDao
 from bisheng.utils import generate_uuid
-from loguru import logger
 
 
 class FinetuneFileService(BaseModel):
@@ -72,7 +72,7 @@ class FinetuneFileService(BaseModel):
                                     user_id=user.get('user_id'),
                                     user_name=user.get('user_name'))
             minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=file_info.url,
-                                         file=file.file, content_type=file.content_type)
+                                         file=file.file, content_type=file.content_type, length=file.size)
             ret.append(file_info)
         return ret
 
