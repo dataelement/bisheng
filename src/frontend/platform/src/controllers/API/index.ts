@@ -258,78 +258,153 @@ export async function rebUploadFile(data) {
 let currentEventSource = null; // 仅保留此变量用于跟踪当前连接
 
 // 用 fetch 实现 POST 方式的 SSE
-export function previewFileSplitApi(data, onEvent) {
-  let controller = new AbortController();
-  const signal = controller.signal;
+/**
+ * 预览文档分片（轮询模式）。
+ * 首次请求创建任务，返回任务标识；随后访问 `/api/v1/knowledge/preview/Polling` 轮询状态。
+ * @param {Record<string, any>} data 请求体
+ * @param {(eventType: string, payload: any) => void} onEvent 事件回调
+ * @param {{ pollInterval?: number }} [options] 轮询配置
+ * @returns {() => void} 取消函数
+ */
+export function previewFileSplitApi(
+  data: Record<string, any>,
+  onEvent: (eventType: string, payload: any) => void,
+  options: { pollInterval?: number } = {}
+) {
+  const createController = new AbortController();
+  const pollingController = new AbortController();
+  const createSignal = createController.signal;
+  const pollingSignal = pollingController.signal;
+  const pollInterval = Math.max(1000, options.pollInterval || 2000);
+  let pollTimer = null;
+  let isFinished = false;
 
-  fetch('/api/v1/knowledge/preview', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-    signal,
-  }).then(response => {
-    // 如果 HTTP 响应状态不是成功（如 4xx/5xx），直接触发解析失败错误
-    if (!response.ok) {
-      onEvent('error', { 
-        code: 10952,  // 新增错误码
-        message: '文档解析失败'  // 新增错误消息
-      });
-      return;
+  const clear = () => {
+    if (pollTimer) {
+      clearTimeout(pollTimer);
+      pollTimer = null;
     }
+    createController.abort();
+    pollingController.abort();
+  };
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
+  const emitError = (payload) => {
+    onEvent('error', {
+      code: payload?.code || 10952,
+      message: payload?.message || '文档解析失败'
+    });
+  };
 
-    const readStream = async () => {
-      const { done, value } = await reader.read();
-      if (done) {
-        onEvent('closed', { message: '连接已关闭' });
+  /**
+   * 轮询状态请求。
+   * @param {string} taskId 任务标识
+   */
+  /**
+   * 轮询状态请求。
+   * @param {string} previewFileId 预览任务标识
+   */
+  const pollStatus = (previewFileId) => {
+    if (isFinished) return;
+    console.log('开始轮询状态, preview_file_id:', previewFileId);
+    axios
+      .get(`/api/v1/knowledge/preview/status`, {
+        params: { preview_file_id: previewFileId },
+        signal: pollingSignal
+      })
+      .then((result: any) => {
+        // axios 拦截器已经返回了 response.data.data，所以这里直接使用 result
+        // 后端返回格式: resp_200(data=file_status)，其中 file_status 是 {"status":"processing"} 或 {"status":"completed","data":{...}}
+        // 经过拦截器后，result 应该是: {"status":"processing"} 或 {"status":"completed","data":{...}}
+        console.log('轮询状态响应:', result);
+        const status: string = result?.status;
+        const payload = result?.data;
+        const code = result?.code;
+        const message = result?.message;
+        
+        if (!status || typeof status !== 'string') {
+          console.error('轮询响应缺少 status 字段或格式异常:', result);
+          isFinished = true;
+          emitError({ message: '轮询响应格式异常' });
+          return;
+        }
+        
+        switch (status) {
+          case 'processing':
+            onEvent('processing', payload || {});
+            if (!isFinished) {
+              pollTimer = setTimeout(() => pollStatus(previewFileId), pollInterval);
+            }
+            break;
+          case 'completed':
+            isFinished = true;
+            onEvent('completed', payload || {});
+            onEvent('closed', { message: '轮询完成' });
+            break;
+          case 'error':
+            isFinished = true;
+            emitError({ code, message, ...(payload || {}) });
+            break;
+          case 'canceled':
+            isFinished = true;
+            onEvent('canceled', payload || {});
+            break;
+          default:
+            // 未知状态视为错误
+            console.warn('未知的轮询状态:', status);
+            isFinished = true;
+            emitError({ code, message: message || `未知状态: ${status}` });
+        }
+      })
+      .catch((err) => {
+        console.error('preview 轮询请求失败', err);
+
+        if (originAxios.isCancel?.(err) || err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') {
+          return;
+        }
+        isFinished = true;
+        emitError({ message: '文档解析失败' });
+      });
+  };
+
+  axios
+    .post('/api/v1/knowledge/preview', data, {
+      signal: createSignal
+    })
+      .then((result: any) => {
+      console.log('preview 创建任务响应:', result);
+      
+      if (!result || isFinished) {
+        console.warn('预览任务创建响应为空或已结束');
         return;
       }
+      const previewFileId = result?.preview_file_id || result?.previewFileId;
+      
+      if (previewFileId) {
+        console.log('获取到 preview_file_id:', previewFileId, '开始轮询');
+        // 立即开始第一次轮询
+        pollStatus(previewFileId);
+        return;
+      }
+      
+      // 如果没有 preview_file_id，可能是响应格式异常
+      console.error('任务创建失败：未找到 preview_file_id，响应数据:', JSON.stringify(result));
+      isFinished = true;
+      emitError({ message: '任务创建失败：响应中缺少任务ID，请检查后端接口返回格式' });
+    })
+    .catch((err) => {
+      console.error('preview 请求失败', err);
 
-      const chunk = decoder.decode(value, { stream: true });
-      const events = chunk.split('\n\n');
-      events.forEach(event => {
-        if (!event) return;
-        const lines = event.split('\n');
-        let eventType = 'message';
-        let eventData = '';
-        lines.forEach(line => {
-          if (line.startsWith('event:')) {
-            eventType = line.slice(6).trim();
-          } else if (line.startsWith('data:')) {
-            eventData += line.slice(5).trim();
-          }
-        });
-        if (eventData) {
-          const parsedData = JSON.parse(eventData);
-          // 若后端返回 error 事件，补充默认错误码（如果后端未返回 code）
-          if (eventType === 'error') {
-            onEvent(eventType, {
-              code: parsedData.code || 10952,  // 优先使用后端返回的 code，否则默认 10952
-              message: parsedData.message || '文档解析失败'  // 优先使用后端消息
-            });
-          } else {
-            onEvent(eventType, parsedData);
-          }
-        }
-      });
+      if (originAxios.isCancel?.(err) || err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') {
+        return;
+      }
+      isFinished = true;
+      emitError({ message: '文档解析失败' });
+    });
 
-      readStream();
-    };
-
-    readStream();
-  }).catch(err => {
-    if (err.name !== 'AbortError') {
-      // 网络错误或连接失败时，也返回解析失败错误
-      onEvent('error', {
-        code: 10952,
-        message: '文档解析失败'
-      });
-    }
-  });
-
-  return () => controller.abort();
+  return () => {
+    isFinished = true;
+    clear();
+  };
 }
 
 /**
