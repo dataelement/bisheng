@@ -113,7 +113,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
                 search_switch: false,
                 rerank_flag: false,
                 rerank_model: '',
-                max_chunk_size: 150000,
+                max_chunk_size: 15000,
             });
         }
     }, [
