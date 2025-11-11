@@ -115,13 +115,25 @@ export default function PreviewFile({
       });
     });
 
-    if (labelsMap.size) {
-      setRePostion(!rePostion);
-      setLabelsMap(labelsMap);
-      labelsMapRef.current = labelsMap;
+  if (labelsMap.size) {
+    setRePostion(!rePostion);
+    setLabelsMap(labelsMap);
+    labelsMapRef.current = labelsMap;
+  }
+}, [suffix, chunks, selectedChunkIndex, isUnsType, partitions]);
+useEffect(() => {
+  // 当 chunks 变化且存在选中的 chunkIndex 时，检查该 chunk 是否仍存在
+  if (selectedChunkIndex !== -1) {
+    const chunkExists = chunks.some(c => c.chunkIndex === selectedChunkIndex);
+    if (!chunkExists) {
+      // 清除该 chunk 对应的标签
+      setLabelsMap(new Map());
+      labelsMapRef.current = new Map();
+      delete labelsMapTempRef.current[selectedChunkIndex];
+      setSelectedBbox([]);
     }
-  }, [suffix, chunks, selectedChunkIndex, isUnsType, partitions]); // 增加partitions依赖
-
+  }
+}, [chunks, selectedChunkIndex, setLabelsMap, setSelectedBbox]);
   // 5. 页面滚动和定位逻辑（对齐ParagraphEdit的postion计算）
   useEffect(() => {
     setPostion(prev => [prev[0], prev[1] + selectedChunkDistanceFactor]);

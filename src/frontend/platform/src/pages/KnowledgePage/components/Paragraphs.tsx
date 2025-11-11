@@ -64,8 +64,8 @@ export default function Paragraphs({ fileId, onBack }) {
     const latestFileUrlRef = useRef('');
     const latestPreviewUrlRef = useRef('');
     const latestOriginalUrlRef = useRef('');
-
-    const [selectedChunkIndex, setSelectedBbox] = useKnowledgeStore((state) => [state.selectedChunkIndex, state.setSelectedBbox]);
+    const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
+const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
     useEffect(() => {
         // 切换chunk清空选中的高亮标注bbox
         setSelectedBbox([])
@@ -73,7 +73,8 @@ export default function Paragraphs({ fileId, onBack }) {
 
     // 表格配置（完全保留原始逻辑）
     const tableConfig = useMemo(() => ({
-        file_ids: selectedFileId ? [selectedFileId] : []
+        file_ids: selectedFileId ? [selectedFileId] : [],
+         knowledge_id: id
     }), [selectedFileId]);
 
     const {
@@ -236,7 +237,7 @@ export default function Paragraphs({ fileId, onBack }) {
             text: item.text || '',
             bbox: item.metadata?.bbox || {},
             activeLabels: {},
-            chunkIndex: item.metadata?.chunk_index || index,
+             chunkIndex: item.metadata?.chunk_index, 
             page: item.metadata?.page || 0,
             metadata: item.metadata || {}
         }));
@@ -352,7 +353,7 @@ export default function Paragraphs({ fileId, onBack }) {
         }
     }, [rawFiles, isInitReady, fileId, handleFileChange, selectedFileId, hasInited]);
 
-    // 处理分段修改（完全保留原始逻辑）
+    // 处理分段修改
     const handleChunkChange = useCallback((chunkIndex, text) => {
         let chunkIndexPage = chunkIndex % pageSize;
         console.log('转换后的localIndex:', chunkIndexPage);
@@ -363,7 +364,8 @@ export default function Paragraphs({ fileId, onBack }) {
         const bbox = { chunk_bboxes: selectedBbox };
 
         // selectedBbox空数组时，使用safeChunks的bbox
-        const bboxStr = selectedBbox.length ? JSON.stringify(bbox) : safeChunks[chunkIndexPage].bbox;
+          const targetChunk = chunks.find(chunk => chunk.chunkIndex === chunkIndex);
+             const bboxStr = selectedBbox.length ? JSON.stringify(bbox) : targetChunk?.bbox;
         captureAndAlertRequestErrorHoc(updateChunkApi({
             knowledge_id: Number(id),
             file_id: selectedFileId || currentFile?.id || '',
@@ -380,7 +382,7 @@ export default function Paragraphs({ fileId, onBack }) {
             (item) => item?.metadata?.chunk_index === chunkIndex,
             (item) => ({ text, metadata: { ...item.metadata, bbox: bboxStr } })
         );
-    }, [id, currentFile, refreshData, selectedBbox]);
+    }, [id, currentFile, refreshData, selectedBbox,chunks]);
 
     // 格式化文件列表（完全保留原始逻辑）
     const files = useMemo(() => {
@@ -486,16 +488,34 @@ export default function Paragraphs({ fileId, onBack }) {
     }, []);
 
 
-    // 删除分段（完全保留原始逻辑）
-    const handleDeleteChunk = useCallback((data) => {
-        captureAndAlertRequestErrorHoc(delChunkApi({
-            knowledge_id: Number(id),
-            file_id: selectedFileId || currentFile?.id || '',
-            chunk_index: data || 0
-        }));
-        reload();
-    }, [id, reload]);
+const handleDeleteChunk = useCallback((data) => {
 
+  const updatedChunks = chunks.filter(chunk => chunk.chunkIndex !== data);
+  setChunks(updatedChunks);
+
+  // 清除选中的bbox（如果选中的是被删除的chunk）
+  if (selectedChunkIndex === data) {
+    setSelectedBbox([]);
+  }
+
+  captureAndAlertRequestErrorHoc(delChunkApi({
+    knowledge_id: Number(id),
+    file_id: selectedFileId || currentFile?.id || '',
+    chunk_index: data || 0
+  }));
+
+  reload();
+
+}, [
+  id, 
+  reload, 
+  chunks, 
+  selectedFileId, 
+  currentFile?.id, 
+  setChunks, 
+  selectedChunkIndex, // 从store获取的选中chunkIndex
+  setSelectedBbox     // 从store获取的set方法
+]);
     // 格式化文件大小（完全保留原始逻辑）
     const formatFileSize = useCallback((bytes) => {
         if (bytes === 0) return '0 Bytes';
@@ -721,7 +741,7 @@ export default function Paragraphs({ fileId, onBack }) {
                         previewUrl={previewUrl}
                         urlState={{ load: !isFetchingUrl, url: previewUrl || fileUrl }}
                         file={currentFile}
-                        chunks={safeChunks}
+                        chunks={chunks}
                         setChunks={setChunks}
                         rules={previewRules}
                         edit
@@ -747,7 +767,7 @@ export default function Paragraphs({ fileId, onBack }) {
                                 className="h-[calc(100vh-206px)] pb-6"
                                 fileSuffix={currentFile?.suffix || ''}
                                 loading={loading}
-                                chunks={safeChunks}
+                                chunks={chunks}
                                 onDel={handleDeleteChunk}
                                 onChange={handleChunkChange}
                             />

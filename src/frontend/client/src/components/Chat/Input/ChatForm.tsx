@@ -137,7 +137,9 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
   const disableInputs = useMemo(
     () => {
       if (readOnly) return true
-      if (!isLingsi && bsConfig?.models.length === 0) return true
+      if (isLingsi) return false
+      if (!bsConfig?.models) return true
+      if (bsConfig.models.length === 0) return true
       return !!((requiresKey ?? false) || invalidAssistant)
     },
     [requiresKey, invalidAssistant, isLingsi, readOnly, bsConfig],
@@ -213,6 +215,12 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
   const showVoice = modelData?.asr_model.id
 
   const [audioOpening] = useRecordingAudioLoading()
+  const noModel = useMemo(() => {
+    if (isLingsi) return false
+    if (!bsConfig?.models) return true
+    if (bsConfig.models.length === 0) return true
+    return false
+  }, [isLingsi, bsConfig])
 
   return (
     <form
@@ -313,7 +321,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
           </FileFormWrapper>
           {/* 发送和停止 */}
           <div className="absolute bottom-2 right-3 flex gap-2 items-center">
-            {showVoice && <SpeechToTextComponent disabled={readOnly} onChange={(e) => {
+            {showVoice && <SpeechToTextComponent disabled={readOnly || noModel} onChange={(e) => {
               const text = textAreaRef.current.value + e
               methods.setValue('text', text, { shouldValidate: true });
             }} />}
