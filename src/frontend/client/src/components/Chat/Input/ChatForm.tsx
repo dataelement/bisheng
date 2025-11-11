@@ -137,8 +137,9 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
   const disableInputs = useMemo(
     () => {
       if (readOnly) return true
+      if (isLingsi) return false
       if (!bsConfig?.models) return true
-      if (!isLingsi && bsConfig.models.length === 0) return true
+      if (bsConfig.models.length === 0) return true
       return !!((requiresKey ?? false) || invalidAssistant)
     },
     [requiresKey, invalidAssistant, isLingsi, readOnly, bsConfig],
@@ -215,10 +216,11 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
 
   const [audioOpening] = useRecordingAudioLoading()
   const noModel = useMemo(() => {
+    if (isLingsi) return false
     if (!bsConfig?.models) return true
     if (bsConfig.models.length === 0) return true
     return false
-  }, [bsConfig])
+  }, [isLingsi, bsConfig])
 
   return (
     <form
