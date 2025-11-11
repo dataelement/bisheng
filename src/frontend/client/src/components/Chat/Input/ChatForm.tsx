@@ -137,7 +137,8 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
   const disableInputs = useMemo(
     () => {
       if (readOnly) return true
-      if (!isLingsi && bsConfig?.models.length === 0) return true
+      if (!bsConfig?.models) return true
+      if (!isLingsi && bsConfig.models.length === 0) return true
       return !!((requiresKey ?? false) || invalidAssistant)
     },
     [requiresKey, invalidAssistant, isLingsi, readOnly, bsConfig],
