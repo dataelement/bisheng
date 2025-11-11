@@ -1,10 +1,10 @@
 import asyncio
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, TypeVar, Generic, Callable, Awaitable, Union
+from contextlib import asynccontextmanager, contextmanager
 from enum import Enum
 from threading import Lock, Event
-from contextlib import asynccontextmanager, contextmanager
+from typing import Any, Dict, Optional, TypeVar, Generic, Callable, Awaitable, Union
 
 from loguru import logger
 
@@ -50,7 +50,7 @@ class BaseContextManager(ABC, Generic[T]):
 
     name: str
     _default_timeout: float = 30.0  # 默认超时时间
-    _default_retry_count: int = 3   # 默认重试次数
+    _default_retry_count: int = 3  # 默认重试次数
 
     def __init__(self, name: str = None, timeout: float = None, retry_count: int = None):
         self.name = name or getattr(self.__class__, 'name', self.__class__.__name__.lower())
@@ -163,7 +163,8 @@ class BaseContextManager(ABC, Generic[T]):
                 last_error = e
                 if attempt < self.retry_count - 1:
                     wait_time = 2 ** attempt  # 指数退避
-                    logger.warning(f"Context '{self.name}' init attempt {attempt + 1} failed: {e}, retrying in {wait_time}s")
+                    logger.warning(
+                        f"Context '{self.name}' init attempt {attempt + 1} failed: {e}, retrying in {wait_time}s")
                     await asyncio.sleep(wait_time)
                 else:
                     logger.error(f"Context '{self.name}' initialization failed after {self.retry_count} attempts: {e}")
@@ -226,7 +227,8 @@ class BaseContextManager(ABC, Generic[T]):
                 last_error = e
                 if attempt < self.retry_count - 1:
                     wait_time = 2 ** attempt  # 指数退避
-                    logger.warning(f"Context '{self.name}' init attempt {attempt + 1} failed: {e}, retrying in {wait_time}s")
+                    logger.warning(
+                        f"Context '{self.name}' init attempt {attempt + 1} failed: {e}, retrying in {wait_time}s")
                     time.sleep(wait_time)
                 else:
                     logger.error(f"Context '{self.name}' initialization failed after {self.retry_count} attempts: {e}")
@@ -472,7 +474,8 @@ class ContextRegistry:
         """
         with self._lock:
             if context_manager.name in self._contexts:
-                raise ValueError(f"Context '{context_manager.name}' already registered")
+                logger.warning(f"Context '{context_manager.name}' is already registered")
+                return
             self._contexts[context_manager.name] = context_manager
             logger.debug(f"Registered context: '{context_manager.name}'")
 
