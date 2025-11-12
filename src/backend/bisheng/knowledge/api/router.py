@@ -1,9 +1,4 @@
-from fastapi import APIRouter
-from .endpoints.knowledge import router as knowledge
-from .endpoints.qa import router as qa
+from .endpoints.knowledge import router as knowledge_router
+from .endpoints.qa import router as qa_router
 
-knowledge_router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
-qa_router = APIRouter(prefix='/qa', tags=['QA'])
-
-knowledge_router.include_router(knowledge)
-qa_router.include_router(qa)
+__all__ = ['knowledge_router', 'qa_router']

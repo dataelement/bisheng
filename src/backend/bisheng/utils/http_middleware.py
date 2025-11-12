@@ -23,11 +23,11 @@ class CustomMiddleware(BaseHTTPMiddleware):
         path = request.url
         trace_id_var.set(trace_id)
 
-        logger.info(f"| {ip} | {path}")
+        logger.info(f"| {ip} | {request.method} {path}")
         start_time = time()
         response = await call_next(request)
         process_time = round(time() - start_time, 4)
         response.headers["X-Process-Time"] = str(process_time)
         response.headers["X-Trace-ID"] = trace_id
-        logger.info(f"| {ip} | {path}：process_time={process_time}s")
+        logger.info(f"| {ip} | {request.method} {path} | process_time={process_time}s")
         return response

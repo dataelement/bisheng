@@ -9,9 +9,9 @@ from pydantic import BaseModel, Field, model_validator, field_validator
 from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.flow import FlowCreate, FlowRead
 from bisheng.database.models.gpts_tools import AuthMethod, AuthType, GptsToolsRead
-from bisheng.knowledge.domain.models.knowledge import KnowledgeRead
 from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
+from bisheng.knowledge.domain.models.knowledge import KnowledgeRead
 
 
 class CaptchaInput(BaseModel):
@@ -228,6 +228,7 @@ class UploadFileResponse(BaseModel):
     flowId: Optional[str] = None
     file_path: str
     relative_path: Optional[str] = None  # minio的相对路径，即object_name
+    repeat: bool = False  # 在知识库里是否重复
 
 
 class StreamData(BaseModel):

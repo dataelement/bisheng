@@ -194,6 +194,24 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return session.exec(sql).all()
 
     @classmethod
+    async def get_repeat_file(cls, knowledge_id: int, md5_: str = None, file_name: str = None):
+        sql = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
+        if md5_ and file_name:
+            sql = sql.where(
+                or_(
+                    KnowledgeFile.md5 == md5_,
+                    KnowledgeFile.file_name == file_name
+                )
+            )
+        elif md5_:
+            sql = sql.where(KnowledgeFile.md5 == md5_)
+        elif file_name:
+            sql = sql.where(KnowledgeFile.file_name == file_name)
+        async with get_async_db_session() as session:
+            result = await session.execute(sql)
+            return result.scalars().all()
+
+    @classmethod
     def select_list(cls, file_ids: List[int]):
         if not file_ids:
             return []
@@ -458,19 +476,19 @@ class QAKnoweldgeDao(QAKnowledgeBase):
     # 根据knowledge_id更新status
     @classmethod
     def update_status_by_knowledge_id(cls, knowledge_id: int, status: QAStatus
-                                        ) -> None:
-            """
-            根据knowledge_id更新status
-            :param knowledge_id: 知识库ID
-            :param status: 状态
-            :return:
-            """
+                                      ) -> None:
+        """
+        根据knowledge_id更新status
+        :param knowledge_id: 知识库ID
+        :param status: 状态
+        :return:
+        """
 
-            statement = (
-                update(QAKnowledge).where(col(QAKnowledge.knowledge_id) == knowledge_id)
-            )
+        statement = (
+            update(QAKnowledge).where(col(QAKnowledge.knowledge_id) == knowledge_id)
+        )
 
-            statement = statement.values(status=status.value)
-            with get_sync_db_session() as session:
-                session.exec(statement)
-                session.commit()
+        statement = statement.values(status=status.value)
+        with get_sync_db_session() as session:
+            session.exec(statement)
+            session.commit()

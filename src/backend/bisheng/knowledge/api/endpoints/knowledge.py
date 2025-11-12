@@ -1,3 +1,4 @@
+import asyncio
 import json
 import urllib.parse
 from datetime import datetime
@@ -23,36 +24,57 @@ from bisheng.common.errcode.server import NoLlmModelConfigError
 from bisheng.common.schemas.api import resp_200, resp_500, resp_502
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_uploaded_file
+from bisheng.database.models.role_access import AccessType
+from bisheng.database.models.user import UserDao
 from bisheng.knowledge.api.dependencies import get_knowledge_service
 from bisheng.knowledge.api.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq
-from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate)
+from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
+                                                       KnowledgeUpdate)
 from bisheng.knowledge.domain.models.knowledge import KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
                                                             QAKnoweldgeDao, QAKnowledgeUpsert, QAStatus)
-from bisheng.database.models.role_access import AccessType
-from bisheng.database.models.user import UserDao
 from bisheng.llm.const import LLMModelType
 from bisheng.llm.models import LLMDao
-from bisheng.utils import generate_uuid
+from bisheng.utils import generate_uuid, calc_data_sha256
 from bisheng.worker.knowledge.qa import insert_qa_celery
 
 # build router
-router = APIRouter()
+router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
 
 
 @router.post('/upload')
 async def upload_file(*, file: UploadFile = File(...)):
-    try:
-        file_name = file.filename
-        # 缓存本地
-        uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
-        file_path = await save_uploaded_file(file, 'bisheng', uuid_file_name)
-        if not isinstance(file_path, str):
-            file_path = str(file_path)
-        return resp_200(UploadFileResponse(file_path=file_path))
-    except Exception as exc:
-        logger.exception(f'Error saving file: {exc}')
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    file_name = file.filename
+    # 缓存本地
+    uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
+    file_path = await save_uploaded_file(file, 'bisheng', uuid_file_name)
+    if not isinstance(file_path, str):
+        file_path = str(file_path)
+    return resp_200(UploadFileResponse(file_path=file_path))
+
+
+@router.post('/upload/{knowledge_id}')
+async def upload_knowledge_file(*, request: Request, login_user: UserPayload = Depends(get_login_user),
+                                knowledge_id: int,
+                                file: UploadFile = File(...)):
+    """ 知识库上传文件，需要判断文件是否在知识库内重复 """
+
+    file_name = file.filename
+    # 缓存本地
+    uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
+    file_path = await save_uploaded_file(file, 'bisheng', uuid_file_name)
+    if not isinstance(file_path, str):
+        file_path = str(file_path)
+
+    # calc file md5 and check
+    file_bytes = await file.read()
+    file_md5 = await asyncio.to_thread(calc_data_sha256, file_bytes)
+
+    repeat_file = await KnowledgeFileDao.get_repeat_file(
+        knowledge_id=knowledge_id, file_name=file_name, md5_=file_md5
+    )
+
+    return resp_200(UploadFileResponse(file_path=file_path, repeat=True if repeat_file else False))
 
 
 @router.post('/preview')
@@ -217,7 +239,7 @@ async def copy_qa_knowledge(*,
     return resp_200(knowledge)
 
 
-@router.get('/', status_code=200)
+@router.get('', status_code=200)
 async def get_knowledge(*,
                         request: Request,
                         login_user: UserPayload = Depends(get_login_user),
@@ -849,9 +871,9 @@ def update_knowledge_model(*,
 # 为知识库添加元数据字段
 @router.post('/add_metadata_fields', status_code=200)
 async def add_metadata_fields(*,
-                        login_user: UserPayload = Depends(get_login_user),
-                        req_data: AddKnowledgeMetadataFieldsReq,
-                        knowledge_service=Depends(get_knowledge_service)):
+                              login_user: UserPayload = Depends(get_login_user),
+                              req_data: AddKnowledgeMetadataFieldsReq,
+                              knowledge_service=Depends(get_knowledge_service)):
     """
     为知识库添加元数据字段
     """
