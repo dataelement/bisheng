@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy import Column, DateTime, text
 from sqlmodel import Field
 
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
 
 
 class ReportBase(SQLModelSerializable):

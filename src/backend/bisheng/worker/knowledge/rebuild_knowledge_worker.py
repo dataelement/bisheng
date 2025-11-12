@@ -7,8 +7,8 @@ from bisheng.api.services.knowledge_imp import (
     decide_vectorstores,
     decide_embeddings
 )
-from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeState
-from bisheng.database.models.knowledge_file import (
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeState
+from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileStatus

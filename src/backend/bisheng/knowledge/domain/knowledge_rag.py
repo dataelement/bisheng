@@ -4,7 +4,7 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
 
 from bisheng.common.errcode.http_error import NotFoundError
-from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.knowledge.rag.elasticsearch_factory import ElasticsearchFactory
 from bisheng.knowledge.rag.milvus_factory import MilvusFactory
 from bisheng.llm.domain import LLMService

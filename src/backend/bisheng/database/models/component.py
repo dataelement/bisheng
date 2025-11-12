@@ -4,7 +4,7 @@ from typing import Any, List, Optional
 from sqlmodel import JSON, Column, DateTime, Field, select, text
 
 from bisheng.core.database import get_sync_db_session
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
 from bisheng.utils import generate_uuid
 
 

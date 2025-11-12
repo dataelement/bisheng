@@ -13,8 +13,8 @@ from bisheng.api.services.user_service import get_login_user, UserPayload
 from bisheng.api.v1.schemas import FinetuneCreateReq, resp_200
 from bisheng.core.cache.utils import file_download
 from bisheng.database.models.finetune import Finetune, FinetuneChangeModelName, FinetuneList
-from bisheng.database.models.knowledge import KnowledgeDao
-from bisheng.database.models.knowledge_file import QAKnoweldgeDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge_file import QAKnoweldgeDao
 
 router = APIRouter(prefix='/finetune', tags=['Finetune'], dependencies=[Depends(get_login_user)])
 

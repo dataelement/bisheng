@@ -5,7 +5,7 @@ from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
 from bisheng.api.services.knowledge_imp import decide_vectorstores
-from bisheng.database.models.knowledge import KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore

@@ -6,7 +6,7 @@ from sqlmodel import Field, select
 
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.constants import AdminRole
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
 from bisheng.database.models.role_access import RoleAccess
 from bisheng.database.models.user_role import UserRole
 

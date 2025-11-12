@@ -9,11 +9,11 @@ from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.errcode.qa import BackendProcessingError
 from bisheng.core.database import get_sync_db_session
-from bisheng.database.models.knowledge_file import KnowledgeFileDao
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.database.models.recall_chunk import RecallChunk
 
 # build router
-router = APIRouter(prefix='/qa', tags=['QA'])
+router = APIRouter()
 
 
 @router.get('/keyword')

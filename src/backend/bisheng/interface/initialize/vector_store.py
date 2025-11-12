@@ -10,7 +10,7 @@ from loguru import logger
 from sqlmodel import select
 
 from bisheng.core.database import get_sync_db_session
-from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.common.services.config_service import settings
 from bisheng.utils.embedding import decide_embeddings
 

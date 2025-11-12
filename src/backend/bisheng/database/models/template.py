@@ -5,7 +5,7 @@ from pydantic import model_validator
 from sqlalchemy import JSON, Column, DateTime, text, String
 from sqlmodel import Field
 
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
 
 
 class TemplateSkillBase(SQLModelSerializable):

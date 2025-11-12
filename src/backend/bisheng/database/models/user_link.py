@@ -1,7 +1,7 @@
 from typing import Optional
 from datetime import datetime
 from sqlmodel import Field, Column, DateTime, select
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
 from sqlalchemy import text, and_, delete
 from sqlalchemy.exc import IntegrityError
 from typing import List

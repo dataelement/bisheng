@@ -16,9 +16,9 @@ from bisheng.api.v2.schema.filelib import APIAddQAParam, APIAppendQAParam, Query
 from bisheng.api.v2.utils import get_default_operator
 from bisheng.core.cache.utils import file_download, save_download_file
 from bisheng.common.errcode.http_error import ServerError
-from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
-                                               KnowledgeUpdate)
-from bisheng.database.models.knowledge_file import (QAKnoweldgeDao, QAKnowledgeUpsert)
+from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
+                                                       KnowledgeUpdate)
+from bisheng.knowledge.domain.models.knowledge_file import (QAKnoweldgeDao, QAKnowledgeUpsert)
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.common.services.config_service import settings

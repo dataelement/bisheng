@@ -40,7 +40,7 @@ from bisheng.database.models.group_resource import (
     GroupResourceDao,
     ResourceTypeEnum,
 )
-from bisheng.database.models.knowledge import (
+from bisheng.knowledge.domain.models.knowledge import (
     Knowledge,
     KnowledgeCreate,
     KnowledgeDao,
@@ -48,7 +48,7 @@ from bisheng.database.models.knowledge import (
     KnowledgeTypeEnum,
     KnowledgeUpdate, KnowledgeState,
 )
-from bisheng.database.models.knowledge_file import (
+from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileStatus, ParseType,

@@ -15,17 +15,20 @@ from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
-                                    resp_200, resp_500, resp_501, resp_502, UpdateKnowledgeReq, KnowledgeFileReProcess)
+                                    UpdateKnowledgeReq, KnowledgeFileReProcess)
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError, \
-    KnowledgeNotQAError, KnowledgePreviewError, KnowledgeNotExistError, KnowledgeNoEmbeddingError
+    KnowledgePreviewError, KnowledgeNotQAError, KnowledgeNoEmbeddingError, KnowledgeNotExistError
 from bisheng.common.errcode.server import NoLlmModelConfigError
+from bisheng.common.schemas.api import resp_200, resp_500, resp_502
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_uploaded_file
-from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate)
-from bisheng.database.models.knowledge import KnowledgeState
-from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
-                                                    QAKnoweldgeDao, QAKnowledgeUpsert, QAStatus)
+from bisheng.knowledge.api.dependencies import get_knowledge_service
+from bisheng.knowledge.api.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq
+from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate)
+from bisheng.knowledge.domain.models.knowledge import KnowledgeState
+from bisheng.knowledge.domain.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
+                                                            QAKnoweldgeDao, QAKnowledgeUpsert, QAStatus)
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.llm.const import LLMModelType
@@ -34,7 +37,7 @@ from bisheng.utils import generate_uuid
 from bisheng.worker.knowledge.qa import insert_qa_celery
 
 # build router
-router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
+router = APIRouter()
 
 
 @router.post('/upload')
@@ -214,7 +217,7 @@ async def copy_qa_knowledge(*,
     return resp_200(knowledge)
 
 
-@router.get('', status_code=200)
+@router.get('/', status_code=200)
 async def get_knowledge(*,
                         request: Request,
                         login_user: UserPayload = Depends(get_login_user),
@@ -841,3 +844,18 @@ def update_knowledge_model(*,
     except Exception as e:
         logger.exception(f"rebuilding knowledge error: {str(e)}")
         return resp_500(message=f"重建知识库失败: {str(e)}")
+
+
+# 为知识库添加元数据字段
+@router.post('/add_metadata_fields', status_code=200)
+async def add_metadata_fields(*,
+                        login_user: UserPayload = Depends(get_login_user),
+                        req_data: AddKnowledgeMetadataFieldsReq,
+                        knowledge_service=Depends(get_knowledge_service)):
+    """
+    为知识库添加元数据字段
+    """
+
+    knowledge_model = await knowledge_service.add_metadata_fields(login_user, req_data)
+
+    return resp_200(data=knowledge_model)

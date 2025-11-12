@@ -3,9 +3,10 @@ import json
 from typing import Any, Dict, List
 
 import orjson
-from bisheng.database.models.base import orjson_dumps
 from langchain.agents import ZeroShotAgent
 from langchain.schema import BaseOutputParser, Document
+
+from bisheng.common.utils.util import orjson_dumps
 
 
 def langchain_bug_openv1(params):

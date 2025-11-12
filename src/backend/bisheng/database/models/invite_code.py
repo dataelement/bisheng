@@ -4,7 +4,7 @@ from typing import Optional, List
 from sqlmodel import Field, Column, text, DateTime, select, update
 
 from bisheng.core.database import get_async_db_session
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
 
 
 class InviteCodeBase(SQLModelSerializable):

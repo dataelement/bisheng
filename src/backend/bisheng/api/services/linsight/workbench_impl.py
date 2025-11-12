@@ -31,7 +31,7 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao
-from bisheng.database.models.knowledge import KnowledgeRead, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge import KnowledgeRead, KnowledgeTypeEnum
 from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum
 from bisheng.database.models.linsight_sop import LinsightSOPRecord

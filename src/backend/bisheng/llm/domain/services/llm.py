@@ -16,8 +16,8 @@ from bisheng.common.errcode.server import NoAsrModelConfigError, AsrModelConfigD
 from bisheng.common.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
-from bisheng.database.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
-from bisheng.database.models.knowledge import KnowledgeState
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge import KnowledgeState
 from bisheng.utils import generate_uuid, md5_hash
 from bisheng.utils.embedding import decide_embeddings
 from ..llm import BishengASR, BishengLLM, BishengTTS, BishengEmbedding

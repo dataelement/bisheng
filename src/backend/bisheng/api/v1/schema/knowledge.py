@@ -1,6 +1,6 @@
 from typing import Optional
 
-from bisheng.database.models.knowledge_file import KnowledgeFileBase
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileBase
 from pydantic import Field
 
 

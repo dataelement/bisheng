@@ -7,7 +7,7 @@ from sqlmodel import Field, select, col
 
 from bisheng.core.database import get_async_db_session
 from bisheng.database.base import uuid_hex
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
 
 
 class ExecuteTaskTypeEnum(str, Enum):

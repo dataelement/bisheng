@@ -7,8 +7,8 @@ import openpyxl
 from pymilvus import Collection
 
 from bisheng.api.services.knowledge_imp import decide_vectorstores, QA_save_knowledge, delete_vector_data
-from bisheng.database.models.knowledge import KnowledgeDao, Knowledge, KnowledgeTypeEnum
-from bisheng.database.models.knowledge_file import QAKnoweldgeDao, KnowledgeFileDao, QAKnowledge, KnowledgeFile, \
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, Knowledge, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_file import QAKnoweldgeDao, KnowledgeFileDao, QAKnowledge, KnowledgeFile, \
     QAStatus, KnowledgeFileStatus
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.worker.knowledge.file_worker import insert_milvus

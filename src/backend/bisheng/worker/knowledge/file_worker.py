@@ -8,8 +8,8 @@ from bisheng.api.services.knowledge_imp import decide_vectorstores, process_file
     KnowledgeUtils, delete_vector_files
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
-from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, KnowledgeState
-from bisheng.database.models.knowledge_file import (
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, KnowledgeState
+from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileStatus,

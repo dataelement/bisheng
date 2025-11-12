@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from bisheng.core.database import get_sync_db_session
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
 from sqlalchemy import Column, DateTime, delete, text, update
 from sqlmodel import Field, select
 

@@ -10,7 +10,7 @@ from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
 from bisheng.database.models.gpts_tools import AuthMethod, AuthType, GptsToolsRead
-from bisheng.database.models.knowledge import KnowledgeRead
+from bisheng.knowledge.domain.models.knowledge import KnowledgeRead
 from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
 

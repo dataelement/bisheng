@@ -9,7 +9,7 @@ from sqlmodel import Field, or_, select, Text, update, col
 
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.constants import ToolPresetType
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
 from bisheng.utils import md5_hash, generate_uuid
 
 

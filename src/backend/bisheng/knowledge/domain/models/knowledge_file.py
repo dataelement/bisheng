@@ -8,9 +8,9 @@ from pydantic import field_validator
 from sqlalchemy import JSON, Column, DateTime, String, or_, text, Text
 from sqlmodel import Field, delete, func, select, update, col
 
+from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.database.base import async_get_count, get_count
-from bisheng.database.models.base import SQLModelSerializable
 
 
 class KnowledgeFileStatus(Enum):

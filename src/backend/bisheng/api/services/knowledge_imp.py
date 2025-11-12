@@ -2,7 +2,7 @@ import json
 import os
 import re
 import time
-from typing import Any, Dict, List, Optional, BinaryIO, Union, Coroutine
+from typing import Any, Dict, List, Optional, Union
 
 import aiofiles
 import requests
@@ -38,8 +38,8 @@ from bisheng.common.errcode.knowledge import KnowledgeSimilarError, KnowledgeFil
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
-from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
-from bisheng.database.models.knowledge_file import (
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileStatus,
