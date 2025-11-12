@@ -131,14 +131,14 @@ class MinioStorage(BaseStorage, ABC):
         if isinstance(file, (bytes, BinaryIO, BytesIO)):
             if isinstance(file, bytes):
                 file = BytesIO(file)
-            length = len(file.getbuffer())
-
-            file.seek(0)
+            if 'length' not in kwargs:
+                length = len(file.getbuffer())
+                kwargs['length'] = length
+                file.seek(0)
             await self.minio_client.put_object(
                 bucket_name=bucket_name,
                 object_name=object_name,
                 data=file,
-                length=length,
                 content_type=content_type,
                 **kwargs
             )
@@ -151,6 +151,14 @@ class MinioStorage(BaseStorage, ABC):
                 content_type=content_type,
                 **kwargs
             )
+        else:
+            await self.minio_client.put_object(
+                bucket_name=bucket_name,
+                object_name=object_name,
+                data=file,
+                content_type=content_type,
+                **kwargs
+            )
 
     def put_object_sync(self, *, bucket_name: Optional[str] = None, object_name: str,
                         file: Union[bytes, BinaryIO, Path, str],
@@ -158,14 +166,17 @@ class MinioStorage(BaseStorage, ABC):
 
         if bucket_name is None:
             bucket_name = self.bucket
-        if isinstance(file, bytes):
-            file = BytesIO(file)
-            length = len(file.getbuffer())
+        if isinstance(file, (bytes, BinaryIO, BytesIO)):
+            if isinstance(file, bytes):
+                file = BytesIO(file)
+            if 'length' not in kwargs:
+                length = len(file.getbuffer())
+                kwargs['length'] = length
+                file.seek(0)
             self.minio_client_sync.put_object(
                 bucket_name=bucket_name,
                 object_name=object_name,
                 data=file,
-                length=length,
                 content_type=content_type,
                 **kwargs
             )

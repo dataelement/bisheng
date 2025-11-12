@@ -7,7 +7,6 @@ from orjson import orjson
 from pydantic import BaseModel, Field, model_validator, field_validator
 
 from bisheng.database.models.assistant import AssistantBase
-from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
 from bisheng.database.models.gpts_tools import AuthMethod, AuthType, GptsToolsRead
 from bisheng.knowledge.domain.models.knowledge import KnowledgeRead
@@ -239,16 +238,6 @@ class StreamData(BaseModel):
         if isinstance(self.data, dict):
             return f'event: {self.event}\ndata: {orjson.dumps(self.data).decode()}\n\n'
         return f'event: {self.event}\ndata: {self.data}\n\n'
-
-
-class FinetuneCreateReq(BaseModel):
-    server: int = Field(description='关联的RT服务ID')
-    base_model: int = Field(description='基础模型ID')
-    model_name: str = Field(max_length=50, description='模型名称')
-    method: TrainMethod = Field(description='训练方法')
-    extra_params: Dict = Field(default_factory=dict, description='训练任务所需额外参数')
-    train_data: Optional[List[Dict]] = Field(default=None, description='个人训练数据')
-    preset_data: Optional[List[Dict]] = Field(default=None, description='预设训练数据')
 
 
 class CreateComponentReq(BaseModel):

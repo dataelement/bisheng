@@ -2,10 +2,10 @@ from datetime import datetime
 from typing import Optional, List
 
 from sqlalchemy import Column, DateTime, String, UniqueConstraint, delete, text
-from sqlmodel import Field, select
+from sqlmodel import Field, select, col
 
-from bisheng.core.database import get_sync_db_session
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database import get_async_db_session
 
 
 class ModelDeployBase(SQLModelSerializable):
@@ -31,57 +31,57 @@ class ModelDeploy(ModelDeployBase, table=True):
 class ModelDeployDao(ModelDeployBase):
 
     @classmethod
-    def find_model(cls, model_id: int) -> ModelDeploy | None:
-        with get_sync_db_session() as session:
+    async def find_model(cls, model_id: int) -> ModelDeploy | None:
+        async with get_async_db_session() as session:
             statement = select(ModelDeploy).where(ModelDeploy.id == model_id)
-            return session.exec(statement).first()
+            return (await session.exec(statement)).first()
 
     @classmethod
-    def find_model_by_server(cls, server_id: str) -> List[ModelDeploy]:
-        with get_sync_db_session() as session:
+    async def find_model_by_server(cls, server_id: str) -> List[ModelDeploy]:
+        async with get_async_db_session() as session:
             statement = select(ModelDeploy).where(ModelDeploy.server == server_id)
-            return session.exec(statement).all()
+            return (await session.exec(statement)).all()
 
     @classmethod
-    def find_model_by_server_and_name(cls, server: str, model: str) -> ModelDeploy | None:
-        with get_sync_db_session() as session:
+    async def find_model_by_server_and_name(cls, server: str, model: str) -> ModelDeploy | None:
+        async with get_async_db_session() as session:
             statement = select(ModelDeploy).where(ModelDeploy.server == server, ModelDeploy.model == model)
-            return session.exec(statement).first()
+            return (await session.exec(statement)).first()
 
     @classmethod
-    def find_model_by_name(cls, model: str) -> ModelDeploy | None:
-        with get_sync_db_session() as session:
+    async def find_model_by_name(cls, model: str) -> ModelDeploy | None:
+        async with get_async_db_session() as session:
             statement = select(ModelDeploy).where(ModelDeploy.model == model)
-            return session.exec(statement).first()
+            return (await session.exec(statement)).first()
 
     @classmethod
-    def delete_model(cls, model: ModelDeploy) -> bool:
-        with get_sync_db_session() as session:
-            session.delete(model)
-            session.commit()
+    async def delete_model(cls, model: ModelDeploy) -> bool:
+        async with get_async_db_session() as session:
+            await session.delete(model)
+            await session.commit()
         return True
 
     @classmethod
-    def delete_model_by_id(cls, model_id: int):
-        with get_sync_db_session() as session:
-            statement = delete(ModelDeploy).where(ModelDeploy.id == model_id)
-            session.exec(statement)
-            session.commit()
+    async def delete_model_by_id(cls, model_id: int):
+        async with get_async_db_session() as session:
+            statement = delete(ModelDeploy).where(col(ModelDeploy.id) == model_id)
+            await session.exec(statement)
+            await session.commit()
 
     @classmethod
-    def insert_one(cls, model: ModelDeploy) -> ModelDeploy:
-        with get_sync_db_session() as session:
+    async def insert_one(cls, model: ModelDeploy) -> ModelDeploy:
+        async with get_async_db_session() as session:
             session.add(model)
-            session.commit()
-            session.refresh(model)
+            await session.commit()
+            await session.refresh(model)
         return model
 
     @classmethod
-    def update_model(cls, model: ModelDeploy) -> ModelDeploy:
-        with get_sync_db_session() as session:
+    async def update_model(cls, model: ModelDeploy) -> ModelDeploy:
+        async with get_async_db_session() as session:
             session.add(model)
-            session.commit()
-            session.refresh(model)
+            await session.commit()
+            await session.refresh(model)
         return model
 
 

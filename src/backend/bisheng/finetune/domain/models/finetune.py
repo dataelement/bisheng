@@ -2,12 +2,13 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import field_validator, BaseModel
+from pydantic import field_validator, BaseModel, model_validator
+from sqlalchemy import Select
 from sqlalchemy.dialects.mysql import LONGTEXT
-from sqlmodel import JSON, Column, DateTime, Field, func, select, text, update
+from sqlmodel import JSON, Column, DateTime, Field, func, select, text, update, col
 
-from bisheng.core.database import get_sync_db_session
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database import get_async_db_session
 from bisheng.utils import generate_uuid
 
 
@@ -68,22 +69,19 @@ class FinetuneBase(SQLModelSerializable):
                 raise ValueError('Finetune.train_data each item must be {name:"",url:"",num:0}')
         return v
 
-    @field_validator('extra_params')
+    @model_validator(mode='before')
     @classmethod
-    def validate_params(cls, v: Optional[Dict]):
-        if v is None or not isinstance(v, dict):
+    def validate_all(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        extra_params = values.get('extra_params', None)
+        if extra_params is None or not isinstance(extra_params, dict):
             raise ValueError('Finetune.extra_params must be a valid json')
-        return v
 
-    @field_validator('train_data')
-    @classmethod
-    def validate_train_data(cls, v: Optional[Dict]):
-        return cls.validate_train(v)
+        train_data = values.get('train_data', None)
+        cls.validate_train(train_data)
 
-    @field_validator('preset_data')
-    @classmethod
-    def validate_preset_data(cls, v: Optional[Dict]):
-        return cls.validate_train(v)
+        preset_data = values.get('preset_data', None)
+        cls.validate_train(preset_data)
+        return values
 
 
 class Finetune(FinetuneBase, table=True):
@@ -93,10 +91,35 @@ class Finetune(FinetuneBase, table=True):
 class FinetuneList(BaseModel):
     server: Optional[int] = Field(None, description='关联的RT服务ID')
     server_name: Optional[str] = Field(None, description='关联的RT服务名称')
-    status: Optional[List[int]] = Field(None, description='训练任务的状态')
+    status: Optional[List[int]] = Field(None, description='训练任务的状态列表')
     model_name: Optional[str] = Field(None, description='模型名称, 模糊搜索')
     page: Optional[int] = Field(default=1, description='页码')
     limit: Optional[int] = Field(default=10, description='每页条数')
+    user_id: Optional[int] = Field(None, description='用户ID')
+
+    def get_select_statement(self) -> (Select, Select):
+        """Generate the select and count statements based on the filters."""
+        statement = select(Finetune)
+        count_statement = select(func.count(Finetune.id))
+        if self.server:
+            statement = statement.where(Finetune.server == self.server)
+            count_statement = count_statement.where(Finetune.server == self.server)
+        if self.server_name:
+            statement = statement.where(Finetune.server_name == self.server_name)
+            count_statement = count_statement.where(Finetune.server_name == self.server_name)
+        if self.status:
+            statement = statement.where(col(Finetune.status).in_(self.status))
+            count_statement = count_statement.where(col(Finetune.status).in_(self.status))
+        if self.model_name:
+            statement = statement.where(col(Finetune.model_name).like(f'%{self.model_name}%'))
+            count_statement = count_statement.where(col(Finetune.model_name).like(f'%{self.model_name}%'))
+        if self.user_id:
+            statement = statement.where(Finetune.user_id == self.user_id)
+            count_statement = count_statement.where(Finetune.user_id == self.user_id)
+        if self.page and self.limit:
+            offset = (self.page - 1) * self.limit
+            statement = statement.offset(offset).limit(self.limit).order_by(col(Finetune.create_time).desc())
+        return statement, count_statement
 
 
 class FinetuneChangeModelName(BaseModel):
@@ -113,7 +136,7 @@ class FinetuneExtraParams(BaseModel):
     max_seq_len: int = Field(8192, gt=0, description='最大序列长度')
     cpu_load: str = Field('false', description='是否cpu载入')
 
-    @field_validator('per_device_train_batch_size')
+    @field_validator('per_device_train_batch_size', mode='before')
     @classmethod
     def validate_batch_size(cls, v: str):
         try:
@@ -125,7 +148,7 @@ class FinetuneExtraParams(BaseModel):
         except Exception as e:
             raise ValueError(f'per_device_train_batch_size must be an integer {e}')
 
-    @field_validator('gpus')
+    @field_validator('gpus', mode='before')
     @classmethod
     def validate_gpus(cls, v: str):
         try:
@@ -148,80 +171,67 @@ class FinetuneExtraParams(BaseModel):
 class FinetuneDao(FinetuneBase):
 
     @classmethod
-    def insert_one(cls, data: Finetune) -> Finetune:
-        with get_sync_db_session() as session:
+    async def insert_one(cls, data: Finetune) -> Finetune:
+        async with get_async_db_session() as session:
             session.add(data)
-            session.commit()
-            session.refresh(data)
+            await session.commit()
+            await session.refresh(data)
         return data
 
     @classmethod
-    def update_job(cls, finetune: Finetune) -> Finetune:
-        with get_sync_db_session() as session:
+    async def update_job(cls, finetune: Finetune) -> Finetune:
+        if not finetune.id:
+            raise ValueError('Finetune.id must not be empty when update')
+        async with get_async_db_session() as session:
             session.add(finetune)
-            session.commit()
-            session.refresh(finetune)
+            await session.commit()
+            await session.refresh(finetune)
         return finetune
 
     @classmethod
-    def find_job(cls, job_id: str) -> Finetune | None:
-        with get_sync_db_session() as session:
+    async def find_job(cls, job_id: str) -> Finetune | None:
+        async with get_async_db_session() as session:
             statement = select(Finetune).where(Finetune.id == job_id)
-            return session.exec(statement).first()
+            return (await session.exec(statement)).first()
 
     @classmethod
-    def find_job_by_model_name(cls, model_name: str) -> Finetune | None:
-        with get_sync_db_session() as session:
+    async def find_job_by_model_name(cls, model_name: str) -> Finetune | None:
+        async with get_async_db_session() as session:
             statement = select(Finetune).where(Finetune.model_name == model_name)
-            return session.exec(statement).first()
+            return (await session.exec(statement)).first()
 
     @classmethod
-    def find_job_by_model_id(cls, model_id: int) -> Finetune | None:
-        with get_sync_db_session() as session:
+    async def find_job_by_model_id(cls, model_id: int) -> Finetune | None:
+        async with get_async_db_session() as session:
             statement = select(Finetune).where(Finetune.model_id == model_id)
-            return session.exec(statement).first()
+            return (await session.exec(statement)).first()
 
     @classmethod
-    def change_status(cls, job_id: str, old_status: int, status: int) -> bool:
-        with get_sync_db_session() as session:
-            update_statement = update(Finetune).where(
-                Finetune.id == job_id, Finetune.status == old_status).values(status=status)
-            update_ret = session.exec(update_statement)
-            session.commit()
+    async def change_status(cls, job_id: str, old_status: int, status: int) -> bool:
+        update_statement = update(Finetune).where(col(Finetune.id) == job_id,
+                                                  col(Finetune.status) == old_status).values(status=status)
+        async with get_async_db_session() as session:
+            update_ret = await session.exec(update_statement)
+            await session.commit()
             return update_ret.rowcount != 0
 
     @classmethod
-    def delete_job(cls, job: Finetune) -> bool:
-        with get_sync_db_session() as session:
-            session.delete(job)
-            session.commit()
+    async def delete_job(cls, job: Finetune) -> bool:
+        if not job or not job.id:
+            raise ValueError('Finetune job to delete must not be None, and id must not be empty')
+        async with get_async_db_session() as session:
+            await session.delete(job)
+            await session.commit()
             return True
 
     @classmethod
-    def find_jobs(cls, finetune_list: FinetuneList) -> (List[Finetune], int):
-        offset = (finetune_list.page - 1) * finetune_list.limit
-        with get_sync_db_session() as session:
-            statement = select(Finetune)
-            count_statement = session.query(func.count(Finetune.id))
-            if finetune_list.server:
-                statement = statement.where(Finetune.server == finetune_list.server)
-                count_statement = count_statement.filter(Finetune.server == finetune_list.server)
-            if finetune_list.server_name:
-                statement = statement.where(Finetune.server_name == finetune_list.server_name)
-                count_statement = count_statement.filter(Finetune.server_name == finetune_list.server_name)
-            if finetune_list.status:
-                statement = statement.where(Finetune.status.in_(finetune_list.status))
-                count_statement = count_statement.filter(Finetune.status.in_(finetune_list.status))
-            if finetune_list.model_name:
-                statement = statement.where(Finetune.model_name.like(f'%{finetune_list.model_name}%'))
-                count_statement = count_statement.filter(Finetune.model_name.like(f'%{finetune_list.model_name}%'))
-            statement = statement.offset(offset).limit(finetune_list.limit).order_by(Finetune.create_time.desc())
-            all_jobs = session.exec(statement).all()
-            return all_jobs, count_statement.scalar()
+    async def find_jobs(cls, finetune_list: FinetuneList) -> (List[Finetune], int):
+        select_statement, count_statement = finetune_list.get_select_statement()
+        async with get_async_db_session() as session:
+            return (await session.exec(select_statement)).all(), await session.scalar(count_statement)
 
     @classmethod
-    def get_server_filters(cls) -> List[str]:
-        with get_sync_db_session() as session:
+    async def get_server_filters(cls) -> List[str]:
+        async with get_async_db_session() as session:
             statement = select(Finetune.server_name).distinct()
-            result = session.exec(statement).all()
-            return result
+            return (await session.exec(statement)).all()

@@ -1,10 +1,10 @@
 import hashlib
 import json
-import xml.dom.minidom
 from pathlib import Path
-from typing import Dict, List
+from typing import List
 
 import aiohttp
+from loguru import logger
 from platformdirs import user_cache_dir
 from sqlalchemy import delete
 from sqlmodel import select
@@ -13,7 +13,6 @@ from bisheng.api.v1.schemas import StreamData
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.variable_value import Variable
 from bisheng.graph.graph.base import Graph
-from loguru import logger
 from fastapi_jwt_auth import AuthJWT
 
 API_WORDS = ['api', 'key', 'token']
@@ -378,41 +377,6 @@ def update_frontend_node_with_template_values(frontend_node, raw_frontend_node):
     update_template_values(frontend_node['template'], raw_frontend_node['template'])
 
     return frontend_node
-
-
-def parse_server_host(endpoint: str):
-    """ 将数据库中的endpoints解析为http请求的host """
-    endpoint = endpoint.replace('http://', '').split('/')[0]
-    return f'http://{endpoint}'
-
-
-# 将 nvidia-smi -q  -x 的输出解析为可视化数据
-def parse_gpus(gpu_str: str) -> List[Dict]:
-    dom_tree = xml.dom.minidom.parseString(gpu_str)
-    collections = dom_tree.documentElement
-    gpus = collections.getElementsByTagName('gpu')
-    res = []
-    for one in gpus:
-        fb_mem_elem = one.getElementsByTagName('fb_memory_usage')[0]
-        gpu_uuid_elem = one.getElementsByTagName('uuid')[0]
-        gpu_id_elem = one.getElementsByTagName('minor_number')[0]
-        gpu_total_mem = fb_mem_elem.getElementsByTagName('total')[0]
-        free_mem = fb_mem_elem.getElementsByTagName('free')[0]
-        gpu_utility_elem = one.getElementsByTagName('utilization')[0].getElementsByTagName(
-            'gpu_util')[0]
-        res.append({
-            'gpu_uuid':
-                gpu_uuid_elem.firstChild.data,
-            'gpu_id':
-                gpu_id_elem.firstChild.data,
-            'gpu_total_mem':
-                '%.2f G' % (float(gpu_total_mem.firstChild.data.split(' ')[0]) / 1024),
-            'gpu_used_mem':
-                '%.2f G' % (float(free_mem.firstChild.data.split(' ')[0]) / 1024),
-            'gpu_utility':
-                round(float(gpu_utility_elem.firstChild.data.split(' ')[0]) / 100, 2)
-        })
-    return res
 
 
 async def get_url_content(url: str) -> str:

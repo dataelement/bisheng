@@ -2,10 +2,10 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 
 from sqlalchemy import func
-from sqlmodel import Column, DateTime, Field, select, text
+from sqlmodel import Column, DateTime, Field, select, text, col
 
-from bisheng.core.database import get_sync_db_session
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database import get_async_db_session
 from bisheng.utils import generate_uuid
 
 
@@ -30,47 +30,47 @@ class PresetTrain(PresetTrainBase, table=True):
 class PresetTrainDao(PresetTrainBase):
 
     @classmethod
-    def insert_batch(cls, models: List[PresetTrain]) -> List[PresetTrain]:
-        with get_sync_db_session() as session:
+    async def insert_batch(cls, models: List[PresetTrain]) -> List[PresetTrain]:
+        async with get_async_db_session() as session:
             for one in models:
                 session.add(one)
-            session.commit()
+            await session.commit()
             for one in models:
-                session.refresh(one)
+                await session.refresh(one)
             return models
 
     @classmethod
-    def delete_one(cls, model: PresetTrain) -> bool:
-        with get_sync_db_session() as session:
-            session.delete(model)
-            session.commit()
+    async def delete_one(cls, model: PresetTrain) -> bool:
+        async with get_async_db_session() as session:
+            await session.delete(model)
+            await session.commit()
         return True
 
     @classmethod
-    def find_one(cls, file_id: str) -> PresetTrain | None:
-        with get_sync_db_session() as session:
+    async def find_one(cls, file_id: str) -> PresetTrain | None:
+        async with get_async_db_session() as session:
             statement = select(PresetTrain).where(PresetTrain.id == file_id)
-            return session.exec(statement).first()
+            return (await session.exec(statement)).first()
 
     @classmethod
-    def find_all(cls) -> List[PresetTrain]:
-        with get_sync_db_session() as session:
+    async def find_all(cls) -> List[PresetTrain]:
+        async with get_async_db_session() as session:
             statement = select(PresetTrain)
-            return session.exec(statement).all()
+            return (await session.exec(statement)).all()
 
     @classmethod
-    def search_name(cls,
-                    keyword: str = None,
-                    page_size: int = None,
-                    page_num: int = None) -> Tuple[List[PresetTrain], int]:
-        with get_sync_db_session() as session:
+    async def search_name(cls,
+                          keyword: str = None,
+                          page_size: int = None,
+                          page_num: int = None) -> Tuple[List[PresetTrain], int]:
+        async with get_async_db_session() as session:
             statement = select(PresetTrain)
             count = select(func.count(PresetTrain.id))
             if keyword:
-                statement = statement.where(PresetTrain.name.like('%{}%'.format(keyword)))
-                count = count.where(PresetTrain.name.like('%{}%'.format(keyword)))
+                statement = statement.where(col(PresetTrain.name).like('%{}%'.format(keyword)))
+                count = count.where(col(PresetTrain.name).like('%{}%'.format(keyword)))
             if page_num and page_size:
                 statement = statement.offset((page_num - 1) * page_size).limit(page_size)
-            statement = statement.order_by(PresetTrain.create_time.desc())
+            statement = statement.order_by(col(PresetTrain.create_time).desc())
 
-            return session.exec(statement).all(), session.scalar(count)
+            return (await session.exec(statement)).all(), await session.scalar(count)

@@ -1,11 +1,11 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, text
-from sqlmodel import Field, select
+from sqlalchemy import Column, DateTime, text, delete
+from sqlmodel import Field, select, col
 
-from bisheng.core.database import get_sync_db_session
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database import get_async_db_session
 
 
 class ServerBase(SQLModelSerializable):
@@ -26,16 +26,31 @@ class Server(ServerBase, table=True):
 # 封装业务操作
 class ServerDao(ServerBase):
     @classmethod
-    def find_server(cls, server_id: int) -> Server | None:
-        with get_sync_db_session() as session:
+    async def find_server(cls, server_id: int) -> Server | None:
+        async with get_async_db_session() as session:
             statement = select(Server).where(Server.id == server_id)
-            return session.exec(statement).first()
+            return (await session.exec(statement)).first()
 
     @classmethod
-    def find_all_server(cls):
-        with get_sync_db_session() as session:
+    async def find_all_server(cls):
+        async with get_async_db_session() as session:
             statement = select(Server)
-            return session.exec(statement).all()
+            return (await session.exec(statement)).all()
+
+    @classmethod
+    async def insert(cls, server: Server) -> Server:
+        async with get_async_db_session() as session:
+            session.add(server)
+            await session.commit()
+            await session.refresh(server)
+            return server
+
+    @classmethod
+    async def delete(cls, server_id: int) -> None:
+        statement = delete(Server).where(col(Server.id) == server_id)
+        async with get_async_db_session() as session:
+            await session.exec(statement)
+            await session.commit()
 
 
 class ServerRead(ServerBase):
