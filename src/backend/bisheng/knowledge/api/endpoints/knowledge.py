@@ -21,13 +21,14 @@ from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError, \
     KnowledgePreviewError, KnowledgeNotQAError, KnowledgeNoEmbeddingError, KnowledgeNotExistError
 from bisheng.common.errcode.server import NoLlmModelConfigError
-from bisheng.common.schemas.api import resp_200, resp_500, resp_502
+from bisheng.common.schemas.api import resp_200, resp_500, resp_502, UnifiedResponseModel
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
-from bisheng.knowledge.api.dependencies import get_knowledge_service
-from bisheng.knowledge.api.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq
+from bisheng.knowledge.api.dependencies import get_knowledge_service, get_knowledge_file_service
+from bisheng.knowledge.api.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
+    UpdateKnowledgeMetadataFieldsReq, ModifyKnowledgeFileMetaDataReq
 from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
                                                        KnowledgeUpdate)
 from bisheng.knowledge.domain.models.knowledge import KnowledgeState
@@ -869,7 +870,7 @@ def update_knowledge_model(*,
 
 
 # 为知识库添加元数据字段
-@router.post('/add_metadata_fields', status_code=200)
+@router.post('/add_metadata_fields', description="为知识库添加元数据字段", response_model=UnifiedResponseModel)
 async def add_metadata_fields(*,
                               login_user: UserPayload = Depends(get_login_user),
                               req_data: AddKnowledgeMetadataFieldsReq,
@@ -881,3 +882,71 @@ async def add_metadata_fields(*,
     knowledge_model = await knowledge_service.add_metadata_fields(login_user, req_data)
 
     return resp_200(data=knowledge_model)
+
+
+# 修改知识库元数据字段
+@router.put('/update_metadata_fields', description="修改知识库元数据字段", response_model=UnifiedResponseModel)
+async def update_metadata_fields(*,
+                                 login_user: UserPayload = Depends(get_login_user),
+                                 req_data: UpdateKnowledgeMetadataFieldsReq,
+                                 knowledge_service=Depends(get_knowledge_service)):
+    """
+    修改知识库元数据字段
+    Args:
+        login_user:
+        req_data:
+        knowledge_service:
+
+    Returns:
+        UnifiedResponseModel
+    """
+
+    knowledge_model = await knowledge_service.update_metadata_fields(login_user, req_data)
+
+    return resp_200(data=knowledge_model)
+
+
+# 删除知识库元数据字段
+@router.delete('/delete_metadata_fields', description="删除知识库元数据字段", response_model=UnifiedResponseModel)
+async def delete_metadata_fields(*,
+                                 login_user: UserPayload = Depends(get_login_user),
+                                 knowledge_id: int = Body(..., embed=True, description="知识库ID"),
+                                 field_names: List[str] = Body(..., embed=True, description="要删除的字段名称列表"),
+                                 knowledge_service=Depends(get_knowledge_service)):
+    """
+    删除知识库元数据字段
+    Args:
+        login_user:
+        knowledge_id:
+        field_names:
+        knowledge_service:
+
+    Returns:
+        UnifiedResponseModel
+    """
+
+    knowledge_model = await knowledge_service.delete_metadata_fields(login_user, knowledge_id, field_names)
+
+    return resp_200(data=knowledge_model)
+
+
+# 修改知识库文件用户自定义元数据
+@router.put('/file/user_metadata', description="修改知识库文件用户自定义元数据", response_model=UnifiedResponseModel)
+async def modify_file_user_metadata(*,
+                                    login_user: UserPayload = Depends(get_login_user),
+                                    req_data: ModifyKnowledgeFileMetaDataReq,
+                                    knowledge_file_service=Depends(get_knowledge_file_service)):
+    """
+    修改知识库文件用户自定义元数据
+    Args:
+        login_user:
+        req_data:
+        knowledge_file_service:
+
+    Returns:
+        UnifiedResponseModel
+    """
+
+    knowledge_file_model = await knowledge_file_service.modify_file_user_metadata(login_user, req_data)
+
+    return resp_200(data=knowledge_file_model)

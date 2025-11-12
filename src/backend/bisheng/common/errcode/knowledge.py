@@ -58,3 +58,9 @@ class KnowledgeNotQAError(BaseErrorCode):
 class KnowledgeNotExistError(BaseErrorCode):
     Code: int = 10970
     Msg: str = '知识库不存在'
+
+
+# 知识库文件不存在
+class KnowledgeFileNotExistError(BaseErrorCode):
+    Code: int = 10971
+    Msg: str = '知识库文件不存在'

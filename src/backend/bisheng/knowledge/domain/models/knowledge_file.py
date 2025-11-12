@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
@@ -51,7 +51,9 @@ class KnowledgeFileBase(SQLModelSerializable):
                                   index=False,
                                   description='1: 解析中；2: 解析成功；3: 解析失败')
     object_name: Optional[str] = Field(default=None, index=False, description='文件在minio存储的对象名称')
-    extra_meta: Optional[str] = Field(default=None, index=False)
+    # extra_meta: Optional[str] = Field(default=None, index=False)
+    user_metadata: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True),
+                                                    description='用户自定义的元数据')
     remark: Optional[str] = Field(default='', sa_column=Column(String(length=512)))
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))

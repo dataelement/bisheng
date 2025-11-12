@@ -36,13 +36,6 @@ class MetadataFieldType(str, Enum):
     TIME = "time"
 
 
-class MetadataField(BaseModel):
-    field_name: str = Field(..., description='元数据字段名')
-    field_type: MetadataFieldType = Field(..., description='元数据字段类型')
-    updated_at: int = Field(default_factory=lambda: int(datetime.now().timestamp()),
-                            description='元数据字段更新时间戳')
-
-
 class KnowledgeBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
     name: str = Field(index=True, min_length=1, max_length=200, description='知识库名, 最少一个字符，最多30个字符')
@@ -54,7 +47,7 @@ class KnowledgeBase(SQLModelSerializable):
     state: Optional[int] = Field(index=False, default=KnowledgeState.PUBLISHED.value,
                                  description='0 为未发布，1 为已发布, 2 为复制中')
 
-    metadata_fields: Optional[List[MetadataField]] = Field(default=None, sa_column=Column(JSON, nullable=True),
+    metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON, nullable=True),
                                                            description="知识库的元数据字段配置")
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
