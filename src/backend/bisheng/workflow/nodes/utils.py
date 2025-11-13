@@ -154,5 +154,5 @@ class RagUtils(BaseNode):
         self._multi_es_retriever = milvus_vector.as_retriever(search_kwargs=self._retriever_kwargs | milvus_extra)
 
         es_extra = {"filter": [{"terms": {"metadata.file_id": file_ids}}]}
-        es_vector = KnowledgeRag.init_es_vectorstore(index_name=self.tmp_collection_name)
+        es_vector = KnowledgeRag.init_es_vectorstore_sync(index_name=self.tmp_collection_name)
         self._multi_es_retriever = es_vector.as_retriever(search_kwargs=self._retriever_kwargs | es_extra)
