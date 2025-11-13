@@ -889,19 +889,22 @@ async def add_metadata_fields(*,
 async def update_metadata_fields(*,
                                  login_user: UserPayload = Depends(get_login_user),
                                  req_data: UpdateKnowledgeMetadataFieldsReq,
-                                 knowledge_service=Depends(get_knowledge_service)):
+                                 knowledge_service=Depends(get_knowledge_service),
+                                 background_tasks: BackgroundTasks
+                                 ):
     """
     修改知识库元数据字段
     Args:
         login_user:
         req_data:
         knowledge_service:
+        background_tasks:
 
     Returns:
         UnifiedResponseModel
     """
 
-    knowledge_model = await knowledge_service.update_metadata_fields(login_user, req_data)
+    knowledge_model = await knowledge_service.update_metadata_fields(login_user, req_data, background_tasks)
 
     return resp_200(data=knowledge_model)
 
@@ -912,7 +915,8 @@ async def delete_metadata_fields(*,
                                  login_user: UserPayload = Depends(get_login_user),
                                  knowledge_id: int = Body(..., embed=True, description="知识库ID"),
                                  field_names: List[str] = Body(..., embed=True, description="要删除的字段名称列表"),
-                                 knowledge_service=Depends(get_knowledge_service)):
+                                 knowledge_service=Depends(get_knowledge_service),
+                                 background_tasks: BackgroundTasks):
     """
     删除知识库元数据字段
     Args:
@@ -920,6 +924,7 @@ async def delete_metadata_fields(*,
         knowledge_id:
         field_names:
         knowledge_service:
+        background_tasks:
 
     Returns:
         UnifiedResponseModel

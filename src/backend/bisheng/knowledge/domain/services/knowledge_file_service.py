@@ -18,7 +18,8 @@ class KnowledgeFileService:
         self.knowledge_file_repository = knowledge_file_repository
         self.knowledge_repository = knowledge_repository
 
-    async def modify_milvus_file_user_metadata(self, knowledge_model, knowledge_file_id, user_metadata: dict):
+    @staticmethod
+    async def modify_milvus_file_user_metadata(knowledge_model, knowledge_file_id, user_metadata: dict):
         """修改 Milvus 中文件的用户元数据"""
         vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(knowledge=knowledge_model,
                                                                              metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
@@ -35,7 +36,8 @@ class KnowledgeFileService:
         await vector_client.aclient.upsert(collection_name=vector_client.collection_name,
                                            data=search_result)
 
-    async def modify_elasticsearch_file_user_metadata(self, knowledge_model, knowledge_file_id, user_metadata: dict):
+    @staticmethod
+    async def modify_elasticsearch_file_user_metadata(knowledge_model, knowledge_file_id, user_metadata: dict):
         """修改 Elasticsearch 中文件的用户元数据"""
         es_client = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=knowledge_model,
                                                                      metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
@@ -94,7 +96,7 @@ class KnowledgeFileService:
 
         knowledge_file_model = await self.knowledge_file_repository.update(knowledge_file_model)
 
-        # TODO: 修改 Milvus, Elasticsearch 中的对应元数据
+        # 修改 Milvus, Elasticsearch 中的对应元数据
         await self.modify_milvus_file_user_metadata(
             knowledge_model=knowledge_model,
             knowledge_file_id=knowledge_file_model.id,

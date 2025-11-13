@@ -28,9 +28,11 @@ async def get_knowledge_file_repository(
 
 async def get_knowledge_service(
         knowledge_repository: KnowledgeRepository = Depends(get_knowledge_repository),
+        knowledge_file_repository: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
 ) -> 'KnowledgeService':
     """获取KnowledgeService实例的依赖项"""
-    return KnowledgeService(knowledge_repository=knowledge_repository)
+    return KnowledgeService(knowledge_repository=knowledge_repository,
+                            knowledge_file_repository=knowledge_file_repository)
 
 
 async def get_knowledge_file_service(
