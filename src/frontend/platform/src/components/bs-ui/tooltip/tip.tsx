@@ -1,4 +1,4 @@
-import { Tooltip, TooltipContent, TooltipTrigger } from "./index";
+import { Tooltip, TooltipContent, TooltipTrigger, Portal } from "./index";
 
 export default function Tip({
     content,
@@ -17,14 +17,15 @@ export default function Tip({
 }): JSX.Element {
     return content ? <Tooltip delayDuration={delayDuration}>
         <TooltipTrigger asChild={asChild}>{children}</TooltipTrigger>
-
-        <TooltipContent
-            className={`${styleClasses} text-sm shadow-md`}
-            side={side}
-            avoidCollisions={false}
-            sticky="always"
-        >
-            <div className=" max-w-96 text-left break-all whitespace-normal">{content}</div>
-        </TooltipContent>
+        <Portal>
+            <TooltipContent
+                className={`${styleClasses} text-sm shadow-md`}
+                side={side}
+                avoidCollisions={false}
+                sticky="always"
+            >
+                <div className=" max-w-96 text-left break-all whitespace-normal">{content}</div>
+            </TooltipContent>
+        </Portal>
     </Tooltip> : children
 }

@@ -1,18 +1,18 @@
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import StepProgress from "@/components/bs-ui/step";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { retryKnowledgeFileApi, subUploadLibFile } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ChevronLeft } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import DialogWithRepeatFiles from "./components/DuplicateFileDialog";
 import FileUploadStep1 from "./components/FileUploadStep1";
 import FileUploadStep2, { Step2PersistState } from "./components/FileUploadStep2";
 import FileUploadStep4 from "./components/FileUploadStep4";
 import PreviewResult from "./components/PreviewResult";
-import { LoadingIcon } from "@/components/bs-icons/loading";
 
 // 正常模式固定步骤标签（4步）
 const NormalStepLabels = [
@@ -53,9 +53,19 @@ export default function FilesUpload() {
   };
 
   // 步骤1：文件上传完成，跳转步骤2
-  const handleStep1Next = (files) => {
+  const handleStep1Next = async (files) => {
     setResultFiles(files);
-    setCurrentStep(2);
+
+    const _repeatFiles = files.filter(e => e.repeat);
+    if (_repeatFiles.length) {
+      setRepeatFiles(_repeatFiles.map(file => ({
+        ...file,
+        file_name: file.fileName,
+        remark: `${file.fileName} 对应已存在文件 ${file.fileName}`
+      })));
+    } else {
+      setCurrentStep(2);
+    }
   };
 
   // 步骤2：分段策略完成，接收配置并跳转步骤3
@@ -182,6 +192,10 @@ export default function FilesUpload() {
 
   // API：重试重复文件（覆盖上传）
   const handleRetry = (objs) => {
+    if (currentStep === 1) {
+      setRepeatFiles([]);
+      return setCurrentStep(2);
+    }
     setRetryLoad(true);
     const params = {
       knowledge_id: Number(_tempConfigRef.current.knowledge_id),
@@ -199,6 +213,24 @@ export default function FilesUpload() {
       repeatCallBackRef.current();
     }));
   };
+
+  const handleUnRetry = () => {
+    if (currentStep === 1) {
+      const files = resultFiles.filter((item) => {
+        return repeatFiles.every((repeatItem) => {
+          return repeatItem.file_path !== item.file_path;
+        });
+      })
+      setResultFiles(files)
+      if (files.length === 0) {
+        return navigate(-1);
+      }
+      setRepeatFiles([]);
+      return setCurrentStep(2);
+    }
+    setRepeatFiles([]);
+    repeatCallBackRef.current();
+  }
   return (
     <div className="relative h-full flex flex-col">
       {/* 顶部返回栏 */}
@@ -248,7 +280,7 @@ export default function FilesUpload() {
                   onPrev={handleBack}
                   kId={knowledgeId}
                   persistState={step2PersistState} // 新增：传递保存的状态
-                  onPersistStateChange={handleStep2StateChange} // 新增：传递状态更新回调
+                  onPersistStateChange={setStep2PersistState} // 新增：传递状态更新回调
                 />
               </div>
             )}
@@ -311,31 +343,14 @@ export default function FilesUpload() {
       </div>
 
       {/* 重复文件提醒弹窗（正常模式共用） */}
-      <Dialog open={!!repeatFiles.length} onOpenChange={b => !b && setRepeatFiles([])}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>{t('modalTitle')}</DialogTitle>
-            <DialogDescription>{t('modalMessage')}</DialogDescription>
-          </DialogHeader>
-          <ul className="overflow-y-auto max-h-[400px] py-2">
-            {repeatFiles.map(el => (
-              <li key={el.id} className="py-1 text-red-500 text-sm">{el.remark}</li>
-            ))}
-          </ul>
-          <DialogFooter>
-            <Button className="h-8" variant="outline" onClick={() => {
-              setRepeatFiles([]);
-              repeatCallBackRef.current();
-            }}>
-              {t('keepOriginal')}
-            </Button>
-            <Button className="h-8" disabled={retryLoad} onClick={() => handleRetry(repeatFiles)}>
-              {retryLoad && <span className="loading loading-spinner loading-xs mr-1"></span>}
-              {t('override')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DialogWithRepeatFiles
+        repeatFiles={repeatFiles}
+        setRepeatFiles={setRepeatFiles}
+        unRetry={handleUnRetry}
+        onRetry={handleRetry}
+        retryLoad={retryLoad}
+        t={t}
+      />
     </div>
   );
 }

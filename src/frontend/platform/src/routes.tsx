@@ -65,7 +65,7 @@ const baseConfig = {
 
 const RedirectToExternalLink = () => {
   useEffect(() => {
-    window.location.href = window.location.origin + '/workspace/'; // 替换为你想跳转的外部链接
+    window.location.href = window.location.origin + '/workspace/';
   }, []);
 
   return null;

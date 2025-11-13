@@ -46,7 +46,7 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange, onValida
                 placeholder={data.placeholder}
                 itemKey={data.key}
                 nodeId={nodeId}
-                flowNode={data}
+                paramItem={data}
                 value={data.value?.msg}
                 onUpload={handleFileUpload}
                 onChange={handleInputChange}

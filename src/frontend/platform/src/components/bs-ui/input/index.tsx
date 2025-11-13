@@ -108,25 +108,25 @@ const SearchInput = React.forwardRef<HTMLInputElement, InputProps & { inputClass
 
 SearchInput.displayName = "SearchInput"
 
-export const PassInput = React.forwardRef<HTMLInputElement, InputProps & { 
-    inputClassName?: string, 
-    iconClassName?: string 
-}>(({ 
-    className, 
-    inputClassName, 
+export const PassInput = React.forwardRef<HTMLInputElement, InputProps & {
+    inputClassName?: string,
+    iconClassName?: string
+}>(({
+    className,
+    inputClassName,
     iconClassName,
     value,
     onChange,
     id,
     label,
-    placeholder = '', 
+    placeholder = '',
     error = '',
     tooltip = '',
     required = false,
     name,
     ...props
 }, ref) => {
-    
+
     const [displayValue, setDisplayValue] = useState('');
     const [realValue, setRealValue] = useState(value || '');
     const [showClear, setShowClear] = useState(false);
@@ -142,14 +142,14 @@ export const PassInput = React.forwardRef<HTMLInputElement, InputProps & {
         const newValue = e.target.value;
         const selectionStart = e.target.selectionStart;
         const selectionEnd = e.target.selectionEnd;
-        
+
         // 处理全选删除的情况
         if (selectionStart === 0 && selectionEnd === displayValue.length && newValue === '') {
             // 用户全选并删除了所有内容
             setRealValue('');
             setDisplayValue('');
             setShowClear(false);
-            
+
             if (onChange) {
                 const syntheticEvent = {
                     ...e,
@@ -163,7 +163,7 @@ export const PassInput = React.forwardRef<HTMLInputElement, InputProps & {
             }
             return;
         }
-        
+
         // 处理部分选择删除的情况
         if (newValue.length < displayValue.length && selectionStart !== null && selectionEnd !== null) {
             // 用户选择了一段文本并删除
@@ -171,11 +171,11 @@ export const PassInput = React.forwardRef<HTMLInputElement, InputProps & {
             const realValueArray = realValue.split('');
             realValueArray.splice(selectionStart, deletedCount);
             const updatedRealValue = realValueArray.join('');
-            
+
             setRealValue(updatedRealValue);
             setDisplayValue(newValue.length > 0 ? new Array(newValue.length).fill('•').join('') : '');
             setShowClear(newValue.length > 0);
-            
+
             if (onChange) {
                 const syntheticEvent = {
                     ...e,
@@ -189,14 +189,14 @@ export const PassInput = React.forwardRef<HTMLInputElement, InputProps & {
             }
             return;
         }
-        
+
         // 原有逻辑：处理单个字符的添加或删除
         if (newValue.length > displayValue.length) {
             // 用户正在输入新字符
             const addedChars = newValue.slice(displayValue.length);
             const updatedRealValue = realValue + addedChars;
             setRealValue(updatedRealValue);
-            
+
             if (onChange) {
                 const syntheticEvent = {
                     ...e,
@@ -213,7 +213,7 @@ export const PassInput = React.forwardRef<HTMLInputElement, InputProps & {
             const deletedCount = displayValue.length - newValue.length;
             const updatedRealValue = realValue.slice(0, -deletedCount);
             setRealValue(updatedRealValue);
-            
+
             if (onChange) {
                 const syntheticEvent = {
                     ...e,
@@ -226,7 +226,7 @@ export const PassInput = React.forwardRef<HTMLInputElement, InputProps & {
                 onChange(syntheticEvent as React.ChangeEvent<HTMLInputElement>);
             }
         }
-        
+
         // 更新显示值（星号）
         setDisplayValue(newValue.length > 0 ? new Array(newValue.length).fill('•').join('') : '');
         setShowClear(newValue.length > 0);
@@ -237,7 +237,7 @@ export const PassInput = React.forwardRef<HTMLInputElement, InputProps & {
         setDisplayValue('');
         setRealValue('');
         setShowClear(false);
-        
+
         if (onChange) {
             const syntheticEvent = {
                 target: {
@@ -255,15 +255,15 @@ export const PassInput = React.forwardRef<HTMLInputElement, InputProps & {
         if (pasteData) {
             // 阻止默认粘贴行为，手动处理
             e.preventDefault();
-            
+
             const updatedRealValue = realValue + pasteData;
             setRealValue(updatedRealValue);
-            
+
             // 更新显示值（星号）
             const newDisplayValue = displayValue + new Array(pasteData.length).fill('•').join('');
             setDisplayValue(newDisplayValue);
             setShowClear(true);
-            
+
             // 触发父组件的 onChange
             if (onChange) {
                 const syntheticEvent = {
@@ -284,7 +284,7 @@ export const PassInput = React.forwardRef<HTMLInputElement, InputProps & {
                 {tooltip && <QuestionTooltip content={tooltip} />}
                 {required && <span className="bisheng-tip">*</span>}
             </label>
-            
+
             <div className="relative">
                 <Input
                     type="text" // 使用 text 类型以便显示星号
@@ -390,7 +390,7 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
     inputClassName?: string,
     className?: string,
     defaultValue?: string[],
-    onChange?: (values: string[]) => void
+    onChange?: (values: string[], info: { action: 'u' | 'd', id: string, value: string }) => void
 }>(
     ({ rules = [], className, dict = false, inputClassName, value = [], defaultValue = [], ...props }, ref) => {
         // 初始化 inputs 状态，为每个值分配唯一 ID
@@ -409,7 +409,6 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
             setInputs(updatedInputs);
         }, [dict, value]); // 依赖项中包含 value，确保外部 value 更新时同步更新
 
-
         const handleChange = (newValue, id, index) => {
             let newInputs = inputs.map(input =>
                 input.key === id ? { ...input, value: newValue } : input
@@ -419,14 +418,22 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
                 newInputs = ([...newInputs, { key: generateUUID(6), value: '' }]);
             }
             setInputs(newInputs);
-            props.onChange(dict ? newInputs : newInputs.map(input => input.value));
+            props.onChange(dict ? newInputs : newInputs.map(input => input.value), {
+                action: 'u',
+                id,
+                value: newValue
+            });
         };
 
         // delete input
         const handleRemoveInput = (id) => {
             const newInputs = inputs.filter(input => input.key !== id);
             setInputs(newInputs);
-            props.onChange(dict ? newInputs : newInputs.map(input => input.value));
+            props.onChange(dict ? newInputs : newInputs.map(input => input.value), {
+                action: 'd',
+                id,
+                value: ''
+            });
         };
 
         return <div className={cname('', className)}>
@@ -439,18 +446,18 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
                             className={cname('pr-8', inputClassName)}
                             placeholder={props.placeholder || ''}
                             onChange={(e) => handleChange(e.target.value, item.key, index)}
-                            // onInput={(e) => {
-                            //     rules.some(rule => {
-                            //         if (rule.maxLength && e.target.value.length > rule.maxLength) {
-                            //             e.target.parentNode.nextSibling.textContent = rule.message;
-                            //             e.target.parentNode.nextSibling.style.display = '';
-                            //             return true;
-                            //         }
-                            //         if (e.target.nextSibling) {
-                            //             e.target.parentNode.nextSibling.style.display = 'none';
-                            //         }
-                            //     })
-                            // }}
+                        // onInput={(e) => {
+                        //     rules.some(rule => {
+                        //         if (rule.maxLength && e.target.value.length > rule.maxLength) {
+                        //             e.target.parentNode.nextSibling.textContent = rule.message;
+                        //             e.target.parentNode.nextSibling.style.display = '';
+                        //             return true;
+                        //         }
+                        //         if (e.target.nextSibling) {
+                        //             e.target.parentNode.nextSibling.style.display = 'none';
+                        //         }
+                        //     })
+                        // }}
                         // onFocus={(e) => {
                         //     if (e.target.value && index === inputs.length - 1) {
                         //         setInputs([...inputs, { id: generateUUID(8), value: '' }]);

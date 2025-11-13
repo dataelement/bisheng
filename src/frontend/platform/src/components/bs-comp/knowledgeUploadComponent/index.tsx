@@ -23,6 +23,7 @@ export const enum ProgressStatus {
 const KnowledgeUploadComponent = ({
     size = 50,
     progressClassName = '',
+    knowledgeId,
     onFileChange,
     onSelectFile,
     initialFiles = []
@@ -75,18 +76,18 @@ const KnowledgeUploadComponent = ({
     // beforeupload
     const handleDrop = (acceptedFiles) => {
         const sizeLimit = appConfig.uploadFileMaxSize * 1024 * 1024;
-        
-        const [ bigFiles, files] = acceptedFiles.reduce(
+
+        const [bigFiles, files] = acceptedFiles.reduce(
             ([big, small], file) => {
-                if (progressList.some(pros => pros.fileName === file.name)) return [ big, small];
+                if (progressList.some(pros => pros.fileName === file.name)) return [big, small];
                 // 大小校验
                 return file.size < sizeLimit
-                    ? [ big, [...small, file]] // 合法文件
+                    ? [big, [...small, file]] // 合法文件
                     : [[...big, file.name], small]; // 超大小文件
             },
-            [[], [],[]]
+            [[], [], []]
         );
-    
+
 
         if (bigFiles.length > 0) {
             message({
@@ -164,6 +165,7 @@ const KnowledgeUploadComponent = ({
             {progressList.map((pros) =>
                 <ProgressItem
                     key={pros.id}
+                    knowledgeId={knowledgeId}
                     item={{
                         ...pros,
                         // 优先使用fileData（回显文件），其次用原始file（新上传文件）

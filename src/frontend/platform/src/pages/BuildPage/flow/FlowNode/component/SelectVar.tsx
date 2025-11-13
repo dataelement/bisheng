@@ -1,5 +1,6 @@
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Select, SelectContent, SelectTrigger } from "@/components/bs-ui/select";
+import Tip from "@/components/bs-ui/tooltip/tip";
 import { cname } from "@/components/bs-ui/utils";
 import { cloneDeep } from "lodash-es";
 import { ChevronRight } from "lucide-react";
@@ -332,14 +333,14 @@ const SelectVar = forwardRef(({
         onCheck(checked, tasks);
     };
 
-    return <Select open={open} onOpenChange={setOpen}>
+    return <Select open={open} onOpenChange={setOpen} >
         <SelectTrigger
             onClick={() => inputOpenRef.current = false}
             showIcon={false}
             className={cname('group shrink min-w-0 p-0 h-auto data-[placeholder]:text-inherit border-none bg-transparent shadow-none outline-none focus:shadow-none focus:outline-none focus:ring-0', className)}>
             {children}
         </SelectTrigger>
-        <SelectContent position="popper" avoidCollisions={false}>
+        <SelectContent position="popper" avoidCollisions={false} className=" overflow-auto">
             <div className="flex max-h-[360px] ">
                 {/* 三级级联菜单 */}
                 <div className="w-36 min-w-36 border-l first:border-none overflow-y-auto  scrollbar-hide">
@@ -400,7 +401,9 @@ const SelectVar = forwardRef(({
                                     onCheckedChange={(bln) => handleCheckClick(bln, currentMenuRef.current.id, q)}
                                     onClick={e => e.stopPropagation()}
                                 />}
-                                <span className="w-full overflow-hidden text-ellipsis truncate">{q.label}</span>
+                                <Tip content={q.label} side={"top"} >
+                                    <span className="w-full overflow-hidden text-ellipsis truncate">{q.label}</span>
+                                </Tip>
                                 {/* {value.includes(`${currentMenuRef.current.id}.${q.value}`) && <Check size={14} />} */}
                             </div>
                         )}

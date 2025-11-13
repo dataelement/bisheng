@@ -2,7 +2,7 @@ import { LoadIcon } from "@/components/bs-icons";
 import { useTranslation } from "react-i18next";
 
 export default function MessageNodeRun({ data }) {
-    const { t } = useTranslation('flow')
+    // const { t } = useTranslation('flow')
 
     return <div className="py-1">
         <div className="rounded-sm border">
@@ -11,7 +11,8 @@ export default function MessageNodeRun({ data }) {
                     {
                         <LoadIcon className="text-primary duration-300" />
                     }
-                    <span>{t('runningNode', { nodeName: data.message.name })}</span>
+                    <span>{data.message.name}</span>
+                    {/* <span>{t('runningNode', { nodeName: data.message.name })}</span> */}
                 </div>
             </div>
         </div>

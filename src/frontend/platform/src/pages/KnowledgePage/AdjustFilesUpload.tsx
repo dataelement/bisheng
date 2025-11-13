@@ -12,6 +12,7 @@ import FileUploadStep2 from "./components/FileUploadStep2";
 import FileUploadStep4 from "./components/FileUploadStep4";
 import PreviewResult from "./components/PreviewResult";
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import DialogWithRepeatFiles from "./components/DuplicateFileDialog";
 
 // 调整模式固定步骤标签（3步）
 const AdjustStepLabels = [
@@ -284,6 +285,11 @@ export default function AdjustFilesUpload() {
     );
   };
 
+  const handleUnRetry = () => {
+    setRepeatFiles([]);
+    repeatCallBackRef.current();
+  }
+
   return (
     <div className="relative h-full flex flex-col">
       {/* 顶部返回栏 */}
@@ -370,31 +376,14 @@ export default function AdjustFilesUpload() {
       </div>
 
       {/* 重复文件提醒弹窗 */}
-      <Dialog open={!!repeatFiles.length} onOpenChange={b => !b && setRepeatFiles([])}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>{t('modalTitle')}</DialogTitle>
-            <DialogDescription>{t('adjustModalMessage')}</DialogDescription>
-          </DialogHeader>
-          <ul className="overflow-y-auto max-h-[400px] py-2">
-            {repeatFiles.map(el => (
-              <li key={el.id} className="py-1 text-red-500 text-sm">{el.remark}</li>
-            ))}
-          </ul>
-          <DialogFooter>
-            <Button className="h-8" variant="outline" onClick={() => {
-              setRepeatFiles([]);
-              repeatCallBackRef.current();
-            }}>
-              {t('keepOriginal')}
-            </Button>
-            <Button className="h-8" disabled={retryLoad} onClick={() => handleRetry(repeatFiles)}>
-              {retryLoad && <span className="loading loading-spinner loading-xs mr-1"></span>}
-              {t('override')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DialogWithRepeatFiles
+        repeatFiles={repeatFiles}
+        setRepeatFiles={setRepeatFiles}
+        unRetry={handleUnRetry}
+        onRetry={handleRetry}
+        retryLoad={retryLoad}
+        t={t}
+      />
     </div>
   );
 }

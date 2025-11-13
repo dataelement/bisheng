@@ -309,7 +309,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 label={''}
                 itemKey={''}
                 nodeId={nodeId}
-                flowNode={nodeData}
+                paramItem={nodeData}
                 value={formData.displayName}
                 placeholder={namePlaceholders[formData.formType]}
                 onChange={(val) => setFormData({ ...formData, displayName: val })}

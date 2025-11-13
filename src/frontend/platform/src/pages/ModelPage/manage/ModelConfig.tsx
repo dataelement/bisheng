@@ -18,6 +18,7 @@ import CustomForm from "./CustomForm";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
 import { getAdvancedParamsTemplate, templateToJsonString } from "@/util/advancedParamsTemplates";
 import { useLinsightConfig } from "./tabs/WorkbenchModel";
+import { useModelProviderInfo } from "./useLink";
 
 function ModelItem({ data, type, onDelete, onInput, onConfig }) {
     const { t } = useTranslation('model')
@@ -367,7 +368,7 @@ export const modelProvider = [
     { "name": "xinference", "value": "xinference" },
     { "name": "llamacpp", "value": "llamacpp" },
     { "name": "vllm", "value": "vllm" },
-    { "name": "通义千问", "value": "qwen" },
+    { "name": "阿里云百炼", "value": "qwen" },
     { "name": "DeepSeek", "value": "deepseek" },
     { "name": "硅基流动", "value": "silicon" },
     { "name": "火山引擎", "value": "volcengine" },
@@ -589,6 +590,8 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         return id === -1 ? modelProvider : [...modelProvider, bishengModelProvider]
     }, [id])
 
+    const providerInfo = useModelProviderInfo(formData.type)
+
     if (!formData) return <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
         <LoadingIcon />
     </div>
@@ -635,11 +638,15 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                 showDefault={id === -1}
                 provider={formData.type}
                 formData={formData.config}
+                providerName={_modelProvider.find(el => el.value === formData.name)?.name}
+                apiKeySite={providerInfo?.apiKeyUrl}
             />
             <div className={formData.type ? 'visible' : 'invisible'}>
                 <div className="mb-2">
                     <div className="flex items-center gap-x-6">
-                        <Label className="bisheng-label">{t('model.dailyCallLimit')}</Label>
+                        <Label className="bisheng-label">
+                            {t('model.dailyCallLimit')}
+                        </Label>
                         <Switch checked={formData.limit_flag} onCheckedChange={(val) => setFormData(form => ({ ...form, limit_flag: val }))} />
                         <div className={`flex items-center gap-x-2 ${formData.limit_flag ? '' : 'invisible'}`}>
                             <Input type="number" value={formData.limit} onChange={(e) => setFormData({ ...formData, limit: Number(e.target.value) })}
@@ -650,7 +657,10 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                     </div>
                 </div>
                 <div className="mb-2">
-                    <Label className="bisheng-label">{t('model.model')}</Label>
+                    <Label className="bisheng-label">
+                        {t('model.model')}
+                        {providerInfo && <a href={providerInfo.modelUrl} target="_blank" rel="noreferrer" className="ml-1 text-primary/80">(前往官网插口那可用模型)</a>}
+                    </Label>
                     <div className="w-[92%]">
                         {
                             formData.models.map((m, i) => (
