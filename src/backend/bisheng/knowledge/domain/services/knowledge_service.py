@@ -4,7 +4,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeNotExistError
 from bisheng.database.models.role_access import AccessType
-from bisheng.knowledge.api.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
+from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
     UpdateKnowledgeMetadataFieldsReq
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
 

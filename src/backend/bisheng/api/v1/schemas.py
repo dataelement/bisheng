@@ -527,7 +527,7 @@ class KnowledgeFileReProcess(FileProcessBase):
     kb_file_id: int = Field(..., description='知识库文件ID')
     excel_rule: Optional[ExcelRule] = Field(default=None, description="Excel rules")
     callback_url: Optional[str] = Field(default=None, description='异步任务回调地址')
-    extra: Optional[str] = Field(default=None, description='附加信息')
+    extra: Optional[Dict] = Field(default=None, description='附加信息')
 
 
 class FrequentlyUsedChat(BaseModel):

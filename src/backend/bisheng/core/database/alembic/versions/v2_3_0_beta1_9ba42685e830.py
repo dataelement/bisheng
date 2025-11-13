@@ -29,6 +29,9 @@ def upgrade() -> None:
 
     op.drop_column('knowledgefile', 'extra_meta')
 
+    op.add_column('knowledgefile', sa.Column('abstract', sa.TEXT, nullable=True, comment='文件摘要'))
+    op.add_column('knowledgefile',sa.Column('updater_id', sa.INT, nullable=True, comment='更新者ID'))
+
 
 def downgrade() -> None:
     """Downgrade schema."""
@@ -39,3 +42,6 @@ def downgrade() -> None:
                   sa.Column('extra_meta', sa.VARCHAR(255), nullable=True, comment='用户自定义的元数据'))
     op.execute('UPDATE knowledgefile SET extra_meta = user_metadata')
     op.drop_column('knowledgefile', 'user_metadata')
+
+    op.drop_column('knowledgefile', 'abstract')
+    op.drop_column('knowledgefile', 'updater_id')

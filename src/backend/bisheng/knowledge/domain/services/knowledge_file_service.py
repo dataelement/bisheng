@@ -1,8 +1,11 @@
+from loguru import logger
+from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeFileNotExistError
 from bisheng.database.models.role_access import AccessType
-from bisheng.knowledge.api.schemas.knowledge_schema import ModifyKnowledgeFileMetaDataReq
+from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+from bisheng.knowledge.domain.schemas.knowledge_schema import ModifyKnowledgeFileMetaDataReq
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
 
@@ -14,6 +17,45 @@ class KnowledgeFileService:
                  knowledge_repository: 'KnowledgeRepository'):
         self.knowledge_file_repository = knowledge_file_repository
         self.knowledge_repository = knowledge_repository
+
+    async def modify_milvus_file_user_metadata(self, knowledge_model, knowledge_file_id, user_metadata: dict):
+        """修改 Milvus 中文件的用户元数据"""
+        vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(knowledge=knowledge_model,
+                                                                             metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
+
+        # 先查出所有数据
+        search_result = await vector_client.aclient.query(collection_name=knowledge_model.collection_name,
+                                                          filter=f"document_id == {knowledge_file_id}", limit=10000)
+
+        # 修改用户元数据
+        for item in search_result:
+            item["user_metadata"] = user_metadata
+
+        # 批量更新数据
+        await vector_client.aclient.upsert(collection_name=vector_client.collection_name,
+                                           data=search_result)
+
+    async def modify_elasticsearch_file_user_metadata(self, knowledge_model, knowledge_file_id, user_metadata: dict):
+        """修改 Elasticsearch 中文件的用户元数据"""
+        es_client = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=knowledge_model,
+                                                                     metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
+
+        # 使用 update_by_query 来更新符合条件的文档
+        res = await es_client.client.update_by_query(
+            index=knowledge_model.index_name,
+            body={
+                "script": {
+                    "source": "ctx._source.metadata.user_metadata = params.user_metadata",
+                    "lang": "painless",
+                    "params": {"user_metadata": user_metadata}
+                },
+                "query": {
+                    "term": {"metadata.document_id": knowledge_file_id}
+                }
+            }
+        )
+
+        logger.info(f"Elasticsearch update_by_query result: {res}")
 
     async def modify_file_user_metadata(self, login_user: 'UserPayload',
                                         modify_file_metadata_req: 'ModifyKnowledgeFileMetaDataReq'):
@@ -53,6 +95,16 @@ class KnowledgeFileService:
         knowledge_file_model = await self.knowledge_file_repository.update(knowledge_file_model)
 
         # TODO: 修改 Milvus, Elasticsearch 中的对应元数据
+        await self.modify_milvus_file_user_metadata(
+            knowledge_model=knowledge_model,
+            knowledge_file_id=knowledge_file_model.id,
+            user_metadata=knowledge_file_model.user_metadata
+        )
 
+        await self.modify_elasticsearch_file_user_metadata(
+            knowledge_model=knowledge_model,
+            knowledge_file_id=knowledge_file_model.id,
+            user_metadata=knowledge_file_model.user_metadata
+        )
 
         return knowledge_file_model

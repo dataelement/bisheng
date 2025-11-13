@@ -24,6 +24,8 @@ from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.common.services.config_service import settings
 from loguru import logger
 
+from bisheng.utils.util import sync_func_to_async
+
 # build router
 router = APIRouter(prefix='/filelib', tags=['OpenAPI', 'Knowledge'])
 
@@ -184,7 +186,7 @@ async def post_chunks(request: Request,
                                     file_list=[KnowledgeFileOne(file_path=file_path)],
                                     extra=metadata)
 
-    res = KnowledgeService.sync_process_knowledge_file(request, login_user, req_data)
+    res = await sync_func_to_async(KnowledgeService.sync_process_knowledge_file)(request, login_user, req_data)
     return resp_200(data=res[0])
 
 

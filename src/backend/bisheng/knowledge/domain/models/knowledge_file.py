@@ -54,7 +54,10 @@ class KnowledgeFileBase(SQLModelSerializable):
     # extra_meta: Optional[str] = Field(default=None, index=False)
     user_metadata: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True),
                                                     description='用户自定义的元数据')
+    abstract: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True),
+                                    description='文件摘要/简介')
     remark: Optional[str] = Field(default='', sa_column=Column(String(length=512)))
+    updater_id: Optional[int] = Field(default=None, index=True, description='最后更新用户ID')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
