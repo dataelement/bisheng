@@ -373,7 +373,7 @@ export default function KnowledgeQa(params) {
             <div className="h-[calc(100vh-128px)] overflow-y-auto pb-20">
                 <div className="flex justify-end gap-4 items-center absolute right-0 top-[-44px]">
                     <SearchInput placeholder={t('lib.searchPlaceholder', { ns: 'bs' })} onChange={(e) => search(e.target.value)} />
-                    <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create')}</Button>
+                    <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>
                 </div>
                 <Table>
                     <TableHeader>
@@ -517,7 +517,7 @@ export default function KnowledgeQa(params) {
                 </Table>
             </div>
             <div className="bisheng-table-footer px-6 bg-background-login">
-                <p className="desc">{t('lib.libraryCollection')}</p>
+                <p className="desc">{t('lib.libraryCollection', { ns: 'bs' })}</p>
                 <div>
                     <AutoPagination
                         page={page}
