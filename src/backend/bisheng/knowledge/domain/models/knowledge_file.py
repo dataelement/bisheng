@@ -53,7 +53,7 @@ class KnowledgeFileBase(SQLModelSerializable):
     object_name: Optional[str] = Field(default=None, index=False, description='文件在minio存储的对象名称')
     # extra_meta: Optional[str] = Field(default=None, index=False)
     user_metadata: Optional[List[Dict[str, Any]]] = Field(default=None, sa_column=Column(JSON, nullable=True),
-                                                    description='用户自定义的元数据')
+                                                          description='用户自定义的元数据')
     abstract: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True),
                                     description='文件摘要/简介')
     remark: Optional[str] = Field(default='', sa_column=Column(String(length=512)))
@@ -213,8 +213,8 @@ class KnowledgeFileDao(KnowledgeFileBase):
         elif file_name:
             sql = sql.where(KnowledgeFile.file_name == file_name)
         async with get_async_db_session() as session:
-            result = await session.execute(sql)
-            return result.scalars().all()
+            result = await session.exec(sql)
+            return result.first()
 
     @classmethod
     def select_list(cls, file_ids: List[int]):

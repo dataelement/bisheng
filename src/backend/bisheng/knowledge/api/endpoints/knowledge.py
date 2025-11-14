@@ -27,13 +27,13 @@ from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.knowledge.api.dependencies import get_knowledge_service, get_knowledge_file_service
-from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
-    UpdateKnowledgeMetadataFieldsReq, ModifyKnowledgeFileMetaDataReq
 from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
                                                        KnowledgeUpdate)
 from bisheng.knowledge.domain.models.knowledge import KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
                                                             QAKnoweldgeDao, QAKnowledgeUpsert, QAStatus)
+from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
+    UpdateKnowledgeMetadataFieldsReq, ModifyKnowledgeFileMetaDataReq
 from bisheng.llm.const import LLMModelType
 from bisheng.llm.models import LLMDao
 from bisheng.utils import generate_uuid, calc_data_sha256
@@ -74,8 +74,12 @@ async def upload_knowledge_file(*, request: Request, login_user: UserPayload = D
     repeat_file = await KnowledgeFileDao.get_repeat_file(
         knowledge_id=knowledge_id, file_name=file_name, md5_=file_md5
     )
+    ret = UploadFileResponse(file_path=file_path)
+    if repeat_file:
+        ret.repeat = True
+        ret.repeat_update_time = repeat_file.update_time
 
-    return resp_200(UploadFileResponse(file_path=file_path, repeat=True if repeat_file else False))
+    return resp_200(ret)
 
 
 @router.post('/preview')
