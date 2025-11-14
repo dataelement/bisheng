@@ -98,7 +98,7 @@ def convert_es_data(knowledge: Knowledge, all_file: List[KnowledgeFile], new_ind
         for one in all_file_chunk:
             new_texts.append(one["_source"]["text"])
             new_metadata.append(convert_new_metadata(one["_source"]["metadata"], file, knowledge))
-        es_vectorstore.add_texts(texts=new_texts, metadata=new_metadata)
+        es_vectorstore.add_texts(texts=new_texts, metadatas=new_metadata)
 
     print(f"知识库 ID:{knowledge.id} 的Elasticsearch数据转换完成。")
     return es_vectorstore
@@ -158,9 +158,6 @@ if __name__ == '__main__':
     # 单个进程的最大并发数
     parser.add_argument('--id', type=int, default=0, help='知识库ID，如果是操作单个知识库时，参数必填')
     args = parser.parse_args()
-
-    args.mode = "convert_one"
-    args.id = 2729
 
     if args.mode == "convert_all":
         convert_all_knowledge_data()
