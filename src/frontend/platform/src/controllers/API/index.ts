@@ -983,12 +983,13 @@ export async function updateKnowledge(data): Promise<any[]> {
 
 
 /**
- * 上传文件
+ * Knowledge Base Upload
  */
-export async function uploadFileApi({ fileKey, file, onProgress, onFinish, onFail, onAbort }:
+export async function uploadFileApi({ fileKey, knowledgeId, file, onProgress, onFinish, onFail, onAbort }:
   {
     fileKey: string,
     file: File,
+    knowledgeId: string,
     onProgress?: (progressEvent: number) => void,
     onFail?: (error: any) => void,
     onFinish?: (response: any) => void,
@@ -1015,7 +1016,7 @@ export async function uploadFileApi({ fileKey, file, onProgress, onFinish, onFai
       },
       signal: abortCtlr.signal,
     }
-    const response = await axios.post('/api/v1/knowledge/upload', formData, config);
+    const response = await axios.post(`/api/v1/knowledge/upload/${knowledgeId}`, formData, config);
     // 处理成功
     isFinished = true;
     onFinish(response);

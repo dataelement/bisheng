@@ -1104,7 +1104,8 @@
     "10540": "Server thread pool is full, please try again later",
     "10541": "Workflow task execution failed：{{exception}}",
     "10620": "The current account has been disabled, please contact the administrator",
-    "10599": "No permission to view for the time being"
+    "10599": "No permission to view for the time being",
+    "13010": "APP is not yet launched, so direct conversation is not possible"
   },
   "all": "All",
   "confirmButton": "Confirm",

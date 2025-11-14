@@ -1,18 +1,17 @@
 "use client"
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Button } from "@/components/bs-ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { cn } from "@/util/utils";
 import { SearchCheck } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import useKnowledgeStore from "../useKnowledgeStore";
 import PreviewResult from "./PreviewResult";
 import RuleFile from "./RuleFile";
 import RuleTable from "./RuleTable";
-import { LoadingIcon } from "@/components/bs-icons/loading";
-import { forwardRef, useImperativeHandle } from 'react';
 
 // 原有类型定义不变
 export interface FileItem {
@@ -59,7 +58,7 @@ const initialStrategies = [
     { id: '2', regex: '\\n', position: 'after', rule: '单换行后切分，用于分隔普通换行' }
 ];
 
-const FileUploadStep2 = forwardRef(({ 
+const FileUploadStep2 = forwardRef(({
     step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode, kId,
     persistState, // 新增：父组件传递的状态
     onPersistStateChange // 新增：状态更新回调

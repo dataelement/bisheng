@@ -26,6 +26,7 @@ from bisheng.api.v1.schemas import (
     KnowledgeFileProcess,
     UpdatePreviewFileChunk, ExcelRule, KnowledgeFileReProcess,
 )
+from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
 from bisheng.common.errcode.knowledge import (
     KnowledgeChunkError,
@@ -40,7 +41,8 @@ from bisheng.database.models.group_resource import (
     GroupResourceDao,
     ResourceTypeEnum,
 )
-from bisheng.database.models.knowledge import (
+from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+from bisheng.knowledge.domain.models.knowledge import (
     Knowledge,
     KnowledgeCreate,
     KnowledgeDao,
@@ -48,7 +50,7 @@ from bisheng.database.models.knowledge import (
     KnowledgeTypeEnum,
     KnowledgeUpdate, KnowledgeState,
 )
-from bisheng.database.models.knowledge_file import (
+from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileStatus, ParseType,
@@ -182,15 +184,10 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge = KnowledgeDao.insert_one(db_knowledge)
 
         try:
-            # 创建milvus的collection_name和es的index_name
-            embeddings = decide_embeddings(db_knowledge.model)
-            vector_client = decide_vectorstores(
-                db_knowledge.collection_name, "Milvus", embeddings
-            )
-            embeddings = FakeEmbedding()
-            es_client = decide_vectorstores(
-                db_knowledge.index_name, "ElasticKeywordsSearch", embeddings
-            )
+            vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge=db_knowledge,
+                                                                                metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
+            es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge,
+                                                                        metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
         except Exception as e:
             logger.exception("create knowledge index name error")
 
@@ -436,8 +433,9 @@ class KnowledgeService(KnowledgeUtils):
         res = []
         cache_map = {}
         for index, val in enumerate(texts):
-            cache_map[index] = {"text": val, "metadata": metadatas[index]}
-            res.append(FileChunk(text=val, metadata=metadatas[index]))
+            metadata_dict = metadatas[index].model_dump()
+            cache_map[index] = {"text": val, "metadata": metadata_dict}
+            res.append(FileChunk(text=val, metadata=metadata_dict))
 
         # 默认是源文件的地址
         file_share_url = file_path
@@ -749,6 +747,7 @@ class KnowledgeService(KnowledgeUtils):
             md5=md5_,
             split_rule=str_split_rule,
             user_id=login_user.user_id,
+            updater_id=login_user.user_id
         )
         db_file = KnowledgeFileDao.add_file(db_file)
         # 原始文件保存

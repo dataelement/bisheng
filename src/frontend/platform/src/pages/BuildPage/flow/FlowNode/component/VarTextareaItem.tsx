@@ -28,7 +28,7 @@ export default function VarTextareaItem({ nodeId, data, onChange, onValidate, on
             <VarInput
                 itemKey={data.key}
                 nodeId={nodeId}
-                flowNode={data}
+                paramItem={data}
                 placeholder={data.placeholder}
                 error={error}
                 value={data.value}

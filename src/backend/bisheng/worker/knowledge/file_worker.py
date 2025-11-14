@@ -8,8 +8,8 @@ from bisheng.api.services.knowledge_imp import decide_vectorstores, process_file
     KnowledgeUtils, delete_vector_files
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
-from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, KnowledgeState
-from bisheng.database.models.knowledge_file import (
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, KnowledgeState
+from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileStatus,
@@ -323,7 +323,7 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
                       chunk_size=file_rule.chunk_size,
                       chunk_overlap=file_rule.chunk_overlap,
                       callback_url=callback_url,
-                      extra_metadata=db_file.extra_meta,
+                      extra_metadata=db_file.user_metadata,
                       preview_cache_keys=[preview_cache_key],
                       retain_images=file_rule.retain_images,
                       enable_formula=file_rule.enable_formula,

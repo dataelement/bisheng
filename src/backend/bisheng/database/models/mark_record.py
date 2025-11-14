@@ -7,7 +7,7 @@ from sqlalchemy import Column, DateTime, delete, text
 from sqlmodel import Field, select
 
 from bisheng.core.database import get_sync_db_session
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
 
 
 class MarkRecordStatus(Enum):
@@ -85,7 +85,7 @@ class MarkRecordDao(MarkRecordBase):
     def get_count(cls, task_id: int):
         with get_sync_db_session() as session:
             sql = text(
-                "select create_user,count(*) as user_count,create_id from markrecord where task_id=:task_id group by create_id")
+                "select create_user,count(*) as user_count,create_id from markrecord where task_id=:task_id group by create_id,create_user")
             query = session.execute(sql, {"task_id": task_id}).fetchall()
             return query
 

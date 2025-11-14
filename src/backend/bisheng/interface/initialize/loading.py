@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Sequence, Type
 import httpx
 import openai
 from bisheng.core.cache.utils import file_download
-from bisheng.database.models.knowledge import KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.interface.agents.base import agent_creator
 from bisheng.interface.chains.base import chain_creator
 from bisheng.interface.custom_lists import CUSTOM_NODES

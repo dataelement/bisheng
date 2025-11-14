@@ -61,8 +61,8 @@
     "roleName": "角色名称",
     "skillAuthorization": "技能授权",
     "knowledgeAuthorization": "知识库授权",
-    "libraryName":"知识库名称",
-    "flowName":"工作流名称",
+    "libraryName": "知识库名称",
+    "flowName": "工作流名称",
     "flowAuthorization": "工作流授权",
     "skillName": "技能名称",
     "creator": "创建人",
@@ -585,7 +585,7 @@
       "modelNameRequired": "模型显示名称不能为空",
       "modelRequired": "模型不能为空",
       "modelDuplicate": "模型不能重复",
-      "voiceTypeRequired":"音色类型不可为空",
+      "voiceTypeRequired": "音色类型不可为空",
       "modelNameDuplicate": "显示名称不能重复",
       "required": "不能为空"
     }
@@ -859,8 +859,8 @@
     "deleteRole": "删除角色",
     "updateRole": "编辑角色",
     "addTool": "创建工具",
-    "updateTool":"修改工具",
-    "deleteTool":"删除工具",
+    "updateTool": "修改工具",
+    "deleteTool": "删除工具",
     "userLogin": "用户登录",
     "chat": "会话",
     "build": "构建",
@@ -1109,7 +1109,8 @@
     "10540": "服务器线程数已满，请稍候再试",
     "10541": "工作流任务执行失败：{{exception}}",
     "10620": "该账号已被禁用，请联系管理员",
-    "10599": "暂无查看权限"
+    "10599": "暂无查看权限",
+    "13010": "应用未上线，无法直接对话"
   },
   "all": "全部",
   "confirmButton": "确定",

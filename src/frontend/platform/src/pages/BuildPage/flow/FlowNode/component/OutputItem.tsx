@@ -61,7 +61,7 @@ const OutputItem = ({ nodeId, node, data, onChange, onValidate, onVarEvent }) =>
                             placeholder={t("userInputPlaceholder")}
                             nodeId={nodeId}
                             itemKey={data.key}
-                            flowNode={data}
+                            paramItem={data}
                             value={data.value.value}
                             onVarEvent={onVarEvent}
                             onChange={(msg) =>

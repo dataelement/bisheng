@@ -18,7 +18,7 @@ from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.group import Group, GroupCreate, GroupDao, GroupRead, DefaultGroup
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
-from bisheng.database.models.knowledge import KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead

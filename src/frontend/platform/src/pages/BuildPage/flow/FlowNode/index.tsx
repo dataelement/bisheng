@@ -14,6 +14,7 @@ import NodeToolbarComponent from './NodeToolbarComponent';
 import ParameterGroup from './ParameterGroup';
 import RunLog from './RunLog';
 import { RunTest } from './RunTest';
+import { useUpdateVariableState } from './flowNodeStore';
 
 export const CustomHandle = ({ id = '', node, isLeft = false, className = '' }) => {
     const [openLeft, setOpenLeft] = useState(false);
@@ -156,6 +157,8 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
 
     const { isVisible, handleMouseEnter, handleMouseLeave } = useHoverToolbar();
 
+    const [_, setUpdateVariable] = useUpdateVariableState()
+
     return (
         <div
             onMouseEnter={handleMouseEnter}
@@ -191,6 +194,14 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                                 disable={['start', 'end'].includes(node.type)}
                                 onChange={(val) => {
                                     node.name = val;
+                                    setUpdateVariable({
+                                        action: 'u',
+                                        node: {
+                                            id: node.id,
+                                            name: node.name,
+                                        },
+                                        question: null
+                                    })
                                     setFocusUpdate(!focusUpdate)
                                 }}>
                                 <span className='truncate block min-h-4'>{node.name}</span>

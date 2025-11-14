@@ -7,7 +7,7 @@ from sqlmodel import (JSON, Column, DateTime, Field, String, Text, case, delete,
                       select, text, update, col)
 
 from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
 
 
 class LikedType(Enum):

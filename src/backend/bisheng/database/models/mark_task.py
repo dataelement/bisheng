@@ -7,7 +7,7 @@ from sqlalchemy import Column, DateTime, and_, delete, func, or_, text
 from sqlmodel import Field, select, update
 
 from bisheng.core.database import get_sync_db_session
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
 
 
 class MarkTaskStatus(Enum):

@@ -15,11 +15,11 @@ from bisheng.chat.types import WorkType
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.assistant import (AssistantDeletedError, AssistantNotOnlineError,
                                               AssistantOtherError)
+from bisheng.common.services.config_service import settings
 from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessageDao, ChatMessage as ChatMessageModel
 from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.common.services.config_service import settings
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 from bisheng.utils.threadpool import thread_pool
@@ -330,13 +330,11 @@ class ChatClient:
         except BaseErrorCode as e:
             logger.exception('handle gpts message error: ')
             await self.send_response('system', 'start', '')
-            await self.send_response('error', 'end', message=json.dumps(e.to_dict()))
             await e.websocket_close_message(websocket=self.websocket)
         except Exception as e:
             e = AssistantOtherError(exception=e)
             logger.exception('handle gpts message error: ')
             await self.send_response('system', 'start', '')
-            await self.send_response('error', 'end', message=json.dumps(e.to_dict()))
             await e.websocket_close_message(websocket=self.websocket)
         finally:
             await self.send_response('processing', 'close', '')

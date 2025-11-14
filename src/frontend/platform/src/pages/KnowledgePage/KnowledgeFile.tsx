@@ -31,17 +31,17 @@ import { useTable } from "../../util/hook";
 import { useModel } from "../ModelPage/manage";
 import { ModelSelect } from "../ModelPage/manage/tabs/WorkbenchModel";
 
-// 知识库状态
+// Knowledge base status
 const enum KnowledgeBaseStatus {
     Unpublished = 0,
-    Published = 1,   // 文档知识库构建成功的状态
+    Published = 1,   // Document knowledge base build success status
     Copying = 2,
-    Rebuilding = 3,  // 文档知识库重建中的状态
-    Failed = 4       // 文档知识库重建失败的状态
+    Rebuilding = 3,  // Document knowledge base rebuilding status
+    Failed = 4       // Document knowledge base rebuild failed status
 }
 
 function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create', currentLib = null }) {
-    const { t } = useTranslation()
+    const { t } = useTranslation('knowledge')
     const navigate = useNavigate()
 
     const nameRef = useRef(null)
@@ -52,7 +52,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
     const [isModelChanged, setIsModelChanged] = useState(false)
 
     const { embeddings, isLoading } = useModel()
-    // 统一处理模型数据获取
+    // Unified handling of model data fetching
     useEffect(() => {
         if (!open) return;
 
@@ -66,7 +66,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                 }
 
                 if (mode === 'edit' && currentLib) {
-                    // 使用 setTimeout 确保 DOM 已经渲染
+                    // Use setTimeout to ensure DOM has been rendered
                     setTimeout(() => {
                         if (nameRef.current) nameRef.current.value = currentLib.name || '';
                         if (descRef.current) descRef.current.value = currentLib.description || '';
@@ -76,7 +76,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                 console.error('Failed to load model data:', error);
                 toast({
                     variant: "error",
-                    description: '加载模型出错'
+                    description: t('loadModelError')
                 });
             }
         };
@@ -85,7 +85,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
     }, [open, mode, currentLib]);
 
     useEffect(() => {
-        // 当弹窗关闭时，清空所有内部状态
+        // Clear all internal state when modal closes
         if (!open) {
             setModelId('');
             setIsSubmitting(false);
@@ -98,42 +98,42 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
     const [error, setError] = useState({ name: false, desc: false })
 
     const handleCreate = async (e, isImport = false) => {
-        const name = nameRef.current.value || ''; // 名称（默认空字符串，避免null）
-        let desc = descRef.current.value || '';   // 描述（默认空字符串）
+        const name = nameRef.current.value || ''; // Name (default empty string to avoid null)
+        let desc = descRef.current.value || '';   // Description (default empty string)
 
-        // 1. 定义默认描述的"固定文本部分"（不含名称）
-        const defaultDescPrefix = "当回答与";
-        const defaultDescSuffix = "相关的问题时，参考此知识库";
-        // 固定文本总长度 = 前缀长度 + 后缀长度
+        // 1. Define the fixed text part of the default description (excluding name)
+        const defaultDescPrefix = t('defaultDescPrefix');
+        const defaultDescSuffix = t('defaultDescSuffix');
+        // Fixed text total length = prefix length + suffix length
         const fixedTextLength = defaultDescPrefix.length + defaultDescSuffix.length;
-        // 名称可占用的最大长度 = 200 - 固定文本长度（确保名称+固定文本≤200）
+        // Maximum name length allowed = 200 - fixed text length (ensure name + fixed text ≤ 200)
         const maxNameLengthForDefaultDesc = 200 - fixedTextLength;
 
-        // 2. 未输入描述时，生成默认描述（严格控制总长度≤200）
+        // 2. When description is not entered, generate default description (strictly control total length ≤ 200)
         if (!desc) {
-            // 情况1：名称长度 ≤ 可占用最大长度 → 直接拼接生成默认描述
+            // Case 1: Name length ≤ maximum allowable length → directly concatenate to generate default description
             if (name.length <= maxNameLengthForDefaultDesc) {
                 desc = `${defaultDescPrefix}${name}${defaultDescSuffix}`;
             }
-            // 情况2：名称长度 > 可占用最大长度 → 截断名称后再拼接
+            // Case 2: Name length > maximum allowable length → truncate name then concatenate
             else {
                 desc = '';
             }
         }
 
-        // 3. 原有校验逻辑（仅针对用户手动输入的描述，默认描述已确保≤200）
+        // 3. Original validation logic (only for user-entered descriptions, default description already ensures ≤ 200)
         if (!name) {
             handleError(t('lib.enterLibraryName'));
             return;
         }
         if (name.length > 200) {
-            handleError('知识库名称不能超过200字');
+            handleError(t('nameExceedsLimit'));
             return;
         }
 
 
-        // 修复：名称重复校验逻辑
-        // 编辑模式且名称未变更时，不进行重复校验
+        // Fix: Name duplication validation logic
+        // In edit mode and name unchanged, skip duplication check
         const isEditMode = mode === 'edit' && currentLib;
         const nameUnchanged = isEditMode && name === currentLib.name;
 
@@ -414,7 +414,7 @@ export default function KnowledgeFile() {
         }
     }, [])
 
-    const { t, i18n } = useTranslation();
+    const { t, i18n } = useTranslation('knowledge');
     useEffect(() => {
         i18n.loadNamespaces('knowledge');
     }, [i18n]);
@@ -470,15 +470,15 @@ export default function KnowledgeFile() {
             </div>}
             <div className="h-[calc(100vh-128px)] overflow-y-auto pb-20">
                 <div className="flex justify-end gap-4 items-center absolute right-0 top-[-44px]">
-                    <SearchInput placeholder={t('lib.searchPlaceholder')} onChange={(e) => search(e.target.value)} />
-                    <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create')}</Button>
+                    <SearchInput placeholder={t('lib.searchPlaceholder', { ns: 'bs' })} onChange={(e) => search(e.target.value)} />
+                    <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>
                 </div>
                 <Table noScroll>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>{t('lib.libraryName')}</TableHead>
+                            <TableHead>{t('lib.libraryName', { ns: 'bs' })}</TableHead>
                             <TableHead>{t('updateTime')}</TableHead>
-                            <TableHead>{t('lib.createUser')}</TableHead>
+                            <TableHead>{t('lib.createUser', { ns: 'bs' })}</TableHead>
                             <TableHead className="text-right">{t('operations')}</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -636,7 +636,7 @@ export default function KnowledgeFile() {
                 </Table>
             </div>
             <div className="bisheng-table-footer px-6 bg-background-login">
-                <p className="desc">{t('lib.libraryCollection')}</p>
+                <p className="desc">{t('lib.libraryCollection', { ns: 'bs' })}</p>
                 <div>
                     <AutoPagination
                         page={page}

@@ -32,7 +32,7 @@ from bisheng.common.errcode.server import InvalidOperationError, ResourceDownloa
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
-from bisheng.database.models.knowledge import KnowledgeTypeEnum, KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum, KnowledgeDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
     LinsightSessionVersion
 from bisheng.database.models.linsight_sop import LinsightSOPDao, LinsightSOPRecord

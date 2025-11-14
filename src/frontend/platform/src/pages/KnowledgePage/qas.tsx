@@ -234,13 +234,11 @@ export default function QasPage() {
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, refreshData } = useTable({}, (param) =>
         getQaList(id, param).then(res => {
             setHasPermission(res.writeable)
-            // setSelectedItems([]);
-            // setSelectAll(false);
             return res
         })
     )
 
-    // 轮询
+    // Polling effect to check if any item is in processing status
     useEffect(() => {
         const runing = datalist.some(item => item.status === 2)
         if (runing) {
@@ -251,29 +249,24 @@ export default function QasPage() {
         }
     }, [datalist])
 
-    // 修改 useEffect 中处理标题的部分
+    // Modify useEffect to handle title processing
     useEffect(() => {
-        // 处理 window.libname 可能的格式问题
+        // Handle potential format issues with window.libname
         let libName = '';
-        // 检查 window.libname 是否存在且有效
         if (window.libname) {
-            // 处理数组格式（[名称, 描述]）
             if (Array.isArray(window.libname) && window.libname.length > 0) {
                 libName = window.libname[0];
-            }
-            // 处理字符串格式
-            else if (typeof window.libname === 'string') {
+            } else if (typeof window.libname === 'string') {
                 libName = window.libname;
             }
-            // 存储到 localStorage 时只存名称
+            // Store only the name in localStorage
             localStorage.setItem('libname', libName);
-        }
-        // 从 localStorage 获取备份
-        else {
+        } else {
             libName = localStorage.getItem('libname') || '';
         }
-        setTitle(libName || t('unknownKnowledgeBase')); // 提供默认文本
+        setTitle(libName || t('unknownKnowledgeBase')); // Provide default text
     }, []);
+
     const handleEnableSelected = async () => {
         if (!selectedItems.length) return;
 
@@ -284,96 +277,83 @@ export default function QasPage() {
             });
 
             if (itemsToEnable.length === 0) {
-                toast({ variant: 'info', description: '所选项目已经是启用状态' });
+                toast({ variant: 'info', description: t('theSelectedItemsAlreadyEnabled') });
                 return;
             }
 
             refreshData(
                 item => itemsToEnable.includes(item.id),
-                { status: 2 } // 处理中状态
+                { status: 2 } // Processing status
             );
 
-            // 优化：使用Promise.allSettled，避免单个ID失败导致整体中断
             const results = await Promise.allSettled(
-                itemsToEnable.map(id => updateQaStatus(id, 1)) // 1 = 启用
+                itemsToEnable.map(id => updateQaStatus(id, 1)) // 1 = Enable
             );
 
-            // 4. 统计结果（成功/失败）
             const successCount = results.filter(res => res.status === 'fulfilled').length;
             const failedIds = results
                 .filter(res => res.status === 'rejected')
-                .map((res, idx) => itemsToEnable[idx]); // 匹配失败的ID
+                .map((res, idx) => itemsToEnable[idx]);
 
-            // 5. 关键：刷新所有分页数据，同步第二页及以后的状态
             await reload();
-
-            // 6. 操作完成：清空选中项（可选，根据业务需求决定是否保留）
             setSelectedItems([]);
             setSelectAll(false);
 
-            // 7. 结果提示
             if (successCount > 0) {
-                toast({ variant: 'success', description: `成功启用 ${successCount} 个项目` });
+                toast({ variant: 'success', description: t('successfullyEnabled', { count: successCount }) });
             }
             if (failedIds.length > 0) {
                 toast({
                     variant: 'warning',
-                    description: `部分项目启用失败，ID: ${failedIds.join(', ')}`
+                    description: t('someItemsFailedToEnable', { ids: failedIds.join(', ') })
                 });
             }
         } catch (error) {
-            toast({ variant: 'error', description: '批量启用操作异常，请重试' });
+            toast({ variant: 'error', description: t('batchEnableOperationFailed') });
         }
     };
 
-    // 批量禁用勾选的 QA 项
     const handleDisableSelected = async () => {
         if (!selectedItems.length) return;
 
         try {
-            // 1. 筛选所有跨页选中项中“未禁用”的ID
             const itemsToDisable = selectedItems.filter(id => {
                 const item = datalist.find(el => el.id === id);
-                return !item || item.status !== 0; // 0 = 禁用
+                return !item || item.status !== 0; // 0 = Disabled
             });
 
             if (itemsToDisable.length === 0) {
-                toast({ variant: 'info', description: '所选项目已经是禁用状态' });
+                toast({ variant: 'info', description: t('theSelectedItemsAlreadyDisabled') });
                 return;
             }
 
-            // 2. 跨页批量调用API
             const results = await Promise.allSettled(
                 itemsToDisable.map(id => updateQaStatus(id, 0))
             );
 
-            // 3. 统计结果
             const successCount = results.filter(res => res.status === 'fulfilled').length;
             const failedIds = results
                 .filter(res => res.status === 'rejected')
                 .map((res, idx) => itemsToDisable[idx]);
 
-            // 4. 关键：刷新所有数据，同步第二页状态
             await reload();
-
-            // 5. 清空选中项
             setSelectedItems([]);
             setSelectAll(false);
 
-            // 6. 提示
             if (successCount > 0) {
-                toast({ variant: 'success', description: `成功禁用 ${successCount} 个项目` });
+                toast({ variant: 'success', description: t('successfullyDisabled', { count: successCount }) });
             }
             if (failedIds.length > 0) {
                 toast({
                     variant: 'warning',
-                    description: `部分项目禁用失败，ID: ${failedIds.join(', ')}`
+                    description: t('someItemsFailedToDisable', { ids: failedIds.join(', ') })
                 });
             }
         } catch (error) {
-            toast({ variant: 'error', description: '批量禁用操作异常，请重试' });
+            toast({ variant: 'error', description: t('batchDisableOperationFailed') });
         }
     };
+
     const handleCheckboxChange = (id) => {
         setSelectedItems((prevSelectedItems) => {
             if (prevSelectedItems.includes(id)) {
@@ -383,37 +363,33 @@ export default function QasPage() {
             }
         });
     };
+
     useEffect(() => {
-        // 检查当前页的所有项目是否都被选中
         const currentPageIds = datalist.map(item => item.id);
         const isAllSelected = currentPageIds.length > 0 &&
             currentPageIds.every(id => selectedItems.includes(id));
         setSelectAll(isAllSelected);
     }, [datalist, selectedItems]);
-    // 1. 全选/取消全选当前页（支持跨页累加）
+
     const handleSelectAll = () => {
         const currentPageIds = datalist.map(item => item.id);
         setSelectedItems(prev => {
             const newSelected = new Set(prev);
             if (selectAll) {
-                // 取消当前页全选：移除当前页所有ID
                 currentPageIds.forEach(id => newSelected.delete(id));
             } else {
-                // 全选当前页：添加当前页所有ID（去重）
                 currentPageIds.forEach(id => newSelected.add(id));
             }
             return Array.from(newSelected);
         });
     };
 
-    // 2. 计算当前页全选状态（仅判断当前页是否全部被选中）
     useEffect(() => {
         const currentPageIds = datalist.map(item => item.id);
-        // 条件：1. 当前页有数据；2. 当前页所有ID都在跨页选中列表中
         const isCurrentPageAllSelected = currentPageIds.length > 0 &&
             currentPageIds.every(id => selectedItems.includes(id));
-        setSelectAll(isCurrentPageAllSelected); // 仅控制当前页全选框状态
-    }, [datalist, selectedItems]); // 依赖当前页数据和跨页选中列表
+        setSelectAll(isCurrentPageAllSelected);
+    }, [datalist, selectedItems]);
 
     const handleDelete = (id) => {
         bsConfirm({
@@ -431,13 +407,13 @@ export default function QasPage() {
         if (!selectedItems.length) return;
 
         bsConfirm({
-            desc: t('confirmDeleteSelectedQaData', { count: selectedItems.length }), // 显示跨页选中总数
+            desc: t('confirmDeleteSelectedQaData', { count: selectedItems.length }), // Display the total number of selected items
             onOk(next) {
                 captureAndAlertRequestErrorHoc(
-                    deleteQa(selectedItems) // 传入所有跨页选中ID
+                    deleteQa(selectedItems) // Pass all selected IDs
                         .then(res => {
-                            reload(); // 刷新所有数据，同步第二页
-                            setSelectedItems([]); // 清空选中
+                            reload(); // Refresh all data
+                            setSelectedItems([]); // Clear selected items
                             setSelectAll(false);
                         })
                 );
@@ -445,11 +421,11 @@ export default function QasPage() {
             },
         });
     };
+
     const handleStatusClick = async (id: number, checked: boolean) => {
         const targetStatus = checked ? 1 : 0;
         const item = datalist.find(el => el.id === id);
 
-        // 如果状态已经是目标状态，则不执行操作
         if (item && item.status === targetStatus) {
             return;
         }
@@ -487,35 +463,35 @@ export default function QasPage() {
                         </div>
                     </div>
                     <div className={selectedItems.length ? 'visible' : 'invisible'}>
-                        <Tip content={!hasPermission && '暂无操作权限'} side='top'>
+                        <Tip content={!hasPermission && t('noOperationPermission')} side='top'>
                             <Button variant="outline" className="disabled:pointer-events-auto ml-2" disabled={!hasPermission} onClick={handleDeleteSelected}>
-                                <Trash2 className="mr-2 h-4 w-4" ></Trash2>  {t('delete')}
+                                <Trash2 className="mr-2 h-4 w-4" ></Trash2> {t('delete')}
                             </Button>
                         </Tip>
-                        <Tip content={!hasPermission && '暂无操作权限'} side='top'>
+                        <Tip content={!hasPermission && t('noOperationPermission')} side='top'>
                             <Button variant="outline" className="disabled:pointer-events-auto ml-2" disabled={!hasPermission} onClick={handleDisableSelected}>
-                                <SquareX className="mr-2 h-4 w-4" /> 禁用
+                                <SquareX className="mr-2 h-4 w-4" /> {t('disable')}
                             </Button>
                         </Tip>
-                        <Tip content={!hasPermission && '暂无操作权限'} side='top'>
+                        <Tip content={!hasPermission && t('noOperationPermission')} side='top'>
                             <Button variant="outline" className="disabled:pointer-events-auto ml-2" disabled={!hasPermission} onClick={handleEnableSelected}>
-                                <SquareCheckBig className="mr-2 h-4 w-4" /> 启用
+                                <SquareCheckBig className="mr-2 h-4 w-4" /> {t('enable')}
                             </Button>
                         </Tip>
                     </div>
                     <div className="flex justify-between items-center mb-4">
                         <div className="flex gap-4 items-center">
                             <SearchInput placeholder={t('qaContent')} onChange={(e) => search(e.target.value)}></SearchInput>
-                            <Tip content={!hasPermission && '暂无操作权限'} side='top'>
-                                <Button variant="outline" disabled={!hasPermission} className="disabled:pointer-events-auto px-8" onClick={() => importRef.current.open()}>导入</Button>
+                            <Tip content={!hasPermission && t('noOperationPermission')} side='top'>
+                                <Button variant="outline" disabled={!hasPermission} className="disabled:pointer-events-auto px-8" onClick={() => importRef.current.open()}>{t('import')}</Button>
                             </Tip>
                             <Button variant="outline" className="px-8" onClick={() => {
                                 getQaFile(id).then(res => {
                                     const fileUrl = res.file_list[0];
                                     downloadFile(checkSassUrl(fileUrl), `${title} ${formatDate(new Date(), 'yyyy-MM-dd')}.xlsx`);
                                 })
-                            }}>导出</Button>
-                            <Tip content={!hasPermission && '暂无操作权限'} side='top'>
+                            }}>{t('export')}</Button>
+                            <Tip content={!hasPermission && t('noOperationPermission')} side='top'>
                                 <Button className="disabled:pointer-events-auto px-8" disabled={!hasPermission} onClick={() => editRef.current.open()}>{t('createQA')}</Button>
                             </Tip>
                         </div>
@@ -531,16 +507,14 @@ export default function QasPage() {
                                 <TableHead className="w-[340px]">{t('question')}</TableHead>
                                 <TableHead className="w-[340px]">{t('answer')}</TableHead>
                                 <TableHead>{t('type')}</TableHead>
-                                {/* <TableHead>{t('creationTime')}</TableHead> */}
                                 <TableHead>{t('updateTime')}</TableHead>
-                                <TableHead>{t('创建用户')}</TableHead>
+                                <TableHead>{t('createUser')}</TableHead>
                                 <TableHead className="text-right pr-6">{t('operations')}</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {datalist.map(el => (
                                 <TableRow key={el.id} className={hasPermission ? "hover:bg-gray-100" : ""}>
-                                    {/* 勾选框单元格 - 阻止事件冒泡 */}
                                     <TableCell className="font-medium" onClick={(e) => e.stopPropagation()}>
                                         <Checkbox
                                             checked={selectedItems.includes(el.id)}
@@ -549,7 +523,6 @@ export default function QasPage() {
                                         />
                                     </TableCell>
 
-                                    {/* 问题单元格 - 可点击编辑 */}
                                     <TableCell
                                         className="font-medium cursor-pointer"
                                         onClick={() => hasPermission && editRef.current.edit(el)}
@@ -559,7 +532,6 @@ export default function QasPage() {
                                         </div>
                                     </TableCell>
 
-                                    {/* 答案单元格 - 可点击编辑 */}
                                     <TableCell
                                         className="font-medium cursor-pointer"
                                         onClick={() => hasPermission && editRef.current.edit(el)}
@@ -569,14 +541,12 @@ export default function QasPage() {
                                         </div>
                                     </TableCell>
 
-                                    {/* 其他内容单元格 - 可点击编辑 */}
                                     <TableCell
                                         className="cursor-pointer"
                                         onClick={() => hasPermission && editRef.current.edit(el)}
                                     >
                                         {['未知', '手动创建', '标注导入', 'api导入', '批量导入'][el.source]}
                                     </TableCell>
-                                    {/* <TableCell>{el.create_time.replace('T', ' ')}</TableCell> */}
                                     <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                                     <TableCell>{el.user_name}</TableCell>
                                     <TableCell className="text-right">
@@ -584,7 +554,7 @@ export default function QasPage() {
                                             <div className="flex items-center">
                                                 {el.status !== 2 && (
                                                     <Tip
-                                                        content={!hasPermission && '暂无操作权限'}
+                                                        content={!hasPermission && t('noOperationPermission')}
                                                         side='top'>
                                                         <div>
                                                             <Switch
@@ -597,14 +567,14 @@ export default function QasPage() {
                                                     </Tip>
                                                 )}
                                                 {el.status === 2 && (
-                                                    <span className="text-sm">处理中</span>
+                                                    <span className="text-sm">{t('processing')}</span>
                                                 )}
                                                 {el.status === 3 && (
-                                                    <span className="text-sm">未启用，请重试</span>
+                                                    <span className="text-sm">{t('notEnabled')}</span>
                                                 )}
                                             </div>
                                             <Tip
-                                                content={!hasPermission && '暂无操作权限'}
+                                                content={!hasPermission && t('noOperationPermission')}
                                                 styleClasses="-translate-x-6"
                                                 side='top'>
                                                 <Button
@@ -640,6 +610,6 @@ export default function QasPage() {
             </div>
             <EditQa ref={editRef} knowlageId={id} onChange={reload} />
             <ImportQa ref={importRef} knowlageId={id} onChange={reload} />
-        </div >
+        </div>
     );
 }

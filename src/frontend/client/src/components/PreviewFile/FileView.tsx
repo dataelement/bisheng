@@ -245,6 +245,7 @@ export default function FileView({
     const listRef = useRef(null)
     const [boxSize, setBoxSize] = useState({ width: 0, height: 0 })
     const [loading, setLoading] = useState(false)
+    const [notFound, setNotFound] = useState(false)
 
     // 视口
     useEffect(() => {
@@ -288,6 +289,10 @@ export default function FileView({
             pageScale = Math.min(pageScale, viewport.width / viewport.height)
             setPdf(pdfDocument)
             setLoading(false)
+            setNotFound(false)
+        }).catch(e => {
+            console.log('e :>> ', e);
+            setNotFound(true)
         })
     }, [fileUrl])
 
@@ -360,23 +365,25 @@ export default function FileView({
         onContextMenu={(e) => e.preventDefault()}
     >
         {
-            loading
-                ? <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                    <LoadingIcon />
-                </div>
-                : <div id="warp-pdf" className="file-view absolute">
-                    <List
-                        ref={listRef}
-                        itemCount={pdf?.numPages || 100}
-                        itemSize={boxSize.width / pageScale}
-                        // 滚动区盒子大小
-                        width={boxSize.width}
-                        height={boxSize.height}
-                        onScroll={handleScroll}
-                    >
-                        {itemRenderer}
-                    </List>
-                </div>
+            notFound
+                ? <div className="flex h-full items-center justify-center text-gray-500 dark:text-gray-400 text-lg">源文件不存在</div> :
+                loading
+                    ? <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+                        <LoadingIcon />
+                    </div>
+                    : <div id="warp-pdf" className="file-view absolute">
+                        <List
+                            ref={listRef}
+                            itemCount={pdf?.numPages || 100}
+                            itemSize={boxSize.width / pageScale}
+                            // 滚动区盒子大小
+                            width={boxSize.width}
+                            height={boxSize.height}
+                            onScroll={handleScroll}
+                        >
+                            {itemRenderer}
+                        </List>
+                    </div>
         }
         {select && <DragPanne onMouseEnd={hanleDragSelectLabel} />}
     </div>

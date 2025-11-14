@@ -208,6 +208,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             }
         }
         const currentMessage = messages[currentMessageIndex]
+        if (!currentMessage) return
         // deepseek
         let message = ''
         let reasoning_log = currentMessage.reasoning_log

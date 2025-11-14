@@ -1,23 +1,23 @@
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import StepProgress from "@/components/bs-ui/step";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { rebUploadFile, retryKnowledgeFileApi, subUploadLibFile } from "@/controllers/API";
+import { rebUploadFile, retryKnowledgeFileApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ChevronLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import DialogWithRepeatFiles from "./components/DuplicateFileDialog";
 import FileUploadStep2 from "./components/FileUploadStep2";
 import FileUploadStep4 from "./components/FileUploadStep4";
 import PreviewResult from "./components/PreviewResult";
-import { LoadingIcon } from "@/components/bs-icons/loading";
 
-// 调整模式固定步骤标签（3步）
-const AdjustStepLabels = [
-  '分段策略',
-  '原文对比',
-  '数据处理'
+// Adjustment mode fixed step labels (3 steps)
+const getAdjustStepLabels = (t) => [
+  t('segmentStrategy'),
+  t('textComparison'),
+  t('dataProcessing')
 ];
 
 export default function AdjustFilesUpload() {
@@ -27,22 +27,22 @@ export default function AdjustFilesUpload() {
   const { message } = useToast();
   const { fileId: knowledgeId } = useParams();
 
-  // 从路由状态获取调整模式的初始数据（必须传文件数据）
+  // Get initial data for adjustment mode from route state (must pass file data)
   const initFileData = location.state?.fileData;
   useEffect(() => {
-    // 如果没有初始化数据，说明是直接访问，跳转到/filelib
+    // If no initialization data, it means direct access, redirect to /filelib
     if (!initFileData) {
       navigate('/filelib', { replace: true });
     }
   }, [initFileData, navigate]);
   if (!initFileData) {
-    navigate(-1); // 无数据时回退
+    navigate(-1); // Roll back when no data
     return null;
   }
-  // 调整模式专属状态
+  // Adjustment mode exclusive state
   const [currentStep, setCurrentStep] = useState(1);
   const getParsedSplitRule = (rawSplitRule) => {
-    // 处理无 split_rule 或为空的情况
+    // Handle no split_rule or empty case
     if (!rawSplitRule) {
       return {
         knowledge_id: "",
@@ -64,27 +64,27 @@ export default function AdjustFilesUpload() {
     }
 
     try {
-      // 解析 JSON 字符串
+      // Parse JSON string
       const parsed = JSON.parse(rawSplitRule);
-      // 格式适配：统一字段格式，避免子组件处理
+      // Format adaptation: Unify field format to avoid child component processing
       return {
-        knowledge_id: parsed.knowledge_id || "", // 知识库ID
-        // 分隔符：确保是数组，默认双换行+单换行
+        knowledge_id: parsed.knowledge_id || "", // Knowledge base ID
+        // Separator: Ensure it's an array, default double newline + single newline
         separator: Array.isArray(parsed.separator) ? parsed.separator : ["\\n\\n", "\\n"],
-        // 分隔符规则：确保与 separator 长度一致，默认 after
+        // Separator rule: Ensure consistent length with separator, default after
         separator_rule: Array.isArray(parsed.separator_rule)
           ? parsed.separator_rule
           : ["after", "after"],
-        // chunk大小：数字转字符串（子组件用字符串格式），默认1000
+        // Chunk size: Convert number to string (child component uses string format), default 1000
         chunk_size: parsed.chunk_size ?? 1000,
-        // 重叠大小：默认100
+        // Overlap size: Default 100
         chunk_overlap: parsed.chunk_overlap ?? 100,
-        // 布尔值转换：0→false，1→true，默认false
+        // Boolean conversion: 0→false, 1→true, default false
         retain_images: parsed.retain_images === 1,
         force_ocr: parsed.force_ocr === 1,
         enable_formula: parsed.enable_formula === 1,
         filter_page_header_footer: parsed.filter_page_header_footer === 1,
-        // 表格规则：默认值兜底
+        // Table rules: Default value fallback
         excel_rule: {
           slice_length: parsed.excel_rule?.slice_length || 10,
           append_header: parsed.excel_rule?.append_header === 1,
@@ -93,8 +93,8 @@ export default function AdjustFilesUpload() {
         }
       };
     } catch (error) {
-      // 解析失败时返回默认配置，避免崩溃
-      console.error("split_rule 解析失败：", error);
+      // Return default config when parsing fails to avoid crash
+      console.error("split_rule parse failed:", error);
       return {
         knowledge_id: "",
         separator: ["\\n\\n", "\\n"],
@@ -121,12 +121,12 @@ export default function AdjustFilesUpload() {
   const [resultFiles, setResultFiles] = useState([
     {
       id: initFileData.id,
-      fileName: initFileData.name || initFileData.file_name, // 兼容字段名
-      file_path: initFileData.filePath || initFileData.object_name, // 兼容文件路径
-      suffix: initFileData.suffix || initFileData.file_name?.split(".").pop() || "", // 解析后缀
+      fileName: initFileData.name || initFileData.file_name, // Compatible field name
+      file_path: initFileData.filePath || initFileData.object_name, // Compatible file path
+      suffix: initFileData.suffix || initFileData.file_name?.split(".").pop() || "", // Parse suffix
       previewUrl: initFileData.previewUrl,
       fileType: fileType,
-      split_rule: getParsedSplitRule(initFileData.split_rule), // 传入转换后的配置对象
+      split_rule: getParsedSplitRule(initFileData.split_rule), // Pass converted config object
       isEtl4lm: initFileData.fileType,
     }
   ]);
@@ -137,13 +137,13 @@ export default function AdjustFilesUpload() {
   const [repeatFiles, setRepeatFiles] = useState([]);
   const [retryLoad, setRetryLoad] = useState(false);
 
-  // Ref管理
+  // Ref management
   const fileUploadStep2Ref = useRef(null);
   const _tempConfigRef = useRef({});
   const submittingRef = useRef(false);
   const repeatCallBackRef = useRef(() => setCurrentStep(3));
 
-  // 步骤2：分段策略完成，接收配置并跳转步骤2（原文对比）
+  // Step 2: Segmentation strategy completed, receive config and jump to step 2 (original text comparison)
   const handleStep2Next = (step, config) => {
     if (config) {
       setSegmentRules(config);
@@ -151,21 +151,21 @@ export default function AdjustFilesUpload() {
     setCurrentStep(2);
   };
 
-  // 步骤2：原文对比回调，控制下一步按钮禁用状态
+  // Step 2: Original text comparison callback, control next button disabled state
   const handlePreviewResult = (isSuccess) => {
     setIsNextDisabled(!isSuccess);
   };
 
-  // 下一步：按当前步骤跳转
+  // Next: Jump based on current step
   const handleNext = () => {
     switch (currentStep) {
-      case 1: // 步骤1→步骤2（分段→对比）
+      case 1: // Step 1 → Step 2 (segment → compare)
         if (fileUploadStep2Ref.current) {
           fileUploadStep2Ref.current.handleNext();
         }
         break;
-      case 2: // 步骤2→步骤3（对比→处理）
-        // 修复：先保存配置，成功后再跳转步骤3（移除提前setCurrentStep）
+      case 2: // Step 2 → Step 3 (compare → process)
+        // Fix: Save config first, then jump to step 3 after success (removed premature setCurrentStep)
         if (segmentRules) {
           handleSave(segmentRules);
         }
@@ -175,7 +175,7 @@ export default function AdjustFilesUpload() {
     }
   };
 
-  // 上一步：按当前步骤回退
+  // Previous: Rollback based on current step
   const handleBack = () => {
     switch (currentStep) {
       case 1:
@@ -192,14 +192,14 @@ export default function AdjustFilesUpload() {
     }
   };
 
-  // API：保存分段策略配置（核心修复点）
+  // API: Save segmentation strategy config (core fix point)
   const handleSave = (_config) => {
     if (submittingRef.current) return;
     submittingRef.current = true;
     setIsSubmitting(true);
 
     /**
-     * 将 UI 可见的换行转义("\\n")还原为真实换行("\n")
+     * Convert UI-visible newline escape sequences ("\\n") back to real newlines ("\n")
      */
     const normalizeSeparators = (arr) =>
       (arr || []).map((s) =>
@@ -224,24 +224,24 @@ export default function AdjustFilesUpload() {
       rebUploadFile(apiConfig)
         .then(res => {
 
-          // 1. 修复重复文件判断（单个对象处理）
+          // 1. Fix duplicate file check (single object processing)
           const _repeatFiles = res.status === 3 ? [res] : [];
           if (_repeatFiles.length) {
             setRepeatFiles(_repeatFiles);
-            return; // 有重复文件时不跳转步骤
+            return; // Don't jump steps when there are duplicate files
           }
 
-          // 2. 修复文件ID更新（直接使用res.id，无需数组索引）
+          // 2. Fix file ID update (directly use res.id, no need for array index)
           setResultFiles(prevFiles =>
             prevFiles.map(file => ({
               ...file,
-              fileId: res.id // 关键修复：单个对象直接取id
+              fileId: res.id // Key fix: Single object directly get id
             }))
           );
 
-          // 3. 修复步骤跳转时机（确保数据更新后再跳转）
-          message({ variant: 'success', description: t('调整分段策略成功') });
-          setCurrentStep(3); // 只有成功且无重复时才跳转
+          // 3. Fix step jump timing (ensure data is updated before jumping)
+          message({ variant: 'success', description: t('adjustSegmentStrategySuccess') });
+          setCurrentStep(3); // Only jump when successful and no duplicates
         })
         .finally(() => {
           submittingRef.current = false;
@@ -266,27 +266,32 @@ export default function AdjustFilesUpload() {
     captureAndAlertRequestErrorHoc(
       retryKnowledgeFileApi(params)
         .then(res => {
-          // 补充：更新覆盖后的文件ID
+          // Additional: Update file ID after overwrite
           setResultFiles(prevFiles =>
             prevFiles.map(file => ({
               ...file,
-              fileId: res.id // 假设retry接口也返回单个对象带id
+              fileId: res.id // Assume retry API also returns single object with id
             }))
           );
           setRepeatFiles([]);
           setRetryLoad(false);
-          message({ variant: 'success', description: t('解析成功') });
+          message({ variant: 'success', description: t('parseSuccess') });
           repeatCallBackRef.current();
         })
         .catch(() => {
-          setRetryLoad(false); // 错误时也需停止加载
+          setRetryLoad(false); // Also need to stop loading on error
         })
     );
   };
 
+  const handleUnRetry = () => {
+    setRepeatFiles([]);
+    repeatCallBackRef.current();
+  }
+
   return (
     <div className="relative h-full flex flex-col">
-      {/* 顶部返回栏 */}
+      {/* Top return bar */}
       <div className="pt-4 px-4">
         <div className="flex items-center mb-4">
           <Button
@@ -297,18 +302,18 @@ export default function AdjustFilesUpload() {
           >
             <ChevronLeft />
           </Button>
-          <span className="text-foreground text-sm font-black pl-4">返回知识库详情</span>
+          <span className="text-foreground text-sm font-black pl-4">{t('backToKnowledgeDetail')}</span>
         </div>
 
-        {/* 调整模式步骤条 */}
+        {/* Adjustment mode step progress */}
         <StepProgress
           align="center"
           currentStep={currentStep}
-          labels={AdjustStepLabels.map(label => t(label))}
+          labels={getAdjustStepLabels(t)}
         />
       </div>
 
-      {/* 步骤内容区域 */}
+      {/* Step content area */}
       <div className="flex flex-1 px-4">
         <div className="w-full">
           <div className="h-full py-4">
@@ -324,7 +329,7 @@ export default function AdjustFilesUpload() {
                 isAdjustMode
               />
             </div>
-            {/* 步骤2：原文对比 */}
+            {/* Step 2: Original text comparison */}
             {currentStep === 2 && segmentRules && (
               <div className="block">
                 <PreviewResult
@@ -341,7 +346,7 @@ export default function AdjustFilesUpload() {
                   isAdjustMode
                 />
 
-                {/* 步骤2底部按钮 */}
+                {/* Step 2 bottom buttons */}
                 <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
                   <Button
                     className="h-8"
@@ -361,7 +366,7 @@ export default function AdjustFilesUpload() {
                 </div>
               </div>
             )}
-            {/* 步骤3：数据处理 */}
+            {/* Step 3: Data processing */}
             {currentStep === 3 && (
               <FileUploadStep4 data={resultFiles} kId={knowledgeId} isAdjustMode />
             )}
@@ -369,32 +374,15 @@ export default function AdjustFilesUpload() {
         </div>
       </div>
 
-      {/* 重复文件提醒弹窗 */}
-      <Dialog open={!!repeatFiles.length} onOpenChange={b => !b && setRepeatFiles([])}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>{t('modalTitle')}</DialogTitle>
-            <DialogDescription>{t('adjustModalMessage')}</DialogDescription>
-          </DialogHeader>
-          <ul className="overflow-y-auto max-h-[400px] py-2">
-            {repeatFiles.map(el => (
-              <li key={el.id} className="py-1 text-red-500 text-sm">{el.remark}</li>
-            ))}
-          </ul>
-          <DialogFooter>
-            <Button className="h-8" variant="outline" onClick={() => {
-              setRepeatFiles([]);
-              repeatCallBackRef.current();
-            }}>
-              {t('keepOriginal')}
-            </Button>
-            <Button className="h-8" disabled={retryLoad} onClick={() => handleRetry(repeatFiles)}>
-              {retryLoad && <span className="loading loading-spinner loading-xs mr-1"></span>}
-              {t('override')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Duplicate file reminder dialog */}
+      <DialogWithRepeatFiles
+        repeatFiles={repeatFiles}
+        setRepeatFiles={setRepeatFiles}
+        unRetry={handleUnRetry}
+        onRetry={handleRetry}
+        retryLoad={retryLoad}
+        t={t}
+      />
     </div>
   );
 }

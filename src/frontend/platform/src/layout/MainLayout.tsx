@@ -12,17 +12,16 @@ import {
     SystemIcon,
     TechnologyIcon
 } from "@/components/bs-icons";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { DatasetIcon } from "@/components/bs-icons/menu/dataset";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
 import { locationContext } from "@/contexts/locationContext";
 import i18next from "i18next";
 import { ChevronDown, Globe, Lock, MoonStar, Sun } from "lucide-react";
-import { useContext, useEffect, useMemo, useState } from "react";
-import { ErrorBoundary } from "react-error-boundary";
+import { Suspense, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
-import CrashErrorComponent from "../components/CrashErrorComponent";
 import { Separator } from "../components/bs-ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/bs-ui/tooltip";
 import { darkContext } from "../contexts/darkContext";
@@ -226,12 +225,9 @@ export default function MainLayout() {
                     </div>}
                 </div>
                 <div className="flex-1 bg-background-main-content rounded-lg w-[calc(100vw-184px)]">
-                    <ErrorBoundary
-                        onReset={() => window.location.href = window.location.href}
-                        FallbackComponent={CrashErrorComponent}
-                    >
+                    <Suspense fallback={<div className="flex items-center justify-center h-full"><LoadingIcon /></div>}>
                         <Outlet />
-                    </ErrorBoundary>
+                    </Suspense>
                 </div>
             </div>
         </div>
