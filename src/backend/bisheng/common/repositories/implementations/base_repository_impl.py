@@ -33,12 +33,12 @@ class BaseRepositoryImpl(BaseRepository[T, ID]):
 
     async def find_by_id(self, entity_id: ID) -> Optional[T]:
         """根据ID查找实体"""
-        entity = await self.session.get_one(entity=self.model_class, ident=entity_id)
+        entity = await self.session.get(self.model_class, entity_id)
         return entity
 
     def find_by_id_sync(self, entity_id: ID) -> Optional[T]:
         """同步根据ID查找实体"""
-        entity = self.session.get_one(entity=self.model_class, ident=entity_id)
+        entity = self.session.get(self.model_class, entity_id)
         return entity
 
     async def find_one(self, **filters) -> Optional[T]:

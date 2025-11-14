@@ -784,15 +784,15 @@ class KnowledgeService(KnowledgeUtils):
                     }
                 ],
                 "post_filter": {
-                    "terms": {"metadata.file_id": [one.id for one in files]}
+                    "terms": {"metadata.document_id": [one.id for one in files]}
                 },
-                "collapse": {"field": "metadata.file_id"},
+                "collapse": {"field": "metadata.document_id"},
             }
             es_res = es_client.client.search(
                 index=db_knowledge.index_name, body=search_data
             )
             for one in es_res["hits"]["hits"]:
-                file_title_map[str(one["_source"]["metadata"]["file_id"])] = one["_source"]["metadata"]["title"]
+                file_title_map[str(one["_source"]["metadata"]["document_id"])] = one["_source"]["metadata"]["title"]
         except Exception as e:
             # maybe es index not exist so ignore this error
             logger.warning(f"act=get_knowledge_files error={str(e)}")
@@ -930,7 +930,7 @@ class KnowledgeService(KnowledgeUtils):
             "size": limit,
             "sort": [
                 {
-                    "metadata.file_id": {
+                    "metadata.document_id": {
                         "order": "desc",
                         "missing": 0,
                         "unmapped_type": "long",
@@ -946,7 +946,7 @@ class KnowledgeService(KnowledgeUtils):
             ],
         }
         if file_ids:
-            search_data["post_filter"] = {"terms": {"metadata.file_id": file_ids}}
+            search_data["post_filter"] = {"terms": {"metadata.document_id": file_ids}}
         if keyword:
             search_data["query"] = {"match_phrase": {"text": keyword}}
         try:
@@ -959,13 +959,13 @@ class KnowledgeService(KnowledgeUtils):
         file_ids = set()
         result = []
         for one in res["hits"]["hits"]:
-            file_ids.add(one["_source"]["metadata"]["file_id"])
+            file_ids.add(one["_source"]["metadata"]["document_id"])
         file_map = {}
         if file_ids:
             file_list = KnowledgeFileDao.get_file_by_ids(list(file_ids))
             file_map = {one.id: one for one in file_list}
         for one in res["hits"]["hits"]:
-            file_id = one["_source"]["metadata"]["file_id"]
+            file_id = one["_source"]["metadata"]["document_id"]
             file_info = file_map.get(file_id, None)
             # 过滤文件名和总结的文档摘要内容
             result.append(
@@ -1006,7 +1006,7 @@ class KnowledgeService(KnowledgeUtils):
         embeddings = decide_embeddings(db_knowledge.model)
 
         logger.info(
-            f"act=update_vector knowledge_id={knowledge_id} file_id={file_id} chunk_index={chunk_index}"
+            f"act=update_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}"
         )
         vector_client = decide_vectorstores(
             db_knowledge.collection_name, "Milvus", embeddings
@@ -1015,7 +1015,7 @@ class KnowledgeService(KnowledgeUtils):
         output_fields = ["pk"]
         output_fields.extend(list(FileChunkMetadata.model_fields.keys()))
         res = vector_client.col.query(
-            expr=f"file_id == {file_id} && chunk_index == {chunk_index}",
+            expr=f"document_id == {file_id} && chunk_index == {chunk_index}",
             output_fields=output_fields,
             timeout=10,
         )
@@ -1038,7 +1038,7 @@ class KnowledgeService(KnowledgeUtils):
         logger.info(f"act=update_vector_over {res}")
 
         logger.info(
-            f"act=update_es knowledge_id={knowledge_id} file_id={file_id} chunk_index={chunk_index}"
+            f"act=update_es knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}"
         )
         es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
         res = es_client.client.update_by_query(
@@ -1046,7 +1046,7 @@ class KnowledgeService(KnowledgeUtils):
             body={
                 "query": {
                     "bool": {
-                        "must": {"match": {"metadata.file_id": file_id}},
+                        "must": {"match": {"metadata.document_id": file_id}},
                         "filter": {"match": {"metadata.chunk_index": chunk_index}},
                     }
                 },
@@ -1085,26 +1085,26 @@ class KnowledgeService(KnowledgeUtils):
         embeddings = FakeEmbedding()
 
         logger.info(
-            f"act=delete_vector knowledge_id={knowledge_id} file_id={file_id} chunk_index={chunk_index}"
+            f"act=delete_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}"
         )
         vector_client = decide_vectorstores(
             db_knowledge.collection_name, "Milvus", embeddings
         )
         res = vector_client.col.delete(
-            expr=f"file_id == {file_id} && chunk_index == {chunk_index}",
+            expr=f"document_id == {file_id} && chunk_index == {chunk_index}",
             timeout=10,
         )
         logger.info(f"act=delete_vector_over {res}")
 
         logger.info(
-            f"act=delete_es knowledge_id={knowledge_id} file_id={file_id} chunk_index={chunk_index} res={res}"
+            f"act=delete_es knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index} res={res}"
         )
         es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
         res = es_client.client.delete_by_query(
             index=index_name,
             query={
                 "bool": {
-                    "must": {"match": {"metadata.file_id": file_id}},
+                    "must": {"match": {"metadata.document_id": file_id}},
                     "filter": {"match": {"metadata.chunk_index": chunk_index}},
                 }
             },

@@ -930,7 +930,8 @@ async def delete_metadata_fields(*,
         UnifiedResponseModel
     """
 
-    knowledge_model = await knowledge_service.delete_metadata_fields(login_user, knowledge_id, field_names)
+    knowledge_model = await knowledge_service.delete_metadata_fields(login_user, knowledge_id, field_names,
+                                                                     background_tasks)
 
     return resp_200(data=knowledge_model)
 

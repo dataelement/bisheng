@@ -1,3 +1,4 @@
+import copy
 from datetime import datetime
 
 from fastapi import BackgroundTasks
@@ -40,12 +41,15 @@ class KnowledgeService:
         if knowledge_model.metadata_fields is None:
             knowledge_model.metadata_fields = []
 
-        existing_field_names = {field.field_name for field in knowledge_model.metadata_fields}
+        existing_field_names = {field["field_name"] for field in knowledge_model.metadata_fields}
 
+        metadata_fields = copy.deepcopy(knowledge_model.metadata_fields)
         # Add new metadata fields, avoiding duplicates
         for field in add_metadata_fields.metadata_fields:
             if field.field_name not in existing_field_names:
-                knowledge_model.metadata_fields.append(field.model_dump())
+                metadata_fields.append(field.model_dump())
+
+        knowledge_model.metadata_fields = metadata_fields
 
         knowledge_model = await self.knowledge_repository.update(knowledge_model)
 
@@ -144,11 +148,21 @@ class KnowledgeService:
             for field_update in update_metadata_fields.metadata_fields
         }
 
+        existing_field_names = {field["field_name"] for field in knowledge_model.metadata_fields}
+
+        # Check if all old field names exist and new field names do not exist
+        for old_field_name in field_name_map.keys():
+            if old_field_name not in existing_field_names or field_name_map[old_field_name] in existing_field_names:
+                return knowledge_model
+
+        metadata_fields = copy.deepcopy(knowledge_model.metadata_fields)
+
         # Update metadata field names
-        for field in knowledge_model.metadata_fields:
-            if field['field_name'] in field_name_map:
-                field['field_name'] = field_name_map[field['field_name']]
-                field['updated_at'] = int(datetime.now().timestamp())
+        for i, field in enumerate(metadata_fields):
+            if field["field_name"] in field_name_map:
+                metadata_fields[i]["field_name"] = field_name_map[field["field_name"]]
+
+        knowledge_model.metadata_fields = metadata_fields
 
         knowledge_model = await self.knowledge_repository.update(knowledge_model)
 
@@ -245,10 +259,12 @@ class KnowledgeService:
             return knowledge_model  # No metadata fields to delete
 
         # Filter out metadata fields to be deleted
-        knowledge_model.metadata_fields = [
+        metadata_fields = [
             field for field in knowledge_model.metadata_fields
             if field['field_name'] not in field_names
         ]
+
+        knowledge_model.metadata_fields = metadata_fields
 
         knowledge_model = await self.knowledge_repository.update(knowledge_model)
 
