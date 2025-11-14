@@ -873,6 +873,25 @@ def update_knowledge_model(*,
         return resp_500(message=f"重建知识库失败: {str(e)}")
 
 
+@router.get("/file/info/{file_id}", description="获取知识库文件信息", response_model=UnifiedResponseModel)
+async def get_knowledge_file_info(*,
+                                    login_user: UserPayload = Depends(get_login_user),
+                                    file_id: int,
+                                    knowledge_file_service=Depends(get_knowledge_file_service)):
+    """
+    获取知识库文件信息
+    Args:
+        login_user:
+        file_id:
+        knowledge_file_service:
+
+    Returns:
+
+    """
+
+    knowledge_file_model = await knowledge_file_service.get_knowledge_file_info(login_user, file_id)
+    return resp_200(data=knowledge_file_model)
+
 # 为知识库添加元数据字段
 @router.post('/add_metadata_fields', description="为知识库添加元数据字段", response_model=UnifiedResponseModel)
 async def add_metadata_fields(*,

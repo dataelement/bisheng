@@ -18,6 +18,25 @@ class KnowledgeFileService:
         self.knowledge_file_repository = knowledge_file_repository
         self.knowledge_repository = knowledge_repository
 
+    async def get_knowledge_file_info(self, login_user: 'UserPayload', knowledge_file_id: int):
+        """获取知识文件信息"""
+        knowledge_file_model = await self.knowledge_file_repository.find_by_id(
+            entity_id=knowledge_file_id)
+
+        if not knowledge_file_model:
+            raise KnowledgeFileNotExistError()
+
+        knowledge_model = await self.knowledge_repository.find_by_id(
+            entity_id=knowledge_file_model.knowledge_id)
+
+        # Permission check
+        if not await login_user.async_access_check(
+                knowledge_model.user_id, str(knowledge_file_model.knowledge_id), AccessType.KNOWLEDGE
+        ):
+            raise UnAuthorizedError()
+
+        return knowledge_file_model
+
     @staticmethod
     async def modify_milvus_file_user_metadata(knowledge_model, knowledge_file_id, user_metadata: dict):
         """修改 Milvus 中文件的用户元数据"""
