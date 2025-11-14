@@ -79,34 +79,36 @@ class KnowledgeFileService:
 
         # Initialize metadata if it's None
         if knowledge_file_model.user_metadata is None:
-            knowledge_file_model.user_metadata = {}
+            knowledge_file_model.user_metadata = []
 
         # 判断新增的元数据字段是否在知识库的元数据字段列表中
         existing_field_names = {field['field_name'] for field in knowledge_model.metadata_fields or []}
 
         # 过滤掉不在知识库元数据字段列表中的字段
-        valid_user_metadata = {
-            item.field_name: item.field_value
+        valid_user_metadata = [
+            item.model_dump()
             for item in modify_file_metadata_req.user_metadata_list
             if item.field_name in existing_field_names
-        }
+        ]
 
         # 更新知识文件的用户元数据
-        knowledge_file_model.user_metadata.update(valid_user_metadata)
+        knowledge_file_model.user_metadata = valid_user_metadata
 
         knowledge_file_model = await self.knowledge_file_repository.update(knowledge_file_model)
+
+        user_metadata = {item['field_name']: item.get('field_value') for item in knowledge_file_model.user_metadata}
 
         # 修改 Milvus, Elasticsearch 中的对应元数据
         await self.modify_milvus_file_user_metadata(
             knowledge_model=knowledge_model,
             knowledge_file_id=knowledge_file_model.id,
-            user_metadata=knowledge_file_model.user_metadata
+            user_metadata=user_metadata
         )
 
         await self.modify_elasticsearch_file_user_metadata(
             knowledge_model=knowledge_model,
             knowledge_file_id=knowledge_file_model.id,
-            user_metadata=knowledge_file_model.user_metadata
+            user_metadata=user_metadata
         )
 
         return knowledge_file_model

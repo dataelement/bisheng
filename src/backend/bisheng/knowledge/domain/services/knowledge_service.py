@@ -51,7 +51,7 @@ class KnowledgeService:
 
         return knowledge_model
 
-    # TODO: Update Milvus and Elasticsearch metadata field names
+    #  Update Milvus and Elasticsearch metadata field names
     async def update_vectorstore_metadata_field_names(self, knowledge_model, field_name_map):
         """Update metadata field names in Milvus and Elasticsearch vector stores."""
         # Update Milvus metadata field names
@@ -112,6 +112,14 @@ class KnowledgeService:
                 }
             )
 
+            # Update knowledge file's user_metadata field
+            for item in knowledge_file.user_metadata:
+                if item['field_name'] in field_name_map:
+                    item['field_name'] = field_name_map[item['field_name']]
+                    item['updated_at'] = int(datetime.now().timestamp())
+
+            await self.knowledge_file_repository.update(knowledge_file)
+
     async def update_metadata_fields(self, login_user: UserPayload,
                                      update_metadata_fields: UpdateKnowledgeMetadataFieldsReq,
                                      background_tasks: BackgroundTasks):
@@ -144,7 +152,7 @@ class KnowledgeService:
 
         knowledge_model = await self.knowledge_repository.update(knowledge_model)
 
-        # TODO: Milvus and ES metadata field name update logic
+        # Milvus and ES metadata field name update logic
         background_tasks.add_task(
             self.update_vectorstore_metadata_field_names,
             knowledge_model,
@@ -211,6 +219,13 @@ class KnowledgeService:
                 }
             )
 
+            knowledge_file.user_metadata = [
+                item for item in knowledge_file.user_metadata
+                if item['field_name'] not in field_names
+            ]
+
+            await self.knowledge_file_repository.update(knowledge_file)
+
     async def delete_metadata_fields(self, login_user: UserPayload, knowledge_id: int, field_names: list[str],
                                      background_tasks: BackgroundTasks):
         """Delete metadata fields from a knowledge entity."""
@@ -237,7 +252,7 @@ class KnowledgeService:
 
         knowledge_model = await self.knowledge_repository.update(knowledge_model)
 
-        # TODO: Milvus and ES metadata field deletion logic
+        # Milvus and ES metadata field deletion logic
         background_tasks.add_task(
             self.delete_vectorstore_metadata_fields,
             knowledge_model,

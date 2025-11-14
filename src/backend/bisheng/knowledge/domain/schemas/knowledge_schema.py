@@ -43,6 +43,8 @@ class UpdateKnowledgeMetadataFieldsReq(BaseModel):
 class FileUserMetaDataInfo(BaseModel):
     field_name: str = Field(..., description='元数据字段名')
     field_value: Optional[Any] = Field(default=None, description='元数据字段值')
+    updated_at: int = Field(default_factory=lambda: int(datetime.now().timestamp()),
+                            description='元数据字段更新时间戳')
 
 
 class ModifyKnowledgeFileMetaDataReq(BaseModel):
