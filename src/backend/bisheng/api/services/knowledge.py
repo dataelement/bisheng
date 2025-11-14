@@ -792,7 +792,7 @@ class KnowledgeService(KnowledgeUtils):
                 index=db_knowledge.index_name, body=search_data
             )
             for one in es_res["hits"]["hits"]:
-                file_title_map[str(one["_source"]["metadata"]["document_id"])] = one["_source"]["metadata"]["title"]
+                file_title_map[str(one["_source"]["metadata"]["document_id"])] = one["_source"]["metadata"]["abstract"]
         except Exception as e:
             # maybe es index not exist so ignore this error
             logger.warning(f"act=get_knowledge_files error={str(e)}")
