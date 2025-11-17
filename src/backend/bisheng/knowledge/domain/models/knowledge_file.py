@@ -54,8 +54,6 @@ class KnowledgeFileBase(SQLModelSerializable):
     # extra_meta: Optional[str] = Field(default=None, index=False)
     user_metadata: Optional[List[Dict[str, Any]]] = Field(default=None, sa_column=Column(JSON, nullable=True),
                                                           description='用户自定义的元数据')
-    abstract: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True),
-                                    description='文件摘要/简介')
     remark: Optional[str] = Field(default='', sa_column=Column(String(length=512)))
     updater_id: Optional[int] = Field(default=None, index=True, description='最后更新用户ID')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -133,6 +131,11 @@ class KnowledgeFileDao(KnowledgeFileBase):
         async with get_async_db_session() as session:
             result = await session.execute(select(KnowledgeFile).where(KnowledgeFile.id == file_id))
             return result.scalars().first()
+
+    @classmethod
+    def query_by_id_sync(cls, file_id: int) -> Optional[KnowledgeFile]:
+        with get_sync_db_session() as session:
+            return session.exec(select(KnowledgeFile).where(KnowledgeFile.id == file_id)).first()
 
     @classmethod
     def get_file_simple_by_knowledge_id(cls, knowledge_id: int, page: int, page_size: int):

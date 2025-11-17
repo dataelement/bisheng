@@ -599,6 +599,7 @@ class KnowledgeService(KnowledgeUtils):
             split_rule_dict["excel_rule"] = req_data.excel_rule.model_dump()
         db_file.split_rule = json.dumps(split_rule_dict)
         db_file.status = KnowledgeFileStatus.PROCESSING.value  # 解析中
+        db_file.updater_id = login_user.user_id
         db_file = await KnowledgeFileDao.async_update(db_file)
 
         file_path, _ = cls.get_file_share_url(db_file.id)
@@ -1057,6 +1058,14 @@ class KnowledgeService(KnowledgeUtils):
             },
         )
         logger.info(f"act=update_es_over {res}")
+
+        knowledge_file = KnowledgeFileDao.query_by_id_sync(file_id)
+
+        if knowledge_file:
+            knowledge_file.updater_id = login_user.user_id
+            knowledge_file.update_time = datetime.now()
+            KnowledgeFileDao.update(knowledge_file)
+
         return True
 
     @classmethod

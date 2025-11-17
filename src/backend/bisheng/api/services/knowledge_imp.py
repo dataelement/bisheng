@@ -594,7 +594,10 @@ def add_file_embedding(
         f"chunk_split file={db_file.id} file_name={db_file.file_name} size={len(texts)}"
     )
     uploader = UserDao.get_user(user_id=db_file.user_id).user_name
-    updater = UserDao.get_user(user_id=db_file.updater_id).user_name
+    if db_file.updater_id:
+        updater = UserDao.get_user(user_id=db_file.updater_id).user_name
+    else:
+        updater = uploader
     for metadata in metadatas:
         metadata.document_id = db_file.id
         metadata.knowledge_id = db_file.knowledge_id
@@ -638,9 +641,6 @@ def add_file_embedding(
         logger.info(
             f"upload_preview_file_over file={db_file.id} tmp_object_name={tmp_preview_file}, preview_object_name={preview_object_name}"
         )
-
-    db_file.abstract = metadatas[0].get("abstract", "") if metadatas else ""
-
 
 
 def add_text_into_vector(

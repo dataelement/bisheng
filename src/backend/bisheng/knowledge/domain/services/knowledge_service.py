@@ -276,3 +276,30 @@ class KnowledgeService:
         )
 
         return knowledge_model
+
+    async def list_metadata_fields(self, default_user, knowledge_id):
+        """
+        List metadata fields of a knowledge entity.
+        Args:
+            default_user:
+            knowledge_id:
+
+        Returns:
+
+        """
+
+        knowledge_model = await self.knowledge_repository.find_by_id(entity_id=knowledge_id)
+
+        if not knowledge_model:
+            raise KnowledgeNotExistError()
+
+        # Permission check
+        if not await default_user.async_access_check(
+                knowledge_model.user_id, str(knowledge_model.id), AccessType.KNOWLEDGE
+        ):
+            raise UnAuthorizedError()
+
+        return {
+            "knowledge_id": knowledge_model.id,
+            "metadata_fields": knowledge_model.metadata_fields or []
+        }

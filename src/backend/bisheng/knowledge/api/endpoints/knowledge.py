@@ -933,7 +933,7 @@ async def update_metadata_fields(*,
 
 
 # 删除知识库元数据字段
-@router.delete('/delete_metadata_fields', description="删除知识库元数据字段", response_model=UnifiedResponseModel)
+@router.delete('/', description="删除知识库元数据字段", response_model=UnifiedResponseModel)
 async def delete_metadata_fields(*,
                                  login_user: UserPayload = Depends(get_login_user),
                                  knowledge_id: int = Body(..., embed=True, description="知识库ID"),

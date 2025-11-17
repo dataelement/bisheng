@@ -112,6 +112,7 @@ class KnowledgeFileService:
 
         # 更新知识文件的用户元数据
         knowledge_file_model.user_metadata = valid_user_metadata
+        knowledge_file_model.updater_id = login_user.user_id
 
         knowledge_file_model = await self.knowledge_file_repository.update(knowledge_file_model)
 
