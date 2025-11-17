@@ -835,7 +835,7 @@ const workflowTemplate = [
                     {
                         "key": "metadata_filter",
                         "label": "元数据过滤",
-                        "type": "metadata_Filter",
+                        "type": "metadata_filter",
                         "value": {},
                     },
                     {

@@ -74,7 +74,7 @@ const comptibleRag = (node) => {
             const metadataFilterParam = {
                 key: "metadata_filter",
                 label: "元数据过滤",
-                type: "metadata_Filter",
+                type: "metadata_filter",
                 value: {},
             };
             knowledgeGroup.params.splice(knowledgeIndex + 1, 0, metadataFilterParam);
