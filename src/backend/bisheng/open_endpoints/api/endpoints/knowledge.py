@@ -37,7 +37,7 @@ async def add_metadata_fields(*,
     return resp_200(data=knowledge_model)
 
 
-@router.put("update_metadata_fields", response_model=UnifiedResponseModel)
+@router.put("/modify_metadata_fields", response_model=UnifiedResponseModel)
 async def update_metadata_fields(*,
                                  default_user: UserPayload = Depends(get_default_operator_async),
                                  req_data: UpdateKnowledgeMetadataFieldsReq,
@@ -85,7 +85,7 @@ async def delete_metadata_fields(*,
     return resp_200(data=knowledge_model)
 
 
-@router.get('/list_metadata_fields', response_model=UnifiedResponseModel)
+@router.get('/get_metadata_fields/{knowledge_id}', response_model=UnifiedResponseModel)
 async def list_metadata_fields(*,
                                default_user: UserPayload = Depends(get_default_operator_async),
                                knowledge_id: int,
