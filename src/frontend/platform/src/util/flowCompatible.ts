@@ -31,6 +31,15 @@ const comptibleRag = (node) => {
         );
 
         const knowledgeIndex = knowledgeGroup.params.findIndex(p => p.key === 'knowledge');
+         // 添加元数据过滤参数
+        const metadataFilterParam = {
+            key: "metadata_Filter_switch",
+            label: "元数据过滤",
+            type: "metadata_Filter",
+            value: {},
+        };
+        knowledgeGroup.params.splice(knowledgeIndex + 1, 0, metadataFilterParam);
+
         // 构造高级检索配置参数
         const advancedParam = {
             key: "advanced_retrieval_switch",
@@ -56,6 +65,21 @@ const comptibleRag = (node) => {
         knowledgeGroup.params.splice(knowledgeIndex + 1, 0, advancedParam);
 
         node.v = 2;
+    }
+    if(node.v == 2){
+         const knowledgeGroup = node.group_params[0];
+        const metadataFilterExists = knowledgeGroup.params.some(p => p.key === 'metadata_Filter_switch');
+        if (!metadataFilterExists) {
+            const knowledgeIndex = knowledgeGroup.params.findIndex(p => p.key === 'knowledge');
+            const metadataFilterParam = {
+                key: "metadata_Filter_switch",
+                label: "元数据过滤",
+                type: "metadata_Filter",
+                value: {},
+            };
+            knowledgeGroup.params.splice(knowledgeIndex + 1, 0, metadataFilterParam);
+        }
+        node.v = 3;
     }
 }
 

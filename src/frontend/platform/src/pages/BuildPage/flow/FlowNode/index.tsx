@@ -5,7 +5,7 @@ import { cname } from '@/components/bs-ui/utils';
 import { WorkflowNode } from '@/types/flow';
 import { Handle, NodeToolbar, Position } from '@xyflow/react';
 import { ChevronDown } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Sidebar from '../Sidebar';
 import EditText from './EditText';
 import NodeLogo from './NodeLogo';
@@ -106,10 +106,36 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
     const [focusUpdate, setFocusUpdate] = useState(false)
     const runRef = useRef(null)
     const { message } = useToast()
-    const onChange = useCallback((evt) => {
-        console.log(evt.target.value);
-    }, []);
     const [currentTab, setCurrentTab] = useState<undefined | string>(node.tab && node.tab.value)
+
+    // 检查知识库检索设置
+    const hasKnowledgeSearchEnabled = useMemo(() => {
+        const knowledgeGroup = node.group_params.find(group => group.name === '知识库检索设置');
+        console.log(knowledgeGroup,123);
+        
+        if (knowledgeGroup && knowledgeGroup.params) {
+            const thirdItem = knowledgeGroup.params[2]; // 第三项（索引为2）
+            console.log(thirdItem,1232);
+            
+            return thirdItem.value && thirdItem.value?.conditions?.length > 0 && thirdItem.value?.enabled;
+        }
+        return false;
+    }, [
+    node.group_params.find(group => group.name === '知识库检索设置')?.params?.[2]?.value?.conditions?.length,
+    node.group_params.find(group => group.name === '知识库检索设置')?.params?.[2]?.value?.enabled
+]);
+
+    // 动态计算节点宽度类名
+    const nodeWidthClass = useMemo(() => {
+        const baseClasses = ['condition'];
+        console.log(hasKnowledgeSearchEnabled,888);
+        
+        if (hasKnowledgeSearchEnabled) {
+            baseClasses.push('rag');
+            baseClasses.push('knowledge_retriever');
+        }
+        return baseClasses.includes(node.type) ? 'w-auto min-w-80' : '';
+    }, [node.type, hasKnowledgeSearchEnabled]);
 
     const handleUpdate = () => {
         // 创建并触发自定义事件，传递需要更新的节点 id 和数据
@@ -128,7 +154,8 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
             return group.params.some(param => {
                 if (param.key === key) {
                     const prefix = key.split('_')[0]
-                    param.value = value.map(item => ({
+                    const values = Array.isArray(value) ? value : [value];
+                    param.value = values.map(item => ({
                         key: `${prefix}_${item.key}`,
                         label: `${prefix}_${item.label}`
                     }))
@@ -153,6 +180,25 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
         runRef.current.run(node)
     }
 
+    // 直接使用函数获取知识库ID，不依赖useMemo
+    const getSelectedKnowledgeIds = () => {
+        if (!node) {
+            return [];
+        }
+        
+        const knowledgeParam = node.group_params
+            .flatMap(group => group.params)
+            .find(param => param.type === "knowledge_select_multi");
+        console.log(knowledgeParam,89);
+        
+        if (knowledgeParam && knowledgeParam.value && Array.isArray(knowledgeParam.value.value)) {
+            const ids = knowledgeParam.value.value.map(kb => String(kb.key));
+            console.log("获取知识库ID:", ids);
+            return ids;
+        }
+        return [];
+    }
+
     const [expend, setExpend] = useState(node.expand === undefined ? true : node.expand)
 
     const { isVisible, handleMouseEnter, handleMouseLeave } = useHoverToolbar();
@@ -168,9 +214,9 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
             <NodeToolbar isVisible align="end" className={`${isVisible ? '' : 'hidden'}`} >
                 <NodeToolbarComponent nodeId={node.id} type={node.type} onRun={handleRun}></NodeToolbarComponent>
             </NodeToolbar>
-
+  
             <div
-                className={cname(`bisheng-node hover:border-primary/10 ${node.type === 'condition' ? 'w-auto min-w-80' : ''} ${selected ? 'border-primary/10' : ' border-transparent'}`, nodeError && 'border-red-500')}
+                className={cname(`bisheng-node hover:border-primary/10 ${nodeWidthClass} ${selected ? 'border-primary/10' : ' border-transparent'}`, nodeError && 'border-red-500')}
                 data-id={node.id}
             >
                 {/* top */}
@@ -261,6 +307,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                                 onFouceUpdate={() => setFocusUpdate(!focusUpdate)}
                                 onStatusChange={((key, obj) => paramValidateEntities.current[key] = obj)}
                                 onVarEvent={((key, obj) => varValidateEntities.current[key] = obj)}
+                                selectedKnowledgeIds={getSelectedKnowledgeIds}
                             />
                         )}
                     </div>

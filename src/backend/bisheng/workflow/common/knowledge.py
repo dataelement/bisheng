@@ -96,11 +96,14 @@ class ConditionCases(BaseModel):
     id: str = Field(default=None, description='Unique id for condition case')
     conditions: List[ConditionOne] = Field(default_factory=list, description='List of conditions')
     operator: str = Field(default=None, description='Operator type')
+    enabled: bool = Field(default=False, description='Whether the condition case is enabled')
 
     def get_knowledge_filter(self, knowledge: Knowledge, parent_node: BaseNode) -> (str, Dict):
         """ get knowledge metadata filter
             returns: milvus_filter, es_filter
         """
+        if not self.enabled:
+            return "", {}
         milvus_filter = ""
         es_filter = {}
         es_conditions = []
