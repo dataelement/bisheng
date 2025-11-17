@@ -1,7 +1,7 @@
 import { WorkflowNode } from "@/types/flow";
 import Parameter from "./Parameter";
 
-export default function ParameterGroup({ nodeId, node, cate, tab, onOutPutChange, onStatusChange, onVarEvent, onFouceUpdate }
+export default function ParameterGroup({ nodeId, node, cate, tab, onOutPutChange, onStatusChange, onVarEvent, onFouceUpdate,selectedKnowledgeIds }
     : {
         nodeId: string,
         node: WorkflowNode,
@@ -12,7 +12,6 @@ export default function ParameterGroup({ nodeId, node, cate, tab, onOutPutChange
         onVarEvent: (key: string, obj: any) => void
         onFouceUpdate: () => void
     }) {
-
     if (!cate.params.filter(el => tab === el.tab || !el.tab).length) return null
 
     return <div className="px-4 py-2 border-t border-[#E8EAF0] dark:border-gray-700">
@@ -26,6 +25,7 @@ export default function ParameterGroup({ nodeId, node, cate, tab, onOutPutChange
             onStatusChange={onStatusChange}
             onVarEvent={onVarEvent}
             onFouceUpdate={onFouceUpdate}
+            selectedKnowledgeIds={selectedKnowledgeIds}
         /> : null)}
     </div>
 };

@@ -1,16 +1,17 @@
 import { FileIcon } from "@/components/bs-icons/file";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Button } from '@/components/bs-ui/button';
-import { Dialog, DialogContent, DialogHeader } from '@/components/bs-ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader } from '@/components/bs-ui/dialog';
 import { SearchInput } from '@/components/bs-ui/input';
 import AutoPagination from '@/components/bs-ui/pagination/autoPagination';
 import ShadTooltip from "@/components/ShadTooltipComponent";
-import { delChunkApi, getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, readFileByLibDatabase, updateChunkApi } from '@/controllers/API';
+import { delChunkApi, getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, getKnowledgeDetailApi, readFileByLibDatabase, updateChunkApi, addMetadata, saveUserMetadataApi,getMetaFile } from '@/controllers/API';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useTable } from '@/util/hook';
 import { truncateString } from "@/util/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu';
-import { ArrowLeft, ChevronDown, ChevronUp, FileText, Search } from 'lucide-react';
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { AlertCircle, ArrowLeft, Calendar as CalendarIcon, ChevronDown, ChevronUp, Edit2, FileText, Plus, Search, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -19,7 +20,132 @@ import ParagraphEdit from './ParagraphEdit';
 import PreviewFile from './PreviewFile';
 import PreviewParagraph from './PreviewParagraph';
 import Tip from "@/components/bs-ui/tooltip/tip";
+import { cname } from "@/components/bs-ui/utils";
+import React from "react";
+import { Calendar } from "@/components/bs-ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
+import { format } from "date-fns";
+import { toast } from "@/components/bs-ui/toast/use-toast";
+import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 
+// 类型图标常量
+const TYPE_ICONS = {
+    String: "📄",
+    Number: "#",
+    Time: "⏱️"
+};
+
+// 元数据行组件
+const MetadataRow = React.memo(({ item, onDelete, onValueChange, isSmallScreen, t, showInput = true }) => {
+    // 将日期字符串转换为 Date 对象
+    const getDateValue = (dateString) => {
+        if (!dateString) return null;
+        try {
+            return new Date(dateString);
+        } catch {
+            return null;
+        }
+    };
+
+    const handleInputChange = (e) => {
+        onValueChange(item.id, e.target.value);
+    };
+
+    const handleNumberChange = (e) => {
+        const value = e.target.value;
+        // 只允许数字
+        if (value === '' || /^-?\d*\.?\d*$/.test(value)) {
+            onValueChange(item.id, value);
+        }
+    };
+
+    const handleDateChange = (date) => {
+        // 将日期对象转换为字符串格式
+        const dateString = date ? format(date, 'yyyy-MM-dd') : '';
+        onValueChange(item.id, dateString);
+    };
+
+    return (
+        <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+            {/* 类型图标 */}
+            <span className={isSmallScreen ? "text-base" : "text-lg"}>
+                {TYPE_ICONS[item.type]}
+            </span>
+
+            {/* 类型标签 */}
+            <span className={cname(
+                "text-gray-500 min-w-[60px]",
+                isSmallScreen ? "text-xs" : "text-sm"
+            )}>
+                {item.type}
+            </span>
+
+            {/* 变量名 */}
+            <span className={cname(
+                "font-medium truncate flex-1 min-w-0",
+                isSmallScreen ? "text-sm" : ""
+            )}>
+                {item.name}
+            </span>
+
+            {/* 输入框 - 根据类型显示不同的输入组件 */}
+            {showInput && (
+                <div className="flex-1 min-w-0">
+                    {item.type === 'String' && (
+                        <input
+                            type="text"
+                            value={item.value || ''}
+                            onChange={handleInputChange}
+                            placeholder={t('请输入文本')}
+                            className={cname(
+                                "w-full px-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                                isSmallScreen ? "py-1 text-xs h-7" : "py-1.5 text-sm h-8"
+                            )}
+                        />
+                    )}
+
+                    {item.type === 'Number' && (
+                        <input
+                            type="number"
+                            value={item.value || ''}
+                            onChange={handleNumberChange}
+                            placeholder={t('请输入数字')}
+                            className={cname(
+                                "w-full px-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                                isSmallScreen ? "py-1 text-xs h-7" : "py-1.5 text-sm h-8"
+                            )}
+                        />
+                    )}
+
+                    {item.type === 'Time' && (
+                        <DatePicker
+                            value={item.value}
+                            placeholder={t('选择日期时间')}
+                            showTime={true}
+                            onChange={(selectedDate) => {
+                                const formattedValue = selectedDate
+                                    ? format(selectedDate, 'yyyy-MM-dd HH:mm:ss')
+                                    : '';
+                                onValueChange(item.id, formattedValue);
+                            }}
+                        />
+                    )}
+                </div>
+            )}
+
+            {/* 删除按钮 */}
+            <button
+                onClick={() => onDelete(item.id)}
+                className="p-1 hover:bg-gray-200 rounded transition-colors flex-shrink-0"
+                title={t('删除')}
+            >
+                <Trash2 size={isSmallScreen ? 14 : 16} className="text-gray-500" />
+            </button>
+        </div>
+    );
+});
+
+MetadataRow.displayName = 'MetadataRow';
 
 export default function Paragraphs({ fileId, onBack }) {
     console.log('Props fileId:', fileId);
@@ -31,7 +157,6 @@ export default function Paragraphs({ fileId, onBack }) {
     const [hasInited, setHasInited] = useState(false);
     const location = useLocation();
     const [chunkSwitchTrigger, setChunkSwitchTrigger] = useState(0);
-    // 状态管理（完全保留原始定义）
     const [selectedFileId, setSelectedFileId] = useState('');
     const [currentFile, setCurrentFile] = useState(null);
     const [fileUrl, setFileUrl] = useState('');
@@ -51,7 +176,6 @@ export default function Paragraphs({ fileId, onBack }) {
     const [selectError, setSelectError] = useState(null);
     const [isFetchingUrl, setIsFetchingUrl] = useState(false);
     const [partitions, setPartitions] = useState()
-    // 引用（完全保留原始定义）
     const isLoadingFilesRef = useRef(false);
     const isMountedRef = useRef(true);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -64,16 +188,44 @@ export default function Paragraphs({ fileId, onBack }) {
     const latestFileUrlRef = useRef('');
     const latestPreviewUrlRef = useRef('');
     const latestOriginalUrlRef = useRef('');
+    const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
 
-    const [selectedChunkIndex, setSelectedBbox] = useKnowledgeStore((state) => [state.selectedChunkIndex, state.setSelectedBbox]);
+    // 元数据相关状态
+    const [newMetadata, setNewMetadata] = useState({
+        name: '',
+        type: 'String' as 'String' | 'Number' | 'Time',
+    });
+    const [metadataError, setMetadataError] = useState('');
+    // 统一管理右侧弹窗状态
+    const [sideDialog, setSideDialog] = useState<{
+        type: 'search' | 'create' | null;
+        open: boolean;
+    }>({
+        type: null,
+        open: false
+    });
+    // 主元数据弹窗中的元数据列表
+    const [mainMetadataList, setMainMetadataList] = useState([]);
+
+    const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
+
+    // 右侧弹窗相关状态与ref
+    const mainMetadataDialogRef = useRef<HTMLDivElement>(null);
+    const [sideDialogPosition, setSideDialogPosition] = useState({ top: 0, left: 0 });
+    const [screenWidth, setScreenWidth] = useState(window.innerWidth);
+    const isSmallScreen = screenWidth < 1366;
+    const sideDialogWidth = isSmallScreen ? 240 : 300;
+
+    const [predefinedMetadata, setPredefinedMetadata] = useState([
+    ]);
+
     useEffect(() => {
-        // 切换chunk清空选中的高亮标注bbox
         setSelectedBbox([])
     }, [selectedChunkIndex])
 
-    // 表格配置（完全保留原始逻辑）
     const tableConfig = useMemo(() => ({
-        file_ids: selectedFileId ? [selectedFileId] : []
+        file_ids: selectedFileId ? [selectedFileId] : [],
+        knowledge_id: id
     }), [selectedFileId]);
 
     const {
@@ -95,18 +247,14 @@ export default function Paragraphs({ fileId, onBack }) {
                 knowledge_id: id
             });
 
-            // 修复：解析 chunk_bboxes 并存储“是否非空”的布尔值
             let chunkBboxes = [];
             try {
                 const firstChunk = response.data?.[0];
                 if (firstChunk?.metadata?.bbox) {
-
-                    // 先判断bbox是否为空字符串
                     if (typeof firstChunk.metadata.bbox === 'string' && JSON.parse(firstChunk?.metadata?.bbox).chunk_bboxes === '') {
                         console.log('bbox为空字符串');
                         chunkBboxes = [];
                     } else {
-                        // 解析JSON
                         const bboxObj = JSON.parse(firstChunk.metadata.bbox);
                         chunkBboxes = bboxObj.chunk_bboxes || [];
                     }
@@ -116,7 +264,6 @@ export default function Paragraphs({ fileId, onBack }) {
                 chunkBboxes = [];
             }
 
-            // 存储“是否非空数组”的布尔值（而非原始数组）
             const isBboxesNotEmpty = Array.isArray(chunkBboxes) && chunkBboxes.length > 0;
             setHasChunkBboxes(isBboxesNotEmpty);
             console.log('chunk_bboxes 是否非空:', isBboxesNotEmpty, '原始数据:', chunkBboxes);
@@ -136,48 +283,35 @@ export default function Paragraphs({ fileId, onBack }) {
             const pares = await getFileBboxApi(fileId);
             setPartitions(pares || []);
 
-            // 获取当前选中的文件信息
             const currentFile = rawFiles.find(f => String(f.id) === String(fileId));
             let finalUrl = '';
             let finalPreviewUrl = '';
 
-            // 检查是否有有效的preview_url和original_url
             const hasPreviewUrl = typeof res.preview_url === 'string' && res.preview_url.trim() !== '';
             const hasOriginalUrl = typeof res.original_url === 'string' && res.original_url.trim() !== '';
 
             if (currentFile) {
-
-                // 判断是否为UNS或LOCAL类型
                 const isUnsOrLocal = currentFile.parse_type === "uns" || currentFile.parse_type === "local";
 
-
                 if (isUnsOrLocal) {
-                    // UNS或LOCAL类型：根据bbox是否有效选择URL
-                    const isBboxesValid = hasChunkBboxes;
                     const isBboxesEmpty = !hasChunkBboxes;
                     if (!isBboxesEmpty && hasPreviewUrl) {
-                        // 有有效bbox且有preview_url → 使用preview_url
                         finalUrl = res.preview_url.trim();
                         finalPreviewUrl = res.preview_url.trim();
                     } else {
-                        // 无有效bbox（为空数组/字符串）或无preview_url → 强制使用original_url
                         finalUrl = hasOriginalUrl ? res.original_url.trim() : '';
                         finalPreviewUrl = finalUrl;
                     }
                 } else {
-                    // 其他类型：优先使用preview_url，无则使用original_url
                     if (hasPreviewUrl) {
-                        // 有preview_url → 优先使用
                         finalUrl = res.preview_url.trim();
                         finalPreviewUrl = res.preview_url.trim();
                     } else {
-                        // 无preview_url → 使用original_url或备选URL
                         finalUrl = hasOriginalUrl ? res.original_url.trim() : '';
                         finalPreviewUrl = finalUrl;
                     }
                 }
             } else {
-                // 如果没有找到当前文件，使用默认策略
                 finalUrl = hasPreviewUrl ? res.preview_url.trim() : (hasOriginalUrl ? res.original_url.trim() : '');
                 finalPreviewUrl = finalUrl;
             }
@@ -185,10 +319,8 @@ export default function Paragraphs({ fileId, onBack }) {
             if (finalUrl) {
                 finalUrl = decodeURIComponent(finalUrl);
                 finalPreviewUrl = decodeURIComponent(finalPreviewUrl);
-                // 同时更新状态和ref（ref会同步生效）
                 setFileUrl(finalUrl);
                 setPreviewUrl(finalPreviewUrl);
-                // 存储original_url到ref中
                 latestOriginalUrlRef.current = hasOriginalUrl ? decodeURIComponent(res.original_url.trim()) : '';
                 return finalUrl;
             } else {
@@ -209,22 +341,15 @@ export default function Paragraphs({ fileId, onBack }) {
         }
     }, [rawFiles, hasChunkBboxes]);
 
-
-
-
-
     useEffect(() => {
-        // 检查当前路径是否是adjust页面且没有有效的state数据
         if (location.pathname.startsWith('/filelib/adjust/') && !window.history.state?.isAdjustMode) {
-            // 提取ID（如从/filelib/adjust/2066中提取2066）
             const adjustId = location.pathname.split('/')[3];
             if (adjustId) {
-                // 重定向到对应的filelib页面
                 navigate(`/filelib/${adjustId}`, { replace: true });
             }
         }
     }, [location.pathname, navigate]);
-    // 从datalist生成chunks（完全保留原始逻辑）
+
     useEffect(() => {
         if (!selectedFileId || !datalist.length) {
             setChunks([]);
@@ -236,7 +361,7 @@ export default function Paragraphs({ fileId, onBack }) {
             text: item.text || '',
             bbox: item.metadata?.bbox || {},
             activeLabels: {},
-            chunkIndex: item.metadata?.chunk_index || index,
+            chunkIndex: item.metadata?.chunk_index,
             page: item.metadata?.page || 0,
             metadata: item.metadata || {}
         }));
@@ -247,7 +372,6 @@ export default function Paragraphs({ fileId, onBack }) {
     const handleFileChange = useCallback(async (newFileId) => {
         console.log('文件切换触发:', newFileId, '当前选中:', selectedFileId);
 
-        // 强制类型转换，避免类型不匹配
         newFileId = String(newFileId);
         const currentId = String(selectedFileId);
 
@@ -256,7 +380,6 @@ export default function Paragraphs({ fileId, onBack }) {
             return;
         }
 
-        // 立即更新UI，避免闪烁
         const selectedFile = rawFiles.find(f => String(f.id) === newFileId);
         if (selectedFile) {
             console.log(selectedFile, fileUrl, previewUrl, 888);
@@ -302,7 +425,6 @@ export default function Paragraphs({ fileId, onBack }) {
         }
     }, [rawFiles, fetchFileUrl, filterData, reload, selectedFileId]);
 
-
     useEffect(() => {
         const loadFiles = async () => {
             if (isLoadingFilesRef.current || !isMountedRef.current) return;
@@ -321,12 +443,12 @@ export default function Paragraphs({ fileId, onBack }) {
                 console.log('加载文件列表:', filesData);
 
                 setIsInitReady(true);
-                setHasInited(true); // 标记为已初始化
+                setHasInited(true);
             } catch (err) {
                 console.error('加载文件失败:', err);
                 setSelectError('加载文件列表失败');
                 setIsInitReady(true);
-                setHasInited(true); // 即使失败也标记为已初始化
+                setHasInited(true);
             } finally {
                 isLoadingFilesRef.current = false;
             }
@@ -336,12 +458,9 @@ export default function Paragraphs({ fileId, onBack }) {
         return () => { isMountedRef.current = false; };
     }, [id]);
 
-
     useEffect(() => {
-        // 核心修复：增加hasInited判断，防止切换后重复初始化
         if (rawFiles.length === 0 || !isInitReady || !isMountedRef.current || !hasInited) return;
 
-        // 只有在首次加载时执行自动选中，切换后不执行
         if (!selectedFileId) {
             const targetFileId = fileId ? String(fileId) : String(rawFiles[0]?.id || '');
             console.log('目标文件ID（rawFiles就绪后）:', targetFileId);
@@ -352,25 +471,145 @@ export default function Paragraphs({ fileId, onBack }) {
         }
     }, [rawFiles, isInitReady, fileId, handleFileChange, selectedFileId, hasInited]);
 
-    // 处理分段修改（完全保留原始逻辑）
+    // 元数据相关处理函数
+    const handleDeleteMainMetadata = useCallback((id) => {
+        setMainMetadataList(prev => prev.filter(item => item.id !== id));
+    }, []);
+
+    const handleMainMetadataValueChange = useCallback((id, value) => {
+        setMainMetadataList(prev => prev.map(item =>
+            item.id === id ? { ...item, value } : item
+        ));
+    }, []);
+
+    const handleSaveNewMetadata = useCallback(async () => {
+        const name = newMetadata.name.trim();
+        const type = newMetadata.type;
+
+        // 验证规则
+        if (!name) {
+            setMetadataError(t('名称不能为空。'));
+            return;
+        }
+
+        if (name.length > 255) {
+            setMetadataError(t('名称不能超过255个字符。'));
+            return;
+        }
+
+        // 格式验证：必须以小写字母开头，且只能包含小写字母、数字和下划线
+        const nameRegex = /^[a-z][a-z0-9_]*$/;
+        if (!nameRegex.test(name)) {
+            setMetadataError(t('必须以小写字母开头，且只能包含小写字母、数字和下划线。'));
+            return;
+        }
+
+        // 检查是否已存在同名元数据
+        const exists = predefinedMetadata.some(item => item.name === name);
+        if (exists) {
+            setMetadataError(t('元数据名已存在。'));
+            return;
+        }
+
+        try {
+            await addMetadata(Number(id), [{
+                field_name: name,
+                field_type: type.toLowerCase()
+            }]);
+
+            // 3. 保存成功后，更新本地状态
+            const newItem = {
+                id: `meta_${Date.now()}`,
+                name: name,
+                type: type,
+            };
+
+            setPredefinedMetadata(prev => [...prev, newItem]);
+
+            closeSideDialog();
+        } catch (error) {
+            console.error("创建元数据字段失败:", error);
+            setMetadataError(t('创建失败，请稍后重试。'));
+        }
+    }, [newMetadata, predefinedMetadata, t]);
+
+    const handleSearchMetadataClick = useCallback(async () => {
+        try {
+            const knowledgeDetails = await getKnowledgeDetailApi([id]);
+            const knowledgeDetail = knowledgeDetails[0];
+
+            if (knowledgeDetail && Array.isArray(knowledgeDetail.metadata_fields)) {
+                const formattedFields = knowledgeDetail.metadata_fields.map(field => ({
+                    id: `meta_${field.field_name}`,
+                    name: field.field_name,
+                    type: field.field_type.charAt(0).toUpperCase() + field.field_type.slice(1),
+                }));
+                setPredefinedMetadata(formattedFields);
+            } else {
+                setPredefinedMetadata([]);
+            }
+        } catch (error) {
+            console.error("获取知识库元数据字段失败:", error);
+            setPredefinedMetadata([]);
+        } finally {
+            setMetadataError('');
+            setSideDialog({ type: 'search', open: true });
+            setSearchTerm("");
+        }
+    }, [id, t]);
+
+    const handleCreateMetadataClick = useCallback(() => {
+        setNewMetadata({ name: '', type: 'String' });
+        setMetadataError('');
+        setSideDialog({ type: 'create', open: true });
+    }, []);
+
+    // 关闭右侧弹窗
+    const closeSideDialog = useCallback(() => {
+        setSideDialog({ type: null, open: false });
+        setMetadataError('');
+        setSearchTerm("");
+        setNewMetadata({ name: '', type: 'String' });
+    }, []);
+
+    // 从搜索弹窗添加元数据到主列表
+    const handleAddFromSearch = useCallback((metadata) => {
+        const exists = mainMetadataList.some(item => item.name === metadata.name);
+        if (exists) {
+            toast({ description: '该元数据已存在，不能重复添加。' });
+            return;
+        }
+        const newItem = {
+            ...metadata,
+            id: `meta_${Date.now()}_${metadata.name}`,
+            value: ''
+        };
+        setMainMetadataList(prev => [...prev, newItem]);
+        closeSideDialog();
+    }, [closeSideDialog]);
+
+    const filteredPredefinedMetadata = useMemo(() => {
+        return predefinedMetadata.filter(meta =>
+            meta.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (meta.description && meta.description.toLowerCase().includes(searchTerm.toLowerCase()))
+        );
+    }, [predefinedMetadata, searchTerm]);
+
     const handleChunkChange = useCallback((chunkIndex, text) => {
         let chunkIndexPage = chunkIndex % pageSize;
         console.log('转换后的localIndex:', chunkIndexPage);
 
-        // if(chunkIndex > 19){
-        //     chunkIndexPage = chunkIndex % pageSize;
-        // }
         const bbox = { chunk_bboxes: selectedBbox };
 
-        // selectedBbox空数组时，使用safeChunks的bbox
-        const bboxStr = selectedBbox.length ? JSON.stringify(bbox) : safeChunks[chunkIndexPage].bbox;
-        captureAndAlertRequestErrorHoc(updateChunkApi({
-            knowledge_id: Number(id),
-            file_id: selectedFileId || currentFile?.id || '',
-            chunk_index: chunkIndex,
-            text,
-            bbox: bboxStr
-        }));
+        const targetChunk = chunks.find(chunk => chunk.chunkIndex === chunkIndex);
+        const bboxStr = selectedBbox.length ? JSON.stringify(bbox.length ? JSON.stringify(bbox) : targetChunk?.bbox) :
+            captureAndAlertRequestErrorHoc(updateChunkApi({
+                knowledge_id: Number(id),
+                file_id: selectedFileId || currentFile?.id || '',
+                chunk_index: chunkIndex,
+                text,
+                bbox: bboxStr
+            }));
 
         setChunks(chunks => chunks.map(chunk =>
             chunk.chunkIndex === chunkIndex ? { ...chunk, bbox: bboxStr, text } : chunk
@@ -380,9 +619,8 @@ export default function Paragraphs({ fileId, onBack }) {
             (item) => item?.metadata?.chunk_index === chunkIndex,
             (item) => ({ text, metadata: { ...item.metadata, bbox: bboxStr } })
         );
-    }, [id, currentFile, refreshData, selectedBbox]);
+    }, [id, currentFile, refreshData, selectedBbox, chunks]);
 
-    // 格式化文件列表（完全保留原始逻辑）
     const files = useMemo(() => {
         return (rawFiles || []).map(el => ({
             label: el?.file_name || '未命名文件',
@@ -398,7 +636,6 @@ export default function Paragraphs({ fileId, onBack }) {
         }));
     }, [rawFiles]);
 
-    // 生成安全的chunks数据（完全保留原始逻辑）
     const safeChunks = useMemo(() => {
         if (!selectedFileId || !datalist.length) return [];
         return (datalist || []).map((item, index) => ({
@@ -409,19 +646,52 @@ export default function Paragraphs({ fileId, onBack }) {
         }));
     }, [datalist, selectedFileId, chunkSwitchTrigger]);
 
-    // 打开元数据弹窗（完全保留原始逻辑）
-    const handleMetadataClick = useCallback(() => {
-        if (currentFile?.fullData) {
+  const handleMetadataClick = useCallback(async () => {
+    if (currentFile?.fullData) {
+        try {
+            const res = await getMetaFile(currentFile.id);
+            const fetchedMetadata = res.user_metadata || [];
+            const sortedMetadata = fetchedMetadata.sort((a, b) => {
+                return a.updated_at - b.updated_at;
+            });
+
+            // 3. 格式化排序后的元数据
+            const formattedMetadata = sortedMetadata.map(meta => {
+                let type = 'String';
+                if (!isNaN(Number(meta.field_value))) {
+                    type = 'Number';
+                } else if (!isNaN(Date.parse(meta.field_value))) {
+                    type = 'Time';
+                }
+
+                return {
+                    id: `meta_${meta.field_name}`,
+                    name: meta.field_name,
+                    type: type,
+                    value: meta.field_value,
+                };
+            });
+
+            // 4. 更新状态
+            setMainMetadataList(formattedMetadata);
+
+            // 5. 打开弹窗
+            setMetadataDialog({
+                open: true,
+                file: currentFile.fullData
+            });
+        } catch (error) {
+            console.error("获取文件元数据失败:", error);
             setMetadataDialog({
                 open: true,
                 file: currentFile.fullData
             });
         }
-    }, [currentFile]);
+    }
+}, [currentFile]);
 
-    // 调整分段策略（完全保留原始逻辑）
     const handleAdjustSegmentation = useCallback(() => {
-        const currentFileUrl = latestOriginalUrlRef.current; // 使用original_url而不是preview_url
+        const currentFileUrl = latestOriginalUrlRef.current;
         const currentPreviewUrl = latestPreviewUrlRef.current;
 
         navigate(`/filelib/adjust/${id}`, {
@@ -443,7 +713,6 @@ export default function Paragraphs({ fileId, onBack }) {
         });
     }, [id, selectedFileId, currentFile, navigate]);
 
-    // 解析切分策略描述（完全保留原始逻辑）
     const splitRuleDesc = useCallback((file) => {
         if (!file.split_rule) return '';
         const suffix = file.file_name?.split('.').pop()?.toUpperCase() || '';
@@ -451,22 +720,18 @@ export default function Paragraphs({ fileId, onBack }) {
             const rule = JSON.parse(file.split_rule);
             const { excel_rule } = rule;
 
-            // 处理Excel文件规则
             if (excel_rule && ['XLSX', 'XLS', 'CSV'].includes(suffix)) {
                 return `每 ${excel_rule.slice_length} 行作为一个分段`;
             }
 
-            // 处理分隔符规则
             const { separator, separator_rule } = rule;
             if (separator && separator_rule && separator.length === separator_rule.length) {
                 const displayItems = separator.map((sep, index) => {
-                    // 核心修复：将实际换行符转换为可见的 \n 字符串
                     const displaySep = sep
-                        .replace(/\n/g, '\\n')  // 替换换行符
-                        .replace(/\r/g, '\\r')  // 替换回车符（可选）
-                        .replace(/\t/g, '\\t'); // 替换制表符（可选）
+                        .replace(/\n/g, '\\n')
+                        .replace(/\r/g, '\\r')
+                        .replace(/\t/g, '\\t');
 
-                    // 根据规则添加切割符号
                     const prefix = separator_rule[index] === 'before' ? '✂️' : '';
                     const suffix = separator_rule[index] === 'after' ? '✂️' : '';
 
@@ -478,51 +743,59 @@ export default function Paragraphs({ fileId, onBack }) {
             console.error('解析切分策略失败:', e);
         }
 
-        // 解析失败时的兜底处理
         return file.split_rule
             .replace(/\n/g, '\\n')
             .replace(/\r/g, '\\r')
             .replace(/\t/g, '\\t');
     }, []);
 
-
-    // 删除分段（完全保留原始逻辑）
     const handleDeleteChunk = useCallback((data) => {
+        const updatedChunks = chunks.filter(chunk => chunk.chunkIndex !== data);
+        setChunks(updatedChunks);
+
+        if (selectedChunkIndex === data) {
+            setSelectedBbox([]);
+        }
+
         captureAndAlertRequestErrorHoc(delChunkApi({
             knowledge_id: Number(id),
             file_id: selectedFileId || currentFile?.id || '',
             chunk_index: data || 0
         }));
-        reload();
-    }, [id, reload]);
 
-    // 格式化文件大小（完全保留原始逻辑）
+        reload();
+
+    }, [
+        id,
+        reload,
+        chunks,
+        selectedFileId,
+        currentFile?.id,
+        setChunks,
+        selectedChunkIndex,
+        setSelectedBbox
+    ]);
+
     const formatFileSize = useCallback((bytes) => {
         if (bytes === 0) return '0 Bytes';
 
-        // 定义单位转换边界（1024进制）
         const KB = 1024;
         const MB = KB * 1024;
         const GB = MB * 1024;
 
-        // 根据文件大小选择合适的单位
         if (bytes < MB) {
-            // 小于1024KB（1MB），使用KB
             return `${(bytes / KB).toFixed(2)} KB`;
         } else if (bytes < GB) {
-            // 1024KB至1024MB之间，使用MB
             return `${(bytes / MB).toFixed(2)} MB`;
         } else {
-            // 1024MB及以上，使用GB
             return `${(bytes / GB).toFixed(2)} GB`;
         }
     }, []);
-    // 筛选下拉框文件（完全保留原始逻辑）
+
     const filteredFiles = files.filter(file =>
         file.label.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    // 预览组件规则配置（完全保留原始逻辑）
     const previewRules = useMemo(() => ({
         fileList: currentFile ? [{
             id: currentFile.id,
@@ -530,31 +803,29 @@ export default function Paragraphs({ fileId, onBack }) {
             fileName: currentFile.name,
             suffix: currentFile.suffix,
             fileType: currentFile.fileType,
-            excelRule: {} // 根据实际需要添加 excel 规则
+            excelRule: {}
         }] : [],
-        pageHeaderFooter: false, // 页面页眉页脚处理
-        chunkOverlap: 200, // 块重叠大小
-        chunkSize: 1000, // 块大小
-        enableFormula: false, // 是否启用公式
-        forceOcr: false, // 是否强制 OCR
-        knowledgeId: id, // 知识库ID
-        retainImages: false, // 是否保留图片
-        separator: [], // 分隔符
-        separatorRule: [] // 分隔规则
+        pageHeaderFooter: false,
+        chunkOverlap: 200,
+        chunkSize: 1000,
+        enableFormula: false,
+        forceOcr: false,
+        knowledgeId: id,
+        retainImages: false,
+        separator: [],
+        separatorRule: []
     }), [currentFile, id]);
 
-    // 预览显示判断（完全保留原始逻辑）
     const isExcelFile = currentFile && ['xlsx', 'xls', 'csv'].includes(currentFile.suffix?.toLowerCase());
     const isPreviewVisible =
-        isInitReady && // 新增：确保组件初始化完成，避免异步数据未加载
+        isInitReady &&
         !isExcelFile &&
         selectedFileId &&
         currentFile &&
-        (previewUrl || fileUrl) && // 兼容 previewUrl 或 fileUrl 任一有值
+        (previewUrl || fileUrl) &&
         !isFetchingUrl;
     const isParagraphVisible = datalist.length > 0;
 
-    // 布局类名计算（完全保留原始逻辑）
     const contentLayoutClass = useMemo(() => {
         const isSingleVisible = isPreviewVisible !== isParagraphVisible;
         if (isSingleVisible) {
@@ -562,11 +833,113 @@ export default function Paragraphs({ fileId, onBack }) {
         }
         return "flex bg-background-main min-h-0";
     }, [isPreviewVisible, isParagraphVisible, isExcelFile]);
+
     useEffect(() => {
         latestFileUrlRef.current = fileUrl;
         latestPreviewUrlRef.current = previewUrl;
     }, [fileUrl, previewUrl]);
-    // 渲染部分（完全保留原始样式，无任何修改）
+
+    // 右侧弹窗位置计算 - 优化版本
+    const updateSideDialogPosition = useCallback(() => {
+        if (mainMetadataDialogRef.current && sideDialog.open) {
+            const rect = mainMetadataDialogRef.current.getBoundingClientRect();
+            const gap = isSmallScreen ? 8 : 16;
+            let left = rect.right + gap;
+
+            // 避免右侧弹窗超出屏幕
+            if (left + sideDialogWidth > screenWidth) {
+                left = screenWidth - sideDialogWidth - 8;
+            }
+
+            setSideDialogPosition({
+                top: Math.max(rect.top, 8), // 确保不会超出顶部
+                left: Math.max(left, 8) // 确保不会超出左侧
+            });
+        }
+    }, [mainMetadataDialogRef, sideDialog.open, isSmallScreen, screenWidth, sideDialogWidth]);
+
+    // 窗口 resize 监听和位置更新
+    useEffect(() => {
+        const handleResize = () => {
+            const newWidth = window.innerWidth;
+            setScreenWidth(newWidth);
+        };
+
+        window.addEventListener("resize", handleResize);
+        return () => window.removeEventListener("resize", handleResize);
+    }, []);
+
+    // 当主弹窗或侧边弹窗状态变化时更新位置
+    useEffect(() => {
+        if (metadataDialog.open && sideDialog.open) {
+            // 使用 setTimeout 确保 DOM 已经更新
+            const timer = setTimeout(() => {
+                updateSideDialogPosition();
+            }, 50);
+            return () => clearTimeout(timer);
+        }
+    }, [metadataDialog.open, sideDialog.open, updateSideDialogPosition]);
+// 保存用户元数据到后端
+const handleSaveUserMetadata = useCallback(async () => {
+  // 1. 表单验证：检查是否有必填项为空
+  const invalidItems = mainMetadataList.filter(item => !item.value?.trim());
+  if (invalidItems.length > 0) {
+    const invalidNames = invalidItems.map(item => item.name).join('、');
+    setMetadataError(t(`元数据「${invalidNames}」的值不能为空，请完善后再保存`));
+    return;
+  }
+
+  const knowledge_id = selectedFileId
+  const user_metadata_list = mainMetadataList.map(item => ({
+      field_name: item.name,
+      field_value: item.value
+    }))
+  try {
+    // 3. 调用API保存数据
+    await saveUserMetadataApi(knowledge_id,user_metadata_list);
+    
+    // 4. 保存成功处理
+    toast({
+      title: t('成功'),
+      description: t('元数据已成功保存'),
+    });
+    setMetadataDialog(prev => ({ ...prev, open: false })); // 关闭弹窗
+    setMetadataError(''); // 清除错误提示
+  } catch (error) {
+    // 5. 保存失败处理
+    console.error('保存元数据失败：', error);
+    setMetadataError(t('保存失败，请检查网络或联系管理员'));
+  }
+}, [mainMetadataList, id, t]);
+    // 右侧弹窗公共容器组件
+    const SideDialogContent = useMemo(() =>
+        React.forwardRef<
+            React.ElementRef<typeof DialogPrimitive.Content>,
+            React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
+        >(({ children, className, ...props }, ref) => (
+            <DialogPrimitive.Portal>
+                <DialogPrimitive.Content
+                    ref={ref}
+                    {...props}
+                    className={cname(
+                        "fixed z-50 flex flex-col border bg-background dark:bg-[#303134] shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg",
+                        `w-[${sideDialogWidth}px]`,
+                        isSmallScreen ? "p-3 text-sm" : "p-5",
+                        className
+                    )}
+                    style={{
+                        top: `${sideDialogPosition.top}px`,
+                        left: `${sideDialogPosition.left}px`,
+                        transform: "none",
+                        maxHeight: "80vh",
+                    }}
+                >
+                    {children}
+                </DialogPrimitive.Content>
+            </DialogPrimitive.Portal>
+        ))
+        , [sideDialogWidth, isSmallScreen, sideDialogPosition, closeSideDialog]);
+    SideDialogContent.displayName = "SideDialogContent";
 
     if (load) return <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
         <LoadingIcon />
@@ -597,7 +970,7 @@ export default function Paragraphs({ fileId, onBack }) {
                                             <FileIcon
                                                 type={(() => {
                                                     const targetFile = files.find(f => f.value === selectedFileId);
-                                                    if (!targetFile) return 'txt'; // 文件不存在时默认'txt'
+                                                    if (!targetFile) return 'txt';
                                                     const parts = targetFile.label.split('.');
                                                     return parts.length > 1 ? parts.pop().toLowerCase() : 'txt';
                                                 })()}
@@ -620,7 +993,7 @@ export default function Paragraphs({ fileId, onBack }) {
                                 align="start"
                                 sideOffset={5}
                                 style={{ zIndex: 9999 }}
-                                onCloseAutoFocus={(e) => e.preventDefault()} // 阻止自动失焦
+                                onCloseAutoFocus={(e) => e.preventDefault()}
                             >
                                 <div className="p-2 border-b border-gray-200">
                                     <div className="relative">
@@ -653,10 +1026,9 @@ export default function Paragraphs({ fileId, onBack }) {
                                             key={file.value}
                                             onSelect={(e) => {
                                                 e.preventDefault();
-                                                // 核心修复3：同步执行，去掉setTimeout，避免首次进入时异步阻塞
                                                 handleFileChange(file.value);
                                                 setSearchTerm("");
-                                                setIsDropdownOpen(false); // 强制关闭菜单
+                                                setIsDropdownOpen(false);
                                             }}
                                             className="cursor-pointer hover:bg-gray-50 px-3 py-2 relative"
                                         >
@@ -712,7 +1084,6 @@ export default function Paragraphs({ fileId, onBack }) {
 
             {/* 主要内容区 */}
             <div className={contentLayoutClass}>
-                {/* 预览组件 - 修复显示问题 */}
                 {isPreviewVisible ? (
                     <PreviewFile
                         rawFiles={rawFiles}
@@ -735,7 +1106,6 @@ export default function Paragraphs({ fileId, onBack }) {
                     )
                 )}
 
-                {/* 分段组件 */}
                 {isParagraphVisible ? (
                     <div className={isPreviewVisible ? "w-1/2" : " w-full max-w-3xl"}>
                         <div className="flex justify-center items-center relative text-sm gap-2 p-2 pt-0 ">
@@ -775,29 +1145,70 @@ export default function Paragraphs({ fileId, onBack }) {
                 />
             </div>
 
-            {/* 元数据弹窗 */}
+            {/* 主元数据弹窗 - 添加ref用于位置计算 */}
             <Dialog open={metadataDialog.open} onOpenChange={(open) => setMetadataDialog(prev => ({ ...prev, open }))}>
-                <DialogContent className="sm:max-w-[625px]">
+                <DialogContent
+                    ref={mainMetadataDialogRef}
+                    className="sm:max-w-[525px] max-w-[625px] max-h-[80vh] overflow-y-auto"
+                >
                     <DialogHeader>
-                        <h3 className="text-lg font-semibold">{t('文档元数据')}</h3>
+                        <h3 className="text-lg font-semibold">{t('元数据')}</h3>
                     </DialogHeader>
-                    <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
+                    <button
+                        onClick={handleSearchMetadataClick}
+                        className="py-2 w-full flex items-center justify-center gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                        <Plus size={16} />
+                        <span>{t('添加元数据')}</span>
+                    </button>
+
+                    {/* 主元数据列表 */}
+                    {mainMetadataList.length > 0 && (
+                        <div className="space-y-2 mt-4">
+                            {mainMetadataList.map((metadata) => (
+                                <MetadataRow
+                                    key={metadata.id}
+                                    item={metadata}
+                                    onDelete={handleDeleteMainMetadata}
+                                    onValueChange={handleMainMetadataValueChange}
+                                    isSmallScreen={isSmallScreen}
+                                    t={t}
+                                    showInput={true}
+                                />
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="grid gap-4 py-4">
+                        <div className="font-medium">文档信息</div>
                         <div className="space-y-2">
                             {[
+                                {
+                                    label: t('文件id'),
+                                    value: metadataDialog.file?.file_name,
+                                },
                                 {
                                     label: t('文件名称'),
                                     value: metadataDialog.file?.file_name,
                                     isFileName: true
                                 },
-                                { label: t('原始文件大小'), value: metadataDialog.file?.file_size ? formatFileSize(metadataDialog.file.file_size) : null },
                                 {
                                     label: t('创建时间'),
                                     value: metadataDialog.file?.create_time ? metadataDialog.file.create_time.replace('T', ' ') : null
                                 },
                                 {
+                                    label: t('创建者'),
+                                    value: metadataDialog.file?.file_name,
+                                },
+                                {
+                                    label: t('更新者'),
+                                    value: metadataDialog.file?.file_name,
+                                },
+                                {
                                     label: t('更新时间'),
                                     value: metadataDialog.file?.update_time ? metadataDialog.file.update_time.replace('T', ' ') : null
                                 },
+                                { label: t('原始文件大小'), value: metadataDialog.file?.file_size ? formatFileSize(metadataDialog.file.file_size) : null },
                                 {
                                     label: t('切分策略'),
                                     value: metadataDialog.file ? splitRuleDesc(metadataDialog.file) : null
@@ -814,6 +1225,26 @@ export default function Paragraphs({ fileId, onBack }) {
                                 )
                             ))}
                         </div>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-4 border-t border-gray-200">
+                        {/* 取消按钮 */}
+                        <Button
+                            variant="outline"
+                            onClick={() => setMetadataDialog(prev => ({ ...prev, open: false }))}
+                            className={cname(isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm")}
+                        >
+                            {t('取消')}
+                        </Button>
+                        {/* 保存按钮 */}
+                        <Button
+                            onClick={handleSaveUserMetadata}
+                            className={cname(
+                                "bg-blue-500 hover:bg-blue-600",
+                                isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm"
+                            )}
+                        >
+                            {t('保存')}
+                        </Button>
                     </div>
                 </DialogContent>
             </Dialog>
@@ -835,6 +1266,178 @@ export default function Paragraphs({ fileId, onBack }) {
                     />
                 </DialogContent>
             </Dialog>
+
+            {/* 统一的右侧弹窗 */}
+            <DialogPrimitive.Dialog open={sideDialog.open} onOpenChange={(open) => {
+                if (!open) closeSideDialog();
+            }}>
+                <SideDialogContent>
+                    {sideDialog.type === 'search' && (
+                        <>
+                            <DialogHeader>
+                                <div className="relative w-full">
+                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500" />
+                                    <input
+                                        ref={searchInputRef}
+                                        type="text"
+                                        placeholder={t('搜索元数据')}
+                                        className={cname(
+                                            "w-full pl-9 pr-3 py-2 text-sm bg-white rounded-md outline-none ring-1 ring-gray-200",
+                                            isSmallScreen ? "text-xs py-1.5" : ""
+                                        )}
+                                        value={searchTerm}
+                                        onChange={(e) => {
+                                            e.stopPropagation();
+                                            setSearchTerm(e.target.value);
+                                        }}
+                                        onKeyDown={(e) => {
+                                            e.stopPropagation();
+                                            if (e.key === 'Escape') {
+                                                closeSideDialog();
+                                            }
+                                        }}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                        }}
+                                    />
+                                </div>
+                            </DialogHeader>
+
+                            {/* 可滚动区域 - 使用 flex 布局 */}
+                            <div className="flex-1 min-h-0 overflow-y-auto">
+                                <div
+                                    className="h-full overflow-y-auto"
+                                    onWheel={(e) => {
+                                        // 手动处理滚动事件，确保正常工作
+                                        e.stopPropagation();
+                                    }}
+                                >
+                                    <div className="space-y-3 pr-2">
+                                        {filteredPredefinedMetadata.map((metadata) => (
+                                            <div
+                                                key={metadata.id}
+                                                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                                                onClick={() => handleAddFromSearch(metadata)}
+                                            >
+                                                <div className="flex items-center gap-3 flex-1">
+                                                    <span className={isSmallScreen ? "text-base" : "text-lg"}>
+                                                        {TYPE_ICONS[metadata.type]}
+                                                    </span>
+                                                    <span className={cname(
+                                                        "text-gray-500 min-w-[60px]",
+                                                        isSmallScreen ? "text-xs" : "text-sm"
+                                                    )}>
+                                                        {metadata.type}
+                                                    </span>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="font-medium text-sm">{metadata.name}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid gap-4 pt-4 border-t">
+                                <div className="space-y-2">
+                                    <button
+                                        onClick={handleCreateMetadataClick}
+                                        className="py-2 w-full flex items-center justify-center gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        <Plus size={isSmallScreen ? 14 : 16} />
+                                        <span>{t('新建元数据')}</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </>
+                    )}
+
+                    {sideDialog.type === 'create' && (
+                        <>
+                            <DialogHeader>
+                                <h3 className={cname("text-lg font-semibold", isSmallScreen ? "text-base" : "")}>{t('新建元数据')}</h3>
+                                <DialogDescription className={isSmallScreen ? "text-xs" : ""}>请输入新元数据的名称和类型。</DialogDescription>
+                            </DialogHeader>
+
+                            <div className="grid gap-4 py-4">
+                                {/* 元数据类型 */}
+                                <div className="space-y-1.5">
+                                    <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>{t('类型')}</label>
+                                    <div className="flex gap-1">
+                                        {['String', 'Number', 'Time'].map((type) => (
+                                            <button
+                                                key={type}
+                                                onClick={() => setNewMetadata(prev => ({ ...prev, type: type as 'String' | 'Number' | 'Time' }))}
+                                                className={cname(
+                                                    "flex-1 rounded-md font-medium transition-colors",
+                                                    newMetadata.type === type
+                                                        ? "bg-blue-500 text-white"
+                                                        : "bg-gray-100 hover:bg-gray-200 text-gray-700",
+                                                    isSmallScreen ? "py-1.5 px-2 text-xs" : "py-2 px-4 text-sm"
+                                                )}
+                                            >
+                                                {type}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* 元数据名称 */}
+                                <div className="space-y-1.5">
+                                    <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>{t('名称')}</label>
+                                    <input
+                                        type="text"
+                                        value={newMetadata.name}
+                                        onChange={(e) => {
+                                            setNewMetadata(prev => ({ ...prev, name: e.target.value }));
+                                            // 清除错误状态当用户开始输入时
+                                            if (metadataError) setMetadataError('');
+                                        }}
+                                        placeholder={t('请输入元数据名称')}
+                                        className={cname(
+                                            "w-full px-3 py-2 border rounded-md text-sm",
+                                            isSmallScreen ? "text-xs h-8 py-1.5" : "",
+                                            // 添加错误状态样式
+                                            metadataError ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-blue-500"
+                                        )}
+                                    />
+                                </div>
+
+                                {/* 错误提示 */}
+                                {metadataError && (
+                                    <div className={cname(
+                                        "flex items-center gap-1.5 text-red-500",
+                                        isSmallScreen ? "text-xs" : "text-sm"
+                                    )}>
+                                        <AlertCircle size={isSmallScreen ? 14 : 16} />
+                                        <span>{metadataError}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex justify-end gap-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setSideDialog({ type: 'search', open: true })}
+                                    className={cname(isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm")}
+                                >
+                                    {t('取消')}
+                                </Button>
+                                <Button
+                                    onClick={handleSaveNewMetadata}
+                                    className={cname(
+                                        "bg-blue-500 hover:bg-blue-600",
+                                        isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm"
+                                    )}
+                                >
+                                    {t('保存')}
+                                </Button>
+                            </div>
+                        </>
+                    )}
+                </SideDialogContent>
+            </DialogPrimitive.Dialog>
         </div>
     );
 }

@@ -24,36 +24,44 @@ import VarItem from "./component/VarItem";
 import VarSelectItem, { VarSelectSingleItem } from "./component/VarSelectItem";
 import VarTextareaItem from "./component/VarTextareaItem";
 import VarTextareaUploadItem from "./component/VarTextareaUploadItem";
+import MetadataFilter from "./component/MetadataFilter";
+import { useEffect, useState } from "react";
 
-// 节点表单项
-export default function Parameter({ node, nodeId, item, onOutPutChange, onStatusChange, onFouceUpdate, onVarEvent }
-    : {
-        nodeId: string,
-        node: WorkflowNode,
-        item: WorkflowNodeParam,
-        onOutPutChange: (key: string, value: any) => void
-        onStatusChange: (key: string, obj: any) => void
-        onVarEvent: (key: string, obj: any) => void
-        onFouceUpdate: () => void
-    }) {
+export default function Parameter({ 
+  node, 
+  nodeId, 
+  item, 
+  onOutPutChange, 
+  onStatusChange, 
+  onFouceUpdate, 
+  onVarEvent,
+  selectedKnowledgeIds
+}: {
+  nodeId: string;
+  node: WorkflowNode;
+  item: WorkflowNodeParam;
+  onOutPutChange: (key: string, value: any) => void;
+  onStatusChange: (key: string, obj: any) => void;
+  onVarEvent: (key: string, obj: any) => void;
+  onFouceUpdate: () => void;
+}) {
+    
+  const handleOnNewValue = (newValue: any, validate?: any) => {
+    item.value = newValue;
+    if (validate) bindValidate(validate);
+  };
 
-    const handleOnNewValue = (newValue: any, validate?: any) => {
-        // 更新by引用(视图更新再组件内部完成)
-        item.value = newValue;
-    }
+  const bindValidate = (validate: any) => {
+    onStatusChange(item.key, { param: item, validate });
+  };
 
-    const bindValidate = (validate) => {
-        validate && onStatusChange(item.key, { param: item, validate })
-    }
+  const bindVarValidate = (validate: any) => {
+    onVarEvent(item.key, { param: item, validate });
+  };
 
-    const bindVarValidate = (validate) => {
-        onVarEvent(item.key, { param: item, validate })
-    }
+  if (item.hidden) return null;
 
-    if (item.hidden) return null
-
-    // 渲染逻辑根据 `type` 返回不同的组件
-    switch (item.type) {
+   switch (item.type) {
         case 'textarea':
             return <TextAreaItem data={item} onChange={handleOnNewValue} />;
         case 'input':
@@ -151,7 +159,16 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
         case 'image_prompt':
             return <ImagePromptItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onVarEvent={bindVarValidate} />;
         case 'search_switch':
-            return <RetrievalWeightSlider data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
+            return <RetrievalWeightSlider data={item} onChange={handleOnNewValue}  onValidate={bindValidate} />;
+        case "metadata_Filter": return (
+            <MetadataFilter 
+            data={item} 
+            onChange={handleOnNewValue} 
+            onValidate={bindValidate} 
+            selectedKnowledgeIds={selectedKnowledgeIds}
+             nodeId={nodeId}
+            />
+        );
         default:
             return <div>Unsupported parameter type</div>;
     }

@@ -16,16 +16,17 @@ import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import { truncateString } from "@/util/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
-import { FileSearch2, Filter, RotateCw, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Filter, RotateCw, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../../components/bs-ui/input";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
-import { deleteFile, readFileByLibDatabase, retryKnowledgeFileApi } from "../../../controllers/API";
+import { deleteFile, getKnowledgeDetailApi, readFileByLibDatabase, retryKnowledgeFileApi } from "../../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import useKnowledgeStore from "../useKnowledgeStore";
 import Tip from "@/components/bs-ui/tooltip/tip";
+import MetadataDialog from "./MetaData";
 import { MetadataManagementDialog } from "./MetadataManagementDialog";
 
 export default function Files({ onPreview }) {
@@ -40,6 +41,7 @@ export default function Files({ onPreview }) {
             return res
         })
     )
+    const [metadataOpen, setMetadataOpen] = useState(false);
     const navigate = useNavigate()
 
     // 存储完整文件对象（保留所有原始参数）
@@ -50,7 +52,7 @@ export default function Files({ onPreview }) {
     const [selectedFilters, setSelectedFilters] = useState<number[]>([]);
     const [tempFilters, setTempFilters] = useState<number[]>([]);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
-
+    const [metadataFields, setMetadataFields] = useState<Array<{ field_name: string; field_type: string }>>([]);
     // 解析中轮巡
     const timerRef = useRef(null)
     useEffect(() => {
@@ -231,9 +233,36 @@ export default function Files({ onPreview }) {
         }
         setIsFilterOpen(open);
     };
+ useEffect(() => {
+    console.log(metadataOpen,78);
+    
+        // 弹窗打开且有知识库ID时，加载元数据
+        if (metadataOpen && id) { // 注意：这里的依赖是 metadataOpen，而不是 open
+            const fetchMetadata = async () => {
+                try {
+                    // 调用接口获取知识库详情
+                      const knowledgeDetails = await getKnowledgeDetailApi([id]);
+                    const knowledgeDetail = knowledgeDetails[0]; // 获取第一个知识库的详情
+                 if (knowledgeDetail && knowledgeDetail.metadata_fields) {
+                        setMetadataFields(knowledgeDetail.metadata_fields);
+                    } else {
+                        setMetadataFields([]); // 如果没有元数据，设为空数组
+                    }
 
+                } catch (err: any) {
+                    console.error("元数据加载失败：", err);
+                    // 可以在这里添加用户提示
+                }
+            };
+            fetchMetadata();
+        }else if (!metadataOpen) {
+            // 当弹窗关闭时，清空元数据状态
+            setMetadataFields([]);
+        }
+    }, [metadataOpen, id]);
     return (
         <div className="relative">
+            
             {loading && (
                 <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                     <LoadingIcon />
@@ -274,16 +303,19 @@ export default function Files({ onPreview }) {
                 </div>
             )}
 
-            <div className="absolute right-0 top-[-62px] flex gap-4 items-center z-20">
+            <div className="absolute right-0 top-[-62px] flex gap-4 items-center z-999">
                 <SearchInput placeholder={t('searchFileName')} onChange={(e) => {
                     search(e.target.value);
                     setSelectedFileObjs([]);
                     setIsAllSelected(false);
                 }} />
-                {/* <Button variant="outline" onClick={() => setDialogOpen(true)} >
-                    <FileSearch2 size={16} />
-                    元数据
-                </Button> */}
+                <Button
+                    variant="outline"
+                    onClick={() => setMetadataOpen(true)}
+                    className="px-4 whitespace-nowrap"
+                >
+                    {t('元数据')}
+                </Button>
                 {isEditable && (
                     <Link to={`/filelib/upload/${id}`}>
                         <Button className="px-8">{t('uploadFile')}</Button>
@@ -562,13 +594,20 @@ export default function Files({ onPreview }) {
                     />
                 </div>
             </div>
-
-            {/* 元数据管理弹窗 */}
             <MetadataManagementDialog
-                open={dialogOpen}
-                onOpenChange={setDialogOpen}
-                hasManagePermission={true}
+                open={metadataOpen} 
+                onOpenChange={() => setMetadataOpen(false)}
+                onSave={() => {}}
+                hasManagePermission={isEditable}
+                id={id}
+                initialMetadata={metadataFields}
             />
+            {/* <MetadataDialog 
+  open={metadataOpen} 
+  onClose={() => setMetadataOpen(false)} 
+  documentId={id} // 传入当前文档ID
+/> */}
         </div>
+        
     )
 }
