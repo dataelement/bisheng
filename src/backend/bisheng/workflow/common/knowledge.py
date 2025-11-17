@@ -30,7 +30,7 @@ class ConditionOne(BaseModel):
             right_value = parent_node.get_other_node_variable(self.right_value)
         field_type = field_info.get('field_type')
         if field_type == MetadataFieldType.STRING.value:
-            right_value = f"'{str(right_value)}'"
+            right_value = str(right_value)
         elif field_type == MetadataFieldType.NUMBER.value:
             right_value = int(right_value)
         elif field_type == MetadataFieldType.TIME.value:
@@ -46,9 +46,13 @@ class ConditionOne(BaseModel):
         es_prefix = "metadata.user_metadata"
         es_item = []
         if self.comparison_operation == "equals":
+            if field_type == MetadataFieldType.STRING.value:
+                right_value = f"'{right_value}'"
             milvus_item = f"{milvus_prefix}['{self.metadata_field}'] == {right_value}"
             es_item.append({"term": {f"{es_prefix}.{self.metadata_field}": right_value}})
         elif self.comparison_operation == "not_equals":
+            if field_type == MetadataFieldType.STRING.value:
+                right_value = f"'{right_value}'"
             milvus_item = f"{milvus_prefix}['{self.metadata_field}'] != {right_value}"
             es_item.append({"range": {f"{es_prefix}.{self.metadata_field}": {"lt": right_value}}})
             es_item.append({"range": {f"{es_prefix}.{self.metadata_field}": {"gt": right_value}}})
