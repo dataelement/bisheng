@@ -352,11 +352,11 @@ const MetadataFilter = ({
                               <>
                                 <div className="p-2 border-b">
                                   <div className="relative">
-                                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    <Search className="absolute left-3 top-2.5 h-3 w-3 text-muted-foreground" />
                                     <input
                                       type="text"
                                       placeholder="搜索元数据"
-                                      className="w-full pl-8 pr-2 py-1 text-sm border rounded"
+                                      className="w-full pl-8 pr-2 py-1 text-[8px] border rounded"
                                       value={searchTerm}
                                       onChange={(e) => setSearchTerm(e.target.value)}
                                       onClick={(e) => e.stopPropagation()}
@@ -364,27 +364,25 @@ const MetadataFilter = ({
                                   </div>
                                 </div>
 
-                                {filteredMetadata.length > 0 ? (
-                                  filteredMetadata.map((meta) => (
-                                    <SelectItem
-                                      key={meta.id}
-                                      value={meta.id}
-                                      showIcon={false}
-                                      className="pr-4"
-                                    >
-                                      <div className="flex justify-between items-center w-full">
-                                        <div className="flex items-center gap-1 flex-1 min-w-0">
-                                          <span className="flex-shrink-0">{meta.icon}</span>
-                                          <span className="text-xs text-muted-foreground flex-shrink-0">{meta.type}</span>
-                                          <span className="truncate flex-1">{meta.name}</span>
-                                        </div>
-                                        <span className="text-xs text-gray-500 ml-2 flex-shrink-0 truncate max-w-[80px]">
-                                          {meta.knowledgeBase}
-                                        </span>
-                                      </div>
-                                    </SelectItem>
-                                  ))
-                                ) : (
+                               {filteredMetadata.length > 0 ? (
+  filteredMetadata.map((meta) => (
+    <SelectItem
+      key={meta.id}
+      value={meta.id}
+      showIcon={false}
+      className="pr-4"
+    >
+      <div className="grid grid-cols-[auto_auto_1fr_auto] items-center w-full gap-1">
+        <span className="flex-shrink-0">{meta.icon}</span>
+        <span className="text-xs text-muted-foreground flex-shrink-0">{meta.type}</span>
+        <span className="truncate">{meta.name}</span>
+        <span className="text-xs text-gray-500 ml-2 flex-shrink-0 truncate max-w-[80px]">
+          {meta.knowledgeBase}
+        </span>
+      </div>
+    </SelectItem>
+  ))
+) : (
                                   <div className="p-4 text-center text-sm text-gray-500">
                                     暂无元数据字段
                                   </div>

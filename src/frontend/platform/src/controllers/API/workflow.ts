@@ -705,9 +705,9 @@ const workflowTemplate = [
                         "required": true
                     },
                     {
-                        "key": "metadata_Filter_switch",
+                        "key": "metadata_filter",
                         "label": "元数据过滤",
-                        "type": "metadata_Filter",//searchSwitch
+                        "type": "metadata_filter",//searchSwitch
                         "value": {},
                     },
                     {
@@ -833,7 +833,7 @@ const workflowTemplate = [
                         "required": true
                     },
                     {
-                        "key": "metadata_Filter_switch",
+                        "key": "metadata_filter",
                         "label": "元数据过滤",
                         "type": "metadata_Filter",
                         "value": {},
