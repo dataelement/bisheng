@@ -227,12 +227,34 @@ const MetadataFilter = ({
     return metadata?.type || null;
   };
 
-  const validateConditions = () => {
-    const isValid = conditions.every(cond => cond.metadataField && cond.operator);
-    onValidate({ valid: isValid });
-    setRequired(!isValid);
-    return isValid;
+// 修改验证逻辑部分
+const validateConditions = () => {
+  const isValid = conditions.every(cond => cond.metadataField && cond.operator);
+  
+  // 创建验证函数，返回错误信息或false
+  const validateFunc = () => {
+    const errors = [];
+    
+    // 检查每个条件是否完整
+    conditions.forEach((cond, index) => {
+      if (!cond.metadataField) {
+        errors.push(`条件 ${index + 1}: 请选择元数据字段`);
+      }
+      if (!cond.operator) {
+        errors.push(`条件 ${index + 1}: 请选择操作符`);
+      }
+      if (!['empty', 'not_empty'].includes(cond.operator) && !cond.value) {
+        errors.push(`条件 ${index + 1}: 请输入值`);
+      }
+    });
+    
+    return errors.length > 0 ? errors.join('; ') : false;
   };
+  
+  onValidate(validateFunc);
+  setRequired(!isValid);
+  return isValid;
+};
 
   const renderValueInput = (condition: MetadataCondition) => {
     const metadataType = getConditionMetadataType(condition.id);
