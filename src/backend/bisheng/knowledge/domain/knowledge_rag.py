@@ -82,6 +82,7 @@ class KnowledgeRag:
         ret = {}
         for knowledge in knowledge_list:
             ret[knowledge.id] = {
+                "knowledge": knowledge,
                 "milvus": None,
                 "es": None,
             }

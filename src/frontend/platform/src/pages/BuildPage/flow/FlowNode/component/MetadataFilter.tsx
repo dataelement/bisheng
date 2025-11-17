@@ -41,14 +41,17 @@ const MetadataFilter = ({
   onChange,
   onValidate,
   selectedKnowledgeIds = () => [],
-   nodeId
+   nodeId,
+   node
 }: MetadataFilterProps) => {
+
+  
   const [isEnabled, setIsEnabled] = useState(false);
   const [conditions, setConditions] = useState<MetadataCondition[]>(() => {
     if (data.value?.conditions) {
       return data.value.conditions.map(cond => ({
         id: cond.id || generateUUID(8),
-        metadataField: cond.metadata_filed || "",
+        metadataField: cond.metadata_field || "",
         operator: cond.comparison_operation || "",
         valueType: cond.right_value_type === "ref" ? "reference" : "input",
         value: cond.right_value || "",
@@ -86,6 +89,7 @@ const MetadataFilter = ({
 
   // 获取元数据的函数
   const fetchAndPrepareMetadata = async () => {
+      console.log(node,78888);
     setIsLoadingMetadata(true);
     let availableMetadata: MetadataField[] = [];
     try {
@@ -94,6 +98,7 @@ const MetadataFilter = ({
 
       if (knowledgeIds.length > 0) {
         const knowledgeDetails = await getKnowledgeDetailApi(knowledgeIds);
+        
         knowledgeDetails.forEach((detail: any) => {
           const kbLabel = detail.name || detail.label || "未知知识库";
           if (detail.metadata_fields && Array.isArray(detail.metadata_fields)) {
@@ -144,7 +149,6 @@ const MetadataFilter = ({
 
   // 监听数据变化，强制刷新
   useEffect(() => {
-    // 当组件启用时，立即获取一次数据
     if (isEnabled) {
       fetchAndPrepareMetadata();
     }
@@ -162,7 +166,7 @@ const MetadataFilter = ({
           return {
             id: cond.id,
             knowledge_id: knowledgeId ? parseInt(knowledgeId, 10) : 0,
-            metadata_filed: metaField?.name || "",
+            metadata_field: metaField?.name || "",
             comparison_operation: cond.operator,
             right_value_type: cond.valueType === "reference" ? "ref" : "input",
             right_value: cond.value,
@@ -199,22 +203,29 @@ const MetadataFilter = ({
     setConditions(prev => prev.filter(c => c.id !== id));
   };
 
-  const updateCondition = (id: string, field: keyof MetadataCondition, value: string) => {
-    setConditions(prev => prev.map(condition => {
-      if (condition.id === id) {
-        const updated = { ...condition, [field]: value };
-        if (field === "operator" && ["empty", "not_empty"].includes(value)) {
-          updated.value = "";
-        }
-        if (field === "metadataField") {
-          updated.operator = "";
-          updated.value = "";
-        }
-        return updated;
+const updateCondition = (id: string, field: keyof MetadataCondition, value: string) => {
+  setConditions(prev => prev.map(condition => {
+    if (condition.id === id) {
+      const updated = { ...condition, [field]: value };
+      
+      if (field === "operator" && ["empty", "not_empty"].includes(value)) {
+        updated.value = "";
       }
-      return condition;
-    }));
-  };
+      
+      if (field === "metadataField") {
+        updated.operator = "";
+        updated.value = "";
+        updated.valueType = "input";
+      }
+      if (field === "valueType") {
+        updated.value = "";
+      }
+      
+      return updated;
+    }
+    return condition;
+  }));
+};
 
   const handleRelationChange = () => {
     setRelation(prev => prev === "and" ? "or" : "and");
@@ -227,12 +238,34 @@ const MetadataFilter = ({
     return metadata?.type || null;
   };
 
-  const validateConditions = () => {
-    const isValid = conditions.every(cond => cond.metadataField && cond.operator);
-    onValidate({ valid: isValid });
-    setRequired(!isValid);
-    return isValid;
+// 修改验证逻辑部分
+const validateConditions = () => {
+  const isValid = conditions.every(cond => cond.metadataField && cond.operator);
+  
+  // 创建验证函数，返回错误信息或false
+  const validateFunc = () => {
+    const errors = [];
+    
+    // 检查每个条件是否完整
+    conditions.forEach((cond, index) => {
+      if (!cond.metadataField) {
+        errors.push(`条件 ${index + 1}: 请选择元数据字段`);
+      }
+      if (!cond.operator) {
+        errors.push(`条件 ${index + 1}: 请选择操作符`);
+      }
+      if (!['empty', 'not_empty'].includes(cond.operator) && !cond.value) {
+        errors.push(`条件 ${index + 1}: 请输入值`);
+      }
+    });
+    
+    return errors.length > 0 ? errors.join('; ') : false;
   };
+  
+  onValidate(validateFunc);
+  setRequired(!isValid);
+  return isValid;
+};
 
   const renderValueInput = (condition: MetadataCondition) => {
     const metadataType = getConditionMetadataType(condition.id);
@@ -256,7 +289,9 @@ const MetadataFilter = ({
               nodeId={nodeId} // 假设 nodeId 在当前组件作用域内可用
               itemKey={condition.id}
               onSelect={(E, v) => {
-                  const selectedValue = `${E.id}.${v.value}`;
+                console.log(E,v,45);
+                
+                  const selectedValue = `${E.name}.${v.value}`;
                   updateCondition(condition.id, "value", selectedValue);
               }}
           >
@@ -268,7 +303,7 @@ const MetadataFilter = ({
               </div>
           </SelectVar>
           {metadataType === "Time" && (
-            <div className="relative group/info flex-shrink-0 ml-1">
+            <div className="relative group/info flex-shrink-0 ml-1 ">
               <Info size={16} className="text-gray-400 cursor-help" />
               <div className="absolute bottom-full left-0 mb-2 hidden group-hover/info:block w-64 p-2 bg-black text-white text-xs rounded z-10">
                 引用变量格式为 "YYYY-MM-DDTHH:mm:ss"
@@ -281,9 +316,17 @@ const MetadataFilter = ({
     if (metadataType === "String") {
       return <Input placeholder={condition.operator === "regex" ? "输入正则表达式" : "请输入文本"} value={condition.value} onChange={(e) => updateCondition(condition.id, "value", e.target.value)} maxLength={255} className="h-8" />;
     }
-    if (metadataType === "Number") {
-      return <InputItem type="number" data={{ value: condition.value, label: "" }} onChange={(e) => updateCondition(condition.id, "value", e.target.value)} />;
-    }
+   if (metadataType === "Number") {
+  return (
+    <div className="mt-2">
+      <InputItem 
+        type="number" 
+        data={{ value: condition.value, label: ""}} 
+        onChange={(e) => updateCondition(condition.id, "value", e.target.value)} 
+      />
+    </div>
+  );
+}
     if (metadataType === "Time") {
       return <DatePicker value={condition.value ? new Date(condition.value) : undefined} showTime onChange={(d) => updateCondition(condition.id, "value", d ? format(d, "yyyy-MM-dd'T'HH:mm:ss") : "")} />;
     }

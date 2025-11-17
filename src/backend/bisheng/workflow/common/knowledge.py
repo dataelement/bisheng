@@ -12,10 +12,6 @@ from bisheng.knowledge.domain.models.knowledge import Knowledge, MetadataFieldTy
 from bisheng.llm.domain import LLMService
 from bisheng.workflow.nodes.base import BaseNode
 
-[{"field_name": "file_11", "field_type": "string", "updated_at": 1763031727},
- {"field_name": "file_22", "field_type": "string", "updated_at": 1763031727},
- {"field_name": "file_33", "field_type": "number", "updated_at": 1763031727}]
-
 
 class ConditionOne(BaseModel):
     id: str = Field(..., description='Unique id for condition')
@@ -110,14 +106,17 @@ class ConditionCases(BaseModel):
         milvus_conditions = []
         if not self.conditions:
             return milvus_filter, es_filter
+        metadata_field_info = {}
+        if knowledge.metadata_fields:
+            metadata_field_info = {one["field_name"]: one for one in knowledge.metadata.fields}
         for condition in self.conditions:
             if int(condition.knowledge_id) != knowledge.id:
                 continue
-            if not knowledge.metadata_fields or condition.metadata_field not in knowledge.metadata_fields:
+            if not metadata_field_info or not metadata_field_info.get(condition.metadata_field):
                 logger.warning(f"condition field {condition.metadata_field} not in knowledge metadata fields")
                 continue
             one_milvus_filter, one_es_filter = condition.get_knowledge_filter(
-                knowledge.metadata_fields[condition.metadata_field], parent_node)
+                metadata_field_info[condition.metadata_field], parent_node)
             if one_milvus_filter:
                 milvus_conditions.append(one_milvus_filter)
             if one_es_filter:
