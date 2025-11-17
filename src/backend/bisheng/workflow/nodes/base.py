@@ -52,7 +52,7 @@ class BaseNode(ABC):
 
         # 存储临时数据的 milvus 集合名 和 es 集合名 用workflow_id作为分区键
         # ！！！同一个collection中向量数据必须是同一个embedding_model生成的，所以集合名中需要包含embedding_model_id
-        self.tmp_collection_name = 'tmp_workflow_data'
+        self.tmp_collection_name = 'tmp_workflow_data_new'
 
         self.stop_flag = False
 

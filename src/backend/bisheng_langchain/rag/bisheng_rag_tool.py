@@ -3,23 +3,23 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import httpx
 import yaml
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains.llm import LLMChain
+from langchain_core.callbacks import CallbackManagerForChainRun
+from langchain_core.language_models.base import LanguageModelLike
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import BaseTool, Tool
+from langchain_core.vectorstores import VectorStoreRetriever
+from loguru import logger
+from pydantic import BaseModel, Field
+
 from bisheng_langchain.rag.extract_info import extract_title
 from bisheng_langchain.rag.init_retrievers import (BaselineVectorRetriever, KeywordRetriever,
                                                    MixRetriever, SmallerChunksVectorRetriever)
 from bisheng_langchain.rag.utils import import_by_type, import_class
 from bisheng_langchain.retrievers import EnsembleRetriever
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
-from langchain.chains.llm import LLMChain
-from langchain.chains.question_answering import load_qa_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.callbacks import CallbackManagerForChainRun
-from langchain_core.language_models.base import LanguageModelLike
-from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel, Field
-from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import BaseTool, Tool
-from langchain_core.vectorstores import VectorStoreRetriever
-from loguru import logger
 
 
 class MultArgsSchemaTool(Tool):
@@ -28,7 +28,7 @@ class MultArgsSchemaTool(Tool):
         # For backwards compatibility, if run_input is a string,
         # pass as a positional argument.
         if isinstance(tool_input, str):
-            return (tool_input, ), {}
+            return (tool_input,), {}
         else:
             return (), tool_input
 
@@ -227,7 +227,8 @@ class BishengRAGTool:
         # 按照文档的source和chunk_index排序，保证上下文的连贯性和一致性
         if self.params['post_retrieval'].get('sort_by_source_and_index', False):
             logger.info('sort chunks by source and chunk_index')
-            docs = sorted(docs, key=lambda x: (x.metadata['source'], x.metadata['chunk_index']))
+            docs = sorted(docs,
+                          key=lambda x: (x.get('source', "") or x.get("document_name", ""), x.metadata['chunk_index']))
         return docs
 
     def run(self,
@@ -276,6 +277,7 @@ if __name__ == '__main__':
 
     from langchain.chat_models import ChatOpenAI
     from langchain.embeddings import OpenAIEmbeddings
+
     # embedding
     embeddings = OpenAIEmbeddings(model='text-embedding-ada-002')
     # llm
@@ -303,7 +305,8 @@ if __name__ == '__main__':
                                        keyword_store=keyword_store,
                                        llm=llm,
                                        max_content=15000)
-    print(tool.run('能否根据2020年金宇生物技术股份有限公司的年报，给我简要介绍一下报告期内公司的社会责任工作情况？', return_only_outputs=False))
+    print(tool.run('能否根据2020年金宇生物技术股份有限公司的年报，给我简要介绍一下报告期内公司的社会责任工作情况？',
+                   return_only_outputs=False))
 
     # tool = BishengRAGTool.get_rag_tool(
     #     name='rag_knowledge_retrieve',

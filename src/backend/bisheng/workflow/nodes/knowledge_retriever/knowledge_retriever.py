@@ -2,7 +2,7 @@ from typing import Any
 
 from loguru import logger
 
-from bisheng.workflow.nodes.utils import RagUtils
+from bisheng.workflow.common.knowledge import RagUtils
 
 
 class KnowledgeRetriever(RagUtils):
