@@ -41,6 +41,11 @@ from bisheng.database.models.group_resource import (
     GroupResourceDao,
     ResourceTypeEnum,
 )
+from bisheng.database.models.role_access import AccessType, RoleAccessDao
+from bisheng.database.models.user import UserDao
+from bisheng.database.models.user_group import UserGroupDao
+from bisheng.database.models.user_role import UserRoleDao
+from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import (
     Knowledge,
@@ -55,19 +60,12 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus, ParseType,
 )
-from bisheng.database.models.role_access import AccessType, RoleAccessDao
-from bisheng.database.models.user import UserDao
-from bisheng.database.models.user_group import UserGroupDao
-from bisheng.database.models.user_role import UserRoleDao
-from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.llm.const import LLMModelType
-from bisheng.llm.domain.services import LLMService
 from bisheng.llm.models import LLMDao
 from bisheng.utils import generate_uuid, generate_knowledge_index_name
 from bisheng.utils import get_request_ip
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.worker.knowledge import file_worker
-from bisheng_langchain.rag.bisheng_rag_chain import BishengRAGTool
 
 
 class KnowledgeService(KnowledgeUtils):
@@ -599,6 +597,7 @@ class KnowledgeService(KnowledgeUtils):
             split_rule_dict["excel_rule"] = req_data.excel_rule.model_dump()
         db_file.split_rule = json.dumps(split_rule_dict)
         db_file.status = KnowledgeFileStatus.PROCESSING.value  # 解析中
+        db_file.updater_id = login_user.user_id
         db_file = await KnowledgeFileDao.async_update(db_file)
 
         file_path, _ = cls.get_file_share_url(db_file.id)
@@ -784,15 +783,15 @@ class KnowledgeService(KnowledgeUtils):
                     }
                 ],
                 "post_filter": {
-                    "terms": {"metadata.file_id": [one.id for one in files]}
+                    "terms": {"metadata.document_id": [one.id for one in files]}
                 },
-                "collapse": {"field": "metadata.file_id"},
+                "collapse": {"field": "metadata.document_id"},
             }
             es_res = es_client.client.search(
                 index=db_knowledge.index_name, body=search_data
             )
             for one in es_res["hits"]["hits"]:
-                file_title_map[str(one["_source"]["metadata"]["file_id"])] = one["_source"]["metadata"]["title"]
+                file_title_map[str(one["_source"]["metadata"]["document_id"])] = one["_source"]["metadata"]["abstract"]
         except Exception as e:
             # maybe es index not exist so ignore this error
             logger.warning(f"act=get_knowledge_files error={str(e)}")
@@ -930,7 +929,7 @@ class KnowledgeService(KnowledgeUtils):
             "size": limit,
             "sort": [
                 {
-                    "metadata.file_id": {
+                    "metadata.document_id": {
                         "order": "desc",
                         "missing": 0,
                         "unmapped_type": "long",
@@ -946,7 +945,7 @@ class KnowledgeService(KnowledgeUtils):
             ],
         }
         if file_ids:
-            search_data["post_filter"] = {"terms": {"metadata.file_id": file_ids}}
+            search_data["post_filter"] = {"terms": {"metadata.document_id": file_ids}}
         if keyword:
             search_data["query"] = {"match_phrase": {"text": keyword}}
         try:
@@ -959,13 +958,13 @@ class KnowledgeService(KnowledgeUtils):
         file_ids = set()
         result = []
         for one in res["hits"]["hits"]:
-            file_ids.add(one["_source"]["metadata"]["file_id"])
+            file_ids.add(one["_source"]["metadata"]["document_id"])
         file_map = {}
         if file_ids:
             file_list = KnowledgeFileDao.get_file_by_ids(list(file_ids))
             file_map = {one.id: one for one in file_list}
         for one in res["hits"]["hits"]:
-            file_id = one["_source"]["metadata"]["file_id"]
+            file_id = one["_source"]["metadata"]["document_id"]
             file_info = file_map.get(file_id, None)
             # 过滤文件名和总结的文档摘要内容
             result.append(
@@ -1006,7 +1005,7 @@ class KnowledgeService(KnowledgeUtils):
         embeddings = decide_embeddings(db_knowledge.model)
 
         logger.info(
-            f"act=update_vector knowledge_id={knowledge_id} file_id={file_id} chunk_index={chunk_index}"
+            f"act=update_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}"
         )
         vector_client = decide_vectorstores(
             db_knowledge.collection_name, "Milvus", embeddings
@@ -1015,7 +1014,7 @@ class KnowledgeService(KnowledgeUtils):
         output_fields = ["pk"]
         output_fields.extend(list(FileChunkMetadata.model_fields.keys()))
         res = vector_client.col.query(
-            expr=f"file_id == {file_id} && chunk_index == {chunk_index}",
+            expr=f"document_id == {file_id} && chunk_index == {chunk_index}",
             output_fields=output_fields,
             timeout=10,
         )
@@ -1038,7 +1037,7 @@ class KnowledgeService(KnowledgeUtils):
         logger.info(f"act=update_vector_over {res}")
 
         logger.info(
-            f"act=update_es knowledge_id={knowledge_id} file_id={file_id} chunk_index={chunk_index}"
+            f"act=update_es knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}"
         )
         es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
         res = es_client.client.update_by_query(
@@ -1046,7 +1045,7 @@ class KnowledgeService(KnowledgeUtils):
             body={
                 "query": {
                     "bool": {
-                        "must": {"match": {"metadata.file_id": file_id}},
+                        "must": {"match": {"metadata.document_id": file_id}},
                         "filter": {"match": {"metadata.chunk_index": chunk_index}},
                     }
                 },
@@ -1057,6 +1056,14 @@ class KnowledgeService(KnowledgeUtils):
             },
         )
         logger.info(f"act=update_es_over {res}")
+
+        knowledge_file = KnowledgeFileDao.query_by_id_sync(file_id)
+
+        if knowledge_file:
+            knowledge_file.updater_id = login_user.user_id
+            knowledge_file.update_time = datetime.now()
+            KnowledgeFileDao.update(knowledge_file)
+
         return True
 
     @classmethod
@@ -1085,26 +1092,26 @@ class KnowledgeService(KnowledgeUtils):
         embeddings = FakeEmbedding()
 
         logger.info(
-            f"act=delete_vector knowledge_id={knowledge_id} file_id={file_id} chunk_index={chunk_index}"
+            f"act=delete_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}"
         )
         vector_client = decide_vectorstores(
             db_knowledge.collection_name, "Milvus", embeddings
         )
         res = vector_client.col.delete(
-            expr=f"file_id == {file_id} && chunk_index == {chunk_index}",
+            expr=f"document_id == {file_id} && chunk_index == {chunk_index}",
             timeout=10,
         )
         logger.info(f"act=delete_vector_over {res}")
 
         logger.info(
-            f"act=delete_es knowledge_id={knowledge_id} file_id={file_id} chunk_index={chunk_index} res={res}"
+            f"act=delete_es knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index} res={res}"
         )
         es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
         res = es_client.client.delete_by_query(
             index=index_name,
             query={
                 "bool": {
-                    "must": {"match": {"metadata.file_id": file_id}},
+                    "must": {"match": {"metadata.document_id": file_id}},
                     "filter": {"match": {"metadata.chunk_index": chunk_index}},
                 }
             },
@@ -1236,39 +1243,3 @@ class KnowledgeService(KnowledgeUtils):
         if db_knowledge.type == KnowledgeTypeEnum.NORMAL.value:
             raise ServerError.http_exception(msg="知识库为普通知识库")
         return db_knowledge
-
-
-def mixed_retrieval_recall(question: str, vector_store, keyword_store, max_content: int, model_id):
-    """
-    使用 BishengRetrieval进行混合检索召回
-    
-    Args:
-        question: 用户查询问题
-        vector_store: 向量存储（Milvus）
-        keyword_store: 关键词存储（Elasticsearch）
-    
-    Returns:
-        dict: 包含检索结果和源文档的字典
-    """
-    try:
-        llm = LLMService.get_bisheng_llm_sync(model_id=model_id,
-                                              temperature=0.01,
-                                              cache=False)
-        # 创建混合检索器
-        rag_tool = BishengRAGTool(
-            llm=llm,
-            vector_store=vector_store,
-            keyword_store=keyword_store,
-            max_content=max_content,
-            sort_by_source_and_index=True
-        )
-
-        # 执行检索和生成
-        answer, docs = rag_tool.run(question, return_only_outputs=False)
-        logger.info(f"act=mixed_retrieval_recall result={docs}")
-        logger.info(f"act=mixed_retrieval_recall answer={answer}")
-        # 格式化返回结果
-        return docs
-
-    except Exception as e:
-        logger.error(f"检索失败: {str(e)}")

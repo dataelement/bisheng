@@ -15,7 +15,7 @@ from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import (OpenAIChatCompletionReq,
                                     OpenAIChatCompletionResp, OpenAIChoice)
-from bisheng.api.v2.utils import get_default_operator
+from bisheng.open_endpoints.domain.utils import get_default_operator
 from bisheng.chat.types import WorkType
 from bisheng.common.services.config_service import settings
 from bisheng.utils import generate_uuid

@@ -2,7 +2,7 @@ from typing import Any
 
 from loguru import logger
 
-from bisheng.workflow.nodes.utils import RagUtils
+from bisheng.workflow.common.knowledge import RagUtils
 
 
 class KnowledgeRetriever(RagUtils):
@@ -27,9 +27,14 @@ class KnowledgeRetriever(RagUtils):
                         "text": one.page_content,
                         "metadata": {
                             "chunk_index": one.metadata.get('chunk_index'),
-                            "file_id": one.metadata.get('file_id'),
                             "knowledge_id": one.metadata.get('knowledge_id'),
-                            "title": one.metadata.get('title'),
+                            "document_id": one.metadata.get('document_id'),
+                            "document_name": one.metadata.get('document_name'),
+                            "upload_time": one.metadata.get('upload_time'),
+                            "update_time": one.metadata.get('update_time'),
+                            "uploader": one.metadata.get('uploader'),
+                            "updater": one.metadata.get('updater'),
+                            "user_metadata": one.metadata.get('user_metadata'),
                         }
                     } for one in question_answer]
                 except Exception as e:

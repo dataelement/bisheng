@@ -12,7 +12,7 @@ from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schema.workflow import WorkflowStream, WorkflowEvent, WorkflowEventType
 from bisheng.api.v1.schemas import resp_200
-from bisheng.api.v2.utils import get_default_operator
+from bisheng.open_endpoints.domain.utils import get_default_operator
 from bisheng.chat.types import WorkType
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.database.models.flow import FlowDao, FlowType

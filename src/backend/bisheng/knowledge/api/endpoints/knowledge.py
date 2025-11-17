@@ -27,13 +27,13 @@ from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.knowledge.api.dependencies import get_knowledge_service, get_knowledge_file_service
-from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
-    UpdateKnowledgeMetadataFieldsReq, ModifyKnowledgeFileMetaDataReq
 from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
                                                        KnowledgeUpdate)
 from bisheng.knowledge.domain.models.knowledge import KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
                                                             QAKnoweldgeDao, QAKnowledgeUpsert, QAStatus)
+from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
+    UpdateKnowledgeMetadataFieldsReq, ModifyKnowledgeFileMetaDataReq
 from bisheng.llm.const import LLMModelType
 from bisheng.llm.models import LLMDao
 from bisheng.utils import generate_uuid, calc_data_sha256
@@ -74,8 +74,12 @@ async def upload_knowledge_file(*, request: Request, login_user: UserPayload = D
     repeat_file = await KnowledgeFileDao.get_repeat_file(
         knowledge_id=knowledge_id, file_name=file_name, md5_=file_md5
     )
+    ret = UploadFileResponse(file_path=file_path)
+    if repeat_file:
+        ret.repeat = True
+        ret.repeat_update_time = repeat_file.update_time
 
-    return resp_200(UploadFileResponse(file_path=file_path, repeat=True if repeat_file else False))
+    return resp_200(ret)
 
 
 @router.post('/preview')
@@ -869,6 +873,25 @@ def update_knowledge_model(*,
         return resp_500(message=f"重建知识库失败: {str(e)}")
 
 
+@router.get("/file/info/{file_id}", description="获取知识库文件信息", response_model=UnifiedResponseModel)
+async def get_knowledge_file_info(*,
+                                    login_user: UserPayload = Depends(get_login_user),
+                                    file_id: int,
+                                    knowledge_file_service=Depends(get_knowledge_file_service)):
+    """
+    获取知识库文件信息
+    Args:
+        login_user:
+        file_id:
+        knowledge_file_service:
+
+    Returns:
+
+    """
+
+    knowledge_file_model = await knowledge_file_service.get_knowledge_file_info(login_user, file_id)
+    return resp_200(data=knowledge_file_model)
+
 # 为知识库添加元数据字段
 @router.post('/add_metadata_fields', description="为知识库添加元数据字段", response_model=UnifiedResponseModel)
 async def add_metadata_fields(*,
@@ -910,7 +933,7 @@ async def update_metadata_fields(*,
 
 
 # 删除知识库元数据字段
-@router.delete('/delete_metadata_fields', description="删除知识库元数据字段", response_model=UnifiedResponseModel)
+@router.delete('/', description="删除知识库元数据字段", response_model=UnifiedResponseModel)
 async def delete_metadata_fields(*,
                                  login_user: UserPayload = Depends(get_login_user),
                                  knowledge_id: int = Body(..., embed=True, description="知识库ID"),
@@ -930,7 +953,8 @@ async def delete_metadata_fields(*,
         UnifiedResponseModel
     """
 
-    knowledge_model = await knowledge_service.delete_metadata_fields(login_user, knowledge_id, field_names)
+    knowledge_model = await knowledge_service.delete_metadata_fields(login_user, knowledge_id, field_names,
+                                                                     background_tasks)
 
     return resp_200(data=knowledge_model)
 

@@ -1,4 +1,4 @@
-from typing import List
+from typing import Dict
 
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
@@ -59,32 +59,44 @@ class KnowledgeRag:
 
     @classmethod
     def get_multi_knowledge_vectorstore(cls, knowledge_ids: list[int], user_name: str = None, check_auth: bool = True,
-                                        include_es: bool = True, include_milvus: bool = True) -> (List[VectorStore],
-                                                                                                  List[VectorStore]):
-        """ get multiple knowledge vectorstore, including milvus and es """
+                                        include_es: bool = True, include_milvus: bool = True) \
+            -> Dict[int, Dict[str, VectorStore | Knowledge]]:
+        """ get multiple knowledge vectorstore, including milvus and es
+            return: {
+                knowledge_id: {
+                    "knowledge": Knowledge
+                    "milvus": Milvus,
+                    "es": ElasticsearchStore,
+                },
+            }
+        """
         if not include_es and not include_milvus:
             raise RuntimeError('at least one of include_es and include_milvus must be True')
-        milvus_retrievers = []
-        es_retrievers = []
+
         if check_auth:
             if not user_name:
                 raise RuntimeError('knowledge check auth user_name must be provided')
             knowledge_list = KnowledgeDao.judge_knowledge_permission(user_name, knowledge_ids)
         else:
             knowledge_list = KnowledgeDao.get_list_by_ids(knowledge_ids)
+        ret = {}
         for knowledge in knowledge_list:
+            ret[knowledge.id] = {
+                "milvus": None,
+                "es": None,
+            }
             if include_milvus:
                 vectorstore = cls.init_knowledge_milvus_vectorstore_sync(knowledge)
-                milvus_retrievers.append(vectorstore)
+                ret[knowledge.id]["milvus"] = vectorstore
             if include_es:
                 es_vectorstore = cls.init_knowledge_es_vectorstore_sync(knowledge)
-                es_retrievers.append(es_vectorstore)
-        return milvus_retrievers, es_retrievers
+                ret[knowledge.id]["es"] = es_vectorstore
+        return ret
 
     @classmethod
-    def init_milvus_vectorstore(cls, collection_name: str, embeddings: Embeddings,**kwargs) -> Milvus:
+    def init_milvus_vectorstore(cls, collection_name: str, embeddings: Embeddings, **kwargs) -> Milvus:
         """ init milvus vectorstore by collection name and model id """
-        return MilvusFactory.init_vectorstore(collection_name, embeddings,**kwargs)
+        return MilvusFactory.init_vectorstore(collection_name, embeddings, **kwargs)
 
     @classmethod
     def init_es_vectorstore(cls, index_name: str, **kwargs) -> AsyncElasticsearchStore:

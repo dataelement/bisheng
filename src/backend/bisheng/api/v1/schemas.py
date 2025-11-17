@@ -229,6 +229,7 @@ class UploadFileResponse(BaseModel):
     file_path: str
     relative_path: Optional[str] = None  # minio的相对路径，即object_name
     repeat: bool = False  # 在知识库里是否重复
+    repeat_update_time: Optional[datetime] = None  # 如果重复，返回重复文件的更新时间
 
 
 class StreamData(BaseModel):

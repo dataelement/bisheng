@@ -5,7 +5,7 @@ from uuid import UUID
 from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.services.utils import set_flow_knowledge_id
 from bisheng.api.v1.schemas import ChatInput, resp_200
-from bisheng.api.v2.schema.message import SyncMessage
+from bisheng.open_endpoints.domain.schemas.message import SyncMessage
 from bisheng.chat.manager import ChatManager
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.flow import Flow

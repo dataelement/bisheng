@@ -14,8 +14,8 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.llm.domain.services import LLMService
 from bisheng.workflow.callback.event import OutputMsgData, StreamMsgOverData
 from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
+from bisheng.workflow.common.knowledge import RagUtils
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
-from bisheng.workflow.nodes.utils import RagUtils
 
 
 class RagNode(RagUtils):
