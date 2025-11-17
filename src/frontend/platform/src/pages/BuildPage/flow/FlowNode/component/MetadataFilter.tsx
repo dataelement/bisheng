@@ -51,7 +51,7 @@ const MetadataFilter = ({
     if (data.value?.conditions) {
       return data.value.conditions.map(cond => ({
         id: cond.id || generateUUID(8),
-        metadataField: cond.metadata_filed || "",
+        metadataField: cond.metadata_field || "",
         operator: cond.comparison_operation || "",
         valueType: cond.right_value_type === "ref" ? "reference" : "input",
         value: cond.right_value || "",
@@ -166,7 +166,7 @@ const MetadataFilter = ({
           return {
             id: cond.id,
             knowledge_id: knowledgeId ? parseInt(knowledgeId, 10) : 0,
-            metadata_filed: metaField?.name || "",
+            metadata_field: metaField?.name || "",
             comparison_operation: cond.operator,
             right_value_type: cond.valueType === "reference" ? "ref" : "input",
             right_value: cond.value,
