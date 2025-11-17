@@ -41,6 +41,11 @@ from bisheng.database.models.group_resource import (
     GroupResourceDao,
     ResourceTypeEnum,
 )
+from bisheng.database.models.role_access import AccessType, RoleAccessDao
+from bisheng.database.models.user import UserDao
+from bisheng.database.models.user_group import UserGroupDao
+from bisheng.database.models.user_role import UserRoleDao
+from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import (
     Knowledge,
@@ -55,19 +60,12 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus, ParseType,
 )
-from bisheng.database.models.role_access import AccessType, RoleAccessDao
-from bisheng.database.models.user import UserDao
-from bisheng.database.models.user_group import UserGroupDao
-from bisheng.database.models.user_role import UserRoleDao
-from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.llm.const import LLMModelType
-from bisheng.llm.domain.services import LLMService
 from bisheng.llm.models import LLMDao
 from bisheng.utils import generate_uuid, generate_knowledge_index_name
 from bisheng.utils import get_request_ip
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.worker.knowledge import file_worker
-from bisheng_langchain.rag.bisheng_rag_chain import BishengRAGTool
 
 
 class KnowledgeService(KnowledgeUtils):
@@ -1245,39 +1243,3 @@ class KnowledgeService(KnowledgeUtils):
         if db_knowledge.type == KnowledgeTypeEnum.NORMAL.value:
             raise ServerError.http_exception(msg="知识库为普通知识库")
         return db_knowledge
-
-
-def mixed_retrieval_recall(question: str, vector_store, keyword_store, max_content: int, model_id):
-    """
-    使用 BishengRetrieval进行混合检索召回
-    
-    Args:
-        question: 用户查询问题
-        vector_store: 向量存储（Milvus）
-        keyword_store: 关键词存储（Elasticsearch）
-    
-    Returns:
-        dict: 包含检索结果和源文档的字典
-    """
-    try:
-        llm = LLMService.get_bisheng_llm_sync(model_id=model_id,
-                                              temperature=0.01,
-                                              cache=False)
-        # 创建混合检索器
-        rag_tool = BishengRAGTool(
-            llm=llm,
-            vector_store=vector_store,
-            keyword_store=keyword_store,
-            max_content=max_content,
-            sort_by_source_and_index=True
-        )
-
-        # 执行检索和生成
-        answer, docs = rag_tool.run(question, return_only_outputs=False)
-        logger.info(f"act=mixed_retrieval_recall result={docs}")
-        logger.info(f"act=mixed_retrieval_recall answer={answer}")
-        # 格式化返回结果
-        return docs
-
-    except Exception as e:
-        logger.error(f"检索失败: {str(e)}")

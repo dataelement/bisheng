@@ -24,7 +24,7 @@ class RRFRerank(BaseRerank):
             Default is 60.
     """
     retrievers: List[Any]
-    weights: List[float]
+    weights: List[float] = None
     c: int = 60
     remove_zero_score: bool = False
 

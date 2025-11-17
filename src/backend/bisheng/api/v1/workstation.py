@@ -151,16 +151,16 @@ def update_config(
 
 
 @router.post('/knowledgeUpload')
-async def knowledgeUpload(request: Request,
-                          background_tasks: BackgroundTasks,
-                          file: UploadFile = File(...),
-                          login_user: UserPayload = Depends(get_login_user)):
-    file_byte = await file.read()
+def knowledgeUpload(request: Request,
+                    background_tasks: BackgroundTasks,
+                    file: UploadFile = File(...),
+                    login_user: UserPayload = Depends(get_login_user)):
+    file_byte = file.file.read()
     file_path = save_download_file(file_byte, 'bisheng', file.filename)
-    res = await WorkStationService.uploadPersonalKnowledge(request,
-                                                           login_user,
-                                                           file_path=file_path,
-                                                           background_tasks=background_tasks)
+    res = WorkStationService.uploadPersonalKnowledge(request,
+                                                     login_user,
+                                                     file_path=file_path,
+                                                     background_tasks=background_tasks)
     return resp_200(data=res[0])
 
 
@@ -406,14 +406,15 @@ async def chat_completions(
                         question=data.text)
             elif data.knowledge_enabled:
                 logger.info(f'knowledge, prompt={data.text}')
-                chunks = WorkStationService.queryChunksFromDB(data.text, login_user)
+                chunks = await WorkStationService.queryChunksFromDB(data.text, login_user)
 
                 if wsConfig.knowledgeBase.prompt:
                     prompt = wsConfig.knowledgeBase.prompt.format(
                         retrieved_file_content='\n'.join(chunks)[:max_token], question=data.text)
                 else:
                     prompt_service = await get_prompt_manager()
-                    prompt = prompt_service.render_prompt('qa', 'simple_qa', context='\n'.join(chunks)[:max_token],
+                    prompt = prompt_service.render_prompt('workstation', 'personal_knowledge',
+                                                          retrieved_file_content='\n'.join(chunks)[:max_token],
                                                           question=data.text).prompt
 
                 logger.debug(f'Knowledge prompt: {prompt}')
