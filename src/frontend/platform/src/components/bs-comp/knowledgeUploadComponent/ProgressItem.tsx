@@ -37,7 +37,8 @@ export default function ProgressItem({ analysis = false, knowledgeId = '', item,
                     id: item.id,
                     fileName: item.fileName,
                     file_path: res.file_path,
-                    repeat: res.repeat
+                    repeat: res.repeat,
+                    time: res.repeat_update_time
                 })
                 setRetrying(false)
             },
@@ -48,7 +49,8 @@ export default function ProgressItem({ analysis = false, knowledgeId = '', item,
                     id: item.id,
                     fileName: item.fileName,
                     file_path: '',
-                    repeat: false
+                    repeat: false,
+                    time: ''
                 })
                 setRetrying(false)
             },
