@@ -22,7 +22,7 @@ def get_default_operator() -> UserPayload:
 
 
 async def get_default_operator_async() -> UserPayload:
-    user_id = await settings.aget_from_db('default_operator').get('user')
+    user_id = (await settings.aget_from_db('default_operator')).get('user')
     if not user_id:
         raise HTTPException(status_code=500, detail='未配置default_operator中user配置')
     # 查找默认用户信息

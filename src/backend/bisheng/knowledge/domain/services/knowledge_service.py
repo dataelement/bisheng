@@ -161,6 +161,7 @@ class KnowledgeService:
         for i, field in enumerate(metadata_fields):
             if field["field_name"] in field_name_map:
                 metadata_fields[i]["field_name"] = field_name_map[field["field_name"]]
+                metadata_fields[i]["updated_at"] = int(datetime.now().timestamp())
 
         knowledge_model.metadata_fields = metadata_fields
 

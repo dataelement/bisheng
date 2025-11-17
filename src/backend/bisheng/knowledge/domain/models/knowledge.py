@@ -35,6 +35,15 @@ class MetadataFieldType(str, Enum):
     NUMBER = "number"
     TIME = "time"
 
+    # 大小写不敏感的枚举匹配
+    @classmethod
+    def _missing_(cls, value: Any) -> Optional["MetadataFieldType"]:
+        if isinstance(value, str):
+            for member in cls:
+                if member.value.lower() == value.lower():
+                    return member
+        return None
+
 
 class KnowledgeBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)

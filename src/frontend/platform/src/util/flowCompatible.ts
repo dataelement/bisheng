@@ -33,9 +33,9 @@ const comptibleRag = (node) => {
         const knowledgeIndex = knowledgeGroup.params.findIndex(p => p.key === 'knowledge');
          // 添加元数据过滤参数
         const metadataFilterParam = {
-            key: "metadata_Filter_switch",
+            key: "metadata_filter",
             label: "元数据过滤",
-            type: "metadata_Filter",
+            type: "metadata_filter",
             value: {},
         };
         knowledgeGroup.params.splice(knowledgeIndex + 1, 0, metadataFilterParam);
@@ -68,13 +68,13 @@ const comptibleRag = (node) => {
     }
     if(node.v == 2){
          const knowledgeGroup = node.group_params[0];
-        const metadataFilterExists = knowledgeGroup.params.some(p => p.key === 'metadata_Filter_switch');
+        const metadataFilterExists = knowledgeGroup.params.some(p => p.key === 'metadata_filter');
         if (!metadataFilterExists) {
             const knowledgeIndex = knowledgeGroup.params.findIndex(p => p.key === 'knowledge');
             const metadataFilterParam = {
-                key: "metadata_Filter_switch",
+                key: "metadata_filter",
                 label: "元数据过滤",
-                type: "metadata_Filter",
+                type: "metadata_filter",
                 value: {},
             };
             knowledgeGroup.params.splice(knowledgeIndex + 1, 0, metadataFilterParam);

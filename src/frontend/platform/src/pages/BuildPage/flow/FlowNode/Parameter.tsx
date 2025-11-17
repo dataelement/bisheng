@@ -160,7 +160,7 @@ export default function Parameter({
             return <ImagePromptItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onVarEvent={bindVarValidate} />;
         case 'search_switch':
             return <RetrievalWeightSlider data={item} onChange={handleOnNewValue}  onValidate={bindValidate} />;
-        case "metadata_Filter": return (
+        case "metadata_filter": return (
             <MetadataFilter 
             data={item} 
             onChange={handleOnNewValue} 

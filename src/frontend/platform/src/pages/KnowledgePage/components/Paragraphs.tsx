@@ -803,17 +803,17 @@ export default function Paragraphs({ fileId, onBack }) {
             fileName: currentFile.name,
             suffix: currentFile.suffix,
             fileType: currentFile.fileType,
-            excelRule: {}
+            excelRule: {} // 根据实际需要添加 excel 规则
         }] : [],
-        pageHeaderFooter: false,
-        chunkOverlap: 200,
-        chunkSize: 1000,
-        enableFormula: false,
-        forceOcr: false,
-        knowledgeId: id,
-        retainImages: false,
-        separator: [],
-        separatorRule: []
+        pageHeaderFooter: false, // 页面页眉页脚处理
+        chunkOverlap: 200, // 块重叠大小
+        chunkSize: 1000, // 块大小
+        enableFormula: false, // 是否启用公式
+        forceOcr: false, // 是否强制 OCR
+        knowledgeId: id, // 知识库ID
+        retainImages: false, // 是否保留图片
+        separator: [], // 分隔符
+        separatorRule: [] // 分隔规则
     }), [currentFile, id]);
 
     const isExcelFile = currentFile && ['xlsx', 'xls', 'csv'].includes(currentFile.suffix?.toLowerCase());

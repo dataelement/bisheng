@@ -352,11 +352,11 @@ const MetadataFilter = ({
                               <>
                                 <div className="p-2 border-b">
                                   <div className="relative">
-                                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    <Search className="absolute left-3 top-2.5 h-3 w-3 text-muted-foreground" />
                                     <input
                                       type="text"
                                       placeholder="搜索元数据"
-                                      className="w-full pl-8 pr-2 py-1 text-sm border rounded"
+                                      className="w-full pl-8 pr-2 py-1 text-[8px] border rounded"
                                       value={searchTerm}
                                       onChange={(e) => setSearchTerm(e.target.value)}
                                       onClick={(e) => e.stopPropagation()}
