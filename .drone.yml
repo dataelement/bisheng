@@ -40,6 +40,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
     - echo $REPO
     - REPO2=$(echo $REPO | sed 's/http:\\/\\///g')
     - sed  '/apt-get/ s|$| '"$PROXY"'|' Dockerfile
+    - sed -i.bak 's/uv cache clean.*$/ /' Dockerfile
     - sed -i '6i\RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
     - sed -i '7i\RUN export UV_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
     - sed -i '8i\RUN export UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
@@ -57,6 +58,8 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         path: /var/run/docker.sock
       - name: pro-cache
         path: /root/.local/share/pypoetry
+      - name: uv-cache
+        path: /root/.cache/uv
     environment:
       http_proxy:
         from_secret: PROXY

@@ -5,8 +5,7 @@ WORKDIR /app
 COPY ./ ./
 
 # 生成并安装依赖
-RUN uv pip compile pyproject.toml --upgrade --output-file requirements.txt && \
-    uv pip install -r requirements.txt --system --no-cache-dir && \
+RUN uv sync --no-managed-python && \
     uv cache clean && \
     rm -f requirements.txt
 
