@@ -48,7 +48,6 @@ export default function FileUploadStep4({ data, kId }) {
     }, [data]);
 
 
-    // 轮询文件状态
     // 轮询文件状态（完整修复版）
     useEffect(() => {
         // 1. 先定义轮询函数（必须先定义再调用，修复“未定义就调用”问题）

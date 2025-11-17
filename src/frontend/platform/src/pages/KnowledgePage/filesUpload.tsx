@@ -154,9 +154,15 @@ export default function FilesUpload() {
     };
 
     captureAndAlertRequestErrorHoc(subUploadLibFile(apiConfig).then(res => {
-      const _repeatFiles = res.filter(e => e.status === 3);
-      if (_repeatFiles.length) {
-        setRepeatFiles(_repeatFiles);
+      const repeatFilesRes = res.filter(e => e.status === 3);
+      if (repeatFilesRes.length) {
+        const newRepeatFiles = repeatFilesRes.filter(file =>
+          // Same timestamp, no overwrite
+          !resultFiles.some(item => item.fileName === file.file_name && item.time && item.time === file.update_time))
+        setRepeatFiles(newRepeatFiles);
+        if (!newRepeatFiles.length) {
+          handleRetry(repeatFilesRes)
+        }
       } else {
         message({ variant: 'success', description: t('addSuccess') });
         setCurrentStep(4);
