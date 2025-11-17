@@ -154,7 +154,7 @@ export default function Parameter({
                 })
                 imageFileItem.hidden = val === 'file'
                 handleOnNewValue(val)
-                onFouceUpdate()
+                // onFouceUpdate()
             }} />;
         case 'image_prompt':
             return <ImagePromptItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onVarEvent={bindVarValidate} />;
@@ -163,6 +163,7 @@ export default function Parameter({
         case "metadata_filter": return (
             <MetadataFilter 
             data={item} 
+            node ={node}
             onChange={handleOnNewValue} 
             onValidate={bindValidate} 
             selectedKnowledgeIds={selectedKnowledgeIds}
@@ -170,6 +171,6 @@ export default function Parameter({
             />
         );
         default:
-            return <div>Unsupported parameter type</div>;
+            return <div>Unsupported parameter type,{item.type}</div>;
     }
 };
