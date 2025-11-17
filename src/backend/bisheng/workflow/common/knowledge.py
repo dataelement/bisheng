@@ -12,10 +12,6 @@ from bisheng.knowledge.domain.models.knowledge import Knowledge, MetadataFieldTy
 from bisheng.llm.domain import LLMService
 from bisheng.workflow.nodes.base import BaseNode
 
-[{"field_name": "file_11", "field_type": "string", "updated_at": 1763031727},
- {"field_name": "file_22", "field_type": "string", "updated_at": 1763031727},
- {"field_name": "file_33", "field_type": "number", "updated_at": 1763031727}]
-
 
 class ConditionOne(BaseModel):
     id: str = Field(..., description='Unique id for condition')
