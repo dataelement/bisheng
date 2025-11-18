@@ -4,7 +4,7 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Button } from "@/components/bs-ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogPortal } from "@/components/bs-ui/dialog"
 import { Input } from "@/components/bs-ui/input"
-import { AlertCircle, Edit2, Plus, Trash2, X } from "lucide-react"
+import { AlertCircle, Clock3, Edit2, Hash, Plus, SquarePen, Trash2, Type, X } from "lucide-react"
 import React, { useCallback, useState, useRef, useEffect, memo, useMemo } from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { cname } from "@/components/bs-ui/utils"
@@ -36,9 +36,9 @@ const BUILT_IN_METADATA: BuiltInMetadata[] = [
 ]
 
 const TYPE_ICONS = {
-    String: "📄",
-    Number: "#",
-    Time: "⏱️",
+    String: <Type />,
+    Number:<Hash />,
+    Time: <Clock3 />,
 }
 
 const TypeSelector = memo(({
@@ -314,7 +314,7 @@ export function MetadataManagementDialog({
                                             onClick={() => handleEditClick(metadata)} disabled={!hasManagePermission || isLoading}
                                             className="p-1.5 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                         >
-                                            <Edit2 size={isSmallScreen ? 16 : 18} />
+                                            <SquarePen size={isSmallScreen ? 16 : 18} />
                                         </button>
                                         <button
                                             onClick={() => handleDelete(metadata)} disabled={!hasManagePermission || isLoading}

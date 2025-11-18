@@ -2,7 +2,7 @@ import { Switch } from "@/components/bs-ui/switch";
 import { Button } from "@/components/bs-ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Input } from "@/components/bs-ui/input";
-import { Trash2, Search, Info, RefreshCcw, ChevronDown } from "lucide-react";
+import { Trash2, Search, Info, RefreshCcw, ChevronDown, Clock3 } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import { generateUUID } from "@/components/bs-ui/utils";
@@ -109,7 +109,7 @@ const MetadataFilter = ({
                 icon = "#";
                 type = "Number";
               } else if (field.field_type === "time") {
-                icon = "⏱️";
+                icon = <Clock3 />;
                 type = "Time";
               }
               return {

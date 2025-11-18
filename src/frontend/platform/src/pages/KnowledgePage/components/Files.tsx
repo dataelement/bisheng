@@ -16,7 +16,7 @@ import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import { truncateString } from "@/util/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
-import { Filter, RotateCw, Trash2 } from "lucide-react";
+import { ClipboardPenLine, Filter, RotateCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../../components/bs-ui/input";
@@ -314,6 +314,7 @@ export default function Files({ onPreview }) {
                     onClick={() => setMetadataOpen(true)}
                     className="px-4 whitespace-nowrap"
                 >
+                    <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-1"/>
                     {t('元数据')}
                 </Button>
                 {isEditable && (
