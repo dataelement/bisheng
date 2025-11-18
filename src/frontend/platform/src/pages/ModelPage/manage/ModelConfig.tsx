@@ -659,7 +659,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                 <div className="mb-2">
                     <Label className="bisheng-label">
                         {t('model.model')}
-                        {providerInfo && <a href={providerInfo.modelUrl} target="_blank" rel="noreferrer" className="ml-1 text-primary/80">(前往官网插口那可用模型)</a>}
+                        {providerInfo && <a href={providerInfo.modelUrl} target="_blank" rel="noreferrer" className="ml-1 text-primary/80">(前往官网查看可用模型)</a>}
                     </Label>
                     <div className="w-[92%]">
                         {

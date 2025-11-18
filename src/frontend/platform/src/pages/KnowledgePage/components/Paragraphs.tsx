@@ -66,109 +66,108 @@ const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onValueChang
         onValueChange(item.id, dateString);
     };
 
-return (
-    <div className="flex items-center gap-3 p-2">
-        {/* 左边部分 - 类型图标、标签、变量名 */}
-        <div className="flex items-center gap-2 flex-1 p-2 rounded-lg bg-gray-50">
-            {/* 类型图标 */}
-            <span className={isSmallScreen ? "text-base" : "text-lg"}>
-                {TYPE_ICONS[item.type]}
-            </span>
+    return (
+        <div className="flex items-center gap-3 p-2">
+            {/* 左边部分 - 类型图标、标签、变量名 */}
+            <div className="flex items-center gap-2 flex-1 p-2 rounded-lg bg-gray-50 h-11">
+                {/* 类型图标 */}
+                <span className={isSmallScreen ? "text-base" : "text-lg"}>
+                    {TYPE_ICONS[item.type]}
+                </span>
 
-            {/* 类型标签 */}
-            <span className={cname(
-                "text-gray-500 min-w-[20px]",
-                isSmallScreen ? "text-xs" : "text-sm"
-            )}>
-                {item.type}
-            </span>
+                {/* 类型标签 */}
+                <span className={cname(
+                    "text-gray-500 min-w-[20px]",
+                    isSmallScreen ? "text-xs" : "text-sm"
+                )}>
+                    {item.type}
+                </span>
 
-            {/* 变量名 */}
-            <div className="min-w-0 flex-1 max-w-[120px]">
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <span
-                                className={cname(
-                                    "font-medium truncate block",
-                                    isSmallScreen ? "text-sm" : "",
-                                    "max-w-full"
-                                )}
+                {/* 变量名 */}
+                <div className="min-w-0 flex-1 max-w-[120px]">
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <span
+                                    className={cname(
+                                        "font-medium truncate block",
+                                        isSmallScreen ? "text-sm" : "",
+                                        "max-w-full"
+                                    )}
+                                    style={{
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                    }}
+                                >
+                                    {item.name}
+                                </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-[200px] whitespace-normal"
                                 style={{
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'normal',
+                                    wordBreak: 'break-word'
                                 }}
                             >
-                                {item.name}
-                            </span>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-[200px] whitespace-normal"
-                            style={{
-                                whiteSpace: 'normal',
-                                wordBreak: 'break-word'
-                            }}
-                        >
-                            <p>{item.name}</p>
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-            </div>
-        </div>
-
-        {/* 右边部分 - 输入框和删除按钮 */}
-        <div className="flex items-center gap-2 flex-1 justify-end p-2 rounded-lg bg-gray-50">
-            {/* 输入框 - 根据类型显示不同的输入组件 */}
-            {showInput && (
-                <div className="w-40">
-                    {item.type === 'String' && (
-                        <input
-                            disabled={!isKnowledgeAdmin}
-                            type="text"
-                            value={item.value || ''}
-                            onChange={handleInputChange}
-                            placeholder={t('请输入文本')}
-                            className={cname(
-                                "w-full px-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                                isSmallScreen ? "py-0.5 text-xs h-6" : "py-1 text-sm h-7"
-                            )}
-                        />
-                    )}
-
-                    {item.type === 'Number' && (
-                        <input
-                            disabled={!isKnowledgeAdmin}
-                            type="number"
-                            value={item.value || 0}
-                            onChange={handleNumberChange}
-                            className={cname(
-                                "w-full px-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                                isSmallScreen ? "py-0.5 text-xs h-6" : "py-1 text-sm h-7"
-                            )}
-                        />
-                    )}
-
-                    {item.type === 'Time' && (
-                        <DatePicker
-                            disabled={!isKnowledgeAdmin}
-                            value={item.value}
-                            placeholder={t('选择时间')}
-                            showTime={true}
-                            onChange={(selectedDate) => {
-                                const formattedValue = selectedDate
-                                    ? format(selectedDate, 'yyyy-MM-dd HH:mm:ss')
-                                    : '';
-                                onValueChange(item.id, formattedValue);
-                            }}
-                            className="w-full h-7 text-sm" 
-                        />
-                    )}
+                                <p>{item.name}</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
                 </div>
-            )}
+            </div>
 
-          
-        </div>
-          {/* 删除按钮 */}
+            {/* 右边部分 - 输入框和删除按钮 */}
+            <div className="flex items-center gap-2 flex-1 justify-end p-2 rounded-lg bg-gray-50 h-11 ml-10">
+                {/* 输入框 - 根据类型显示不同的输入组件 */}
+                {showInput && (
+                    <div className="w-40">
+                        {item.type === 'String' && (
+                            <input
+                                disabled={!isKnowledgeAdmin}
+                                type="text"
+                                value={item.value || ''}
+                                onChange={handleInputChange}
+                                placeholder={t('请输入文本')}
+                                className={cname(
+                                    "w-full px-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                                    isSmallScreen ? "py-0.5 text-xs h-6" : "py-1 text-sm h-7"
+                                )}
+                            />
+                        )}
+
+                        {item.type === 'Number' && (
+                            <input
+                                disabled={!isKnowledgeAdmin}
+                                type="number"
+                                value={item.value || 0}
+                                onChange={handleNumberChange}
+                                className={cname(
+                                    "w-full px-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                                    isSmallScreen ? "py-0.5 text-xs h-6" : "py-1 text-sm h-7"
+                                )}
+                            />
+                        )}
+
+                        {item.type === 'Time' && (
+                            <DatePicker
+                                disabled={!isKnowledgeAdmin}
+                                value={item.value}
+                                placeholder={t('选择时间')}
+                                showTime={true}
+                                onChange={(selectedDate) => {
+                                    const formattedValue = selectedDate
+                                        ? format(selectedDate, 'yyyy-MM-dd HH:mm:ss')
+                                        : '';
+                                    onValueChange(item.id, formattedValue);
+                                }}
+                            />
+                        )}
+                    </div>
+                )}
+
+
+            </div>
+            {/* 删除按钮 */}
             <button
                 onClick={() => onDelete(item.id)}
                 disabled={!isKnowledgeAdmin}
@@ -177,8 +176,8 @@ return (
             >
                 <Trash2 size={isSmallScreen ? 18 : 20} className="text-gray-500" />
             </button>
-    </div>
-)
+        </div>
+    )
 });
 
 MetadataRow.displayName = 'MetadataRow';
@@ -1211,115 +1210,121 @@ export default function Paragraphs({ fileId, onBack }) {
                 />
             </div>
 
-            {/* 主元数据弹窗 - 添加ref用于位置计算 */}
-            <Dialog open={metadataDialog.open} onOpenChange={(open) => setMetadataDialog(prev => ({ ...prev, open }))}>
-                <DialogContent
-                    ref={mainMetadataDialogRef}
-                    className="sm:max-w-[525px] max-w-[625px] max-h-[80vh] overflow-y-auto"
-                    style={{
-                        transition: 'none'
-                    }}
-                >
-                    <DialogHeader>
-                        <h3 className="text-lg font-semibold">{t('元数据')}</h3>
-                    </DialogHeader>
-                    <button
-                        onClick={handleSearchMetadataClick}
-                        disabled={!isKnowledgeAdmin}
-                        className="py-2 w-full flex items-center justify-center gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                        <Plus size={16} />
-                        <span>{t('添加元数据')}</span>
-                    </button>
+         {/* 主元数据弹窗 - 添加ref用于位置计算 */}
+<Dialog open={metadataDialog.open} onOpenChange={(open) => setMetadataDialog(prev => ({ ...prev, open }))}>
+    <DialogContent
+        ref={mainMetadataDialogRef}
+        className="sm:max-w-[525px] max-w-[625px] h-[80vh] flex flex-col"  // 改为 h-[80vh]
+        style={{
+            transition: 'none'
+        }}
+    >
+        <DialogHeader>
+            <h3 className="text-lg font-semibold">{t('元数据')}</h3>
+        </DialogHeader>
+        
+        {/* 可滚动的内容区域 - 设置固定高度 */}
+        <div className="flex-1 overflow-y-auto min-h-0">  {/* 添加 min-h-0 */}
+            <button
+                onClick={handleSearchMetadataClick}
+                disabled={!isKnowledgeAdmin}
+                className="py-2 w-full flex items-center justify-center gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mb-4"
+            >
+                <Plus size={16} />
+                <span>{t('添加元数据')}</span>
+            </button>
 
-                    {/* 主元数据列表 */}
-                    {mainMetadataList.length > 0 && (
-                        <div className="space-y-2 mt-4">
-                            {mainMetadataList.map((metadata) => (
-                                <MetadataRow
-                                    isKnowledgeAdmin={isKnowledgeAdmin}
-                                    key={metadata.id}
-                                    item={metadata}
-                                    onDelete={handleDeleteMainMetadata}
-                                    onValueChange={handleMainMetadataValueChange}
-                                    isSmallScreen={isSmallScreen}
-                                    t={t}
-                                    showInput={true}
-                                />
-                            ))}
-                        </div>
-                    )}
+            {/* 主元数据列表 */}
+            {mainMetadataList.length > 0 && (
+                <div className="space-y-2">
+                    {mainMetadataList.map((metadata) => (
+                        <MetadataRow
+                            isKnowledgeAdmin={isKnowledgeAdmin}
+                            key={metadata.id}
+                            item={metadata}
+                            onDelete={handleDeleteMainMetadata}
+                            onValueChange={handleMainMetadataValueChange}
+                            isSmallScreen={isSmallScreen}
+                            t={t}
+                            showInput={true}
+                        />
+                    ))}
+                </div>
+            )}
 
-                    <div className="grid gap-4 py-4">
-                        <div className="font-medium">文档信息</div>
-                        {fileInfor && <div className="space-y-2">
-                            {[
-                                {
-                                    label: t('文件id'),
-                                    value: fileInfor?.id,
-                                },
-                                {
-                                    label: t('文件名称'),
-                                    value: fileInfor?.file_name,
-                                    isFileName: true
-                                },
-                                {
-                                    label: t('创建时间'),
-                                    value: fileInfor?.create_time ? metadataDialog.file.create_time.replace('T', ' ') : null
-                                },
-                                {
-                                    label: t('创建者'),
-                                    value: fileInfor?.creat_user,
-                                },
-                                {
-                                    label: t('更新者'),
-                                    value: fileInfor?.update_user,
-                                },
-                                {
-                                    label: t('更新时间'),
-                                    value: fileInfor?.update_time ? fileInfor?.update_time.replace('T', ' ') : null
-                                },
-                                { label: t('原始文件大小'), value: fileInfor?.file_size ? formatFileSize(metadataDialog.file.file_size) : null },
-                                {
-                                    label: t('切分策略'),
-                                    value: fileInfor ? splitRuleDesc(fileInfor) : null
-                                },
-                                { label: t('全文摘要'), value: metadataDialog.file?.title }
-                            ].map((item, index) => (
-                                item.value && (
-                                    <div key={index} className="grid grid-cols-4 gap-4 items-center">
-                                        <span className="text-sm text-muted-foreground col-span-1">{item.label}</span>
-                                        <span className={`col-span-3 text-sm ${item.isFileName ? 'truncate max-w-full' : ''}`}>
-                                            {item.value || t('none')}
-                                        </span>
-                                    </div>
-                                )
-                            ))}
-                        </div>}
-                    </div>
-                    <div className="flex justify-end gap-2 pt-4 border-t border-gray-200">
-                        {/* 取消按钮 */}
-                        <Button
-                            variant="outline"
-                            onClick={() => setMetadataDialog(prev => ({ ...prev, open: false }))}
-                            className={cname(isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm")}
-                        >
-                            {t('取消')}
-                        </Button>
-                        {/* 保存按钮 */}
-                        <Button
-                            onClick={handleSaveUserMetadata}
-                            disabled={!isKnowledgeAdmin}
-                            className={cname(
-                                "bg-blue-500 hover:bg-blue-600",
-                                isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm"
-                            )}
-                        >
-                            {t('保存')}
-                        </Button>
-                    </div>
-                </DialogContent>
-            </Dialog>
+            <div className="grid gap-4 py-4">
+                <div className="font-medium">文档信息</div>
+                {fileInfor && <div className="space-y-2">
+                    {[
+                        {
+                            label: t('文件id'),
+                            value: fileInfor?.id,
+                        },
+                        {
+                            label: t('文件名称'),
+                            value: fileInfor?.file_name,
+                            isFileName: true
+                        },
+                        {
+                            label: t('创建时间'),
+                            value: fileInfor?.create_time ? metadataDialog.file.create_time.replace('T', ' ') : null
+                        },
+                        {
+                            label: t('创建者'),
+                            value: fileInfor?.creat_user,
+                        },
+                        {
+                            label: t('更新者'),
+                            value: fileInfor?.update_user,
+                        },
+                        {
+                            label: t('更新时间'),
+                            value: fileInfor?.update_time ? fileInfor?.update_time.replace('T', ' ') : null
+                        },
+                        { label: t('原始文件大小'), value: fileInfor?.file_size ? formatFileSize(metadataDialog.file.file_size) : null },
+                        {
+                            label: t('切分策略'),
+                            value: fileInfor ? splitRuleDesc(fileInfor) : null
+                        },
+                        { label: t('全文摘要'), value: metadataDialog.file?.title }
+                    ].map((item, index) => (
+                        item.value && (
+                            <div key={index} className="grid grid-cols-4 gap-4 items-center">
+                                <span className="text-sm text-muted-foreground col-span-1">{item.label}</span>
+                                <span className={`col-span-3 text-sm ${item.isFileName ? 'truncate max-w-full' : ''}`}>
+                                    {item.value || t('none')}
+                                </span>
+                            </div>
+                        )
+                    ))}
+                </div>}
+            </div>
+        </div>
+
+        {/* 固定在底部的按钮 */}
+        <div className="flex justify-end gap-2 pt-4 border-t border-gray-200 flex-shrink-0">  {/* 添加 flex-shrink-0 */}
+            {/* 取消按钮 */}
+            <Button
+                variant="outline"
+                onClick={() => setMetadataDialog(prev => ({ ...prev, open: false }))}
+                className={cname(isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm")}
+            >
+                {t('取消')}
+            </Button>
+            {/* 保存按钮 */}
+            <Button
+                onClick={handleSaveUserMetadata}
+                disabled={!isKnowledgeAdmin}
+                className={cname(
+                    "bg-blue-500 hover:bg-blue-600",
+                    isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm"
+                )}
+            >
+                {t('保存')}
+            </Button>
+        </div>
+    </DialogContent>
+</Dialog>
 
             {/* 分段编辑弹窗 */}
             <Dialog open={paragraph.show} onOpenChange={(show) => setParagraph(prev => ({ ...prev, show }))}>
