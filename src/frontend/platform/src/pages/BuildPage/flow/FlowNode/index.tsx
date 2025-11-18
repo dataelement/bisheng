@@ -111,25 +111,25 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
     // 检查知识库检索设置
     const hasKnowledgeSearchEnabled = useMemo(() => {
         const knowledgeGroup = node.group_params.find(group => group.name === '知识库检索设置');
-        console.log(knowledgeGroup,123);
-        
+        console.log(knowledgeGroup, 123);
+
         if (knowledgeGroup && knowledgeGroup.params) {
             const thirdItem = knowledgeGroup.params[2]; // 第三项（索引为2）
-            console.log(thirdItem,1232);
-            
+            console.log(thirdItem, 1232);
+
             return thirdItem.value && thirdItem.value?.conditions?.length > 0 && thirdItem.value?.enabled;
         }
         return false;
     }, [
-    node.group_params.find(group => group.name === '知识库检索设置')?.params?.[2]?.value?.conditions?.length,
-    node.group_params.find(group => group.name === '知识库检索设置')?.params?.[2]?.value?.enabled
-]);
+        node.group_params.find(group => group.name === '知识库检索设置')?.params?.[2]?.value?.conditions?.length,
+        node.group_params.find(group => group.name === '知识库检索设置')?.params?.[2]?.value?.enabled
+    ]);
 
     // 动态计算节点宽度类名
     const nodeWidthClass = useMemo(() => {
         const baseClasses = ['condition'];
-        console.log(hasKnowledgeSearchEnabled,888);
-        
+        console.log(hasKnowledgeSearchEnabled, 888);
+
         if (hasKnowledgeSearchEnabled) {
             baseClasses.push('rag');
             baseClasses.push('knowledge_retriever');
@@ -185,12 +185,12 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
         if (!node) {
             return [];
         }
-        
+
         const knowledgeParam = node.group_params
             .flatMap(group => group.params)
             .find(param => param.type === "knowledge_select_multi");
-        console.log(knowledgeParam,89);
-        
+        console.log(knowledgeParam, 89);
+
         if (knowledgeParam && knowledgeParam.value && Array.isArray(knowledgeParam.value.value)) {
             const ids = knowledgeParam.value.value.map(kb => String(kb.key));
             console.log("获取知识库ID:", ids);
@@ -214,9 +214,9 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
             <NodeToolbar isVisible align="end" className={`${isVisible ? '' : 'hidden'}`} >
                 <NodeToolbarComponent nodeId={node.id} type={node.type} onRun={handleRun}></NodeToolbarComponent>
             </NodeToolbar>
-  
+
             <div
-                className={cname(`bisheng-node hover:border-primary/10 ${nodeWidthClass} ${selected ? 'border-primary/10' : ' border-transparent'}`, nodeError && 'border-red-500')}
+                className={cname(`bisheng-node hover:border-primary/10 max-w-[35rem] ${nodeWidthClass} ${selected ? 'border-primary/10' : ' border-transparent'}`, nodeError && 'border-red-500')}
                 data-id={node.id}
             >
                 {/* top */}
