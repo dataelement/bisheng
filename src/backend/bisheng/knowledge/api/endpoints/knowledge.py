@@ -889,8 +889,8 @@ async def get_knowledge_file_info(*,
 
     """
 
-    knowledge_file_model = await knowledge_file_service.get_knowledge_file_info(login_user, file_id)
-    return resp_200(data=knowledge_file_model)
+    knowledge_file_info_res = await knowledge_file_service.get_knowledge_file_info(login_user, file_id)
+    return resp_200(data=knowledge_file_info_res)
 
 # 为知识库添加元数据字段
 @router.post('/add_metadata_fields', description="为知识库添加元数据字段", response_model=UnifiedResponseModel)

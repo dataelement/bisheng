@@ -6,7 +6,7 @@ from fastapi import BackgroundTasks
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
-from bisheng.common.errcode.knowledge import KnowledgeNotExistError
+from bisheng.common.errcode.knowledge import KnowledgeNotExistError, KnowledgeMetadataFieldConflictError
 from bisheng.database.models.role_access import AccessType
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
@@ -40,6 +40,13 @@ class KnowledgeService:
         # Initialize metadata_fields if it's None
         if knowledge_model.metadata_fields is None:
             knowledge_model.metadata_fields = []
+
+        # Built field names
+        built_field_names = [item.field_name for item in KNOWLEDGE_RAG_METADATA_SCHEMA]
+
+        for field in add_metadata_fields.metadata_fields:
+            if field.field_name in built_field_names:
+                raise KnowledgeMetadataFieldConflictError(field_name=field.field_name)
 
         existing_field_names = {field["field_name"] for field in knowledge_model.metadata_fields}
 
@@ -142,6 +149,13 @@ class KnowledgeService:
 
         if knowledge_model.metadata_fields is None:
             return knowledge_model  # No metadata fields to update
+
+        # Built field names
+        built_field_names = [item.field_name for item in KNOWLEDGE_RAG_METADATA_SCHEMA]
+
+        for field in update_metadata_fields.metadata_fields:
+            if field.new_field_name in built_field_names:
+                raise KnowledgeMetadataFieldConflictError(field_name=field.new_field_name)
 
         field_name_map = {
             field_update.old_field_name: field_update.new_field_name

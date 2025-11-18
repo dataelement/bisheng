@@ -64,3 +64,8 @@ class KnowledgeNotExistError(BaseErrorCode):
 class KnowledgeFileNotExistError(BaseErrorCode):
     Code: int = 10971
     Msg: str = '知识库文件不存在'
+
+# 与内置元数据字段名称冲突
+class KnowledgeMetadataFieldConflictError(BaseErrorCode):
+    Code: int = 10980
+    Msg: str = '{field_name} 与内置元数据字段名称冲突'

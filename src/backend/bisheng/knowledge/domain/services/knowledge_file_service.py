@@ -2,13 +2,16 @@ import copy
 from typing import List
 
 from loguru import logger
+
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeFileNotExistError
 from bisheng.database.models.role_access import AccessType
+from bisheng.database.models.user import UserDao
 from bisheng.knowledge.domain import utils
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+from bisheng.knowledge.domain.schemas.knowledge_file_schema import KnowledgeFileInfoRes
 from bisheng.knowledge.domain.schemas.knowledge_schema import ModifyKnowledgeFileMetaDataReq, MetadataField
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
@@ -40,7 +43,16 @@ class KnowledgeFileService:
         ):
             raise UnAuthorizedError()
 
-        return knowledge_file_model
+        create_user = await UserDao.aget_user(user_id=knowledge_file_model.user_id)
+        update_user = await UserDao.aget_user(user_id=knowledge_file_model.updater_id)
+
+        knowledge_file_info_res = KnowledgeFileInfoRes.from_orm_extra(model=knowledge_file_model,
+                                                                      extra={
+                                                                          'creat_user': create_user.user_name if create_user else '',
+                                                                          'update_user': update_user.user_name if update_user else create_user.user_name
+                                                                      })
+
+        return knowledge_file_info_res
 
     @staticmethod
     async def modify_milvus_file_user_metadata(knowledge_model, knowledge_file_id, user_metadata: dict):
@@ -413,4 +425,3 @@ class KnowledgeFileService:
             knowledge_file_ids=knowledge_file_ids)
 
         return user_metadata_dict
-

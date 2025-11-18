@@ -32,9 +32,9 @@ async def add_metadata_fields(*,
 
     """
 
-    knowledge_model = await knowledge_service.add_metadata_fields(default_user, req_data)
+    await knowledge_service.add_metadata_fields(default_user, req_data)
 
-    return resp_200(data=knowledge_model)
+    return resp_200(data=True)
 
 
 @router.put("/modify_metadata_fields", response_model=UnifiedResponseModel)
@@ -55,9 +55,9 @@ async def update_metadata_fields(*,
 
     """
 
-    knowledge_model = await knowledge_service.update_metadata_fields(
+    await knowledge_service.update_metadata_fields(
         default_user, req_data, background_tasks)
-    return resp_200(data=knowledge_model)
+    return resp_200(data=True)
 
 
 @router.delete('/delete_metadata_fields', response_model=UnifiedResponseModel)
@@ -79,10 +79,10 @@ async def delete_metadata_fields(*,
     Returns:
     """
 
-    knowledge_model = await knowledge_service.delete_metadata_fields(
+    await knowledge_service.delete_metadata_fields(
         default_user, knowledge_id, field_names, background_tasks)
 
-    return resp_200(data=knowledge_model)
+    return resp_200(data=True)
 
 
 @router.get('/get_metadata_fields/{knowledge_id}', response_model=UnifiedResponseModel)
@@ -136,7 +136,7 @@ async def modify_file_user_metadata(*,
                                     default_user: UserPayload = Depends(get_default_operator_async),
                                     knowledge_id: int = Body(..., embed=True, description="Knowledge ID"),
                                     modify_metadata_list: List[ModifyKnowledgeFileMetaDataReq] = Body(...,
-                                                                                                    description="File User Metadata List"),
+                                                                                                      description="File User Metadata List"),
                                     knowledge_file_service: KnowledgeFileService = Depends(
                                         get_knowledge_file_service)):
     """
@@ -152,7 +152,7 @@ async def modify_file_user_metadata(*,
     """
 
     await knowledge_file_service.batch_modify_file_user_metadata(default_user, knowledge_id,
-                                                                                         modify_metadata_list)
+                                                                 modify_metadata_list)
 
     return resp_200(data=True)
 
