@@ -140,7 +140,6 @@ def convert_one_knowledge_data(knowledge: Knowledge):
     except Exception as e:
         print(f"知识库 ID:{knowledge.id} 数据转换失败，错误原因：{e}")
         traceback.print_exc()
-        raise e
     # 在这里添加转换逻辑
     print(f"知识库 ID:{knowledge.id} 的数据转换完成。")
 
