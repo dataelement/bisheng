@@ -66,8 +66,10 @@ const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onValueChang
         onValueChange(item.id, dateString);
     };
 
-    return (
-        <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+return (
+    <div className="flex items-center gap-3 p-2">
+        {/* 左边部分 - 类型图标、标签、变量名 */}
+        <div className="flex items-center gap-2 flex-1 p-2 rounded-lg bg-gray-50">
             {/* 类型图标 */}
             <span className={isSmallScreen ? "text-base" : "text-lg"}>
                 {TYPE_ICONS[item.type]}
@@ -82,7 +84,7 @@ const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onValueChang
             </span>
 
             {/* 变量名 */}
-            <div className="min-w-0 flex-1 max-w-[80px]">
+            <div className="min-w-0 flex-1 max-w-[120px]">
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
@@ -112,10 +114,13 @@ const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onValueChang
                     </Tooltip>
                 </TooltipProvider>
             </div>
+        </div>
 
+        {/* 右边部分 - 输入框和删除按钮 */}
+        <div className="flex items-center gap-2 flex-1 justify-end p-2 rounded-lg bg-gray-50">
             {/* 输入框 - 根据类型显示不同的输入组件 */}
             {showInput && (
-                <div className="w-64 ml-auto">
+                <div className="w-40">
                     {item.type === 'String' && (
                         <input
                             disabled={!isKnowledgeAdmin}
@@ -124,8 +129,8 @@ const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onValueChang
                             onChange={handleInputChange}
                             placeholder={t('请输入文本')}
                             className={cname(
-                                "w-full px-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                                isSmallScreen ? "py-1 text-xs h-7" : "py-1.5 text-sm h-8"
+                                "w-full px-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                                isSmallScreen ? "py-0.5 text-xs h-6" : "py-1 text-sm h-7"
                             )}
                         />
                     )}
@@ -134,21 +139,20 @@ const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onValueChang
                         <input
                             disabled={!isKnowledgeAdmin}
                             type="number"
-                            value={item.value || ''}
+                            value={item.value || 0}
                             onChange={handleNumberChange}
-                            placeholder={t('请输入数字')}
                             className={cname(
-                                "w-full px-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                                isSmallScreen ? "py-1 text-xs h-7" : "py-1.5 text-sm h-8"
+                                "w-full px-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                                isSmallScreen ? "py-0.5 text-xs h-6" : "py-1 text-sm h-7"
                             )}
                         />
                     )}
 
                     {item.type === 'Time' && (
                         <DatePicker
-                            isKnowledgeAdmin={isKnowledgeAdmin}
+                            disabled={!isKnowledgeAdmin}
                             value={item.value}
-                            placeholder={t('选择日期时间')}
+                            placeholder={t('选择时间')}
                             showTime={true}
                             onChange={(selectedDate) => {
                                 const formattedValue = selectedDate
@@ -156,23 +160,25 @@ const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onValueChang
                                     : '';
                                 onValueChange(item.id, formattedValue);
                             }}
-                            className="w-full"
+                            className="w-full h-7 text-sm" 
                         />
                     )}
                 </div>
             )}
 
-            {/* 删除按钮 */}
+          
+        </div>
+          {/* 删除按钮 */}
             <button
                 onClick={() => onDelete(item.id)}
                 disabled={!isKnowledgeAdmin}
                 className="p-1 hover:bg-gray-200 rounded transition-colors flex-shrink-0"
                 title={t('删除')}
             >
-                <Trash2 size={isSmallScreen ? 14 : 16} className="text-gray-500" />
+                <Trash2 size={isSmallScreen ? 18 : 20} className="text-gray-500" />
             </button>
-        </div>
-    );
+    </div>
+)
 });
 
 MetadataRow.displayName = 'MetadataRow';
@@ -220,6 +226,7 @@ export default function Paragraphs({ fileId, onBack }) {
     const latestPreviewUrlRef = useRef('');
     const latestOriginalUrlRef = useRef('');
     const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
+    const [fileInfor, setFileInfor] = useState()
 
     // 元数据相关状态
     const [newMetadata, setNewMetadata] = useState({
@@ -426,7 +433,7 @@ export default function Paragraphs({ fileId, onBack }) {
                 filePath: fileUrl || previewUrl,
                 suffix: selectedFile.file_name?.split('.').pop() || '',
                 fileType: selectedFile.parse_type || 'unknown',
-                fullData: selectedFile || {}
+                fullData: selectedFile || {},
             });
             setSelectedFileId(newFileId);
         }
@@ -469,7 +476,7 @@ export default function Paragraphs({ fileId, onBack }) {
                     pageSize: 4000,
                     status: 2
                 });
-                setIsKnowledgeAdmin(false)
+                setIsKnowledgeAdmin(res.writeable)
                 const filesData = res?.data || [];
                 setRawFiles(filesData);
                 console.log('加载文件列表:', filesData);
@@ -634,11 +641,11 @@ export default function Paragraphs({ fileId, onBack }) {
 
         const bbox = { chunk_bboxes: selectedBbox };
 
-        const bboxStr = selectedBbox.length ? JSON.stringify(bbox):safeChunks[chunkIndexPage].bbox
+        const bboxStr = selectedBbox.length ? JSON.stringify(bbox) : safeChunks[chunkIndexPage].bbox
         captureAndAlertRequestErrorHoc(updateChunkApi({
-            knowledge_id:Number(id),
-            file_id:selectedFileId || currentFile?.id||'',
-            chunk_index:chunkIndex,
+            knowledge_id: Number(id),
+            file_id: selectedFileId || currentFile?.id || '',
+            chunk_index: chunkIndex,
             text,
             bbox: bboxStr
         }))
@@ -681,6 +688,7 @@ export default function Paragraphs({ fileId, onBack }) {
         if (currentFile?.fullData) {
             try {
                 const res = await getMetaFile(currentFile.id);
+                setFileInfor(res)
                 const fetchedMetadata = res.user_metadata || [];
                 const sortedMetadata = fetchedMetadata.sort((a, b) => {
                     return a.updated_at - b.updated_at;
@@ -870,7 +878,6 @@ export default function Paragraphs({ fileId, onBack }) {
         latestPreviewUrlRef.current = previewUrl;
     }, [fileUrl, previewUrl]);
 
-    // 完全重写的位置计算逻辑
     const updateSideDialogPosition = useCallback(() => {
         if (!mainMetadataDialogRef.current || !sideDialog.open) return;
 
@@ -1218,6 +1225,7 @@ export default function Paragraphs({ fileId, onBack }) {
                     </DialogHeader>
                     <button
                         onClick={handleSearchMetadataClick}
+                        disabled={!isKnowledgeAdmin}
                         className="py-2 w-full flex items-center justify-center gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                         <Plus size={16} />
@@ -1244,37 +1252,37 @@ export default function Paragraphs({ fileId, onBack }) {
 
                     <div className="grid gap-4 py-4">
                         <div className="font-medium">文档信息</div>
-                        <div className="space-y-2">
+                        {fileInfor && <div className="space-y-2">
                             {[
                                 {
                                     label: t('文件id'),
-                                    value: metadataDialog.file?.id,
+                                    value: fileInfor?.id,
                                 },
                                 {
                                     label: t('文件名称'),
-                                    value: metadataDialog.file?.file_name,
+                                    value: fileInfor?.file_name,
                                     isFileName: true
                                 },
                                 {
                                     label: t('创建时间'),
-                                    value: metadataDialog.file?.create_time ? metadataDialog.file.create_time.replace('T', ' ') : null
+                                    value: fileInfor?.create_time ? metadataDialog.file.create_time.replace('T', ' ') : null
                                 },
                                 {
                                     label: t('创建者'),
-                                    value: metadataDialog.file?.creat_user,
+                                    value: fileInfor?.creat_user,
                                 },
                                 {
                                     label: t('更新者'),
-                                    value: metadataDialog.file?.update_user,
+                                    value: fileInfor?.update_user,
                                 },
                                 {
                                     label: t('更新时间'),
-                                    value: metadataDialog.file?.update_time ? metadataDialog.file.update_time.replace('T', ' ') : null
+                                    value: fileInfor?.update_time ? fileInfor?.update_time.replace('T', ' ') : null
                                 },
-                                { label: t('原始文件大小'), value: metadataDialog.file?.file_size ? formatFileSize(metadataDialog.file.file_size) : null },
+                                { label: t('原始文件大小'), value: fileInfor?.file_size ? formatFileSize(metadataDialog.file.file_size) : null },
                                 {
                                     label: t('切分策略'),
-                                    value: metadataDialog.file ? splitRuleDesc(metadataDialog.file) : null
+                                    value: fileInfor ? splitRuleDesc(fileInfor) : null
                                 },
                                 { label: t('全文摘要'), value: metadataDialog.file?.title }
                             ].map((item, index) => (
@@ -1287,7 +1295,7 @@ export default function Paragraphs({ fileId, onBack }) {
                                     </div>
                                 )
                             ))}
-                        </div>
+                        </div>}
                     </div>
                     <div className="flex justify-end gap-2 pt-4 border-t border-gray-200">
                         {/* 取消按钮 */}
@@ -1301,6 +1309,7 @@ export default function Paragraphs({ fileId, onBack }) {
                         {/* 保存按钮 */}
                         <Button
                             onClick={handleSaveUserMetadata}
+                            disabled={!isKnowledgeAdmin}
                             className={cname(
                                 "bg-blue-500 hover:bg-blue-600",
                                 isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm"

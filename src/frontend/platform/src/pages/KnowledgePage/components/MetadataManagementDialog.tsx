@@ -24,16 +24,22 @@ interface Metadata {
 interface BuiltInMetadata {
     name: string
     type: MetadataType
-    description: string
+
 }
 
 const BUILT_IN_METADATA: BuiltInMetadata[] = [
-    { name: "document_id", type: "Number", description: "系统文档id值，全局唯一" },
-    { name: "document_name", type: "String", description: "知识库文档名称，知识库唯一" },
-    { name: "upload_time", type: "Time", description: "文档上传时间" },
-    { name: "update_time", type: "Time", description: "文档最后一次更新时间" },
-    { name: "uploader", type: "String", description: "文档上传者" },
-    { name: "updater", type: "String", description: "文档最后一次更新者" },
+    { name: "document_id", type: "Number" },
+    { name: "document_name", type: "String"},
+    { name: "upload_time", type: "Time"},
+    { name: "update_time", type: "Time"},
+    { name: "uploader", type: "String"},
+    { name: "updater", type: "String"},
+    { name: "abstract", type: "String"},
+    { name: "chunk_index", type: "Number"},
+    { name: "bbox", type: "String"},
+    { name: "page", type: "Number"},
+    { name: "knowledge_id", type: "Number"},
+    { name: "user_metadata", type: "String"},
 ]
 
 const TYPE_ICONS = {
@@ -475,7 +481,7 @@ export function MetadataManagementDialog({
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                {BUILT_IN_METADATA.map((metadata) => (
+                                { BUILT_IN_METADATA.slice(0, 6).map((metadata) => (
                                     <div
                                         key={metadata.name}
                                         className={cname("flex items-center bg-gray-50 rounded-lg", isSmallScreen ? "p-2 gap-2" : "p-3 gap-3")}

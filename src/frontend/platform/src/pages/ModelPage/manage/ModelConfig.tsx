@@ -397,7 +397,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
     const { t } = useTranslation('model')
     const { refetch: refetchConfig } = useLinsightConfig();
 
-    const [formData, setFormData] = useState(id === -1 ? { ...defaultForm } : null)
+    const [formData, setFormData] = useState({ ...defaultForm })
     const [modelRefs, setModelRefs] = useState({});
 
     useEffect(() => {
