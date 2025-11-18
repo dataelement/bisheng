@@ -11,7 +11,7 @@ import { useTable } from '@/util/hook';
 import { truncateString } from "@/util/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu';
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { AlertCircle, ArrowLeft, Calendar as CalendarIcon, ChevronDown, ChevronUp, Edit2, FileText, Plus, Search, Trash2, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Calendar as CalendarIcon, ChevronDown, ChevronUp, ClipboardPenLine, Clock3, Edit2, FileText, Hash, Plus, Search, Trash2, Type, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -30,13 +30,13 @@ import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 
 // 类型图标常量
 const TYPE_ICONS = {
-    String: "📄",
-    Number: "#",
-    Time: "⏱️"
+    String: <Type />,
+    Number: <Hash />,
+    Time: <Clock3 />
 };
 
 // 元数据行组件
-const MetadataRow = React.memo(({ item, onDelete, onValueChange, isSmallScreen, t, showInput = true }) => {
+const MetadataRow = React.memo(({isKnowledgeAdmin, item, onDelete, onValueChange, isSmallScreen, t, showInput = true }) => {
     // 将日期字符串转换为 Date 对象
     const getDateValue = (dateString) => {
         if (!dateString) return null;
@@ -93,6 +93,7 @@ const MetadataRow = React.memo(({ item, onDelete, onValueChange, isSmallScreen, 
                 <div className="flex-1 min-w-0">
                     {item.type === 'String' && (
                         <input
+                            disabled={!isKnowledgeAdmin}
                             type="text"
                             value={item.value || ''}
                             onChange={handleInputChange}
@@ -106,6 +107,7 @@ const MetadataRow = React.memo(({ item, onDelete, onValueChange, isSmallScreen, 
 
                     {item.type === 'Number' && (
                         <input
+                             disabled={!isKnowledgeAdmin}
                             type="number"
                             value={item.value || ''}
                             onChange={handleNumberChange}
@@ -119,6 +121,7 @@ const MetadataRow = React.memo(({ item, onDelete, onValueChange, isSmallScreen, 
 
                     {item.type === 'Time' && (
                         <DatePicker
+                        isKnowledgeAdmin={isKnowledgeAdmin}
                             value={item.value}
                             placeholder={t('选择日期时间')}
                             showTime={true}
@@ -136,6 +139,7 @@ const MetadataRow = React.memo(({ item, onDelete, onValueChange, isSmallScreen, 
             {/* 删除按钮 */}
             <button
                 onClick={() => onDelete(item.id)}
+                disabled={!isKnowledgeAdmin}
                 className="p-1 hover:bg-gray-200 rounded transition-colors flex-shrink-0"
                 title={t('删除')}
             >
@@ -162,6 +166,7 @@ export default function Paragraphs({ fileId, onBack }) {
     const [fileUrl, setFileUrl] = useState('');
     const [chunks, setChunks] = useState([]);
     const [rawFiles, setRawFiles] = useState([]);
+    const [isKnowledgeAdmin, setIsKnowledgeAdmin] = useState(false); // 是否为知识库管理员（有管理权限）
     const [metadataDialog, setMetadataDialog] = useState({
         open: false,
         file: null
@@ -437,7 +442,7 @@ export default function Paragraphs({ fileId, onBack }) {
                     pageSize: 4000,
                     status: 2
                 });
-
+                setIsKnowledgeAdmin(false)
                 const filesData = res?.data || [];
                 setRawFiles(filesData);
                 console.log('加载文件列表:', filesData);
@@ -1069,6 +1074,7 @@ const handleSaveUserMetadata = useCallback(async () => {
                         />
                     </div>
                     <Button variant="outline" onClick={handleMetadataClick} className="px-4 whitespace-nowrap">
+                        <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-1"/>
                         {t('元数据')}
                     </Button>
                     <Tip content={!isEditable && '暂无操作权限'} side='top'>
@@ -1167,6 +1173,7 @@ const handleSaveUserMetadata = useCallback(async () => {
                         <div className="space-y-2 mt-4">
                             {mainMetadataList.map((metadata) => (
                                 <MetadataRow
+                                    isKnowledgeAdmin={isKnowledgeAdmin}
                                     key={metadata.id}
                                     item={metadata}
                                     onDelete={handleDeleteMainMetadata}
@@ -1343,6 +1350,7 @@ const handleSaveUserMetadata = useCallback(async () => {
                                 <div className="space-y-2">
                                     <button
                                         onClick={handleCreateMetadataClick}
+                                        disabled={!isKnowledgeAdmin}
                                         className="py-2 w-full flex items-center justify-center gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                     >
                                         <Plus size={isSmallScreen ? 14 : 16} />

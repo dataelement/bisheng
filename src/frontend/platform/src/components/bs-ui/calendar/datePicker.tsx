@@ -19,7 +19,8 @@ export function DatePicker({
   placeholder = '',
   onChange,
   showTime = false,
-  dateFormat = showTime ? 'yyyy-MM-dd HH:mm:ss' : 'yyyy-MM-dd'
+  dateFormat = showTime ? 'yyyy-MM-dd HH:mm:ss' : 'yyyy-MM-dd',
+  isKnowledgeAdmin
 }) {
   const initialDate = parseDate(value)
   const [date, setDate] = useState<Date | null>(initialDate)
@@ -106,6 +107,7 @@ export function DatePicker({
       <PopoverTrigger asChild>
         <Button
           variant="outline"
+          disabled={!isKnowledgeAdmin}
           className={cname(
             "w-full justify-start text-left font-normal bg-search-input",
             !dateStr && "text-muted-foreground"
