@@ -111,12 +111,10 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
     // 检查知识库检索设置
     const hasKnowledgeSearchEnabled = useMemo(() => {
         const knowledgeGroup = node.group_params.find(group => group.name === '知识库检索设置');
-        console.log(knowledgeGroup, 123);
-
+        
         if (knowledgeGroup && knowledgeGroup.params) {
             const thirdItem = knowledgeGroup.params[2]; // 第三项（索引为2）
-            console.log(thirdItem, 1232);
-
+            
             return thirdItem.value && thirdItem.value?.conditions?.length > 0 && thirdItem.value?.enabled;
         }
         return false;
@@ -128,8 +126,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
     // 动态计算节点宽度类名
     const nodeWidthClass = useMemo(() => {
         const baseClasses = ['condition'];
-        console.log(hasKnowledgeSearchEnabled, 888);
-
+        
         if (hasKnowledgeSearchEnabled) {
             baseClasses.push('rag');
             baseClasses.push('knowledge_retriever');
@@ -189,11 +186,9 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
         const knowledgeParam = node.group_params
             .flatMap(group => group.params)
             .find(param => param.type === "knowledge_select_multi");
-        console.log(knowledgeParam, 89);
-
+        
         if (knowledgeParam && knowledgeParam.value && Array.isArray(knowledgeParam.value.value)) {
             const ids = knowledgeParam.value.value.map(kb => String(kb.key));
-            console.log("获取知识库ID:", ids);
             return ids;
         }
         return [];

@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader } from '@/compon
 import { SearchInput } from '@/components/bs-ui/input';
 import AutoPagination from '@/components/bs-ui/pagination/autoPagination';
 import ShadTooltip from "@/components/ShadTooltipComponent";
-import { delChunkApi, getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, getKnowledgeDetailApi, readFileByLibDatabase, updateChunkApi, addMetadata, saveUserMetadataApi,getMetaFile } from '@/controllers/API';
+import { delChunkApi, getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, getKnowledgeDetailApi, readFileByLibDatabase, updateChunkApi, addMetadata, saveUserMetadataApi, getMetaFile } from '@/controllers/API';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useTable } from '@/util/hook';
 import { truncateString } from "@/util/utils";
@@ -27,6 +27,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popo
 import { format } from "date-fns";
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 
 // 类型图标常量
 const TYPE_ICONS = {
@@ -36,7 +37,7 @@ const TYPE_ICONS = {
 };
 
 // 元数据行组件
-const MetadataRow = React.memo(({isKnowledgeAdmin, item, onDelete, onValueChange, isSmallScreen, t, showInput = true }) => {
+const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onValueChange, isSmallScreen, t, showInput = true }) => {
     // 将日期字符串转换为 Date 对象
     const getDateValue = (dateString) => {
         if (!dateString) return null;
@@ -74,23 +75,47 @@ const MetadataRow = React.memo(({isKnowledgeAdmin, item, onDelete, onValueChange
 
             {/* 类型标签 */}
             <span className={cname(
-                "text-gray-500 min-w-[60px]",
+                "text-gray-500 min-w-[20px]",
                 isSmallScreen ? "text-xs" : "text-sm"
             )}>
                 {item.type}
             </span>
 
             {/* 变量名 */}
-            <span className={cname(
-                "font-medium truncate flex-1 min-w-0",
-                isSmallScreen ? "text-sm" : ""
-            )}>
-                {item.name}
-            </span>
+            <div className="min-w-0 flex-1 max-w-[80px]">
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span
+                                className={cname(
+                                    "font-medium truncate block",
+                                    isSmallScreen ? "text-sm" : "",
+                                    "max-w-full"
+                                )}
+                                style={{
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                }}
+                            >
+                                {item.name}
+                            </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-[200px] whitespace-normal"
+                            style={{
+                                whiteSpace: 'normal',
+                                wordBreak: 'break-word'
+                            }}
+                        >
+                            <p>{item.name}</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            </div>
 
             {/* 输入框 - 根据类型显示不同的输入组件 */}
             {showInput && (
-                <div className="flex-1 min-w-0">
+                <div className="w-64 ml-auto">
                     {item.type === 'String' && (
                         <input
                             disabled={!isKnowledgeAdmin}
@@ -107,7 +132,7 @@ const MetadataRow = React.memo(({isKnowledgeAdmin, item, onDelete, onValueChange
 
                     {item.type === 'Number' && (
                         <input
-                             disabled={!isKnowledgeAdmin}
+                            disabled={!isKnowledgeAdmin}
                             type="number"
                             value={item.value || ''}
                             onChange={handleNumberChange}
@@ -121,7 +146,7 @@ const MetadataRow = React.memo(({isKnowledgeAdmin, item, onDelete, onValueChange
 
                     {item.type === 'Time' && (
                         <DatePicker
-                        isKnowledgeAdmin={isKnowledgeAdmin}
+                            isKnowledgeAdmin={isKnowledgeAdmin}
                             value={item.value}
                             placeholder={t('选择日期时间')}
                             showTime={true}
@@ -131,6 +156,7 @@ const MetadataRow = React.memo(({isKnowledgeAdmin, item, onDelete, onValueChange
                                     : '';
                                 onValueChange(item.id, formattedValue);
                             }}
+                            className="w-full"
                         />
                     )}
                 </div>
@@ -220,6 +246,9 @@ export default function Paragraphs({ fileId, onBack }) {
     const [screenWidth, setScreenWidth] = useState(window.innerWidth);
     const isSmallScreen = screenWidth < 1366;
     const sideDialogWidth = isSmallScreen ? 240 : 300;
+
+    // 添加新的状态来控制侧边弹窗的显示时机
+    const [isSideDialogPositioned, setIsSideDialogPositioned] = useState(false);
 
     const [predefinedMetadata, setPredefinedMetadata] = useState([
     ]);
@@ -387,8 +416,6 @@ export default function Paragraphs({ fileId, onBack }) {
 
         const selectedFile = rawFiles.find(f => String(f.id) === newFileId);
         if (selectedFile) {
-            console.log(selectedFile, fileUrl, previewUrl, 888);
-
             setCurrentFile({
                 label: selectedFile.file_name || '',
                 value: newFileId,
@@ -575,6 +602,7 @@ export default function Paragraphs({ fileId, onBack }) {
         setMetadataError('');
         setSearchTerm("");
         setNewMetadata({ name: '', type: 'String' });
+        setIsSideDialogPositioned(false);
     }, []);
 
     // 从搜索弹窗添加元数据到主列表
@@ -591,7 +619,7 @@ export default function Paragraphs({ fileId, onBack }) {
         };
         setMainMetadataList(prev => [...prev, newItem]);
         closeSideDialog();
-    }, [closeSideDialog]);
+    }, [closeSideDialog, mainMetadataList]);
 
     const filteredPredefinedMetadata = useMemo(() => {
         return predefinedMetadata.filter(meta =>
@@ -606,16 +634,14 @@ export default function Paragraphs({ fileId, onBack }) {
 
         const bbox = { chunk_bboxes: selectedBbox };
 
-        const targetChunk = chunks.find(chunk => chunk.chunkIndex === chunkIndex);
-        const bboxStr = selectedBbox.length ? JSON.stringify(bbox.length ? JSON.stringify(bbox) : targetChunk?.bbox) :
-            captureAndAlertRequestErrorHoc(updateChunkApi({
-                knowledge_id: Number(id),
-                file_id: selectedFileId || currentFile?.id || '',
-                chunk_index: chunkIndex,
-                text,
-                bbox: bboxStr
-            }));
-
+        const bboxStr = selectedBbox.length ? JSON.stringify(bbox):safeChunks[chunkIndexPage].bbox
+        captureAndAlertRequestErrorHoc(updateChunkApi({
+            knowledge_id:Number(id),
+            file_id:selectedFileId || currentFile?.id||'',
+            chunk_index:chunkIndex,
+            text,
+            bbox: bboxStr
+        }))
         setChunks(chunks => chunks.map(chunk =>
             chunk.chunkIndex === chunkIndex ? { ...chunk, bbox: bboxStr, text } : chunk
         ));
@@ -651,49 +677,49 @@ export default function Paragraphs({ fileId, onBack }) {
         }));
     }, [datalist, selectedFileId, chunkSwitchTrigger]);
 
-  const handleMetadataClick = useCallback(async () => {
-    if (currentFile?.fullData) {
-        try {
-            const res = await getMetaFile(currentFile.id);
-            const fetchedMetadata = res.user_metadata || [];
-            const sortedMetadata = fetchedMetadata.sort((a, b) => {
-                return a.updated_at - b.updated_at;
-            });
+    const handleMetadataClick = useCallback(async () => {
+        if (currentFile?.fullData) {
+            try {
+                const res = await getMetaFile(currentFile.id);
+                const fetchedMetadata = res.user_metadata || [];
+                const sortedMetadata = fetchedMetadata.sort((a, b) => {
+                    return a.updated_at - b.updated_at;
+                });
 
-            // 3. 格式化排序后的元数据
-            const formattedMetadata = sortedMetadata.map(meta => {
-                let type = 'String';
-                if (!isNaN(Number(meta.field_value))) {
-                    type = 'Number';
-                } else if (!isNaN(Date.parse(meta.field_value))) {
-                    type = 'Time';
-                }
+                // 3. 格式化排序后的元数据
+                const formattedMetadata = sortedMetadata.map(meta => {
+                    let type = 'String';
+                    if (!isNaN(Number(meta.field_value))) {
+                        type = 'Number';
+                    } else if (!isNaN(Date.parse(meta.field_value))) {
+                        type = 'Time';
+                    }
 
-                return {
-                    id: `meta_${meta.field_name}`,
-                    name: meta.field_name,
-                    type: type,
-                    value: meta.field_value,
-                };
-            });
+                    return {
+                        id: `meta_${meta.field_name}`,
+                        name: meta.field_name,
+                        type: type,
+                        value: meta.field_value,
+                    };
+                });
 
-            // 4. 更新状态
-            setMainMetadataList(formattedMetadata);
+                // 4. 更新状态
+                setMainMetadataList(formattedMetadata);
 
-            // 5. 打开弹窗
-            setMetadataDialog({
-                open: true,
-                file: currentFile.fullData
-            });
-        } catch (error) {
-            console.error("获取文件元数据失败:", error);
-            setMetadataDialog({
-                open: true,
-                file: currentFile.fullData
-            });
+                // 5. 打开弹窗
+                setMetadataDialog({
+                    open: true,
+                    file: currentFile.fullData
+                });
+            } catch (error) {
+                console.error("获取文件元数据失败:", error);
+                setMetadataDialog({
+                    open: true,
+                    file: currentFile.fullData
+                });
+            }
         }
-    }
-}, [currentFile]);
+    }, [currentFile]);
 
     const handleAdjustSegmentation = useCallback(() => {
         const currentFileUrl = latestOriginalUrlRef.current;
@@ -844,26 +870,28 @@ export default function Paragraphs({ fileId, onBack }) {
         latestPreviewUrlRef.current = previewUrl;
     }, [fileUrl, previewUrl]);
 
-    // 右侧弹窗位置计算 - 优化版本
+    // 完全重写的位置计算逻辑
     const updateSideDialogPosition = useCallback(() => {
-        if (mainMetadataDialogRef.current && sideDialog.open) {
-            const rect = mainMetadataDialogRef.current.getBoundingClientRect();
-            const gap = isSmallScreen ? 8 : 16;
-            let left = rect.right + gap;
+        if (!mainMetadataDialogRef.current || !sideDialog.open) return;
 
-            // 避免右侧弹窗超出屏幕
-            if (left + sideDialogWidth > screenWidth) {
-                left = screenWidth - sideDialogWidth - 8;
-            }
+        const rect = mainMetadataDialogRef.current.getBoundingClientRect();
+        const gap = isSmallScreen ? 0 : 4;
+        let left = rect.right + gap;
 
-            setSideDialogPosition({
-                top: Math.max(rect.top, 8), // 确保不会超出顶部
-                left: Math.max(left, 8) // 确保不会超出左侧
-            });
+        if (left + sideDialogWidth > screenWidth) {
+            left = screenWidth - sideDialogWidth - 8;
         }
+
+        const newPosition = {
+            top: Math.max(rect.top, 8),
+            left: Math.max(left, 8)
+        };
+
+        setSideDialogPosition(newPosition);
+        setIsSideDialogPositioned(true);
     }, [mainMetadataDialogRef, sideDialog.open, isSmallScreen, screenWidth, sideDialogWidth]);
 
-    // 窗口 resize 监听和位置更新
+    // 窗口 resize 监听
     useEffect(() => {
         const handleResize = () => {
             const newWidth = window.innerWidth;
@@ -874,48 +902,63 @@ export default function Paragraphs({ fileId, onBack }) {
         return () => window.removeEventListener("resize", handleResize);
     }, []);
 
-    // 当主弹窗或侧边弹窗状态变化时更新位置
     useEffect(() => {
-        if (metadataDialog.open && sideDialog.open) {
-            // 使用 setTimeout 确保 DOM 已经更新
-            const timer = setTimeout(() => {
-                updateSideDialogPosition();
-            }, 50);
-            return () => clearTimeout(timer);
+        if (!metadataDialog.open || !sideDialog.open) {
+            setIsSideDialogPositioned(false);
+            return;
         }
-    }, [metadataDialog.open, sideDialog.open, updateSideDialogPosition]);
-// 保存用户元数据到后端
-const handleSaveUserMetadata = useCallback(async () => {
-  // 1. 表单验证：检查是否有必填项为空
-  const invalidItems = mainMetadataList.filter(item => !item.value?.trim());
-  if (invalidItems.length > 0) {
-    const invalidNames = invalidItems.map(item => item.name).join('、');
-    setMetadataError(t(`元数据「${invalidNames}」的值不能为空，请完善后再保存`));
-    return;
-  }
 
-  const knowledge_id = selectedFileId
-  const user_metadata_list = mainMetadataList.map(item => ({
-      field_name: item.name,
-      field_value: item.value
-    }))
-  try {
-    // 3. 调用API保存数据
-    await saveUserMetadataApi(knowledge_id,user_metadata_list);
-    
-    // 4. 保存成功处理
-    toast({
-      title: t('成功'),
-      description: t('元数据已成功保存'),
-    });
-    setMetadataDialog(prev => ({ ...prev, open: false })); // 关闭弹窗
-    setMetadataError(''); // 清除错误提示
-  } catch (error) {
-    // 5. 保存失败处理
-    console.error('保存元数据失败：', error);
-    setMetadataError(t('保存失败，请检查网络或联系管理员'));
-  }
-}, [mainMetadataList, id, t]);
+        // 使用多个阶段的延迟来确保位置计算准确
+        const timer1 = setTimeout(() => {
+            updateSideDialogPosition();
+        }, 0);
+
+        const timer2 = setTimeout(() => {
+            updateSideDialogPosition();
+        }, 50);
+
+        const timer3 = setTimeout(() => {
+            updateSideDialogPosition();
+        }, 100);
+
+        return () => {
+            clearTimeout(timer1);
+            clearTimeout(timer2);
+            clearTimeout(timer3);
+        };
+    }, [metadataDialog.open, sideDialog.open, updateSideDialogPosition]);
+
+    const handleSaveUserMetadata = useCallback(async () => {
+        const invalidItems = mainMetadataList.filter(item => !item.value?.trim());
+        if (invalidItems.length > 0) {
+            const invalidNames = invalidItems.map(item => item.name).join('、');
+            setMetadataError(t(`元数据「${invalidNames}」的值不能为空，请完善后再保存`));
+            return;
+        }
+
+        const knowledge_id = selectedFileId
+        const user_metadata_list = mainMetadataList.map(item => ({
+            field_name: item.name,
+            field_value: item.value
+        }))
+        try {
+            // 3. 调用API保存数据
+            await saveUserMetadataApi(knowledge_id, user_metadata_list);
+
+            // 4. 保存成功处理
+            toast({
+                title: t('成功'),
+                description: t('元数据已成功保存'),
+            });
+            setMetadataDialog(prev => ({ ...prev, open: false })); // 关闭弹窗
+            setMetadataError(''); // 清除错误提示
+        } catch (error) {
+            // 5. 保存失败处理
+            console.error('保存元数据失败：', error);
+            setMetadataError(t('保存失败，请检查网络或联系管理员'));
+        }
+    }, [mainMetadataList, id, t]);
+
     // 右侧弹窗公共容器组件
     const SideDialogContent = useMemo(() =>
         React.forwardRef<
@@ -927,7 +970,7 @@ const handleSaveUserMetadata = useCallback(async () => {
                     ref={ref}
                     {...props}
                     className={cname(
-                        "fixed z-50 flex flex-col border bg-background dark:bg-[#303134] shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg",
+                        "fixed z-50 flex flex-col border bg-background dark:bg-[#303134] shadow-lg sm:rounded-lg",
                         `w-[${sideDialogWidth}px]`,
                         isSmallScreen ? "p-3 text-sm" : "p-5",
                         className
@@ -937,13 +980,23 @@ const handleSaveUserMetadata = useCallback(async () => {
                         left: `${sideDialogPosition.left}px`,
                         transform: "none",
                         maxHeight: "80vh",
+                        // 只有在位置计算完成后才显示
+                        opacity: isSideDialogPositioned ? 1 : 0,
+                        transition: 'opacity 0.05s ease-in-out'
                     }}
                 >
                     {children}
+                    <DialogPrimitive.Close
+                        className="absolute right-3 top-3 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
+                        onClick={closeSideDialog}
+                    >
+                        <X className={isSmallScreen ? "h-3 w-3" : "h-4 w-4"} />
+                        <span className="sr-only">Close</span>
+                    </DialogPrimitive.Close>
                 </DialogPrimitive.Content>
             </DialogPrimitive.Portal>
         ))
-        , [sideDialogWidth, isSmallScreen, sideDialogPosition, closeSideDialog]);
+        , [sideDialogWidth, isSmallScreen, sideDialogPosition, isSideDialogPositioned, closeSideDialog]);
     SideDialogContent.displayName = "SideDialogContent";
 
     if (load) return <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
@@ -1074,7 +1127,7 @@ const handleSaveUserMetadata = useCallback(async () => {
                         />
                     </div>
                     <Button variant="outline" onClick={handleMetadataClick} className="px-4 whitespace-nowrap">
-                        <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-1"/>
+                        <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-1" />
                         {t('元数据')}
                     </Button>
                     <Tip content={!isEditable && '暂无操作权限'} side='top'>
@@ -1156,6 +1209,9 @@ const handleSaveUserMetadata = useCallback(async () => {
                 <DialogContent
                     ref={mainMetadataDialogRef}
                     className="sm:max-w-[525px] max-w-[625px] max-h-[80vh] overflow-y-auto"
+                    style={{
+                        transition: 'none'
+                    }}
                 >
                     <DialogHeader>
                         <h3 className="text-lg font-semibold">{t('元数据')}</h3>
@@ -1192,7 +1248,7 @@ const handleSaveUserMetadata = useCallback(async () => {
                             {[
                                 {
                                     label: t('文件id'),
-                                    value: metadataDialog.file?.file_name,
+                                    value: metadataDialog.file?.id,
                                 },
                                 {
                                     label: t('文件名称'),
@@ -1205,11 +1261,11 @@ const handleSaveUserMetadata = useCallback(async () => {
                                 },
                                 {
                                     label: t('创建者'),
-                                    value: metadataDialog.file?.file_name,
+                                    value: metadataDialog.file?.creat_user,
                                 },
                                 {
                                     label: t('更新者'),
-                                    value: metadataDialog.file?.file_name,
+                                    value: metadataDialog.file?.update_user,
                                 },
                                 {
                                     label: t('更新时间'),
@@ -1310,12 +1366,10 @@ const handleSaveUserMetadata = useCallback(async () => {
                                 </div>
                             </DialogHeader>
 
-                            {/* 可滚动区域 - 使用 flex 布局 */}
-                            <div className="flex-1 min-h-0 overflow-y-auto">
+                            <div className="flex-1 min-h-0 mt-2 mb-2 overflow-y-auto">
                                 <div
                                     className="h-full overflow-y-auto"
                                     onWheel={(e) => {
-                                        // 手动处理滚动事件，确保正常工作
                                         e.stopPropagation();
                                     }}
                                 >
@@ -1326,7 +1380,7 @@ const handleSaveUserMetadata = useCallback(async () => {
                                                 className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
                                                 onClick={() => handleAddFromSearch(metadata)}
                                             >
-                                                <div className="flex items-center gap-3 flex-1">
+                                                <div className="flex items-center gap-3 flex-1 min-w-0">
                                                     <span className={isSmallScreen ? "text-base" : "text-lg"}>
                                                         {TYPE_ICONS[metadata.type]}
                                                     </span>
@@ -1336,9 +1390,27 @@ const handleSaveUserMetadata = useCallback(async () => {
                                                     )}>
                                                         {metadata.type}
                                                     </span>
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="font-medium text-sm">{metadata.name}</div>
-                                                    </div>
+
+                                                    <TooltipProvider>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="font-medium text-sm truncate">
+                                                                        {metadata.name}
+                                                                    </div>
+                                                                </div>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent className="max-w-[200px] whitespace-normal"
+                                                                style={{
+                                                                    whiteSpace: 'normal',
+                                                                    wordBreak: 'break-word'
+                                                                }}
+                                                            >
+                                                                <p>{metadata.name}</p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+
                                                 </div>
                                             </div>
                                         ))}
@@ -1418,7 +1490,6 @@ const handleSaveUserMetadata = useCallback(async () => {
                                         "flex items-center gap-1.5 text-red-500",
                                         isSmallScreen ? "text-xs" : "text-sm"
                                     )}>
-                                        <AlertCircle size={isSmallScreen ? 14 : 16} />
                                         <span>{metadataError}</span>
                                     </div>
                                 )}

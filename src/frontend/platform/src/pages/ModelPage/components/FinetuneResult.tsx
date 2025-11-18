@@ -19,7 +19,6 @@ export default function FinetuneResult({ id, training, isStop, failed, onChange 
 
         clearTimeout(timerRef.current)
         timerRef.current = setTimeout(() => {
-            console.log('2s');
             loadData(true)
 
             setCount(count + 1)

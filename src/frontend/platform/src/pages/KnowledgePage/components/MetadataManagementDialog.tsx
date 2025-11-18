@@ -9,6 +9,7 @@ import React, { useCallback, useState, useRef, useEffect, memo, useMemo } from "
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { cname } from "@/components/bs-ui/utils"
 import { addMetadata, updateMetadataFields, deleteMetadataFields } from "@/controllers/API"
+import { QuestionTooltip, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip"
 
 type MetadataType = "String" | "Number" | "Time"
 
@@ -37,7 +38,7 @@ const BUILT_IN_METADATA: BuiltInMetadata[] = [
 
 const TYPE_ICONS = {
     String: <Type />,
-    Number:<Hash />,
+    Number: <Hash />,
     Time: <Clock3 />,
 }
 
@@ -107,6 +108,9 @@ export function MetadataManagementDialog({
     const isSideDialogAtRisk = isSmallScreen && sideDialog.open;
     const mainDialogMaxWidth = isSmallScreen ? 600 : 1200;
 
+    // 添加状态控制侧边弹窗显示时机
+    const [isSideDialogReady, setIsSideDialogReady] = useState(false);
+
     useEffect(() => {
         if (open && initialMetadata && initialMetadata.length > 0) {
             const formattedMetadata = initialMetadata.map((item) => ({
@@ -125,7 +129,7 @@ export function MetadataManagementDialog({
     const updateSideDialogPosition = useCallback(() => {
         if (mainDialogRef.current) {
             const rect = mainDialogRef.current.getBoundingClientRect();
-            const gap = isSmallScreen ? 8 : 16;
+            const gap = isSmallScreen ? 0 : 4;
             let left = rect.right + gap;
             if (left + sideDialogWidth > screenWidth) left = screenWidth - sideDialogWidth - 8;
             if (sideDialogPosition.left !== left || sideDialogPosition.top !== rect.top) {
@@ -138,17 +142,42 @@ export function MetadataManagementDialog({
         const handleResize = () => {
             const newWidth = window.innerWidth;
             setScreenWidth(newWidth);
-            updateSideDialogPosition();
         };
         window.addEventListener("resize", handleResize);
-        if (open && sideDialog.open) {
-            const timer = setTimeout(updateSideDialogPosition, 100);
-            return () => clearTimeout(timer);
-        }
         return () => window.removeEventListener("resize", handleResize);
+    }, []);
+
+    useEffect(() => {
+        if (!open || !sideDialog.open) {
+            setIsSideDialogReady(false);
+            return;
+        }
+
+        // 使用多个阶段的延迟确保位置计算准确
+        const timer1 = setTimeout(() => {
+            updateSideDialogPosition();
+        }, 0);
+
+        const timer2 = setTimeout(() => {
+            updateSideDialogPosition();
+        }, 50);
+
+        const timer3 = setTimeout(() => {
+            updateSideDialogPosition();
+            setIsSideDialogReady(true);
+        }, 100);
+
+        return () => {
+            clearTimeout(timer1);
+            clearTimeout(timer2);
+            clearTimeout(timer3);
+            setIsSideDialogReady(false);
+        };
     }, [open, sideDialog.open, updateSideDialogPosition]);
 
     const validateName = useCallback((name: string): { valid: boolean; error?: string } => {
+        const isBuiltInName = BUILT_IN_METADATA.some(meta => meta.name === name);
+        if (isBuiltInName) return { valid: false, error: "该名称为系统内置元数据，不可使用" };
         if (!name || name.trim().length === 0) return { valid: false, error: "名称不能为空。" };
         if (name.length > 255) return { valid: false, error: "名称不能超过255个字符。" };
         if (!/^[a-z][a-z0-9_]*$/.test(name)) return { valid: false, error: "必须以小写字母开头，且只能包含小写字母、数字和下划线。" };
@@ -162,6 +191,7 @@ export function MetadataManagementDialog({
         setNewType("String");
         setNewName("");
         setError("");
+        setIsSideDialogReady(false); // 重置准备状态
     }, []);
 
     const handleEditClick = useCallback((metadata: Metadata) => {
@@ -169,10 +199,12 @@ export function MetadataManagementDialog({
         setNewName(metadata.name);
         setSideDialog({ type: "rename", open: true });
         setError("");
+        setIsSideDialogReady(false); // 重置准备状态
     }, []);
 
     const closeSideDialog = useCallback(() => {
         setSideDialog(prev => ({ ...prev, open: false }));
+        setIsSideDialogReady(false); // 重置准备状态
         setTimeout(() => {
             setSelectedMetadata(null);
             setNewName("");
@@ -221,32 +253,99 @@ export function MetadataManagementDialog({
         }
     }, [newName, selectedMetadata, id, closeSideDialog, validateName, metadataList, onSave]);
 
-    // --- 删除调用 deleteMetadataFields ---
     const handleDelete = useCallback(async (metadata: Metadata) => {
-        if (!id) { bsConfirm({ desc: "知识库ID不存在，无法删除" }); return; }
+        if (!id) {
+            setError("知识库ID不存在，无法删除");
+            return;
+        }
 
-        bsConfirm({
-            desc: `确认删除元数据 "${metadata.name}"?`,
-            okTxt: "删除",
-            onOk: async (next: () => void) => {
-                setIsLoading(true);
-                try {
-                    await deleteMetadataFields(id, [metadata.name]);
-                    setMetadataList((prev) => prev.filter((m) => m.id !== metadata.id));
-                    if (onSave) onSave(metadataList);
-                } catch (err: any) {
-                    setError(err.message || "删除元数据失败，请稍后重试");
-                    console.error("删除失败:", err);
-                } finally {
-                    setIsLoading(false);
-                    next();
-                }
-            },
-        })
+        setIsLoading(true);
+        try {
+            await deleteMetadataFields(id, [metadata.name]);
+            setMetadataList((prev) => prev.filter((m) => m.id !== metadata.id));
+            if (onSave) onSave(metadataList);
+        } catch (err: any) {
+            setError(err.message || "删除元数据失败，请稍后重试");
+            console.error("删除失败:", err);
+        } finally {
+            setIsLoading(false);
+        }
     }, [id, metadataList, onSave]);
 
     const sortedMetadata = [...metadataList].sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime());
 
+    const BubbleConfirm = ({
+        trigger,
+        onConfirm,
+        message = "确认删除？"
+    }) => {
+        const [isOpen, setIsOpen] = useState(false);
+        const triggerRef = useRef(null);
+
+        // 点击外部关闭气泡
+        useEffect(() => {
+            const handleClickOutside = (event) => {
+                if (triggerRef.current && !triggerRef.current.contains(event.target)) {
+                    setIsOpen(false);
+                }
+            };
+
+            if (isOpen) {
+                document.addEventListener('mousedown', handleClickOutside);
+                return () => document.removeEventListener('mousedown', handleClickOutside);
+            }
+        }, [isOpen]);
+
+        return (
+            <div ref={triggerRef} className="relative inline-block">
+                {/* 触发元素（删除图标按钮） */}
+                <button
+                    onClick={() => setIsOpen(!isOpen)}
+                    className="p-1.5 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    disabled={trigger.props.disabled}
+                >
+                    {trigger.props.children}
+                </button>
+
+                {/* 气泡确认弹窗 */}
+                {isOpen && (
+                    <div className="absolute bottom-full left-1/2 mb-2 w-56 bg-white border rounded-lg shadow-lg p-3 z-50"
+                        style={{ transform: 'translateX(-84%)' }}>
+                        <div className="flex">
+                            <AlertCircle size={14} className="text-red-500" />
+                            <div className="flex -mt-1 ml-1 font-medium text-sm">提示</div>
+                        </div>
+                        <div className="flex gap-2 mb-3 mt-2">
+                            <p className="text-sm ml-10 text-gray-700 font-medium">{message}</p>
+                        </div>
+
+                        <div className="flex justify-end gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setIsOpen(false)}
+                                className="px-2 py-1 h-7 min-h-7 text-xs"
+                            >
+                                取消
+                            </Button>
+                            <Button
+                                size="sm"
+                                onClick={() => {
+                                    onConfirm();
+                                    setIsOpen(false);
+                                }}
+                                className="px-2 py-1 h-7 min-h-7 text-xs bg-red-500 hover:bg-red-600"
+                            >
+                                确认删除
+                            </Button>
+                        </div>
+                        {/* 气泡尖角 - 指向下方的删除图标 */}
+                        <div className="absolute top-full right-7 -mt-2 w-4 h-4 bg-white border-r border-b transform rotate-45"></div>
+                    </div>
+                )}
+            </div>
+        );
+    };
     const SideDialogContent = useMemo(() =>
         React.forwardRef<React.ElementRef<typeof DialogPrimitive.Content>, React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>>(
             ({ children, className, ...props }, ref) => (
@@ -255,12 +354,20 @@ export function MetadataManagementDialog({
                         ref={ref}
                         {...props}
                         className={cname(
-                            "fixed z-50 grid gap-4 border bg-background dark:bg-[#303134] shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg",
+                            "fixed z-50 grid gap-4 border bg-background dark:bg-[#303134] shadow-lg sm:rounded-lg",
                             `w-[${sideDialogWidth}px]`,
                             isSmallScreen ? "p-3 text-sm" : "p-5",
                             className
                         )}
-                        style={{ top: `${sideDialogPosition.top}px`, left: `${sideDialogPosition.left}px`, transform: "none", maxHeight: "80vh" }}
+                        style={{
+                            top: `${sideDialogPosition.top}px`,
+                            left: `${sideDialogPosition.left}px`,
+                            transform: "none",
+                            maxHeight: "80vh",
+                            // 只有在位置计算完成后才显示
+                            opacity: isSideDialogReady ? 1 : 0,
+                            transition: 'opacity 0.05s ease-in-out'
+                        }}
                     >
                         {children}
                         <DialogPrimitive.Close className="absolute right-3 top-3 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
@@ -271,7 +378,7 @@ export function MetadataManagementDialog({
                 </DialogPortal>
             )
         )
-        , [sideDialogWidth, isSmallScreen, sideDialogPosition]);
+        , [sideDialogWidth, isSmallScreen, sideDialogPosition, isSideDialogReady]);
     SideDialogContent.displayName = "SideDialogContent";
 
     return (
@@ -279,11 +386,11 @@ export function MetadataManagementDialog({
             <Dialog open={open} onOpenChange={onOpenChange}>
                 <DialogContent
                     ref={mainDialogRef}
-                    className={cname("max-h-[70vh] overflow-y-auto transition-all duration-200", typeof mainDialogMaxWidth === "string" ? "" : `w-[${mainDialogMaxWidth}px]`)}
+                    className={cname("max-h-[70vh] overflow-y-auto", typeof mainDialogMaxWidth === "string" ? "" : `w-[${mainDialogMaxWidth}px]`)}
                     style={{
                         width: mainDialogMaxWidth, maxWidth: "none",
                         left: isSideDialogAtRisk ? "8px" : isSmallScreen ? "calc(50% - 300px)" : "calc(50% - 600px)",
-                        top: "50%", transform: "translateY(-50%)", transition: "left 0.2s ease, width 0.2s ease", minWidth: 580
+                        top: "50%", transform: "translateY(-50%)", minWidth: 580
                     }}
                 >
                     <DialogHeader>
@@ -307,7 +414,37 @@ export function MetadataManagementDialog({
                                     <div className="flex items-center gap-2 flex-1">
                                         <span className={isSmallScreen ? "text-base" : "text-lg"}>{TYPE_ICONS[metadata.type]}</span>
                                         <span className={cname("text-gray-500", isSmallScreen ? "text-xs" : "text-sm")}>{metadata.type}</span>
-                                        <span className={cname("font-medium truncate", isSmallScreen ? "text-sm" : "")}>{metadata.name}</span>
+                                        <div className=" min-w-0 max-w-64">
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <span
+                                                            className={cname(
+                                                                "font-medium truncate block",
+                                                                isSmallScreen ? "text-sm" : "",
+                                                                "max-w-full" // 确保它不会超出父容器
+                                                            )}
+                                                            style={{
+                                                                whiteSpace: 'nowrap',
+                                                                overflow: 'hidden',
+                                                                textOverflow: 'ellipsis',
+                                                                width: '100%'
+                                                            }}
+                                                        >
+                                                            {metadata.name}
+                                                        </span>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent className="max-w-[200px] whitespace-normal"
+                                                        style={{
+                                                            whiteSpace: 'normal', // 强制文本正常换行
+                                                            wordBreak: 'break-word' // 在必要时允许单词内换行，防止长单词溢出
+                                                        }}
+                                                    >
+                                                        <p>{metadata.name}</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
+                                        </div>
                                     </div>
                                     <div className="flex gap-1">
                                         <button
@@ -316,12 +453,15 @@ export function MetadataManagementDialog({
                                         >
                                             <SquarePen size={isSmallScreen ? 16 : 18} />
                                         </button>
-                                        <button
-                                            onClick={() => handleDelete(metadata)} disabled={!hasManagePermission || isLoading}
-                                            className="p-1.5 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                        >
-                                            <Trash2 size={isSmallScreen ? 16 : 18} />
-                                        </button>
+                                        <BubbleConfirm
+                                            trigger={
+                                                <button disabled={!hasManagePermission || isLoading}>
+                                                    <Trash2 size={isSmallScreen ? 16 : 18} />
+                                                </button>
+                                            }
+                                            message="确认删除该元数据？"
+                                            onConfirm={() => handleDelete(metadata)}
+                                        />
                                     </div>
                                 </div>
                             ))}
@@ -330,11 +470,8 @@ export function MetadataManagementDialog({
                         <div className="space-y-3">
                             <div className="flex items-center gap-2">
                                 <h3 className={cname("font-semibold", isSmallScreen ? "text-sm" : "")}>内置元数据</h3>
-                                <div className="group relative cursor-help">
-                                    <span className="text-gray-400">?</span>
-                                    <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10">
-                                        内置元数据是系统预定义的元数据
-                                    </div>
+                                <div className="group relative">
+                                    <QuestionTooltip className="relative top-0.5 ml-1" content="内置元数据是系统预定义的元数据"></QuestionTooltip>
                                 </div>
                             </div>
                             <div className="space-y-2">
@@ -373,7 +510,6 @@ export function MetadataManagementDialog({
                                     />
                                     {error && (
                                         <div className={cname("flex items-center gap-1.5 text-red-500", isSmallScreen ? "text-xs" : "text-sm")}>
-                                            <AlertCircle size={isSmallScreen ? 14 : 16} />
                                             <span>{error}</span>
                                         </div>
                                     )}
@@ -403,7 +539,6 @@ export function MetadataManagementDialog({
                                     />
                                     {error && (
                                         <div className={cname("flex items-center gap-1.5 text-red-500", isSmallScreen ? "text-xs" : "text-sm")}>
-                                            <AlertCircle size={isSmallScreen ? 14 : 16} />
                                             <span>{error}</span>
                                         </div>
                                     )}

@@ -705,7 +705,7 @@ const useSelectModel = () => {
 
     const loadData = async () => {
         try {
-            const response = await fetch((window as any).__APP_ENV__?.BASE_URL + '/models/data.json');
+            const response = await fetch(__APP_ENV__?.BASE_URL + '/models/data.json');
             if (!response.ok) {
                 throw new Error('Failed to fetch data');
             }

@@ -284,15 +284,13 @@ const MetadataFilter = ({
       return (
         <div className="flex items-center gap-1 min-w-0">
           <SelectVar
-            className="max-w-40 flex-1" // 使用 flex-1 让其占据可用空间
-            nodeId={nodeId} // 假设 nodeId 在当前组件作用域内可用
-            itemKey={condition.id}
-            onSelect={(E, v) => {
-              console.log(E, v, 45);
-
-              const selectedValue = `${E.name}.${v.value}`;
-              updateCondition(condition.id, "value", selectedValue);
-            }}
+              className="max-w-40 flex-1" // 使用 flex-1 让其占据可用空间
+              nodeId={nodeId} // 假设 nodeId 在当前组件作用域内可用
+              itemKey={condition.id}
+              onSelect={(E, v) => {
+                  const selectedValue = `${E.name}.${v.value}`;
+                  updateCondition(condition.id, "value", selectedValue);
+              }}
           >
             <div
               className={`no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}

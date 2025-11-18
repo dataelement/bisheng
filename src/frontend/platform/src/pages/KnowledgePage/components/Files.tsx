@@ -234,8 +234,6 @@ export default function Files({ onPreview }) {
         setIsFilterOpen(open);
     };
  useEffect(() => {
-    console.log(metadataOpen,78);
-    
         // 弹窗打开且有知识库ID时，加载元数据
         if (metadataOpen && id) { // 注意：这里的依赖是 metadataOpen，而不是 open
             const fetchMetadata = async () => {
