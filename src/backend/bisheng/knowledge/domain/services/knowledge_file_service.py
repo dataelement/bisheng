@@ -157,6 +157,9 @@ class KnowledgeFileService:
         knowledge_model = await self.knowledge_repository.find_by_id(
             entity_id=knowledge_id)
 
+        if not knowledge_model:
+            raise KnowledgeFileNotExistError()
+
         # Permission check
         if not await login_user.async_access_check(
                 knowledge_model.user_id, str(knowledge_model.id), AccessType.KNOWLEDGE_WRITE
@@ -241,6 +244,9 @@ class KnowledgeFileService:
         knowledge_model = await self.knowledge_repository.find_by_id(
             entity_id=knowledge_id)
 
+        if not knowledge_model:
+            raise KnowledgeFileNotExistError()
+
         # Permission check
         if not await login_user.async_access_check(
                 knowledge_model.user_id, str(knowledge_model.id), AccessType.KNOWLEDGE_WRITE
@@ -322,6 +328,10 @@ class KnowledgeFileService:
 
         knowledge_model = await self.knowledge_repository.find_by_id(
             entity_id=knowledge_id)
+
+        if not knowledge_model:
+            raise KnowledgeFileNotExistError()
+
         # Permission check
         if not await login_user.async_access_check(
                 knowledge_model.user_id, str(knowledge_model.id), AccessType.KNOWLEDGE_WRITE
@@ -388,6 +398,9 @@ class KnowledgeFileService:
 
         knowledge_model = await self.knowledge_repository.find_by_id(
             entity_id=knowledge_id)
+
+        if not knowledge_model:
+            raise KnowledgeFileNotExistError()
 
         # Permission check
         if not await login_user.async_access_check(

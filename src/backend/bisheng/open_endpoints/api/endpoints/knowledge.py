@@ -106,7 +106,7 @@ async def list_metadata_fields(*,
     return resp_200(data=metadata_fields)
 
 
-@router.get('/file/add_user_metadata', response_model=UnifiedResponseModel)
+@router.post('/file/add_user_metadata', response_model=UnifiedResponseModel)
 async def add_file_user_metadata(*,
                                  default_user: UserPayload = Depends(get_default_operator_async),
                                  knowledge_id: int = Body(..., embed=True, description="Knowledge ID"),
@@ -125,24 +125,24 @@ async def add_file_user_metadata(*,
 
     """
 
-    knowledge_file_models = await knowledge_file_service.add_file_user_metadata(
+    await knowledge_file_service.add_file_user_metadata(
         default_user, knowledge_id, add_metadata_list)
 
-    return resp_200(data=knowledge_file_models)
+    return resp_200(data=True)
 
 
 @router.put('/file/modify_user_metadata', response_model=UnifiedResponseModel)
 async def modify_file_user_metadata(*,
                                     default_user: UserPayload = Depends(get_default_operator_async),
                                     knowledge_id: int = Body(..., embed=True, description="Knowledge ID"),
-                                    user_metadata_list: List[ModifyKnowledgeFileMetaDataReq] = Body(...,
+                                    modify_metadata_list: List[ModifyKnowledgeFileMetaDataReq] = Body(...,
                                                                                                     description="File User Metadata List"),
                                     knowledge_file_service: KnowledgeFileService = Depends(
                                         get_knowledge_file_service)):
     """
     Modify user metadata of a knowledge file.
     Args:
-        user_metadata_list:
+        modify_metadata_list:
         knowledge_id:
         default_user:
         knowledge_file_service:
@@ -151,10 +151,10 @@ async def modify_file_user_metadata(*,
 
     """
 
-    knowledge_file_models = await knowledge_file_service.batch_modify_file_user_metadata(default_user, knowledge_id,
-                                                                                         user_metadata_list)
+    await knowledge_file_service.batch_modify_file_user_metadata(default_user, knowledge_id,
+                                                                                         modify_metadata_list)
 
-    return resp_200(data=knowledge_file_models)
+    return resp_200(data=True)
 
 
 @router.delete('/file/delete_user_metadata', response_model=UnifiedResponseModel)
@@ -177,10 +177,10 @@ async def delete_file_user_metadata(*,
 
     """
 
-    knowledge_file_models = await knowledge_file_service.batch_delete_file_user_metadata(
+    await knowledge_file_service.batch_delete_file_user_metadata(
         default_user, knowledge_id, delete_user_metadatas)
 
-    return resp_200(data=knowledge_file_models)
+    return resp_200(data=True)
 
 
 @router.post('/file/list_user_metadata', response_model=UnifiedResponseModel)
