@@ -146,7 +146,10 @@ def convert_one_knowledge_data(knowledge: Knowledge):
 
 def convert_all_knowledge_data():
     all_knowledge = KnowledgeDao.get_all_knowledge()
-    for knowledge in all_knowledge:
+    total = len(all_knowledge)
+    for index, knowledge in enumerate(all_knowledge):
+        print(
+            f"convert progress: {round(index + 1 / total * 100, 2)}% knowledge id: {knowledge.id} name: {knowledge.name}")
         convert_one_knowledge_data(knowledge)
 
 
