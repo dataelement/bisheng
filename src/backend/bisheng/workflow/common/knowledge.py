@@ -5,6 +5,7 @@ from langchain_core.documents import Document
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.core.ai.rerank.rrf_rerank import RRFRerank
 from bisheng.core.vectorstore.multi_retriever import MultiRetriever
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
@@ -21,17 +22,11 @@ class ConditionOne(BaseModel):
     right_value_type: str = Field(..., description='Right value type')
     right_value: str = Field(..., description='Right value')
 
-    def get_knowledge_filter(self, field_info: Dict, parent_node: BaseNode) -> (str, List[Dict]):
-        """ get knowledge metadata filter
-            returns: milvus_filter, es_filter
-        """
-        right_value = self.right_value
-        if self.right_value_type == 'ref' and self.right_value:
-            right_value = parent_node.get_other_node_variable(self.right_value)
-        field_type = field_info.get('field_type')
-        if field_type == MetadataFieldType.STRING.value:
+    @staticmethod
+    def convert_right_value(field_type: str, right_value: Any) -> Any:
+        if field_type in [MetadataFieldType.STRING.value, "text"]:
             right_value = str(right_value)
-        elif field_type == MetadataFieldType.NUMBER.value:
+        elif field_type in [MetadataFieldType.NUMBER.value, 'int64', 'int8', 'int16', 'int32', 'int64']:
             right_value = int(right_value)
         elif field_type == MetadataFieldType.TIME.value:
             try:
@@ -41,52 +36,73 @@ class ConditionOne(BaseModel):
                 right_value = int(right_time.timestamp())
         else:
             raise ValueError(f"Unsupported metadata field type: {field_type}")
-        milvus_item = ""
-        milvus_prefix = "user_metadata"
-        es_prefix = "metadata.user_metadata"
+        return right_value
+
+    def get_milvus_es_field(self, is_preset: bool) -> (str, str):
+        """ get milvus/es field name
+        """
+        if is_preset:
+            milvus_field = f"{self.metadata_field}"
+            es_field = f"metadata.{self.metadata_field}"
+        else:
+            milvus_field = f"user_metadata['{self.metadata_field}']"
+            es_field = f"metadata.user_metadata.{self.metadata_field}"
+        return milvus_field, es_field
+
+    def get_knowledge_filter(self, field_info: Dict, parent_node: BaseNode, is_preset: bool) -> (str, List[Dict]):
+        """ get knowledge metadata filter
+            returns: milvus_filter, es_filter
+        """
+        right_value = self.right_value
+        if self.right_value_type == 'ref' and self.right_value:
+            right_value = parent_node.get_other_node_variable(self.right_value)
+        field_type = field_info.get('field_type')
+        right_value = self.convert_right_value(field_type, right_value)
+
+        milvus_field, es_field = self.get_milvus_es_field(is_preset)
         es_item = []
         if self.comparison_operation == "equals":
             if field_type == MetadataFieldType.STRING.value:
                 right_value = f"'{right_value}'"
-            milvus_item = f"{milvus_prefix}['{self.metadata_field}'] == {right_value}"
-            es_item.append({"term": {f"{es_prefix}.{self.metadata_field}": right_value}})
+            milvus_item = f"{milvus_field} == {right_value}"
+            es_item.append({"term": {f"{es_field}": right_value}})
         elif self.comparison_operation == "not_equals":
             if field_type == MetadataFieldType.STRING.value:
                 right_value = f"'{right_value}'"
-            milvus_item = f"{milvus_prefix}['{self.metadata_field}'] != {right_value}"
-            es_item.append({"range": {f"{es_prefix}.{self.metadata_field}": {"lt": right_value}}})
-            es_item.append({"range": {f"{es_prefix}.{self.metadata_field}": {"gt": right_value}}})
+            milvus_item = f"{milvus_field} != {right_value}"
+            es_item.append({"range": {f"{es_field}": {"lt": right_value}}})
+            es_item.append({"range": {f"{es_field}": {"gt": right_value}}})
         elif self.comparison_operation == "contains":
-            milvus_item = f"{milvus_prefix}['{self.metadata_field}'] like '%{right_value}%'"
-            es_item.append({"match_phrase": {f"{es_prefix}.{self.metadata_field}": f"*{right_value}*"}})
+            milvus_item = f"{milvus_field} like '%{right_value}%'"
+            es_item.append({"match_phrase": {f"{es_field}": f"*{right_value}*"}})
         elif self.comparison_operation == "not_contains":
-            milvus_item = f"{milvus_prefix}['{self.metadata_field}'] not like '%{right_value}%'"
+            milvus_item = f"{milvus_field} not like '%{right_value}%'"
             es_item.append(
-                {"bool": {"must_not": {"match_phrase": {f"{es_prefix}.{self.metadata_field}": f"*{right_value}*"}}}})
+                {"bool": {"must_not": {"match_phrase": {f"{es_field}": f"*{right_value}*"}}}})
         elif self.comparison_operation == "starts_with":
-            milvus_item = f"{milvus_prefix}['{self.metadata_field}'] like '{right_value}%'"
-            es_item.append({"match_phrase_prefix": {f"{es_prefix}.{self.metadata_field}": right_value}})
+            milvus_item = f"{milvus_field} like '{right_value}%'"
+            es_item.append({"match_phrase_prefix": {f"{es_field}": right_value}})
         elif self.comparison_operation == "ends_with":
-            milvus_item = f"{milvus_prefix}['{self.metadata_field}'] like '%{right_value}'"
-            es_item.append({"regexp": {f"{es_prefix}.{self.metadata_field}": f".*{right_value}"}})
+            milvus_item = f"{milvus_field} like '%{right_value}'"
+            es_item.append({"regexp": {f"{es_field}": f".*{right_value}"}})
         elif self.comparison_operation == "is_empty":
-            milvus_item = f"{milvus_prefix}['{self.metadata_field}'] is null"
-            es_item.append({"bool": {"must_not": [{"exists": {"field": f"{es_prefix}.{self.metadata_field}"}}]}})
+            milvus_item = f"{milvus_field} is null"
+            es_item.append({"bool": {"must_not": [{"exists": {"field": f"{es_field}"}}]}})
         elif self.comparison_operation == "is_not_empty":
-            milvus_item = f"{milvus_prefix}['{self.metadata_field}'] is not null"
-            es_item.append({"exists": {"field": f"{es_prefix}.{self.metadata_field}"}})
+            milvus_item = f"{milvus_field} is not null"
+            es_item.append({"exists": {"field": f"{es_field}"}})
         elif self.comparison_operation == "greater_than":
-            milvus_item = f"{milvus_prefix}['{self.metadata_field}'] > {right_value}"
-            es_item.append({"range": {f"{es_prefix}.{self.metadata_field}": {"gt": right_value}}})
+            milvus_item = f"{milvus_field} > {right_value}"
+            es_item.append({"range": {f"{es_field}": {"gt": right_value}}})
         elif self.comparison_operation == "greater_than_or_equals":
-            milvus_item = f"{milvus_prefix}['{self.metadata_field}'] >= {right_value}"
-            es_item.append({"range": {f"{es_prefix}.{self.metadata_field}": {"gte": right_value}}})
+            milvus_item = f"{milvus_field} >= {right_value}"
+            es_item.append({"range": {f"{es_field}": {"gte": right_value}}})
         elif self.comparison_operation == "less_than":
-            milvus_item = f"{milvus_prefix}['{self.metadata_field}'] < {right_value}"
-            es_item.append({"range": {f"{es_prefix}.{self.metadata_field}": {"lt": right_value}}})
+            milvus_item = f"{milvus_field} < {right_value}"
+            es_item.append({"range": {f"{es_field}": {"lt": right_value}}})
         elif self.comparison_operation == "less_than_or_equals":
-            milvus_item = f"{milvus_prefix}['{self.metadata_field}'] <= {right_value}"
-            es_item.append({"range": {f"{es_prefix}.{self.metadata_field}": {"lte": right_value}}})
+            milvus_item = f"{milvus_field} <= {right_value}"
+            es_item.append({"range": {f"{es_field}": {"lte": right_value}}})
         else:
             raise ValueError(f"Unsupported comparison operation: {self.comparison_operation}")
         return milvus_item, es_item
@@ -112,15 +128,26 @@ class ConditionCases(BaseModel):
             return milvus_filter, es_filter
         metadata_field_info = {}
         if knowledge.metadata_fields:
-            metadata_field_info = {one["field_name"]: one for one in knowledge.metadata.fields}
+            metadata_field_info = {one["field_name"]: one for one in knowledge.metadata_fields}
+
+        # 内置的元数据字段
+        preset_field_info = {
+            one.field_name: one.model_dump() for one in KNOWLEDGE_RAG_METADATA_SCHEMA if
+            one.field_name != "user_metadata"
+        }
         for condition in self.conditions:
             if int(condition.knowledge_id) != knowledge.id:
                 continue
-            if not metadata_field_info or not metadata_field_info.get(condition.metadata_field):
+            if condition.metadata_field in preset_field_info:
+                one_milvus_filter, one_es_filter = condition.get_knowledge_filter(
+                    preset_field_info[condition.metadata_field], parent_node, True)
+            elif condition.metadata_field in metadata_field_info:
+                one_milvus_filter, one_es_filter = condition.get_knowledge_filter(
+                    metadata_field_info[condition.metadata_field], parent_node, False)
+            else:
                 logger.warning(f"condition field {condition.metadata_field} not in knowledge metadata fields")
                 continue
-            one_milvus_filter, one_es_filter = condition.get_knowledge_filter(
-                metadata_field_info[condition.metadata_field], parent_node)
+
             if one_milvus_filter:
                 milvus_conditions.append(one_milvus_filter)
             if one_es_filter:

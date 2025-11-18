@@ -223,7 +223,6 @@ export default function WorkbenchModel({ onBack }) {
             </div>
             <h3 className="bisheng-label">{t('工作台语音模型')}</h3>
             <div className="border rounded-lg p-4 -mt-3 space-y-4">
-                {console.log(form.asrModelId,77)}
                 <ModelSelect
                     close
                     label={t('语音转文字（ASR）模型')}

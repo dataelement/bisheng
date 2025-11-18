@@ -39,7 +39,6 @@ export default function FilePreview({ files, fileId, currentDisplayFile, onDownl
     }
 
     const render = () => {
-        console.log(currentFile, 999);
         if (!currentFile && !currentFile?.file_url) {
             return <div className="flex justify-center items-center h-full text-gray-400">{localize('com_sop_preview_failed')}</div>
         }

@@ -158,28 +158,28 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[625px]">
                 <DialogHeader>
-                    <DialogTitle>{mode === 'create' ? t('lib.createLibrary') : t('knowledgeSettings')}</DialogTitle>
+                    <DialogTitle>{mode === 'create' ? t('lib.createLibrary',{ ns: 'bs' }) : t('knowledgeSettings',{ ns: 'bs' })}</DialogTitle>
                 </DialogHeader>
                 <div className="flex flex-col gap-4 py-2">
                     {mode === 'edit' && currentLib && (
                         <div className="space-y-4">
                             <div className="flex items-center gap-48">
-                                <label className="bisheng-label text-sm text-gray-500">{t('lib.knowledgeBaseId')}</label>
+                                <label className="bisheng-label text-sm text-gray-500">{t('lib.knowledgeBaseId',{ ns: 'bs' })}</label>
                                 <div className="text-sm">{currentLib.id}</div>
                             </div>
                             <div className="flex items-center gap-48">
-                                <label className="bisheng-label text-sm text-gray-500">{t('createTime')}</label>
+                                <label className="bisheng-label text-sm text-gray-500">{t('createTime',{ ns: 'bs' })}</label>
                                 <div className="text-sm">{currentLib.create_time.replace('T', ' ')}</div>
                             </div>
                         </div>
                     )}
                     <div className="">
-                        <label htmlFor="name" className="bisheng-label">{t('lib.libraryName')}</label>
+                        <label htmlFor="name" className="bisheng-label">{t('lib.libraryName',{ ns: 'bs' })}</label>
                         <span className="text-red-500">*</span>
                         <Input
                             name="name"
                             ref={nameRef}
-                            placeholder={t('lib.enterLibraryName')}
+                            placeholder={t('lib.enterLibraryName',{ ns: 'bs' })}
                             className="col-span-3"
                         />
                     </div>
@@ -479,7 +479,7 @@ export default function KnowledgeQa(params) {
                                                     >
                                                         <div className="flex gap-2 items-center">
                                                             <Copy className="w-4 h-4" />
-                                                            {t('lib.copy')}
+                                                            {t('lib.copy',{ ns: 'bs' })}
                                                         </div>
                                                     </SelectItem>
                                                 </Tip>
