@@ -52,6 +52,13 @@ class KnowledgeFileService:
                                                                           'update_user': update_user.user_name if update_user else create_user.user_name
                                                                       })
 
+        metadata_field_dict = {item['field_name']: MetadataField(**item) for item in
+                               knowledge_model.metadata_fields or []}
+
+        for item in knowledge_file_info_res.user_metadata:
+            field_name = item['field_name']
+            if field_name in metadata_field_dict:
+                item['field_type'] = metadata_field_dict[field_name].field_type
         return knowledge_file_info_res
 
     @staticmethod
