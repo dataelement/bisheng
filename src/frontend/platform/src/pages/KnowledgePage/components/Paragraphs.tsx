@@ -485,6 +485,7 @@ export default function Paragraphs({ fileId, onBack }) {
                     id: `meta_${field.field_name}`,
                     name: field.field_name,
                     type: field.field_type.charAt(0).toUpperCase() + field.field_type.slice(1),
+                    updated:field.updated_at
                 }));
                 setPredefinedMetadata(formattedFields);
             } else {

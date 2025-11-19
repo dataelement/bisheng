@@ -36,13 +36,13 @@ export const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onVal
     };
 
     return (
-        <div className="flex items-center gap-3 p-2">
-            <div className="flex items-center gap-2 flex-1 p-2 rounded-lg bg-gray-50 h-11">
+        <div className="flex items-center gap-3 p-2 w-full">
+            <div className="flex items-center gap-2 flex-1 p-2 rounded-lg bg-gray-50 h-11 min-w-[180px]">
                 <span className={isSmallScreen ? "text-base" : "text-lg"}>
                     {TYPE_ICONS[item.type]}
                 </span>
                 <span className={cname(
-                    "text-gray-500 min-w-[20px]",
+                    "text-gray-500 min-w-[60px]",
                     isSmallScreen ? "text-xs" : "text-sm"
                 )}>
                     {item.type}
@@ -78,8 +78,7 @@ export const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onVal
                     </TooltipProvider>
                 </div>
             </div>
-
-            <div className="flex items-center gap-2 flex-1 justify-end p-2 rounded-lg bg-gray-50 h-11 ml-10">
+            <div className="flex items-center gap-2 flex-2 justify-end p-2 rounded-lg bg-gray-50 h-11 ml-10 min-w-[180px]">
                 {showInput && (
                     <div className="w-40">
                         {item.type === 'String' && (
@@ -130,7 +129,7 @@ export const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onVal
             <button
                 onClick={() => onDelete(item.id)}
                 disabled={!isKnowledgeAdmin}
-                className="p-1 hover:bg-gray-200 rounded transition-colors flex-shrink-0"
+                className="p-1 rounded transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                 title={t('删除')}
             >
                 <Trash2 size={isSmallScreen ? 18 : 20} className="text-gray-500" />
@@ -158,8 +157,6 @@ export const MainMetadataDialog = React.memo(({
     handleMainMetadataValueChange,
     mainMetadataDialogRef 
 }) => {
-console.log(mainMetadataList,78);
-
     return (
         <Dialog open={metadataDialog.open} onOpenChange={(open) => setMetadataDialog(prev => ({ ...prev, open }))}>
             <DialogContent
@@ -218,16 +215,16 @@ console.log(mainMetadataList,78);
                                     value: fileInfor?.create_time ? metadataDialog.file.create_time.replace('T', ' ') : null
                                 },
                                 {
+                                    label: t('更新时间'),
+                                    value: fileInfor?.update_time ? fileInfor?.update_time.replace('T', ' ') : null
+                                },
+                                {
                                     label: t('创建者'),
                                     value: fileInfor?.creat_user,
                                 },
                                 {
                                     label: t('更新者'),
                                     value: fileInfor?.update_user,
-                                },
-                                {
-                                    label: t('更新时间'),
-                                    value: fileInfor?.update_time ? fileInfor?.update_time.replace('T', ' ') : null
                                 },
                                 { label: t('原始文件大小'), value: fileInfor?.file_size ? formatFileSize(metadataDialog.file.file_size) : null },
                                 {
@@ -299,12 +296,18 @@ export const MetadataSideDialog = React.memo(({
 }) => {
     const searchInputRef = useRef(null);
     
-    const filteredPredefinedMetadata = useMemo(() => {
-        return predefinedMetadata.filter(meta =>
+const filteredPredefinedMetadata = useMemo(() => {
+    return predefinedMetadata
+        .filter(meta =>
             meta.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             (meta.description && meta.description.toLowerCase().includes(searchTerm.toLowerCase()))
-        );
-    }, [predefinedMetadata, searchTerm]);
+        )
+        .sort((a, b) => {
+            const updatedA = a.updated || 0;
+            const updatedB = b.updated || 0;
+            return updatedA - updatedB;
+        });
+}, [predefinedMetadata, searchTerm]);
 
     const SideDialogContent = useMemo(() =>
         React.forwardRef(({ children, className, ...props }, ref) => (

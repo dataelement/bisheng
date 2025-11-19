@@ -364,17 +364,18 @@ const FormField = ({ showDefault, field, value, providerName, apiKeySite, onChan
 
 
 const CustomForm = forwardRef(({ showDefault, provider, formData, providerName, apiKeySite, apiKeyUrl }, ref) => {
-    
-    const [form, setForm] = useState({ ...formData });
+    const [form, setForm] = useState(formData);
     const fields = modelProviders[provider] || [];
-
+    
     const handleChange = (key, value) => {
         setForm((prevData) => ({
             ...prevData,
             [key]: value,
         }));
     };
-
+    useEffect(() => {
+        setForm(formData);
+    }, [formData]);
     useImperativeHandle(ref, () => ({
         getData() {
             const errorObj = fields.find(field => field.required && !form[field.key]);
