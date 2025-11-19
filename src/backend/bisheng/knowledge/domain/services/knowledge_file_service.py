@@ -55,7 +55,7 @@ class KnowledgeFileService:
         metadata_field_dict = {item['field_name']: MetadataField(**item) for item in
                                knowledge_model.metadata_fields or []}
 
-        for item in knowledge_file_info_res.user_metadata:
+        for item in knowledge_file_info_res.user_metadata or []:
             field_name = item['field_name']
             if field_name in metadata_field_dict:
                 item['field_type'] = metadata_field_dict[field_name].field_type
