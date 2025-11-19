@@ -1,7 +1,7 @@
 import { FileIcon } from "@/components/bs-icons/file";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Button } from '@/components/bs-ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader } from '@/components/bs-ui/dialog';
+import { Dialog, DialogContent } from '@/components/bs-ui/dialog';
 import { SearchInput } from '@/components/bs-ui/input';
 import AutoPagination from '@/components/bs-ui/pagination/autoPagination';
 import ShadTooltip from "@/components/ShadTooltipComponent";
@@ -10,8 +10,7 @@ import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useTable } from '@/util/hook';
 import { truncateString } from "@/util/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu';
-import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { AlertCircle, ArrowLeft, Calendar as CalendarIcon, ChevronDown, ChevronUp, ClipboardPenLine, Clock3, Edit2, FileText, Hash, Plus, Search, Trash2, Type, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ChevronDown, ChevronUp, ClipboardPenLine, Edit2, FileText, Search, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -22,165 +21,10 @@ import PreviewParagraph from './PreviewParagraph';
 import Tip from "@/components/bs-ui/tooltip/tip";
 import { cname } from "@/components/bs-ui/utils";
 import React from "react";
-import { Calendar } from "@/components/bs-ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
-import { format } from "date-fns";
 import { toast } from "@/components/bs-ui/toast/use-toast";
-import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 
-// 类型图标常量
-const TYPE_ICONS = {
-    String: <Type />,
-    Number: <Hash />,
-    Time: <Clock3 />
-};
-
-// 元数据行组件
-const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onValueChange, isSmallScreen, t, showInput = true }) => {
-    // 将日期字符串转换为 Date 对象
-    const getDateValue = (dateString) => {
-        if (!dateString) return null;
-        try {
-            return new Date(dateString);
-        } catch {
-            return null;
-        }
-    };
-
-    const handleInputChange = (e) => {
-        onValueChange(item.id, e.target.value);
-    };
-
-    const handleNumberChange = (e) => {
-        const value = e.target.value;
-        // 只允许数字
-        if (value === '' || /^-?\d*\.?\d*$/.test(value)) {
-            onValueChange(item.id, value);
-        }
-    };
-
-    const handleDateChange = (date) => {
-        // 将日期对象转换为字符串格式
-        const dateString = date ? format(date, 'yyyy-MM-dd') : '';
-        onValueChange(item.id, dateString);
-    };
-
-    return (
-        <div className="flex items-center gap-3 p-2">
-            {/* 左边部分 - 类型图标、标签、变量名 */}
-            <div className="flex items-center gap-2 flex-1 p-2 rounded-lg bg-gray-50 h-11">
-                {/* 类型图标 */}
-                <span className={isSmallScreen ? "text-base" : "text-lg"}>
-                    {TYPE_ICONS[item.type]}
-                </span>
-
-                {/* 类型标签 */}
-                <span className={cname(
-                    "text-gray-500 min-w-[20px]",
-                    isSmallScreen ? "text-xs" : "text-sm"
-                )}>
-                    {item.type}
-                </span>
-
-                {/* 变量名 */}
-                <div className="min-w-0 flex-1 max-w-[120px]">
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <span
-                                    className={cname(
-                                        "font-medium truncate block",
-                                        isSmallScreen ? "text-sm" : "",
-                                        "max-w-full"
-                                    )}
-                                    style={{
-                                        whiteSpace: 'nowrap',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                    }}
-                                >
-                                    {item.name}
-                                </span>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-[200px] whitespace-normal"
-                                style={{
-                                    whiteSpace: 'normal',
-                                    wordBreak: 'break-word'
-                                }}
-                            >
-                                <p>{item.name}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-                </div>
-            </div>
-
-            {/* 右边部分 - 输入框和删除按钮 */}
-            <div className="flex items-center gap-2 flex-1 justify-end p-2 rounded-lg bg-gray-50 h-11 ml-10">
-                {/* 输入框 - 根据类型显示不同的输入组件 */}
-                {showInput && (
-                    <div className="w-40">
-                        {item.type === 'String' && (
-                            <input
-                                disabled={!isKnowledgeAdmin}
-                                type="text"
-                                value={item.value || ''}
-                                onChange={handleInputChange}
-                                placeholder={t('请输入文本')}
-                                className={cname(
-                                    "w-full px-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                                    isSmallScreen ? "py-0.5 text-xs h-6" : "py-1 text-sm h-7"
-                                )}
-                            />
-                        )}
-
-                        {item.type === 'Number' && (
-                            <input
-                                disabled={!isKnowledgeAdmin}
-                                type="number"
-                                value={item.value || 0}
-                                onChange={handleNumberChange}
-                                className={cname(
-                                    "w-full px-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                                    isSmallScreen ? "py-0.5 text-xs h-6" : "py-1 text-sm h-7"
-                                )}
-                            />
-                        )}
-
-                        {item.type === 'Time' && (
-                            <DatePicker
-                                disabled={!isKnowledgeAdmin}
-                                value={item.value}
-                                placeholder={t('选择时间')}
-                                showTime={true}
-                                onChange={(selectedDate) => {
-                                    const formattedValue = selectedDate
-                                        ? format(selectedDate, 'yyyy-MM-dd HH:mm:ss')
-                                        : '';
-                                    onValueChange(item.id, formattedValue);
-                                }}
-                            />
-                        )}
-                    </div>
-                )}
-
-
-            </div>
-            {/* 删除按钮 */}
-            <button
-                onClick={() => onDelete(item.id)}
-                disabled={!isKnowledgeAdmin}
-                className="p-1 hover:bg-gray-200 rounded transition-colors flex-shrink-0"
-                title={t('删除')}
-            >
-                <Trash2 size={isSmallScreen ? 18 : 20} className="text-gray-500" />
-            </button>
-        </div>
-    )
-});
-
-MetadataRow.displayName = 'MetadataRow';
+// 导入元数据组件
+import { MainMetadataDialog, MetadataSideDialog, MetadataRow } from './MetadataDialog';
 
 export default function Paragraphs({ fileId, onBack }) {
     console.log('Props fileId:', fileId);
@@ -198,11 +42,27 @@ export default function Paragraphs({ fileId, onBack }) {
     const [fileUrl, setFileUrl] = useState('');
     const [chunks, setChunks] = useState([]);
     const [rawFiles, setRawFiles] = useState([]);
-    const [isKnowledgeAdmin, setIsKnowledgeAdmin] = useState(false); // 是否为知识库管理员（有管理权限）
+    const [isKnowledgeAdmin, setIsKnowledgeAdmin] = useState(false);
+    
+    // 元数据相关状态
     const [metadataDialog, setMetadataDialog] = useState({
         open: false,
         file: null
     });
+    const [mainMetadataList, setMainMetadataList] = useState([]);
+    const [newMetadata, setNewMetadata] = useState({
+        name: '',
+        type: 'String'
+    });
+    const [metadataError, setMetadataError] = useState('');
+    const [sideDialog, setSideDialog] = useState({
+        type: null,
+        open: false
+    });
+    const [predefinedMetadata, setPredefinedMetadata] = useState([]);
+    const [searchTerm, setSearchTerm] = useState("");
+    const [fileInfor, setFileInfor] = useState();
+
     const [paragraph, setParagraph] = useState({
         fileId: '',
         chunkId: '',
@@ -217,7 +77,6 @@ export default function Paragraphs({ fileId, onBack }) {
     const isLoadingFilesRef = useRef(false);
     const isMountedRef = useRef(true);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-    const [searchTerm, setSearchTerm] = useState("");
     const searchInputRef = useRef(null);
     const isChangingRef = useRef(false);
     const [isInitReady, setIsInitReady] = useState(false);
@@ -227,39 +86,16 @@ export default function Paragraphs({ fileId, onBack }) {
     const latestPreviewUrlRef = useRef('');
     const latestOriginalUrlRef = useRef('');
     const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
-    const [fileInfor, setFileInfor] = useState()
-
-    // 元数据相关状态
-    const [newMetadata, setNewMetadata] = useState({
-        name: '',
-        type: 'String' as 'String' | 'Number' | 'Time',
-    });
-    const [metadataError, setMetadataError] = useState('');
-    // 统一管理右侧弹窗状态
-    const [sideDialog, setSideDialog] = useState<{
-        type: 'search' | 'create' | null;
-        open: boolean;
-    }>({
-        type: null,
-        open: false
-    });
-    // 主元数据弹窗中的元数据列表
-    const [mainMetadataList, setMainMetadataList] = useState([]);
-
-    const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
 
     // 右侧弹窗相关状态与ref
-    const mainMetadataDialogRef = useRef<HTMLDivElement>(null);
+    const mainMetadataDialogRef = useRef(null);
     const [sideDialogPosition, setSideDialogPosition] = useState({ top: 0, left: 0 });
     const [screenWidth, setScreenWidth] = useState(window.innerWidth);
     const isSmallScreen = screenWidth < 1366;
     const sideDialogWidth = isSmallScreen ? 240 : 300;
-
-    // 添加新的状态来控制侧边弹窗的显示时机
     const [isSideDialogPositioned, setIsSideDialogPositioned] = useState(false);
 
-    const [predefinedMetadata, setPredefinedMetadata] = useState([
-    ]);
+    const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
 
     useEffect(() => {
         // 切换chunk清空选中的高亮标注bbox
@@ -321,6 +157,42 @@ export default function Paragraphs({ fileId, onBack }) {
     );
 
     const [load, setLoad] = useState(true);
+
+
+    const safeChunks = useMemo(() => {
+        if (!selectedFileId || !datalist.length) return [];
+        return (datalist || []).map((item, index) => ({
+            text: item?.text || '',
+            title: `分段${index + 1}`,
+            chunkIndex: item?.metadata?.chunk_index || index,
+            bbox: item?.metadata?.bbox
+        }));
+    }, [datalist, selectedFileId, chunkSwitchTrigger]);
+
+    const handleChunkChange = useCallback((chunkIndex, text) => {
+        let chunkIndexPage = chunkIndex % pageSize;
+        console.log('转换后的localIndex:', chunkIndexPage);
+
+        const bbox = { chunk_bboxes: selectedBbox };
+
+        const bboxStr = selectedBbox.length ? JSON.stringify(bbox) : safeChunks[chunkIndexPage]?.bbox || '';
+        captureAndAlertRequestErrorHoc(updateChunkApi({
+            knowledge_id: Number(id),
+            file_id: selectedFileId || currentFile?.id || '',
+            chunk_index: chunkIndex,
+            text,
+            bbox: bboxStr
+        }))
+        setChunks(chunks => chunks.map(chunk =>
+            chunk.chunkIndex === chunkIndex ? { ...chunk, bbox: bboxStr, text } : chunk
+        ));
+
+        refreshData(
+            (item) => item?.metadata?.chunk_index === chunkIndex,
+            (item) => ({ text, metadata: { ...item.metadata, bbox: bboxStr } })
+        );
+    }, [id, currentFile, refreshData, selectedBbox, safeChunks, pageSize, selectedFileId]);
+
     const fetchFileUrl = useCallback(async (fileId) => {
         console.log('获取文件URL:', fileId);
         if (!fileId) return '';
@@ -560,7 +432,6 @@ export default function Paragraphs({ fileId, onBack }) {
         const name = newMetadata.name.trim();
         const type = newMetadata.type;
 
-        // 验证规则
         if (!name) {
             setMetadataError(t('名称不能为空。'));
             return;
@@ -571,14 +442,12 @@ export default function Paragraphs({ fileId, onBack }) {
             return;
         }
 
-        // 格式验证：必须以小写字母开头，且只能包含小写字母、数字和下划线
         const nameRegex = /^[a-z][a-z0-9_]*$/;
         if (!nameRegex.test(name)) {
             setMetadataError(t('必须以小写字母开头，且只能包含小写字母、数字和下划线。'));
             return;
         }
 
-        // 检查是否已存在同名元数据
         const exists = predefinedMetadata.some(item => item.name === name);
         if (exists) {
             setMetadataError(t('元数据名已存在。'));
@@ -591,7 +460,6 @@ export default function Paragraphs({ fileId, onBack }) {
                 field_type: type.toLowerCase()
             }]);
 
-            // 3. 保存成功后，更新本地状态
             const newItem = {
                 id: `meta_${Date.now()}`,
                 name: name,
@@ -605,7 +473,7 @@ export default function Paragraphs({ fileId, onBack }) {
             console.error("创建元数据字段失败:", error);
             setMetadataError(t('创建失败，请稍后重试。'));
         }
-    }, [newMetadata, predefinedMetadata, t]);
+    }, [newMetadata, predefinedMetadata, t, id]);
 
     const handleSearchMetadataClick = useCallback(async () => {
         try {
@@ -638,7 +506,6 @@ export default function Paragraphs({ fileId, onBack }) {
         setSideDialog({ type: 'create', open: true });
     }, []);
 
-    // 关闭右侧弹窗
     const closeSideDialog = useCallback(() => {
         setSideDialog({ type: null, open: false });
         setMetadataError('');
@@ -647,7 +514,6 @@ export default function Paragraphs({ fileId, onBack }) {
         setIsSideDialogPositioned(false);
     }, []);
 
-    // 从搜索弹窗添加元数据到主列表
     const handleAddFromSearch = useCallback((metadata) => {
         const exists = mainMetadataList.some(item => item.name === metadata.name);
         if (exists) {
@@ -663,45 +529,6 @@ export default function Paragraphs({ fileId, onBack }) {
         closeSideDialog();
     }, [closeSideDialog, mainMetadataList]);
 
-    const filteredPredefinedMetadata = useMemo(() => {
-        return predefinedMetadata.filter(meta =>
-            meta.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (meta.description && meta.description.toLowerCase().includes(searchTerm.toLowerCase()))
-        );
-    }, [predefinedMetadata, searchTerm]);
-
-    // 处理分段修改
-    const handleChunkChange = useCallback((chunkIndex, text) => {
-        let chunkIndexPage = chunkIndex % pageSize;
-        console.log('转换后的localIndex:', chunkIndexPage);
-
-        // if(chunkIndex > 19){
-        //     chunkIndexPage = chunkIndex % pageSize;
-        // }
-        const bbox = { chunk_bboxes: selectedBbox };
-
-        // selectedBbox空数组时，使用safeChunks的bbox
-        const targetChunk = chunks.find(chunk => chunk.chunkIndex === chunkIndex);
-        const bboxStr = selectedBbox.length ? JSON.stringify(bbox) : targetChunk?.bbox;
-        captureAndAlertRequestErrorHoc(updateChunkApi({
-            knowledge_id: Number(id),
-            file_id: selectedFileId || currentFile?.id || '',
-            chunk_index: chunkIndex,
-            text,
-            bbox: bboxStr
-        }));
-
-        setChunks(chunks => chunks.map(chunk =>
-            chunk.chunkIndex === chunkIndex ? { ...chunk, bbox: bboxStr, text } : chunk
-        ));
-
-        refreshData(
-            (item) => item?.metadata?.chunk_index === chunkIndex,
-            (item) => ({ text, metadata: { ...item.metadata, bbox: bboxStr } })
-        );
-    }, [id, currentFile, refreshData, selectedBbox]);
-
-    // 格式化文件列表（完全保留原始逻辑）
     const files = useMemo(() => {
         return (rawFiles || []).map(el => ({
             label: el?.file_name || '未命名文件',
@@ -717,61 +544,43 @@ export default function Paragraphs({ fileId, onBack }) {
         }));
     }, [rawFiles]);
 
-    // 生成安全的chunks数据（完全保留原始逻辑）
-    const safeChunks = useMemo(() => {
-        if (!selectedFileId || !datalist.length) return [];
-        return (datalist || []).map((item, index) => ({
-            text: item?.text || '',
-            title: `分段${index + 1}`,
-            chunkIndex: item?.metadata?.chunk_index || index,
-            bbox: item?.metadata?.bbox
-        }));
-    }, [datalist, selectedFileId, chunkSwitchTrigger]);
+  const handleMetadataClick = useCallback(async () => {
+    if (currentFile?.fullData) {
+        try {
+            const res = await getMetaFile(currentFile.id);
+            setFileInfor(res);
+            const fetchedMetadata = res.user_metadata || [];
+            const sortedMetadata = fetchedMetadata.sort((a, b) => {
+                return a.updated_at - b.updated_at;
+            });
 
-    const handleMetadataClick = useCallback(async () => {
-        if (currentFile?.fullData) {
-            try {
-                const res = await getMetaFile(currentFile.id);
-                setFileInfor(res)
-                const fetchedMetadata = res.user_metadata || [];
-                const sortedMetadata = fetchedMetadata.sort((a, b) => {
-                    return a.updated_at - b.updated_at;
-                });
+            const formattedMetadata = sortedMetadata.map(meta => {
+                const rawType = meta.field_type || ''; 
+                
+                const formattedType = rawType.charAt(0).toUpperCase() + rawType.slice(1).toLowerCase();
+                return {
+                    id: `meta_${meta.field_name}`,
+                    name: meta.field_name,
+                    type: formattedType, // 使用格式化后的类型
+                    value: meta.field_value,
+                };
+            });
 
-                // 3. 格式化排序后的元数据
-                const formattedMetadata = sortedMetadata.map(meta => {
-                    let type = 'String';
-                    if (!isNaN(Number(meta.field_value))) {
-                        type = 'Number';
-                    } else if (!isNaN(Date.parse(meta.field_value))) {
-                        type = 'Time';
-                    }
+            setMainMetadataList(formattedMetadata);
 
-                    return {
-                        id: `meta_${meta.field_name}`,
-                        name: meta.field_name,
-                        type: type,
-                        value: meta.field_value,
-                    };
-                });
-
-                // 4. 更新状态
-                setMainMetadataList(formattedMetadata);
-
-                // 5. 打开弹窗
-                setMetadataDialog({
-                    open: true,
-                    file: currentFile.fullData
-                });
-            } catch (error) {
-                console.error("获取文件元数据失败:", error);
-                setMetadataDialog({
-                    open: true,
-                    file: currentFile.fullData
-                });
-            }
+            setMetadataDialog({
+                open: true,
+                file: currentFile.fullData
+            });
+        } catch (error) {
+            console.error("获取文件元数据失败:", error);
+            setMetadataDialog({
+                open: true,
+                file: currentFile.fullData
+            });
         }
-    }, [currentFile]);
+    }
+}, [currentFile]);
 
     // 调整分段策略（完全保留原始逻辑）
     const handleAdjustSegmentation = useCallback(() => {
@@ -861,7 +670,6 @@ export default function Paragraphs({ fileId, onBack }) {
         chunks,
         selectedFileId,
         currentFile?.id,
-        setChunks,
         selectedChunkIndex,
         setSelectedBbox
     ]);
@@ -956,7 +764,6 @@ export default function Paragraphs({ fileId, onBack }) {
         setIsSideDialogPositioned(true);
     }, [mainMetadataDialogRef, sideDialog.open, isSmallScreen, screenWidth, sideDialogWidth]);
 
-    // 窗口 resize 监听
     useEffect(() => {
         const handleResize = () => {
             const newWidth = window.innerWidth;
@@ -973,7 +780,6 @@ export default function Paragraphs({ fileId, onBack }) {
             return;
         }
 
-        // 使用多个阶段的延迟来确保位置计算准确
         const timer1 = setTimeout(() => {
             updateSideDialogPosition();
         }, 0);
@@ -994,75 +800,29 @@ export default function Paragraphs({ fileId, onBack }) {
     }, [metadataDialog.open, sideDialog.open, updateSideDialogPosition]);
 
     const handleSaveUserMetadata = useCallback(async () => {
-        const invalidItems = mainMetadataList.filter(item => !item.value?.trim());
-        if (invalidItems.length > 0) {
-            const invalidNames = invalidItems.map(item => item.name).join('、');
-            setMetadataError(t(`元数据「${invalidNames}」的值不能为空，请完善后再保存`));
-            return;
-        }
-
         const knowledge_id = selectedFileId
         const user_metadata_list = mainMetadataList.map(item => ({
             field_name: item.name,
-            field_value: item.value
+            field_value: item.value || ''
         }))
         try {
-            // 3. 调用API保存数据
             await saveUserMetadataApi(knowledge_id, user_metadata_list);
 
-            // 4. 保存成功处理
             toast({
                 title: t('成功'),
                 description: t('元数据已成功保存'),
             });
-            setMetadataDialog(prev => ({ ...prev, open: false })); // 关闭弹窗
-            setMetadataError(''); // 清除错误提示
+            setMetadataDialog(prev => ({ ...prev, open: false }));
+            setMetadataError('');
         } catch (error) {
-            // 5. 保存失败处理
+              toast({
+                variant: 'error',
+                description: error,
+            });
             console.error('保存元数据失败：', error);
             setMetadataError(t('保存失败，请检查网络或联系管理员'));
         }
-    }, [mainMetadataList, id, t]);
-
-    // 右侧弹窗公共容器组件
-    const SideDialogContent = useMemo(() =>
-        React.forwardRef<
-            React.ElementRef<typeof DialogPrimitive.Content>,
-            React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
-        >(({ children, className, ...props }, ref) => (
-            <DialogPrimitive.Portal>
-                <DialogPrimitive.Content
-                    ref={ref}
-                    {...props}
-                    className={cname(
-                        "fixed z-50 flex flex-col border bg-background dark:bg-[#303134] shadow-lg sm:rounded-lg",
-                        `w-[${sideDialogWidth}px]`,
-                        isSmallScreen ? "p-3 text-sm" : "p-5",
-                        className
-                    )}
-                    style={{
-                        top: `${sideDialogPosition.top}px`,
-                        left: `${sideDialogPosition.left}px`,
-                        transform: "none",
-                        maxHeight: "80vh",
-                        // 只有在位置计算完成后才显示
-                        opacity: isSideDialogPositioned ? 1 : 0,
-                        transition: 'opacity 0.05s ease-in-out'
-                    }}
-                >
-                    {children}
-                    <DialogPrimitive.Close
-                        className="absolute right-3 top-3 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
-                        onClick={closeSideDialog}
-                    >
-                        <X className={isSmallScreen ? "h-3 w-3" : "h-4 w-4"} />
-                        <span className="sr-only">Close</span>
-                    </DialogPrimitive.Close>
-                </DialogPrimitive.Content>
-            </DialogPrimitive.Portal>
-        ))
-        , [sideDialogWidth, isSmallScreen, sideDialogPosition, isSideDialogPositioned, closeSideDialog]);
-    SideDialogContent.displayName = "SideDialogContent";
+    }, [mainMetadataList, selectedFileId, t]);
 
     if (load) return <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
         <LoadingIcon />
@@ -1272,121 +1032,22 @@ export default function Paragraphs({ fileId, onBack }) {
                 />
             </div>
 
-         {/* 主元数据弹窗 - 添加ref用于位置计算 */}
-<Dialog open={metadataDialog.open} onOpenChange={(open) => setMetadataDialog(prev => ({ ...prev, open }))}>
-    <DialogContent
-        ref={mainMetadataDialogRef}
-        className="sm:max-w-[525px] max-w-[625px] h-[80vh] flex flex-col"  // 改为 h-[80vh]
-        style={{
-            transition: 'none'
-        }}
-    >
-        <DialogHeader>
-            <h3 className="text-lg font-semibold">{t('元数据')}</h3>
-        </DialogHeader>
-        
-        {/* 可滚动的内容区域 - 设置固定高度 */}
-        <div className="flex-1 overflow-y-auto min-h-0">  {/* 添加 min-h-0 */}
-            <button
-                onClick={handleSearchMetadataClick}
-                disabled={!isKnowledgeAdmin}
-                className="py-2 w-full flex items-center justify-center gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mb-4"
-            >
-                <Plus size={16} />
-                <span>{t('添加元数据')}</span>
-            </button>
-
-            {/* 主元数据列表 */}
-            {mainMetadataList.length > 0 && (
-                <div className="space-y-2">
-                    {mainMetadataList.map((metadata) => (
-                        <MetadataRow
-                            isKnowledgeAdmin={isKnowledgeAdmin}
-                            key={metadata.id}
-                            item={metadata}
-                            onDelete={handleDeleteMainMetadata}
-                            onValueChange={handleMainMetadataValueChange}
-                            isSmallScreen={isSmallScreen}
-                            t={t}
-                            showInput={true}
-                        />
-                    ))}
-                </div>
-            )}
-
-            <div className="grid gap-4 py-4">
-                <div className="font-medium">文档信息</div>
-                {fileInfor && <div className="space-y-2">
-                    {[
-                        {
-                            label: t('文件id'),
-                            value: fileInfor?.id,
-                        },
-                        {
-                            label: t('文件名称'),
-                            value: fileInfor?.file_name,
-                            isFileName: true
-                        },
-                        {
-                            label: t('创建时间'),
-                            value: fileInfor?.create_time ? metadataDialog.file.create_time.replace('T', ' ') : null
-                        },
-                        {
-                            label: t('创建者'),
-                            value: fileInfor?.creat_user,
-                        },
-                        {
-                            label: t('更新者'),
-                            value: fileInfor?.update_user,
-                        },
-                        {
-                            label: t('更新时间'),
-                            value: fileInfor?.update_time ? fileInfor?.update_time.replace('T', ' ') : null
-                        },
-                        { label: t('原始文件大小'), value: fileInfor?.file_size ? formatFileSize(metadataDialog.file.file_size) : null },
-                        {
-                            label: t('切分策略'),
-                            value: fileInfor ? splitRuleDesc(fileInfor) : null
-                        },
-                        { label: t('全文摘要'), value: metadataDialog.file?.title }
-                    ].map((item, index) => (
-                        item.value && (
-                            <div key={index} className="grid grid-cols-4 gap-4 items-center">
-                                <span className="text-sm text-muted-foreground col-span-1">{item.label}</span>
-                                <span className={`col-span-3 text-sm ${item.isFileName ? 'truncate max-w-full' : ''}`}>
-                                    {item.value || t('none')}
-                                </span>
-                            </div>
-                        )
-                    ))}
-                </div>}
-            </div>
-        </div>
-
-        {/* 固定在底部的按钮 */}
-        <div className="flex justify-end gap-2 pt-4 border-t border-gray-200 flex-shrink-0">  {/* 添加 flex-shrink-0 */}
-            {/* 取消按钮 */}
-            <Button
-                variant="outline"
-                onClick={() => setMetadataDialog(prev => ({ ...prev, open: false }))}
-                className={cname(isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm")}
-            >
-                {t('取消')}
-            </Button>
-            {/* 保存按钮 */}
-            <Button
-                onClick={handleSaveUserMetadata}
-                disabled={!isKnowledgeAdmin}
-                className={cname(
-                    "bg-blue-500 hover:bg-blue-600",
-                    isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm"
-                )}
-            >
-                {t('保存')}
-            </Button>
-        </div>
-    </DialogContent>
-</Dialog>
+            <MainMetadataDialog
+                metadataDialog={metadataDialog}
+                setMetadataDialog={setMetadataDialog}
+                mainMetadataList={mainMetadataList}
+                fileInfor={fileInfor}
+                isKnowledgeAdmin={isKnowledgeAdmin}
+                isSmallScreen={isSmallScreen}
+                t={t}
+                formatFileSize={formatFileSize}
+                splitRuleDesc={splitRuleDesc}
+                handleSaveUserMetadata={handleSaveUserMetadata}
+                handleSearchMetadataClick={handleSearchMetadataClick}
+                handleDeleteMainMetadata={handleDeleteMainMetadata}
+                handleMainMetadataValueChange={handleMainMetadataValueChange}
+                mainMetadataDialogRef={mainMetadataDialogRef}
+            />
 
             {/* 分段编辑弹窗 */}
             <Dialog open={paragraph.show} onOpenChange={(show) => setParagraph(prev => ({ ...prev, show }))}>
@@ -1406,193 +1067,28 @@ export default function Paragraphs({ fileId, onBack }) {
                 </DialogContent>
             </Dialog>
 
-            {/* 统一的右侧弹窗 */}
-            <DialogPrimitive.Dialog open={sideDialog.open} onOpenChange={(open) => {
-                if (!open) closeSideDialog();
-            }}>
-                <SideDialogContent>
-                    {sideDialog.type === 'search' && (
-                        <>
-                            <DialogHeader>
-                                <div className="relative w-full">
-                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500" />
-                                    <input
-                                        ref={searchInputRef}
-                                        type="text"
-                                        placeholder={t('搜索元数据')}
-                                        className={cname(
-                                            "w-full pl-9 pr-3 py-2 text-sm bg-white rounded-md outline-none ring-1 ring-gray-200",
-                                            isSmallScreen ? "text-xs py-1.5" : ""
-                                        )}
-                                        value={searchTerm}
-                                        onChange={(e) => {
-                                            e.stopPropagation();
-                                            setSearchTerm(e.target.value);
-                                        }}
-                                        onKeyDown={(e) => {
-                                            e.stopPropagation();
-                                            if (e.key === 'Escape') {
-                                                closeSideDialog();
-                                            }
-                                        }}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                        }}
-                                    />
-                                </div>
-                            </DialogHeader>
-
-                            <div className="flex-1 min-h-0 mt-2 mb-2 overflow-y-auto">
-                                <div
-                                    className="h-full overflow-y-auto"
-                                    onWheel={(e) => {
-                                        e.stopPropagation();
-                                    }}
-                                >
-                                    <div className="space-y-3 pr-2">
-                                        {filteredPredefinedMetadata.map((metadata) => (
-                                            <div
-                                                key={metadata.id}
-                                                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-                                                onClick={() => handleAddFromSearch(metadata)}
-                                            >
-                                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                                    <span className={isSmallScreen ? "text-base" : "text-lg"}>
-                                                        {TYPE_ICONS[metadata.type]}
-                                                    </span>
-                                                    <span className={cname(
-                                                        "text-gray-500 min-w-[60px]",
-                                                        isSmallScreen ? "text-xs" : "text-sm"
-                                                    )}>
-                                                        {metadata.type}
-                                                    </span>
-
-                                                    <TooltipProvider>
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild>
-                                                                <div className="flex-1 min-w-0">
-                                                                    <div className="font-medium text-sm truncate">
-                                                                        {metadata.name}
-                                                                    </div>
-                                                                </div>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent className="max-w-[200px] whitespace-normal"
-                                                                style={{
-                                                                    whiteSpace: 'normal',
-                                                                    wordBreak: 'break-word'
-                                                                }}
-                                                            >
-                                                                <p>{metadata.name}</p>
-                                                            </TooltipContent>
-                                                        </Tooltip>
-                                                    </TooltipProvider>
-
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="grid gap-4 pt-4 border-t">
-                                <div className="space-y-2">
-                                    <button
-                                        onClick={handleCreateMetadataClick}
-                                        disabled={!isKnowledgeAdmin}
-                                        className="py-2 w-full flex items-center justify-center gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                    >
-                                        <Plus size={isSmallScreen ? 14 : 16} />
-                                        <span>{t('新建元数据')}</span>
-                                    </button>
-                                </div>
-                            </div>
-                        </>
-                    )}
-
-                    {sideDialog.type === 'create' && (
-                        <>
-                            <DialogHeader>
-                                <h3 className={cname("text-lg font-semibold", isSmallScreen ? "text-base" : "")}>{t('新建元数据')}</h3>
-                                <DialogDescription className={isSmallScreen ? "text-xs" : ""}>请输入新元数据的名称和类型。</DialogDescription>
-                            </DialogHeader>
-
-                            <div className="grid gap-4 py-4">
-                                {/* 元数据类型 */}
-                                <div className="space-y-1.5">
-                                    <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>{t('类型')}</label>
-                                    <div className="flex gap-1">
-                                        {['String', 'Number', 'Time'].map((type) => (
-                                            <button
-                                                key={type}
-                                                onClick={() => setNewMetadata(prev => ({ ...prev, type: type as 'String' | 'Number' | 'Time' }))}
-                                                className={cname(
-                                                    "flex-1 rounded-md font-medium transition-colors",
-                                                    newMetadata.type === type
-                                                        ? "bg-blue-500 text-white"
-                                                        : "bg-gray-100 hover:bg-gray-200 text-gray-700",
-                                                    isSmallScreen ? "py-1.5 px-2 text-xs" : "py-2 px-4 text-sm"
-                                                )}
-                                            >
-                                                {type}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* 元数据名称 */}
-                                <div className="space-y-1.5">
-                                    <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>{t('名称')}</label>
-                                    <input
-                                        type="text"
-                                        value={newMetadata.name}
-                                        onChange={(e) => {
-                                            setNewMetadata(prev => ({ ...prev, name: e.target.value }));
-                                            // 清除错误状态当用户开始输入时
-                                            if (metadataError) setMetadataError('');
-                                        }}
-                                        placeholder={t('请输入元数据名称')}
-                                        className={cname(
-                                            "w-full px-3 py-2 border rounded-md text-sm",
-                                            isSmallScreen ? "text-xs h-8 py-1.5" : "",
-                                            // 添加错误状态样式
-                                            metadataError ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-blue-500"
-                                        )}
-                                    />
-                                </div>
-
-                                {/* 错误提示 */}
-                                {metadataError && (
-                                    <div className={cname(
-                                        "flex items-center gap-1.5 text-red-500",
-                                        isSmallScreen ? "text-xs" : "text-sm"
-                                    )}>
-                                        <span>{metadataError}</span>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="flex justify-end gap-2">
-                                <Button
-                                    variant="outline"
-                                    onClick={() => setSideDialog({ type: 'search', open: true })}
-                                    className={cname(isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm")}
-                                >
-                                    {t('取消')}
-                                </Button>
-                                <Button
-                                    onClick={handleSaveNewMetadata}
-                                    className={cname(
-                                        "bg-blue-500 hover:bg-blue-600",
-                                        isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm"
-                                    )}
-                                >
-                                    {t('保存')}
-                                </Button>
-                            </div>
-                        </>
-                    )}
-                </SideDialogContent>
-            </DialogPrimitive.Dialog>
+            {/* 右侧元数据弹窗 */}
+            <MetadataSideDialog
+                sideDialog={sideDialog}
+                closeSideDialog={closeSideDialog}
+                predefinedMetadata={predefinedMetadata}
+                searchTerm={searchTerm}
+                setSearchTerm={setSearchTerm}
+                newMetadata={newMetadata}
+                setNewMetadata={setNewMetadata}
+                metadataError={metadataError}
+                setMetadataError={setMetadataError}
+                isKnowledgeAdmin={isKnowledgeAdmin}
+                isSmallScreen={isSmallScreen}
+                t={t}
+                sideDialogWidth={sideDialogWidth}
+                sideDialogPosition={sideDialogPosition}
+                isSideDialogPositioned={isSideDialogPositioned}
+                handleAddFromSearch={handleAddFromSearch}
+                handleCreateMetadataClick={handleCreateMetadataClick}
+                handleSaveNewMetadata={handleSaveNewMetadata}
+                setSideDialog={setSideDialog}
+            />
         </div>
     );
 }

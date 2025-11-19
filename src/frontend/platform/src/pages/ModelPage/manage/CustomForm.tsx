@@ -364,7 +364,8 @@ const FormField = ({ showDefault, field, value, providerName, apiKeySite, onChan
 
 
 const CustomForm = forwardRef(({ showDefault, provider, formData, providerName, apiKeySite, apiKeyUrl }, ref) => {
-    const [form, setForm] = useState(formData);
+    
+    const [form, setForm] = useState({ ...formData });
     const fields = modelProviders[provider] || [];
 
     const handleChange = (key, value) => {
@@ -392,7 +393,7 @@ const CustomForm = forwardRef(({ showDefault, provider, formData, providerName, 
                     key={provider + field.key}
                     showDefault={showDefault}
                     field={field}
-                    value={form[field.key] || ''}
+                    value={form[field.key]|| ''}
                     providerName={providerName}
                     apiKeySite={apiKeySite}
                     onChange={handleChange}

@@ -638,7 +638,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                 showDefault={id === -1}
                 provider={formData.type}
                 formData={formData.config}
-                providerName={_modelProvider.find(el => el.value === formData.name)?.name}
+                providerName={_modelProvider.find(el => el.value === formData.type)?.name}
                 apiKeySite={providerInfo?.apiKeyUrl}
             />
             <div className={formData.type ? 'visible' : 'invisible'}>
