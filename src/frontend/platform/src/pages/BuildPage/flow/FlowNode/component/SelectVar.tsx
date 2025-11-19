@@ -276,7 +276,7 @@ const SelectVar = forwardRef(({
                     // 处理三级菜单
                     const { keys: nestedKeys, checkedCount: checkedCountL2 } = handleNestedItems(
                         keyL2,
-                        itemL2.param.value,
+                        itemL2.param.value.filter(e => e.label),
                         valueSet
                     );
                     Object.assign(acc, nestedKeys);
@@ -307,7 +307,7 @@ const SelectVar = forwardRef(({
             return data.param.value
                 // .slice(0, -1) // 排除最后一个元素
                 .map((item) => {
-                    tasks.push({
+                    item.label && tasks.push({
                         node: currentNode,
                         variable: { ...item, value: `${data.value}#${item.value}` },
                     })
@@ -401,7 +401,7 @@ const SelectVar = forwardRef(({
                                     onCheckedChange={(bln) => handleCheckClick(bln, currentMenuRef.current.id, q)}
                                     onClick={e => e.stopPropagation()}
                                 />}
-                                <Tip content={q.label} side={"top"} >
+                                <Tip content={q.label.length > 7 && q.label} side={"top"} >
                                     <span className="w-full overflow-hidden text-ellipsis truncate">{q.label}</span>
                                 </Tip>
                                 {/* {value.includes(`${currentMenuRef.current.id}.${q.value}`) && <Check size={14} />} */}

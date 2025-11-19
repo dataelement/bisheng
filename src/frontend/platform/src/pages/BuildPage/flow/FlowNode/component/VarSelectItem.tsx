@@ -208,7 +208,7 @@ export function VarSelectSingleItem({ nodeId, data: paramItem, onChange, onValid
         </div>
         <SelectVar nodeId={nodeId} itemKey={paramItem.key} onSelect={handleChange}>
             <div className={`${error && 'border-red-500'} no-drag nowheel mt-2 group flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}>
-                <div className="flex flex-wrap">
+                <div className="flex flex-wrap truncate">
                     {value ? paramItem.varZh?.[value] : <span className="text-gray-400">{paramItem.placeholder}</span>}
                 </div>
                 <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
