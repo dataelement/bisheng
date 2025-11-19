@@ -165,6 +165,9 @@ if __name__ == '__main__':
         convert_all_knowledge_data()
     elif args.mode == "convert_one":
         tmp_knowledge = KnowledgeDao.query_by_id(args.id)
+        if not tmp_knowledge:
+            print(f"知识库 ID:{args.id} 不存在，无法进行转换。")
+            exit(0)
         convert_one_knowledge_data(tmp_knowledge)
     else:
         print("mode参数错误,只能是 convert_all 或 convert_one")
