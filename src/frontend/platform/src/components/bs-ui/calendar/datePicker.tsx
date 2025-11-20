@@ -7,11 +7,47 @@ import { Button } from "../button"
 import { Calendar } from "../calendar"
 import { cname } from "../utils"
 
-const parseDate = (value: string | Date | undefined): Date | null => {
+const parseDate = (value: string | Date | number | undefined): Date | null => {
   if (!value) return null
   if (value instanceof Date) return value
-  const date = new Date(value)
-  return isNaN(date.getTime()) ? null : date
+  
+  // 处理数字时间戳（可能是秒级或毫秒级）
+  if (typeof value === 'number') {
+    console.log('Parsing timestamp:', value)
+    // 判断是秒级还是毫秒级时间戳
+    // 如果数值小于 1000000000000（即小于 2001-09-09），则认为是秒级
+    const timestamp = value < 1000000000000 ? value * 1000 : value
+    const date = new Date(timestamp)
+    console.log('Timestamp result:', date)
+    return isNaN(date.getTime()) ? null : date
+  }
+  
+  // 处理字符串日期
+  if (typeof value === 'string') {
+    let date: Date
+    
+    // 处理 ISO 格式 (包含 T 的格式)
+    if (value.includes('T')) {
+      date = new Date(value)
+    } 
+    // 处理 yyyy-MM-dd HH:mm:ss 格式
+    else if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)) {
+      date = new Date(value.replace(' ', 'T'))
+    }
+    // 处理 yyyy-MM-dd 格式
+    else if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      date = new Date(value + 'T00:00:00')
+    }
+    // 其他格式
+    else {
+      date = new Date(value)
+    }
+    
+    console.log('Parsing date string:', value, '->', date)
+    return isNaN(date.getTime()) ? null : date
+  }
+  
+  return null
 }
 
 // 滚动式时间选择器列
@@ -28,11 +64,13 @@ const TimeColumn = ({
 }) => {
   const columnRef = useRef<HTMLDivElement>(null)
   const itemHeight = 32 // 每项高度
+  const scrollTimeoutRef = useRef<NodeJS.Timeout>()
+  const isScrollingRef = useRef(false)
 
   // 滚动到指定值
   const scrollToValue = useCallback((val: number, smooth = true) => {
     if (columnRef.current) {
-      const scrollTop = val * itemHeight - 0 // itemHeight * 2 // 居中显示
+      const scrollTop = val * itemHeight
       columnRef.current.scrollTo({
         top: scrollTop,
         behavior: smooth ? 'smooth' : 'auto'
@@ -40,23 +78,71 @@ const TimeColumn = ({
     }
   }, [itemHeight])
 
-  // 初始化滚动位置 - 立即滚动，不使用动画
+  // 初始化滚动位置
   useEffect(() => {
     scrollToValue(value, false)
   }, [])
 
   // 当 value 变化时，平滑滚动到新位置
   useEffect(() => {
-    if (columnRef.current) {
+    if (columnRef.current && !isScrollingRef.current) {
       scrollToValue(value, true)
     }
   }, [value, scrollToValue])
+
+  // 处理滚动事件
+  const handleScroll = useCallback(() => {
+    if (!columnRef.current) return
+    
+    isScrollingRef.current = true
+    
+    // 清除之前的定时器
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current)
+    }
+    
+    // 设置新的定时器，在滚动停止后对齐
+    scrollTimeoutRef.current = setTimeout(() => {
+      if (!columnRef.current) return
+      
+      const scrollTop = columnRef.current.scrollTop
+      const currentIndex = Math.round(scrollTop / itemHeight)
+      const clampedIndex = Math.max(0, Math.min(max, currentIndex))
+      
+      if (clampedIndex !== value) {
+        onChange(clampedIndex)
+      }
+      
+      isScrollingRef.current = false
+    }, 150) // 滚动结束后150ms触发对齐
+  }, [value, onChange, max, itemHeight])
 
   // 处理点击
   const handleClick = useCallback((val: number) => {
     onChange(val)
     scrollToValue(val, true)
   }, [onChange, scrollToValue])
+
+  // 处理滚轮事件
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault()
+    if (!columnRef.current) return
+    
+    const delta = e.deltaY > 0 ? 1 : -1
+    const newValue = Math.max(0, Math.min(max, value + delta))
+    
+    onChange(newValue)
+    scrollToValue(newValue, true)
+  }, [value, onChange, max, scrollToValue])
+
+  // 清理定时器
+  useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current)
+      }
+    }
+  }, [])
 
   return (
     <div className="flex flex-col items-center">
@@ -73,6 +159,8 @@ const TimeColumn = ({
             paddingTop: `${itemHeight * 2}px`,
             paddingBottom: `${itemHeight * 2}px`
           }}
+          onScroll={handleScroll}
+          onWheel={handleWheel}
         >
           {Array.from({ length: max + 1 }, (_, i) => (
             <div
@@ -197,6 +285,7 @@ interface DatePickerProps {
   onChange?: (date: Date) => void
   showTime?: boolean
   dateFormat?: string
+  disabled?: boolean
 }
 
 export function DatePicker({
@@ -207,6 +296,8 @@ export function DatePicker({
   dateFormat = showTime ? 'yyyy-MM-dd HH:mm:ss' : 'yyyy-MM-dd',
   disabled = false
 }: DatePickerProps) {
+  
+  console.log('DatePicker value:', value)
   
   const initialDate = useMemo(() => parseDate(value), [value])
   const now = useMemo(() => new Date(), [])
@@ -232,6 +323,7 @@ export function DatePicker({
 
   useEffect(() => {
     const parsed = parseDate(value)
+    console.log('Parsed date:', parsed)
     setDate(parsed)
     if (showTime && parsed) {
       setTime({
@@ -281,15 +373,16 @@ export function DatePicker({
             !dateStr && "text-muted-foreground"
           )}
         >
-          <CalendarDays className="mr-2 h-4 w-4" />
+          <CalendarDays className={cname(
+            "h-4 w-4",
+            !dateStr && "mr-2"
+          )}/>
           {dateStr || <span>{placeholder}</span>}
         </Button>
       </PopoverTrigger>
       <PopoverContent
         className="w-auto p-0"
         align="start"
-      // sideOffset={5}
-      // collisionPadding={16}
       >
         <div className="">
           <Calendar

@@ -158,6 +158,7 @@
         "save": "保存",
         "pleaseEnter": "请输入"
     },
+    "universalRules":"通用切分规则",
     "splitRules": {
         "singleNewline": "单换行后切分，用于分隔普通换行",
         "doubleNewline": "双换行后切分,用于分隔段落",
