@@ -973,7 +973,6 @@
   "com_runlog_knowledge_deleted": "知识库已被删除，无法获取知识库名",
   "com_runlog_done": "完成",
   "com_runlog_thinking": "思考中",
-  "com_node_run_running": "正在运行",
   "com_node_run_node": "节点",
   "com_feedback_required": "反馈信息不能为空",
   "com_feedback_title": "反馈",

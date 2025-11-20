@@ -972,7 +972,6 @@
   "com_runlog_knowledge_deleted": "ナレッジベースが削除されたため、名称を取得できません",
   "com_runlog_done": "完了",
   "com_runlog_thinking": "思考中",
-  "com_node_run_running": "実行中",
   "com_node_run_node": "ノード",
   "com_feedback_required": "フィードバックは空にできません",
   "com_feedback_title": "フィードバック",
