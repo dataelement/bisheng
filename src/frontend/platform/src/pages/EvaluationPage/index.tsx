@@ -10,9 +10,12 @@ import {
 import { Tabs, TabsContent } from "@/components/bs-ui/tabs";
 import { useNavigate } from "react-router-dom";
 
+import { checkSassUrl } from "@/components/bs-comp/FileView";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Badge } from "@/components/bs-ui/badge";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import {
   Evaluation,
   deleteEvaluationApi,
@@ -23,6 +26,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { downloadFile } from "@/util/utils";
 import { map } from "lodash-es";
+import { CircleHelpIcon } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -33,10 +37,6 @@ import {
   EvaluationType,
   EvaluationTypeLabelMap,
 } from "./types";
-import { checkSassUrl } from "@/components/bs-comp/FileView";
-import { LoadingIcon } from "@/components/bs-icons/loading";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
-import { CircleHelpIcon } from "lucide-react";
 
 export default function EvaluationPage() {
   const navigate = useNavigate();
@@ -58,7 +58,7 @@ export default function EvaluationPage() {
   useEffect(() => {
     const intervalId = setInterval(() => {
       reload();
-    }, 6000); // 每 6 秒轮询一次
+    }, 6000); // Poll every 6 seconds
 
     return () => clearInterval(intervalId);
   }, [reload]);
@@ -187,9 +187,11 @@ export default function EvaluationPage() {
                       <div className="flex flex-wrap">
                         {el.result_score
                           ? map(el.result_score, (value, key) => {
+                            const labelKey = EvaluationScoreLabelMap[EvaluationScore[key]]?.label;
+                            const displayLabel = labelKey ? t(labelKey) : key;
                             return (
                               <span className="whitespace-nowrap">
-                                {EvaluationScoreLabelMap[EvaluationScore[key]]?.label ?? key}
+                                {displayLabel}
                                 :{value}&nbsp;
                               </span>
                             );
