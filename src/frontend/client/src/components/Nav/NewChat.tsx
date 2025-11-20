@@ -113,7 +113,7 @@ export default function NewChat({
               navigate('/apps');
             }}>
             <AppsIcon />
-            <span className="text-sm font-normal whitespace-nowrap ml-1">{localize('com_nav_app_center')}</span>
+            <span className="text-sm font-normal whitespace-nowrap ml-0.5">{localize('com_nav_app_center')}</span>
           </Button>
           {/* 新建btn */}
           <Button
@@ -122,7 +122,7 @@ export default function NewChat({
             aria-label={localize('com_ui_new_chat')}
           >
             <img className='size-[18px] grayscale' src={__APP_ENV__.BASE_URL + '/assets/chat2.png'} alt="" />
-            <span className="text-sm font-normal whitespace-nowrap ml-1">{localize('com_nav_start_new_chat')}</span>
+            <span className="text-sm font-normal whitespace-nowrap ml-0.5">{localize('com_nav_start_new_chat')}</span>
           </Button>
         </div>
       </div>
