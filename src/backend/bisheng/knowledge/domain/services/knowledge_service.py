@@ -13,6 +13,7 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository 
 from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
     UpdateKnowledgeMetadataFieldsReq
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
+from bisheng.utils.util import retry_async
 
 
 class KnowledgeService:
@@ -81,6 +82,20 @@ class KnowledgeService:
         es_client = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=knowledge_model,
                                                                      metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
 
+        # 请求milvus
+        @retry_async(delay=3)
+        async def request_milvus(new_data):
+            # 批量更新数据
+            await vector_client.aclient.upsert(collection_name=vector_client.collection_name, data=new_data)
+
+        # 请求es
+        @retry_async(delay=3)
+        async def request_es(request_body):
+            await es_client.client.update_by_query(
+                index=knowledge_model.index_name,
+                body=request_body
+            )
+
         for knowledge_file in knowledge_model_files:
             # Update Milvus metadata
             # Implement Milvus metadata field name update logic for each knowledge file here
@@ -96,7 +111,7 @@ class KnowledgeService:
                         item["user_metadata"][new_field_name] = item["user_metadata"].pop(old_field_name)
 
             # 批量更新数据
-            await vector_client.aclient.upsert(collection_name=vector_client.collection_name, data=search_result)
+            await request_milvus(search_result)
 
             # Update Elasticsearch metadata
             # Implement Elasticsearch metadata field name update logic for each knowledge file here
@@ -110,24 +125,26 @@ class KnowledgeService:
                     "ctx._source.metadata.user_metadata.remove('" + old_field_name + "'); }"
                 )
             script_source = " ".join(script_lines)
-            await es_client.client.update_by_query(
-                index=knowledge_model.index_name,
-                body={
-                    "script": {
-                        "source": script_source,
-                        "lang": "painless"
-                    },
-                    "query": {
-                        "term": {"metadata.document_id": knowledge_file.id}
-                    }
+            body = {
+                "script": {
+                    "source": script_source,
+                    "lang": "painless"
+                },
+                "query": {
+                    "term": {"metadata.document_id": knowledge_file.id}
                 }
-            )
+            }
+            # 更新es
+            await request_es(body)
 
             # Update knowledge file's user_metadata field
-            for item in knowledge_file.user_metadata:
+            user_metadata = copy.deepcopy(knowledge_file.user_metadata)
+            for item in user_metadata:
                 if item['field_name'] in field_name_map:
                     item['field_name'] = field_name_map[item['field_name']]
                     item['updated_at'] = int(datetime.now().timestamp())
+
+            knowledge_file.user_metadata = user_metadata
 
             await self.knowledge_file_repository.update(knowledge_file)
 
@@ -208,6 +225,20 @@ class KnowledgeService:
         es_client = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=knowledge_model,
                                                                      metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
 
+        # 请求milvus
+        @retry_async(delay=3)
+        async def request_milvus(new_data):
+            # 批量更新数据
+            await vector_client.aclient.upsert(collection_name=vector_client.collection_name, data=new_data)
+
+        # 请求es
+        @retry_async(delay=3)
+        async def request_es(request_body):
+            await es_client.client.update_by_query(
+                index=knowledge_model.index_name,
+                body=request_body
+            )
+
         for knowledge_file in knowledge_model_files:
             # Delete Milvus metadata fields
             # Implement Milvus metadata field deletion logic for each knowledge file here
@@ -223,7 +254,7 @@ class KnowledgeService:
                         del item["user_metadata"][field_name]
 
             # 批量更新数据
-            await vector_client.aclient.upsert(collection_name=vector_client.collection_name, data=search_result)
+            await request_milvus(search_result)
 
             # Delete Elasticsearch metadata fields
             # Implement Elasticsearch metadata field deletion logic for each knowledge file here
@@ -235,18 +266,19 @@ class KnowledgeService:
                     f"ctx._source.metadata.user_metadata.remove('{field_name}');"
                 )
             script_source = " ".join(script_lines)
-            await es_client.client.update_by_query(
-                index=knowledge_model.index_name,
-                body={
-                    "script": {
-                        "source": script_source,
-                        "lang": "painless"
-                    },
-                    "query": {
-                        "term": {"metadata.document_id": knowledge_file.id}
-                    }
+
+            body = {
+                "script": {
+                    "source": script_source,
+                    "lang": "painless"
+                },
+                "query": {
+                    "term": {"metadata.document_id": knowledge_file.id}
                 }
-            )
+            }
+
+            # 更新es
+            await request_es(body)
 
             knowledge_file.user_metadata = [
                 item for item in knowledge_file.user_metadata
