@@ -13,14 +13,14 @@ export default function TestChat({ assisId, guideQuestion, onClear }) {
     const { assistantState } = useAssistantStore()
     const { t } = useTranslation()
 
-    // 编辑页生成唯一id
+    // Generate unique ID for edit page
     // const chatIdRef = useRef(generateUUID(32))
     useEffect(() => {
-        // 建立 websocket
+        // Establish websocket
         changeChatId('')
     }, [])
 
-    // send 前获取参数用来做 params to send ws
+    // Get parameters before sending to send via websocket
     const getWsParamData = (action, msg, data) => {
         const inputKey = 'input';
         const msgData = {

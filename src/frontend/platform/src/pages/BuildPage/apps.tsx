@@ -1,4 +1,5 @@
 import CardComponent from "@/components/bs-comp/cardComponent";
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import LabelShow from "@/components/bs-comp/cardComponent/LabelShow";
 import AppTempSheet from "@/components/bs-comp/sheets/AppTempSheet";
 import { LoadingIcon } from "@/components/bs-icons/loading";
@@ -24,11 +25,10 @@ import { generateUUID } from "@/utils";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { useQueryLabels } from "./assistant";
 import CreateApp from "./CreateApp";
+import { useCreateTemp, useErrorPrompt, useQueryLabels } from "./hook";
 import CardSelectVersion from "./skills/CardSelectVersion";
 import CreateTemp from "./skills/CreateTemp";
-import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 
 export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
     const [value, setValue] = useState<string>(defaultValue)
@@ -285,40 +285,3 @@ export default function apps() {
         <CreateApp ref={createAppModalRef} />
     </div>
 };
-
-// 创建技能模板弹窗状态
-const useCreateTemp = () => {
-    const [open, setOpen] = useState(false)
-    const [tempType, setType] = useState<AppType>(AppType.ALL)
-    const flowRef = useRef(null)
-
-    return {
-        open,
-        tempType,
-        flowRef,
-        toggleTempModal(flow?) {
-            const map = { 10: "flow", 5: "assistant", 1: "skill" }
-            flowRef.current = flow || null
-            flow && setType(map[flow.flow_type])
-            setOpen(!open)
-        }
-    }
-}
-
-const useErrorPrompt = () => {
-    const search = location.search;
-    const params = new URLSearchParams(search);
-    const error = params.get('error');
-    const { toast } = useToast()
-    const { t } = useTranslation()
-
-    useEffect(() => {
-        if (error) {
-            toast({ description: t(`errors.${error}`), variant: 'error' });
-
-            // Clear the 'error' parameter from the URL
-            const newUrl = window.location.origin + window.location.pathname;
-            window.history.replaceState({}, '', newUrl);
-        }
-    }, [])
-}

@@ -44,7 +44,7 @@ export default function Setting() {
         {t("build.basicConfiguration")}
       </h1>
       <Accordion type="multiple" className="w-full">
-        {/* 基础配置 */}
+        {/* Basic configuration */}
         <AccordionItem value="item-1">
           <AccordionTrigger>
             <span>{t("build.modelConfiguration")}</span>
@@ -83,7 +83,7 @@ export default function Setting() {
             </div>
           </AccordionContent>
         </AccordionItem>
-        {/* 开场引导 */}
+        {/* Opening guide */}
         <AccordionItem value="item-2">
           <AccordionTrigger>
             <span>{t("build.openingIntroduction")}</span>
@@ -135,14 +135,14 @@ export default function Setting() {
             </div>
           </AccordionContent>
         </AccordionItem>
-        {/* 内容安全审查 */}
+        {/* Content security review */}
         {appConfig.isPro && <AssistantSetting id={assistantState.id} type={3} />}
       </Accordion>
       <h1 className="border-b bg-background-login indent-4 text-sm leading-8 text-muted-foreground">
         {t("build.knowledge")}
       </h1>
       <Accordion type="multiple" className="w-full">
-        {/* 知识库 */}
+        {/* Knowledge base */}
         <AccordionItem value="item-1">
           <AccordionTrigger>
             <div className="flex flex-1 items-center justify-between">
@@ -204,7 +204,7 @@ export default function Setting() {
           document.getElementById("skill-scroll").scrollTo({ top: 9999 })
         }
       >
-        {/* 工具 */}
+        {/* Tools */}
         <AccordionItem value="item-1">
           <AccordionTrigger>
             <div className="flex flex-1 items-center justify-between">
@@ -252,7 +252,7 @@ export default function Setting() {
             </div>
           </AccordionContent>
         </AccordionItem>
-        {/* 技能 */}
+        {/* Skills */}
         <AccordionItem value="skill">
           <AccordionTrigger>
             <div className="flex flex-1 items-center justify-between">
