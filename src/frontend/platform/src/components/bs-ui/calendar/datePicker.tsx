@@ -204,8 +204,10 @@ export function DatePicker({
   placeholder = '',
   onChange,
   showTime = false,
-  dateFormat = showTime ? 'yyyy-MM-dd HH:mm:ss' : 'yyyy-MM-dd'
+  dateFormat = showTime ? 'yyyy-MM-dd HH:mm:ss' : 'yyyy-MM-dd',
+  disabled = false
 }: DatePickerProps) {
+  
   const initialDate = useMemo(() => parseDate(value), [value])
   const now = useMemo(() => new Date(), [])
 
@@ -273,7 +275,7 @@ export function DatePicker({
       <PopoverTrigger asChild>
         <Button
           variant="outline"
-          // disabled={!isKnowledgeAdmin}
+          disabled={disabled}
           className={cname(
             "w-full justify-start text-left font-normal bg-search-input",
             !dateStr && "text-muted-foreground"

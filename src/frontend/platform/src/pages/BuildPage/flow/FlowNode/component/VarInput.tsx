@@ -261,7 +261,7 @@ export default function VarInput({
                                         nodeId={nodeId}
                                         itemKey={itemKey}
                                         placeholder={placeholder}
-                                        flowNode={paramItem}
+                                        paramItem={paramItem}
                                         value={fullVarInputValue}
                                         error={error}
                                         children={children}

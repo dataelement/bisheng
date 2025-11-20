@@ -26,7 +26,6 @@ import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import useKnowledgeStore from "../useKnowledgeStore";
 import Tip from "@/components/bs-ui/tooltip/tip";
-import MetadataDialog from "./MetaData";
 import { MetadataManagementDialog } from "./MetadataManagementDialog";
 
 export default function Files({ onPreview }) {
@@ -601,11 +600,6 @@ export default function Files({ onPreview }) {
                 id={id}
                 initialMetadata={metadataFields}
             />
-            {/* <MetadataDialog 
-  open={metadataOpen} 
-  onClose={() => setMetadataOpen(false)} 
-  documentId={id} // 传入当前文档ID
-/> */}
         </div>
         
     )

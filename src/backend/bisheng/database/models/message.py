@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Tuple
 
 from loguru import logger
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import (JSON, Column, DateTime, Field, String, Text, case, delete, func, not_, or_,
                       select, text, update, col)
 
@@ -22,7 +23,7 @@ class MessageBase(SQLModelSerializable):
     mark_status: Optional[int] = Field(index=False, default=1, description='标记状态')
     mark_user: Optional[int] = Field(default=None, index=False, description='标记用户')
     mark_user_name: Optional[str] = Field(default=None, index=False, description='标记用户')
-    message: Optional[str] = Field(default=None, sa_column=Column(Text), description='聊天消息')
+    message: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT), description='聊天消息')
     extra: Optional[str] = Field(default=None, sa_column=Column(Text), description='连接信息等')
     type: str = Field(index=False, description='消息类型')
     category: str = Field(index=False, max_length=32, description='消息类别， question等')

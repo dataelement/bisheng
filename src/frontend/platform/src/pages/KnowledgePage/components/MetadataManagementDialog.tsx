@@ -4,7 +4,7 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Button } from "@/components/bs-ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogPortal } from "@/components/bs-ui/dialog"
 import { Input } from "@/components/bs-ui/input"
-import { AlertCircle, Clock3, Edit2, Hash, Plus, SquarePen, Trash2, Type, X } from "lucide-react"
+import { AlertCircle, CircleQuestionMark, Clock3, Edit2, Hash, Plus, SquarePen, Trash2, Type, X } from "lucide-react"
 import React, { useCallback, useState, useRef, useEffect, memo, useMemo } from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { cname } from "@/components/bs-ui/utils"
@@ -24,16 +24,22 @@ interface Metadata {
 interface BuiltInMetadata {
     name: string
     type: MetadataType
-    description: string
+
 }
 
 const BUILT_IN_METADATA: BuiltInMetadata[] = [
-    { name: "document_id", type: "Number", description: "系统文档id值，全局唯一" },
-    { name: "document_name", type: "String", description: "知识库文档名称，知识库唯一" },
-    { name: "upload_time", type: "Time", description: "文档上传时间" },
-    { name: "update_time", type: "Time", description: "文档最后一次更新时间" },
-    { name: "uploader", type: "String", description: "文档上传者" },
-    { name: "updater", type: "String", description: "文档最后一次更新者" },
+    { name: "document_id", type: "Number" },
+    { name: "document_name", type: "String"},
+    { name: "upload_time", type: "Time"},
+    { name: "update_time", type: "Time"},
+    { name: "uploader", type: "String"},
+    { name: "updater", type: "String"},
+    { name: "abstract", type: "String"},
+    { name: "chunk_index", type: "Number"},
+    { name: "bbox", type: "String"},
+    { name: "page", type: "Number"},
+    { name: "knowledge_id", type: "Number"},
+    { name: "user_metadata", type: "String"},
 ]
 
 const TYPE_ICONS = {
@@ -312,7 +318,7 @@ export function MetadataManagementDialog({
                     <div className="absolute bottom-full left-1/2 mb-2 w-56 bg-white border rounded-lg shadow-lg p-3 z-50"
                         style={{ transform: 'translateX(-84%)' }}>
                         <div className="flex">
-                            <AlertCircle size={14} className="text-red-500" />
+                            <CircleQuestionMark size={14} className="text-red-500" />
                             <div className="flex -mt-1 ml-1 font-medium text-sm">提示</div>
                         </div>
                         <div className="flex gap-2 mb-3 mt-2">
@@ -334,9 +340,9 @@ export function MetadataManagementDialog({
                                     onConfirm();
                                     setIsOpen(false);
                                 }}
-                                className="px-2 py-1 h-7 min-h-7 text-xs bg-red-500 hover:bg-red-600"
+                                className="px-2 py-1 h-7 min-h-7 text-xs"
                             >
-                                确认删除
+                                确认
                             </Button>
                         </div>
                         {/* 气泡尖角 - 指向下方的删除图标 */}
@@ -475,7 +481,7 @@ export function MetadataManagementDialog({
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                {BUILT_IN_METADATA.map((metadata) => (
+                                { BUILT_IN_METADATA.slice(0, 6).map((metadata) => (
                                     <div
                                         key={metadata.name}
                                         className={cname("flex items-center bg-gray-50 rounded-lg", isSmallScreen ? "p-2 gap-2" : "p-3 gap-3")}

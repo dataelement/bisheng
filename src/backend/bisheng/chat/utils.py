@@ -9,6 +9,7 @@ from fastapi import WebSocket
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
 from langchain.schema.document import Document
+from loguru import logger
 
 from bisheng.api.v1.schemas import ChatMessage
 from bisheng.core.database import get_sync_db_session
@@ -16,7 +17,6 @@ from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.interface.utils import try_setting_streaming_options
 from bisheng.llm.domain.services import LLMService
 from bisheng.processing.base import get_result_and_steps
-from loguru import logger
 
 
 class SourceType(Enum):
@@ -112,15 +112,15 @@ def sync_judge_source(result, source_document, chat_id, extra: Dict):
         if any(not doc.metadata.get('right', True) for doc in source_document):
             source = SourceType.NO_PERMISSION.value
         elif all(
-                doc.metadata.get('extra') and json.loads(doc.metadata.get('extra')).get('url')
+                doc.metadata.get('user_metadata') and json.loads(doc.metadata.get('user_metadata', '{}')).get('url')
                 for doc in source_document):
             source = SourceType.LINK.value
             repeat_doc = {}
             doc = []
             # 来源文档做去重，不能改变原有的顺序
             for one in source_document:
-                title = one.metadata.get('source')
-                url = json.loads(one.metadata.get('extra', '{}')).get('url')
+                title = one.metadata.get('source') or one.metadata.get('document_name')
+                url = json.loads(one.metadata.get('user_metadata', '{}')).get('url')
                 repeat_key = (title, url)
                 # 重复的丢掉，不返回
                 if repeat_doc.get(repeat_key):
@@ -134,14 +134,14 @@ def sync_judge_source(result, source_document, chat_id, extra: Dict):
             # 判断是否都是知识库内的文件, 有一个不是则不支持溯源
             for one in source_document:
                 # 如果没有知识库id和文件id，则不支持溯源
-                if not one.metadata.get('knowledge_id') or not one.metadata.get('file_id'):
+                if not one.metadata.get('knowledge_id') or not one.metadata.get('document_id'):
                     source = SourceType.NOT_SUPPORT.value
                     break
                 # 判断下知识库id和文件id是否是数字格式，因为工作流上传的临时文档也有knowledge_id和文件id
                 try:
                     int(one.metadata.get('knowledge_id'))
-                    int(one.metadata.get('file_id'))
-                except ValueError:
+                    int(one.metadata.get('file_id') or one.metadata.get('document_id'))
+                except Exception:
                     source = SourceType.NOT_SUPPORT.value
                     break
 
@@ -169,7 +169,7 @@ def sync_process_source_document(source_document: List[Document], chat_id, messa
             recall_chunk = RecallChunk(chat_id=chat_id,
                                        keywords=json.dumps(answer_keywords),
                                        chunk=content,
-                                       file_id=doc.metadata.get('file_id'),
+                                       file_id=doc.metadata.get('file_id') or doc.metadata.get('document_id'),
                                        meta_data=json.dumps(doc.metadata),
                                        message_id=message_id)
             batch_insert.append(recall_chunk)

@@ -397,7 +397,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
     const { t } = useTranslation('model')
     const { refetch: refetchConfig } = useLinsightConfig();
 
-    const [formData, setFormData] = useState(id === -1 ? { ...defaultForm } : null)
+    const [formData, setFormData] = useState({ ...defaultForm })
     const [modelRefs, setModelRefs] = useState({});
 
     useEffect(() => {
@@ -638,7 +638,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                 showDefault={id === -1}
                 provider={formData.type}
                 formData={formData.config}
-                providerName={_modelProvider.find(el => el.value === formData.name)?.name}
+                providerName={_modelProvider.find(el => el.value === formData.type)?.name}
                 apiKeySite={providerInfo?.apiKeyUrl}
             />
             <div className={formData.type ? 'visible' : 'invisible'}>
@@ -659,7 +659,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                 <div className="mb-2">
                     <Label className="bisheng-label">
                         {t('model.model')}
-                        {providerInfo && <a href={providerInfo.modelUrl} target="_blank" rel="noreferrer" className="ml-1 text-primary/80">(前往官网插口那可用模型)</a>}
+                        {providerInfo && <a href={providerInfo.modelUrl} target="_blank" rel="noreferrer" className="ml-1 text-primary/80">(前往官网查看可用模型)</a>}
                     </Label>
                     <div className="w-[92%]">
                         {

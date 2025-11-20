@@ -371,8 +371,7 @@ export function updateVariableNameByCode(paramItem, questions) {
 
     if (question) {
         const [regWell, regUnderline] = createReg(question.id)
-
-        return [...paramItem.value.reduce((change, item) => {
+        const newItems = paramItem.value.reduce((change, item) => {
             if (regWell.test(item.value)) {
                 item.label = item.label.replace(/\/[^\/]+$/, '/' + question.name)
                 return paramItem.value
@@ -381,16 +380,18 @@ export function updateVariableNameByCode(paramItem, questions) {
                 return paramItem.value
             }
             return change
-        }, null)]
+        }, null)
+        return newItems && [...newItems]
     }
 
     if (node) { // output has no node name, so no need to update
-        return [...paramItem.value.map(item => {
+        const newItems = paramItem.value.map(item => {
             if (item.value.startsWith(node.id)) {
                 item.label = item.label.replace(/^[^\/]+\//, node.name + '/')
             }
             return item
-        }, null)]
+        }, null)
+        return newItems && [...newItems]
     }
     return null
 }

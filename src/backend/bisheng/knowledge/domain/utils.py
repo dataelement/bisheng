@@ -57,10 +57,16 @@ def time_str_to_timestamp(time_str):
 def metadata_value_type_convert(value, target_type: MetadataFieldType):
     try:
         if target_type == MetadataFieldType.NUMBER:
+            if not value:
+                return 0
             return int(value)
         elif target_type == MetadataFieldType.STRING:
+            if not value:
+                return None
             return str(value)
         elif target_type == MetadataFieldType.TIME:
+            if not value:
+                return None
             timestamp = time_str_to_timestamp(value)
             return timestamp
         else:

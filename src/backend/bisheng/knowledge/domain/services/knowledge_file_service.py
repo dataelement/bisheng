@@ -52,6 +52,13 @@ class KnowledgeFileService:
                                                                           'update_user': update_user.user_name if update_user else create_user.user_name
                                                                       })
 
+        metadata_field_dict = {item['field_name']: MetadataField(**item) for item in
+                               knowledge_model.metadata_fields or []}
+
+        for item in knowledge_file_info_res.user_metadata or []:
+            field_name = item['field_name']
+            if field_name in metadata_field_dict:
+                item['field_type'] = metadata_field_dict[field_name].field_type
         return knowledge_file_info_res
 
     @staticmethod
@@ -132,8 +139,9 @@ class KnowledgeFileService:
                 # 数据类型转换
                 try:
                     field_type = metadata_field_dict[item.field_name].field_type
-                    item_dict['field_value'] = utils.metadata_value_type_convert(
+                    field_value = utils.metadata_value_type_convert(
                         value=item_dict['field_value'], target_type=field_type)
+                    item_dict['field_value'] = field_value
                 except Exception as e:
                     logger.error(f"Metadata value type conversion error: {e}")
                     continue
@@ -216,8 +224,10 @@ class KnowledgeFileService:
                     # 数据类型转换
                     try:
                         field_type = metadata_field_dict[item['field_name']].field_type
-                        item['field_value'] = utils.metadata_value_type_convert(
+                        field_value = utils.metadata_value_type_convert(
                             value=item['field_value'], target_type=field_type)
+                        item['field_value'] = field_value
+
                     except Exception as e:
                         logger.error(f"Metadata value type conversion error: {e}")
                         continue
@@ -295,8 +305,9 @@ class KnowledgeFileService:
                             # 数据类型
                             field_type = metadata_field_dict[item.field_name].field_type
                             # 更新已有字段的值和更新时间
-                            existing_item['field_value'] = utils.metadata_value_type_convert(
+                            field_value = utils.metadata_value_type_convert(
                                 value=existing_item['field_value'], target_type=field_type)
+                            existing_item['field_value'] = field_value
                             existing_item['updated_at'] = item.updated_at
                         except Exception as e:
                             logger.error(f"Metadata value type conversion error: {e}")

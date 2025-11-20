@@ -469,7 +469,7 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
                             onClick={() => {
                                 const newInputs = [...inputs, { key: generateUUID(6), value: '' }]
                                 setInputs(newInputs);
-                                props.onChange(newInputs.map(input => input.value));
+                                props.onChange(dict ? newInputs : newInputs.map(input => input.value));
                             }} /> : <CircleMinus
                             onClick={(e) => {
                                 if (e.target.previousSibling) {
