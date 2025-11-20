@@ -20,7 +20,6 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.knowledge import KnowledgeFileResp
 from bisheng.api.v1.schemas import (
     FileChunk,
-    FileChunkMetadata,
     FileProcessBase,
     KnowledgeFileOne,
     KnowledgeFileProcess,
@@ -60,6 +59,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus, ParseType,
 )
+from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.llm.const import LLMModelType
 from bisheng.llm.models import LLMDao
 from bisheng.utils import generate_uuid, generate_knowledge_index_name
@@ -1012,7 +1012,7 @@ class KnowledgeService(KnowledgeUtils):
         )
         # search metadata
         output_fields = ["pk"]
-        output_fields.extend(list(FileChunkMetadata.model_fields.keys()))
+        output_fields.extend(list(Metadata.model_fields.keys()))
         res = vector_client.col.query(
             expr=f"document_id == {file_id} && chunk_index == {chunk_index}",
             output_fields=output_fields,
@@ -1022,7 +1022,6 @@ class KnowledgeService(KnowledgeUtils):
         pk = []
         for one in res:
             pk.append(one.pop("pk"))
-            one["knowledge_id"] = str(knowledge_id)
             metadata.append(one)
         # insert data
         if metadata:

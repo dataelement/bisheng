@@ -12,6 +12,7 @@ from bisheng.database.models.gpts_tools import AuthMethod, AuthType, GptsToolsRe
 from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeRead
+from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 
 
 class CaptchaInput(BaseModel):
@@ -479,21 +480,11 @@ class FileProcessBase(BaseModel):
         return values
 
 
-class FileChunkMetadata(BaseModel):
-    source: str = Field(default='', description='源文件名')
-    title: str = Field(default='', description='源文件内容总结的标题')
-    chunk_index: int = Field(default=0, description='文本块索引')
-    bbox: str = Field(default='', description='文本块bbox信息')
-    page: int = Field(default=0, description='文本块所在页码')
-    extra: str = Field(default='', description='文本块额外信息')
-    file_id: int = Field(default=0, description='文本块所属文件ID')
-
-
 # 文件分块数据格式
 class FileChunk(BaseModel):
     text: str = Field(..., description='文本块内容')
     parse_type: Optional[str] = Field(default=None, description='文本所属的文件解析类型')
-    metadata: FileChunkMetadata = Field(..., description='文本块元数据')
+    metadata: Metadata = Field(..., description='文本块元数据')
 
 
 # 预览文件分块内容请求参数
