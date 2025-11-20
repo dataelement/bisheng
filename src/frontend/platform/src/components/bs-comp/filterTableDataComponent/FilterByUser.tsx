@@ -6,9 +6,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 interface UserOption {
     label: string;
     value: string;
+    placeholder?: string;
 }
 
-export default function FilterByUser({ value, onChange }) {
+export default function FilterByUser({ value, placeholder = 'Username', onChange }) {
     const { users, loadUsers, searchUser, loadMoreUsers } = useUsers();
 
     return (
@@ -17,7 +18,7 @@ export default function FilterByUser({ value, onChange }) {
                 contentClassName="overflow-y-auto max-w-[200px]"
                 options={users}
                 value={value}
-                placeholder="用户名"
+                placeholder={placeholder}
                 onLoad={() => loadUsers("")}
                 onSearch={searchUser}
                 onScrollLoad={loadMoreUsers}

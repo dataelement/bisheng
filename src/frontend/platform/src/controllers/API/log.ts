@@ -53,9 +53,9 @@ const actions = [
     { name: 'log.deleteRole', value: 'delete_role' },
     { name: 'log.updateRole', value: 'update_role' },
     { name: 'log.userLogin', value: 'user_login' },
-    { name: 'log.addTool', value: 'add_tool' },
-    { name: 'log.updateTool', value: 'update_tool' },
-    { name: 'log.deleteTool', value: 'delete_tool' }
+    { name: 'log.add_tool', value: 'add_tool' },
+    { name: 'log.update_tool', value: 'update_tool' },
+    { name: 'log.delete_tool', value: 'delete_tool' }
 ];
 
 // 全部操作行为
