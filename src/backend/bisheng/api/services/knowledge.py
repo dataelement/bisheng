@@ -59,12 +59,10 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus, ParseType,
 )
-from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.llm.const import LLMModelType
 from bisheng.llm.models import LLMDao
 from bisheng.utils import generate_uuid, generate_knowledge_index_name
 from bisheng.utils import get_request_ip
-from bisheng.utils.embedding import decide_embeddings
 from bisheng.worker.knowledge import file_worker
 
 
@@ -598,6 +596,7 @@ class KnowledgeService(KnowledgeUtils):
         db_file.split_rule = json.dumps(split_rule_dict)
         db_file.status = KnowledgeFileStatus.PROCESSING.value  # 解析中
         db_file.updater_id = login_user.user_id
+        db_file.updater_name = login_user.user_name
         db_file = await KnowledgeFileDao.async_update(db_file)
 
         file_path, _ = cls.get_file_share_url(db_file.id)
@@ -659,6 +658,8 @@ class KnowledgeService(KnowledgeUtils):
 
             file.split_rule = input_file["split_rule"]
             file.status = KnowledgeFileStatus.PROCESSING.value  # 解析中
+            file.uploader_id = login_user.user_id
+            file.updater_name = login_user.user_name
 
             file = KnowledgeFileDao.update(file)
             res.append([file, file_preview_cache_key])
@@ -746,7 +747,9 @@ class KnowledgeService(KnowledgeUtils):
             md5=md5_,
             split_rule=str_split_rule,
             user_id=login_user.user_id,
-            updater_id=login_user.user_id
+            user_name=login_user.user_name,
+            updater_id=login_user.user_id,
+            updater_name=login_user.user_name,
         )
         db_file = KnowledgeFileDao.add_file(db_file)
         # 原始文件保存
@@ -897,6 +900,18 @@ class KnowledgeService(KnowledgeUtils):
         )
 
     @classmethod
+    def judge_knowledge_access(cls, login_user: UserPayload, knowledge_id: int, access_type: AccessType) -> Knowledge:
+        db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
+        if not db_knowledge:
+            raise NotFoundError.http_exception()
+
+        if not login_user.access_check(
+                db_knowledge.user_id, str(knowledge_id), access_type
+        ):
+            raise UnAuthorizedError.http_exception()
+        return db_knowledge
+
+    @classmethod
     def get_knowledge_chunks(
             cls,
             request: Request,
@@ -907,22 +922,9 @@ class KnowledgeService(KnowledgeUtils):
             page: int = None,
             limit: int = None,
     ) -> (List[FileChunk], int):
-        db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
-        if not db_knowledge:
-            raise NotFoundError.http_exception()
+        db_knowledge = cls.judge_knowledge_access(login_user, knowledge_id, AccessType.KNOWLEDGE)
 
-        if not login_user.access_check(
-                db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE
-        ):
-            raise UnAuthorizedError.http_exception()
-
-        index_name = (
-            db_knowledge.index_name
-            if db_knowledge.index_name
-            else db_knowledge.collection_name
-        )
-        embeddings = FakeEmbedding()
-        es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
+        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(db_knowledge)
 
         search_data = {
             "from": (page - 1) * limit,
@@ -949,7 +951,7 @@ class KnowledgeService(KnowledgeUtils):
         if keyword:
             search_data["query"] = {"match_phrase": {"text": keyword}}
         try:
-            res = es_client.client.search(index=index_name, body=search_data)
+            res = es_client.client.search(index=db_knowledge.index_name, body=search_data)
         except Exception as e:
             logger.warning(f"act=get_knowledge_chunks error={str(e)}")
             raise KnowledgeChunkError.http_exception()
@@ -977,6 +979,48 @@ class KnowledgeService(KnowledgeUtils):
         return result, res["hits"]["total"]["value"]
 
     @classmethod
+    def update_chunk_updater_info(cls, vector_client, es_client, db_knowledge, file_id, login_user):
+        # Product Requirements！！！！！！！
+        logger.debug(f"start update_milvus_chunk_updater_info user={login_user.user_name}")
+        output_fields = [s.name for s in vector_client.col.schema.fields]
+        iterator = vector_client.col.query_iterator(
+            expr=f"document_id == {file_id}",
+            output_fields=output_fields,
+            timeout=10,
+        )
+        update_time = int(datetime.now().timestamp())
+        while True:
+            result = iterator.next()
+            if not result:
+                iterator.close()
+                break
+            for record in result:
+                logger.debug(f"update milvus one record")
+                if not record.get("pk") or not record.get("vector"):
+                    raise ValueError("milvus chunk pk field or vector field is None")
+                record["updater"] = login_user.user_name
+                record["update_time"] = update_time
+                vector_client.col.upsert(record)
+                logger.debug(f"update milvus one record over")
+        logger.debug(f"update_milvus_chunk_updater_info over")
+
+        res = es_client.client.update_by_query(
+            index=db_knowledge.index_name,
+            body={
+                "query": {
+                    "bool": {
+                        "must": {"match": {"metadata.document_id": file_id}},
+                    }
+                },
+                "script": {
+                    "source": "ctx._source.metadata.updater=params.updater;ctx._source.metadata.update_time=params.update_time;",
+                    "params": {"updater": login_user.user_name, "update_time": update_time},
+                },
+            },
+        )
+        logger.debug(f"update_es_chunk_updater_info: {res}")
+
+    @classmethod
     def update_knowledge_chunk(
             cls,
             request: Request,
@@ -987,32 +1031,14 @@ class KnowledgeService(KnowledgeUtils):
             text: str,
             bbox: str,
     ):
-        db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
-        if not db_knowledge:
-            raise NotFoundError.http_exception()
-
-        if not login_user.access_check(
-                db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE_WRITE
-        ):
-            raise UnAuthorizedError.http_exception()
-
-        index_name = (
-            db_knowledge.index_name
-            if db_knowledge.index_name
-            else db_knowledge.collection_name
-        )
-
-        embeddings = decide_embeddings(db_knowledge.model)
+        db_knowledge = cls.judge_knowledge_access(login_user, knowledge_id, AccessType.KNOWLEDGE_WRITE)
 
         logger.info(
             f"act=update_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}"
         )
-        vector_client = decide_vectorstores(
-            db_knowledge.collection_name, "Milvus", embeddings
-        )
+        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(db_knowledge)
         # search metadata
-        output_fields = ["pk"]
-        output_fields.extend(list(Metadata.model_fields.keys()))
+        output_fields = [s.name for s in vector_client.col.schema.fields if s.name != "vector"]
         res = vector_client.col.query(
             expr=f"document_id == {file_id} && chunk_index == {chunk_index}",
             output_fields=output_fields,
@@ -1023,13 +1049,14 @@ class KnowledgeService(KnowledgeUtils):
         for one in res:
             pk.append(one.pop("pk"))
             metadata.append(one)
+        if not metadata:
+            raise ValueError("chunk not found in vector db")
         # insert data
-        if metadata:
-            logger.info(f"act=add_vector {knowledge_id}")
-            new_metadata = metadata[0]
-            new_metadata["bbox"] = bbox
-            text = KnowledgeUtils.aggregate_chunk_metadata(text, new_metadata)
-            res = vector_client.add_texts([text], [new_metadata], timeout=10)
+        logger.info(f"act=add_vector {knowledge_id}")
+        new_metadata = metadata[0]
+        new_metadata["bbox"] = bbox
+        new_text = KnowledgeUtils.aggregate_chunk_metadata(text, new_metadata)
+        res = vector_client.add_texts([new_text], [new_metadata], timeout=10)
         # delete data
         logger.info(f"act=delete_vector pk={pk}")
         res = vector_client.col.delete(f"pk in {pk}", timeout=10)
@@ -1038,9 +1065,9 @@ class KnowledgeService(KnowledgeUtils):
         logger.info(
             f"act=update_es knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}"
         )
-        es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
+        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(db_knowledge)
         res = es_client.client.update_by_query(
-            index=index_name,
+            index=db_knowledge.index_name,
             body={
                 "query": {
                     "bool": {
@@ -1050,18 +1077,16 @@ class KnowledgeService(KnowledgeUtils):
                 },
                 "script": {
                     "source": "ctx._source.text=params.text;ctx._source.metadata.bbox=params.bbox;",
-                    "params": {"text": text, "bbox": bbox},
+                    "params": {"text": new_text, "bbox": bbox},
                 },
             },
         )
-        logger.info(f"act=update_es_over {res}")
+        logger.info(f"act=update_es_chunk_over {res}")
 
-        knowledge_file = KnowledgeFileDao.query_by_id_sync(file_id)
+        # update metadata updater and update_time
+        cls.update_chunk_updater_info(vector_client, es_client, db_knowledge, file_id, login_user)
 
-        if knowledge_file:
-            knowledge_file.updater_id = login_user.user_id
-            knowledge_file.update_time = datetime.now()
-            KnowledgeFileDao.update(knowledge_file)
+        KnowledgeFileDao.update_file_updater(file_id, login_user.user_id, login_user.user_name)
 
         return True
 
@@ -1074,28 +1099,12 @@ class KnowledgeService(KnowledgeUtils):
             file_id: int,
             chunk_index: int,
     ):
-        db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
-        if not db_knowledge:
-            raise NotFoundError.http_exception()
-
-        if not login_user.access_check(
-                db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE_WRITE
-        ):
-            raise UnAuthorizedError.http_exception()
-
-        index_name = (
-            db_knowledge.index_name
-            if db_knowledge.index_name
-            else db_knowledge.collection_name
-        )
-        embeddings = FakeEmbedding()
+        db_knowledge = cls.judge_knowledge_access(login_user, knowledge_id, AccessType.KNOWLEDGE_WRITE)
 
         logger.info(
             f"act=delete_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}"
         )
-        vector_client = decide_vectorstores(
-            db_knowledge.collection_name, "Milvus", embeddings
-        )
+        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(db_knowledge)
         res = vector_client.col.delete(
             expr=f"document_id == {file_id} && chunk_index == {chunk_index}",
             timeout=10,
@@ -1105,9 +1114,9 @@ class KnowledgeService(KnowledgeUtils):
         logger.info(
             f"act=delete_es knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index} res={res}"
         )
-        es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
+        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(db_knowledge)
         res = es_client.client.delete_by_query(
-            index=index_name,
+            index=db_knowledge.index_name,
             query={
                 "bool": {
                     "must": {"match": {"metadata.document_id": file_id}},
@@ -1116,6 +1125,10 @@ class KnowledgeService(KnowledgeUtils):
             },
         )
         logger.info(f"act=delete_es_over {res}")
+
+        cls.update_chunk_updater_info(vector_client, es_client, db_knowledge, file_id, login_user)
+
+        KnowledgeFileDao.update_file_updater(file_id, login_user.user_id, login_user.user_name)
 
         return True
 

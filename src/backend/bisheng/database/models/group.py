@@ -1,10 +1,11 @@
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from bisheng.core.database import get_sync_db_session
-from bisheng.common.models.base import SQLModelSerializable
 from sqlalchemy import Column, DateTime, delete, text, update
 from sqlmodel import Field, select
+
+from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database import get_sync_db_session
 
 # 默认用户组的ID
 DefaultGroup = 2
@@ -17,11 +18,8 @@ class GroupBase(SQLModelSerializable):
     update_user: Optional[int] = Field(default=None, description="更新用户的ID")
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None,
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class Group(GroupBase, table=True):

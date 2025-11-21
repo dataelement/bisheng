@@ -32,9 +32,9 @@ class ConditionOne(BaseModel):
         elif field_type == MetadataFieldType.TIME.value:
             try:
                 right_value = int(right_value)
+                right_value = datetime.fromtimestamp(right_value).strftime('%Y-%m-%d %H:%M:%S')
             except ValueError:
-                right_time = datetime.fromisoformat(right_value)
-                right_value = int(right_time.timestamp())
+                right_value = datetime.fromisoformat(right_value).strftime('%Y-%m-%d %H:%M:%S')
         else:
             raise ValueError(f"Unsupported metadata field type: {field_type}")
         return right_value
@@ -50,7 +50,7 @@ class ConditionOne(BaseModel):
         elif self.metadata_field == "update_time":
             return "update_time"
         elif self.metadata_field == "uploader":
-            return "username"
+            return "user_name"
         elif self.metadata_field == "updater":
             return "updater_name"
         else:

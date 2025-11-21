@@ -7,9 +7,9 @@ from pydantic import model_validator
 from sqlalchemy import JSON, Column, DateTime, String, text, func
 from sqlmodel import Field, or_, select, Text, update, col
 
+from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.constants import ToolPresetType
-from bisheng.common.models.base import SQLModelSerializable
 from bisheng.utils import md5_hash, generate_uuid
 
 
@@ -34,14 +34,10 @@ class GptsToolsBase(SQLModelSerializable):
     is_delete: int = Field(default=0, description='1 表示逻辑删除')
     api_params: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='用来存储api参数等信息')
     user_id: Optional[int] = Field(default=None, index=True, description='创建用户ID， null表示系统创建')
-    create_time: Optional[datetime] = Field(default=None,
-                                            sa_column=Column(DateTime, nullable=False,
-                                                             server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None,
-                                            sa_column=Column(DateTime,
-                                                             nullable=False,
-                                                             server_default=text('CURRENT_TIMESTAMP'),
-                                                             onupdate=text('CURRENT_TIMESTAMP')))
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class GptsToolsTypeBase(SQLModelSerializable):
@@ -59,14 +55,10 @@ class GptsToolsTypeBase(SQLModelSerializable):
     is_preset: Optional[int] = Field(default=ToolPresetType.API.value, description="工具的类别，历史原因字段就不改名了")
     user_id: Optional[int] = Field(default=None, index=True, description='创建用户ID， null表示系统创建')
     is_delete: int = Field(default=0, description='1 表示逻辑删除')
-    create_time: Optional[datetime] = Field(default=None,
-                                            sa_column=Column(DateTime, nullable=False,
-                                                             server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None,
-                                            sa_column=Column(DateTime,
-                                                             nullable=False,
-                                                             server_default=text('CURRENT_TIMESTAMP'),
-                                                             onupdate=text('CURRENT_TIMESTAMP')))
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class GptsTools(GptsToolsBase, table=True):
