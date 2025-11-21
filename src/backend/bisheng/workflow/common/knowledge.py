@@ -323,7 +323,7 @@ class RagUtils(BaseNode):
         tmp_collection_name = self.get_milvus_collection_name(getattr(embeddings, 'model_id'))
         milvus_vector = KnowledgeRag.init_milvus_vectorstore(collection_name=tmp_collection_name, embeddings=embeddings)
         milvus_extra = {"expr": f"document_id in {file_ids}"}
-        self._multi_es_retriever = milvus_vector.as_retriever(search_kwargs=self._retriever_kwargs | milvus_extra)
+        self._multi_milvus_retriever = milvus_vector.as_retriever(search_kwargs=self._retriever_kwargs | milvus_extra)
 
         es_extra = {"filter": [{"terms": {"metadata.document_id": file_ids}}]}
         es_vector = KnowledgeRag.init_es_vectorstore_sync(index_name=self.tmp_collection_name)
