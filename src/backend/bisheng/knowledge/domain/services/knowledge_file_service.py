@@ -127,8 +127,8 @@ class KnowledgeFileService:
         if knowledge_file_model.user_metadata is None:
             knowledge_file_model.user_metadata = {}
 
-        # 过滤掉不在知识库元数据字段列表中的字段
-        valid_user_metadata = {}
+        # 复制当前的用户元数据
+        current_user_metadata = copy.deepcopy(knowledge_file_model.user_metadata)
 
         for item in modify_file_metadata_req.user_metadata_list:
             if item.field_name in metadata_field_dict.keys():
@@ -144,10 +144,10 @@ class KnowledgeFileService:
                     continue
                 item_dict['field_type'] = metadata_field_dict[item.field_name].field_type
                 item_dict.pop('field_name')
-                valid_user_metadata[item.field_name] = item_dict
+                current_user_metadata[item.field_name] = item_dict
 
         # 更新知识文件的用户元数据
-        knowledge_file_model.user_metadata = valid_user_metadata
+        knowledge_file_model.user_metadata = current_user_metadata
         knowledge_file_model.updater_id = login_user.user_id
 
         knowledge_file_model = await self.knowledge_file_repository.update(knowledge_file_model)

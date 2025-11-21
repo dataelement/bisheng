@@ -403,7 +403,6 @@ export default function Paragraphs({ fileId, onBack }) {
 
 
     useEffect(() => {
-        // 核心修复：增加hasInited判断，防止切换后重复初始化
         if (rawFiles.length === 0 || !isInitReady || !isMountedRef.current || !hasInited) return;
 
         // 只有在首次加载时执行自动选中，切换后不执行
@@ -417,7 +416,6 @@ export default function Paragraphs({ fileId, onBack }) {
         }
     }, [rawFiles, isInitReady, fileId, handleFileChange, selectedFileId, hasInited]);
 
-    // 元数据相关处理函数
     const handleDeleteMainMetadata = useCallback((id) => {
         setMainMetadataList(prev => prev.filter(item => item.id !== id));
     }, []);
@@ -455,19 +453,26 @@ export default function Paragraphs({ fileId, onBack }) {
         }
 
         try {
-            await addMetadata(Number(id), [{
-                field_name: name,
-                field_type: type.toLowerCase()
-            }]);
+        await addMetadata(Number(id), [{
+            field_name: name,
+            field_type: type.toLowerCase()
+        }]);
+        const knowledgeDetails = await getKnowledgeDetailApi([id]);
+        const knowledgeDetail = knowledgeDetails[0];
 
-            const newItem = {
-                id: `meta_${Date.now()}`,
-                name: name,
-                type: type,
-            };
+        if (knowledgeDetail && knowledgeDetail.metadata_fields) {
+          const formattedFields = Object.entries(knowledgeDetail.metadata_fields).map(([fieldName, fieldData]) => ({
+                id: `meta_${fieldName}`,
+                name: fieldName,
+                type: fieldData.field_type.charAt(0).toUpperCase() + fieldData.field_type.slice(1),
+                updated: fieldData.updated_at
+            }));
+            setPredefinedMetadata(formattedFields);
+        }
+        setNewMetadata({ name: '', type: 'String' });
+        setMetadataError('');
 
-            setPredefinedMetadata(prev => [...prev, newItem]);
-            setSideDialog({ type: 'search', open: true })
+        setSideDialog({ type: 'search', open: true });
 
         } catch (error) {
             console.error("创建元数据字段失败:", error);
@@ -480,13 +485,13 @@ export default function Paragraphs({ fileId, onBack }) {
             const knowledgeDetails = await getKnowledgeDetailApi([id]);
             const knowledgeDetail = knowledgeDetails[0];
 
-            if (knowledgeDetail && Array.isArray(knowledgeDetail.metadata_fields)) {
-                const formattedFields = knowledgeDetail.metadata_fields.map(field => ({
-                    id: `meta_${field.field_name}`,
-                    name: field.field_name,
-                    type: field.field_type.charAt(0).toUpperCase() + field.field_type.slice(1),
-                    updated:field.updated_at
-                }));
+            if (knowledgeDetail &&  knowledgeDetail.metadata_fields) {
+                const formattedFields = Object.entries(knowledgeDetail.metadata_fields).map(([fieldName, fieldData]) => ({
+                id: `meta_${fieldName}`,
+                name: fieldName,
+                type: fieldData.field_type.charAt(0).toUpperCase() + fieldData.field_type.slice(1),
+                updated: fieldData.updated_at
+            }));
                 setPredefinedMetadata(formattedFields);
             } else {
                 setPredefinedMetadata([]);
@@ -551,23 +556,21 @@ export default function Paragraphs({ fileId, onBack }) {
             const res = await getMetaFile(currentFile.id);
             setFileInfor(res);
             const fetchedMetadata = res.user_metadata || [];
-            const sortedMetadata = fetchedMetadata.sort((a, b) => {
-                return a.updated_at - b.updated_at;
+            console.log(fetchedMetadata,34);
+            const metadataArray = Object.entries(fetchedMetadata).map(([fieldName, fieldData]) => ({
+                id: `meta_${fieldName}`,
+                name: fieldName,
+                type: fieldData.field_type ? 
+                    fieldData.field_type.charAt(0).toUpperCase() + fieldData.field_type.slice(1).toLowerCase() : 
+                    'String',
+                value: fieldData.field_value || '',
+                updated_at: fieldData.updated_at
+            }));
+            const sortedMetadata = metadataArray.sort((a, b) => {
+                return (a.updated_at || 0) - (b.updated_at || 0);
             });
 
-            const formattedMetadata = sortedMetadata.map(meta => {
-                const rawType = meta.field_type || ''; 
-                
-                const formattedType = rawType.charAt(0).toUpperCase() + rawType.slice(1).toLowerCase();
-                return {
-                    id: `meta_${meta.field_name}`,
-                    name: meta.field_name,
-                    type: formattedType, // 使用格式化后的类型
-                    value: meta.field_value,
-                };
-            });
-
-            setMainMetadataList(formattedMetadata);
+        setMainMetadataList(sortedMetadata);
 
             setMetadataDialog({
                 open: true,

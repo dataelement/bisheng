@@ -53,7 +53,7 @@ class KnowledgeFileBase(SQLModelSerializable):
                                   description='1: 解析中；2: 解析成功；3: 解析失败')
     object_name: Optional[str] = Field(default=None, index=False, description='文件在minio存储的对象名称')
     # extra_meta: Optional[str] = Field(default=None, index=False)
-    user_metadata: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True),
+    user_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, sa_column=Column(JSON, nullable=True),
                                                           description='用户自定义的元数据')
     remark: Optional[str] = Field(default='', sa_column=Column(String(length=512)))
     updater_id: Optional[int] = Field(default=None, index=True, description='最后更新用户ID')

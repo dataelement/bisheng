@@ -658,7 +658,7 @@ class KnowledgeService(KnowledgeUtils):
 
             file.split_rule = input_file["split_rule"]
             file.status = KnowledgeFileStatus.PROCESSING.value  # 解析中
-            file.uploader_id = login_user.user_id
+            file.updater_id = login_user.user_id
             file.updater_name = login_user.user_name
 
             file = KnowledgeFileDao.update(file)
@@ -995,13 +995,11 @@ class KnowledgeService(KnowledgeUtils):
                 iterator.close()
                 break
             for record in result:
-                logger.debug(f"update milvus one record")
                 if not record.get("pk") or not record.get("vector"):
                     raise ValueError("milvus chunk pk field or vector field is None")
                 record["updater"] = login_user.user_name
                 record["update_time"] = update_time
                 vector_client.col.upsert(record)
-                logger.debug(f"update milvus one record over")
         logger.debug(f"update_milvus_chunk_updater_info over")
 
         res = es_client.client.update_by_query(
@@ -1017,6 +1015,7 @@ class KnowledgeService(KnowledgeUtils):
                     "params": {"updater": login_user.user_name, "update_time": update_time},
                 },
             },
+            conflicts="proceed",
         )
         logger.debug(f"update_es_chunk_updater_info: {res}")
 
