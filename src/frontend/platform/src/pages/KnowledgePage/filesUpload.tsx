@@ -197,7 +197,7 @@ export default function FilesUpload() {
 
   // API: Retry duplicate files (overwrite upload)
   const handleRetry = (objs) => {
-    if (currentStep === 1) {
+    if (currentStep === 1 && !repeatCallBackRef.current) {
       setRepeatFiles([]);
       return setCurrentStep(2);
     }

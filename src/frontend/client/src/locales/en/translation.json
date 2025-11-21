@@ -1053,7 +1053,6 @@
   "com_runlog_knowledge_deleted": "The knowledge base has been deleted and the name cannot be retrieved",
   "com_runlog_done": "Done",
   "com_runlog_thinking": "Thinking",
-  "com_node_run_running": "Running",
   "com_node_run_node": "node",
   "com_feedback_required": "Feedback cannot be empty",
   "com_feedback_title": "Feedback",

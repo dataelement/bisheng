@@ -467,11 +467,11 @@ export default function Paragraphs({ fileId, onBack }) {
             };
 
             setPredefinedMetadata(prev => [...prev, newItem]);
+            setSideDialog({ type: 'search', open: true })
 
-            closeSideDialog();
         } catch (error) {
             console.error("创建元数据字段失败:", error);
-            setMetadataError(t('创建失败，请稍后重试。'));
+            setMetadataError(t('该名称为系统内置元数据，不可使用'));
         }
     }, [newMetadata, predefinedMetadata, t, id]);
 

@@ -123,7 +123,7 @@ class KnowledgeService(KnowledgeUtils):
             res.append(
                 KnowledgeRead(
                     **one.model_dump(),
-                    user_name=db_user_dict.get(one.user_id, one.user_id),
+                    user_name=db_user_dict.get(one.user_id, str(one.user_id)),
                     copiable=login_user.access_check(
                         one.user_id, str(one.id), AccessType.KNOWLEDGE_WRITE
                     ),

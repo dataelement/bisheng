@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogHeader, DialogDescription } from '@/components/bs-ui/dialog';
 import { Button } from '@/components/bs-ui/button';
@@ -19,6 +19,8 @@ const TYPE_ICONS = {
 
 // 元数据行组件
 export const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onValueChange, isSmallScreen, t, showInput = true }) => {
+    console.log(item);
+    
     const handleInputChange = (e) => {
         onValueChange(item.id, e.target.value);
     };
@@ -28,11 +30,6 @@ export const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onVal
         if (value === '' || /^-?\d*\.?\d*$/.test(value)) {
             onValueChange(item.id, value);
         }
-    };
-
-    const handleDateChange = (date) => {
-        const dateString = date ? format(date, 'yyyy-MM-dd') : '';
-        onValueChange(item.id, dateString);
     };
 
     return (
@@ -87,6 +84,7 @@ export const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onVal
                                 type="text"
                                 value={item.value || ''}
                                 onChange={handleInputChange}
+                                maxLength={255}
                                 placeholder={t('请输入文本')}
                                 className={cname(
                                     "w-full px-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
@@ -99,8 +97,14 @@ export const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onVal
                             <input
                                 disabled={!isKnowledgeAdmin}
                                 type="number"
-                                value={item.value || 0}
+                                value={item.value ?? 0}
                                 onChange={handleNumberChange}
+                                onBlur={(e) => {
+                                    // 当失去焦点时，如果值为空字符串，则设置为0
+                                    if (e.target.value === '') {
+                                        onValueChange(item.id, 0);
+                                    }
+                                }}
                                 className={cname(
                                     "w-full px-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                                     isSmallScreen ? "py-0.5 text-xs h-6" : "py-1 text-sm h-7"
@@ -155,7 +159,7 @@ export const MainMetadataDialog = React.memo(({
     handleSearchMetadataClick,
     handleDeleteMainMetadata,
     handleMainMetadataValueChange,
-    mainMetadataDialogRef 
+    mainMetadataDialogRef
 }) => {
     return (
         <Dialog open={metadataDialog.open} onOpenChange={(open) => setMetadataDialog(prev => ({ ...prev, open }))}>
@@ -169,7 +173,7 @@ export const MainMetadataDialog = React.memo(({
                 <DialogHeader>
                     <h3 className="text-lg font-semibold">{t('元数据')}</h3>
                 </DialogHeader>
-                
+
                 <div className="flex-1 overflow-y-auto min-h-0">
                     <button
                         onClick={handleSearchMetadataClick}
@@ -295,19 +299,19 @@ export const MetadataSideDialog = React.memo(({
     setSideDialog
 }) => {
     const searchInputRef = useRef(null);
-    
-const filteredPredefinedMetadata = useMemo(() => {
-    return predefinedMetadata
-        .filter(meta =>
-            meta.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (meta.description && meta.description.toLowerCase().includes(searchTerm.toLowerCase()))
-        )
-        .sort((a, b) => {
-            const updatedA = a.updated || 0;
-            const updatedB = b.updated || 0;
-            return updatedA - updatedB;
-        });
-}, [predefinedMetadata, searchTerm]);
+
+    const filteredPredefinedMetadata = useMemo(() => {
+        return predefinedMetadata
+            .filter(meta =>
+                meta.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (meta.description && meta.description.toLowerCase().includes(searchTerm.toLowerCase()))
+            )
+            .sort((a, b) => {
+                const updatedA = a.updated || 0;
+                const updatedB = b.updated || 0;
+                return updatedA - updatedB;
+            });
+    }, [predefinedMetadata, searchTerm]);
 
     const SideDialogContent = useMemo(() =>
         React.forwardRef(({ children, className, ...props }, ref) => (

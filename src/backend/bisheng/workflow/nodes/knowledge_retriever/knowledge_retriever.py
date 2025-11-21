@@ -41,7 +41,7 @@ class KnowledgeRetriever(RagUtils):
                     question_answer = str(e)
                 ret[output_key] = question_answer
         except Exception as e:
-            logger.error(f"KnowledgeRetriever node run error: {e}", exc_info=True)
+            logger.exception(f"KnowledgeRetriever node run error: {e}")
             ret = {
                 one: str(e) for one in self._output_keys
             }

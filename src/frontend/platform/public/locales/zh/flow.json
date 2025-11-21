@@ -65,7 +65,6 @@
     "basicNodes": "基础节点",
     "toolNodes": "工具节点",
     "workflowPreview": "工作流预览",
-    "runningNode": "正在运行 {{nodeName}} 节点",
     "viewLogs": "查看日志",
     "running": "运行中",
     "runSuccess": "运行成功",

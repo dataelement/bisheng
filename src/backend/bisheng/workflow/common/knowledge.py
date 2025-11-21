@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Literal
 
 from langchain_core.documents import Document
 from loguru import logger
@@ -10,6 +10,7 @@ from bisheng.core.ai.rerank.rrf_rerank import RRFRerank
 from bisheng.core.vectorstore.multi_retriever import MultiRetriever
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, MetadataFieldType
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.llm.domain import LLMService
 from bisheng.workflow.nodes.base import BaseNode
 
@@ -38,94 +39,88 @@ class ConditionOne(BaseModel):
             raise ValueError(f"Unsupported metadata field type: {field_type}")
         return right_value
 
-    def get_milvus_es_field(self, is_preset: bool) -> (str, str):
-        """ get milvus/es field name
-        """
-        if is_preset:
-            milvus_field = f"{self.metadata_field}"
-            es_field = f"metadata.{self.metadata_field}"
+    def convert_preset_filed(self) -> (str, str):
+        """ convert preset field to mysql field in knowledge file table"""
+        if self.metadata_field == "document_id":
+            return "id"
+        elif self.metadata_field == "document_name":
+            return "file_name"
+        elif self.metadata_field == "upload_time":
+            return "create_time"
+        elif self.metadata_field == "update_time":
+            return "update_time"
+        elif self.metadata_field == "uploader":
+            return "username"
+        elif self.metadata_field == "updater":
+            return "updater_name"
         else:
-            milvus_field = f"user_metadata['{self.metadata_field}']"
-            es_field = f"metadata.user_metadata.{self.metadata_field}"
-        return milvus_field, es_field
+            raise ValueError(f"Unsupported preset metadata field: {self.metadata_field}")
 
-    def get_knowledge_filter(self, field_info: Dict, parent_node: BaseNode, is_preset: bool) -> (str, List[Dict]):
-        """ get knowledge metadata filter
-            returns: milvus_filter, es_filter
-        """
+    def get_knowledge_file_filter(self, field_info: Dict, parent_node: BaseNode, is_preset: bool) -> (str, List[Dict]):
+        """ get knowledge file filter field info for mysql """
         right_value = self.right_value
         if self.right_value_type == 'ref' and self.right_value:
             right_value = parent_node.get_other_node_variable(self.right_value)
         field_type = field_info.get('field_type')
         right_value = self.convert_right_value(field_type, right_value)
+        if is_preset:
+            field_key = self.convert_preset_filed()
+        else:
+            field_key = f"JSON_UNQUOTE(JSON_EXTRACT(`user_metadata`, '$.{self.metadata_field}'))"
 
-        milvus_field, es_field = self.get_milvus_es_field(is_preset)
-        es_item = []
+        key_info = {}
         if self.comparison_operation == "equals":
-            if field_type == MetadataFieldType.STRING.value:
-                right_value = f"'{right_value}'"
-            milvus_item = f"{milvus_field} == {right_value}"
-            es_item.append({"term": {f"{es_field}": right_value}})
+            key_info['comparison'] = '='
+            key_info['value'] = right_value
         elif self.comparison_operation == "not_equals":
-            if field_type == MetadataFieldType.STRING.value:
-                right_value = f"'{right_value}'"
-            milvus_item = f"{milvus_field} != {right_value}"
-            es_item.append({"range": {f"{es_field}": {"lt": right_value}}})
-            es_item.append({"range": {f"{es_field}": {"gt": right_value}}})
+            key_info['comparison'] = '!='
+            key_info['value'] = right_value
         elif self.comparison_operation == "contains":
-            milvus_item = f"{milvus_field} like '%{right_value}%'"
-            es_item.append({"match_phrase": {f"{es_field}": f"*{right_value}*"}})
+            key_info['comparison'] = 'like'
+            key_info['value'] = f"%{right_value}%"
         elif self.comparison_operation == "not_contains":
-            milvus_item = f"{milvus_field} not like '%{right_value}%'"
-            es_item.append(
-                {"bool": {"must_not": {"match_phrase": {f"{es_field}": f"*{right_value}*"}}}})
+            key_info['comparison'] = 'not like'
+            key_info['value'] = f"%{right_value}%"
         elif self.comparison_operation == "starts_with":
-            milvus_item = f"{milvus_field} like '{right_value}%'"
-            es_item.append({"match_phrase_prefix": {f"{es_field}": right_value}})
+            key_info['comparison'] = 'like'
+            key_info['value'] = f"{right_value}%"
         elif self.comparison_operation == "ends_with":
-            milvus_item = f"{milvus_field} like '%{right_value}'"
-            es_item.append({"regexp": {f"{es_field}": f".*{right_value}"}})
+            key_info['comparison'] = 'like'
+            key_info['value'] = f"%{right_value}"
         elif self.comparison_operation == "is_empty":
-            milvus_item = f"{milvus_field} is null"
-            es_item.append({"bool": {"must_not": [{"exists": {"field": f"{es_field}"}}]}})
+            key_info['comparison'] = 'is null'
+            key_info['value'] = ''
         elif self.comparison_operation == "is_not_empty":
-            milvus_item = f"{milvus_field} is not null"
-            es_item.append({"exists": {"field": f"{es_field}"}})
+            key_info['comparison'] = 'is not null'
+            key_info['value'] = ''
         elif self.comparison_operation == "greater_than":
-            milvus_item = f"{milvus_field} > {right_value}"
-            es_item.append({"range": {f"{es_field}": {"gt": right_value}}})
+            key_info['comparison'] = '>'
+            key_info['value'] = right_value
         elif self.comparison_operation == "greater_than_or_equals":
-            milvus_item = f"{milvus_field} >= {right_value}"
-            es_item.append({"range": {f"{es_field}": {"gte": right_value}}})
+            key_info['comparison'] = '>='
+            key_info['value'] = right_value
         elif self.comparison_operation == "less_than":
-            milvus_item = f"{milvus_field} < {right_value}"
-            es_item.append({"range": {f"{es_field}": {"lt": right_value}}})
+            key_info['comparison'] = '<'
+            key_info['value'] = right_value
         elif self.comparison_operation == "less_than_or_equals":
-            milvus_item = f"{milvus_field} <= {right_value}"
-            es_item.append({"range": {f"{es_field}": {"lte": right_value}}})
+            key_info['comparison'] = '<='
+            key_info['value'] = right_value
         else:
             raise ValueError(f"Unsupported comparison operation: {self.comparison_operation}")
-        return milvus_item, es_item
+        return {field_key: key_info}
 
 
 class ConditionCases(BaseModel):
     id: str = Field(default=None, description='Unique id for condition case')
     conditions: List[ConditionOne] = Field(default_factory=list, description='List of conditions')
-    operator: str = Field(default=None, description='Operator type')
+    operator: Literal['and', 'or'] = Field(default='and', description='Logical operator to combine conditions')
     enabled: bool = Field(default=False, description='Whether the condition case is enabled')
 
     def get_knowledge_filter(self, knowledge: Knowledge, parent_node: BaseNode) -> (str, Dict):
-        """ get knowledge metadata filter
-            returns: milvus_filter, es_filter
-        """
-        if not self.enabled:
+        """ if return is None, filter file is empty, don't need to retrieve from this knowledge """
+        if not self.enabled or not self.conditions:
             return "", {}
-        milvus_filter = ""
-        es_filter = {}
-        es_conditions = []
-        milvus_conditions = []
-        if not self.conditions:
-            return milvus_filter, es_filter
+
         metadata_field_info = {}
         if knowledge.metadata_fields:
             metadata_field_info = {one["field_name"]: one for one in knowledge.metadata_fields}
@@ -135,35 +130,28 @@ class ConditionCases(BaseModel):
             one.field_name: one.model_dump() for one in KNOWLEDGE_RAG_METADATA_SCHEMA if
             one.field_name != "user_metadata"
         }
+        all_filter_field = {}
         for condition in self.conditions:
             if int(condition.knowledge_id) != knowledge.id:
                 continue
-            if condition.metadata_field in preset_field_info:
-                one_milvus_filter, one_es_filter = condition.get_knowledge_filter(
-                    preset_field_info[condition.metadata_field], parent_node, True)
-            elif condition.metadata_field in metadata_field_info:
-                one_milvus_filter, one_es_filter = condition.get_knowledge_filter(
-                    metadata_field_info[condition.metadata_field], parent_node, False)
+            if field_info := preset_field_info.get(condition.metadata_field):
+                filter_field_info = condition.get_knowledge_file_filter(field_info, parent_node, True)
+            elif field_info := metadata_field_info.get(condition.metadata_field):
+                filter_field_info = condition.get_knowledge_file_filter(field_info, parent_node, False)
             else:
                 logger.warning(f"condition field {condition.metadata_field} not in knowledge metadata fields")
-                continue
+                raise ValueError(f"field {condition.metadata_field} not in knowledge metadata fields")
+            all_filter_field.update(filter_field_info)
+        if not all_filter_field:
+            return "", {}
 
-            if one_milvus_filter:
-                milvus_conditions.append(one_milvus_filter)
-            if one_es_filter:
-                es_conditions.extend(one_es_filter)
-
-        if self.operator == "and":
-            if milvus_conditions:
-                milvus_filter = " and ".join(milvus_conditions)
-            if es_conditions:
-                es_filter['filter'] = es_conditions
-        elif self.operator == "or":
-            if milvus_conditions:
-                milvus_filter = " or ".join(milvus_conditions)
-            if es_conditions:
-                es_filter['filter'] = [{"bool": {"should": es_conditions}}]
-
+        file_ids = KnowledgeFileDao.filter_file_by_metadata_fields(knowledge.id, self.operator, all_filter_field)
+        if not file_ids:
+            # no file match the filter condition
+            logger.debug(f'knowledge {knowledge.id} no file match the filter condition')
+            return None, None
+        milvus_filter = f"document_id in {file_ids}"
+        es_filter = {"filter": [{"terms": {"metadata.document_id": file_ids}}]}
         return milvus_filter, es_filter
 
 
@@ -196,6 +184,7 @@ class RagUtils(BaseNode):
 
         self._multi_milvus_retriever = None
         self._multi_es_retriever = None
+        self._init_knowledge_retriever = False
         self._retriever_kwargs = {"k": 100, "param": {"ef": 110}}
         self._rerank_model = None
 
@@ -268,9 +257,9 @@ class RagUtils(BaseNode):
 
     def init_knowledge_retriever(self):
         """ retriever from knowledge base """
-        if self._multi_milvus_retriever or self._multi_es_retriever:
+        if self._init_knowledge_retriever:
             return
-
+        self._init_knowledge_retriever = True
         ret = KnowledgeRag.get_multi_knowledge_vectorstore(
             knowledge_ids=self._knowledge_value,
             user_name=self.user_info.user_name,
@@ -288,6 +277,8 @@ class RagUtils(BaseNode):
             es_vector = knowledge_info.get('es')
             milvus_filter, es_filter = self._metadata_filter.get_knowledge_filter(knowledge=knowledge,
                                                                                   parent_node=self)
+            if milvus_filter is None and es_filter is None:
+                continue
             if milvus_vector:
                 all_milvus.append(milvus_vector)
                 milvus_filter = {"expr": milvus_filter} if milvus_filter else {}

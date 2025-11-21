@@ -12,7 +12,6 @@ export default function MessageNodeRun({ data }) {
                         <LoadIcon className="text-primary duration-300" />
                     }
                     <span>{data.message.name}</span>
-                    {/* <span>{t('runningNode', { nodeName: data.message.name })}</span> */}
                 </div>
             </div>
         </div>

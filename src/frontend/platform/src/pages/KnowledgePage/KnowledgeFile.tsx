@@ -138,7 +138,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
         const nameUnchanged = isEditMode && name === currentLib.name;
 
         if (!nameUnchanged && datalist.find(data => data.name === name && (!currentLib || data.id !== currentLib.id))) {
-            handleError(t('lib.nameExists'));
+            handleError(t('lib.nameExists',{ns:'bs'}));
             return;
         }
 
