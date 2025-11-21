@@ -1015,6 +1015,7 @@ class KnowledgeService(KnowledgeUtils):
                     "params": {"updater": login_user.user_name, "update_time": update_time},
                 },
             },
+            conflicts="proceed",
         )
         logger.debug(f"update_es_chunk_updater_info: {res}")
 
