@@ -1,7 +1,5 @@
 import re
 
-from loguru import logger
-
 REGEX = re.compile(r'\{\{#([#a-zA-Z_][#a-zA-Z0-9_]{0,29})#\}\}')
 WITH_VARIABLE_TMPL_REGEX = re.compile(
     r'\{\{#([#a-zA-Z_][a-zA-Z0-9_]{0,29}|[#a-zA-Z0-9_]{1,50}\.[#a-zA-Z0-9_\.]{1,100})#\}\}')
