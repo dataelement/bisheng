@@ -1,18 +1,17 @@
-import { Switch } from "@/components/bs-ui/switch";
-import { Button } from "@/components/bs-ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import { Input } from "@/components/bs-ui/input";
-import { Trash2, Search, Info, RefreshCcw, ChevronDown, Clock3, Type, Hash, CircleQuestionMark } from "lucide-react";
-import { useState, useEffect, useMemo, useRef } from "react";
-import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
-import { generateUUID } from "@/components/bs-ui/utils";
 import { Badge } from "@/components/bs-ui/badge";
-import InputItem from "./InputItem";
-import { format } from "date-fns";
+import { Button } from "@/components/bs-ui/button";
+import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
+import { Input } from "@/components/bs-ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { Switch } from "@/components/bs-ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { generateUUID } from "@/components/bs-ui/utils";
 import { getKnowledgeDetailApi } from "@/controllers/API";
-import SelectVar from "./SelectVar";
-import { QuestionTooltip, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { format } from "date-fns";
+import { ChevronDown, CircleQuestionMark, Clock3, Hash, RefreshCcw, Search, Trash2, Type } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import NumberInput from "./NumberInput";
+import SelectVar from "./SelectVar";
 
 interface MetadataCondition {
   id: string;
@@ -98,80 +97,80 @@ const MetadataFilter = ({
     less_equal: "≤",
   };
 
-const fetchAndPrepareMetadata = async () => {
-  setIsLoadingMetadata(true);
-  let availableMetadata: MetadataField[] = [];
-  try {
-    const knowledgeIds = selectedKnowledgeIds();
-    console.log("MetadataFilter获取知识库ID:", knowledgeIds);
+  const fetchAndPrepareMetadata = async () => {
+    setIsLoadingMetadata(true);
+    let availableMetadata: MetadataField[] = [];
+    try {
+      const knowledgeIds = selectedKnowledgeIds();
+      console.log("MetadataFilter获取知识库ID:", knowledgeIds);
 
-    if (knowledgeIds.length > 0) {
-      const knowledgeDetails = await getKnowledgeDetailApi(knowledgeIds);
+      if (knowledgeIds.length > 0) {
+        const knowledgeDetails = await getKnowledgeDetailApi(knowledgeIds);
 
-      knowledgeDetails.forEach((detail: any) => {
-        const kbLabel = detail.name || detail.label || "未知知识库";
-        
-        const defaultFields = [
-          { name: "document_id", type: "Number", icon: <Hash size={14} /> },
-          { name: "document_name", type: "String", icon: <Type size={14} /> },
-          { name: "upload_time", type: "Time", icon: <Clock3 size={14} /> },
-          { name: "update_time", type: "Time", icon: <Clock3 size={14} /> },
-          { name: "uploader", type: "String", icon: <Type size={14} /> },
-          { name: "updater", type: "String", icon: <Type size={14} /> }
-        ];
+        knowledgeDetails.forEach((detail: any) => {
+          const kbLabel = detail.name || detail.label || "未知知识库";
 
-        const defaultMetadataFields = defaultFields.map(field => ({
-          id: `${detail.id}-${field.name}`,
-          name: field.name,
-          type: field.type as "String" | "Number" | "Time",
-          knowledgeBase: kbLabel,
-          updatedAt: Date.now(),
-          icon: field.icon,
-          isDefault: true
-        }));
+          const defaultFields = [
+            { name: "document_id", type: "Number", icon: <Hash size={14} /> },
+            { name: "document_name", type: "String", icon: <Type size={14} /> },
+            { name: "upload_time", type: "Time", icon: <Clock3 size={14} /> },
+            { name: "update_time", type: "Time", icon: <Clock3 size={14} /> },
+            { name: "uploader", type: "String", icon: <Type size={14} /> },
+            { name: "updater", type: "String", icon: <Type size={14} /> }
+          ];
 
-        availableMetadata = [...availableMetadata, ...defaultMetadataFields];
+          const defaultMetadataFields = defaultFields.map(field => ({
+            id: `${detail.id}-${field.name}`,
+            name: field.name,
+            type: field.type as "String" | "Number" | "Time",
+            knowledgeBase: kbLabel,
+            updatedAt: Date.now(),
+            icon: field.icon,
+            isDefault: true
+          }));
 
-        if (detail.metadata_fields && Array.isArray(detail.metadata_fields)) {
-          const customFields = detail.metadata_fields.map((field: any) => {
-            let icon: React.ReactNode = <Type size={14} />;
-            let type: "String" | "Number" | "Time" = "String";
-            if (field.field_type === "number") {
-              icon = <Hash size={14} />;
-              type = "Number";
-            } else if (field.field_type === "time") {
-              icon = <Clock3 size={14} />;
-              type = "Time";
-            }
-            return {
-              id: `${detail.id}-${field.field_name}`,
-              name: field.field_name,
-              type,
-              knowledgeBase: kbLabel,
-              updatedAt: field.updated_at || Date.now(),
-              icon,
-              isDefault: false
-            };
-          });
-          availableMetadata = [...availableMetadata, ...customFields];
-        }
+          availableMetadata = [...availableMetadata, ...defaultMetadataFields];
+
+          if (detail.metadata_fields && Array.isArray(detail.metadata_fields)) {
+            const customFields = detail.metadata_fields.map((field: any) => {
+              let icon: React.ReactNode = <Type size={14} />;
+              let type: "String" | "Number" | "Time" = "String";
+              if (field.field_type === "number") {
+                icon = <Hash size={14} />;
+                type = "Number";
+              } else if (field.field_type === "time") {
+                icon = <Clock3 size={14} />;
+                type = "Time";
+              }
+              return {
+                id: `${detail.id}-${field.field_name}`,
+                name: field.field_name,
+                type,
+                knowledgeBase: kbLabel,
+                updatedAt: field.updated_at || Date.now(),
+                icon,
+                isDefault: false
+              };
+            });
+            availableMetadata = [...availableMetadata, ...customFields];
+          }
+        });
+      }
+    } catch (error) {
+      console.error("Error loading metadata:", error);
+    } finally {
+      // 排序：自定义字段在前（按更新时间倒序），默认字段在底部
+      availableMetadata.sort((a, b) => {
+        if (a.isDefault && !b.isDefault) return 1;
+        if (!a.isDefault && b.isDefault) return -1;
+        if (!a.isDefault && !b.isDefault) return b.updatedAt - a.updatedAt;
+        return a.name.localeCompare(b.name);
       });
+
+      setAvailableMetadataState(availableMetadata);
+      setIsLoadingMetadata(false);
     }
-  } catch (error) {
-    console.error("Error loading metadata:", error);
-  } finally {
-    // 排序：自定义字段在前（按更新时间倒序），默认字段在底部
-    availableMetadata.sort((a, b) => {
-      if (a.isDefault && !b.isDefault) return 1;
-      if (!a.isDefault && b.isDefault) return -1;
-      if (!a.isDefault && !b.isDefault) return b.updatedAt - a.updatedAt;
-      return a.name.localeCompare(b.name);
-    });
-    
-    setAvailableMetadataState(availableMetadata);
-    setIsLoadingMetadata(false);
-  }
-};
+  };
 
   useEffect(() => {
     if (isEnabled) {
@@ -430,7 +429,7 @@ const fetchAndPrepareMetadata = async () => {
       return (
         <DatePicker
           value={condition.value ? new Date(condition.value) : undefined}
-          placeholder="选择时间" 
+          placeholder="选择时间"
           showTime
           onChange={(d) => updateCondition(condition.id, "value", d ? format(d, "yyyy-MM-dd'T'HH:mm:ss") : "")}
         />
@@ -472,7 +471,7 @@ const fetchAndPrepareMetadata = async () => {
               const isTimeType = metadataType === "Time";
 
               return (
-                <div key={condition.id} className="relative group pl-10">
+                <div key={condition.id} className="relative group pl-10 nodrag">
                   <div className="flex gap-2 items-center min-w-0">
                     <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[15%]' : 'max-w-[25%]'}`}>
                       <Select
