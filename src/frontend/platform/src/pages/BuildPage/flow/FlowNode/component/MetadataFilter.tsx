@@ -2,8 +2,8 @@ import { Switch } from "@/components/bs-ui/switch";
 import { Button } from "@/components/bs-ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Input } from "@/components/bs-ui/input";
-import { Trash2, Search, Info, RefreshCcw, ChevronDown, Clock3 } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { Trash2, Search, Info, RefreshCcw, ChevronDown, Clock3, Type, Hash, CircleQuestionMark } from "lucide-react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { Badge } from "@/components/bs-ui/badge";
@@ -11,6 +11,8 @@ import InputItem from "./InputItem";
 import { format } from "date-fns";
 import { getKnowledgeDetailApi } from "@/controllers/API";
 import SelectVar from "./SelectVar";
+import { QuestionTooltip, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import NumberInput from "./NumberInput";
 
 interface MetadataCondition {
   id: string;
@@ -26,14 +28,16 @@ interface MetadataField {
   type: "String" | "Number" | "Time";
   knowledgeBase: string;
   updatedAt: number;
-  icon: string;
+  icon: React.ReactNode;
 }
 
 interface MetadataFilterProps {
   data: any;
   onChange: (value: any) => void;
   onValidate: (validate: any) => void;
-  selectedKnowledgeIds?: () => string[]; // 改为函数类型
+  selectedKnowledgeIds?: () => string[];
+  nodeId?: string;
+  node?: any;
 }
 
 const MetadataFilter = ({
@@ -45,13 +49,18 @@ const MetadataFilter = ({
   node
 }: MetadataFilterProps) => {
 
+  const isInitialMount = useRef(true);
+  const isUpdatingFromExternal = useRef(false);
+  const validateTimer = useRef<NodeJS.Timeout | null>(null);
 
-  const [isEnabled, setIsEnabled] = useState(false);
+  const [isEnabled, setIsEnabled] = useState(data.value?.enabled ?? false);
   const [conditions, setConditions] = useState<MetadataCondition[]>(() => {
-    if (data.value?.conditions) {
+    if (data.value?.conditions && Array.isArray(data.value.conditions)) {
       return data.value.conditions.map(cond => ({
         id: cond.id || generateUUID(8),
-        metadataField: cond.metadata_field || "",
+        metadataField: cond.knowledge_id && cond.metadata_field
+          ? `${cond.knowledge_id}-${cond.metadata_field}`
+          : "",
         operator: cond.comparison_operation || "",
         valueType: cond.right_value_type === "ref" ? "reference" : "input",
         value: cond.right_value || "",
@@ -59,7 +68,9 @@ const MetadataFilter = ({
     }
     return [];
   });
-  const [relation, setRelation] = useState<"and" | "or">("and");
+  const [relation, setRelation] = useState<"and" | "or">(() => {
+    return data.value?.operator === "or" ? "or" : "and";
+  });
   const [searchTerm, setSearchTerm] = useState("");
   const [required, setRequired] = useState(false);
   const [availableMetadataState, setAvailableMetadataState] = useState<MetadataField[]>([]);
@@ -87,96 +98,165 @@ const MetadataFilter = ({
     less_equal: "≤",
   };
 
-  // 获取元数据的函数
-  const fetchAndPrepareMetadata = async () => {
-    setIsLoadingMetadata(true);
-    let availableMetadata: MetadataField[] = [];
-    try {
-      const knowledgeIds = selectedKnowledgeIds();
-      console.log("MetadataFilter获取知识库ID:", knowledgeIds);
+const fetchAndPrepareMetadata = async () => {
+  setIsLoadingMetadata(true);
+  let availableMetadata: MetadataField[] = [];
+  try {
+    const knowledgeIds = selectedKnowledgeIds();
+    console.log("MetadataFilter获取知识库ID:", knowledgeIds);
 
-      if (knowledgeIds.length > 0) {
-        const knowledgeDetails = await getKnowledgeDetailApi(knowledgeIds);
+    if (knowledgeIds.length > 0) {
+      const knowledgeDetails = await getKnowledgeDetailApi(knowledgeIds);
 
-        knowledgeDetails.forEach((detail: any) => {
-          const kbLabel = detail.name || detail.label || "未知知识库";
-          if (detail.metadata_fields && Array.isArray(detail.metadata_fields)) {
-            const fields = detail.metadata_fields.map((field: any) => {
-              let icon = "📄";
-              let type: "String" | "Number" | "Time" = "String";
-              if (field.field_type === "number") {
-                icon = "#";
-                type = "Number";
-              } else if (field.field_type === "time") {
-                icon = <Clock3 />;
-                type = "Time";
-              }
-              return {
-                id: `${detail.id}-${field.field_name}`,
-                name: field.field_name,
-                type,
-                knowledgeBase: kbLabel,
-                updatedAt: field.updated_at || Date.now(),
-                icon,
-              };
-            });
-            availableMetadata = [...availableMetadata, ...fields];
-          }
-        });
+      knowledgeDetails.forEach((detail: any) => {
+        const kbLabel = detail.name || detail.label || "未知知识库";
+        
+        const defaultFields = [
+          { name: "document_id", type: "Number", icon: <Hash size={14} /> },
+          { name: "document_name", type: "String", icon: <Type size={14} /> },
+          { name: "upload_time", type: "Time", icon: <Clock3 size={14} /> },
+          { name: "update_time", type: "Time", icon: <Clock3 size={14} /> },
+          { name: "uploader", type: "String", icon: <Type size={14} /> },
+          { name: "updater", type: "String", icon: <Type size={14} /> }
+        ];
+
+        const defaultMetadataFields = defaultFields.map(field => ({
+          id: `${detail.id}-${field.name}`,
+          name: field.name,
+          type: field.type as "String" | "Number" | "Time",
+          knowledgeBase: kbLabel,
+          updatedAt: Date.now(),
+          icon: field.icon,
+          isDefault: true
+        }));
+
+        availableMetadata = [...availableMetadata, ...defaultMetadataFields];
+
+        if (detail.metadata_fields && Array.isArray(detail.metadata_fields)) {
+          const customFields = detail.metadata_fields.map((field: any) => {
+            let icon: React.ReactNode = <Type size={14} />;
+            let type: "String" | "Number" | "Time" = "String";
+            if (field.field_type === "number") {
+              icon = <Hash size={14} />;
+              type = "Number";
+            } else if (field.field_type === "time") {
+              icon = <Clock3 size={14} />;
+              type = "Time";
+            }
+            return {
+              id: `${detail.id}-${field.field_name}`,
+              name: field.field_name,
+              type,
+              knowledgeBase: kbLabel,
+              updatedAt: field.updated_at || Date.now(),
+              icon,
+              isDefault: false
+            };
+          });
+          availableMetadata = [...availableMetadata, ...customFields];
+        }
+      });
+    }
+  } catch (error) {
+    console.error("Error loading metadata:", error);
+  } finally {
+    // 排序：自定义字段在前（按更新时间倒序），默认字段在底部
+    availableMetadata.sort((a, b) => {
+      if (a.isDefault && !b.isDefault) return 1;
+      if (!a.isDefault && b.isDefault) return -1;
+      if (!a.isDefault && !b.isDefault) return b.updatedAt - a.updatedAt;
+      return a.name.localeCompare(b.name);
+    });
+    
+    setAvailableMetadataState(availableMetadata);
+    setIsLoadingMetadata(false);
+  }
+};
+
+  useEffect(() => {
+    if (isEnabled) {
+      fetchAndPrepareMetadata();
+    }
+  }, [isEnabled]);
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    if (data.value && !isUpdatingFromExternal.current) {
+      isUpdatingFromExternal.current = true;
+
+      setIsEnabled(data.value.enabled ?? false);
+
+      if (data.value.operator === "or") {
+        setRelation("or");
+      } else {
+        setRelation("and");
       }
-    } catch (error) {
-      console.error("Error loading metadata:", error);
-    } finally {
-      availableMetadata.sort((a, b) => b.updatedAt - a.updatedAt);
-      setAvailableMetadataState(availableMetadata);
-      setIsLoadingMetadata(false);
-    }
-  };
 
-  // 当打开下拉框或启用状态变化时获取数据
-  useEffect(() => {
-    if (isEnabled && isSelectOpen) {
-      fetchAndPrepareMetadata();
-    }
-  }, [isSelectOpen, isEnabled])
-  // 当启用时获取数据
-  useEffect(() => {
-    if (isEnabled) {
-      fetchAndPrepareMetadata();
-    }
-  }, [isEnabled]);
+      if (data.value.conditions && Array.isArray(data.value.conditions)) {
+        const newConditions = data.value.conditions.map(cond => ({
+          id: cond.id || generateUUID(8),
+          metadataField: cond.knowledge_id && cond.metadata_field
+            ? `${cond.knowledge_id}-${cond.metadata_field}`
+            : "",
+          operator: cond.comparison_operation || "",
+          valueType: cond.right_value_type === "ref" ? "reference" : "input",
+          value: cond.right_value || "",
+        }));
+        setConditions(newConditions);
+      }
 
-  // 监听数据变化，强制刷新
-  useEffect(() => {
-    if (isEnabled) {
-      fetchAndPrepareMetadata();
+      // 延迟重置标志，避免循环
+      setTimeout(() => {
+        isUpdatingFromExternal.current = false;
+      }, 100);
     }
-  }, [isEnabled]);
+  }, [data.value]);
 
   useEffect(() => {
+    if (isUpdatingFromExternal.current) return;
+
     if (isEnabled) {
       validateConditions();
       const filterData = {
         enabled: true,
         operator: relation,
         conditions: conditions.map(cond => {
-          const [knowledgeId] = cond.metadataField.split("-");
-          const metaField = availableMetadataState.find(m => m.id === cond.metadataField);
+          const [knowledgeId, ...fieldParts] = cond.metadataField.split("-");
+          const metadata_field = fieldParts.join("-");
           return {
             id: cond.id,
             knowledge_id: knowledgeId ? parseInt(knowledgeId, 10) : 0,
-            metadata_field: metaField?.name || "",
+            metadata_field: metadata_field || "",
             comparison_operation: cond.operator,
             right_value_type: cond.valueType === "reference" ? "ref" : "input",
             right_value: cond.value,
           };
         }),
       };
-      onChange(filterData);
+      const currentDataStr = JSON.stringify(filterData);
+      const prevDataStr = JSON.stringify(data.value);
+
+      if (currentDataStr !== prevDataStr) {
+        onChange(filterData);
+      }
     } else {
       onChange({ enabled: false });
+      onValidate(() => false);
     }
-  }, [conditions, relation, isEnabled, availableMetadataState, onChange]);
+  }, [conditions, relation, isEnabled, onChange]);
+
+  // 只在组件卸载时清理定时器
+  useEffect(() => {
+    return () => {
+      if (validateTimer.current) {
+        clearTimeout(validateTimer.current);
+      }
+    };
+  }, []);
 
   const filteredMetadata = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
@@ -237,15 +317,32 @@ const MetadataFilter = ({
     return metadata?.type || null;
   };
 
-  // 修改验证逻辑部分
   const validateConditions = () => {
-    const isValid = conditions.every(cond => cond.metadataField && cond.operator);
+    // 检查是否所有必填字段都已填写（对 Time 类型特殊处理）
+    const isValid = conditions.every(cond => {
+      // 必须选择元数据字段和操作符
+      if (!cond.metadataField || !cond.operator) {
+        return false;
+      }
 
-    // 创建验证函数，返回错误信息或false
+      // 如果操作符是 empty 或 not_empty，不需要校验值
+      if (['empty', 'not_empty'].includes(cond.operator)) {
+        return true;
+      }
+
+      // 对于 Time 类型，允许值为空
+      const metadataType = getConditionMetadataType(cond.id);
+      if (metadataType === "Time") {
+        return true; // Time 类型即使值为空也视为有效
+      }
+
+      // 其他类型（String, Number）需要校验值
+      return !!cond.value;
+    });
+
     const validateFunc = () => {
       const errors = [];
 
-      // 检查每个条件是否完整
       conditions.forEach((cond, index) => {
         if (!cond.metadataField) {
           errors.push(`条件 ${index + 1}: 请选择元数据字段`);
@@ -253,8 +350,12 @@ const MetadataFilter = ({
         if (!cond.operator) {
           errors.push(`条件 ${index + 1}: 请选择操作符`);
         }
+        // 只有当操作符不是 empty/not_empty，且不是 Time 类型，且值为空时才报错
         if (!['empty', 'not_empty'].includes(cond.operator) && !cond.value) {
-          errors.push(`条件 ${index + 1}: 请输入值`);
+          const metadataType = getConditionMetadataType(cond.id);
+          if (metadataType !== "Time") { // 排除 Time 类型
+            errors.push(`条件 ${index + 1}: 请输入值`);
+          }
         }
       });
 
@@ -274,7 +375,6 @@ const MetadataFilter = ({
       return <Input placeholder="无需输入" value="" disabled className="bg-gray-100 h-8" />;
     }
     if (condition.valueType === "reference") {
-      // 查找当前选中值对应的标签
       const selectedLabel = condition.value
         ? condition.value.split('.').reduce((acc, part, index, array) => {
           return index === array.length - 1 ? `${acc}/${part}` : `${acc}.${part}`;
@@ -284,50 +384,66 @@ const MetadataFilter = ({
       return (
         <div className="flex items-center gap-1 min-w-0">
           <SelectVar
-              className="max-w-40 flex-1" // 使用 flex-1 让其占据可用空间
-              nodeId={nodeId} // 假设 nodeId 在当前组件作用域内可用
-              itemKey={condition.id}
-              onSelect={(E, v) => {
-                  const selectedValue = `${E.name}.${v.value}`;
-                  updateCondition(condition.id, "value", selectedValue);
-              }}
+            className="max-w-40 flex-1"
+            nodeId={nodeId}
+            itemKey={condition.id}
+            onSelect={(E: any, v: any) => {
+              const selectedValue = `${E.name}.${v.value}`;
+              updateCondition(condition.id, "value", selectedValue);
+            }}
           >
             <div
               className={`no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}
             >
-              <span className="flex items-center flex-1 truncate">{selectedLabel || "选择变量"}</span>
+              <span className="flex items-center flex-1 truncate">{selectedLabel || "选择引用"}</span>
               <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
             </div>
           </SelectVar>
-          {metadataType === "Time" && (
-            <div className="relative group/info flex-shrink-0 ml-1 ">
-              <Info size={16} className="text-gray-400 cursor-help" />
-              <div className="absolute bottom-full left-0 mb-2 hidden group-hover/info:block w-64 p-2 bg-black text-white text-xs rounded z-10">
-                引用变量格式为 "YYYY-MM-DDTHH:mm:ss"
-              </div>
-            </div>
-          )}
+
         </div>
       );
     }
     if (metadataType === "String") {
-      return <Input placeholder={condition.operator === "regex" ? "输入正则表达式" : "请输入文本"} value={condition.value} onChange={(e) => updateCondition(condition.id, "value", e.target.value)} maxLength={255} className="h-8" />;
+      return (
+        <Input
+          placeholder={condition.operator === "regex" ? "输入正则表达式" : "输入值"}
+          value={condition.value}
+          onChange={(e) => updateCondition(condition.id, "value", e.target.value)}
+          maxLength={255}
+          className="h-8"
+        />
+      );
     }
     if (metadataType === "Number") {
       return (
-        <div className="mt-2">
-          <InputItem
-            type="number"
-            data={{ value: condition.value, label: "" }}
-            onChange={(e) => updateCondition(condition.id, "value", e.target.value)}
+        <div className="w-full mt-2">
+          <NumberInput
+            value={condition.value || ''}
+            onChange={(value) => {
+              updateCondition(condition.id, "value", value);
+            }}
           />
         </div>
       );
     }
     if (metadataType === "Time") {
-      return <DatePicker value={condition.value ? new Date(condition.value) : undefined} showTime onChange={(d) => updateCondition(condition.id, "value", d ? format(d, "yyyy-MM-dd'T'HH:mm:ss") : "")} />;
+      return (
+        <DatePicker
+          value={condition.value ? new Date(condition.value) : undefined}
+          placeholder="选择时间" 
+          showTime
+          onChange={(d) => updateCondition(condition.id, "value", d ? format(d, "yyyy-MM-dd'T'HH:mm:ss") : "")}
+        />
+      );
     }
-    return <Input placeholder="输入值" value={condition.value} onChange={(e) => updateCondition(condition.id, "value", e.target.value)} className="h-8" />;
+    return (
+      <Input
+        placeholder="输入值"
+        value={condition.value}
+        onChange={(e) => updateCondition(condition.id, "value", e.target.value)}
+        className="h-8"
+      />
+    );
   };
 
   return (
@@ -345,7 +461,7 @@ const MetadataFilter = ({
             {conditions.length > 1 && (
               <div className="absolute left-1 top-0 w-4 h-full py-4">
                 <div className="h-full border border-foreground border-dashed border-r-0 rounded-l-sm">
-                  <Badge variant="outline" className="absolute top-1/2 left-0.5 -translate-x-1/2 -translate-y-1/2 px-1 py-0 text-primary bg-[#E6ECF6] cursor-pointer" onClick={handleRelationChange}>
+                  <Badge variant="outline" className="absolute top-1/2 left-0.5 -translate-x-1/2 -translate-y-1/2 px-1 py-0 text-primary bg-[#E6ECF6] cursor-pointer z-10" onClick={handleRelationChange}>
                     {relation} <RefreshCcw size={12} />
                   </Badge>
                 </div>
@@ -365,18 +481,46 @@ const MetadataFilter = ({
                         onOpenChange={setIsSelectOpen}
                       >
                         <SelectTrigger
-                          className={`h-8 min-w-0 ${required && !condition.metadataField && 'border-red-500'}`}
+                          className={`h-8 min-w-0 `}
                         >
                           <SelectValue placeholder="选择变量">
                             {condition.metadataField && (
-                              <>
-                                {
-                                  (() => {
-                                    const meta = availableMetadataState.find(m => m.id === condition.metadataField);
-                                    return meta ? `${meta.icon} ${meta.name}` : '选择变量';
-                                  })()
-                                }
-                              </>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex items-center gap-1" style={{ pointerEvents: 'auto' }}>
+                                      {(() => {
+                                        const meta = availableMetadataState.find(m => m.id === condition.metadataField);
+                                        return meta?.icon || null;
+                                      })()}
+                                      <span style={{
+                                        flex: 1,
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap'
+                                      }}>
+                                        {(() => {
+                                          const meta = availableMetadataState.find(m => m.id === condition.metadataField);
+                                          return meta?.name || '选择变量';
+                                        })()}
+                                      </span>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent
+                                    className="max-w-[200px] whitespace-normal z-50"
+                                    style={{
+                                      whiteSpace: 'normal',
+                                      wordBreak: 'break-word',
+                                      pointerEvents: 'none'
+                                    }}
+                                  >
+                                    {(() => {
+                                      const meta = availableMetadataState.find(m => m.id === condition.metadataField);
+                                      return meta?.name || '';
+                                    })()}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             )}
                           </SelectValue>
                         </SelectTrigger>
@@ -392,11 +536,11 @@ const MetadataFilter = ({
                               <>
                                 <div className="p-2 border-b">
                                   <div className="relative">
-                                    <Search className="absolute left-3 top-2.5 h-3 w-3 text-muted-foreground" />
+                                    <Search className="absolute left-3 top-2 h-3 w-3 text-muted-foreground" />
                                     <input
                                       type="text"
                                       placeholder="搜索元数据"
-                                      className="w-full pl-8 pr-2 py-1 text-[8px] border rounded"
+                                      className="w-full pl-8 pr-2 py-1 text-[12px] border rounded"
                                       value={searchTerm}
                                       onChange={(e) => setSearchTerm(e.target.value)}
                                       onClick={(e) => e.stopPropagation()}
@@ -412,15 +556,50 @@ const MetadataFilter = ({
                                       showIcon={false}
                                       className="pr-4"
                                     >
-                                      <div className="flex justify-between items-center w-full">
+                                      <div className="flex items-center w-full">
                                         <div className="flex items-center gap-1 flex-1 min-w-0">
                                           <span className="flex-shrink-0">{meta.icon}</span>
                                           <span className="text-xs text-muted-foreground flex-shrink-0">{meta.type}</span>
-                                          <span className="truncate flex-1">{meta.name}</span>
+                                          <TooltipProvider>
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <span className="truncate flex-1 max-w-16">
+                                                  {meta.name}
+                                                </span>
+                                              </TooltipTrigger>
+                                              <TooltipContent
+                                                className="max-w-[200px] whitespace-normal"
+                                                style={{
+                                                  whiteSpace: 'normal',
+                                                  wordBreak: 'break-word',
+                                                }}
+                                              >
+                                                <p className="text-sm">{meta.name}</p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          </TooltipProvider>
                                         </div>
-                                        <span className="text-xs text-gray-500 ml-2 flex-shrink-0 truncate max-w-[80px]">
-                                          {meta.knowledgeBase}
-                                        </span>
+                                        <TooltipProvider>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <span
+                                                className="text-xs text-gray-500 ml-2 flex-shrink-0 truncate max-w-[80px]"
+                                                style={{ marginLeft: 'auto' }}
+                                              >
+                                                {meta.knowledgeBase}
+                                              </span>
+                                            </TooltipTrigger>
+                                            <TooltipContent
+                                              className="max-w-[200px] whitespace-normal"
+                                              style={{
+                                                whiteSpace: 'normal',
+                                                wordBreak: 'break-word',
+                                              }}
+                                            >
+                                              <p className="text-sm">{meta.knowledgeBase}</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </TooltipProvider>
                                       </div>
                                     </SelectItem>
                                   ))
@@ -441,7 +620,7 @@ const MetadataFilter = ({
                         onValueChange={(value) => updateCondition(condition.id, "operator", value)}
                         disabled={!condition.metadataField}
                       >
-                        <SelectTrigger className={`h-8 min-w-0 ${required && !condition.operator && 'border-red-500'}`}>
+                        <SelectTrigger className={`h-8 min-w-0 `}>
                           <SelectValue placeholder="选择条件" />
                         </SelectTrigger>
                         <SelectContent>
@@ -451,25 +630,43 @@ const MetadataFilter = ({
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[15%]' : 'max-w-[20%]'}`}>
-                      <Select
-                        value={condition.valueType}
-                        onValueChange={(value: "reference" | "input") => updateCondition(condition.id, "valueType", value)}
-                        disabled={!condition.metadataField || ["empty", "not_empty"].includes(condition.operator)}
-                      >
-                        <SelectTrigger className="h-8 min-w-0"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="reference">引用</SelectItem>
-                          <SelectItem value="input">输入</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[45%]' : 'max-w-[25%]'}`}>
-                      {renderValueInput(condition)}
-                    </div>
+                    {!["empty", "not_empty"].includes(condition.operator) &&
+                      <>
+                        <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[16%]' : 'max-w-[20%]'}`}>
+                          <Select
+                            value={condition.valueType}
+                            onValueChange={(value: "reference" | "input") => updateCondition(condition.id, "valueType", value)}
+                          >
+                            <SelectTrigger className="h-8 min-w-0">
+                              <div className="flex items-center justify-between w-full">
+                                <span>
+                                  {condition.valueType === "reference" ? "引用" : "输入"}
+                                </span>
+                                {condition.valueType === "reference" && metadataType === "Time" && (
+                                  <div className="relative group/info flex-shrink-0">
+                                    <CircleQuestionMark size={16} className="text-gray-400" />
+                                    <div className="absolute bottom-full right-0 mb-2 hidden group-hover/info:block p-2 bg-black text-white text-xs rounded z-10">
+                                      引用变量请调整格式为"YYYY-MM-DD HH:mm:ss"，如"2025-01-10T21:08:20"表示2025年1月10日21时08分20秒
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="reference">引用</SelectItem>
+                              <SelectItem value="input">输入</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[45%]' : 'max-w-[25%]'}`}>
+                          {renderValueInput(condition)}
+                        </div>
+                      </>
+                    }
+
                     <div className={`flex-shrink-0 ${isTimeType ? 'max-w-[10%]' : 'max-w-[10%]'} flex justify-center`}>
                       <Trash2
-                        size={14}
+                        size={18}
                         onClick={() => deleteCondition(condition.id)}
                         className="hover:text-red-600 cursor-pointer group-hover:opacity-100 opacity-0"
                       />
@@ -491,5 +688,6 @@ const MetadataFilter = ({
     </div>
   );
 };
+
 
 export default MetadataFilter;

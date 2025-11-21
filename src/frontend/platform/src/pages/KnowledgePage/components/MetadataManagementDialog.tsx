@@ -342,7 +342,7 @@ export function MetadataManagementDialog({
                                 }}
                                 className="px-2 py-1 h-7 min-h-7 text-xs"
                             >
-                                确认
+                                确定
                             </Button>
                         </div>
                         {/* 气泡尖角 - 指向下方的删除图标 */}

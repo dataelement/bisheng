@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
@@ -38,6 +38,7 @@ class ParseType(Enum):
 
 class KnowledgeFileBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
+    user_name: Optional[str] = Field(default=None, index=True)
     knowledge_id: int = Field(index=True)
     file_name: str = Field(max_length=200, index=True)
     file_size: Optional[int] = Field(default=None, index=False, description='文件大小，单位为bytes')
@@ -52,14 +53,15 @@ class KnowledgeFileBase(SQLModelSerializable):
                                   description='1: 解析中；2: 解析成功；3: 解析失败')
     object_name: Optional[str] = Field(default=None, index=False, description='文件在minio存储的对象名称')
     # extra_meta: Optional[str] = Field(default=None, index=False)
-    user_metadata: Optional[List[Dict[str, Any]]] = Field(default=None, sa_column=Column(JSON, nullable=True),
+    user_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, sa_column=Column(JSON, nullable=True),
                                                           description='用户自定义的元数据')
     remark: Optional[str] = Field(default='', sa_column=Column(String(length=512)))
     updater_id: Optional[int] = Field(default=None, index=True, description='最后更新用户ID')
+    updater_name: Optional[str] = Field(default=None, index=True)
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class QAKnowledgeBase(SQLModelSerializable):
@@ -75,7 +77,7 @@ class QAKnowledgeBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
     @field_validator('questions')
     @classmethod
@@ -345,6 +347,52 @@ class KnowledgeFileDao(KnowledgeFileBase):
         if remark:
             statement = statement.values(remark=remark)
 
+        with get_sync_db_session() as session:
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def filter_file_by_metadata_fields(cls, knowledge_id: int, logical: Literal["and", "or"],
+                                       metadata_filters: Dict[str, Any]) -> List[int]:
+        """
+        根据用户自定义元数据字段过滤知识文件
+        :param knowledge_id: 知识库ID
+        :param logical: 逻辑操作符，支持 "AND" 或 "OR"
+        :param metadata_filters: 用户自定义元数据字段及其对应的值
+        :return: 符合条件的知识文件ID列表
+        """
+
+        statement = "select id from knowledgefile where knowledge_id = :knowledge_id"
+        params = {"knowledge_id": knowledge_id}
+
+        params_index = 1
+        for key, key_info in metadata_filters.items():
+            key_comparison = key_info['comparison']
+            key_value = key_info['value']
+            params_key = f"tmp_params_{params_index}"
+            params[params_key] = key_value
+            statement += f" {logical} {key} {key_comparison} :{params_key}"
+
+        with get_sync_db_session() as session:
+            file_ids = []
+            result = session.execute(text(statement), params)
+            for one in result:
+                file_ids.append(one[0])
+            return file_ids
+
+    @classmethod
+    def update_file_updater(cls, file_id: int, updater_id: int, updater_name: str) -> None:
+        """
+        更新知识文件的更新者信息
+        :param file_id: 知识文件ID
+        :param updater_id: 更新者用户ID
+        :param updater_name: 更新者用户名
+        :return: None
+        """
+
+        statement = update(KnowledgeFile).where(col(KnowledgeFile.id) == file_id)
+
+        statement = statement.values(updater_id=updater_id, updater_name=updater_name)
         with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()

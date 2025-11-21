@@ -9,10 +9,10 @@ from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 
 
 class KnowledgeTypeEnum(Enum):
@@ -57,11 +57,11 @@ class KnowledgeBase(SQLModelSerializable):
                                  description='0 为未发布，1 为已发布, 2 为复制中')
 
     metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON, nullable=True),
-                                                           description="知识库的元数据字段配置")
+                                                  description="知识库的元数据字段配置")
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
     @field_validator('model', mode='before')
     @classmethod

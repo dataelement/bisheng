@@ -52,13 +52,13 @@ class KnowledgeFileService:
                                                                           'update_user': update_user.user_name if update_user else create_user.user_name
                                                                       })
 
-        metadata_field_dict = {item['field_name']: MetadataField(**item) for item in
-                               knowledge_model.metadata_fields or []}
+        if not knowledge_file_info_res.user_metadata:
+            metadata_field_dict = {item['field_name']: MetadataField(**item) for item in
+                                   knowledge_model.metadata_fields or []}
 
-        for item in knowledge_file_info_res.user_metadata or []:
-            field_name = item['field_name']
-            if field_name in metadata_field_dict:
-                item['field_type'] = metadata_field_dict[field_name].field_type
+            for key, item in knowledge_file_info_res.user_metadata.items():
+                if key in metadata_field_dict:
+                    item['field_type'] = metadata_field_dict[key].field_type
         return knowledge_file_info_res
 
     @staticmethod
@@ -125,16 +125,13 @@ class KnowledgeFileService:
 
         # Initialize metadata if it's None
         if knowledge_file_model.user_metadata is None:
-            knowledge_file_model.user_metadata = []
+            knowledge_file_model.user_metadata = {}
 
-        # 判断新增的元数据字段是否在知识库的元数据字段列表中
-        existing_field_names = {field['field_name'] for field in knowledge_model.metadata_fields or []}
-
-        # 过滤掉不在知识库元数据字段列表中的字段
-        valid_user_metadata = []
+        # 复制当前的用户元数据
+        current_user_metadata = copy.deepcopy(knowledge_file_model.user_metadata)
 
         for item in modify_file_metadata_req.user_metadata_list:
-            if item.field_name in existing_field_names:
+            if item.field_name in metadata_field_dict.keys():
                 item_dict = item.model_dump()
                 # 数据类型转换
                 try:
@@ -145,15 +142,17 @@ class KnowledgeFileService:
                 except Exception as e:
                     logger.error(f"Metadata value type conversion error: {e}")
                     continue
-                valid_user_metadata.append(item_dict)
+                item_dict['field_type'] = metadata_field_dict[item.field_name].field_type
+                item_dict.pop('field_name')
+                current_user_metadata[item.field_name] = item_dict
 
         # 更新知识文件的用户元数据
-        knowledge_file_model.user_metadata = valid_user_metadata
+        knowledge_file_model.user_metadata = current_user_metadata
         knowledge_file_model.updater_id = login_user.user_id
 
         knowledge_file_model = await self.knowledge_file_repository.update(knowledge_file_model)
 
-        user_metadata = {item['field_name']: item.get('field_value') for item in knowledge_file_model.user_metadata}
+        user_metadata = {key: value.get('field_value') for key, value in knowledge_file_model.user_metadata.items()}
 
         # 修改 Milvus, Elasticsearch 中的对应元数据
         await self.modify_milvus_file_user_metadata(
@@ -201,37 +200,27 @@ class KnowledgeFileService:
 
             # Initialize metadata if it's None
             if knowledge_file_model.user_metadata is None:
-                knowledge_file_model.user_metadata = []
-
-            # 判断新增的元数据字段是否在知识库的元数据字段列表中
-            existing_field_names = {field['field_name'] for field in knowledge_model.metadata_fields or []}
+                knowledge_file_model.user_metadata = {}
 
             current_user_metadata = copy.deepcopy(knowledge_file_model.user_metadata)
 
-            # 过滤掉不在知识库元数据字段列表中的字段
-            valid_user_metadata = [
-                item.model_dump()
-                for item in modify_file_metadata_req.user_metadata_list
-                if item.field_name in existing_field_names
-            ]
-
-            # 已有的元数据字段名集合
-            existing_metadata_field_names = {item['field_name'] for item in current_user_metadata}
 
             # 添加新的元数据字段，避免重复添加相同字段
-            for item in valid_user_metadata:
-                if item['field_name'] not in existing_metadata_field_names:
+            for item in modify_file_metadata_req.user_metadata_list:
+                if item.field_name in metadata_field_dict.keys() and item.field_name not in current_user_metadata.keys():
+                    item_dict = item.model_dump()
                     # 数据类型转换
                     try:
-                        field_type = metadata_field_dict[item['field_name']].field_type
+                        field_type = metadata_field_dict[item.field_name].field_type
                         field_value = utils.metadata_value_type_convert(
-                            value=item['field_value'], target_type=field_type)
-                        item['field_value'] = field_value
-
+                            value=item_dict['field_value'], target_type=field_type)
+                        item_dict['field_value'] = field_value
                     except Exception as e:
                         logger.error(f"Metadata value type conversion error: {e}")
                         continue
-                    current_user_metadata.append(item)
+                    item_dict['field_type'] = metadata_field_dict[item.field_name].field_type
+                    item_dict.pop('field_name')
+                    current_user_metadata[item.field_name] = item_dict
 
             # 更新知识文件的用户元数据
             knowledge_file_model.user_metadata = current_user_metadata
@@ -239,7 +228,7 @@ class KnowledgeFileService:
 
             knowledge_file_model = await self.knowledge_file_repository.update(knowledge_file_model)
 
-            user_metadata = {item['field_name']: item.get('field_value') for item in knowledge_file_model.user_metadata}
+            user_metadata = {key: value.get('field_value') for key, value in knowledge_file_model.user_metadata.items()}
 
             # 修改 Milvus, Elasticsearch 中的对应元数据
             await self.modify_milvus_file_user_metadata(
@@ -290,7 +279,7 @@ class KnowledgeFileService:
 
             # Initialize metadata if it's None
             if knowledge_file_model.user_metadata is None:
-                knowledge_file_model.user_metadata = []
+                knowledge_file_model.user_metadata = {}
 
             current_user_metadata = copy.deepcopy(knowledge_file_model.user_metadata)
 
@@ -299,7 +288,7 @@ class KnowledgeFileService:
                 if item.field_name in metadata_field_dict.keys():
                     # 查找是否已存在该字段
                     existing_item = next(
-                        (meta for meta in current_user_metadata if meta['field_name'] == item.field_name), None)
+                        (v for k, v in current_user_metadata.items() if k == item.field_name), None)
                     if existing_item:
                         try:
                             # 数据类型
@@ -317,7 +306,7 @@ class KnowledgeFileService:
 
             knowledge_file_model = await self.knowledge_file_repository.update(knowledge_file_model)
 
-            user_metadata = {item['field_name']: item.get('field_value') for item in knowledge_file_model.user_metadata}
+            user_metadata = {key: value.get('field_value') for key, value in knowledge_file_model.user_metadata.items()}
             # 修改 Milvus, Elasticsearch 中的对应元数据
             await self.modify_milvus_file_user_metadata(
                 knowledge_model=knowledge_model,
@@ -371,22 +360,21 @@ class KnowledgeFileService:
                 continue
 
             if knowledge_file_model.user_metadata is None:
-                knowledge_file_model.user_metadata = []
+                knowledge_file_model.user_metadata = {}
 
             current_user_metadata = copy.deepcopy(knowledge_file_model.user_metadata)
 
             # 删除指定的元数据字段
-            current_user_metadata = [
-                item for item in current_user_metadata
-                if item['field_name'] not in delete_metadata_req.field_names
-            ]
+            for field_name in delete_metadata_req.field_names:
+                if field_name in current_user_metadata.keys():
+                    current_user_metadata.pop(field_name)
 
             knowledge_file_model.user_metadata = current_user_metadata
             knowledge_file_model.updater_id = login_user.user_id
 
             knowledge_file_model = await self.knowledge_file_repository.update(knowledge_file_model)
 
-            user_metadata = {item['field_name']: item.get('field_value') for item in knowledge_file_model.user_metadata}
+            user_metadata = {key: value.get('field_value') for key, value in knowledge_file_model.user_metadata.items()}
 
             # 修改 Milvus, Elasticsearch 中的对应元数据
             await self.modify_milvus_file_user_metadata(

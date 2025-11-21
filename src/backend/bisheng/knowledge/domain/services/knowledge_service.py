@@ -138,13 +138,14 @@ class KnowledgeService:
             await request_es(body)
 
             # Update knowledge file's user_metadata field
-            user_metadata = copy.deepcopy(knowledge_file.user_metadata)
-            for item in user_metadata:
-                if item['field_name'] in field_name_map:
-                    item['field_name'] = field_name_map[item['field_name']]
-                    item['updated_at'] = int(datetime.now().timestamp())
+            user_metadata_dict = copy.deepcopy(knowledge_file.user_metadata)
+            for old_field_name, new_field_name in field_name_map.items():
+                user_metadata = user_metadata_dict.pop(old_field_name, None)
+                if user_metadata is not None:
+                    user_metadata["updated_at"] = int(datetime.now().timestamp())
+                    user_metadata[new_field_name] = user_metadata
 
-            knowledge_file.user_metadata = user_metadata
+            knowledge_file.user_metadata = user_metadata_dict
 
             await self.knowledge_file_repository.update(knowledge_file)
 
@@ -280,10 +281,11 @@ class KnowledgeService:
             # 更新es
             await request_es(body)
 
-            knowledge_file.user_metadata = [
-                item for item in knowledge_file.user_metadata
-                if item['field_name'] not in field_names
-            ]
+            # Update knowledge file's user_metadata field
+            knowledge_file.user_metadata = {
+                key: value for key, value in knowledge_file.user_metadata.items()
+                if key not in field_names
+            }
 
             await self.knowledge_file_repository.update(knowledge_file)
 

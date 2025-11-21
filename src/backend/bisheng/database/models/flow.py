@@ -8,9 +8,9 @@ from pydantic import field_validator
 from sqlalchemy import Column, DateTime, String, and_, func, or_, text
 from sqlmodel import JSON, Field, select, update
 
+from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.assistant import Assistant
-from bisheng.common.models.base import SQLModelSerializable
 from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAccessDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid
@@ -51,10 +51,10 @@ class FlowBase(SQLModelSerializable):
     status: Optional[int] = Field(index=False, default=1)
     flow_type: Optional[int] = Field(index=False, default=1)
     guide_word: Optional[str] = Field(default=None, sa_column=Column(String(length=1000)))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
     @field_validator('data', mode='before')
     @classmethod

@@ -140,6 +140,7 @@
         "save": "Save",
         "pleaseEnter": "Please enter"
     },
+    "universalRules":"Universal Segmentation Rules",
     "splitRules": {
         "singleNewline": "Split after single newline, for separating normal line breaks",
         "doubleNewline": "Split after double newline, for separating paragraphs",

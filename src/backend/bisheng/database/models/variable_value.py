@@ -6,8 +6,8 @@ from pydantic import field_validator
 from sqlalchemy import Column, DateTime, text
 from sqlmodel import Field, select
 
-from bisheng.core.database import get_sync_db_session
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database import get_sync_db_session
 
 
 class VariableBase(SQLModelSerializable):
@@ -21,7 +21,7 @@ class VariableBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
     @field_validator('variable_name')
     @classmethod

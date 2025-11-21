@@ -36,7 +36,7 @@ def generate_metadata_mappings(metadata_schemas: Optional[List[RagMetadataFieldS
         elif schema.field_type == 'double':
             metadata_mappings[schema.field_name] = {'type': 'double'}
         elif schema.field_type == 'json':
-            metadata_mappings[schema.field_name] = {'type': 'object'}
+            metadata_mappings[schema.field_name] = {'type': 'flattened'}
 
     return metadata_mappings
 
