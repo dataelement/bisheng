@@ -2,7 +2,7 @@ import { Switch } from "@/components/bs-ui/switch";
 import { Button } from "@/components/bs-ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Input } from "@/components/bs-ui/input";
-import { Trash2, Search, Info, RefreshCcw, ChevronDown, Clock3, Type, Hash } from "lucide-react";
+import { Trash2, Search, Info, RefreshCcw, ChevronDown, Clock3, Type, Hash, CircleQuestionMark } from "lucide-react";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import { generateUUID } from "@/components/bs-ui/utils";
@@ -11,7 +11,8 @@ import InputItem from "./InputItem";
 import { format } from "date-fns";
 import { getKnowledgeDetailApi } from "@/controllers/API";
 import SelectVar from "./SelectVar";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { QuestionTooltip, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import NumberInput from "./NumberInput";
 
 interface MetadataCondition {
   id: string;
@@ -47,17 +48,18 @@ const MetadataFilter = ({
   nodeId,
   node
 }: MetadataFilterProps) => {
-  // 使用 ref 来跟踪是否是初始渲染和防止循环
+
   const isInitialMount = useRef(true);
   const isUpdatingFromExternal = useRef(false);
-  
+  const validateTimer = useRef<NodeJS.Timeout | null>(null);
+
   const [isEnabled, setIsEnabled] = useState(data.value?.enabled ?? false);
   const [conditions, setConditions] = useState<MetadataCondition[]>(() => {
     if (data.value?.conditions && Array.isArray(data.value.conditions)) {
       return data.value.conditions.map(cond => ({
         id: cond.id || generateUUID(8),
-        metadataField: cond.knowledge_id && cond.metadata_field 
-          ? `${cond.knowledge_id}-${cond.metadata_field}` 
+        metadataField: cond.knowledge_id && cond.metadata_field
+          ? `${cond.knowledge_id}-${cond.metadata_field}`
           : "",
         operator: cond.comparison_operation || "",
         valueType: cond.right_value_type === "ref" ? "reference" : "input",
@@ -96,53 +98,81 @@ const MetadataFilter = ({
     less_equal: "≤",
   };
 
-  // 获取元数据的函数
-  const fetchAndPrepareMetadata = async () => {
-    setIsLoadingMetadata(true);
-    let availableMetadata: MetadataField[] = [];
-    try {
-      const knowledgeIds = selectedKnowledgeIds();
-      console.log("MetadataFilter获取知识库ID:", knowledgeIds);
+const fetchAndPrepareMetadata = async () => {
+  setIsLoadingMetadata(true);
+  let availableMetadata: MetadataField[] = [];
+  try {
+    const knowledgeIds = selectedKnowledgeIds();
+    console.log("MetadataFilter获取知识库ID:", knowledgeIds);
 
-      if (knowledgeIds.length > 0) {
-        const knowledgeDetails = await getKnowledgeDetailApi(knowledgeIds);
+    if (knowledgeIds.length > 0) {
+      const knowledgeDetails = await getKnowledgeDetailApi(knowledgeIds);
 
-        knowledgeDetails.forEach((detail: any) => {
-          const kbLabel = detail.name || detail.label || "未知知识库";
-          if (detail.metadata_fields && Array.isArray(detail.metadata_fields)) {
-            const fields = detail.metadata_fields.map((field: any) => {
-              let icon: React.ReactNode = <Type size={14} />;
-              let type: "String" | "Number" | "Time" = "String";
-              if (field.field_type === "number") {
-                icon = <Hash size={14} />;
-                type = "Number";
-              } else if (field.field_type === "time") {
-                icon = <Clock3 size={14} />;
-                type = "Time";
-              }
-              return {
-                id: `${detail.id}-${field.field_name}`,
-                name: field.field_name,
-                type,
-                knowledgeBase: kbLabel,
-                updatedAt: field.updated_at || Date.now(),
-                icon,
-              };
-            });
-            availableMetadata = [...availableMetadata, ...fields];
-          }
-        });
-      }
-    } catch (error) {
-      console.error("Error loading metadata:", error);
-    } finally {
-      availableMetadata.sort((a, b) => b.updatedAt - a.updatedAt);
-      setAvailableMetadataState(availableMetadata);
-      setIsLoadingMetadata(false);
+      knowledgeDetails.forEach((detail: any) => {
+        const kbLabel = detail.name || detail.label || "未知知识库";
+        
+        const defaultFields = [
+          { name: "document_id", type: "Number", icon: <Hash size={14} /> },
+          { name: "document_name", type: "String", icon: <Type size={14} /> },
+          { name: "upload_time", type: "Time", icon: <Clock3 size={14} /> },
+          { name: "update_time", type: "Time", icon: <Clock3 size={14} /> },
+          { name: "uploader", type: "String", icon: <Type size={14} /> },
+          { name: "updater", type: "String", icon: <Type size={14} /> }
+        ];
+
+        const defaultMetadataFields = defaultFields.map(field => ({
+          id: `${detail.id}-${field.name}`,
+          name: field.name,
+          type: field.type as "String" | "Number" | "Time",
+          knowledgeBase: kbLabel,
+          updatedAt: Date.now(),
+          icon: field.icon,
+          isDefault: true
+        }));
+
+        availableMetadata = [...availableMetadata, ...defaultMetadataFields];
+
+        if (detail.metadata_fields && Array.isArray(detail.metadata_fields)) {
+          const customFields = detail.metadata_fields.map((field: any) => {
+            let icon: React.ReactNode = <Type size={14} />;
+            let type: "String" | "Number" | "Time" = "String";
+            if (field.field_type === "number") {
+              icon = <Hash size={14} />;
+              type = "Number";
+            } else if (field.field_type === "time") {
+              icon = <Clock3 size={14} />;
+              type = "Time";
+            }
+            return {
+              id: `${detail.id}-${field.field_name}`,
+              name: field.field_name,
+              type,
+              knowledgeBase: kbLabel,
+              updatedAt: field.updated_at || Date.now(),
+              icon,
+              isDefault: false
+            };
+          });
+          availableMetadata = [...availableMetadata, ...customFields];
+        }
+      });
     }
-  };
+  } catch (error) {
+    console.error("Error loading metadata:", error);
+  } finally {
+    // 排序：自定义字段在前（按更新时间倒序），默认字段在底部
+    availableMetadata.sort((a, b) => {
+      if (a.isDefault && !b.isDefault) return 1;
+      if (!a.isDefault && b.isDefault) return -1;
+      if (!a.isDefault && !b.isDefault) return b.updatedAt - a.updatedAt;
+      return a.name.localeCompare(b.name);
+    });
+    
+    setAvailableMetadataState(availableMetadata);
+    setIsLoadingMetadata(false);
+  }
+};
 
-  // 修复1: 只在启用状态变化时获取元数据
   useEffect(() => {
     if (isEnabled) {
       fetchAndPrepareMetadata();
@@ -157,20 +187,20 @@ const MetadataFilter = ({
 
     if (data.value && !isUpdatingFromExternal.current) {
       isUpdatingFromExternal.current = true;
-      
+
       setIsEnabled(data.value.enabled ?? false);
-      
+
       if (data.value.operator === "or") {
         setRelation("or");
       } else {
         setRelation("and");
       }
-      
+
       if (data.value.conditions && Array.isArray(data.value.conditions)) {
         const newConditions = data.value.conditions.map(cond => ({
           id: cond.id || generateUUID(8),
-          metadataField: cond.knowledge_id && cond.metadata_field 
-            ? `${cond.knowledge_id}-${cond.metadata_field}` 
+          metadataField: cond.knowledge_id && cond.metadata_field
+            ? `${cond.knowledge_id}-${cond.metadata_field}`
             : "",
           operator: cond.comparison_operation || "",
           valueType: cond.right_value_type === "ref" ? "reference" : "input",
@@ -178,7 +208,7 @@ const MetadataFilter = ({
         }));
         setConditions(newConditions);
       }
-      
+
       // 延迟重置标志，避免循环
       setTimeout(() => {
         isUpdatingFromExternal.current = false;
@@ -186,10 +216,9 @@ const MetadataFilter = ({
     }
   }, [data.value]);
 
-  // 修复3: 防抖的状态同步
   useEffect(() => {
     if (isUpdatingFromExternal.current) return;
-    
+
     if (isEnabled) {
       validateConditions();
       const filterData = {
@@ -210,7 +239,7 @@ const MetadataFilter = ({
       };
       const currentDataStr = JSON.stringify(filterData);
       const prevDataStr = JSON.stringify(data.value);
-      
+
       if (currentDataStr !== prevDataStr) {
         onChange(filterData);
       }
@@ -219,6 +248,15 @@ const MetadataFilter = ({
       onValidate(() => false);
     }
   }, [conditions, relation, isEnabled, onChange]);
+
+  // 只在组件卸载时清理定时器
+  useEffect(() => {
+    return () => {
+      if (validateTimer.current) {
+        clearTimeout(validateTimer.current);
+      }
+    };
+  }, []);
 
   const filteredMetadata = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
@@ -280,7 +318,27 @@ const MetadataFilter = ({
   };
 
   const validateConditions = () => {
-    const isValid = conditions.every(cond => cond.metadataField && cond.operator);
+    // 检查是否所有必填字段都已填写（对 Time 类型特殊处理）
+    const isValid = conditions.every(cond => {
+      // 必须选择元数据字段和操作符
+      if (!cond.metadataField || !cond.operator) {
+        return false;
+      }
+
+      // 如果操作符是 empty 或 not_empty，不需要校验值
+      if (['empty', 'not_empty'].includes(cond.operator)) {
+        return true;
+      }
+
+      // 对于 Time 类型，允许值为空
+      const metadataType = getConditionMetadataType(cond.id);
+      if (metadataType === "Time") {
+        return true; // Time 类型即使值为空也视为有效
+      }
+
+      // 其他类型（String, Number）需要校验值
+      return !!cond.value;
+    });
 
     const validateFunc = () => {
       const errors = [];
@@ -292,8 +350,12 @@ const MetadataFilter = ({
         if (!cond.operator) {
           errors.push(`条件 ${index + 1}: 请选择操作符`);
         }
+        // 只有当操作符不是 empty/not_empty，且不是 Time 类型，且值为空时才报错
         if (!['empty', 'not_empty'].includes(cond.operator) && !cond.value) {
-          errors.push(`条件 ${index + 1}: 请输入值`);
+          const metadataType = getConditionMetadataType(cond.id);
+          if (metadataType !== "Time") { // 排除 Time 类型
+            errors.push(`条件 ${index + 1}: 请输入值`);
+          }
         }
       });
 
@@ -333,40 +395,32 @@ const MetadataFilter = ({
             <div
               className={`no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}
             >
-              <span className="flex items-center flex-1 truncate">{selectedLabel || "选择变量"}</span>
+              <span className="flex items-center flex-1 truncate">{selectedLabel || "选择引用"}</span>
               <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
             </div>
           </SelectVar>
-          {metadataType === "Time" && (
-            <div className="relative group/info flex-shrink-0 ml-1 ">
-              <Info size={16} className="text-gray-400 cursor-help" />
-              <div className="absolute bottom-full left-0 mb-2 hidden group-hover/info:block w-64 p-2 bg-black text-white text-xs rounded z-10">
-                引用变量格式为 "YYYY-MM-DDTHH:mm:ss"
-              </div>
-            </div>
-          )}
+
         </div>
       );
     }
     if (metadataType === "String") {
       return (
-        <Input 
-          placeholder={condition.operator === "regex" ? "输入正则表达式" : "请输入文本"} 
-          value={condition.value} 
-          onChange={(e) => updateCondition(condition.id, "value", e.target.value)} 
-          maxLength={255} 
-          className="h-8" 
+        <Input
+          placeholder={condition.operator === "regex" ? "输入正则表达式" : "输入值"}
+          value={condition.value}
+          onChange={(e) => updateCondition(condition.id, "value", e.target.value)}
+          maxLength={255}
+          className="h-8"
         />
       );
     }
     if (metadataType === "Number") {
       return (
         <div className="w-full mt-2">
-          <InputItem
-            type="number"
-            data={{ value: condition.value, label: "" }}
+          <NumberInput
+            value={condition.value || ''}
             onChange={(value) => {
-              updateCondition(condition.id, "value", String(value));
+              updateCondition(condition.id, "value", value);
             }}
           />
         </div>
@@ -374,19 +428,20 @@ const MetadataFilter = ({
     }
     if (metadataType === "Time") {
       return (
-        <DatePicker 
-          value={condition.value ? new Date(condition.value) : undefined} 
-          showTime 
-          onChange={(d) => updateCondition(condition.id, "value", d ? format(d, "yyyy-MM-dd'T'HH:mm:ss") : "")} 
+        <DatePicker
+          value={condition.value ? new Date(condition.value) : undefined}
+          placeholder="选择时间" 
+          showTime
+          onChange={(d) => updateCondition(condition.id, "value", d ? format(d, "yyyy-MM-dd'T'HH:mm:ss") : "")}
         />
       );
     }
     return (
-      <Input 
-        placeholder="输入值" 
-        value={condition.value} 
-        onChange={(e) => updateCondition(condition.id, "value", e.target.value)} 
-        className="h-8" 
+      <Input
+        placeholder="输入值"
+        value={condition.value}
+        onChange={(e) => updateCondition(condition.id, "value", e.target.value)}
+        className="h-8"
       />
     );
   };
@@ -406,7 +461,7 @@ const MetadataFilter = ({
             {conditions.length > 1 && (
               <div className="absolute left-1 top-0 w-4 h-full py-4">
                 <div className="h-full border border-foreground border-dashed border-r-0 rounded-l-sm">
-                  <Badge variant="outline" className="absolute top-1/2 left-0.5 -translate-x-1/2 -translate-y-1/2 px-1 py-0 text-primary bg-[#E6ECF6] cursor-pointer" onClick={handleRelationChange}>
+                  <Badge variant="outline" className="absolute top-1/2 left-0.5 -translate-x-1/2 -translate-y-1/2 px-1 py-0 text-primary bg-[#E6ECF6] cursor-pointer z-10" onClick={handleRelationChange}>
                     {relation} <RefreshCcw size={12} />
                   </Badge>
                 </div>
@@ -575,22 +630,40 @@ const MetadataFilter = ({
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[15%]' : 'max-w-[20%]'}`}>
-                      <Select
-                        value={condition.valueType}
-                        onValueChange={(value: "reference" | "input") => updateCondition(condition.id, "valueType", value)}
-                        disabled={!condition.metadataField || ["empty", "not_empty"].includes(condition.operator)}
-                      >
-                        <SelectTrigger className="h-8 min-w-0"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="reference">引用</SelectItem>
-                          <SelectItem value="input">输入</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[45%]' : 'max-w-[25%]'}`}>
-                      {renderValueInput(condition)}
-                    </div>
+                    {!["empty", "not_empty"].includes(condition.operator) &&
+                      <>
+                        <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[16%]' : 'max-w-[20%]'}`}>
+                          <Select
+                            value={condition.valueType}
+                            onValueChange={(value: "reference" | "input") => updateCondition(condition.id, "valueType", value)}
+                          >
+                            <SelectTrigger className="h-8 min-w-0">
+                              <div className="flex items-center justify-between w-full">
+                                <span>
+                                  {condition.valueType === "reference" ? "引用" : "输入"}
+                                </span>
+                                {condition.valueType === "reference" && metadataType === "Time" && (
+                                  <div className="relative group/info flex-shrink-0">
+                                    <CircleQuestionMark size={16} className="text-gray-400" />
+                                    <div className="absolute bottom-full right-0 mb-2 hidden group-hover/info:block p-2 bg-black text-white text-xs rounded z-10">
+                                      引用变量请调整格式为"YYYY-MM-DD HH:mm:ss"，如"2025-01-10T21:08:20"表示2025年1月10日21时08分20秒
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="reference">引用</SelectItem>
+                              <SelectItem value="input">输入</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[45%]' : 'max-w-[25%]'}`}>
+                          {renderValueInput(condition)}
+                        </div>
+                      </>
+                    }
+
                     <div className={`flex-shrink-0 ${isTimeType ? 'max-w-[10%]' : 'max-w-[10%]'} flex justify-center`}>
                       <Trash2
                         size={18}
@@ -615,5 +688,6 @@ const MetadataFilter = ({
     </div>
   );
 };
+
 
 export default MetadataFilter;
