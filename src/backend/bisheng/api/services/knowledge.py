@@ -995,13 +995,11 @@ class KnowledgeService(KnowledgeUtils):
                 iterator.close()
                 break
             for record in result:
-                logger.debug(f"update milvus one record")
                 if not record.get("pk") or not record.get("vector"):
                     raise ValueError("milvus chunk pk field or vector field is None")
                 record["updater"] = login_user.user_name
                 record["update_time"] = update_time
                 vector_client.col.upsert(record)
-                logger.debug(f"update milvus one record over")
         logger.debug(f"update_milvus_chunk_updater_info over")
 
         res = es_client.client.update_by_query(
