@@ -658,7 +658,7 @@ class KnowledgeService(KnowledgeUtils):
 
             file.split_rule = input_file["split_rule"]
             file.status = KnowledgeFileStatus.PROCESSING.value  # 解析中
-            file.uploader_id = login_user.user_id
+            file.updater_id = login_user.user_id
             file.updater_name = login_user.user_name
 
             file = KnowledgeFileDao.update(file)
