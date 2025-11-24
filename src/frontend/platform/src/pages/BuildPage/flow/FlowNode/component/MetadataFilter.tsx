@@ -2,17 +2,18 @@ import { Switch } from "@/components/bs-ui/switch";
 import { Button } from "@/components/bs-ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Input } from "@/components/bs-ui/input";
-import { Trash2, Search, Info, RefreshCcw, ChevronDown, Clock3, Type, Hash, CircleQuestionMark } from "lucide-react";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { Trash2, Search, Info, RefreshCcw, ChevronDown, Clock3, Type, Hash, CircleQuestionMark, AlertCircle } from "lucide-react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { Badge } from "@/components/bs-ui/badge";
-import InputItem from "./InputItem";
 import { format } from "date-fns";
 import { getKnowledgeDetailApi } from "@/controllers/API";
 import SelectVar from "./SelectVar";
-import { QuestionTooltip, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import NumberInput from "./NumberInput";
+import { isVarInFlow } from "@/util/flowUtils";
+import useFlowStore from "../../flowStore";
 
 interface MetadataCondition {
   id: string;
@@ -29,6 +30,7 @@ interface MetadataField {
   knowledgeBase: string;
   updatedAt: number;
   icon: React.ReactNode;
+  isDefault: boolean;
 }
 
 interface MetadataFilterProps {
@@ -52,6 +54,7 @@ const MetadataFilter = ({
   const isInitialMount = useRef(true);
   const isUpdatingFromExternal = useRef(false);
   const validateTimer = useRef<NodeJS.Timeout | null>(null);
+  const { flow } = useFlowStore();
 
   const [isEnabled, setIsEnabled] = useState(data.value?.enabled ?? false);
   const [conditions, setConditions] = useState<MetadataCondition[]>(() => {
@@ -76,6 +79,10 @@ const MetadataFilter = ({
   const [availableMetadataState, setAvailableMetadataState] = useState<MetadataField[]>([]);
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
   const [isSelectOpen, setIsSelectOpen] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({});
+
+  // 节点变化检测状态
+  const [knowledgeIdsStr, setKnowledgeIdsStr] = useState("");
 
   const operatorConfig = {
     String: ["equals", "not_equals", "contains", "not_contains", "empty", "not_empty", "starts_with", "ends_with"],
@@ -98,87 +105,106 @@ const MetadataFilter = ({
     less_equal: "≤",
   };
 
-const fetchAndPrepareMetadata = async () => {
-  setIsLoadingMetadata(true);
-  let availableMetadata: MetadataField[] = [];
-  try {
-    const knowledgeIds = selectedKnowledgeIds();
-    console.log("MetadataFilter获取知识库ID:", knowledgeIds);
+  const fetchAndPrepareMetadata = async () => {
+    setIsLoadingMetadata(true);
+    let availableMetadata: MetadataField[] = [];
+    try {
+      const knowledgeIds = selectedKnowledgeIds();
+      console.log("MetadataFilter获取知识库ID:", knowledgeIds);
 
-    if (knowledgeIds.length > 0) {
-      const knowledgeDetails = await getKnowledgeDetailApi(knowledgeIds);
+      if (knowledgeIds.length > 0) {
+        const knowledgeDetails = await getKnowledgeDetailApi(knowledgeIds);
 
-      knowledgeDetails.forEach((detail: any) => {
-        const kbLabel = detail.name || detail.label || "未知知识库";
-        
-        const defaultFields = [
-          { name: "document_id", type: "Number", icon: <Hash size={14} /> },
-          { name: "document_name", type: "String", icon: <Type size={14} /> },
-          { name: "upload_time", type: "Time", icon: <Clock3 size={14} /> },
-          { name: "update_time", type: "Time", icon: <Clock3 size={14} /> },
-          { name: "uploader", type: "String", icon: <Type size={14} /> },
-          { name: "updater", type: "String", icon: <Type size={14} /> }
-        ];
+        knowledgeDetails.forEach((detail: any) => {
+          const kbLabel = detail.name || detail.label || "未知知识库";
 
-        const defaultMetadataFields = defaultFields.map(field => ({
-          id: `${detail.id}-${field.name}`,
-          name: field.name,
-          type: field.type as "String" | "Number" | "Time",
-          knowledgeBase: kbLabel,
-          updatedAt: Date.now(),
-          icon: field.icon,
-          isDefault: true
-        }));
+          const defaultFields = [
+            { name: "document_id", type: "Number", icon: <Hash size={14} /> },
+            { name: "document_name", type: "String", icon: <Type size={14} /> },
+            { name: "upload_time", type: "Time", icon: <Clock3 size={14} /> },
+            { name: "update_time", type: "Time", icon: <Clock3 size={14} /> },
+            { name: "uploader", type: "String", icon: <Type size={14} /> },
+            { name: "updater", type: "String", icon: <Type size={14} /> }
+          ];
 
-        availableMetadata = [...availableMetadata, ...defaultMetadataFields];
+          const defaultMetadataFields = defaultFields.map(field => ({
+            id: `${detail.id}-${field.name}`,
+            name: field.name,
+            type: field.type as "String" | "Number" | "Time",
+            knowledgeBase: kbLabel,
+            updatedAt: Date.now(),
+            icon: field.icon,
+            isDefault: true
+          }));
 
-        if (detail.metadata_fields && Array.isArray(detail.metadata_fields)) {
-          const customFields = detail.metadata_fields.map((field: any) => {
-            let icon: React.ReactNode = <Type size={14} />;
-            let type: "String" | "Number" | "Time" = "String";
-            if (field.field_type === "number") {
-              icon = <Hash size={14} />;
-              type = "Number";
-            } else if (field.field_type === "time") {
-              icon = <Clock3 size={14} />;
-              type = "Time";
-            }
-            return {
-              id: `${detail.id}-${field.field_name}`,
-              name: field.field_name,
-              type,
-              knowledgeBase: kbLabel,
-              updatedAt: field.updated_at || Date.now(),
-              icon,
-              isDefault: false
-            };
-          });
-          availableMetadata = [...availableMetadata, ...customFields];
-        }
+          availableMetadata = [...availableMetadata, ...defaultMetadataFields];
+
+          if (detail.metadata_fields && Array.isArray(detail.metadata_fields)) {
+            const customFields = detail.metadata_fields.map((field: any) => {
+              let icon: React.ReactNode = <Type size={14} />;
+              let type: "String" | "Number" | "Time" = "String";
+              if (field.field_type === "number") {
+                icon = <Hash size={14} />;
+                type = "Number";
+              } else if (field.field_type === "time") {
+                icon = <Clock3 size={14} />;
+                type = "Time";
+              }
+              return {
+                id: `${detail.id}-${field.field_name}`,
+                name: field.field_name,
+                type,
+                knowledgeBase: kbLabel,
+                updatedAt: field.updated_at || Date.now(),
+                icon,
+                isDefault: false
+              };
+            });
+            availableMetadata = [...availableMetadata, ...customFields];
+          }
+        });
+      }
+    } catch (error) {
+      console.error("Error loading metadata:", error);
+    } finally {
+      // 排序：自定义字段在前（按更新时间倒序），默认字段在底部
+      availableMetadata.sort((a, b) => {
+        if (a.isDefault && !b.isDefault) return 1;
+        if (!a.isDefault && b.isDefault) return -1;
+        if (!a.isDefault && !b.isDefault) return b.updatedAt - a.updatedAt;
+        return a.name.localeCompare(b.name);
       });
-    }
-  } catch (error) {
-    console.error("Error loading metadata:", error);
-  } finally {
-    // 排序：自定义字段在前（按更新时间倒序），默认字段在底部
-    availableMetadata.sort((a, b) => {
-      if (a.isDefault && !b.isDefault) return 1;
-      if (!a.isDefault && b.isDefault) return -1;
-      if (!a.isDefault && !b.isDefault) return b.updatedAt - a.updatedAt;
-      return a.name.localeCompare(b.name);
-    });
-    
-    setAvailableMetadataState(availableMetadata);
-    setIsLoadingMetadata(false);
-  }
-};
 
+      setAvailableMetadataState(availableMetadata);
+      setIsLoadingMetadata(false);
+      
+      // 元数据加载完成后，验证现有条件
+      if (conditions.length > 0) {
+        validateAllConditions();
+      }
+    }
+  };
+
+  // 监听节点变化
+  useEffect(() => {
+    const currentIds = JSON.stringify(selectedKnowledgeIds());
+    if (currentIds !== knowledgeIdsStr) {
+      setKnowledgeIdsStr(currentIds);
+      if (isEnabled) {
+        console.log("检测到节点变化，重新获取元数据");
+        fetchAndPrepareMetadata();
+      }
+    }
+  }, [selectedKnowledgeIds(), isEnabled]);
+
+  // 监听启用状态变化
   useEffect(() => {
     if (isEnabled) {
       fetchAndPrepareMetadata();
     }
   }, [isEnabled]);
 
+  // 监听外部数据变化
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false;
@@ -216,6 +242,7 @@ const fetchAndPrepareMetadata = async () => {
     }
   }, [data.value]);
 
+  // 监听内部状态变化并更新外部
   useEffect(() => {
     if (isUpdatingFromExternal.current) return;
 
@@ -249,7 +276,7 @@ const fetchAndPrepareMetadata = async () => {
     }
   }, [conditions, relation, isEnabled, onChange]);
 
-  // 只在组件卸载时清理定时器
+  // 组件卸载时清理
   useEffect(() => {
     return () => {
       if (validateTimer.current) {
@@ -257,6 +284,49 @@ const fetchAndPrepareMetadata = async () => {
       }
     };
   }, []);
+
+  // 变量校验函数
+  const validateMetadataField = useCallback((metadataFieldId: string, fieldName: string = ""): string => {
+    if (!metadataFieldId) return "";
+    
+    // 检查选择的元数据字段是否在可用列表中
+    const isValid = availableMetadataState.some(meta => meta.id === metadataFieldId);
+    
+    if (!isValid) {
+      // 使用 isVarInFlow 函数进行详细校验
+      const errorMsg = isVarInFlow(nodeId, flow.nodes, metadataFieldId, fieldName);
+      return errorMsg || "选择的元数据字段无效或已被删除";
+    }
+    
+    return "";
+  }, [availableMetadataState, flow.nodes, nodeId]);
+
+  // 实时校验所有条件
+  const validateAllConditions = useCallback(() => {
+    const errors: { [key: string]: string } = {};
+    
+    conditions.forEach(condition => {
+      if (condition.metadataField) {
+        const selectedMeta = availableMetadataState.find(m => m.id === condition.metadataField);
+        const fieldName = selectedMeta ? `${selectedMeta.knowledgeBase}/${selectedMeta.name}` : "";
+        const error = validateMetadataField(condition.metadataField, fieldName);
+        
+        if (error) {
+          errors[condition.id] = error;
+        }
+      }
+    });
+    
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  }, [conditions, availableMetadataState, validateMetadataField]);
+
+  // 在条件更新时自动校验
+  useEffect(() => {
+    if (conditions.length > 0 && availableMetadataState.length > 0) {
+      validateAllConditions();
+    }
+  }, [conditions, availableMetadataState]);
 
   const filteredMetadata = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
@@ -287,15 +357,39 @@ const fetchAndPrepareMetadata = async () => {
       if (condition.id === id) {
         const updated = { ...condition, [field]: value };
 
+        // 清除相关错误
+        setFieldErrors(prevErrors => ({
+          ...prevErrors,
+          [id]: ""
+        }));
+
+        if (field === "metadataField") {
+          // 实时校验元数据字段
+          const selectedMeta = availableMetadataState.find(m => m.id === value);
+          const fieldName = selectedMeta ? `${selectedMeta.knowledgeBase}/${selectedMeta.name}` : "";
+          const errorMsg = validateMetadataField(value, fieldName);
+          
+          if (errorMsg) {
+            setFieldErrors(prevErrors => ({
+              ...prevErrors,
+              [id]: errorMsg
+            }));
+          } else {
+            updated.operator = "";
+            updated.value = "";
+            updated.valueType = "input";
+            
+            // 当选择 Number 类型的元数据字段时，自动设置默认值为 "0"
+            if (selectedMeta?.type === "Number") {
+              updated.value = "0";
+            }
+          }
+        }
+
         if (field === "operator" && ["empty", "not_empty"].includes(value)) {
           updated.value = "";
         }
 
-        if (field === "metadataField") {
-          updated.operator = "";
-          updated.value = "";
-          updated.valueType = "input";
-        }
         if (field === "valueType") {
           updated.value = "";
         }
@@ -318,10 +412,13 @@ const fetchAndPrepareMetadata = async () => {
   };
 
   const validateConditions = () => {
-    // 检查是否所有必填字段都已填写（对 Time 类型特殊处理）
     const isValid = conditions.every(cond => {
-      // 必须选择元数据字段和操作符
       if (!cond.metadataField || !cond.operator) {
+        return false;
+      }
+
+      // 校验元数据字段有效性
+      if (cond.metadataField && !validateMetadataField(cond.metadataField)) {
         return false;
       }
 
@@ -333,10 +430,16 @@ const fetchAndPrepareMetadata = async () => {
       // 对于 Time 类型，允许值为空
       const metadataType = getConditionMetadataType(cond.id);
       if (metadataType === "Time") {
-        return true; // Time 类型即使值为空也视为有效
+        return true;
       }
 
-      // 其他类型（String, Number）需要校验值
+      // 对于 Number 类型，"0" 是有效值
+      if (metadataType === "Number") {
+        const isValidNumber = cond.value !== "" && cond.value !== null && cond.value !== undefined;
+        return isValidNumber;
+      }
+
+      // String 类型需要非空值
       return !!cond.value;
     });
 
@@ -346,14 +449,21 @@ const fetchAndPrepareMetadata = async () => {
       conditions.forEach((cond, index) => {
         if (!cond.metadataField) {
           errors.push(`条件 ${index + 1}: 请选择元数据字段`);
+        } else if (validateMetadataField(cond.metadataField)) {
+          errors.push(`条件 ${index + 1}: 选择的元数据字段无效或已被删除`);
         }
         if (!cond.operator) {
           errors.push(`条件 ${index + 1}: 请选择操作符`);
         }
-        // 只有当操作符不是 empty/not_empty，且不是 Time 类型，且值为空时才报错
-        if (!['empty', 'not_empty'].includes(cond.operator) && !cond.value) {
+        if (!['empty', 'not_empty'].includes(cond.operator)) {
           const metadataType = getConditionMetadataType(cond.id);
-          if (metadataType !== "Time") { // 排除 Time 类型
+          if (metadataType === "Number") {
+            // Number 类型：空值、null、undefined 才报错，"0" 是有效值
+            if (cond.value === "" || cond.value === null || cond.value === undefined) {
+              errors.push(`条件 ${index + 1}: 请输入值`);
+            }
+          } else if (metadataType !== "Time" && !cond.value) {
+            // String 类型需要非空值
             errors.push(`条件 ${index + 1}: 请输入值`);
           }
         }
@@ -395,11 +505,10 @@ const fetchAndPrepareMetadata = async () => {
             <div
               className={`no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}
             >
-              <span className="flex items-center flex-1 truncate">{selectedLabel || "选择引用"}</span>
+              <span className="flex items-center flex-1 truncate">{selectedLabel || "请选择"}</span>
               <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
             </div>
           </SelectVar>
-
         </div>
       );
     }
@@ -430,7 +539,7 @@ const fetchAndPrepareMetadata = async () => {
       return (
         <DatePicker
           value={condition.value ? new Date(condition.value) : undefined}
-          placeholder="选择时间" 
+          placeholder="选择时间"
           showTime
           onChange={(d) => updateCondition(condition.id, "value", d ? format(d, "yyyy-MM-dd'T'HH:mm:ss") : "")}
         />
@@ -470,9 +579,11 @@ const fetchAndPrepareMetadata = async () => {
             {conditions.map((condition) => {
               const metadataType = getConditionMetadataType(condition.id);
               const isTimeType = metadataType === "Time";
+              const selectedMeta = availableMetadataState.find(m => m.id === condition.metadataField);
+              const fieldName = selectedMeta ? `${selectedMeta.knowledgeBase}/${selectedMeta.name}` : "";
 
               return (
-                <div key={condition.id} className="relative group pl-10">
+                <div key={condition.id} className="relative group pl-10 nodrag">
                   <div className="flex gap-2 items-center min-w-0">
                     <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[15%]' : 'max-w-[25%]'}`}>
                       <Select
@@ -480,44 +591,26 @@ const fetchAndPrepareMetadata = async () => {
                         onValueChange={(value) => updateCondition(condition.id, "metadataField", value)}
                         onOpenChange={setIsSelectOpen}
                       >
-                        <SelectTrigger
-                          className={`h-8 min-w-0 `}
-                        >
+                        <SelectTrigger className="h-8 min-w-0">
                           <SelectValue placeholder="选择变量">
                             {condition.metadataField && (
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <div className="flex items-center gap-1" style={{ pointerEvents: 'auto' }}>
-                                      {(() => {
-                                        const meta = availableMetadataState.find(m => m.id === condition.metadataField);
-                                        return meta?.icon || null;
-                                      })()}
+                                      {selectedMeta?.icon || null}
                                       <span style={{
                                         flex: 1,
                                         overflow: 'hidden',
                                         textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap'
+                                        whiteSpace: 'nowrap',
                                       }}>
-                                        {(() => {
-                                          const meta = availableMetadataState.find(m => m.id === condition.metadataField);
-                                          return meta?.name || '选择变量';
-                                        })()}
+                                        {fieldName || '选择变量'}
                                       </span>
                                     </div>
                                   </TooltipTrigger>
-                                  <TooltipContent
-                                    className="max-w-[200px] whitespace-normal z-50"
-                                    style={{
-                                      whiteSpace: 'normal',
-                                      wordBreak: 'break-word',
-                                      pointerEvents: 'none'
-                                    }}
-                                  >
-                                    {(() => {
-                                      const meta = availableMetadataState.find(m => m.id === condition.metadataField);
-                                      return meta?.name || '';
-                                    })()}
+                                  <TooltipContent className="max-w-[200px] break-words">
+                                    <p className="text-xs">{fieldName}</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
@@ -547,34 +640,26 @@ const fetchAndPrepareMetadata = async () => {
                                     />
                                   </div>
                                 </div>
-
                                 {filteredMetadata.length > 0 ? (
                                   filteredMetadata.map((meta) => (
                                     <SelectItem
                                       key={meta.id}
                                       value={meta.id}
-                                      showIcon={false}
-                                      className="pr-4"
+                                      className="pr-2 w-full max-w-[240px]"
                                     >
-                                      <div className="flex items-center w-full">
-                                        <div className="flex items-center gap-1 flex-1 min-w-0">
-                                          <span className="flex-shrink-0">{meta.icon}</span>
+                                      <div className="flex items-center justify-between w-full gap-1 min-w-0">
+                                        <div className="flex items-center gap-1 min-w-0 flex-1">
+                                          <span className="flex-shrink-0 text-xs">{meta.icon}</span>
                                           <span className="text-xs text-muted-foreground flex-shrink-0">{meta.type}</span>
                                           <TooltipProvider>
                                             <Tooltip>
                                               <TooltipTrigger asChild>
-                                                <span className="truncate flex-1 max-w-16">
+                                                <span className="truncate text-xs min-w-0 flex-1">
                                                   {meta.name}
                                                 </span>
                                               </TooltipTrigger>
-                                              <TooltipContent
-                                                className="max-w-[200px] whitespace-normal"
-                                                style={{
-                                                  whiteSpace: 'normal',
-                                                  wordBreak: 'break-word',
-                                                }}
-                                              >
-                                                <p className="text-sm">{meta.name}</p>
+                                              <TooltipContent className="max-w-[200px] break-words">
+                                                <p className="text-xs">{meta.name}</p>
                                               </TooltipContent>
                                             </Tooltip>
                                           </TooltipProvider>
@@ -582,21 +667,12 @@ const fetchAndPrepareMetadata = async () => {
                                         <TooltipProvider>
                                           <Tooltip>
                                             <TooltipTrigger asChild>
-                                              <span
-                                                className="text-xs text-gray-500 ml-2 flex-shrink-0 truncate max-w-[80px]"
-                                                style={{ marginLeft: 'auto' }}
-                                              >
+                                              <span className="text-xs text-gray-500 truncate max-w-[60px] text-right flex-shrink-0 ml-1">
                                                 {meta.knowledgeBase}
                                               </span>
                                             </TooltipTrigger>
-                                            <TooltipContent
-                                              className="max-w-[200px] whitespace-normal"
-                                              style={{
-                                                whiteSpace: 'normal',
-                                                wordBreak: 'break-word',
-                                              }}
-                                            >
-                                              <p className="text-sm">{meta.knowledgeBase}</p>
+                                            <TooltipContent className="max-w-[200px] break-words">
+                                              <p className="text-xs">{meta.knowledgeBase}</p>
                                             </TooltipContent>
                                           </Tooltip>
                                         </TooltipProvider>
@@ -604,7 +680,7 @@ const fetchAndPrepareMetadata = async () => {
                                     </SelectItem>
                                   ))
                                 ) : (
-                                  <div className="p-4 text-center text-sm text-gray-500">
+                                  <div className="p-2 text-center text-xs text-gray-500">
                                     暂无元数据字段
                                   </div>
                                 )}
@@ -620,7 +696,7 @@ const fetchAndPrepareMetadata = async () => {
                         onValueChange={(value) => updateCondition(condition.id, "operator", value)}
                         disabled={!condition.metadataField}
                       >
-                        <SelectTrigger className={`h-8 min-w-0 `}>
+                        <SelectTrigger className="h-8 min-w-0">
                           <SelectValue placeholder="选择条件" />
                         </SelectTrigger>
                         <SelectContent>
@@ -688,6 +764,5 @@ const fetchAndPrepareMetadata = async () => {
     </div>
   );
 };
-
 
 export default MetadataFilter;

@@ -66,7 +66,7 @@ class ConditionOne(BaseModel):
         if is_preset:
             field_key = self.convert_preset_filed()
         else:
-            field_key = f"JSON_UNQUOTE(JSON_EXTRACT(`user_metadata`, '$.{self.metadata_field}'))"
+            field_key = f"JSON_UNQUOTE(JSON_EXTRACT(`user_metadata`, '$.{self.metadata_field}.field_value'))"
 
         key_info = {}
         if self.comparison_operation == "equals":
@@ -191,6 +191,14 @@ class RagUtils(BaseNode):
     def _run(self, unique_id: str) -> Dict[str, Any]:
         raise NotImplementedError()
 
+    @staticmethod
+    def format_timestamp(timestamp: int) -> str:
+        try:
+            return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%dT%H:%M:%S')
+        except Exception as e:
+            logger.error(f"Error formatting timestamp {timestamp}: {e}")
+            return str(timestamp)
+
     def retrieve_question(self, question: str) -> List[Document]:
         # 1: retrieve documents from multi retrievers
         milvus_docs = []
@@ -227,12 +235,26 @@ class RagUtils(BaseNode):
         for one in finally_docs:
             file_id = one.metadata.get('file_id')
             same_file_id.add(file_id)
-            if len(same_file_id) > 1:
-                break
         if len(same_file_id) == 1:
             # 来自同一个文件，则按照chunk_index排序
             finally_docs.sort(key=lambda x: x.metadata.get('chunk_index', 0))
             logger.debug(f'retrieve sort by chunk index: {finally_docs}')
+        file_map = {}
+        if finally_docs:
+            if self._knowledge_type == 'knowledge':
+                file_info = KnowledgeFileDao.get_file_by_ids(list(same_file_id))
+                file_map = {one.id: one for one in file_info}
+            for one in finally_docs:
+                if "upload_time" in one.metadata:
+                    one.metadata["upload_time"] = self.format_timestamp(one.metadata["upload_time"])
+                if "update_time" in one.metadata:
+                    one.metadata["update_time"] = self.format_timestamp(one.metadata["update_time"])
+                file_id = one.metadata.get('file_id')
+                if file_id and file_map.get(file_id):
+                    for user_key, user_value in one.metadata.get('user_metadata', {}).items():
+                        field_info = file_map[file_id].user_metadata.get(user_key)
+                        if field_info and field_info.get('field_type') == MetadataFieldType.TIME.value:
+                            one.metadata["user_metadata"][user_key] = self.format_timestamp(user_value)
         return finally_docs
 
     def init_user_question(self) -> List[str]:

@@ -67,11 +67,26 @@ export default defineConfig(() => {
       outDir: "build",
       rollupOptions: {
         output: {
-          manualChunks: {
-            acebuilds: ['react-ace', 'ace-builds', 'react-syntax-highlighter', 'rehype-mathjax', 'react-markdown'],
-            reactflow: ['@xyflow/react'],
-            pdfjs: ['pdfjs-dist'],
-            reactdrop: ['react-window', 'react-beautiful-dnd', 'react-dropzone']
+          chunkFileNames: 'assets/js/[name]-[hash].js',
+          entryFileNames: 'assets/js/[name]-[hash].js',
+          assetFileNames: 'assets/[ext]/[name]-[hash].[ext]',
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('react-ace') || id.includes('ace-builds') || id.includes('react-syntax-highlighter') || id.includes('rehype-mathjax') || id.includes('react-markdown')) {
+                return 'acebuilds';
+              }
+              if (id.includes('@xyflow/react')) {
+                return 'reactflow';
+              }
+              if (id.includes('pdfjs-dist')) {
+                return 'pdfjs';
+              }
+              if (id.includes('react-window') || id.includes('react-beautiful-dnd') || id.includes('react-dropzone')) {
+                return 'reactdrop';
+              }
+
+              return
+            }
           }
         }
       }

@@ -146,6 +146,10 @@ class KnowledgeFileService:
                 item_dict.pop('field_name')
                 current_user_metadata[item.field_name] = item_dict
 
+        # 处理清空元数据的情况
+        if not modify_file_metadata_req.user_metadata_list:
+            current_user_metadata = {}
+
         # 更新知识文件的用户元数据
         knowledge_file_model.user_metadata = current_user_metadata
         knowledge_file_model.updater_id = login_user.user_id

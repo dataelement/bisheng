@@ -488,7 +488,7 @@ export default function Paragraphs({ fileId, onBack }) {
             if (knowledgeDetail &&  knowledgeDetail.metadata_fields) {
                 const formattedFields = Object.entries(knowledgeDetail.metadata_fields).map(([fieldName, fieldData]) => ({
                 id: `meta_${fieldName}`,
-                name: fieldName,
+                name: fieldData.field_name,
                 type: fieldData.field_type.charAt(0).toUpperCase() + fieldData.field_type.slice(1),
                 updated: fieldData.updated_at
             }));
