@@ -9,11 +9,16 @@ import { useEffect, useState } from "react";
     // 如果外部值为空，则显示0；否则显示实际值
     if (value === '' || value === undefined || value === null) {
       setInputValue('0');
+       onChange('0');
     } else {
       setInputValue(String(value));
     }
   }, [value]);
-
+  useEffect(() => {
+      if (value === '' || value === undefined || value === null) {
+        onChange('0');
+      }
+    }, []);
   // 验证数字范围
   const validateNumber = (numValue) => {
     // 空值或0都视为有效
@@ -33,7 +38,7 @@ import { useEffect, useState } from "react";
 
     // 检查32位整数范围 (-2^31 到 2^31-1)
     if (number < -4294967296 || number > 4294967296) {
-      return { isValid: false, error: '数字大小不能为2的32次方。' };
+      return { isValid: false, error: '数字大小不能超过2的32次方。' };
     }
 
     return { isValid: true, value: number };
