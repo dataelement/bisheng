@@ -54,7 +54,7 @@ class KnowledgeFileBase(SQLModelSerializable):
     object_name: Optional[str] = Field(default=None, index=False, description='文件在minio存储的对象名称')
     # extra_meta: Optional[str] = Field(default=None, index=False)
     user_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, sa_column=Column(JSON, nullable=True),
-                                                          description='用户自定义的元数据')
+                                                    description='用户自定义的元数据')
     remark: Optional[str] = Field(default='', sa_column=Column(String(length=512)))
     updater_id: Optional[int] = Field(default=None, index=True, description='最后更新用户ID')
     updater_name: Optional[str] = Field(default=None, index=True)
@@ -369,9 +369,12 @@ class KnowledgeFileDao(KnowledgeFileBase):
         for key, key_info in metadata_filters.items():
             key_comparison = key_info['comparison']
             key_value = key_info['value']
-            params_key = f"tmp_params_{params_index}"
-            params[params_key] = key_value
-            statement += f" {logical} {key} {key_comparison} :{params_key}"
+            if key_value is not None:
+                params_key = f"tmp_params_{params_index}"
+                params[params_key] = key_value
+                statement += f" {logical} {key} {key_comparison} :{params_key}"
+            else:
+                statement += f" {logical} {key} {key_comparison}"
 
         with get_sync_db_session() as session:
             file_ids = []
