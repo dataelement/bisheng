@@ -66,7 +66,7 @@ class ConditionOne(BaseModel):
         if is_preset:
             field_key = self.convert_preset_filed()
         else:
-            field_key = f"JSON_UNQUOTE(JSON_EXTRACT(`user_metadata`, '$.{self.metadata_field}'))"
+            field_key = f"JSON_UNQUOTE(JSON_EXTRACT(`user_metadata`, '$.{self.metadata_field}.field_value'))"
 
         key_info = {}
         if self.comparison_operation == "equals":
