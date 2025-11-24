@@ -4,17 +4,17 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/bs-ui
 import { useToast } from '@/components/bs-ui/toast/use-toast';
 import { sopApi } from "@/controllers/API/linsight";
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
+import { TaskFlowContent } from "@/workspace/SopTasks";
 import { Check, ChevronDown, ChevronUp, Search, Star } from 'lucide-react';
 import * as React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { LoadIcon } from '../bs-icons/loading';
 import AutoPagination from '../bs-ui/pagination/autoPagination';
-import SopMarkdown from './SopMarkdown';
+import { Tabs, TabsList, TabsTrigger } from '../bs-ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../bs-ui/tooltip';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '../bs-ui/tabs';
-import { useTranslation } from 'react-i18next';
-import { TaskFlowContent } from "@/workspace/SopTasks";
 import Tip from '../bs-ui/tooltip/tip';
+import SopMarkdown from './SopMarkdown';
 
 interface SopRecord {
   id: number;
@@ -53,13 +53,13 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
   const [isSavingAsNew, setIsSavingAsNew] = useState(false);
   const [isOverwriting, setIsOverwriting] = useState(false);
   const isMountedRef = useRef(false);
-  // 获取SOP记录
+  // Obtain SOP records 
   const fetchRecords = async (isSearch = false) => {
     setLoading(true);
     try {
       const params = {
         keyword: searchTerm,
-        // 修复1：始终传递分页参数，无论是否搜索
+        // Fix 1: Always pass pagination parameters, regardless of whether a search is performed or not
         page,
         page_size: pageSize,
         sort: sortConfig.direction,
@@ -99,7 +99,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
       setIsSavingAsNew(false);
     }
   }, [open]);
-  // 初始化数据
+  // init
   useEffect(() => {
     if (open) {
       fetchRecords();
@@ -114,20 +114,20 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
   useEffect(() => {
     const timer = setTimeout(() => {
       if (open) {
-        setPage(1);  // 搜索时重置到第一页
-        fetchRecords(!!searchTerm);  // 使用统一的fetchRecords调用
+        setPage(1);  // Reset to the first page when searching 
+        fetchRecords(!!searchTerm);
       }
     }, 500);
     return () => clearTimeout(timer);
   }, [searchTerm]);
-  // 搜索和分页变化时重新获取数据
+  //  Reload data when search and pagination change 
   useEffect(() => {
     if (open) {
       fetchRecords(!!searchTerm);
     }
   }, [page, pageSize, sortConfig]);
 
-  // 排序处理
+  // sort
   const sortedRecords = useMemo(() => {
     return [...records].sort((a, b) => {
       const aValue = a[sortConfig.key as keyof SopRecord];
@@ -145,7 +145,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
     });
   }, [records, sortConfig]);
 
-  // 处理页码输入变化
+  // input change
   const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     if (value === '' || /^\d+$/.test(value)) {
@@ -153,7 +153,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
     }
   };
 
-  // 处理页码输入确认
+  // page change
   const handlePageInputConfirm = () => {
     if (pageInputValue === '') {
       setPageInputValue(page.toString());
@@ -170,14 +170,13 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
     }
   };
 
-  // 处理键盘事件
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       handlePageInputConfirm();
     }
   };
 
-  // 处理记录选择和多选
+  // Handle record selection and multi-selection
   const handleSelectRecord = (record: SopRecord) => setCurrentRecord(record);
 
   const handleToggleSelect = (record: SopRecord, e: React.MouseEvent) => {
@@ -187,7 +186,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
         ? prev.filter(id => id !== record.id)
         : [...prev, record.id];
 
-      // 同步更新selectedRecords
+      // update selectedRecords
       setSelectedRecords(prevRecords =>
         prev.includes(record.id)
           ? prevRecords.filter(r => r.id !== record.id)
@@ -198,7 +197,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
     });
     setCurrentRecord(record);
   };
-  // 全选/取消全选当前页
+  // Select All/Deselect All on Current Page
   const handleToggleSelectAll = () => {
     const currentPageIds = records.map(r => r.id);
     const allSelected = currentPageIds.every(id => selectedRecordIds.includes(id));
@@ -209,7 +208,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
         : [...new Set([...prev, ...currentPageIds])]
     );
 
-    // 同步更新selectedRecords
+    // update selectedRecords
     setSelectedRecords(prev => {
       if (allSelected) {
         return prev.filter(r => !currentPageIds.includes(r.id));
@@ -239,10 +238,10 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
         return;
       }
 
-      toast({ variant: 'success', description: t('ImportFromRecordsDialog.success') });
+      toast({ variant: 'success', description: t('importLinsight.success') });
       onOpenChange(false);
 
-      // 导入成功后清空所有选择状态
+      // clear
       setSelectedRecordIds([]);
       setSelectedRecords([]);
     } finally {
@@ -272,7 +271,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
     fetchSopShowcase();
   }, [currentRecord])
 
-  // 当切换记录时，重置Tab为"指导手册"
+  // When switching records, reset the Tab to "guidebook" 
   useEffect(() => {
     if (currentRecord) {
       setActiveTab('manual');
@@ -282,17 +281,17 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-[87.5vw] min-w-[87.5vw]">
         <div className="flex h-full" onClick={e => e.stopPropagation()}>
-          {/* 左侧记录列表 */}
+          {/* left list */}
           <div className="p-6 w-[50%] min-w-160">
             <SheetHeader>
-              <SheetTitle>{t('ImportFromRecordsDialog.title')}</SheetTitle>
+              <SheetTitle>{t('importLinsight.title')}</SheetTitle>
             </SheetHeader>
 
             <div className="relative mt-6 mb-6 w-[100%]">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
-                placeholder={t('ImportFromRecordsDialog.searchPlaceholder')}
+                placeholder={t('importLinsight.searchPlaceholder')}
                 className="w-full pl-10 pr-4 py-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-primary"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -304,12 +303,12 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
                 <div className="flex justify-center items-center h-full bg-gray-50 rounded-lg">
                   <div className="flex flex-col items-center gap-2">
                     <LoadIcon className="animate-spin w-10 h-10 text-primary" />
-                    <span>{t('ImportFromRecordsDialog.loading')}</span>
+                    <span>{t('importLinsight.loading')}</span>
                   </div>
                 </div>
               ) : records.length === 0 ? (
                 <div className="text-center text-muted-foreground py-4">
-                  {searchTerm ? t('ImportFromRecordsDialog.noMatchingRecords') : t('ImportFromRecordsDialog.noRecords')}
+                  {searchTerm ? t('importLinsight.noMatchingRecords') : t('importLinsight.noRecords')}
                 </div>
               ) : (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
@@ -335,11 +334,11 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
                             </button>
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            {t('ImportFromRecordsDialog.columns.name')}
+                            {t('importLinsight.columns.name')}
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <div className="flex items-center">
-                              {t('ImportFromRecordsDialog.columns.createTime')}
+                              {t('importLinsight.columns.createTime')}
                               <div className="flex flex-col ml-1">
                                 <button onClick={() => setSortConfig({
                                   key: 'create_time',
@@ -357,10 +356,10 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
                             </div>
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            {t('ImportFromRecordsDialog.columns.createUser')}
+                            {t('importLinsight.columns.createUser')}
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            {t('ImportFromRecordsDialog.columns.rating')}
+                            {t('importLinsight.columns.rating')}
                           </th>
                         </tr>
                       </thead>
@@ -416,7 +415,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
                     <div className="px-6 py-3 flex items-center justify-between border-t border-gray-200">
                       <div className="flex items-center whitespace-nowrap min-w-16">
                         <span className="text-sm  text-gray-700">
-                          共 {total} 条记录
+                          {t('importLinsight.pagination.totalRecords', { total })}
                         </span>
                       </div>
                       <div className="flex items-center ml-4">
@@ -427,7 +426,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
                           onChange={setPage}
                         />
                         <span className="text-sm text-gray-700 mr-2 whitespace-nowrap">
-                          {t('ImportFromRecordsDialog.pagination.goToPage')}
+                          {t('importLinsight.pagination.goToPage')}
                         </span>
                         <input
                           type="number"
@@ -441,7 +440,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
                           disabled={loading}
                         />
                         <span className="text-sm text-gray-700 ml-2 whitespace-nowrap">
-                          {t('ImportFromRecordsDialog.pagination.page')}
+                          {t('importLinsight.pagination.page')}
                         </span>
                         {loading && <LoadIcon className="animate-spin w-4 h-4 ml-2" />}
                       </div>
@@ -452,7 +451,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
             </div>
 
             <div className="flex items-center justify-start mt-4">
-              <span>已选择 {selectedRecordIds.length} 项</span>
+              <span>{t('importLinsight.selectedCount', { selectedCount: selectedRecordIds.length })}</span>
               <Button
                 onClick={() => {
                   importSops(selectedRecords, false, false);
@@ -460,24 +459,24 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
                 disabled={selectedRecordIds.length === 0 || loading}
                 className="ml-4"
               >
-                {loading ? t('ImportFromRecordsDialog.loading') : t('ImportFromRecordsDialog.batchImport')}
+                {loading ? t('importLinsight.loading') : t('importLinsight.batchImport')}
               </Button>
             </div>
           </div>
 
-          {/* 右侧预览区域 */}
+          {/* right viewpanne */}
           <div className="flex-1 bg-[#fff] p-6 h-full flex flex-col w-[50%]">
             {currentRecord ? (
               <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
-                <div className=" flex items-center justify-between gap-4">
+                <div className="flex items-center justify-between gap-4">
                   <h3 className="text-lg font-semibold truncate">{currentRecord.name}</h3>
                   <TabsList className='mr-4'>
-                    <TabsTrigger value="manual">指导手册</TabsTrigger>
-                    {sopShowcase ? <Tip content="无运行结果" side="bottom">
+                    <TabsTrigger value="manual">{t('importLinsight.guidelineManual')}</TabsTrigger>
+                    {sopShowcase ? <Tip content={t('importLinsight.noRunningResult')} side="bottom">
                       <span className="inline-block">
-                        <TabsTrigger value="result" disabled={sopShowcase}>运行结果</TabsTrigger>
+                        <TabsTrigger value="result" disabled={sopShowcase}>{t('importLinsight.runningResult')}</TabsTrigger>
                       </span>
-                    </Tip> : <TabsTrigger value="result" disabled={sopShowcase}>运行结果</TabsTrigger>}
+                    </Tip> : <TabsTrigger value="result" disabled={sopShowcase}>{t('importLinsight.runningResult')}</TabsTrigger>}
                   </TabsList>
                 </div>
 
@@ -509,7 +508,6 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
                           if (!currentRecord) return;
                           setSelectedRecordIds([]);
                           setSelectedRecords([]);
-                          // 直接尝试导入当前SOP
                           importSops([currentRecord]).then((hasDuplicate) => {
                             if (hasDuplicate === false) {
                               setDuplicateDialogOpen(true);
@@ -518,7 +516,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
                         }}
                         disabled={!currentRecord || loading}
                       >
-                        {loading ? t('ImportFromRecordsDialog.loading') : t('ImportFromRecordsDialog.importCurrent')}
+                        {loading ? t('importLinsight.loading') : t('importLinsight.importCurrent')}
                       </Button>
                     </div>
                   </div>
@@ -535,7 +533,6 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
                           if (!currentRecord) return;
                           setSelectedRecordIds([]);
                           setSelectedRecords([]);
-                          // 直接尝试导入当前SOP
                           importSops([currentRecord]).then((hasDuplicate) => {
                             if (hasDuplicate === false) {
                               setDuplicateDialogOpen(true);
@@ -544,7 +541,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
                         }}
                         disabled={!currentRecord || loading}
                       >
-                        {loading ? t('ImportFromRecordsDialog.loading') : t('ImportFromRecordsDialog.importCurrent')}
+                        {loading ? t('importLinsight.loading') : t('importLinsight.importCurrent')}
                       </Button>
                     </div>
                   </div>
@@ -552,7 +549,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
               </Tabs>
             ) : (
               <div className="flex justify-center items-center h-full text-muted-foreground">
-                {t('ImportFromRecordsDialog.preview.noSelection')}
+                {t('importLinsight.preview.noSelection')}
               </div>
             )}
           </div>
@@ -561,9 +558,9 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
       <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t('ImportFromRecordsDialog.duplicateDialog.title')}</DialogTitle>
+            <DialogTitle>{t('importLinsight.duplicateDialog.title')}</DialogTitle>
             <DialogDescription>
-              {t('ImportFromRecordsDialog.duplicateDialog.description')}
+              {t('importLinsight.duplicateDialog.description')}
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-[300px] overflow-y-auto border rounded-md p-4">
@@ -575,7 +572,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
               ))
             ) : (
               <div className="text-center py-2 text-muted-foreground">
-                {t('ImportFromRecordsDialog.duplicateDialog.noDuplicateNames')}
+                {t('importLinsight.duplicateDialog.noDuplicateNames')}
               </div>
             )}
           </div>
@@ -595,11 +592,11 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
                   newFormData.append('save_new', 'true');
 
                   try {
-                    setLoading(true); // 添加加载状态
-                    await captureAndAlertRequestErrorHoc(sopApi.UploadSopRecord(newFormData)) // 等待请求完成
-                    toast({ variant: 'success', description: t('ImportFromRecordsDialog.success') });
+                    setLoading(true);
+                    await captureAndAlertRequestErrorHoc(sopApi.UploadSopRecord(newFormData))
+                    toast({ variant: 'success', description: t('importLinsight.success') });
                     setDuplicateDialogOpen(false);
-                    onOpenChange(false); // 关闭主弹窗
+                    onOpenChange(false);
                   } finally {
                     setLoading(false);
                     setIsSavingAsNew(false);
@@ -618,9 +615,9 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
               {isSavingAsNew ? (
                 <div className="flex items-center gap-2">
                   <LoadIcon className="animate-spin w-4 h-4" />
-                  {t('ImportFromRecordsDialog.duplicateDialog.savingAsNew')}
+                  {t('importLinsight.duplicateDialog.savingAsNew')}
                 </div>
-              ) : t('ImportFromRecordsDialog.duplicateDialog.saveAsNew')}
+              ) : t('importLinsight.duplicateDialog.saveAsNew')}
             </Button>
             <Button
               onClick={async () => {
@@ -637,18 +634,16 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
                   try {
                     setLoading(true);
                     await sopApi.UploadSopRecord(newFormData);
-                    toast({ variant: 'success', description: t('ImportFromRecordsDialog.success') });
+                    toast({ variant: 'success', description: t('importLinsight.success') });
                     setDuplicateDialogOpen(false);
                     onOpenChange(false);
                   } catch (error) {
-                    toast({ variant: 'error', description: t('ImportFromRecordsDialog.error') });
-                    // 错误时也重置状态
+                    toast({ variant: 'error', description: t('importLinsight.error') });
                     if (isMountedRef.current) {
                       setIsOverwriting(false);
                     }
                   } finally {
                     setLoading(false);
-                    // 确保状态重置
                     if (isMountedRef.current) {
                       setIsOverwriting(false);
                     }
@@ -663,7 +658,6 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
                     await importSops(recordsToUse, true, false);
                     setDuplicateDialogOpen(false);
                   } finally {
-                    // 确保状态重置
                     if (isMountedRef.current) {
                       setIsOverwriting(false);
                     }
@@ -674,9 +668,9 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
               {isOverwriting ? (
                 <div className="flex items-center gap-2">
                   <LoadIcon className="animate-spin w-4 h-4" />
-                  {t('ImportFromRecordsDialog.duplicateDialog.overwriting')}
+                  {t('importLinsight.duplicateDialog.overwriting')}
                 </div>
-              ) : t('ImportFromRecordsDialog.duplicateDialog.overwrite')}
+              ) : t('importLinsight.duplicateDialog.overwrite')}
             </Button>
           </div>
         </DialogContent>

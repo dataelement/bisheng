@@ -438,7 +438,7 @@
     "1005": ""
   },
 
-  "ImportFromRecordsDialog": {
+  "importLinsight": {
     "title": "从运行记录中导入指导手册",
     "searchPlaceholder": "搜索指导手册",
     "loading": "加载中...",
@@ -474,7 +474,24 @@
       "overwriting": "正在覆盖SOP..."
     },
     "success": "导入成功",
-    "error": "导入失败"
+    "error": "导入失败",
+    "guidelineManual": "指导手册",
+    "noRunningResult": "无运行结果",
+    "runningResult": "运行结果",
+    "name": "名称",
+    "creator": "创建者",
+    "description": "描述",
+    "featured": "是否精选",
+    "notFeatured": "未精选",
+    "actions": "操作",
+    "reset": "重置",
+    "apply": "确认",
+    "edit": "编辑",
+    "delete": "删除",
+    "noRatings": "暂无评分",
+    "noSOPFound": "未找到相关SOP",
+    "goTo": "跳至",
+    "pages": "页"
   },
   "sopForm": {
     "editManual": "编辑指导手册",
@@ -494,7 +511,14 @@
     "contentMaxLength": "详细内容不能超过{{max}}字",
     "importFailed": "SOP 导入失败",
     "contentTooLong": "内容超长",
-    "saveFailed": "保存失败"
+    "saveFailed": "保存失败",
+    "manual": "指导手册",
+    "result": "运行结果",
+    "noResult": "无运行结果",
+    "onlyFeaturedWithResult": "仅可精选包含运行结果的案例",
+    "featuredCase": "精选案例",
+    "setAsFeaturedCase": "设为精选案例",
+    "failToSetFeaturedCase": "sop设置精选案例失败"
   },
   "toolSelector": {
     "selectedTools": "已选工具",
@@ -594,7 +618,9 @@
       "voiceTypeRequired": "音色类型不可为空",
       "modelNameDuplicate": "显示名称不能重复",
       "required": "不能为空"
-    }
+    },
+    "systemPrompt2": "你是BISHENG智能问答助手，你的任务是根据用户问题进行回答。\n在回答时，请注意以下几点：\n- 当前时间是{cur_date}。\n- 不要泄露任何敏感信息，回答应基于一般性知识和逻辑。\n- 确保回答不违反法律法规、道德准则和公序良俗。",
+    "webSearchPrompt": "# 以下内容是基于用户发送的消息的搜索结果:\n{search_results}\n在我给你的搜索结果中，每个结果都是[webpage X begin]...[webpage X end]格式的，X代表每篇文章的数字索引。请在适当的情况下在句子末尾引用上下文。请按照引用编号[citation:X]的格式在答案中对应部分引用上下文。如果一句话源自多个上下文，请列出所有相关的引用编号，例如:cite[3]:cite[5]，切记不要将引用集中在最后返回引用编号，而是在答案对应部分列出。\n在回答时，请注意以下几点：\n- 今天是{cur_date}。\n- 并非搜索结果的所有内容都与用户的问题密切相关，你需要结合问题，对搜索结果进行甄别、筛选。\n- 对于列举类的问题（如列举所有航班信息），尽量将答案控制在10个要点以内，并告诉用户可以查看搜索来源、获得完整信息。优先提供信息完整、最相关的列举项；如非必要，不要主动告诉用户搜索结果未提供的内容。\n- 对于创作类的问题（如写论文），请务必在正文的段落中引用对应的参考编号，例如:cite[3]:cite[5]，不能只在文章末尾引用。你需要解读并概括用户的题目要求，选择合适的格式，充分利用搜索结果并抽取重要信息，生成符合用户要求、极具思想深度、富有创造力与专业性的答案。你的创作篇幅需要尽可能延长，对于每一个要点的论述要推测用户的意图，给出尽可能多角度的回答要点，且务必信息量大、论述详尽。\n- 如果回答很长，请尽量结构化、分段落总结。如果需要分点作答，尽量控制在5个点以内，并合并相关的内容。\n- 对于客观类的问答，如果问题的答案非常简短，可以适当补充一到两句相关信息，以丰富内容。\n- 你需要根据用户要求和回答内容选择合适、美观的回答格式，确保可读性强。\n- 你的回答应该综合多个相关网页来回答，不能重复引用一个网页。\n- 除非用户要求，否则你回答的语言需要和用户提问的语言保持一致。\n\n# 用户消息为：\n{question}"
   },
   "build": {
     "create": "创建",
@@ -730,6 +756,20 @@
     "leaveAndSave": "离开并保存",
     "leaveWithoutSave": "不保存,直接退出",
     "selectModel": "选择一个模型"
+  },
+  "bench": {
+    "daily": "日常",
+    "lingsi": "灵思",
+    "model": "模型",
+    "displayName": "显示名称",
+    "webSearchPrompt": "联网搜索提示词",
+    "confirmDelete": "确定要删除吗?",
+    "requestFailed": "请求失败",
+    "deleteFailed": "删除失败",
+    "fetchToolsFailed": "获取 {{type}} 列表失败",
+    "statusMessage": "共计划导入0条SOP，格式正确0条，错误0条",
+    "inputPlaceholder": "请输入你的任务目标，然后交给 BISHENG 灵思",
+    "inputPlaceholderDescription": "灵思是一位擅长完成复杂任务的Agent助理，除了描述任务目标外，您还可以用通俗的语言描述希望如何实现，这将有助于得到符合您预期的结果~"
   },
   "tools": {
     "addTool": "添加工具",

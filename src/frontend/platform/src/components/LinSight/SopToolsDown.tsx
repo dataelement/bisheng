@@ -32,14 +32,15 @@ export default function SopToolsDown({
     const [adjustedPosition, setAdjustedPosition] = useState(position);
     const popupRef = useRef<HTMLDivElement>(null);
     const [isHoveringMenu, setIsHoveringMenu] = useState(false);
-    // 初始化状态
+
+    // Initialize the state
     useEffect(() => {
         if (!open) {
             setHoverIndex(null);
             return;
         }
 
-        // 根据当前值查找激活的菜单项
+        // Find the active menu item based on the current value
         let foundActiveIndex: any = null;
         options.forEach((option, index) => {
             if (option.value === value) foundActiveIndex = index;
@@ -53,7 +54,7 @@ export default function SopToolsDown({
         setHoverIndex(foundActiveIndex);
     }, [open, value, options]);
 
-    // 精确位置调整逻辑
+    // Position adjustment logic
     useLayoutEffect(() => {
         if (!open || !popupRef.current) return;
         const SAFE_MARGIN = 8;
@@ -61,7 +62,7 @@ export default function SopToolsDown({
         const popup = popupRef.current;
         const popupRect = popup.getBoundingClientRect();
 
-        // 获取父容器边界（默认为视口）
+        // Get the boundaries of the parent container (default to viewport)
         const parentRect = parentRef?.current?.getBoundingClientRect() || {
             top: 0,
             left: 0,
@@ -71,7 +72,7 @@ export default function SopToolsDown({
             height: window.innerHeight
         };
 
-        // 计算修正后的位置（考虑父元素偏移）
+        // Calculate the adjusted position (considering the parent's offset)
         let adjustedTop = position.top;
         let adjustedLeft = position.left;
 
@@ -79,15 +80,14 @@ export default function SopToolsDown({
             adjustedTop = parentRect.height - popupRect.height - SAFE_MARGIN;
         }
 
-        if (position.left + popupRect.width*2 > parentRect.width) {
-            adjustedLeft = parentRect.width - popupRect.width*2 - SAFE_MARGIN;
+        if (position.left + popupRect.width * 2 > parentRect.width) {
+            adjustedLeft = parentRect.width - popupRect.width * 2 - SAFE_MARGIN;
         }
-
 
         setAdjustedPosition({ top: adjustedTop, left: adjustedLeft });
     }, [open, position, parentRef]);
 
-    // 处理菜单交互
+    // Handle menu interaction
     const handleParentHover = (index: number) => setHoverIndex(index);
 
     const handleParentClick = (index: number, e: React.MouseEvent) => {
@@ -107,7 +107,7 @@ export default function SopToolsDown({
         onClose();
     };
 
-    // 点击外部关闭菜单
+    // Close the menu if clicking outside
     useEffect(() => {
         if (!open) return;
 
@@ -122,19 +122,19 @@ export default function SopToolsDown({
     }, [open, onClose, isHoveringMenu]);
 
     if (!open) return null;
-    {/* 下拉弹窗 */ }
+    {/* Dropdown popup */ }
     return <div
         ref={popupRef}
         className="absolute bg-white shadow-lg rounded-md border border-gray-200"
         style={{
             top: adjustedPosition.top,
             left: adjustedPosition.left,
-            transform: 'translateZ(0)' // 确保精确渲染
+            transform: 'translateZ(0)' // Ensure accurate rendering
         }}
         onClick={(e) => e.stopPropagation()}
     >
         <div className="flex text-sm">
-            {/* 一级菜单 */}
+            {/* First-level menu */}
             <div className="w-48 border-r border-gray-100 overflow-auto max-h-96">
                 {options.map((option, index) => {
                     const hasChildren = option.children && option.children.length > 0;
@@ -171,7 +171,7 @@ export default function SopToolsDown({
                 })}
             </div>
 
-            {/* 二级菜单 */}
+            {/* Second-level menu */}
             {hoverIndex !== null && options[hoverIndex]?.children?.length > 0 && (
                 <div className="w-44 max-h-96 overflow-y-auto">
                     {options[hoverIndex].children?.map((child, childIndex) => (

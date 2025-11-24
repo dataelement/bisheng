@@ -1,6 +1,6 @@
+import { useDebounce } from "@/util/hook";
 import { Search } from "lucide-react";
 import { useEffect } from "react";
-import { useDebounce } from "@/util/hook";
 
 interface SopSearchBarProps {
     value: string;
@@ -21,7 +21,7 @@ export default function SopSearchBar({ value, placeholder, onChangeValue, onSear
     }, []);
 
     useEffect(() => {
-        // 当外部依赖变化时，取消上一次定时，使用新的防抖周期
+        // Cancel the previous timeout when external dependencies change, and use the new debounce interval
         (debouncedSearch as any)?.cancel?.();
     }, [debounceKey]);
 

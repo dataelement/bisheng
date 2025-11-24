@@ -1,14 +1,17 @@
 // src/features/chat-config/ChatConfig.tsx
+import DeleteConfirmModal from "@/components/LinSight/DeleteConfirmModal";
+import LocalFileImportDialog from "@/components/LinSight/LocalFileImportDialog";
+import SopActionsBar from "@/components/LinSight/SopActionsBar";
 import SopFormDrawer from "@/components/LinSight/SopFormDrawer";
 import ImportFromRecordsDialog from "@/components/LinSight/SopFromRecord";
+import SopSearchBar from "@/components/LinSight/SopSearchBar";
 import SopTable from "@/components/LinSight/SopTable";
 import ToolSelectorContainer from "@/components/LinSight/ToolSelectorContainer";
-import { UploadIcon } from "@/components/bs-icons";
-import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
+import ValidationDialog from "@/components/LinSight/ValidationDialog";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import { Card, CardContent } from "@/components/bs-ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { message, toast, useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
@@ -17,9 +20,10 @@ import { getAssistantToolsApi } from "@/controllers/API/assistant";
 import { sopApi } from "@/controllers/API/linsight";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useAssistantStore } from "@/store/assistantStore";
+import { useDebounce } from "@/util/hook";
 import { downloadFile } from "@/util/utils";
+import { t } from "i18next";
 import { cloneDeep } from "lodash-es";
-import { Search } from "lucide-react";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
@@ -27,13 +31,6 @@ import { useNavigate } from "react-router-dom";
 import { FormInput } from "./FormInput";
 import { Model } from "./ModelManagement";
 import Preview from "./Preview";
-import { t } from "i18next";
-import { useDebounce } from "@/util/hook";
-import SopSearchBar from "@/components/LinSight/SopSearchBar";
-import SopActionsBar from "@/components/LinSight/SopActionsBar";
-import DeleteConfirmModal from "@/components/LinSight/DeleteConfirmModal";
-import LocalFileImportDialog from "@/components/LinSight/LocalFileImportDialog";
-import ValidationDialog from "@/components/LinSight/ValidationDialog";
 
 export interface FormErrors {
     sidebarSlogan: string;
@@ -41,7 +38,7 @@ export interface FormErrors {
     functionDescription: string;
     inputPlaceholder: string;
     modelNames: string[] | string[][];
-    webSearch?: Record<string, string>; // 新增动态错误存储
+    webSearch?: Record<string, string>; // New: dynamic error storage
     systemPrompt: string;
     model: string;
     kownledgeBase: string;
@@ -94,6 +91,7 @@ export interface ChatConfigForm {
 }
 
 export default function index({ formData: parentFormData, setFormData: parentSetFormData }) {
+    const { t } = useTranslation()
     const [keywords, setKeywords] = useState('');
     const [datalist, setDatalist] = useState([]);
     const [total, setTotal] = useState(1);
@@ -115,7 +113,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const [isImporting, setIsImporting] = useState(false);
     const [validationDialog, setValidationDialog] = useState({
         open: false,
-        status_message: "共计划导入0条SOP，格式正确0条，错误0条"
+        status_message: t('bench.statusMessage')
     });
     const [importFilesData, setImportFilesData] = useState<File[]>([]);
     const [duplicateNames, setDuplicateNames] = useState<string[]>([]);
@@ -123,7 +121,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const [sopShowcase, setSopShowcase] = useState(false);
     const [deleteConfirmModal, setDeleteConfirmModal] = useState({
         open: false,
-        title: '确认删除',
+        title: t('bench.confirmDelete'),
         content: '',
         onConfirm: () => { },
         isBatch: false
@@ -144,7 +142,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         sidebarSlogan: '',
         welcomeMessage: '',
         functionDescription: '',
-        inputPlaceholder: '请输入你的任务目标，然后交给 BISHENG 灵思',
+        inputPlaceholder: t('bench.inputPlaceholder'),
         models: [],
         maxTokens: 15000,
         voiceInput: {
@@ -166,7 +164,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             prompt: ''
         },
         linsightConfig: {
-            input_placeholder: '灵思是一位擅长完成复杂任务的Agent助理，除了描述任务目标外，您还可以用通俗的语言描述希望如何实现，这将有助于得到符合您预期的结果~',
+            input_placeholder: t('bench.inputPlaceholderDescription'),
             tools: []
         }
     };
@@ -191,12 +189,12 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             }
             setToolsData(prev => ({ ...prev, [type]: res || [] }));
         } catch (error) {
-            toast({ variant: 'error', description: `获取${type}工具失败` });
+            toast({ variant: 'error', description: t('bench.fetchToolsFailed', { type }) });
         } finally {
             setLoading(false);
         }
     };
-    // 简单深比较（JSON序列化），用于避免父子相互 set 导致的循环刷新
+    // Simple deep comparison (JSON serialization) to avoid circular refresh caused by parent-child mutual setting
     const isDeepEqual = (a: any, b: any) => {
         try {
             return JSON.stringify(a) === JSON.stringify(b);
@@ -280,8 +278,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             const calculatedTotal = hasItems ? Math.max(res.total || 0, (params.page || page) * pageSize) : 0;
             setTotal(calculatedTotal);
         } catch (error) {
-            console.error('请求失败:', error);
-            toast({ variant: 'error', description: '请求失败，请稍后重试' });
+            console.error('Request failed:', error);
+            toast({ variant: 'error', description: t('bench.requestFailed') });
         } finally {
             setLoading(false);
         }
@@ -290,24 +288,24 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         fetchData({ page: 1, pageSize: 10, keyword: '', showcase: showcaseFilter });
     }, []);
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-    const [isEditing, setIsEditing] = useState(false); // 标记当前是否为编辑模式
-    const [currentSopId, setCurrentSopId] = useState(null); // 当前编辑的SOP ID
-    // 切换工具选中状态
+    const [isEditing, setIsEditing] = useState(false); // Mark whether currently in edit mode
+    const [currentSopId, setCurrentSopId] = useState(null); // Current editing SOP ID
+    // Toggle tool selection state
     const toggleTool = (tool, child) => {
         setSelectedTools(prev => {
             const parentIndex = prev.findIndex(t => t.id === tool.id);
 
-            // 一级工具存在
+            // Parent tool exists
             if (parentIndex > -1) {
                 const parent = prev[parentIndex];
                 const childIndex = parent.children.findIndex(c => c.id === child.id);
 
-                // 创建新的子工具数组
+                // Create new child tools array
                 const newChildren = childIndex === -1
-                    ? [...parent.children, child]  // 添加新子工具
-                    : parent.children.filter((_, i) => i !== childIndex); // 移除已存在子工具
+                    ? [...parent.children, child]  // Add new child tool
+                    : parent.children.filter((_, i) => i !== childIndex); // Remove existing child tool
 
-                // 更新或移除父级工具
+                // Update or remove parent tool
                 return newChildren.length > 0
                     ? [
                         ...prev.slice(0, parentIndex),
@@ -317,7 +315,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     : prev.filter(t => t.id !== tool.id);
             }
 
-            // 一级工具不存在，直接添加
+            // Parent tool does not exist, add directly
             return [...prev, { ...tool, children: [child] }];
         });
     };
@@ -334,7 +332,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         setFormData
     );
 
-    // 非admin角色跳走
+    // Redirect non-admin users
     const { user } = useContext(userContext);
     const navigate = useNavigate()
 
@@ -346,7 +344,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const handleDragEnd = (result) => {
         if (!result.destination) return;
 
-        // 防止拖拽到无效位置
+        // Prevent dragging to invalid positions
         if (result.destination.index === result.source.index) return;
 
         const newSelectedTools = [...selectedTools];
@@ -414,7 +412,6 @@ export default function index({ formData: parentFormData, setFormData: parentSet
 
     const [selectedItems, setSelectedItems] = useState([]);
     const [sortConfig, setSortConfig] = useState({ key: null, direction: '' });
-    const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
     const handleSearch = (keyword: string, resetPage: boolean = false) => {
         const newKeywords = keyword;
@@ -427,7 +424,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             showcase: showcaseFilter
         });
 
-        // 更新状态
+        // Update state
         setKeywords(newKeywords);
         setPageInputValue(newPage.toString());
         if (newPage !== page) {
@@ -435,7 +432,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         }
     };
 
-    // 关闭弹窗刷新下数据
+    // Refresh data when dialog closes
     useEffect(() => {
         if (!importDialogOpen) {
             fetchData({
@@ -474,7 +471,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
 
     };
 
-    // 添加回车键支持
+    // Add Enter key support
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -492,7 +489,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         setLoading(true);
         setSortConfig({ key, direction });
 
-        // 调用API进行服务端排序
+        // Call API for server-side sorting
         sopApi.getSopList({
             page_size: pageSize,
             page: 1,
@@ -545,12 +542,12 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         setPage(1);
         setPageInputValue('1');
     };
-      // 使用自定义防抖 hook（500ms，非立即）
-      const debouncedCallback = useCallback((value: string) => {
+    // Use custom debounce hook (500ms, non-immediate)
+    const debouncedCallback = useCallback((value: string) => {
         handleSearch(value, true);
     }, [showcaseFilter]);
     const debouncedSearch = useDebounce(debouncedCallback, 500, false);
-    // 仅在卸载时取消，避免因依赖变化反复取消
+    // Cancel only on unmount to avoid repeated cancellations due to dependency changes
     useEffect(() => {
         return () => {
             (debouncedSearch as any)?.cancel?.();
@@ -562,11 +559,11 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         try {
             await sopApi.batchDeleteSop(selectedItems);
 
-            // 计算新的总数
+            // Calculate new total
             const newTotal = total - selectedItems.length;
             const newTotalPages = Math.ceil(newTotal / pageSize);
 
-            // 确定新的当前页
+            // Determine new current page
             let newPage = page;
 
             if (datalist.length === selectedItems.length) {
@@ -581,13 +578,13 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                 newPage = newTotalPages;
             }
 
-            // 更新状态
+            // Update state
             setTotal(newTotal);
             setSelectedItems([]);
-            setPage(newPage);  // 确保更新page状态
+            setPage(newPage);  // Ensure page state is updated
             setPageInputValue(newPage.toString());
 
-            // 重新获取数据
+            // Re-fetch data
             fetchData({
                 page: newPage,
                 pageSize: pageSize,
@@ -600,7 +597,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                 description: t('chatConfig.batchDeleteSuccess', { count: selectedItems.length })
             });
         } catch (error) {
-            toast({ variant: 'error', description: '删除失败，请稍后重试' });
+            toast({ variant: 'error', description: t('bench.deleteFailed') });
         } finally {
             setBatchDeleting(false);
         }
@@ -644,14 +641,14 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             };
 
             if (isEditing && sopForm.id) {
-                // 更新操作
+                // Update operation
                 await sopApi.updateSop({
                     id: sopForm.id,
                     ...requestData
                 });
                 toast({ variant: 'success', description: t('chatConfig.sopUpdated') });
             } else {
-                // 新建操作
+                // Create operation
                 await sopApi.addSop(requestData);
                 toast({ variant: 'success', description: t('chatConfig.sopCreated') });
             }
@@ -662,8 +659,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                 pageSize: 10,
                 keyword: keywords,
                 showcase: showcaseFilter
-            }); // 刷新列表
-            resetSopForm(); // 重置表单
+            }); // Refresh list
+            resetSopForm(); // Reset form
         } catch (error) {
         }
     };
@@ -671,8 +668,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const [linsight, setLinsight] = useState({});
     const handleEdit = async (id: string) => {
         const sopToEdit = datalist.find(item => item.id === id);
-        const res =  await sopApi.getSopShowcaseDetail({ sop_id: id });
-        // 根据是否有运行结果设置sopShowcase状态
+        const res = await sopApi.getSopShowcaseDetail({ sop_id: id });
+        // Set sopShowcase state based on whether there are execution results
         setSopShowcase(res.execute_tasks.length === 0);
 
         setLinsight({ ...res.version_info, tasks: res.execute_tasks });
@@ -689,7 +686,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             description: sopToEdit.description || '',
             content: sopToEdit.content || '',
             rating: sopToEdit.rating || 0,
-            showcase: sopToEdit.showcase || false  // 添加精选状态
+            showcase: sopToEdit.showcase || false  // Add featured status
         });
         setIsDrawerOpen(true);
     };
@@ -711,7 +708,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
 
                         setSelectedItems(prevItems => prevItems.filter(itemId => itemId !== id));
 
-                        // 修复这里 - 确保传递正确的参数
+                        // Fix here - ensure correct parameters are passed
                         if (datalist.length === 1 && page > 1) {
                             setPage(page - 1);
                             fetchData({
@@ -758,18 +755,18 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         multiple: false,
         accept: {
             // 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.csv'],
-            // 'application/*': ['.xlsx'] // 结合扩展名和 MIME 类型双重验证
+            // 'application/*': ['.xlsx'] // Combine extension and MIME type for double verification
             "": [".xlsx"],
         },
         useFsAccessApi: false,
         onDrop: (acceptedFiles, rejectedFiles) => {
-            // 1. 如果用户上传了不支持的文件（如 .pdf、.docx）
+            // 1. If user uploaded unsupported files (e.g. .pdf, .docx)
             if (rejectedFiles.length > 0) {
                 message({ variant: 'warning', description: t('chatConfig.uploadXlsxTip') });
                 return;
             }
 
-            // 2. 如果用户上传了 .xlsx 文件，但文件名可能被篡改（如 fake.xlsx.pdf）
+            // 2. If user uploaded .xlsx file, but filename may be tampered (e.g. fake.xlsx.pdf)
             const file = acceptedFiles[0];
             const ext = file.name.split('.').pop().toLowerCase();
             if (ext !== 'xlsx') {
@@ -785,9 +782,9 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             const formData = new FormData();
             formData.append('file', importFiles[0]);
 
-            setImportFilesData([importFiles[0]]); // 只保存一个文件
+            setImportFilesData([importFiles[0]]); // Only save one file
             const res = await sopApi.UploadSopRecord(formData);
-            console.log('API Response:', res); // 调试用
+            console.log('API Response:', res); // For debugging
             if (res.status_code === 11010) {
                 setValidationDialog({
                     open: true,
@@ -955,7 +952,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 setDuplicateDialogOpen={setDuplicateDialogOpen}
                                 importFormData={importFormData}
                             />
-                            {/* 表格区域 */}
+                            {/* Table area */}
                             <SopTable datalist={datalist} selectedItems={selectedItems} handleSelectItem={handleSelectItem} handleSelectAll={handleSelectAll} handleSort={handleSort} handleEdit={handleEdit} handleDelete={handleDelete} page={page} pageSize={pageSize} total={total} loading={loading} pageInputValue={pageInputValue} handlePageChange={handlePageChange} handlePageInputChange={handlePageInputChange} handlePageInputConfirm={handlePageInputConfirm} handleKeyDown={handleKeyDown} onShowcaseFilterChange={handleShowcaseFilterChange} />
                             <DeleteConfirmModal
                                 open={deleteConfirmModal.open}
@@ -1025,7 +1022,7 @@ const useChatConfig = (
     const { toast } = useToast();
 
     const handleSave = async (formData: ChatConfigForm) => {
-        // 保留所有必要的字段
+        // Keep all necessary fields
         const processedTools = selectedTools.map(tool => ({
             id: tool.id,
             name: tool.name,
@@ -1042,7 +1039,7 @@ const useChatConfig = (
 
         const dataToSave = {
             ...formData,
-            // 应用中心欢迎语/描述：若未提供，使用多语言占位默认值
+            // Application center welcome/description: If not provided, use multilingual placeholder default
             applicationCenterWelcomeMessage: (formData.applicationCenterWelcomeMessage?.trim?.() || t('chatConfig.appCenterWelcomePlaceholder')),
             applicationCenterDescription: (formData.applicationCenterDescription?.trim?.() || t('chatConfig.appCenterDescriptionPlaceholder')),
             linsightConfig: {

@@ -250,7 +250,7 @@
     "runNewWorkflow": "Run New Chat",
     "chatEndMessage": "This chat has ended"
   },
-  "ImportFromRecordsDialog": {
+  "importLinsight": {
     "title": "Import Guidebook from Run Records",
     "searchPlaceholder": "Search guidebooks",
     "loading": "Loading...",
@@ -286,7 +286,21 @@
       "overwriting": "Overwriting SOP..."
     },
     "success": "Import successful",
-    "error": "Import failed"
+    "error": "Import failed",
+    "name": "Name",
+    "creator": "Creator",
+    "description": "Description",
+    "featured": "Featured",
+    "notFeatured": "Not Featured",
+    "actions": "Actions",
+    "reset": "Reset",
+    "apply": "Apply",
+    "edit": "Edit",
+    "delete": "Delete",
+    "noRatings": "No ratings available",
+    "noSOPFound": "No relevant SOP found",
+    "goTo": "Go to",
+    "pages": "Pages"
   },
   "toolSelector": {
     "selectedTools": "Selected Tools",
@@ -297,7 +311,10 @@
     "builtinTools": "Built-in Tools",
     "apiTools": "API Tools",
     "mcpTools": "MCP Tools",
-    "noToolsFound": "No related tools found"
+    "noToolsFound": "No related tools found",
+    "guidelineManual": "Guideline Manual",
+    "noRunningResult": "No Running Results",
+    "runningResult": "Running Results"
   },
   "sopForm": {
     "editManual": "Edit Manual",
@@ -317,7 +334,14 @@
     "contentMaxLength": "Detailed content cannot exceed {{max}} characters",
     "importFailed": "SOP import failed",
     "contentTooLong": "content too long",
-    "saveFailed": "Save failed"
+    "saveFailed": "Save failed",
+    "manual": "Manual",
+    "result": "Result",
+    "noResult": "No result",
+    "onlyFeaturedWithResult": "Only cases with results can be featured",
+    "featuredCase": "Featured Case",
+    "setAsFeaturedCase": "Set as Featured Case",
+    "failToSetFeaturedCase": "Failed to set as featured case"
   },
   "chatConfig": {
     "linsightPlaceholder": "Linsight is an Agent assistant skilled at completing complex tasks. In addition to describing your task objectives, you can also describe in plain language how you want them to be achieved, which will help get results that meet your expectations~",
@@ -362,6 +386,7 @@
     "maxTokensPlaceholder": "Maximum characters supported by the model",
     "systemPrompt": "System Prompt",
     "systemPromptPlaceholder": "You are BISHENG intelligent Q&A assistant, your task is to answer user questions.\nWhen answering, please note the following:\n- Current time is {cur_date}.\n- Do not disclose any sensitive information, answers should be based on general knowledge and logic.\n- Ensure answers do not violate laws, regulations, moral standards and public order.",
+    "webSea": "Web Search",
     "knowledgeBase": "Personal Knowledge",
     "knowledgeBasePrompt": "Personal Knowledge Base Search Prompt",
     "fileUpload": "File Upload",
@@ -404,7 +429,9 @@
       "modelDuplicate": "Model cannot be duplicated",
       "modelNameDuplicate": "Display name cannot be duplicated",
       "required": "Cannot be empty"
-    }
+    },
+    "systemPrompt2": "You are the BISHENG intelligent Q&A assistant. Your task is to answer user questions based on the information provided. When answering, please note the following points:\n- The current date is {cur_date}.\n- Do not disclose any sensitive information. Answers should be based on general knowledge and logic.\n- Ensure that your answers do not violate laws, regulations, moral standards, or public order.",
+    "webSearchPrompt": "# The following content is based on the search results of the message sent by the user:\n{search_results}\nIn the search results I provide you, each result is in the format [webpage X begin]...[webpage X end], where X represents the numerical index of each article. Please cite the context at the end of sentences when appropriate. Use the citation number [citation:X] format in the corresponding part of the answer. If a sentence comes from multiple contexts, list all relevant citation numbers, for example: cite[3]:cite[5]. Remember not to concentrate citations at the end but list them in the corresponding parts of the answer.\nWhen answering, please note the following points:\n- Today is {cur_date}.\n- Not all content in the search results is closely related to the user's question. You need to combine the question and filter the search results.\n- For enumeration questions (such as listing all flight information), try to keep the answer within 10 key points and inform the user that they can check the source for complete information. Prioritize providing complete and most relevant items; do not proactively inform the user of content not provided in the search results unless necessary.\n- For creative questions (such as writing an essay), ensure that you cite the corresponding reference numbers in the body paragraphs, for example: cite[3]:cite[5]. Do not only cite at the end of the article. Interpret and summarize the user's requirements, choose an appropriate format, fully utilize the search results, and extract important information to generate answers that meet the user's requirements, are highly insightful, creative, and professional. Extend the length of your creation as much as possible, infer the user's intent for each key point, and provide multi-angle answers with substantial information and detailed explanations.\n- If the answer is long, try to structure it and summarize in paragraphs. If you need to answer in points, try to limit it to 5 points and merge related content.\n- For objective questions, if the answer is very short, you can add one or two additional pieces of relevant information to enrich the content.\n- Choose an appropriate and aesthetically pleasing answer format based on the user's requirements and content to ensure readability.\n- Your answer should be based on multiple relevant web pages and should not repeatedly cite the same page.\n- Unless the user requests otherwise, the language of your answer should match the language of the user's question.\n\n# User message is:\n{question}"
   },
   "save": "Save",
   "model": {
@@ -731,6 +758,20 @@
     "leaveAndSave": "Leave and save",
     "leaveWithoutSave": "Leave without saving",
     "selectModel": "Select a model"
+  },
+  "bench": {
+    "daily": "Daily",
+    "lingsi": "Linsight",
+    "model": "Model",
+    "displayName": "Display Name",
+    "webSearchPrompt": "Web Search Prompt",
+    "confirmDelete": "Are you sure you want to delete?",
+    "requestFailed": "Request failed",
+    "deleteFailed": "Delete failed",
+    "fetchToolsFailed": "Failed to fetch {{type}} list",
+    "statusMessage": "Planned to import 0 SOPs, 0 correct, 0 errors",
+    "inputPlaceholder": "Enter your task goal and let BISHENG Lingsi handle it",
+    "inputPlaceholderDescription": "Lingsi is an Agent assistant skilled at completing complex tasks. Besides describing your task goal, you can also explain in simple terms how you want it to be achieved. This will help get the results you expect~"
   },
   "tools": {
     "addTool": "Add Tool",

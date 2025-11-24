@@ -1,14 +1,12 @@
 // components/ToolSelector.tsx
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
-import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
-import { Plus, X, AlignJustify, User, Star, CpuIcon } from 'lucide-react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { AlignJustify, Check, CpuIcon, Minus, Plus, Star, User, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
+import { useTranslation } from 'react-i18next';
+import { LoadIcon } from '../bs-icons/loading';
 import { SearchInput } from '../bs-ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../bs-ui/tooltip';
-import { Check, Minus } from "lucide-react";
-import { LoadIcon } from '../bs-icons/loading';
-import { t } from 'i18next';
-import { useTranslation } from 'react-i18next';
 type CheckboxState = 'checked' | 'unchecked' | 'indeterminate';
 
 const ToolSelector = ({
@@ -30,7 +28,7 @@ const ToolSelector = ({
   setManuallyExpandedItems,
   toggleGroup,
 }) => {
-     const { t } = useTranslation()
+  const { t } = useTranslation()
   const [scrollToParentId, setScrollToParentId] = useState<string | null>(null);
   const [isExpanding, setIsExpanding] = useState(false);
   const [targetCategory, setTargetCategory] = useState<string | null>(null);
@@ -321,7 +319,7 @@ const ToolSelector = ({
                 value={toolSearchTerm}
                 onChange={(e) => setToolSearchTerm(e.target.value)}
                 onClear={() => setToolSearchTerm('')}
-                
+
               />
             </div>
 
