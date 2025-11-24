@@ -233,7 +233,7 @@ class RagUtils(BaseNode):
         logger.debug(f'retrieve finally chunks: {finally_docs}')
         same_file_id = set()
         for one in finally_docs:
-            file_id = one.metadata.get('file_id')
+            file_id = one.metadata.get('document_id') or one.metadata.get('file_id')
             same_file_id.add(file_id)
         if len(same_file_id) == 1:
             # 来自同一个文件，则按照chunk_index排序
@@ -249,7 +249,7 @@ class RagUtils(BaseNode):
                     one.metadata["upload_time"] = self.format_timestamp(one.metadata["upload_time"])
                 if "update_time" in one.metadata:
                     one.metadata["update_time"] = self.format_timestamp(one.metadata["update_time"])
-                file_id = one.metadata.get('file_id')
+                file_id = one.metadata.get('document_id') or one.metadata.get('file_id')
                 if file_id and file_map.get(file_id):
                     for user_key, user_value in one.metadata.get('user_metadata', {}).items():
                         field_info = file_map[file_id].user_metadata.get(user_key)
