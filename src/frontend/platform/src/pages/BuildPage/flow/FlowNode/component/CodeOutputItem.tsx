@@ -37,8 +37,8 @@ const Item = ({ item, index, validate, onUpdateItem, onDeleteItem }) => {
                 </SelectTrigger>
                 <SelectContent>
                     <SelectGroup>
-                        <SelectItem value="str">str</SelectItem>
-                        <SelectItem value="list">list</SelectItem>
+                        <SelectItem value="str">Str</SelectItem>
+                        <SelectItem value="list">List</SelectItem>
                     </SelectGroup>
                 </SelectContent>
             </Select>
