@@ -89,10 +89,10 @@ class ConditionOne(BaseModel):
             key_info['value'] = f"%{right_value}"
         elif self.comparison_operation == "is_empty":
             key_info['comparison'] = 'is null'
-            key_info['value'] = ''
+            key_info['value'] = None
         elif self.comparison_operation == "is_not_empty":
             key_info['comparison'] = 'is not null'
-            key_info['value'] = ''
+            key_info['value'] = None
         elif self.comparison_operation == "greater_than":
             key_info['comparison'] = '>'
             key_info['value'] = right_value
