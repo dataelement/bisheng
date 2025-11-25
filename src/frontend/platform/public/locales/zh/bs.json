@@ -809,7 +809,19 @@
     "nameExists": "名称已存在，请修改",
     "configRequired": "配置不能为空",
     "configFormatError": "配置格式错误，请检查JSON格式是否正确",
-    "exampleGaode": "高德地图"
+    "exampleGaode": "高德地图",
+    "toolNameCannotBeEmpty": "工具名称不能为空",
+    "schemaCannotBeEmpty": "schema不能为空",
+    "apiKeyCannotBeEmpty": "API Key不可为空",
+    "apiKeyMaxLengthExceeded": "API Key不可大于1000字符",
+    "parameterNameCannotBeEmpty": "Parameter name 不可为空",
+    "parameterNameMaxLengthExceeded": "Parameter name 不可大于1000字符",
+    "addMcpServer": "添加MCP服务器",
+    "refresh":"刷新",
+    "gaodeMap": "高德地图",
+    "gaodeMapSSE": "高德地图（SSE 协议）",
+    "gaodeMapStreamable": "高德地图（streamable 协议）",
+    "gaodeMapDesc": "高德地图API，提供地理编码、逆地理编码、IP定位、天气查询、骑行路径规划、步行路径规划、驾车路径规划、公交路径规划、距离测量、关键词搜索、周边搜索、详情搜索等服务"
   },
   "test": {
     "test": "测试",
@@ -832,7 +844,8 @@
     "selectVersion": "选择版本",
     "component": "组件",
     "parameterName": "参数名",
-    "parameterValue": "参数值"
+    "parameterValue": "参数值",
+    "inputTypeValue": "输入{{type}}类型值"
   },
   "resetPassword": {
     "slogen": "安全地重置您的密码",

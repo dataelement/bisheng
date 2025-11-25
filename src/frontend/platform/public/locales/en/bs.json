@@ -811,7 +811,19 @@
     "nameExists": "Name already exists, please modify",
     "configRequired": "Configuration is required",
     "configFormatError": "Configuration format error, please check JSON format",
-    "exampleGaode": "AMap"
+    "exampleGaode": "AMap",
+    "toolNameCannotBeEmpty": "Tool name cannot be empty",
+    "schemaCannotBeEmpty": "Schema cannot be empty",
+    "apiKeyCannotBeEmpty": "API Key cannot be empty",
+    "apiKeyMaxLengthExceeded": "API Key cannot exceed 1000 characters",
+    "parameterNameCannotBeEmpty": "Parameter name cannot be empty",
+    "parameterNameMaxLengthExceeded": "Parameter name cannot exceed 1000 characters",
+    "addMcpServer": "Add MCP Server",
+    "refresh":"Refresh",
+    "gaodeMap": "Gaode Map",
+    "gaodeMapSSE": "Gaode Map (SSE Protocol)",
+    "gaodeMapStreamable": "Gaode Map (streamable Protocol)",
+    "gaodeMapDesc": "AMap provides a variety of location-based services, including geocoding, reverse geocoding, IP location, weather query, cycling path planning, walking path planning, driving path planning, bus path planning, distance measurement, keyword search, nearby search, and detailed search services"
   },
   "test": {
     "test": "Test",
@@ -834,7 +846,8 @@
     "selectVersion": "Select Version",
     "component": "Component",
     "parameterName": "Name",
-    "parameterValue": "Value"
+    "parameterValue": "Value",
+    "inputTypeValue": "Enter a value of type {{type}}"
   },
   "resetPassword": {
     "slogen": "Securely Reset Your Password",

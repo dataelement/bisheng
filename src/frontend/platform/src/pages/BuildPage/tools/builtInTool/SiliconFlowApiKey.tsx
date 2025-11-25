@@ -9,7 +9,7 @@ const defaultValues = {
 };
 
 const SiliconFlowApiKeyForm = ({ formData = {}, onSubmit }) => {
-    const { t } = useTranslation();
+    const { t } = useTranslation('tool');
     const [localFormData, setLocalFormData] = useState(() => ({ ...defaultValues, ...formData }));
     const [errors, setErrors] = useState<any>({});
 
@@ -19,12 +19,14 @@ const SiliconFlowApiKeyForm = ({ formData = {}, onSubmit }) => {
     };
 
     const validateForm = () => {
-        const formErrors = {};
+        const formErrors: Record<string, boolean> = {};
         let isValid = true;
+
         if (!localFormData.siliconflow_api_key) {
             formErrors.siliconflow_api_key = true;
             isValid = false;
         }
+
         setErrors(formErrors);
         return isValid;
     };
@@ -38,14 +40,14 @@ const SiliconFlowApiKeyForm = ({ formData = {}, onSubmit }) => {
 
     return (
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-            {/* SiliconFlow API 密钥 */}
+            {/* SiliconFlow API Key */}
             <InputField
                 required
-                label="SiliconFlow API 密钥"
+                label={t('siliconflowApiKeyLabel')}
                 type="password"
                 id="siliconflow_api_key"
                 name="siliconflow_api_key"
-                placeholder={''}
+                placeholder=""
                 value={localFormData.siliconflow_api_key}
                 onChange={handleChange}
                 error={errors.siliconflow_api_key}
@@ -55,11 +57,11 @@ const SiliconFlowApiKeyForm = ({ formData = {}, onSubmit }) => {
             <DialogFooter>
                 <DialogClose>
                     <Button variant="outline" className="px-11" type="button">
-                        {t('cancel')}
+                        {t('cancel', { ns: 'bs' })}
                     </Button>
                 </DialogClose>
                 <Button className="px-11" type="submit">
-                    {t('save')}
+                    {t('save', { ns: 'bs' })}
                 </Button>
             </DialogFooter>
         </form>
