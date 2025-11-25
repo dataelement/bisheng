@@ -10,11 +10,11 @@ const defaultValues = {
     email_password: '',
     smtp_server: '',
     smtp_port: '',
-    encrypt_method: '无加密', // 默认值
+    encrypt_method: '无加密', // Default value
 };
 
 const EmailConfigForm = ({ formData = {}, onSubmit }) => {
-    const { t } = useTranslation();
+    const { t } = useTranslation('tool');
     const [localFormData, setLocalFormData] = useState(() => ({ ...defaultValues, ...formData }));
     const [errors, setErrors] = useState({});
 
@@ -31,7 +31,7 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
 
     // Validate the form inputs
     const validateForm = () => {
-        const formErrors = {};
+        const formErrors: Record<string, boolean | string> = {};
         let isValid = true;
 
         // Email account validation
@@ -40,7 +40,7 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
             formErrors.email_account = true;
             isValid = false;
         } else if (!emailRegex.test(localFormData.email_account)) {
-            formErrors.email_account = '请输入有效的邮箱地址';
+            formErrors.email_account = t('invalidEmailMessage');
             isValid = false;
         }
 
@@ -56,7 +56,7 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
             formErrors.smtp_server = true;
             isValid = false;
         } else if (!smtpServerRegex.test(localFormData.smtp_server)) {
-            formErrors.smtp_server = '请输入有效的SMTP服务器地址';
+            formErrors.smtp_server = t('invalidSmtpServerMessage');
             isValid = false;
         }
 
@@ -66,7 +66,7 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
             formErrors.smtp_port = true;
             isValid = false;
         } else if (isNaN(smtpPort) || smtpPort < 1 || smtpPort > 65535) {
-            formErrors.smtp_port = '请输入有效的端口号';
+            formErrors.smtp_port = t('invalidPortMessage');
             isValid = false;
         }
 
@@ -89,15 +89,15 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
     };
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-6"  autoComplete="off">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-6" autoComplete="off">
             {/* Email Account */}
             <InputField
                 required
-                label="email_account（发件人邮箱账号）"
+                label={t('emailAccountLabel')}
                 type="text"
                 id="email_account"
                 name="email_account"
-                placeholder={''}
+                placeholder=""
                 value={localFormData.email_account}
                 onChange={handleChange}
                 error={errors.email_account}
@@ -106,11 +106,11 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
             {/* Email Password */}
             <InputField
                 required
-                label="email_password（发件人邮箱密码）"
+                label={t('emailPasswordLabel')}
                 type="password"
                 id="email_password"
                 name="email_password"
-                placeholder={''}
+                placeholder=""
                 value={localFormData.email_password}
                 onChange={handleChange}
                 error={errors.email_password}
@@ -119,11 +119,11 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
             {/* SMTP Server */}
             <InputField
                 required
-                label="smtp_server（发信 SMTP 服务器地址）"
+                label={t('smtpServerLabel')}
                 type="text"
                 id="smtp_server"
                 name="smtp_server"
-                placeholder={''}
+                placeholder=""
                 value={localFormData.smtp_server}
                 onChange={handleChange}
                 error={errors.smtp_server}
@@ -132,11 +132,11 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
             {/* SMTP Port */}
             <InputField
                 required
-                label="smtp_port（发信 SMTP 服务器端口）"
+                label={t('smtpPortLabel')}
                 type="text"
                 id="smtp_port"
                 name="smtp_port"
-                placeholder={''}
+                placeholder=""
                 value={localFormData.smtp_port}
                 onChange={handleChange}
                 error={errors.smtp_port}
@@ -145,15 +145,15 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
             {/* Encrypt Method */}
             <SelectField
                 required
-                label="encrypt_method（发信 服务器加密方式）"
+                label={t('encryptMethodLabel')}
                 id="encrypt_method"
                 name="encrypt_method"
                 value={localFormData.encrypt_method}
                 onChange={(value) => handleSelectChange('encrypt_method', value)}
                 options={[
-                    { label: '无加密', value: '无加密' },
-                    { label: 'SSL 加密', value: 'SSL 加密' },
-                    { label: 'STARTTLS 加密', value: 'STARTTLS 加密' },
+                    { label: t('encryptMethodNoneLabel'), value: '无加密' },
+                    { label: t('encryptMethodSslLabel'), value: 'SSL 加密' },
+                    { label: t('encryptMethodStarttlsLabel'), value: 'STARTTLS 加密' },
                 ]}
                 error={errors.encrypt_method}
             />
@@ -162,11 +162,11 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
             <DialogFooter>
                 <DialogClose>
                     <Button variant="outline" className="px-11" type="button">
-                        {t('cancel')}
+                        {t('cancel', { ns: 'bs' })}
                     </Button>
                 </DialogClose>
                 <Button className="px-11" type="submit">
-                    {t('save')}
+                    {t('save', { ns: 'bs' })}
                 </Button>
             </DialogFooter>
         </form>

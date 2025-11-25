@@ -9,7 +9,7 @@ const defaultValues = {
 };
 
 const JinaApiKeyForm = ({ formData = {}, onSubmit }) => {
-    const { t } = useTranslation();
+    const { t } = useTranslation('tool');
     const [localFormData, setLocalFormData] = useState(() => ({ ...defaultValues, ...formData }));
 
     const handleChange = (e) => {
@@ -26,11 +26,11 @@ const JinaApiKeyForm = ({ formData = {}, onSubmit }) => {
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
             {/* Jina API Key Input */}
             <InputField
-                label="Jina API 密钥"
+                label={t('jinaApiKeyLabel')}
                 type="password"
                 id="jina_api_key"
                 name="jina_api_key"
-                placeholder={''}
+                placeholder=""
                 value={localFormData.jina_api_key}
                 onChange={handleChange}
             />
@@ -39,11 +39,11 @@ const JinaApiKeyForm = ({ formData = {}, onSubmit }) => {
             <DialogFooter>
                 <DialogClose>
                     <Button variant="outline" className="px-11" type="button">
-                        {t('cancel')}
+                        {t('cancel', { ns: 'bs' })}
                     </Button>
                 </DialogClose>
                 <Button className="px-11" type="submit">
-                    {t('save')}
+                    {t('save', { ns: 'bs' })}
                 </Button>
             </DialogFooter>
         </form>

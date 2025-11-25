@@ -1,0 +1,389 @@
+{
+    "categories": {
+        "代码执行器": {
+            "name": "Code Interpreter",
+            "desc": "Execute code to perform chart plotting, file processing, and other programming-related tasks"
+        },
+        "天眼查": {
+            "name": "Tianyancha",
+            "desc": "Enterprise information search"
+        },
+        "Jina AI": {
+            "name": "Jina AI",
+            "desc": "Convert content of target URLs (PDF supported) into Markdown format for LLM processing"
+        },
+        "联网搜索": {
+            "name": "Web Search",
+            "desc": "Search the internet with configurable engines such as Bing, Bochacha, Jina Deep Search, SerpApi, and Tavily"
+        },
+        "Dalle3绘画": {
+            "name": "DALL·E 3 Image Generation",
+            "desc": "OpenAI text-to-image model"
+        },
+        "Firecrawl": {
+            "name": "Firecrawl",
+            "desc": "Crawl a website and convert its content into Markdown format"
+        },
+        "SiliconFlow": {
+            "name": "SiliconFlow",
+            "desc": "Generate high-quality images using Flux or Stable Diffusion models"
+        },
+        "飞书消息": {
+            "name": "Feishu Messages",
+            "desc": "Retrieve Feishu direct or group chat history; send messages to users or group chats"
+        },
+        "Bing web搜索": {
+            "name": "Bing Web Search",
+            "desc": "Search the internet using Bing, e.g., for weather, exchange rates, or news"
+        },
+        "发送邮件": {
+            "name": "Send Email",
+            "desc": "Send emails using the SMTP protocol"
+        },
+        "企业微信": {
+            "name": "WeCom",
+            "desc": "Send messages to WeCom groups via robots"
+        },
+        "钉钉": {
+            "name": "DingTalk",
+            "desc": "Send group messages using DingTalk robots"
+        },
+        "论文获取": {
+            "name": "Paper Fetcher",
+            "desc": "Retrieve papers from arXiv using keywords"
+        },
+        "计算器": {
+            "name": "Calculator",
+            "desc": "Perform mathematical expression computation using Python"
+        },
+        "经济金融数据": {
+            "name": "Economic & Financial Data",
+            "desc": "Large financial data platform including stocks, funds, futures, macroeconomics, and corporate fundamentals"
+        },
+        "时间": {
+            "name": "Time",
+            "desc": "Get the current time"
+        }
+    },
+    "tools": {
+        "bisheng_code_interpreter": {
+            "name": "Code Interpreter",
+            "desc": "Execute Python or shell code and return results within 600 seconds; suitable for math, programming, images, files, etc.",
+            "params": {
+                "python_code": "The pure Python script to evaluate. It will be placed in main.py. Do not use Markdown."
+            }
+        },
+        "tianyancha_riskinfo": {
+            "name": "Enterprise Risk (Tianyancha)",
+            "desc": "Retrieve risk information related to a company, including internal/related/alert risks",
+            "params": {
+                "query": "Search keyword (company name, ID, registration number, or unified social credit code)"
+            }
+        },
+        "tianyancha_company_holders": {
+            "name": "Company Shareholders",
+            "desc": "Retrieve shareholder information including name, equity ratio, capital contribution, etc.",
+            "params": {
+                "query": "Search keyword (company name, ID, registration number, or unified social credit code)"
+            }
+        },
+        "tianyancha_company_change_info": {
+            "name": "Business Registration Change Records",
+            "desc": "Retrieve company business change records, including change items and before/after details",
+            "params": {
+                "query": "Search keyword (company name, ID, registration number, or unified social credit code)"
+            }
+        },
+        "tianyancha_ic_info": {
+            "name": "Industrial & Commercial Information",
+            "desc": "Retrieve company basic info, key personnel, shareholders, external investments, branches, etc.",
+            "params": {
+                "query": "Search keyword (company name, ID, registration number, or unified social credit code)"
+            }
+        },
+        "tianyancha_law_suit_case": {
+            "name": "Legal Litigation",
+            "desc": "Retrieve company lawsuits including case name, cause, identity, case number, etc.",
+            "params": {
+                "query": "Search keyword"
+            }
+        },
+        "tianyancha_judicial_risk": {
+            "name": "Judicial Risk",
+            "desc": "Retrieve lawsuits, court announcements, hearings, dishonest persons, enforcement info, case filings, delivery notices, etc.",
+            "params": {
+                "query": "Search keyword"
+            }
+        },
+        "tianyancha_ip_rights": {
+            "name": "Intellectual Property",
+            "desc": "Retrieve IP-related info including trademarks, patents, copyrights, software copyrights, and website filings",
+            "params": {
+                "query": "Search keyword"
+            }
+        },
+        "tianyancha_get_company_baseinfo": {
+            "name": "Company Basic Information",
+            "desc": "Retrieve basic info including company name, type, establishment date, status, registered capital, legal rep., etc.",
+            "params": {
+                "query": "Search keyword"
+            }
+        },
+        "tianyancha_search_company": {
+            "name": "Search Companies",
+            "desc": "Retrieve a list of companies matching a keyword, including name, type, date, status, credit code, etc.",
+            "params": {
+                "query": "Keyword"
+            }
+        },
+        "tianyancha_all_companys_by_company": {
+            "name": "Person’s Related Companies",
+            "desc": "Retrieve all companies associated with a person (as legal rep., shareholder, senior management)",
+            "params": {
+                "query": "Person to search",
+                "name": "Company the person worked at"
+            }
+        },
+        "jina_get_markdown": {
+            "name": "Fetch Single Webpage",
+            "desc": "Crawl target URL (PDF supported) and convert to Markdown for LLM processing",
+            "params": {
+                "target_url": "URL to fetch"
+            }
+        },
+        "web_search": {
+            "name": "Web Search",
+            "desc": "Perform online search and return results",
+            "params": {
+                "query": "Search query"
+            }
+        },
+        "dalle_image_generator": {
+            "name": "DALL·E 3 Image Generator",
+            "desc": "Generate image based on text description",
+            "params": {
+                "query": "Description of the image"
+            }
+        },
+        "fire_search_crawl": {
+            "name": "Deep Crawl (Crawl Mode)",
+            "desc": "Crawl target website and all accessible subpages",
+            "params": {
+                "target_url": "Starting URL"
+            }
+        },
+        "fire_search_scrape": {
+            "name": "Single Page Crawl (Scrape Mode)",
+            "desc": "Crawl only the given URL page, without subpages",
+            "params": {
+                "target_url": "URL to scrape"
+            }
+        },
+        "silicon_flux": {
+            "name": "Flux Image Generator",
+            "desc": "Generate images using the Flux model",
+            "params": {
+                "prompt": "Image prompt (recommended in English)"
+            }
+        },
+        "silicon_stable_diffusion": {
+            "name": "Stable Diffusion",
+            "desc": "Generate images using Stable Diffusion model",
+            "params": {
+                "prompt": "Image prompt",
+                "negative_prompt": "Content to exclude"
+            }
+        },
+        "feishu_get_chat_messages": {
+            "name": "Retrieve Feishu Message History",
+            "desc": "Fetch messages in direct chats, groups, or threads",
+            "params": {
+                "container_id": "Chat/group/thread ID",
+                "container_id_type": "Container type",
+                "start_time": "Start timestamp",
+                "end_time": "End timestamp",
+                "page_size": "Number of messages per request",
+                "sort_type": "Sort order",
+                "page_token": "Pagination token"
+            }
+        },
+        "feishu_send_message": {
+            "name": "Send Feishu Message",
+            "desc": "Send message to specified user or group",
+            "params": {
+                "message": "Message content",
+                "receive_id": "Receiver ID",
+                "receive_id_type": "ID type"
+            }
+        },
+        "bing_search": {
+            "name": "Bing Web Search",
+            "desc": "Search Bing and return results",
+            "params": {
+                "query": "Search query"
+            }
+        },
+        "email_send_email": {
+            "name": "Send Email",
+            "desc": "Send email to one or more recipients (use comma to separate multiple emails)",
+            "params": {
+                "receiver": "Recipient email address",
+                "subject": "Email subject",
+                "content": "Email body"
+            }
+        },
+        "wechat_send_message": {
+            "name": "Send WeCom Group Message",
+            "desc": "Push message to WeCom group via robot",
+            "params": {
+                "url": "Webhook URL",
+                "message": "Message content"
+            }
+        },
+        "ding_send_message": {
+            "name": "Send DingTalk Group Message",
+            "desc": "Send message to DingTalk group via custom robot",
+            "params": {
+                "url": "Webhook URL",
+                "message": "Message content"
+            }
+        },
+        "arxiv": {
+            "name": "Paper Fetcher",
+            "desc": "Retrieve papers from arXiv",
+            "params": {
+                "query": "Search query"
+            }
+        },
+        "calculator": {
+            "name": "Calculator",
+            "desc": "Compute mathematical expressions",
+            "params": {}
+        },
+        "macro_bond_zh_us_rate": {
+            "name": "China–US Treasury Yields",
+            "desc": "Return treasury yield data for both countries (2y / 5y / 10y / 30y / 10y-2y spread)",
+            "params": {
+                "start_date": "Start date (YYYY-MM-DD)",
+                "end_date": "End date (YYYY-MM-DD)"
+            }
+        },
+        "macro_china_pmi": {
+            "name": "PMI",
+            "desc": "China PMI monthly statistics",
+            "params": {
+                "start_date": "Start date",
+                "end_date": "End date"
+            }
+        },
+        "macro_china_consumer_goods_retail": {
+            "name": "Retail Sales",
+            "desc": "China total retail sales of consumer goods monthly data",
+            "params": {
+                "start_date": "Start date",
+                "end_date": "End date"
+            }
+        },
+        "macro_china_money_supply": {
+            "name": "Money Supply",
+            "desc": "China monthly data for M0, M1, M2 and YoY/MoM changes",
+            "params": {
+                "start_date": "Start date",
+                "end_date": "End date"
+            }
+        },
+        "macro_china_ppi": {
+            "name": "PPI",
+            "desc": "Producer Price Index monthly data",
+            "params": {
+                "start_date": "Start date",
+                "end_date": "End date"
+            }
+        },
+        "macro_china_cpi": {
+            "name": "CPI",
+            "desc": "Consumer Price Index monthly data across national, urban, and rural levels",
+            "params": {
+                "start_date": "Start date",
+                "end_date": "End date"
+            }
+        },
+        "macro_china_gdp_yearly": {
+            "name": "GDP",
+            "desc": "China quarterly GDP statistics",
+            "params": {
+                "start_date": "Start date",
+                "end_date": "End date"
+            }
+        },
+        "macro_china_shrzgm": {
+            "name": "Social Financing Increment",
+            "desc": "Monthly total social financing increment and breakdown",
+            "params": {
+                "start_date": "Start date",
+                "end_date": "End date"
+            }
+        },
+        "sina_history_KLine": {
+            "name": "Historical Stock Quotes",
+            "desc": "Retrieve China A-share historical price data (open, high, low, close, volume)",
+            "params": {
+                "date": "Date (YYYY-MM-DD)",
+                "stock_exchange": "Exchange code",
+                "stock_symbol": "6-digit stock or index code"
+            }
+        },
+        "sina_realtime_info": {
+            "name": "Realtime Stock Quotes",
+            "desc": "Retrieve real-time A-share stock/index data",
+            "params": {
+                "prefix": "Prefix for quote type",
+                "stock_exchange": "Exchange code",
+                "stock_symbol": "6-digit stock or index code"
+            }
+        },
+        "get_current_time": {
+            "name": "Current Time",
+            "desc": "Return the current time (defaults to UTC+8)",
+            "params": {}
+        }
+    },
+    "addMcpServer": "Add MCP Server",
+    "refresh": "Refresh",
+    "refreshSuccess": "Refresh Successful",
+    "executionModeLabel": "Code execution mode",
+    "executionLocalLabel": "Run locally",
+    "executionE2bLabel": "Run in E2B sandbox",
+    "serviceProviderLabel": "Service provider",
+    "providerPrivateLabel": "Self-hosted",
+    "providerPrivateTooltip": "Deploy E2B in your local environment, point the domain to your self-hosted address, and let your E2B backend handle API key authentication.",
+    "providerOfficialLabel": "Official cloud",
+    "providerOfficialTooltip": "Use the official E2B cloud service and obtain an API key from E2B.",
+    "domainCannotBeEmpty": "Domain cannot be empty",
+    "apiKeyCannotBeEmpty": "API key cannot be empty",
+    "enterApiKeyPlaceholder": "Please enter the API key",
+    "enterApiKey": "Enter the API key",
+    "timeoutTooltip": "Maximum time in milliseconds the crawler waits for a page before aborting.",
+    "deepCrawlDetailConfigDescription": "Advanced deep crawl settings (only affect Crawl requests)",
+    "maxdepthTooltip": "Maximum crawl depth relative to the input URL.",
+    "limitTooltip": "Maximum number of pages to crawl.",
+    "azureEndpointPlaceholder": "Example: https://xxx.openai.azure.com/",
+    "openaiApiVersionPlaceholder": "Example: 2024-02-01",
+    "emailAccountLabel": "email_account (sender email address)",
+    "emailPasswordLabel": "email_password (sender email password)",
+    "smtpServerLabel": "smtp_server (SMTP server address)",
+    "smtpPortLabel": "smtp_port (SMTP server port)",
+    "encryptMethodLabel": "encrypt_method (SMTP encryption method)",
+    "encryptMethodNoneLabel": "No encryption",
+    "encryptMethodSslLabel": "SSL encryption",
+    "encryptMethodStarttlsLabel": "STARTTLS encryption",
+    "invalidEmailMessage": "Please enter a valid email address",
+    "invalidSmtpServerMessage": "Please enter a valid SMTP server address",
+    "invalidPortMessage": "Please enter a valid port number",
+    "feishuAppIdTooltip": "The app’s unique identifier.",
+    "feishuAppSecretTooltip": "The app secret generated by the platform when the app is created.",
+    "pleaseSelect": "Please select",
+    "fieldCannotBeEmpty": "{{label}} cannot be empty",
+    "jinaApiKeyLabel": "Jina API Key",
+    "siliconflowApiKeyLabel": "SiliconFlow API Key"
+}

@@ -10,7 +10,7 @@ const defaultValues = {
 };
 
 const FeishuConfigForm = ({ formData = {}, onSubmit }) => {
-    const { t } = useTranslation();
+    const { t } = useTranslation('tool');
     const [localFormData, setLocalFormData] = useState(() => ({ ...defaultValues, ...formData }));
     const [errors, setErrors] = useState({});
 
@@ -20,7 +20,7 @@ const FeishuConfigForm = ({ formData = {}, onSubmit }) => {
     };
 
     const validateForm = () => {
-        const formErrors = {};
+        const formErrors: Record<string, boolean> = {};
         let isValid = true;
         if (!localFormData.app_id) {
             formErrors.app_id = true;
@@ -47,11 +47,11 @@ const FeishuConfigForm = ({ formData = {}, onSubmit }) => {
             <InputField
                 required
                 label="App ID"
-                tooltip="应用唯一的标识。"
+                tooltip={t('feishuAppIdTooltip')}
                 type="text"
                 id="app_id"
                 name="app_id"
-                placeholder={''}
+                placeholder=""
                 value={localFormData.app_id}
                 onChange={handleChange}
                 error={errors.app_id}
@@ -61,11 +61,11 @@ const FeishuConfigForm = ({ formData = {}, onSubmit }) => {
             <InputField
                 required
                 label="App Secret"
-                tooltip="应用的密钥，在创建应用时由平台生成。"
+                tooltip={t('feishuAppSecretTooltip')}
                 type="password"
                 id="app_secret"
                 name="app_secret"
-                placeholder={''}
+                placeholder=""
                 value={localFormData.app_secret}
                 onChange={handleChange}
                 error={errors.app_secret}
@@ -75,11 +75,11 @@ const FeishuConfigForm = ({ formData = {}, onSubmit }) => {
             <DialogFooter>
                 <DialogClose>
                     <Button variant="outline" className="px-11" type="button">
-                        {t('cancel')}
+                        {t('cancel', { ns: 'bs' })}
                     </Button>
                 </DialogClose>
                 <Button className="px-11" type="submit">
-                    {t('save')}
+                    {t('save', { ns: 'bs' })}
                 </Button>
             </DialogFooter>
         </form>
