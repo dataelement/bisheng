@@ -11,6 +11,7 @@ import InputItem from "./component/InputItem";
 import InputListItem from "./component/InputListItem";
 import KnowledgeQaSelectItem from "./component/KnowledgeQaSelectItem";
 import KnowledgeSelectItem from "./component/KnowledgeSelectItem";
+import MetadataFilter from "./component/MetadataFilter";
 import ModelItem from "./component/ModelItem";
 import OutputItem from "./component/OutputItem";
 import ReportItem from "./component/ReportItem";
@@ -24,44 +25,42 @@ import VarItem from "./component/VarItem";
 import VarSelectItem, { VarSelectSingleItem } from "./component/VarSelectItem";
 import VarTextareaItem from "./component/VarTextareaItem";
 import VarTextareaUploadItem from "./component/VarTextareaUploadItem";
-import MetadataFilter from "./component/MetadataFilter";
-import { useEffect, useState } from "react";
 
-export default function Parameter({ 
-  node, 
-  nodeId, 
-  item, 
-  onOutPutChange, 
-  onStatusChange, 
-  onFouceUpdate, 
-  onVarEvent,
-  selectedKnowledgeIds
+export default function Parameter({
+    node,
+    nodeId,
+    item,
+    onOutPutChange,
+    onStatusChange,
+    onFouceUpdate,
+    onVarEvent,
+    selectedKnowledgeIds
 }: {
-  nodeId: string;
-  node: WorkflowNode;
-  item: WorkflowNodeParam;
-  onOutPutChange: (key: string, value: any) => void;
-  onStatusChange: (key: string, obj: any) => void;
-  onVarEvent: (key: string, obj: any) => void;
-  onFouceUpdate: () => void;
+    nodeId: string;
+    node: WorkflowNode;
+    item: WorkflowNodeParam;
+    onOutPutChange: (key: string, value: any) => void;
+    onStatusChange: (key: string, obj: any) => void;
+    onVarEvent: (key: string, obj: any) => void;
+    onFouceUpdate: () => void;
 }) {
-    
-  const handleOnNewValue = (newValue: any, validate?: any) => {
-    item.value = newValue;
-    if (validate) bindValidate(validate);
-  };
 
-  const bindValidate = (validate: any) => {
-    onStatusChange(item.key, { param: item, validate });
-  };
+    const handleOnNewValue = (newValue: any, validate?: any) => {
+        item.value = newValue;
+        if (validate) bindValidate(validate);
+    };
 
-  const bindVarValidate = (validate: any) => {
-    onVarEvent(item.key, { param: item, validate });
-  };
+    const bindValidate = (validate: any) => {
+        onStatusChange(item.key, { param: item, validate });
+    };
 
-  if (item.hidden) return null;
+    const bindVarValidate = (validate: any) => {
+        onVarEvent(item.key, { param: item, validate });
+    };
 
-   switch (item.type) {
+    if (item.hidden) return null;
+
+    switch (item.type) {
         case 'textarea':
             return <TextAreaItem data={item} onChange={handleOnNewValue} />;
         case 'input':
@@ -159,15 +158,16 @@ export default function Parameter({
         case 'image_prompt':
             return <ImagePromptItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onVarEvent={bindVarValidate} />;
         case 'search_switch':
-            return <RetrievalWeightSlider data={item} onChange={handleOnNewValue}  onValidate={bindValidate} />;
+            return <RetrievalWeightSlider data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
         case "metadata_filter": return (
-            <MetadataFilter 
-            data={item} 
-            node ={node}
-            onChange={handleOnNewValue} 
-            onValidate={bindValidate} 
-            selectedKnowledgeIds={selectedKnowledgeIds}
-             nodeId={nodeId}
+            <MetadataFilter
+                data={item}
+                node={node}
+                onChange={handleOnNewValue}
+                onValidate={bindValidate}
+                selectedKnowledgeIds={selectedKnowledgeIds}
+                nodeId={nodeId}
+                onVarEvent={bindVarValidate}
             />
         );
         default:

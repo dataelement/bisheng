@@ -184,6 +184,7 @@ class KnowledgeService(KnowledgeUtils):
                                                                                 metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
             es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge,
                                                                         metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
+            es_client._store._create_index_if_not_exists()
         except Exception as e:
             logger.exception("create knowledge index name error")
 
