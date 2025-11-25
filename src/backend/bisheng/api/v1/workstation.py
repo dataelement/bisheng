@@ -15,7 +15,6 @@ from sse_starlette import EventSourceResponse
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.knowledge import KnowledgeService
-from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.services.workstation import (SSECallbackClient, WorkstationConversation,
                                               WorkstationMessage, WorkStationService)
@@ -23,6 +22,7 @@ from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import FrequentlyUsedChat
 from bisheng.api.v1.schemas import WorkstationConfig, resp_200, WSPrompt, ExcelRule, UnifiedResponseModel
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
 from bisheng.common.errcode.workstation import WebSearchToolNotFoundError, ConversationNotFoundError, \
@@ -119,7 +119,7 @@ async def final_message(conversation: MessageSession, title: str, requestMessage
 @router.get('/config', summary='获取工作台配置', response_model=UnifiedResponseModel)
 def get_config(
         request: Request,
-        login_user: UserPayload = Depends(get_login_user)):
+        login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ 获取评价相关的模型配置 """
     ret = WorkStationService.get_config()
 
@@ -142,7 +142,7 @@ def get_config(
 @router.post('/config', summary='更新工作台配置', response_model=UnifiedResponseModel)
 def update_config(
         request: Request,
-        login_user: UserPayload = Depends(get_admin_user),
+        login_user: UserPayload = Depends(UserPayload.get_admin_user),
         data: WorkstationConfig = Body(..., description='默认模型配置'),
 ):
     """ 更新评价相关的模型配置 """
@@ -154,7 +154,7 @@ def update_config(
 def knowledgeUpload(request: Request,
                     background_tasks: BackgroundTasks,
                     file: UploadFile = File(...),
-                    login_user: UserPayload = Depends(get_login_user)):
+                    login_user: UserPayload = Depends(UserPayload.get_login_user)):
     file_byte = file.file.read()
     file_path = save_download_file(file_byte, 'bisheng', file.filename)
     res = WorkStationService.uploadPersonalKnowledge(request,
@@ -168,7 +168,7 @@ def knowledgeUpload(request: Request,
 def queryKnoledgeList(request: Request,
                       page: int,
                       size: int,
-                      login_user: UserPayload = Depends(get_login_user)):
+                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
     # 查询是否有个人知识库
     res, total = WorkStationService.queryKnowledgeList(request, login_user, page, size)
     return resp_200(data={'list': res, 'total': total})
@@ -177,7 +177,7 @@ def queryKnoledgeList(request: Request,
 @router.delete('/deleteKnowledge')
 def deleteKnowledge(request: Request,
                     file_id: int,
-                    login_user: UserPayload = Depends(get_login_user)):
+                    login_user: UserPayload = Depends(UserPayload.get_login_user)):
     res = KnowledgeService.delete_knowledge_file(request, login_user, [file_id])
     return resp_200(data=res)
 
@@ -187,7 +187,7 @@ async def upload_file(
         request: Request,
         file: UploadFile = File(...),
         file_id: str = Body(..., description='文件ID'),
-        login_user: UserPayload = Depends(get_login_user),
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """
     上传文件
@@ -215,7 +215,7 @@ async def upload_file(
 
 @router.post('/gen_title')
 async def gen_title(conversationId: str = Body(..., description='', embed=True),
-                    login_user: UserPayload = Depends(get_login_user)):
+                    login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     生成标题
     """
@@ -238,7 +238,7 @@ async def gen_title(conversationId: str = Body(..., description='', embed=True),
 
 @router.get('/messages/{conversationId}')
 async def get_chat_history(conversationId: str,
-                           login_user: UserPayload = Depends(get_login_user),
+                           login_user: UserPayload = Depends(UserPayload.get_login_user),
                            share_link: Union['ShareLink', None] = Depends(header_share_token_parser)
                            ):
     messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=conversationId, limit=1000)
@@ -309,7 +309,7 @@ def getFileContent(filepath):
 @router.post('/chat/completions')
 async def chat_completions(
         data: APIChatCompletion,
-        login_user: UserPayload = Depends(get_login_user),
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     try:
         wsConfig = await WorkStationService.aget_config()
@@ -522,7 +522,7 @@ async def chat_completions(
 
 
 @router.get('/app/frequently_used')
-def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
+def frequently_used_chat(login_user: UserPayload = Depends(UserPayload.get_login_user),
                          user_link_type: Optional[str] = 'app',
                          page: Optional[int] = 1,
                          limit: Optional[int] = 8
@@ -533,7 +533,7 @@ def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
 
 
 @router.post('/app/frequently_used')
-def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
+def frequently_used_chat(login_user: UserPayload = Depends(UserPayload.get_login_user),
                          data: FrequentlyUsedChat = Body(..., description='添加常用应用')
                          ):
     is_new = WorkFlowService.add_frequently_used_flows(login_user, data.user_link_type, data.type_detail)
@@ -544,7 +544,7 @@ def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
 
 
 @router.delete('/app/frequently_used')
-def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
+def frequently_used_chat(login_user: UserPayload = Depends(UserPayload.get_login_user),
                          user_link_type: Optional[str] = None,
                          type_detail: Optional[str] = None
                          ):
@@ -553,7 +553,7 @@ def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
 
 
 @router.get('/app/uncategorized')
-def get_uncategorized_chat(login_user: UserPayload = Depends(get_login_user),
+def get_uncategorized_chat(login_user: UserPayload = Depends(UserPayload.get_login_user),
                            page: Optional[int] = 1,
                            limit: Optional[int] = 8):
     data, _ = WorkFlowService.get_uncategorized_flows(login_user, page, limit)

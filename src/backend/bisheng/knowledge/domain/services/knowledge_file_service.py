@@ -8,14 +8,14 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeFileNotExistError
 from bisheng.database.models.role_access import AccessType
-from bisheng.database.models.user import UserDao
 from bisheng.knowledge.domain import utils
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.schemas.knowledge_file_schema import KnowledgeFileInfoRes
-from bisheng.knowledge.domain.schemas.knowledge_schema import ModifyKnowledgeFileMetaDataReq, MetadataField
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
+from bisheng.knowledge.domain.schemas.knowledge_file_schema import KnowledgeFileInfoRes
+from bisheng.knowledge.domain.schemas.knowledge_schema import ModifyKnowledgeFileMetaDataReq, MetadataField
 from bisheng.open_endpoints.domain.schemas.knowledge import DeleteUserMetadataReq
+from bisheng.user.domain.models.user import UserDao
 
 
 class KnowledgeFileService:

@@ -242,9 +242,9 @@ class ConfigService(Settings):
         all_config = self.get_all_config()
         return all_config.get('default_llm', {})
 
-    def get_password_conf(self) -> PasswordConf:
+    async def get_password_conf(self) -> PasswordConf:
         # 获取密码相关的配置项
-        all_config = self.get_all_config()
+        all_config = await self.aget_all_config()
         return PasswordConf(**all_config.get('password_conf', {}))
 
     def get_system_login_method(self) -> SystemLoginMethod:

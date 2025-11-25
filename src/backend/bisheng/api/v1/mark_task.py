@@ -2,30 +2,29 @@ from collections import deque
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
-from fastapi_jwt_auth import AuthJWT
+from loguru import logger
 
-from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schema.mark_schema import MarkData, MarkTaskCreate
 from bisheng.api.v1.schemas import resp_200, resp_500
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.database.models.mark_app_user import MarkAppUser, MarkAppUserDao
 from bisheng.database.models.mark_record import MarkRecord, MarkRecordDao
 from bisheng.database.models.mark_task import MarkTask, MarkTaskDao, MarkTaskRead, MarkTaskStatus
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSessionDao
-from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.user.domain.models.user import UserDao
 from bisheng.utils.linked_list import DoubleLinkList
-from loguru import logger
 
 router = APIRouter(prefix='/mark', tags=['Mark'])
 
 
 @router.get('/list')
-def list(request: Request, Authorize: AuthJWT = Depends(),
+def list(request: Request,
          status: Optional[int] = None,
          page_size: int = 10,
          page_num: int = 1,
-         login_user: UserPayload = Depends(get_login_user)):
+         login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     非admin 只能查看自己已标注和未标注的
     """
@@ -64,7 +63,7 @@ def list(request: Request, Authorize: AuthJWT = Depends(),
 
 @router.get('/get_status')
 async def get_status(task_id: int, chat_id: str,
-                     login_user: UserPayload = Depends(get_login_user)):
+                     login_user: UserPayload = Depends(UserPayload.get_login_user)):
     record = MarkRecordDao.get_record(task_id, chat_id)
     if not record:
         return resp_200(data={"status": ""})
@@ -79,7 +78,7 @@ async def get_status(task_id: int, chat_id: str,
 
 
 @router.post('/create_task')
-async def create(task_create: MarkTaskCreate, login_user: UserPayload = Depends(get_login_user)):
+async def create(task_create: MarkTaskCreate, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     应用和用户是多对多对关系，依赖一条主任务记录
     """
@@ -117,7 +116,7 @@ async def get_user(task_id: int):
 
 @router.post('/mark')
 async def mark(data: MarkData,
-               login_user: UserPayload = Depends(get_login_user)):
+               login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     标记任务为当前用户，并且其他人不能进行覆盖
     flow_type flow assistant
@@ -178,7 +177,8 @@ async def get_record(chat_id: str, task_id: int):
 
 
 @router.get("/next")
-async def pre_or_next(chat_id: str, action: str, task_id: int, login_user: UserPayload = Depends(get_login_user)):
+async def pre_or_next(chat_id: str, action: str, task_id: int,
+                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     prev or next 
     """
@@ -250,11 +250,10 @@ async def pre_or_next(chat_id: str, action: str, task_id: int, login_user: UserP
 
 
 @router.delete('/del')
-def del_task(request: Request, task_id: int, Authorize: AuthJWT = Depends()):
+def del_task(request: Request, task_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     非admin 只能查看自己已标注和未标注的
     """
-    Authorize.jwt_required()
 
     MarkTaskDao.delete_task(task_id)
     MarkRecordDao.del_record(task_id)

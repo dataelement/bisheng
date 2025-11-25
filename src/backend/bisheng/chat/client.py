@@ -8,10 +8,10 @@ from loguru import logger
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.types import WorkType
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.assistant import (AssistantDeletedError, AssistantNotOnlineError,
                                               AssistantOtherError)

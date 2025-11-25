@@ -10,25 +10,25 @@ from fastapi import Request, WebSocket, WebSocketDisconnect, status
 from loguru import logger
 
 from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse, FileResponse
-from bisheng.core.cache.flow import InMemoryCache
-from bisheng.core.cache.manager import Subject, cache_manager
 from bisheng.chat.client import ChatClient
 from bisheng.chat.clients.workflow_client import WorkflowClient
 from bisheng.chat.types import IgnoreException, WorkType
 from bisheng.chat.utils import process_node_data
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.chat import (DocumentParseError, InputDataParseError,
                                          LLMExecutionError, SkillDeletedError,
                                          SkillNotOnlineError)
+from bisheng.core.cache.flow import InMemoryCache
+from bisheng.core.cache.manager import Subject, cache_manager
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.flow import Flow, FlowType, FlowDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.database.models.user import User, UserDao
 from bisheng.graph.utils import find_next_node
 from bisheng.processing.process import process_tweaks
+from bisheng.user.domain.models.user import User, UserDao
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 from bisheng.utils.threadpool import ThreadPoolManager, thread_pool
@@ -197,7 +197,7 @@ class ChatManager:
 
     async def dispatch_client(
             self,
-            request: Request,  # 原始请求体
+            request: Request | WebSocket,  # 原始请求体
             client_id: str,
             chat_id: str,
             login_user: UserPayload,

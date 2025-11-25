@@ -1,31 +1,25 @@
 # build router
-import json
 from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 
 from bisheng.api.services.role_group_service import RoleGroupService
-from bisheng.api.services.user_service import UserPayload, get_login_user
-from bisheng.api.utils import check_permissions
 from bisheng.api.v1.schemas import resp_200
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.database.models.group import Group, GroupCreate
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.user_group import UserGroupDao
-from fastapi_jwt_auth import AuthJWT
 
-router = APIRouter(prefix='/group', tags=['User'], dependencies=[Depends(get_login_user)])
+router = APIRouter(prefix='/group', tags=['User'], dependencies=[Depends(UserPayload.get_login_user)])
 
 
 @router.get('/list')
-async def get_all_group(Authorize: AuthJWT = Depends()):
+async def get_all_group(login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     获取所有分组
     """
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    login_user = UserPayload(**payload)
     if login_user.is_admin():
         groups = []
     else:
@@ -44,20 +38,18 @@ async def get_all_group(Authorize: AuthJWT = Depends()):
 
 
 @router.post('/create')
-async def create_group(request: Request, group: GroupCreate, Authorize: AuthJWT = Depends()):
+async def create_group(request: Request, group: GroupCreate,
+                       login_user: UserPayload = Depends(UserPayload.get_admin_user)):
     """
     新建用户组
     """
-    await check_permissions(Authorize, ['admin'])
-    payload = json.loads(Authorize.get_jwt_subject())
-    login_user = UserPayload(**payload)
     return resp_200(RoleGroupService().create_group(request, login_user, group))
 
 
 @router.put('/create')
 async def update_group(request: Request,
                        group: Group,
-                       login_user: UserPayload = Depends(get_login_user)):
+                       login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     编辑用户组
     """
@@ -69,7 +61,7 @@ async def update_group(request: Request,
 @router.delete('/create', status_code=200)
 async def delete_group(request: Request,
                        group_id: int,
-                       login_user: UserPayload = Depends(get_login_user)):
+                       login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     删除用户组
     """
@@ -83,7 +75,7 @@ async def delete_group(request: Request,
 async def set_user_group(request: Request,
                          user_id: Annotated[int, Body(embed=True)],
                          group_id: Annotated[List[int], Body(embed=True)],
-                         login_user: UserPayload = Depends(get_login_user)):
+                         login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     设置用户分组, 批量替换, 根据操作人权限不同，替换不同的用户组
     用户组管理就只替换他拥有权限的用户组。超级管理员全量替换
@@ -94,11 +86,10 @@ async def set_user_group(request: Request,
 
 
 @router.get('/get_user_group')
-async def get_user_group(user_id: int, Authorize: AuthJWT = Depends()):
+async def get_user_group(user_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     获取用户所属分组
     """
-    # await check_permissions(Authorize, ['admin'])
     return resp_200(RoleGroupService().get_user_groups_list(user_id))
 
 
@@ -106,11 +97,10 @@ async def get_user_group(user_id: int, Authorize: AuthJWT = Depends()):
 async def get_group_user(group_id: int,
                          page_size: int = None,
                          page_num: int = None,
-                         Authorize: AuthJWT = Depends()):
+                         login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     获取分组用户
     """
-    # await check_permissions(Authorize, ['admin'])
     return RoleGroupService().get_group_user_list(group_id, page_size, page_num)
 
 
@@ -119,25 +109,20 @@ async def set_group_admin(
         request: Request,
         user_ids: Annotated[List[int], Body(embed=True)],
         group_id: Annotated[int, Body(embed=True)],
-        login_user: UserPayload = Depends(get_login_user)):
+        login_user: UserPayload = Depends(UserPayload.get_admin_user)):
     """
     获取分组的admin，批量设置接口，覆盖历史的admin
     """
 
-    if not login_user.is_admin():
-        return UnAuthorizedError.return_resp()
     return resp_200(RoleGroupService().set_group_admin(request, login_user, user_ids, group_id))
 
 
 @router.post('/set_update_user', status_code=200)
 async def set_update_user(group_id: Annotated[int, Body(embed=True)],
-                          Authorize: AuthJWT = Depends()):
+                          login_user: UserPayload = Depends(UserPayload.get_admin_user)):
     """
     更新用户组的最近修改人
     """
-    # await check_permissions(Authorize, ['admin'])
-    payload = json.loads(Authorize.get_jwt_subject())
-    login_user = UserPayload(**payload)
     return resp_200(RoleGroupService().set_group_update_user(login_user, group_id))
 
 
@@ -148,7 +133,7 @@ async def get_group_resources(*,
                               name: Optional[str] = None,
                               page_size: Optional[int] = 10,
                               page_num: Optional[int] = 1,
-                              user: UserPayload = Depends(get_login_user)):
+                              user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     获取用户组下的资源列表
     """
@@ -173,7 +158,7 @@ async def get_group_roles(*,
                           keyword: str = Query(None, description="搜索关键字"),
                           page: int = 0,
                           limit: int = 0,
-                          user: UserPayload = Depends(get_login_user)):
+                          user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     获取用户组内的角色列表
     """
@@ -191,7 +176,7 @@ async def get_group_roles(*,
 
 
 @router.get("/manage/resources")
-async def get_manage_resources(login_user: UserPayload = Depends(get_login_user),
+async def get_manage_resources(login_user: UserPayload = Depends(UserPayload.get_login_user),
                                keyword: str = Query(None, description="搜索关键字"),
                                page: int = 1,
                                page_size: int = 10):

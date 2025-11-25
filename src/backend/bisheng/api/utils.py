@@ -1,7 +1,5 @@
 import hashlib
-import json
 from pathlib import Path
-from typing import List
 
 import aiohttp
 from loguru import logger
@@ -13,7 +11,6 @@ from bisheng.api.v1.schemas import StreamData
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.variable_value import Variable
 from bisheng.graph.graph.base import Graph
-from fastapi_jwt_auth import AuthJWT
 
 API_WORDS = ['api', 'key', 'token']
 
@@ -228,17 +225,6 @@ async def build_flow_no_yield(graph_data: dict,
         except Exception as exc:
             raise exc
     return graph
-
-
-async def check_permissions(Authorize: AuthJWT, roles: List[str]):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    user_roles = [payload.get('role')] if isinstance(payload.get('role'),
-                                                     str) else payload.get('role')
-    if any(role in roles for role in user_roles):
-        return True
-    else:
-        raise ValueError('权限不够')
 
 
 def get_L2_param_from_flow(flow_data: dict, flow_id: str, version_id: int = None):

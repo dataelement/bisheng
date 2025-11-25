@@ -5,9 +5,9 @@ from typing import Dict, Callable
 from fastapi import WebSocket, Request
 from loguru import logger
 
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.types import WorkType
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.database.models.message import ChatMessage as ChatMessageModel
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.utils import generate_uuid

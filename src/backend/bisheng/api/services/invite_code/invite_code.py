@@ -1,7 +1,7 @@
 from loguru import logger
 
 from bisheng.api.services.invite_code.code_validator import VoucherGenerator
-from bisheng.api.services.user_service import UserPayload
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.database.models.invite_code import InviteCode, InviteCodeDao
 from bisheng.utils import generate_uuid
 

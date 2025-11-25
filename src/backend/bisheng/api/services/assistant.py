@@ -10,9 +10,9 @@ from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.tool import ToolServices
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
                                     StreamData, UnifiedResponseModel, resp_200, resp_500)
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
                                               AssistantNotEditError, AssistantNotExistsError, ToolTypeRepeatError,
                                               ToolTypeIsPresetError)
@@ -24,15 +24,15 @@ from bisheng.database.models.assistant import (Assistant, AssistantDao, Assistan
 from bisheng.database.models.flow import Flow, FlowDao, FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsTypeRead, GptsTools
 from bisheng.database.models.group_resource import GroupResourceDao, GroupResource, ResourceTypeEnum
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
-from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.database.models.user_role import UserRoleDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.llm.domain.services import LLMService
 from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import get_request_ip
 
 

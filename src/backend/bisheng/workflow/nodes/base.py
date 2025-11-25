@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 
 from langchain_core.messages import HumanMessage
 
-from bisheng.database.models.user import UserDao
+from bisheng.user.domain.models.user import UserDao
 from bisheng.utils.exceptions import IgnoreException
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeEndData, NodeStartData

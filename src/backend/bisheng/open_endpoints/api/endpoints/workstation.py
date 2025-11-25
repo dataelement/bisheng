@@ -2,8 +2,8 @@ from fastapi import APIRouter, BackgroundTasks, Body, File, Request, UploadFile
 
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, resp_200, ExcelRule
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.core.cache.utils import save_download_file
 from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.llm.domain.services import LLMService

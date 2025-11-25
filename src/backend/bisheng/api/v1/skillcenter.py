@@ -3,17 +3,17 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends
 from sqlmodel import select
 
-from bisheng.api.services.user_service import get_login_user
 from bisheng.api.utils import remove_api_keys
 from bisheng.api.v1.schemas import resp_200
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.flow import FlowTemplateNameError
+from bisheng.common.services.config_service import settings
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.template import Template, TemplateCreate, TemplateUpdate
-from bisheng.common.services.config_service import settings
 
 # build router
-router = APIRouter(prefix='/skill', tags=['Skills'], dependencies=[Depends(get_login_user)])
+router = APIRouter(prefix='/skill', tags=['Skills'], dependencies=[Depends(UserPayload.get_login_user)])
 ORDER_GAP = 65535
 
 

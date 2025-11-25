@@ -8,11 +8,11 @@ from loguru import logger
 
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_L2_param_from_flow
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq, resp_500, \
     StreamData
 from bisheng.chat.utils import process_node_data
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.flow import NotFoundVersionError, CurVersionDelError, VersionNameExistsError, \
     NotFoundFlowError, \
     FlowOnlineEditError, WorkFlowOnlineEditError
@@ -23,12 +23,12 @@ from bisheng.database.models.group_resource import GroupResourceDao, ResourceTyp
 from bisheng.database.models.role_access import RoleAccessDao, AccessType
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
-from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.database.models.user_role import UserRoleDao
 from bisheng.database.models.variable_value import VariableDao
 from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import get_request_ip
 
 

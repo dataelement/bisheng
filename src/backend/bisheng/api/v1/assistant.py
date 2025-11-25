@@ -5,16 +5,17 @@ from fastapi import (APIRouter, Body, Depends, HTTPException, Query, Request, We
                      WebSocketException)
 from fastapi import status as http_status
 from fastapi.responses import StreamingResponse
+from loguru import logger
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.openapi import OpenApiSchema
 from bisheng.api.services.tool import ToolServices
-from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.v1.schemas import (AssistantCreateReq, AssistantUpdateReq,
                                     DeleteToolTypeReq, StreamData, TestToolReq,
                                     resp_200, resp_500)
 from bisheng.chat.manager import ChatManager
 from bisheng.chat.types import WorkType
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.database.constants import ToolPresetType
@@ -25,9 +26,7 @@ from bisheng.mcp_manage.manager import ClientManager
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import generate_uuid
-from loguru import logger
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
-from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(prefix='/assistant', tags=['Assistant'])
 chat_manager = ChatManager()
@@ -40,13 +39,13 @@ def get_assistant(*,
                   page: Optional[int] = Query(default=1, gt=0, description='页码'),
                   limit: Optional[int] = Query(default=10, gt=0, description='每页条数'),
                   status: Optional[int] = Query(default=None, description='是否上线状态'),
-                  login_user: UserPayload = Depends(get_login_user)):
+                  login_user: UserPayload = Depends(UserPayload.get_login_user)):
     return AssistantService.get_assistant(login_user, name, status, tag_id, page, limit)
 
 
 # 获取某个助手的详细信息
 @router.get('/info/{assistant_id}')
-async def get_assistant_info(*, assistant_id: str, login_user: UserPayload = Depends(get_login_user),
+async def get_assistant_info(*, assistant_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user),
                              share_link: Union['ShareLink', None] = Depends(header_share_token_parser)):
     """获取助手信息"""
     return await AssistantService.get_assistant_info(assistant_id, login_user, share_link)
@@ -56,7 +55,7 @@ async def get_assistant_info(*, assistant_id: str, login_user: UserPayload = Dep
 def delete_assistant(*,
                      request: Request,
                      assistant_id: str,
-                     login_user: UserPayload = Depends(get_login_user)):
+                     login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """删除助手"""
     return AssistantService.delete_assistant(request, login_user, assistant_id)
 
@@ -65,7 +64,7 @@ def delete_assistant(*,
 async def create_assistant(*,
                            request: Request,
                            req: AssistantCreateReq,
-                           login_user: UserPayload = Depends(get_login_user)):
+                           login_user: UserPayload = Depends(UserPayload.get_login_user)):
     # get login user
     assistant = Assistant(**req.dict(), user_id=login_user.user_id)
     try:
@@ -79,7 +78,7 @@ async def create_assistant(*,
 async def update_assistant(*,
                            request: Request,
                            req: AssistantUpdateReq,
-                           login_user: UserPayload = Depends(get_login_user)):
+                           login_user: UserPayload = Depends(UserPayload.get_login_user)):
     # get login user
     return await AssistantService.update_assistant(request, login_user, req)
 
@@ -89,12 +88,12 @@ async def update_status(*,
                         request: Request,
                         assistant_id: str = Body(description='助手唯一ID', alias='id'),
                         status: int = Body(description='是否上线，1:上线，0:下线'),
-                        login_user: UserPayload = Depends(get_login_user)):
+                        login_user: UserPayload = Depends(UserPayload.get_login_user)):
     return await AssistantService.update_status(request, login_user, assistant_id, status)
 
 
 @router.post('/auto/task')
-async def auto_update_assistant_task(*, request: Request, login_user: UserPayload = Depends(get_login_user),
+async def auto_update_assistant_task(*, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
                                      assistant_id: str = Body(description='助手唯一ID'),
                                      prompt: str = Body(description='用户填写的提示词')):
     # 存入缓存
@@ -140,7 +139,7 @@ async def auto_update_assistant(*, task_id: str = Query(description='优化任�
 async def update_prompt(*,
                         assistant_id: str = Body(description='助手唯一ID', alias='id'),
                         prompt: str = Body(description='用户使用的prompt'),
-                        login_user: UserPayload = Depends(get_login_user)):
+                        login_user: UserPayload = Depends(UserPayload.get_login_user)):
     return AssistantService.update_prompt(assistant_id, prompt, login_user)
 
 
@@ -148,7 +147,7 @@ async def update_prompt(*,
 async def update_flow_list(*,
                            assistant_id: str = Body(description='助手唯一ID', alias='id'),
                            flow_list: List[str] = Body(description='用户选择的技能列表'),
-                           login_user: UserPayload = Depends(get_login_user)):
+                           login_user: UserPayload = Depends(UserPayload.get_login_user)):
     return AssistantService.update_flow_list(assistant_id, flow_list, login_user)
 
 
@@ -156,7 +155,7 @@ async def update_flow_list(*,
 async def update_tool_list(*,
                            assistant_id: str = Body(description='助手唯一ID', alias='id'),
                            tool_list: List[int] = Body(description='用户选择的工具列表'),
-                           login_user: UserPayload = Depends(get_login_user)):
+                           login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ 更新助手选择的工具列表 """
     return AssistantService.update_tool_list(assistant_id, tool_list, login_user)
 
@@ -166,20 +165,10 @@ async def update_tool_list(*,
 async def chat(*,
                assistant_id: str,
                websocket: WebSocket,
-               t: Optional[str] = None,
                chat_id: Optional[str] = None,
-               Authorize: AuthJWT = Depends()):
+               login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws)):
     try:
-        if t:
-            Authorize.jwt_required(auth_from='websocket', token=t)
-            Authorize._token = t
-        else:
-            Authorize.jwt_required(auth_from='websocket', websocket=websocket)
-        payload = Authorize.get_jwt_subject()
-        payload = json.loads(payload)
-        login_user = UserPayload(**payload)
-        request = websocket
-        await chat_manager.dispatch_client(request, assistant_id, chat_id, login_user,
+        await chat_manager.dispatch_client(websocket, assistant_id, chat_id, login_user,
                                            WorkType.GPTS, websocket)
     except WebSocketException as exc:
         logger.error(f'Websocket exception: {str(exc)}')
@@ -196,7 +185,7 @@ async def chat(*,
 @router.get('/tool_list')
 def get_tool_list(*,
                   is_preset: Optional[int | bool] = None,
-                  login_user: UserPayload = Depends(get_login_user)):
+                  login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """查询所有可见的tool 列表"""
     if is_preset is not None and type(is_preset) == bool:
         is_preset = ToolPresetType.PRESET.value if is_preset else ToolPresetType.API.value
@@ -205,7 +194,7 @@ def get_tool_list(*,
 
 @router.post('/tool/config')
 async def update_tool_config(*,
-                             login_user: UserPayload = Depends(get_admin_user),
+                             login_user: UserPayload = Depends(UserPayload.get_admin_user),
                              tool_id: int = Body(description='工具类别唯一ID'),
                              extra: dict = Body(description='工具配置项')):
     """ 更新工具的配置 """
@@ -214,7 +203,7 @@ async def update_tool_config(*,
 
 
 @router.post('/tool_schema')
-async def get_tool_schema(request: Request, login_user: UserPayload = Depends(get_login_user),
+async def get_tool_schema(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
                           download_url: Optional[str] = Body(default=None,
                                                              description='下载url不为空的话优先用下载url'),
                           file_content: Optional[str] = Body(default=None, description='上传的文件')):
@@ -225,7 +214,7 @@ async def get_tool_schema(request: Request, login_user: UserPayload = Depends(ge
 
 
 @router.post('/mcp/tool_schema')
-async def get_mcp_tool_schema(request: Request, login_user: UserPayload = Depends(get_login_user),
+async def get_mcp_tool_schema(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
                               file_content: Optional[str] = Body(default=None, embed=True,
                                                                  description='mcp服务配置内容')):
     """ 解析mcp的工具配置文件 """
@@ -235,7 +224,7 @@ async def get_mcp_tool_schema(request: Request, login_user: UserPayload = Depend
 
 
 @router.post('/mcp/tool_test')
-async def mcp_tool_run(login_user: UserPayload = Depends(get_login_user),
+async def mcp_tool_run(login_user: UserPayload = Depends(UserPayload.get_login_user),
                        req: TestToolReq = None):
     """ 测试mcp服务的工具 """
     try:
@@ -253,7 +242,7 @@ async def mcp_tool_run(login_user: UserPayload = Depends(get_login_user),
 
 
 @router.post('/mcp/refresh')
-async def refresh_all_mcp_tools(request: Request, login_user: UserPayload = Depends(get_login_user)):
+async def refresh_all_mcp_tools(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ 刷新用户当前所有的mcp工具列表 """
     services = ToolServices(request=request, login_user=login_user)
     error_msg = await services.refresh_all_mcp()
@@ -266,7 +255,7 @@ async def refresh_all_mcp_tools(request: Request, login_user: UserPayload = Depe
 async def add_tool_type(*,
                         request: Request,
                         req: Dict = Body(default={}, description='openapi解析后的工具对象'),
-                        login_user: UserPayload = Depends(get_login_user)):
+                        login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ 新增自定义tool """
     req = GptsToolsTypeRead(**req)
     return await AssistantService.add_gpts_tools(request, login_user, req)
@@ -275,7 +264,7 @@ async def add_tool_type(*,
 @router.put('/tool_list')
 async def update_tool_type(*,
                            request: Request,
-                           login_user: UserPayload = Depends(get_login_user),
+                           login_user: UserPayload = Depends(UserPayload.get_login_user),
                            req: Dict = Body(default={}, description='通过openapi 解析后的内容，包含类别的唯一ID')):
     """ 更新自定义tool """
     req = GptsToolsTypeRead(**req)
@@ -283,13 +272,14 @@ async def update_tool_type(*,
 
 
 @router.delete('/tool_list')
-def delete_tool_type(*, request: Request, login_user: UserPayload = Depends(get_login_user), req: DeleteToolTypeReq):
+def delete_tool_type(*, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
+                     req: DeleteToolTypeReq):
     """ 删除自定义工具 """
     return AssistantService.delete_gpts_tools(request, login_user, req.tool_type_id)
 
 
 @router.post('/tool_test')
-async def tool_run(*, login_user: UserPayload = Depends(get_login_user), req: TestToolReq):
+async def tool_run(*, login_user: UserPayload = Depends(UserPayload.get_login_user), req: TestToolReq):
     """ 测试自定义工具 """
     extra = json.loads(req.extra)
     extra.update({'api_location': req.api_location, 'parameter_name': req.parameter_name})

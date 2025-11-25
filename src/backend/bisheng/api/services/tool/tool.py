@@ -11,8 +11,8 @@ from pydantic import BaseModel, ConfigDict
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.openapi import OpenApiSchema
 from bisheng.api.services.tool.langchain_tool.search_knowledge import SearchKnowledgeBase
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_url_content
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.assistant import ToolTypeNotExistsError, ToolTypeRepeatError
 from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
 from bisheng.database.constants import ToolPresetType

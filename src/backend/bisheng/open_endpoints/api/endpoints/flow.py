@@ -1,11 +1,12 @@
 from uuid import UUID
 
-from bisheng.api.services.flow import FlowService
-from bisheng.api.services.user_service import UserPayload
-from bisheng.open_endpoints.api.endpoints.assistant import get_default_operator
-from bisheng.common.services.config_service import settings
 from fastapi import APIRouter, HTTPException, Query, Request
 from loguru import logger
+
+from bisheng.api.services.flow import FlowService
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.services.config_service import settings
+from bisheng.open_endpoints.api.endpoints.assistant import get_default_operator
 
 router = APIRouter(prefix='/flows', tags=['OpenAPI', 'FlowV2'])
 
