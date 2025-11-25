@@ -92,7 +92,7 @@ class WorkflowClient(BaseClient):
         if workflow_db.status != FlowStatus.ONLINE.value and self.chat_id:
             self.workflow.set_workflow_stop()
             try:
-                await WorkflowOfflineError().websocket_close_message(websocket=self.websocket)
+                await WorkflowOfflineError().websocket_close_message(websocket=self.websocket, close_ws=False)
                 await self.send_response('processing', 'close', '')
             except:
                 logger.warning('websocket is closed')

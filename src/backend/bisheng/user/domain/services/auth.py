@@ -98,6 +98,18 @@ class LoginUser(BaseModel):
     user_role: List[int] = Field(default_factory=list, description="用户角色ID列表")
     group_cache: Dict[int, Any] = Field(default_factory=dict, description="用户组缓存")
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.user_id = kwargs.get('user_id')
+        self.user_name = kwargs.get('user_name')
+        self.user_role = kwargs.get('user_role')
+        self.group_cache = kwargs.get('group_cache', {})
+
+        if not self.user_role:
+            self.user_role = []
+            user_role = UserRoleDao.get_user_roles(self.user_id)
+            self.user_role = [user_role.role_id for user_role in user_role]
+
     @cached_property
     def _check_admin(self):
         if isinstance(self.user_role, list):

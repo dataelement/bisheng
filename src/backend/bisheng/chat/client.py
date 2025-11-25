@@ -330,11 +330,11 @@ class ChatClient:
         except BaseErrorCode as e:
             logger.exception('handle gpts message error: ')
             await self.send_response('system', 'start', '')
-            await e.websocket_close_message(websocket=self.websocket)
+            await e.websocket_close_message(websocket=self.websocket, close_ws=False)
         except Exception as e:
             e = AssistantOtherError(exception=e)
             logger.exception('handle gpts message error: ')
             await self.send_response('system', 'start', '')
-            await e.websocket_close_message(websocket=self.websocket)
+            await e.websocket_close_message(websocket=self.websocket, close_ws=False)
         finally:
             await self.send_response('processing', 'close', '')
