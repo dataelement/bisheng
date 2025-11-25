@@ -40,7 +40,6 @@ from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_cl
 from bisheng.core.cache.utils import file_download
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
-from bisheng.database.models.user import UserDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
@@ -58,6 +57,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
 )
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.llm.domain.services import LLMService
+from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import md5_hash, util
 from bisheng.utils.embedding import decide_embeddings
 from bisheng_langchain.rag.extract_info import extract_title, async_extract_title
