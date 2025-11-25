@@ -1,9 +1,9 @@
 import json
 from typing import Any
 
-from bisheng.database.models.user import UserDao
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.interface.vector_store.custom import MilvusWithPermissionCheck
+from bisheng.user.domain.models.user import UserDao
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng_langchain.chains.retrieval.retrieval_chain import RetrievalChain
 

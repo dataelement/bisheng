@@ -11,8 +11,8 @@ from pydantic import field_validator
 
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.knowledge import KnowledgeService
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.server import EmbeddingModelStatusError
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.core.ai.rerank.rrf_rerank import RRFRerank
@@ -20,10 +20,10 @@ from bisheng.database.constants import MessageCategory
 from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.database.models.user import UserDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.llm.domain.services import LLMService
+from bisheng.user.domain.models.user import UserDao
 from bisheng.utils.embedding import decide_embeddings
 
 

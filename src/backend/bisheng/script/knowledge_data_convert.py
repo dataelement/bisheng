@@ -14,7 +14,7 @@ user_map = {}
 
 
 def get_user_name_by_id(user_id: int):
-    from bisheng.database.models.user import UserDao
+    from bisheng.user.domain.models.user import UserDao
 
     if user_id in user_map:
         return user_map[user_id]

@@ -1,14 +1,15 @@
-from typing import Any, List
+from typing import List
 
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.component import ComponentExistError, ComponentNotExistError
 from bisheng.database.models.component import Component, ComponentDao
 
 
 class ComponentService:
     @classmethod
-    def get_all_component(cls, user: Any) -> UnifiedResponseModel[List[Component]]:
-        res = ComponentDao.get_user_components(user.get('user_id'))
+    def get_all_component(cls, user: UserPayload) -> UnifiedResponseModel[List[Component]]:
+        res = ComponentDao.get_user_components(user.user_id)
         return resp_200(data=res)
 
     @classmethod

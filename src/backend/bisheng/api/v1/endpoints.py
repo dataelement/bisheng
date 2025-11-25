@@ -7,10 +7,10 @@ import yaml
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, UploadFile
 from loguru import logger
 
-from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.v1.schemas import (ProcessResponse, UploadFileResponse,
                                     resp_200)
 from bisheng.chat.utils import judge_source, process_source_document
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync
@@ -76,14 +76,14 @@ def get_env():
 
 
 @router.get('/config')
-def get_config(admin_user: UserPayload = Depends(get_admin_user)):
+def get_config(admin_user: UserPayload = Depends(UserPayload.get_admin_user)):
     db_config = ConfigDao.get_config(ConfigKeyEnum.INIT_DB)
     config_str = db_config.value if db_config else ''
     return resp_200(config_str)
 
 
 @router.post('/config/save')
-def save_config(data: dict, admin_user: UserPayload = Depends(get_admin_user)):
+def save_config(data: dict, admin_user: UserPayload = Depends(UserPayload.get_admin_user)):
     if not data.get('data', '').strip():
         raise HTTPException(status_code=500, detail='配置不能为空')
     try:
@@ -117,7 +117,7 @@ async def get_web_config():
 
 @router.post('/web/config')
 async def update_web_config(request: Request,
-                            admin_user: UserPayload = Depends(get_admin_user),
+                            admin_user: UserPayload = Depends(UserPayload.get_admin_user),
                             value: str = Body(embed=True)):
     """ 更新一些前端所需要的配置项，内容由前端决定 """
     logger.info(
@@ -315,7 +315,7 @@ async def _upload_file(file: UploadFile, object_name_prefix: str, file_supports:
 
 @router.post('/upload/icon')
 async def upload_icon(request: Request,
-                      login_user: UserPayload = Depends(get_login_user),
+                      login_user: UserPayload = Depends(UserPayload.get_login_user),
                       file: UploadFile = None):
     bucket = bisheng_settings.object_storage.minio.public_bucket
     resp = await _upload_file(file,
@@ -327,7 +327,7 @@ async def upload_icon(request: Request,
 
 @router.post('/upload/workflow/{workflow_id}')
 async def upload_icon_workflow(request: Request,
-                               login_user: UserPayload = Depends(get_login_user),
+                               login_user: UserPayload = Depends(UserPayload.get_login_user),
                                file: UploadFile = None,
                                workflow_id: str = Path(..., description='workflow id')):
     bucket = bisheng_settings.object_storage.minio.public_bucket

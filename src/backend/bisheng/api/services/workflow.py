@@ -4,11 +4,11 @@ from fastapi.encoders import jsonable_encoder
 from langchain.memory import ConversationBufferWindowMemory
 
 from bisheng.api.services.base import BaseService
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.workflow import WorkflowEvent, WorkflowEventType, WorkflowInputSchema, WorkflowInputItem, \
     WorkflowOutputSchema
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.chat.utils import SourceType
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.flow import WorkFlowInitError
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.database.models.flow import FlowDao, FlowStatus, FlowType
@@ -17,9 +17,9 @@ from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.tag import TagDao
-from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_link import UserLinkDao
-from bisheng.database.models.user_role import UserRoleDao
+from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.common.node import BaseNodeData, NodeType
@@ -180,7 +180,7 @@ class WorkFlowService(BaseService):
         if not await login_user.async_access_check(db_flow.user_id, flow_id, AccessType.WORKFLOW_WRITE):
             raise UnAuthorizedError()
 
-        version_info =await FlowVersionDao.aget_version_by_id(version_id)
+        version_info = await FlowVersionDao.aget_version_by_id(version_id)
         if not version_info or version_info.flow_id != flow_id:
             raise NotFoundError()
         if status == FlowStatus.ONLINE.value:

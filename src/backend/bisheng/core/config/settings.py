@@ -153,6 +153,19 @@ class LinsightConf(BaseModel):
     max_file_content_num: int = Field(default=3, description='拆分子任务时读取文件数量，按修改时间倒序')
 
 
+class CookieConf(BaseModel):
+    """ Cookie 配置 """
+    max_age: Optional[int] = Field(default=None, description="Cookie 的最大存活时间，单位为秒")
+    path: str = Field(default='/', description="Cookie 的路径属性")
+    domain: Optional[str] = Field(default=None, description="Cookie 的域属性")
+    secure: bool = Field(default=False, description="是否启用 secure 属性")
+    httponly: bool = Field(default=True, description="是否启用 HttpOnly 属性")
+    samesite: str = Field(default=None, description="SameSite 属性，可选值为 'lax', 'strict', 'none'")
+
+    jwt_token_expire_time: int = Field(default=86400, description="JwtToken的的过期时间，单位为秒")
+    jwt_iss: str = Field(default='bisheng', description="JwtToken的签发者")
+
+
 class Settings(BaseModel):
     """ Application Settings """
     model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True, extra='ignore')
@@ -198,6 +211,7 @@ class Settings(BaseModel):
     object_storage: ObjectStore = ObjectStore()
     workflow_conf: WorkflowConf = WorkflowConf()
     celery_task: CeleryConf = CeleryConf()
+    cookie_conf: CookieConf = CookieConf()
 
     @field_validator('database_url')
     @classmethod

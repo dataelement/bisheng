@@ -7,22 +7,21 @@ from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
 from loguru import logger
 
-from bisheng.api.services import chat_imp
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.services.knowledge_imp import delete_es, delete_vector
-from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.utils import build_flow, build_input_keys_response
 from bisheng.api.v1.schema.base_schema import PageList
-from bisheng.api.v1.schema.chat_schema import APIChatCompletion, AppChatList
+from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import (AddChatMessages, BuildStatus, BuiltResponse, ChatInput,
                                     ChatList, InitResponse, StreamData,
                                     UnifiedResponseModel, resp_200)
 from bisheng.chat.manager import ChatManager
 from bisheng.chat_session.domain.chat import ChatSessionService
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.chat import ChatServiceError, SkillDeletedError, SkillNotBuildError, SkillNotOnlineError
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
 from bisheng.core.cache.redis_manager import get_redis_client
@@ -34,42 +33,17 @@ from bisheng.database.models.mark_record import MarkRecordDao, MarkRecordStatus
 from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao, LikedType
 from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
-from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.graph.graph.base import Graph
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
-from bisheng.utils import generate_uuid
+from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import get_request_ip
 from bisheng.utils.util import get_cache_key
-from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(tags=['Chat'])
 chat_manager = ChatManager()
 expire = 600  # reids 60s 过期
-
-
-@router.post('/chat/completions', response_class=StreamingResponse)
-async def chat_completions(request: APIChatCompletion, Authorize: AuthJWT = Depends()):
-    # messages 为openai 格式。目前不支持openai的复杂多轮，先临时处理
-    message = None
-    if request.messages:
-        last_message = request.messages[-1]
-        if 'content' in last_message:
-            message = last_message['content']
-        else:
-            logger.info('last_message={}', last_message)
-            message = last_message
-    session_id = request.session_id or generate_uuid()
-
-    payload = {'user_name': 'root', 'user_id': 1, 'role': 'admin'}
-    access_token = Authorize.create_access_token(subject=json.dumps(payload), expires_time=864000)
-    url = f'ws://127.0.0.1:7860/api/v1/chat/{request.model}?chat_id={session_id}&t={access_token}'
-    web_conn = await chat_imp.get_connection(url, session_id)
-
-    return StreamingResponse(chat_imp.event_stream(web_conn, message, session_id, request.model,
-                                                   request.streaming),
-                             media_type='text/event-stream')
 
 
 @router.get('/chat/app/list')
@@ -81,7 +55,7 @@ def get_app_chat_list(*,
                       flow_type: Optional[int] = None,
                       page_num: Optional[int] = 1,
                       page_size: Optional[int] = 20,
-                      login_user: UserPayload = Depends(get_login_user)):
+                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ 通过标注任务ID获取对应的会话列表 """
 
     group_flow_ids = []
@@ -180,7 +154,7 @@ async def get_chat_message(*,
                            flow_id: str,
                            id: Optional[str] = None,
                            page_size: Optional[int] = 20,
-                           login_user: UserPayload = Depends(get_login_user),
+                           login_user: UserPayload = Depends(UserPayload.get_login_user),
                            share_link: Union['ShareLink', None] = Depends(header_share_token_parser)):
     history = await ChatSessionService.get_chat_history(chat_id, flow_id, id, page_size)
 
@@ -202,7 +176,7 @@ async def get_chat_info(chat_id: str = Query(..., description='会话唯一id，
 @router.post('/chat/conversation/rename')
 def rename(conversationId: str = Body(..., description='会话id', embed=True),
            name: str = Body(..., description='会话名称', embed=True),
-           login_user: UserPayload = Depends(get_login_user)):
+           login_user: UserPayload = Depends(UserPayload.get_login_user)):
     conversation = MessageSessionDao.get_one(conversationId)
     conversation.flow_name = name
     MessageSessionDao.insert_one(conversation)
@@ -226,7 +200,7 @@ def copy(conversationId: str = Body(..., description='会话id', embed=True), ):
 def del_chat_id(*,
                 request: Request,
                 chat_id: str,
-                login_user: UserPayload = Depends(get_login_user)):
+                login_user: UserPayload = Depends(UserPayload.get_login_user)):
     # 获取一条消息
     session_chat = MessageSessionDao.get_one(chat_id)
 
@@ -259,7 +233,7 @@ def del_chat_id(*,
 def add_chat_messages(*,
                       request: Request,
                       data: AddChatMessages,
-                      login_user: UserPayload = Depends(get_login_user)):
+                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     添加一条完整问答记录， 安全检查写入使用
     """
@@ -339,7 +313,7 @@ def update_chat_message(*,
                         message_id: int,
                         message: str = Body(embed=True),
                         category: str = Body(default=None, embed=True),
-                        login_user: UserPayload = Depends(get_login_user)):
+                        login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ 更新一条消息的内容 安全检查使用"""
     logger.info(
         f'update_chat_message message_id={message_id} message={message} login_user={login_user.user_name}'
@@ -364,7 +338,7 @@ def update_chat_message(*,
 
 
 @router.delete('/chat/message/{message_id}', status_code=200)
-def del_message_id(*, message_id: str, login_user: UserPayload = Depends(get_login_user)):
+def del_message_id(*, message_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     ChatMessageDao.delete_by_message_id(login_user.user_id, message_id)
 
     return resp_200(message='删除成功')
@@ -429,7 +403,7 @@ def comment_resp(*, data: ChatInput):
 def get_session_list(page: Optional[int] = Query(default=1, ge=1, le=1000),
                      limit: Optional[int] = Query(default=10, ge=1, le=100),
                      flow_type: Optional[List[int]] = Query(default=None, description='技能类型'),
-                     login_user: UserPayload = Depends(get_login_user)):
+                     login_user: UserPayload = Depends(UserPayload.get_login_user)):
     res = MessageSessionDao.filter_session(user_ids=[login_user.user_id],
                                            flow_type=flow_type,
                                            page=page,
@@ -467,7 +441,7 @@ def get_online_chat(*,
                     tag_id: Optional[int] = None,
                     page: Optional[int] = 1,
                     limit: Optional[int] = 10,
-                    user: UserPayload = Depends(get_login_user)):
+                    user: UserPayload = Depends(UserPayload.get_login_user)):
     data, _ = WorkFlowService.get_all_flows(user, keyword, FlowStatus.ONLINE.value, tag_id, None, page, limit)
     return resp_200(data=data)
 
@@ -477,10 +451,9 @@ async def chat(
         *,
         flow_id: UUID,
         websocket: WebSocket,
-        t: Optional[str] = None,
         chat_id: Optional[str] = None,
         version_id: Optional[int] = None,
-        Authorize: AuthJWT = Depends(),
+        login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws),
 ):
     """Websocket endpoint for chat."""
     flow_id = flow_id.hex
@@ -488,12 +461,6 @@ async def chat(
     redis_client = await get_redis_client()
 
     try:
-        if t:
-            Authorize.jwt_required(auth_from='websocket', token=t)
-            Authorize._token = t
-        else:
-            Authorize.jwt_required(auth_from='websocket', websocket=websocket)
-        login_user = await get_login_user(Authorize)
         user_id = login_user.user_id
         if chat_id:
             with get_sync_db_session() as session:

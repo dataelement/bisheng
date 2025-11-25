@@ -9,7 +9,7 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.user_group import UserGroup
-from bisheng.database.models.user_role import UserRole
+from bisheng.user.domain.models.user_role import UserRole
 
 
 class UserBase(SQLModelSerializable):
@@ -44,7 +44,7 @@ class User(UserBase, table=True):
 
 class UserRead(UserBase):
     user_id: Optional[int] = None
-    role: Optional[str] = None
+    role: Optional[str] = None  # admin / group_admin
     access_token: Optional[str] = None
     web_menu: Optional[List[str]] = None
     admin_groups: Optional[List[int]] = None  # 所管理的用户组ID列表
@@ -108,11 +108,26 @@ class UserDao(UserBase):
             return session.exec(statement).first()
 
     @classmethod
+    async def aget_user_by_username(cls, username: str) -> User | None:
+        async with get_async_db_session() as session:
+            statement = select(User).where(User.user_name == username)
+            result = await session.exec(statement)
+            return result.first()
+
+    @classmethod
     def update_user(cls, user: User) -> User:
         with get_sync_db_session() as session:
             session.add(user)
             session.commit()
             session.refresh(user)
+            return user
+
+    @classmethod
+    async def aupdate_user(cls, user: User) -> User:
+        async with get_async_db_session() as session:
+            session.add(user)
+            await session.commit()
+            await session.refresh(user)
             return user
 
     @classmethod

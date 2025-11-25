@@ -11,16 +11,15 @@ from loguru import logger
 
 from bisheng.api import router, router_rpc
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.services.config_service import settings
+from bisheng.common.exceptions.auth import AuthJWTException
 from bisheng.common.init_data import init_default_data
+from bisheng.common.services.config_service import settings
 from bisheng.core.context import initialize_app_context, close_app_context
 from bisheng.core.logger import set_logger_config
 from bisheng.interface.utils import setup_llm_caching
 from bisheng.services.utils import initialize_services, teardown_services
 from bisheng.utils.http_middleware import CustomMiddleware
 from bisheng.utils.threadpool import thread_pool
-from fastapi_jwt_auth import AuthJWT
-from fastapi_jwt_auth.exceptions import AuthJWTException
 
 
 def handle_http_exception(req: Request, exc: Exception) -> ORJSONResponse:
@@ -91,11 +90,6 @@ def create_app():
     )
 
     app.add_middleware(CustomMiddleware)
-
-    @AuthJWT.load_config
-    def get_config():
-        from bisheng.api.JWT import Settings
-        return Settings()
 
     @app.exception_handler(AuthJWTException)
     def authjwt_exception_handler(request: Request, exc: AuthJWTException):

@@ -1,5 +1,4 @@
 import hashlib
-import json
 import random
 import string
 from base64 import b64encode
@@ -11,17 +10,15 @@ import rsa
 from captcha.image import ImageCaptcha
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
 from fastapi.security import OAuth2PasswordBearer
+from loguru import logger
 from sqlmodel import select
 
 from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
 from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.services.captcha import verify_captcha
-from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_user_role, get_login_user,
-                                               get_admin_user, UserService)
 from bisheng.api.v1.schemas import resp_200, CreateUserReq
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
-from bisheng.common.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
-                                         UserValidateError, UserPasswordError, UserForbiddenError)
+from bisheng.common.errcode.user import (UserNotPasswordError, UserValidateError, UserPasswordError, UserForbiddenError)
+from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.constants import AdminRole, DefaultRole
@@ -29,15 +26,15 @@ from bisheng.database.models.group import GroupDao
 from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
 from bisheng.database.models.role_access import RoleRefresh, RoleAccessDao, AccessType
-from bisheng.database.models.user import User, UserCreate, UserDao, UserLogin, UserRead, UserUpdate
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.database.models.user_role import UserRole, UserRoleCreate, UserRoleDao
-from bisheng.common.services.config_service import settings
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_PASSWORD_ERROR, USER_CURRENT_SESSION
-from loguru import logger
-from fastapi_jwt_auth import AuthJWT
+from ..domain.models.user import User, UserCreate, UserDao, UserLogin, UserRead, UserUpdate
+from ..domain.models.user_role import UserRole, UserRoleCreate, UserRoleDao
+from ..domain.services.auth import AuthJwt, LoginUser
+from ..domain.services.captcha import verify_captcha
+from ..domain.services.user import UserService
 
 # build router
 router = APIRouter(prefix='', tags=['User'])
@@ -77,7 +74,7 @@ async def regist(*, user: UserCreate):
 
 
 @router.post('/user/sso')
-async def sso(*, request: Request, user: UserCreate):
+async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends()):
     """ 给闭源网关提供的登录接口 """
     if settings.get_system_login_method().bisheng_pro:  # 判断sso 是否打开
         account_name = user.user_name
@@ -99,7 +96,7 @@ async def sso(*, request: Request, user: UserCreate):
             UserGroupDao.add_default_user_group(user_exist.user_id)
         if 1 == user_exist.delete:
             raise UserForbiddenError.http_exception()
-        access_token, refresh_token, _, _ = gen_user_jwt(user_exist)
+        access_token = LoginUser.create_access_token(user_exist, auth_jwt=auth_jwt)
 
         # 设置登录用户当前的cookie, 比jwt有效期多一个小时
         redis_client = await get_redis_client()
@@ -107,11 +104,9 @@ async def sso(*, request: Request, user: UserCreate):
                                 ACCESS_TOKEN_EXPIRE_TIME + 3600)
 
         # 记录审计日志
-        AuditLogService.user_login(UserPayload(**{
-            'user_name': user_exist.user_name,
-            'user_id': user_exist.user_id,
-        }), get_request_ip(request))
-        return resp_200({'access_token': access_token, 'refresh_token': refresh_token})
+        login_user = await LoginUser.init_login_user(user_id=user_exist.user_id, user_name=user_exist.user_name)
+        AuditLogService.user_login(login_user, get_request_ip(request))
+        return resp_200({'access_token': access_token, 'refresh_token': access_token})
     else:
         raise ValueError('不支持接口')
 
@@ -127,68 +122,12 @@ def clear_error_password_key(username: str):
 
 
 @router.post('/user/login')
-async def login(*, request: Request, user: UserLogin, Authorize: AuthJWT = Depends()):
-    # 验证码校验
-    if settings.get_from_db('use_captcha'):
-        if not user.captcha_key or not await verify_captcha(user.captcha, user.captcha_key):
-            raise HTTPException(status_code=500, detail='验证码错误')
-
-    password = UserService.decrypt_md5_password(user.password)
-
-    db_user = UserDao.get_user_by_username(user.user_name)
-    # 检查密码
-    if not db_user or not db_user.password:
-        return UserValidateError.return_resp()
-
-    if 1 == db_user.delete:
-        raise HTTPException(status_code=500, detail='该账号已被禁用，请联系管理员')
-
-    password_conf = settings.get_password_conf()
-
-    redis_client = await get_redis_client()
-
-    if db_user.password and db_user.password != password:
-        # 判断是否需要记录错误次数
-        if not password_conf.login_error_time_window or not password_conf.max_error_times:
-            return UserValidateError.return_resp()
-        # 错误次数加1
-        error_key = get_error_password_key(user.user_name)
-        error_num = await redis_client.aincr(error_key)
-        if error_num == 1:
-            # 首次设置key的过期时间
-            await redis_client.aexpire_key(error_key, password_conf.login_error_time_window * 60)
-        if error_num and int(error_num) >= password_conf.max_error_times:
-            # 错误次数到达上限，封禁账号
-            db_user.delete = 1
-            UserDao.update_user(db_user)
-            raise HTTPException(status_code=500, detail='由于登录失败次数过多，该账号被自动禁用，请联系管理员处理')
-        return UserValidateError.return_resp()
-
-    # 判断下密码是否长期未修改
-    if db_user.password and password_conf.password_valid_period and password_conf.password_valid_period > 0:
-        if (datetime.now() - db_user.password_update_time).days >= password_conf.password_valid_period:
-            return UserPasswordExpireError.return_resp()
-
-    access_token, refresh_token, role, web_menu = gen_user_jwt(db_user)
-
-    # Set the JWT cookies in the response
-    Authorize.set_access_cookies(access_token)
-    Authorize.set_refresh_cookies(refresh_token)
-
-    # 设置登录用户当前的cookie, 比jwt有效期多一个小时
-    await redis_client.aset(USER_CURRENT_SESSION.format(db_user.user_id), access_token, ACCESS_TOKEN_EXPIRE_TIME + 3600)
-
-    # 记录审计日志
-    AuditLogService.user_login(UserPayload(**{
-        'user_name': db_user.user_name,
-        'user_id': db_user.user_id,
-        'role': role
-    }), get_request_ip(request))
-    return resp_200(UserRead(role=str(role), web_menu=web_menu, access_token=access_token, **db_user.__dict__))
+async def login(*, request: Request, user: UserLogin, auth_jwt: AuthJwt = Depends()):
+    return await UserService.user_login(request, user=user, auth_jwt=auth_jwt)
 
 
 @router.get('/user/admin')
-async def get_admins(login_user: UserPayload = Depends(get_login_user)):
+async def get_admins(login_user: LoginUser = Depends(LoginUser.get_login_user)):
     """
     获取所有的超级管理员账号
     """
@@ -207,23 +146,21 @@ async def get_admins(login_user: UserPayload = Depends(get_login_user)):
 
 
 @router.get('/user/info')
-async def get_info(login_user: UserPayload = Depends(get_login_user)):
-    # check if user already exist
-    try:
-        user_id = login_user.user_id
-        db_user = UserDao.get_user(user_id)
-        role, web_menu = gen_user_role(db_user)
-        admin_group = UserGroupDao.get_user_admin_group(user_id)
-        admin_group = [one.group_id for one in admin_group]
-        return resp_200(UserRead(role=str(role), web_menu=web_menu, admin_groups=admin_group, **db_user.__dict__))
-    except Exception:
-        raise HTTPException(status_code=500, detail='用户信息失败')
+async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
+    user_id = login_user.user_id
+    db_user = await UserDao.aget_user(user_id)
+    if not db_user:
+        raise NotFoundError()
+    role, web_menu = await login_user.get_roles_web_menu(db_user)
+
+    admin_group = await UserGroupDao.aget_user_admin_group(user_id)
+    admin_group = [one.group_id for one in admin_group]
+    return resp_200(UserRead(role=str(role), web_menu=web_menu, admin_groups=admin_group, **db_user.__dict__))
 
 
 @router.post('/user/logout', status_code=201)
-async def logout(Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    Authorize.unset_jwt_cookies()
+async def logout(auth_jwt: AuthJwt = Depends()):
+    auth_jwt.unset_access_token()
     return resp_200()
 
 
@@ -234,7 +171,7 @@ async def list_user(*,
                     page_num: Optional[int] = 1,
                     group_id: Annotated[List[int], Query()] = None,
                     role_id: Annotated[List[int], Query()] = None,
-                    login_user: UserPayload = Depends(get_login_user)):
+                    login_user: LoginUser = Depends(LoginUser.get_login_user)):
     groups = group_id
     roles = role_id
     user_admin_groups = []
@@ -345,7 +282,7 @@ def get_user_groups(user: User, group_cache: Dict) -> List[Dict]:
 async def update(*,
                  request: Request,
                  user: UserUpdate,
-                 login_user: UserPayload = Depends(get_login_user)):
+                 login_user: LoginUser = Depends(LoginUser.get_login_user)):
     db_user = UserDao.get_user(user.user_id)
     if not db_user:
         raise HTTPException(status_code=500, detail='用户不存在')
@@ -380,7 +317,7 @@ async def update(*,
     return resp_200()
 
 
-def update_user_delete_hook(request: Request, login_user: UserPayload, user: User) -> bool:
+def update_user_delete_hook(request: Request, login_user: LoginUser, user: User) -> bool:
     logger.info(f'update_user_delete_hook: {request}, user={user}')
     if user.delete == 0:  # 启用用户
         AuditLogService.recover_user(login_user, get_request_ip(request), user)
@@ -393,7 +330,7 @@ def update_user_delete_hook(request: Request, login_user: UserPayload, user: Use
 async def create_role(*,
                       request: Request,
                       role: RoleCreate,
-                      login_user: UserPayload = Depends(get_login_user)):
+                      login_user: LoginUser = Depends(LoginUser.get_login_user)):
     if not role.group_id:
         raise HTTPException(status_code=500, detail='用户组ID不能为空')
     if not role.role_name:
@@ -415,7 +352,7 @@ async def create_role(*,
         raise HTTPException(status_code=500, detail='添加失败，检查是否重复添加')
 
 
-def create_role_hook(request: Request, login_user: UserPayload, db_role: Role) -> bool:
+def create_role_hook(request: Request, login_user: LoginUser, db_role: Role) -> bool:
     logger.info(f'create_role_hook: {login_user.user_name}, role={db_role}')
     AuditLogService.create_role(login_user, get_request_ip(request), db_role)
 
@@ -425,7 +362,7 @@ async def update_role(*,
                       request: Request,
                       role_id: int,
                       role: RoleUpdate,
-                      login_user: UserPayload = Depends(get_login_user)):
+                      login_user: LoginUser = Depends(LoginUser.get_login_user)):
     db_role = RoleDao.get_role_by_id(role_id)
     if not db_role:
         raise HTTPException(status_code=404, detail='角色不存在')
@@ -449,7 +386,7 @@ async def update_role(*,
         raise HTTPException(status_code=500, detail='更新失败，服务端异常')
 
 
-def update_role_hook(request: Request, login_user: UserPayload, db_role: Role) -> bool:
+def update_role_hook(request: Request, login_user: LoginUser, db_role: Role) -> bool:
     logger.info(f'update_role_hook: {login_user.user_name}, role={db_role}')
     AuditLogService.update_role(login_user, get_request_ip(request), db_role)
 
@@ -459,7 +396,7 @@ async def get_role(*,
                    role_name: str = None,
                    page: int = 0,
                    limit: int = 0,
-                   login_user: UserPayload = Depends(get_login_user)):
+                   login_user: LoginUser = Depends(LoginUser.get_login_user)):
     """
     获取用户可见的角色列表， 根据用户权限不同返回不同的数据
     """
@@ -487,7 +424,7 @@ async def get_role(*,
 @router.delete('/role/{role_id}', status_code=200)
 async def delete_role(*,
                       request: Request,
-                      role_id: int, login_user: UserPayload = Depends(get_login_user)):
+                      role_id: int, login_user: LoginUser = Depends(LoginUser.get_login_user)):
     db_role = RoleDao.get_role_by_id(role_id)
     if not db_role:
         return resp_200()
@@ -512,7 +449,7 @@ async def delete_role(*,
 async def user_addrole(*,
                        request: Request,
                        user_role: UserRoleCreate,
-                       login_user: UserPayload = Depends(get_login_user)):
+                       login_user: LoginUser = Depends(LoginUser.get_login_user)):
     """
     重新设置用户的角色。根据权限不同改动的数据范围不同
     """
@@ -562,7 +499,7 @@ async def user_addrole(*,
     return resp_200()
 
 
-def update_user_role_hook(request: Request, login_user: UserPayload, user_id: int,
+def update_user_role_hook(request: Request, login_user: LoginUser, user_id: int,
                           old_roles: List[int], new_roles: List[int]):
     logger.info(f'update_user_role_hook, user_id: {user_id}, old_roles: {old_roles}, new_roles: {new_roles}')
     # 写入审计日志
@@ -580,35 +517,9 @@ def update_user_role_hook(request: Request, login_user: UserPayload, user_id: in
     AuditLogService.update_user(login_user, get_request_ip(request), user_id, group_ids, note)
 
 
-@router.get('/user/role', status_code=200)
-async def get_user_role(*, user_id: int, Authorize: AuthJWT = Depends()):
-    # 废弃， 全部通过用户列表接口返回
-    Authorize.jwt_required()
-    if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
-        raise HTTPException(status_code=500, detail='无设置权限')
-
-    with get_sync_db_session() as session:
-        db_userroles = session.exec(select(UserRole).where(UserRole.user_id == user_id)).all()
-
-    role_ids = [role.role_id for role in db_userroles]
-    with get_sync_db_session() as session:
-        db_role = session.exec(select(Role).where(Role.id.in_(role_ids))).all()
-    role_name_dict = {role.id: role.role_name for role in db_role}
-
-    res = []
-    for db_user_role in db_userroles:
-        user_role = db_user_role.__dict__
-        if db_user_role.role_id not in role_name_dict:
-            # 错误数据
-            continue
-        user_role['role_name'] = role_name_dict[db_user_role.role_id]
-        res.append(user_role)
-
-    return resp_200(res)
-
-
 @router.post('/role_access/refresh', status_code=200)
-async def access_refresh(*, request: Request, data: RoleRefresh, login_user: UserPayload = Depends(get_login_user)):
+async def access_refresh(*, request: Request, data: RoleRefresh,
+                         login_user: LoginUser = Depends(LoginUser.get_login_user)):
     db_role = await RoleDao.aget_role_by_id(data.role_id)
     if not db_role:
         raise NotFoundError().http_exception()
@@ -627,7 +538,8 @@ async def access_refresh(*, request: Request, data: RoleRefresh, login_user: Use
 
 
 @router.get('/role_access/list', status_code=200)
-async def access_list(*, role_id: int, type: Optional[int] = None, login_user: UserPayload = Depends(get_login_user)):
+async def access_list(*, role_id: int, access_type: Optional[int] = Query(default=None, alias="type"),
+                      login_user: LoginUser = Depends(LoginUser.get_login_user)):
     db_role = await RoleDao.aget_role_by_id(role_id)
     if not db_role:
         raise NotFoundError().http_exception()
@@ -636,8 +548,8 @@ async def access_list(*, role_id: int, type: Optional[int] = None, login_user: U
         return UnAuthorizedError.return_resp()
 
     access_type = None
-    if type:
-        access_type = AccessType(type)
+    if access_type:
+        access_type = AccessType(access_type)
     res = await RoleAccessDao.aget_role_access([role_id], access_type)
 
     return resp_200({
@@ -696,7 +608,7 @@ async def reset_password(
         *,
         user_id: int = Body(embed=True),
         password: str = Body(embed=True),
-        login_user: UserPayload = Depends(get_login_user),
+        login_user: LoginUser = Depends(LoginUser.get_login_user),
 ):
     """
     管理员重置用户密码
@@ -705,7 +617,7 @@ async def reset_password(
     user_info = UserDao.get_user(user_id)
     if not user_info:
         raise HTTPException(status_code=404, detail='用户不存在')
-    user_payload = UserPayload(**{
+    user_payload = LoginUser(**{
         'user_id': user_info.user_id,
         'user_name': user_info.user_name,
         'role': ''
@@ -734,7 +646,7 @@ async def reset_password(
 async def change_password(*,
                           password: str = Body(embed=True),
                           new_password: str = Body(embed=True),
-                          login_user: UserPayload = Depends(get_login_user)):
+                          login_user: LoginUser = Depends(LoginUser.get_login_user)):
     """
     登录用户 修改自己的密码
     """
@@ -781,7 +693,7 @@ async def change_password_public(*,
 
 
 @router.get('/user/mark', status_code=200)
-async def has_mark_access(*, request: Request, login_user: UserPayload = Depends(get_login_user)):
+async def has_mark_access(*, request: Request, login_user: LoginUser = Depends(LoginUser.get_login_user)):
     """
     获取当前用户是否有标注权限,判断当前用户是否为admin 或者是用户组管理员
     """
@@ -800,7 +712,7 @@ async def has_mark_access(*, request: Request, login_user: UserPayload = Depends
 @router.post('/user/create', status_code=200)
 async def create_user(*,
                       request: Request,
-                      admin_user: UserPayload = Depends(get_admin_user),
+                      admin_user: LoginUser = Depends(LoginUser.get_admin_user),
                       req: CreateUserReq):
     """
     超级管理员创建用户

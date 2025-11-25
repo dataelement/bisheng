@@ -19,9 +19,9 @@ from bisheng.database.models.group import Group, DefaultGroup
 from bisheng.database.models.role import Role
 from bisheng.database.models.role_access import RoleAccess, AccessType
 from bisheng.database.models.template import Template
-from bisheng.database.models.user import User
-from bisheng.database.models.user_role import UserRoleDao
 from bisheng.finetune.domain.models.sft_model import SftModel
+from bisheng.user.domain.models.user import User
+from bisheng.user.domain.models.user_role import UserRoleDao
 
 
 async def init_default_data():

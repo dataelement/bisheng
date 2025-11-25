@@ -16,7 +16,6 @@ from bisheng.api.services.knowledge_imp import (
     process_file_task,
     async_read_chunk_text,
 )
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.knowledge import KnowledgeFileResp
 from bisheng.api.v1.schemas import (
     FileChunk,
@@ -26,6 +25,7 @@ from bisheng.api.v1.schemas import (
     UpdatePreviewFileChunk, ExcelRule, KnowledgeFileReProcess,
 )
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
 from bisheng.common.errcode.knowledge import (
     KnowledgeChunkError,
@@ -41,9 +41,7 @@ from bisheng.database.models.group_resource import (
     ResourceTypeEnum,
 )
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
-from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.database.models.user_role import UserRoleDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import (
@@ -61,6 +59,8 @@ from bisheng.knowledge.domain.models.knowledge_file import (
 )
 from bisheng.llm.const import LLMModelType
 from bisheng.llm.models import LLMDao
+from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid, generate_knowledge_index_name
 from bisheng.utils import get_request_ip
 from bisheng.worker.knowledge import file_worker
