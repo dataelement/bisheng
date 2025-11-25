@@ -190,7 +190,7 @@ export default function AppUseLog() {
         const [start_date, end_date] = getStrTime([adjustedStart, adjustedEnd])
 
         exportCsvDataApi({
-            flow_ids: filters.appName?.length ? filters.appName.map(el => el.value) : undefined,
+            flow_ids: filters.appName?.length ? filters.appName : undefined,
             user_ids: filters.userName?.[0]?.value || undefined,
             group_ids: filters.userGroup || undefined,
             start_date,
