@@ -50,6 +50,7 @@ const MetadataFilter = ({
   onValidate,
   selectedKnowledgeIds = () => [],
   nodeId,
+  node,
   onVarEvent
 }: MetadataFilterProps) => {
 
@@ -324,45 +325,47 @@ const MetadataFilter = ({
     onChange(filterData);
   }, [isEnabled, relation, checkAllFieldsValidity, validateConditionsUI, validateFunc, onChange, onValidate]);
 
-  const validateVars = useCallback(async (): Promise<string> => {
-    if (!isEnabled) return "";
-    
-    try {
-      const knowledgeIds = selectedKnowledgeIds();
-      if (knowledgeIds.length === 0) return "";
-      
-      const knowledgeDetails = await getKnowledgeDetailApi(knowledgeIds);
+const validateVars = useCallback(async (): Promise<string> => {
+  if (!isEnabled) return "";
   
-      const validFieldIds = new Set<string>();
-      knowledgeDetails.forEach((detail: any) => {
+  try {
+    const knowledgeIds = selectedKnowledgeIds();
+    if (knowledgeIds.length === 0) return "";
+    
+    const knowledgeDetails = await getKnowledgeDetailApi(knowledgeIds);
 
-        const defaultFields = ["document_id", "document_name", "upload_time", "update_time", "uploader", "updater"];
-        defaultFields.forEach(field => {
-          validFieldIds.add(`${detail.id}-${field}`);
-        });
-        
-        if (detail.metadata_fields) {
-          detail.metadata_fields.forEach((field: any) => {
-            validFieldIds.add(`${detail.id}-${field.field_name}`);
-          });
-        }
+    const validFieldIds = new Set<string>();
+    knowledgeDetails.forEach((detail: any) => {
+
+      const defaultFields = ["document_id", "document_name", "upload_time", "update_time", "uploader", "updater"];
+      defaultFields.forEach(field => {
+        validFieldIds.add(`${detail.id}-${field}`);
       });
       
-      const { conditions } = stateRef.current;
-      for (const condition of conditions) {
-        if (!condition.metadataField) continue;
-        if (!validFieldIds.has(condition.metadataField)) {
-          const fieldName = condition.metadataField.split("-").pop() || "";
-          return `条件中引用的字段"${fieldName}"已无效。`;
-        }
+      if (detail.metadata_fields) {
+        detail.metadata_fields.forEach((field: any) => {
+          validFieldIds.add(`${detail.id}-${field.field_name}`);
+        });
       }
-      
-      return "";
-    } catch (error) {
-      console.error("Error validating metadata fields:", error);
-      return "验证元数据字段时发生错误";
+    });
+    
+    const { conditions } = stateRef.current;
+    for (const condition of conditions) {
+      if (!condition.metadataField) continue;
+      if (!validFieldIds.has(condition.metadataField)) {
+        const fieldName = condition.metadataField.split("-").pop() || "";
+        // 获取节点名称，如果没有则使用默认值
+        const nodeName = node?.name || "元数据过滤";
+        return `${nodeName}节点错误："${fieldName}"已失效。`;
+      }
     }
-  }, [isEnabled, selectedKnowledgeIds]);
+    
+    return "";
+  } catch (error) {
+    console.error("Error validating metadata fields:", error);
+    return "验证元数据字段时发生错误";
+  }
+}, [isEnabled, selectedKnowledgeIds, node]);
 
   useEffect(() => {
     if (onVarEvent) {
@@ -503,7 +506,7 @@ const MetadataFilter = ({
                         onValueChange={(value) => updateCondition(condition.id, "metadataField", value)}
                         onOpenChange={setIsSelectOpen}
                       >
-                        <SelectTrigger className={`h-8 min-w-0 ${hasError ? 'border-red-500' : ''}`}>
+                        <SelectTrigger className={`h-8 min-w-0`}>
                           <SelectValue placeholder="选择变量">
                             {condition.metadataField && (
                               <TooltipProvider>
