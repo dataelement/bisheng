@@ -1,4 +1,3 @@
-import { Label } from "@/components/bs-ui/label";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import VarInput from "./VarInput";

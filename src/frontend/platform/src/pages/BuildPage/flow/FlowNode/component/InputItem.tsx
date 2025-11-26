@@ -1,10 +1,12 @@
 import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export default function InputItem({ type = 'text', char = false, linefeed = false, data, onChange }) {
-    const [value, setValue] = useState(data.value ? String(data.value) : ''); 
+    const [value, setValue] = useState(data.value ? String(data.value) : '');
+    const { t } = useTranslation('flow');
 
     // 初始化时同步外部数据（确保为整数）
     useEffect(() => {
@@ -42,7 +44,7 @@ export default function InputItem({ type = 'text', char = false, linefeed = fals
                     max={data.max}
                     onChange={(e) => handleChange(e.target.value)}
                 />
-                <Label className="bisheng-label">字</Label>
+                <Label className="bisheng-label">{t('character')}</Label>
             </div>
         </div>
     );

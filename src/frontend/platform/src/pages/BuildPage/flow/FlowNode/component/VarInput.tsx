@@ -242,7 +242,7 @@ export default function VarInput({
                                         </Button>
                                     </TooltipTrigger>
                                     <TooltipContent>
-                                        <p>上传文件</p>
+                                        <p>{t('uploadFile')}</p>
                                     </TooltipContent>
                                 </Tooltip>
                             </TooltipProvider>

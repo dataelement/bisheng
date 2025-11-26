@@ -1,20 +1,18 @@
-import { Switch } from "@/components/bs-ui/switch";
 import { Button } from "@/components/bs-ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Input } from "@/components/bs-ui/input";
-import { Trash2, Search, RefreshCcw, ChevronDown, Clock3, Type, Hash, CircleQuestionMark } from "lucide-react";
-import { useState, useLayoutEffect, useMemo, useRef, useCallback, useEffect } from "react";
-
-import { generateUUID } from "@/components/bs-ui/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { Switch } from "@/components/bs-ui/switch";
+import { ChevronDown, CircleQuestionMark, Clock3, Hash, RefreshCcw, Search, Trash2, Type } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/bs-ui/badge";
-import { format } from "date-fns";
-import { getKnowledgeDetailApi } from "@/controllers/API";
-import SelectVar from "./SelectVar";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
-import NumberInput from "./NumberInput";
-import { isVarInFlow } from "@/util/flowUtils";
-import useFlowStore from "../../flowStore";
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { generateUUID } from "@/components/bs-ui/utils";
+import { getKnowledgeDetailApi } from "@/controllers/API";
+import { format } from "date-fns";
+import useFlowStore from "../../flowStore";
+import NumberInput from "./NumberInput";
+import SelectVar from "./SelectVar";
 
 interface MetadataCondition {
   id: string;

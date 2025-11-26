@@ -25,7 +25,7 @@ interface Input {
 
 export const ResultText = ({ title, value }: { title: string, value: any }) => {
     const [copyed, setCopied] = useState(false)
-    const [text, setText] = useState(() => {
+    const [text] = useState(() => {
         if (typeof value === 'object') {
             return JSON.stringify(value, null, 2)
         } else if (Array.isArray(value)) {
@@ -150,14 +150,14 @@ export const RunTest = forwardRef((props, ref) => {
                 return true
             }
         })
-        
+
         // save cache
         const cacheData = inputs.reduce((res, input) => {
             res[input.key] = input.value
             return res
         }, {})
         setRunCache(node.id, cacheData)
-        
+
         setLoading(true)
         setResults([])
         await captureAndAlertRequestErrorHoc(
@@ -263,12 +263,12 @@ export const RunTest = forwardRef((props, ref) => {
                         <Select value={currentIndex + ""} onValueChange={(val => setCurrentIndex(Number(val)))}>
                             <SelectTrigger className="w-[180px]">
                                 {/* <SelectValue /> */}
-                                <span>第 {currentIndex + 1} 轮运行结果</span>
+                                <span>{t('roundRunResult', { index: currentIndex + 1 })}</span>
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectGroup>
                                     {
-                                        results.map((_, index) => <SelectItem key={index} value={index + ""}>第 {index + 1} 轮运行结果</SelectItem>)
+                                        results.map((_, index) => <SelectItem key={index} value={index + ""}>{t('roundRunResult', { index: index + 1 })}</SelectItem>)
                                     }
                                 </SelectGroup>
                             </SelectContent>

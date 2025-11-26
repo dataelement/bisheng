@@ -81,7 +81,7 @@ export default function apps() {
 
     const { open: tempOpen, tempType, flowRef, toggleTempModal } = useCreateTemp()
 
-    // 上下线
+    // on/off line
     const handleCheckedChange = (checked, data) => {
         if (data.flow_type === 1) {
             return captureAndAlertRequestErrorHoc(updataOnlineState(data.id, data, checked).then(res => {
@@ -149,7 +149,7 @@ export default function apps() {
     const handleCreateApp = async (type, tempId = 0, item?: any) => {
         if (type === AppType.SKILL) {
             if (!tempId) return navigate('/build/skill')
-            // 选模板(创建技能)
+            // select template
             const [flow] = await readTempsDatabase(type, tempId)
 
             flow.name = `${flow.name}-${generateUUID(5)}`
@@ -249,7 +249,7 @@ export default function apps() {
                                     onDelete={handleDelete}
                                     onSetting={(item) => handleSetting(item)}
                                     headSelecter={(
-                                        // 技能版本
+                                        // skills
                                         item.flow_type !== AppNumType.ASSISTANT ? <CardSelectVersion
                                             showPop={item.status !== 2}
                                             data={item}
@@ -274,14 +274,14 @@ export default function apps() {
                     </div>
             }
         </div>
-        {/* 添加模板 */}
+        {/* add template */}
         <CreateTemp flow={flowRef.current} type={tempType} open={tempOpen} setOpen={() => toggleTempModal()} onCreated={() => { }} ></CreateTemp>
         {/* footer */}
         <div className="flex justify-between absolute bottom-0 left-0 w-full bg-background-main h-16 items-center px-10">
             <p className="text-sm text-muted-foreground break-keep">{t('build.manageYourApplications')}</p>
             <AutoPagination className="m-0 w-auto justify-end" page={page} pageSize={pageSize} total={total} onChange={setPage}></AutoPagination>
         </div>
-        {/* 创建应用弹窗 flow&assistant */}
+        {/* create flow&assistant */}
         <CreateApp ref={createAppModalRef} />
     </div>
 };

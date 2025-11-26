@@ -218,29 +218,29 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
 
         // 1. 非空检查
         if (!varName || !varName.trim()) {
-            return '变量名称不可为空'
+            return t('variableNameCannotBeEmpty');
         }
 
         // 2. 不能以数字开头
         if (/^\d/.test(varName)) {
-            return '变量名不能以数字开头';
+            return t('variableNameCannotStartWithNumber');
         }
 
         // 3. 只能包含英文字符、数字和下划线
         if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(varName)) {
-            return '变量名称只能包含英文字符、数字和下划线';
+            return t('variableNameContainsInvalidCharacters');
         }
 
         // 4. 长度不超过50
         if (varName.length > 50) {
-            return '变量名称不能超过50个字符';
+            return t('variableNameTooLong');
         }
 
         // 5. 不能重复
         if (existingOptions?.some(opt => opt.type === 'file'
             && opt.image_file === formData.imageFile)
             && formData.imageFile !== oldImageFileRef.current) {
-            return '变量名已存在';
+            return t('variableNameAlreadyExists');
         }
 
         return '';

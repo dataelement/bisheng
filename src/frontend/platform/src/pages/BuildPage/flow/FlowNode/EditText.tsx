@@ -2,10 +2,12 @@ import { Input, Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { cname } from "@/components/bs-ui/utils";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export default function EditText({ type = 'input', reDefaultValue = false, children, disable = false, defaultValue, maxLength = 0, className = '', onChange }) {
     const [edit, setEdit] = useState(false)
     const [value, setValue] = useState(defaultValue)
+    const { t } = useTranslation('flow')
 
     const { message } = useToast()
 
@@ -18,7 +20,7 @@ export default function EditText({ type = 'input', reDefaultValue = false, child
         if (maxLength && value.length > maxLength) {
             return message({
                 variant: 'warning',
-                description: `不能超过 ${maxLength} 个字符`
+                description: t('cannotExceedMaxLength', { maxLength })
             })
         }
         setEdit(false)

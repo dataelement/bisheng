@@ -32,7 +32,6 @@ export default function Parameter({
     item,
     onOutPutChange,
     onStatusChange,
-    onFouceUpdate,
     onVarEvent,
     selectedKnowledgeIds
 }: {

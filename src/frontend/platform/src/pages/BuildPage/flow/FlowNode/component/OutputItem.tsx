@@ -19,7 +19,7 @@ const OutputItem = ({ nodeId, node, data, onChange, onValidate, onVarEvent }) =>
         }))
     }, [data.options]);
 
-    data.label = '用户输入内容'
+    data.label = t('userInputContent')
     data.required = false
 
     // 根据交互类型切换不同的展示

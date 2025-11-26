@@ -177,7 +177,10 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                 setFitView()
             } catch (error) {
                 console.error("Import flow error:", error);
-                toast({ variant: 'error', description: '该文件无法识别，请导入正确的JSON文件' })
+                toast({
+                    variant: 'error',
+                    description: t('invalidFileError')
+                })
             }
         }
     }

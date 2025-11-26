@@ -2,7 +2,7 @@ import { Label } from "@/components/bs-ui/label";
 import Cascader from "@/components/bs-ui/select/cascader";
 import { getLlmDefaultModel } from "@/controllers/API/finetune";
 import { useModel } from "@/pages/ModelPage/manage";
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function ModelItem({ agent = false, data, onChange, onValidate }) {

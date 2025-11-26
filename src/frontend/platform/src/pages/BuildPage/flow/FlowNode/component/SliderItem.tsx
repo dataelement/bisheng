@@ -1,6 +1,5 @@
 import { Label } from "@/components/bs-ui/label";
 import { Slider } from "@/components/bs-ui/slider";
-import { Switch } from "@/components/bs-ui/switch";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import React from "react";
 

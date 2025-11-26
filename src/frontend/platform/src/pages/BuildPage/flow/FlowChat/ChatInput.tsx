@@ -274,7 +274,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             const errorMsg = status_code == 500 ? status_message : t(`errors.${status_code}`, params)
             addNotification({
                 type: 'error',
-                title: '运行异常',
+                title: 'runtime error',
                 description: errorMsg
             })
 

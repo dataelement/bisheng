@@ -5,9 +5,11 @@ import { generateUUID } from "@/components/bs-ui/utils";
 import { useCallback, useEffect, useMemo } from "react";
 import { useUpdateVariableState } from "../flowNodeStore";
 import { debounce } from "lodash-es";
+import { useTranslation } from "react-i18next";
 
 export default function InputListItem({ node, data, preset, onChange }) {
     const [_, setUpdateVariable] = useUpdateVariableState()
+    const { t } = useTranslation()
 
     const value = useMemo(() => {
         const _value = data.value || [];
@@ -61,7 +63,7 @@ export default function InputListItem({ node, data, preset, onChange }) {
         <div className="nowheel nodrag overflow-y-auto max-h-52 mt-2">
             <InputList
                 dict={preset}
-                rules={[{ maxLength: 50, message: '最大50个字符' }]}
+                rules={[{ maxLength: 50, message: t('max50Characters') }]}
                 value={value}
                 onChange={handleChange}
                 placeholder={data.placeholder || ''}
