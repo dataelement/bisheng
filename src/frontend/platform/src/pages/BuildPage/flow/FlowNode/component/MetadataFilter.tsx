@@ -82,14 +82,16 @@ const MetadataFilter = ({
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
   const [isSelectOpen, setIsSelectOpen] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({});
-  
+  const [error, setError] = useState(false)
+
+
   // 用 ref 存储最新状态，绕开闭包问题
   const stateRef = useRef({
     conditions: conditions,
     availableMetadataState: availableMetadataState,
     isLoadingMetadata: isLoadingMetadata
   });
-  
+
   // 状态变化时同步更新 ref
   useEffect(() => {
     stateRef.current = {
@@ -239,13 +241,13 @@ const MetadataFilter = ({
     if (isLoadingMetadata) return;
 
     const newFieldErrors = { ...fieldErrors };
-    
+
     conditions.forEach(cond => {
       if (!cond.metadataField) {
         if (newFieldErrors[cond.id]) delete newFieldErrors[cond.id];
         return;
       }
-      
+
       const isFieldValid = availableMetadataState.some(meta => meta.id === cond.metadataField);
       if (!isFieldValid) {
         newFieldErrors[cond.id] = "选择的元数据字段无效或已被删除";
@@ -253,7 +255,7 @@ const MetadataFilter = ({
         delete newFieldErrors[cond.id];
       }
     });
-    
+
     if (JSON.stringify(newFieldErrors) !== JSON.stringify(fieldErrors)) {
       setFieldErrors(newFieldErrors);
     }
@@ -261,17 +263,22 @@ const MetadataFilter = ({
 
   // validateFunc 从 ref 拿最新 conditions
   const validateFunc = useCallback(() => {
-    const { conditions } = stateRef.current;
+    const { conditions, availableMetadataState } = stateRef.current; 
     const errors = [];
     conditions.forEach((cond, index) => {
       if (!cond.metadataField) errors.push(`条件 ${index + 1}: 请选择元数据字段`);
       if (!cond.operator) errors.push(`条件 ${index + 1}: 请选择操作符`);
-      
+       if (cond.metadataField) {
+      const isFieldValid = availableMetadataState.some(meta => meta.id === cond.metadataField);
+      if (!isFieldValid) {
+        errors.push(`条件 ${index + 1}: 选择的元数据字段无效或已被删除`);
+      }
+    }
       if (![`is_empty`, `is_not_empty`].includes(cond.operator) && cond.metadataField) {
         // 实时获取字段类型
         const meta = stateRef.current.availableMetadataState.find(m => m.id === cond.metadataField);
         if (meta?.type === "Number" && !cond.value) {
-           errors.push(`条件 ${index + 1}: 请输入数值`);
+          errors.push(`条件 ${index + 1}: 请输入数值`);
         }
       }
     });
@@ -283,7 +290,7 @@ const MetadataFilter = ({
     const isValid = conditions.every(cond => {
       if (!cond.metadataField || !cond.operator) return false;
       if ([`is_empty`, `is_not_empty`].includes(cond.operator)) return true;
-      
+
       const meta = stateRef.current.availableMetadataState.find(m => m.id === cond.metadataField);
       if (meta?.type === "Number") {
         return !!cond.value;
@@ -301,7 +308,7 @@ const MetadataFilter = ({
       onValidate(() => false);
       return;
     }
-    
+
     checkAllFieldsValidity();
     validateConditionsUI();
     onValidate(validateFunc);
@@ -325,47 +332,48 @@ const MetadataFilter = ({
     onChange(filterData);
   }, [isEnabled, relation, checkAllFieldsValidity, validateConditionsUI, validateFunc, onChange, onValidate]);
 
-const validateVars = useCallback(async (): Promise<string> => {
-  if (!isEnabled) return "";
-  
-  try {
-    const knowledgeIds = selectedKnowledgeIds();
-    if (knowledgeIds.length === 0) return "";
-    
-    const knowledgeDetails = await getKnowledgeDetailApi(knowledgeIds);
+  const validateVars = useCallback(async (): Promise<string> => {
+    if (!isEnabled) return "";
 
-    const validFieldIds = new Set<string>();
-    knowledgeDetails.forEach((detail: any) => {
+    try {
+      const knowledgeIds = selectedKnowledgeIds();
+      if (knowledgeIds.length === 0) return "";
 
-      const defaultFields = ["document_id", "document_name", "upload_time", "update_time", "uploader", "updater"];
-      defaultFields.forEach(field => {
-        validFieldIds.add(`${detail.id}-${field}`);
-      });
-      
-      if (detail.metadata_fields) {
-        detail.metadata_fields.forEach((field: any) => {
-          validFieldIds.add(`${detail.id}-${field.field_name}`);
+      const knowledgeDetails = await getKnowledgeDetailApi(knowledgeIds);
+
+      const validFieldIds = new Set<string>();
+      knowledgeDetails.forEach((detail: any) => {
+
+        const defaultFields = ["document_id", "document_name", "upload_time", "update_time", "uploader", "updater"];
+        defaultFields.forEach(field => {
+          validFieldIds.add(`${detail.id}-${field}`);
         });
+
+        if (detail.metadata_fields) {
+          detail.metadata_fields.forEach((field: any) => {
+            validFieldIds.add(`${detail.id}-${field.field_name}`);
+          });
+        }
+      });
+
+      const { conditions } = stateRef.current;
+      for (const condition of conditions) {
+        if (!condition.metadataField) continue;
+        if (!validFieldIds.has(condition.metadataField)) {
+          setError(true)
+          const fieldName = condition.metadataField.split("-").pop() || "";
+          // 获取节点名称，如果没有则使用默认值
+          const nodeName = node?.name || "元数据过滤";
+          return `${nodeName}节点错误："${fieldName}"已失效。`;
+        }
       }
-    });
-    
-    const { conditions } = stateRef.current;
-    for (const condition of conditions) {
-      if (!condition.metadataField) continue;
-      if (!validFieldIds.has(condition.metadataField)) {
-        const fieldName = condition.metadataField.split("-").pop() || "";
-        // 获取节点名称，如果没有则使用默认值
-        const nodeName = node?.name || "元数据过滤";
-        return `${nodeName}节点错误："${fieldName}"已失效。`;
-      }
+      setError(false)
+      return "";
+    } catch (error) {
+      console.error("Error validating metadata fields:", error);
+      return "验证元数据字段时发生错误";
     }
-    
-    return "";
-  } catch (error) {
-    console.error("Error validating metadata fields:", error);
-    return "验证元数据字段时发生错误";
-  }
-}, [isEnabled, selectedKnowledgeIds, node]);
+  }, [isEnabled, selectedKnowledgeIds, node]);
 
   useEffect(() => {
     if (onVarEvent) {
@@ -386,7 +394,7 @@ const validateVars = useCallback(async (): Promise<string> => {
       meta.knowledgeBase.toLowerCase().includes(term)
     );
   }, [availableMetadataState, searchTerm]);
-  
+
   const addCondition = () => {
     setConditions(prev => [...prev, {
       id: generateUUID(8),
@@ -492,7 +500,6 @@ const validateVars = useCallback(async (): Promise<string> => {
               const metadataType = stateRef.current.availableMetadataState.find(m => m.id === condition.metadataField)?.type;
               const isTimeType = metadataType === "Time";
               const hasError = !!fieldErrors[condition.id];
-              
               const selectedMeta = stateRef.current.availableMetadataState.find(m => m.id === condition.metadataField);
               const displayName = selectedMeta ? selectedMeta.name : condition.metadataField.split("-").pop() || "未知字段";
               const displayIcon = selectedMeta ? selectedMeta.icon : null;
@@ -506,7 +513,7 @@ const validateVars = useCallback(async (): Promise<string> => {
                         onValueChange={(value) => updateCondition(condition.id, "metadataField", value)}
                         onOpenChange={setIsSelectOpen}
                       >
-                        <SelectTrigger className={`h-8 min-w-0`}>
+                        <SelectTrigger className={`h-8 min-w-0 ${error ? 'border-red-500 ring-1 ring-red-500' : ''}`}>
                           <SelectValue placeholder="选择变量">
                             {condition.metadataField && (
                               <TooltipProvider>
