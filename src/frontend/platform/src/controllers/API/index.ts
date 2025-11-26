@@ -218,11 +218,13 @@ export async function updateMetadataFields(
  */
 export async function saveUserMetadataApi (
     knowledge_id: string | number,
-    updates: Array<{ field_name: string; field_value: any }>
+    updates: Array<{ field_name: string; field_value: any }>,
+     updated_at?: string | number
 ) {
     await axios.put(`/api/v1/knowledge/file/user_metadata`, {
         knowledge_file_id: knowledge_id,
         user_metadata_list: updates,
+        updated_at:updated_at
     });
 }
 /**

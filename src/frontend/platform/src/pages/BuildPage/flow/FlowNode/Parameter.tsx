@@ -167,6 +167,7 @@ export default function Parameter({
                 onValidate={bindValidate}
                 selectedKnowledgeIds={selectedKnowledgeIds}
                 nodeId={nodeId}
+                onVarEvent={bindVarValidate}
             />
         );
         default:
