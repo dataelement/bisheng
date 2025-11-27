@@ -14,7 +14,7 @@ from bisheng.database.models.knowledge_file import (
     KnowledgeFileStatus
 )
 from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.worker import bisheng_celery
+from bisheng.worker.main import bisheng_celery
 
 
 @bisheng_celery.task(acks_late=True)
