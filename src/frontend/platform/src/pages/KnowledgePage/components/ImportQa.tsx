@@ -14,7 +14,7 @@ import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import * as XLSX from 'xlsx';
 
-// 添加&编辑qa
+// add QA
 const SimilarityProblemModal = forwardRef(function ({ questions }, ref) {
     const { t } = useTranslation('knowledge');
     const [open, setOpen] = useState(false);
@@ -34,12 +34,12 @@ const SimilarityProblemModal = forwardRef(function ({ questions }, ref) {
         <Dialog open={open} onOpenChange={(bln) => bln ? setOpen(bln) : close()}>
             <DialogContent className="sm:max-w-[625px]">
                 <DialogHeader>
-                    <DialogTitle>相似问题</DialogTitle>
+                    <DialogTitle>{t('similarQuestions')}</DialogTitle>
                 </DialogHeader>
                 <div className="flex flex-col gap-4 py-2 max-h-[36vh] overflow-y-auto">
                     <Table>
                         <TableRow>
-                            <TableHead>相似问题（仅显示前十条）</TableHead>
+                            <TableHead>{t('similarQuestionsPreview')}</TableHead>
                         </TableRow>
                         <TableBody>
                             {(questions || []).slice(0, 10).map((el, index) => {
@@ -98,7 +98,7 @@ function QaTable({ dataList }) {
                                         if (!questions.length) {
                                             return message({
                                                 variant: 'warning',
-                                                description: '暂无相似问题'
+                                                description: t('noSimilarQuestions')
                                             });
                                         }
                                         setQuestions(questions);
@@ -119,13 +119,12 @@ function QaTable({ dataList }) {
     );
 }
 
-// Excel校验函数
 const excelPreCheck = async (file) => {
+    const { t } = useTranslation('knowledge');
     return new Promise((resolve) => {
-        // 检查是否是Excel文件
         const ext = file.name.split('.').pop().toLowerCase();
         if (!['xlsx', 'xls'].includes(ext)) {
-            return { valid: false, message: '请上传xlsx、xls类型的文件' }; // 非Excel文件跳过校验
+            return { valid: false, message: t('excelFileTypeError') };
         }
 
         const reader = new FileReader();
@@ -138,12 +137,12 @@ const excelPreCheck = async (file) => {
                 const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
 
                 if (jsonData.length === 0) {
-                    resolve({ valid: false, message: 'Excel文件为空' });
+                    resolve({ valid: false, message: t('excelFileEmpty') });
                     return;
                 }
 
                 const headers = jsonData[0].map(header => header?.toString().toLowerCase().trim());
-                const requiredColumns = ['问题', '答案'];
+                const requiredColumns = [t('question'), t('answer')];
                 const missingColumns = requiredColumns.filter(
                     col => !headers.includes(col.toLowerCase())
                 );
@@ -151,18 +150,18 @@ const excelPreCheck = async (file) => {
                 if (missingColumns.length > 0) {
                     resolve({
                         valid: false,
-                        message: `缺少必要列: ${missingColumns.join(', ')}`
+                        message: t('missingRequiredColumns', { columns: missingColumns.join(', ') })
                     });
                 } else {
                     resolve({ valid: true });
                 }
             } catch (error) {
-                resolve({ valid: false, message: 'Excel文件解析失败' });
+                resolve({ valid: false, message: t('excelParseError') });
             }
         };
 
         reader.onerror = () => {
-            resolve({ valid: false, message: '文件读取失败' });
+            resolve({ valid: false, message: t('fileReadError') });
         };
 
         reader.readAsArrayBuffer(file);
@@ -211,14 +210,13 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
             fileUrl: isDataListEmpty,
         });
 
-        if (isDataListEmpty) errors.push('待上传问题为空，请检查');
+        if (isDataListEmpty) errors.push(t('emptyUploadData'));
         if (errors.length > 0) {
             return message({
                 variant: 'warning',
                 description: errors
             });
         }
-        //提交
         const res = await captureAndAlertRequestErrorHoc(postImportQaFile(id, {
             url: form.fileUrl
         }));
@@ -234,9 +232,7 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
     };
     const { id } = useParams();
     const handleFileUploadSuccess = async (name, url) => {
-        // 发送请求进行预览
         const res = await captureAndAlertRequestErrorHoc(getQaFilePreview(id, {
-            // 最多预览10条
             size: 10,
             url,
         }));
@@ -252,22 +248,22 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
         <Dialog open={open} onOpenChange={(bln) => bln ? setOpen(bln) : close()}>
             <DialogContent className="sm:max-w-[825px]">
                 <DialogHeader>
-                    <DialogTitle>导入 QA</DialogTitle>
+                    <DialogTitle>{t('importQA')}</DialogTitle>
                 </DialogHeader>
                 <div>
                     <div className="flex justify-between items-center">
                         <label htmlFor="dataSetName" className="bisheng-label">
-                            <span className="text-red-500">*</span>请上传文件
+                            <span className="text-red-500">*</span>{t('upFile')}
                         </label>
                         <div className="flex gap-2 items-center">
-                            <Label>示例文件:</Label>
+                            <Label>{t('exampleFile')}:</Label>
                             <Button variant="link" className="px-1" onClick={() => {
                                 getQaFile('template').then(res => {
                                     const fileUrl = res.url;
-                                    downloadFile(checkSassUrl(fileUrl), 'QA导入格式示例.xlsx');
+                                    downloadFile(checkSassUrl(fileUrl), t('qaImportExampleFile'));
                                 })
                             }}>
-                                QA导入格式示例.xlsx
+                                {t('qaImportExampleFile')}
                             </Button>
                         </div>
                     </div>
@@ -285,7 +281,7 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
                 </div>
                 {!!dataList.length && <div>
                     <label htmlFor="dataSetName" className="bisheng-label">
-                        导入预览（仅显示前十条）
+                        {t('importPreview')}
                     </label>
                     <div className="flex flex-col gap-4 py-2 max-h-[36vh] overflow-y-auto">
                         <QaTable dataList={dataList} />
@@ -294,7 +290,7 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
                 <DialogFooter>
                     <DialogClose>
                         <Button variant="outline" className="px-11" type="button" onClick={close}>
-                            取消
+                            {t('cancel')}
                         </Button>
                     </DialogClose>
                     <LoadButton loading={saveLoad} type="submit" className="px-11" onClick={handleSubmit}>
