@@ -22,6 +22,7 @@ interface MetadataCondition {
   operator: string;
   valueType: "reference" | "input";
   value: string;
+  valueLabel: string;
 }
 
 interface MetadataField {
@@ -69,6 +70,7 @@ const MetadataFilter = ({
         operator: cond.comparison_operation || "",
         valueType: cond.right_value_type === "ref" ? "reference" : "input",
         value: cond.right_value || "",
+        valueLabel: cond.right_label || "", 
       }));
     }
     return [];
@@ -209,7 +211,7 @@ const MetadataFilter = ({
         setIsEnabled(data.value.enabled ?? false);
         setRelation(data.value.operator === "or" ? "or" : "and");
         if (data.value.conditions && Array.isArray(data.value.conditions)) {
-          const newConditions = data.value.conditions.map(cond => ({
+          const newConditions = data.value.conditions.map(cond => ({            
             id: cond.id || generateUUID(8),
             metadataField: cond.knowledge_id && cond.metadata_field
               ? `${cond.knowledge_id}-${cond.metadata_field}`
@@ -217,6 +219,7 @@ const MetadataFilter = ({
             operator: cond.comparison_operation || "",
             valueType: cond.right_value_type === "ref" ? "reference" : "input",
             value: cond.right_value || "",
+            valueLabel: cond.right_label || "",
           }));
           setConditions(newConditions);
         }
@@ -321,6 +324,7 @@ const MetadataFilter = ({
           comparison_operation: cond.operator,
           right_value_type: cond.valueType === "reference" ? "ref" : "input",
           right_value: cond.value,
+          right_label:cond.valueLabel
         };
       }),
     };
@@ -397,6 +401,7 @@ const MetadataFilter = ({
       operator: "",
       valueType: "input",
       value: "",
+      valueLabel: ""
     }]);
   };
 
@@ -444,8 +449,8 @@ const MetadataFilter = ({
     const isEmptyOperator = [`is_empty`, `is_not_empty`].includes(condition.operator);
     if (isEmptyOperator) return <Input placeholder="无需输入" value="" disabled className="bg-gray-100 h-8" />;
     if (condition.valueType === "reference") {
-      const selectedLabel = condition.value
-        ? condition.value.split('.').reduce((acc, part, index, array) => index === array.length - 1 ? `${acc}/${part}` : `${acc}.${part}`)
+      const selectedLabel = condition.valueLabel
+        ? condition.valueLabel.split('.').reduce((acc, part, index, array) => index === array.length - 1 ? `${acc}/${part}` : `${acc}.${part}`)
         : "";
       return (
         <div className="flex items-center gap-1 min-w-0">
@@ -453,7 +458,10 @@ const MetadataFilter = ({
             className="max-w-40 flex-1"
             nodeId={nodeId}
             itemKey={condition.id}
-            onSelect={(E: any, v: any) => updateCondition(condition.id, "value", `${E.name}.${v.value}`)}
+            onSelect={(E: any, v: any) => {
+            updateCondition(condition.id, "value", `${E.id}.${v.value}`);
+            updateCondition(condition.id, "valueLabel", `${E.name}/${v.label}`);
+          }}
           >
             <div className="no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400">
               <span className="flex items-center flex-1 truncate">{selectedLabel || "请选择"}</span>
