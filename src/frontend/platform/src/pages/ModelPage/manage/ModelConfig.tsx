@@ -19,9 +19,10 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { getAdvancedParamsTemplate, templateToJsonString } from "@/util/advancedParamsTemplates";
 import { useLinsightConfig } from "./tabs/WorkbenchModel";
 import { useModelProviderInfo } from "./useLink";
+import { t } from "i18next";
 
 function ModelItem({ data, type, onDelete, onInput, onConfig }) {
-    const { t } = useTranslation('model')
+    const { t } = useTranslation()
     const [model, setModel] = useState({
         ...data,
         voice: data.config?.voice || ''
@@ -85,7 +86,7 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                 });
             }
         } catch (err) {
-            console.error('初始化模板失败:', err);
+            console.error('Failed to initialize template:', err);
         }
     };
 
@@ -229,16 +230,16 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                             <DialogTrigger asChild>
                                 <div className="flex items-center cursor-pointer ml-2">
                                     <Settings className=" text-blue-500" size={16} strokeWidth={2} />
-                                    <span className="ml-1 text-blue-500 text-xs">高级参数配置</span>
+                                    <span className="ml-1 text-blue-500 text-xs">{t('model.advancedParamsConfig')}</span>
                                 </div>
                             </DialogTrigger>
 
                             <DialogContent className="sm:max-w-[625px]">
                                 <DialogHeader>
-                                    <DialogTitle>高级参数配置</DialogTitle>
+                                    <DialogTitle>{t('model.advancedParamsConfig')}</DialogTitle>
                                 </DialogHeader>
                                 <div className="mt-4 text-gray-500">
-                                    <Label>请在下方的文本框中粘贴或输入你的高级参数配置</Label>
+                                    <Label>{t('model.pasteAdvancedParamsHere')}</Label>
                                     <Textarea
                                         value={inputAdvancedParams}
                                         onChange={(e) => {
@@ -266,13 +267,13 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                                     />
                                     {jsonError && (
                                         <span className="text-red-500 text-xs mt-1 inline-block">
-                                            错误：无效的 JSON 格式。请检查你的输入
+                                            {t('model.errorInvalidJsonFormat')}
                                         </span>
                                     )}
                                 </div>
                                 <DialogFooter className="mt-4">
-                                    <Button variant="outline" onClick={handleCloseDialog}>取消</Button>
-                                    <Button onClick={handleSaveAdvancedParams}>保存</Button>
+                                    <Button variant="outline" onClick={handleCloseDialog}>{t('model.cancel')}</Button>
+                                    <Button onClick={handleSaveAdvancedParams}>{t('model.save')}</Button>
                                 </DialogFooter>
                             </DialogContent>
                         </Dialog>
@@ -304,13 +305,13 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectGroup>
-                                <SelectItem value="llm">LLM</SelectItem>
-                                <SelectItem value="embedding">Embedding</SelectItem>
-                                <SelectItem value="rerank">Rerank</SelectItem>
+                                <SelectItem value="llm">{t('model.llm')}</SelectItem>
+                                <SelectItem value="embedding">{t('model.embedding')}</SelectItem>
+                                <SelectItem value="rerank">{t('model.rerank')}</SelectItem>
                                 {showAsrTtsTypes.includes(type) && (
                                     <>
-                                        <SelectItem value="asr">ASR</SelectItem>
-                                        <SelectItem value="tts">TTS</SelectItem>
+                                        <SelectItem value="asr">{t('model.asr')}</SelectItem>
+                                        <SelectItem value="tts">{t('model.tts')}</SelectItem>
                                     </>
                                 )}
                             </SelectGroup>
@@ -339,7 +340,9 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                 {model.model_type === 'llm' && (
                     <>
                         {['qwen', 'tencent', 'moonshot'].includes(type) && <div className="flex gap-2 items-center">
-                            <Label className="bisheng-label">联网搜索</Label>
+                            <Label className="bisheng-label">
+                                {t('model.webSearch')}
+                            </Label>
                             <Switch checked={isWebSearchEnabled} onCheckedChange={handleSwitchChange} />
                         </div>}
                         <div>
@@ -360,7 +363,6 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
     )
 }
 
-
 export const modelProvider = [
     { "name": "OpenAI", "value": "openai" },
     { "name": "Azure OpenAI", "value": "azure_openai" },
@@ -368,15 +370,15 @@ export const modelProvider = [
     { "name": "xinference", "value": "xinference" },
     { "name": "llamacpp", "value": "llamacpp" },
     { "name": "vllm", "value": "vllm" },
-    { "name": "阿里云百炼", "value": "qwen" },
+    { "name": t('model.aliYunBaiLian'), "value": "qwen" }, // Using translation key
     { "name": "DeepSeek", "value": "deepseek" },
-    { "name": "硅基流动", "value": "silicon" },
-    { "name": "火山引擎", "value": "volcengine" },
-    { "name": "智谱 AI", "value": "zhipu" },
-    { "name": "讯飞星火", "value": "spark" },
-    { "name": "腾讯云", "value": "tencent" },
-    { "name": "月之暗面", "value": "moonshot" },
-    { "name": "百度千帆", "value": "qianfan" },
+    { "name": t('model.guiJiLiuDong'), "value": "silicon" }, // Using translation key
+    { "name": t('model.huoShanYinQing'), "value": "volcengine" }, // Using translation key
+    { "name": t('model.zhiPuAI'), "value": "zhipu" }, // Using translation key
+    { "name": t('model.xunFeiXingHuo'), "value": "spark" }, // Using translation key
+    { "name": t('model.tengXunYun'), "value": "tencent" }, // Using translation key
+    { "name": t('model.yueZhiAnMian'), "value": "moonshot" }, // Using translation key
+    { "name": t('model.baiDuQianFan'), "value": "qianfan" }, // Using translation key
     { "name": "Minimax", "value": "minimax" },
     { "name": "Anthropic", "value": "anthropic" },
     { "name": "MindIE", "value": "MindIE" },
@@ -394,7 +396,7 @@ const defaultForm = {
 }
 
 export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforSave, onAfterSave }) {
-    const { t } = useTranslation('model')
+    const { t } = useTranslation()
     const { refetch: refetchConfig } = useLinsightConfig();
 
     const [formData, setFormData] = useState({ ...defaultForm })
@@ -607,7 +609,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         </div>
         <div className="w-[50%] min-w-64 px-4 pb-10 mx-auto mt-6 h-[calc(100vh-220px)] overflow-y-auto">
             <div className="mb-2">
-                <Label className="bisheng-label">模型接口格式</Label>
+                <Label className="bisheng-label"> {t('model.interModelFormat')}</Label>
                 <Select value={formData.type} disabled={id !== -1} onValueChange={handleTypeChange}>
                     <SelectTrigger>
                         <SelectValue placeholder="" />
@@ -630,7 +632,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                     document.getElementById('model_provider_name_error').style.display = !name || name.length > 100 ? 'block' : 'none'
                 }}></Input>
                 <span id="model_provider_name_error" style={{ display: 'none' }} className="text-red-500 text-xs">{
-                    formData.name ? '最多 100 个字符' : '不可为空'
+                    formData.name ? t('model.max100Characters') : t('model.cannotBeEmpty')
                 }</span>
             </div>
             <CustomForm
@@ -659,7 +661,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                 <div className="mb-2">
                     <Label className="bisheng-label">
                         {t('model.model')}
-                        {providerInfo && <a href={providerInfo.modelUrl} target="_blank" rel="noreferrer" className="ml-1 text-primary/80">(前往官网查看可用模型)</a>}
+                        {providerInfo && <a href={providerInfo.modelUrl} target="_blank" rel="noreferrer" className="ml-1 text-primary/80">({t('model.visitOfficialWebsiteToViewAvailableModels')})</a>}
                     </Label>
                     <div className="w-[92%]">
                         {
@@ -693,12 +695,11 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                 loading={isLoading}
                 onClick={handleSave}
             >
-                {isLoading ? '模型状态检测中' : t('model.save')}
+                {isLoading ? t('model.modelStatusChecking') : t('model.save')}
             </LoadButton>
         </div>
     </div>
 }
-
 
 const useSelectModel = () => {
     const modelsRef = useRef<any>(null)
