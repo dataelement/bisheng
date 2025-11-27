@@ -102,13 +102,13 @@ class ConditionOne(BaseModel):
         elif self.comparison_operation == "greater_than":
             key_info['comparison'] = '>'
             key_info['value'] = right_value
-        elif self.comparison_operation == "greater_than_or_equals":
+        elif self.comparison_operation == "greater_than_or_equal":
             key_info['comparison'] = '>='
             key_info['value'] = right_value
         elif self.comparison_operation == "less_than":
             key_info['comparison'] = '<'
             key_info['value'] = right_value
-        elif self.comparison_operation == "less_than_or_equals":
+        elif self.comparison_operation == "less_than_or_equal":
             key_info['comparison'] = '<='
             key_info['value'] = right_value
         else:
