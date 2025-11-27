@@ -563,6 +563,7 @@ export default function Paragraphs({ fileId, onBack }) {
                     fieldData.field_type.charAt(0).toUpperCase() + fieldData.field_type.slice(1).toLowerCase() : 
                     'String',
                 value: fieldData.field_value || '',
+                originalValue: fieldData.field_value || '', 
                 updated_at: fieldData.updated_at
             }));
             const sortedMetadata = metadataArray.sort((a, b) => {
@@ -810,7 +811,7 @@ export default function Paragraphs({ fileId, onBack }) {
             field_value: item.value || '',
         };
 
-        if (!item.id.startsWith('temp_') && item.updated_at !== undefined) {
+        if (!item.id.startsWith('temp_') && item.updated_at !== undefined && item.value === item.originalValue) {
             return {
                 ...baseItem,
                 updated_at: item.updated_at 
