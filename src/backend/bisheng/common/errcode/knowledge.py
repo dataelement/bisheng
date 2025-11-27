@@ -69,3 +69,8 @@ class KnowledgeFileNotExistError(BaseErrorCode):
 class KnowledgeMetadataFieldConflictError(BaseErrorCode):
     Code: int = 10980
     Msg: str = '{field_name} 与内置元数据字段名称冲突'
+
+# 元数据字段已存在
+class KnowledgeMetadataFieldExistError(BaseErrorCode):
+    Code: int = 10981
+    Msg: str = '元数据字段 {field_name} 已存在'

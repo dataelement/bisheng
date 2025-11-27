@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from typing import Optional, List, Any
 
@@ -16,10 +17,20 @@ class UpdatePreviewFileChunk(BaseModel):
 
 class MetadataField(BaseModel):
     """元数据字段模型"""
-    field_name: str = Field(..., description='元数据字段名')
+    field_name: str = Field(..., max_length=255, description='元数据字段名')
     field_type: MetadataFieldType = Field(..., description='元数据字段类型')
     updated_at: int = Field(default_factory=lambda: int(datetime.now().timestamp()),
                             description='元数据字段更新时间戳')
+
+    @field_validator('field_name')
+    @classmethod
+    def validate_field_name(cls, v: str) -> str:
+        # 必须由小写字母、数字、下划线组成，且必须以小写字母开头
+        pattern = r'^[a-z][a-z0-9_]*$'
+        if not re.match(pattern, v):
+            raise ValueError(
+                'field_name must start with a lowercase letter and contain only lowercase letters, numbers, and underscores, current value: {v}')
+        return v
 
 
 class AddKnowledgeMetadataFieldsReq(BaseModel):
@@ -34,7 +45,17 @@ class UpdateKnowledgeMetadataFieldsReq(BaseModel):
     class UpdateMetadataFieldName(BaseModel):
         """更新元数据字段名称模型"""
         old_field_name: str = Field(..., description='旧的元数据字段名')
-        new_field_name: str = Field(..., description='新的元数据字段名')
+        new_field_name: str = Field(..., max_length=255, description='新的元数据字段名')
+
+        @field_validator('new_field_name')
+        @classmethod
+        def validate_new_field_name(cls, v: str) -> str:
+            # 必须由小写字母、数字、下划线组成，且必须以小写字母开头
+            pattern = r'^[a-z][a-z0-9_]*$'
+            if not re.match(pattern, v):
+                raise ValueError(
+                    f"new_field_name must start with a lowercase letter and contain only lowercase letters, numbers, and underscores, current value: {v}")
+            return v
 
     knowledge_id: int = Field(..., description='知识库ID')
     metadata_fields: List[UpdateMetadataFieldName] = Field(..., description='要更新的元数据字段列表')

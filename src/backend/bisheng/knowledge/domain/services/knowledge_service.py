@@ -6,7 +6,8 @@ from fastapi import BackgroundTasks
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
-from bisheng.common.errcode.knowledge import KnowledgeNotExistError, KnowledgeMetadataFieldConflictError
+from bisheng.common.errcode.knowledge import KnowledgeNotExistError, KnowledgeMetadataFieldConflictError, \
+    KnowledgeMetadataFieldExistError
 from bisheng.database.models.role_access import AccessType
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
@@ -42,14 +43,17 @@ class KnowledgeService:
         if knowledge_model.metadata_fields is None:
             knowledge_model.metadata_fields = []
 
+        existing_field_names = {field["field_name"] for field in knowledge_model.metadata_fields}
+
         # Built field names
         built_field_names = [item.field_name for item in KNOWLEDGE_RAG_METADATA_SCHEMA]
 
+        # 判断新增字段是否和已有字段冲突
         for field in add_metadata_fields.metadata_fields:
-            if field.field_name in built_field_names:
+            if field.field_name in existing_field_names:
+                raise KnowledgeMetadataFieldExistError(field_name=field.field_name)
+            elif field.field_name in built_field_names:
                 raise KnowledgeMetadataFieldConflictError(field_name=field.field_name)
-
-        existing_field_names = {field["field_name"] for field in knowledge_model.metadata_fields}
 
         metadata_fields = copy.deepcopy(knowledge_model.metadata_fields)
         # Add new metadata fields, avoiding duplicates
@@ -171,16 +175,18 @@ class KnowledgeService:
         # Built field names
         built_field_names = [item.field_name for item in KNOWLEDGE_RAG_METADATA_SCHEMA]
 
+        existing_field_names = {field["field_name"] for field in knowledge_model.metadata_fields}
+
         for field in update_metadata_fields.metadata_fields:
             if field.new_field_name in built_field_names:
                 raise KnowledgeMetadataFieldConflictError(field_name=field.new_field_name)
+            elif field.old_field_name not in existing_field_names:
+                raise KnowledgeMetadataFieldExistError(field_name=field.old_field_name)
 
         field_name_map = {
             field_update.old_field_name: field_update.new_field_name
             for field_update in update_metadata_fields.metadata_fields
         }
-
-        existing_field_names = {field["field_name"] for field in knowledge_model.metadata_fields}
 
         # Check if all old field names exist and new field names do not exist
         for old_field_name in field_name_map.keys():
