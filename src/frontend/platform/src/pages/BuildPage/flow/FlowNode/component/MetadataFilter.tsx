@@ -271,14 +271,6 @@ const MetadataFilter = ({
     conditions.forEach((cond, index) => {
       if (!cond.metadataField) errors.push(`条件 ${index + 1}: 请选择元数据字段`);
       if (!cond.operator) errors.push(`条件 ${index + 1}: 请选择操作符`);
-
-      if (![`is_empty`, `is_not_empty`].includes(cond.operator) && cond.metadataField) {
-        // 实时获取字段类型
-        const meta = stateRef.current.availableMetadataState.find(m => m.id === cond.metadataField);
-        if (meta?.type === "Number" && !cond.value) {
-          errors.push(`条件 ${index + 1}: 请输入数值`);
-        }
-      }
     });
     return errors.length > 0 ? errors.join('; ') : false;
   }, []);

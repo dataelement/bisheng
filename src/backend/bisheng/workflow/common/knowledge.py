@@ -190,7 +190,7 @@ class RagUtils(BaseNode):
 
         self._multi_milvus_retriever = None
         self._multi_es_retriever = None
-        self._init_knowledge_retriever = False
+        self._knowledge_vector_list = []
         self._retriever_kwargs = {"k": 100, "param": {"ef": 110}}
         self._rerank_model = None
 
@@ -285,21 +285,19 @@ class RagUtils(BaseNode):
 
     def init_knowledge_retriever(self):
         """ retriever from knowledge base """
-        if self._init_knowledge_retriever:
-            return
-        self._init_knowledge_retriever = True
-        ret = KnowledgeRag.get_multi_knowledge_vectorstore(
-            knowledge_ids=self._knowledge_value,
-            user_name=self.user_info.user_name,
-            check_auth=self._knowledge_auth,
-            include_es=self._keyword_weight > 0,
-            include_milvus=self._vector_weight > 0,
-        )
+        if not self._knowledge_vector_list:
+            self._knowledge_vector_list = KnowledgeRag.get_multi_knowledge_vectorstore(
+                knowledge_ids=self._knowledge_value,
+                user_name=self.user_info.user_name,
+                check_auth=self._knowledge_auth,
+                include_es=self._keyword_weight > 0,
+                include_milvus=self._vector_weight > 0,
+            )
         all_milvus = []
         all_milvus_filter = []
         all_es = []
         all_es_filter = []
-        for knowledge_id, knowledge_info in ret.items():
+        for knowledge_id, knowledge_info in self._knowledge_vector_list.items():
             knowledge = knowledge_info.get('knowledge')
             milvus_vector = knowledge_info.get('milvus')
             es_vector = knowledge_info.get('es')
