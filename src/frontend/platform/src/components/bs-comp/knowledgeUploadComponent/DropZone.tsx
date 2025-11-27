@@ -9,7 +9,7 @@ export default function DropZone({ onDrop }) {
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
 
-    // 1. 定义支持的文件格式（用于显示提示文本，不用于过滤）
+    // Define supported file formats (for display purposes only, not for filtering)
     const supportedFormats = appConfig.enableEtl4lm
         ? ['.PDF', '.TXT', '.DOCX', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.PNG', '.JPG', '.JPEG', '.BMP']
         : ['.PDF', '.TXT', '.DOCX', '.DOC', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV'];
@@ -22,9 +22,9 @@ export default function DropZone({ onDrop }) {
         },
         useFsAccessApi: false,
         onDrop: (acceptedFiles, disAcceptedFiles) => {
-            // 1. 过滤不符合格式的文件
+            // Filter files that don't match the allowed formats
             const validFiles = acceptedFiles.filter(file => {
-                // 获取文件后缀（无后缀则视为无效）
+                // Get file extension (if no extension, consider invalid)
                 const ext = file.name.split('.').pop()?.toLowerCase();
                 return ext ? allowedExts.has(ext) : false;
             });
@@ -38,12 +38,12 @@ export default function DropZone({ onDrop }) {
                 )];
                 message({
                     title: t('prompt'),
-                    description: `不支持文件类型:${uniqueExtensions}`,
+                    description: t('unsupportedFileType', { extensions: uniqueExtensions.join(', ') }),
                     variant: 'error'
                 });
             }
 
-            // 3. 只传递有效文件给父组件
+            // Only pass valid files to parent component
             if (validFiles.length > 0) {
                 onDrop(validFiles);
             }
@@ -51,8 +51,8 @@ export default function DropZone({ onDrop }) {
     });
 
     const formatText = appConfig.enableEtl4lm
-        ? `支持的文件格式为  pdf（含扫描件）、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp；每个文件最大支持${appConfig.uploadFileMaxSize}mb；pdf支持溯源定位。`
-        : `支持的文件格式为 pdf、txt、docx、doc、ppt、pptx、md、html、xls、xlsx、csv，每个文件最大支持${appConfig.uploadFileMaxSize}mb`
+        ? t('supportedFormatsWithImages', { maxSize: appConfig.uploadFileMaxSize })
+        : t('supportedFormatsWithoutImages', { maxSize: appConfig.uploadFileMaxSize })
 
     return (
         <div {...getRootProps()} className="group h-48 border border-dashed rounded-md flex flex-col justify-center items-center cursor-pointer gap-3 hover:border-primary">
