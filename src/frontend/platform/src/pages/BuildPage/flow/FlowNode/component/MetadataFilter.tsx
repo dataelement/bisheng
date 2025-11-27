@@ -268,12 +268,7 @@ const MetadataFilter = ({
     conditions.forEach((cond, index) => {
       if (!cond.metadataField) errors.push(`条件 ${index + 1}: 请选择元数据字段`);
       if (!cond.operator) errors.push(`条件 ${index + 1}: 请选择操作符`);
-       if (cond.metadataField) {
-      const isFieldValid = availableMetadataState.some(meta => meta.id === cond.metadataField);
-      if (!isFieldValid) {
-        errors.push(`条件 ${index + 1}: 选择的元数据字段无效或已被删除`);
-      }
-    }
+
       if (![`is_empty`, `is_not_empty`].includes(cond.operator) && cond.metadataField) {
         // 实时获取字段类型
         const meta = stateRef.current.availableMetadataState.find(m => m.id === cond.metadataField);
