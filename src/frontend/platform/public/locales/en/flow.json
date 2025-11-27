@@ -62,8 +62,8 @@
   "parallelInputOutputNodes": "Multiple input or output nodes (dialogue inputs) cannot execute in parallel",
   "parallelOutputNodes": "Multiple output nodes (input interactions) cannot execute in parallel",
   "unconnectedConditionNode": "[{{nodeName}}] Node error: There are unconnected touchpoints",
-  "basicNodes": "Basic Nodes",
-  "toolNodes": "Tool Nodes",
+  "basicNodes": "Basic",
+  "toolNodes": "Tool",
   "workflowPreview": "Workflow Preview",
   "viewLogs": "View Logs",
   "running": "Running",
@@ -183,7 +183,7 @@
   "variableNameCannotStartWithNumber": "Variable name cannot start with a number",
   "variableNameContainsInvalidCharacters": "Variable name can only contain letters, numbers, and underscores",
   "variableNameAlreadyExists": "Variable name already exists",
-  "character": "Character",
+  "character": "Char",
   "max50Characters": "Maximum 50 characters",
   "nodeError": "Node error",
   "doesNotExist": "does not exist",
@@ -202,11 +202,326 @@
   "retrievalResultLength": "Retrieval result length",
   "controlResultTextLengthForModel": "Control the length of the result text passed to the model. Exceeding the model's maximum context length may cause errors.",
   "rerankModelCannotBeEmpty": "Rerank model cannot be empty",
+  "insertVariable": "Insert variable",
   "uploadFile": "Upload file",
   "messageContentVariable": "Message content variable",
   "cannotExceedMaxLength": "Cannot exceed {{maxLength}} characters",
   "roundRunResult": "Round {{index}} run result",
   "searchResult": "search_result",
   "resultTooLongDownloadToView": "The result is too long, please download to view",
-  "downloadFullContent": "Download full content"
+  "downloadFullContent": "Download full content",
+  "allTypes": "All Types",
+  "document": "Document",
+  "image": "Image",
+  "enterValidNumber": "Please enter a valid number",
+  "numberExceedsMaxLimit": "The number cannot exceed 2 to the power of 32.",
+  "unknownKnowledgeBase": "Unknown Knowledge Base",
+  "invalidOrDeletedMetadataField": "The selected metadata field is invalid or has been deleted",
+  "selectMetadataField": "Condition {index}: Please select a metadata field",
+  "selectOperator": "Condition {index}: Please select an operator",
+  "enterValue": "Condition {index}: Please enter a value",
+  "defaultNodeName": "Metadata Filtering",
+  "nodeError2": "Node error: \"{fieldName}\" has been invalid.",
+  "metadataFieldValidationError": "An error occurred while validating metadata fields",
+  "noInputNeeded": "No input needed",
+  "selectOption": "Please select",
+  "enterValue2": "Enter value",
+  "selectTime": "Select time",
+  "unknownField": "Unknown Field",
+  "loadingMetadataFields": "Loading metadata fields...",
+  "searchMetadata": "Search metadata",
+  "noMetadataFields": "No metadata fields available",
+  "referenceFormatTip": "Please adjust the reference format to 'YYYY-MM-DD HH:mm:ss', e.g., '2025-01-10 21:08:20' for January 10, 2025 at 21:08:20",
+  "+ Add Condition": "+ Add condition",
+  "node": {
+    "start": {
+      "name": "Start",
+      "description": "The starting point of workflow execution.",
+      "开场引导": "Opening Guide",
+      "全局变量": "Global Variables",
+      "guide_word": {
+        "label": "Opening Message",
+        "placeholder": "Message shown to the user at the beginning of each workflow. Supports Markdown. Leave empty to skip."
+      },
+      "guide_question": {
+        "label": "Guide Questions",
+        "placeholder": "Enter guide questions",
+        "help": "Recommended questions to guide user input. If more than 3 are set, 3 will be randomly displayed."
+      },
+      "user_info": {
+        "label": "User Information"
+      },
+      "current_time": {
+        "label": "Current Time"
+      },
+      "preset_question": {
+        "label": "Preset Question List",
+        "placeholder": "Enter batch preset questions",
+        "help": "Useful for document review or report generation to run multiple RAG queries using preset questions."
+      }
+    },
+    "input": {
+      "name": "Input",
+      "description": "Receives user input from the chat interface. Supports two input types: dialog input and form input.",
+      "tab_dialog_input": {
+        "label": "Dialog Input",
+        "help": "Receives free-text input from the user."
+      },
+      "tab_form_input": {
+        "label": "Form Input",
+        "help": "Displays a form to collect structured user input."
+      },
+      "user_input": {
+        "label": "Text Input Content"
+      },
+      "dialog_files_content": {
+        "label": "Uploaded File Content"
+      },
+      "dialog_files_content_size": {
+        "label": "File Content Size Limit"
+      },
+      "dialog_file_accept": {
+        "label": "Accepted File Types"
+      },
+      "dialog_image_files": {
+        "label": "Uploaded Images",
+        "help": "Extracts image files. Useful when large multimodal models are used."
+      },
+      "form_input": {
+        "label": "+ Add Form Item"
+      }
+    },
+    "output": {
+      "name": "Output",
+      "description": "Sends text or files to the user and supports interactive workflows, such as requesting approval or allowing users to directly edit model output.",
+      "message": {
+        "label": "Message Content",
+        "placeholder": "Message to send, e.g., 'Please confirm the next action' or 'Here is the draft for your review'."
+      },
+      "output_result": {
+        "label": "Interaction Type"
+      }
+    },
+    "llm": {
+      "name": "LLM",
+      "description": "Uses a large model to answer questions or execute tasks.",
+      "tab_single": {
+        "label": "Single Run"
+      },
+      "tab_batch": {
+        "label": "Batch Run"
+      },
+      "batch_variable": {
+        "label": "Batch Variable",
+        "placeholder": "Select the variable for batch execution",
+        "help": "The node will run multiple times, each using one value from the selected variable."
+      },
+      "模型设置": "Model Settings",
+      "提示词": "Prompt Settings",
+      "输出": "Output",
+      "model_id": {
+        "label": "Model",
+        "placeholder": "Configure an LLM model in the model management page"
+      },
+      "temperature": {
+        "label": "Temperature"
+      },
+      "system_prompt": {
+        "label": "System Prompt"
+      },
+      "user_prompt": {
+        "label": "User Prompt"
+      },
+      "image_prompt": {
+        "label": "Image Input",
+        "help": "Upload images for multimodal models."
+      },
+      "output_user": {
+        "label": "Show Output in Chat",
+        "help": "Enable in Q&A scenarios; disable for report generation or document processing."
+      },
+      "output": {
+        "label": "Output Variable",
+        "help": "Stores model output."
+      }
+    },
+    "agent": {
+      "name": "Agent",
+      "description": "Autonomously plans tasks and selects the appropriate knowledge base, database, or tools.",
+      "tab_single": {
+        "label": "Single Run"
+      },
+      "tab_batch": {
+        "label": "Batch Run"
+      },
+      "batch_variable": {
+        "label": "Batch Variable",
+        "placeholder": "Select the variable for batch execution",
+        "help": "Each run processes one value from the batch list."
+      },
+      "模型设置": "Model Settings",
+      "提示词": "Prompt Settings",
+      "知识库": "Knowledge Base",
+      "数据库": "Database",
+      "工具": "Tools",
+      "输出": "Output",
+      "model_id": {
+        "label": "Model",
+        "placeholder": "Configure the agent’s reasoning model in system settings"
+      },
+      "temperature": {
+        "label": "Temperature"
+      },
+      "system_prompt": {
+        "label": "System Prompt",
+        "placeholder": "Agent persona description"
+      },
+      "user_prompt": {
+        "label": "User Prompt",
+        "placeholder": "User message content"
+      },
+      "chat_history_flag": {
+        "label": "Chat History",
+        "help": "Number of past messages to include as context. 0 disables context."
+      },
+      "image_prompt": {
+        "label": "Image Input",
+        "help": "Upload images for multimodal reasoning."
+      },
+      "knowledge_id": {
+        "label": "Knowledge Base Range",
+        "placeholder": "Select knowledge base"
+      },
+      "sql_agent": {
+        "label": "Database Configuration"
+      },
+      "tool_list": {
+        "label": "+ Add Tool"
+      },
+      "output_user": {
+        "label": "Show Output in Chat",
+        "help": "Recommended for Q&A; disable for automated processing."
+      },
+      "output": {
+        "label": "Output Variable",
+        "help": "Stores model output."
+      }
+    },
+    "qa_retriever": {
+      "name": "QA Knowledge Retrieval",
+      "description": "Retrieves Q&A pairs from the QA knowledge base.",
+      "检索设置": "Retrieval Settings",
+      "输出": "Output",
+      "user_question": {
+        "label": "Input Variable",
+        "placeholder": "Select a question to search"
+      },
+      "qa_knowledge_id": {
+        "label": "QA Knowledge Base",
+        "placeholder": "Select QA knowledge base"
+      },
+      "score": {
+        "label": "Similarity Threshold",
+        "help": "Results below this threshold will be filtered out."
+      },
+      "retrieved_result": {
+        "label": "Retrieved Result"
+      }
+    },
+    "rag": {
+      "name": "Document Knowledge Base Q&A",
+      "description": "Searches knowledge bases and generates final answers using an LLM. Supports parallel question processing.",
+      "知识库检索设置": "Retrieval Settings",
+      "AI回复生成设置": "AI Response Settings",
+      "输出": "Output",
+      "user_question": {
+        "label": "User Question",
+        "placeholder": "Select user question",
+        "help": "For multiple questions, the node executes once per question."
+      },
+      "knowledge": {
+        "label": "Search Scope",
+        "placeholder": "Select knowledge base"
+      },
+      "metadata_filter": {
+        "label": "Metadata Filter"
+      },
+      "advanced_retrieval_switch": {
+        "label": "Advanced Retrieval Settings"
+      },
+      "retrieved_result": {
+        "label": "Retrieved Result"
+      },
+      "system_prompt": {
+        "label": "System Prompt",
+        "value": "You are a knowledge base Q&A assistant. Follow these rules to answer the questions:\n1. Answer the user's questions in a formal and professional manner in Chinese.\n2. Your answers must be strictly based on the content in the [Reference Text]:\n\n- If the [Reference Text] contains specific content relevant to the user's question, use that content to answer. If no relevant content exists, simply reply: 'No relevant content found'.\n- If the content in the [Reference Text] includes markdown-formatted images (e.g., ![image](path/IMAGE_1.png)), it must strictly preserve its original markdown format, without adding quotes, code blocks (` or ```) or other special symbols. The image path must not be altered, ensuring proper rendering of the markdown image.\n3. When the content in the [Reference Text] comes from multiple sources and there are obvious differences or conflicts, list each answer separately to reflect these differences. If no conflicts exist, provide a unified answer."
+      },
+      "user_prompt": {
+        "label": "User Prompt",
+        "value": "User Question: ```{{#user_question#}}```\nReference Text: ```{{#retrieved_result#}}```\nYour Answer:"
+      },
+      "model_id": {
+        "label": "Model",
+        "placeholder": "Configure an LLM model"
+      },
+      "temperature": {
+        "label": "Temperature"
+      },
+      "output_user": {
+        "label": "Show Output in Chat",
+        "help": "Enable in Q&A; disable in automated workflows."
+      },
+      "output_user_input": {
+        "label": "Output Variable",
+        "help": "Stores model output."
+      }
+    },
+    "knowledge_retriever": {
+      "name": "Document Knowledge Retrieval",
+      "description": "Retrieves content from the knowledge base based on user questions.",
+      "知识库检索设置": "Retrieval Settings",
+      "输出": "Output",
+      "user_question": {
+        "label": "User Question",
+        "placeholder": "Select user question",
+        "help": "Executes once per question when batch enabled."
+      },
+      "knowledge": {
+        "label": "Search Scope",
+        "placeholder": "Select knowledge base"
+      },
+      "metadata_filter": {
+        "label": "Metadata Filter"
+      },
+      "advanced_retrieval_switch": {
+        "label": "Advanced Retrieval Settings"
+      },
+      "retrieved_result": {
+        "label": "Retrieved Result"
+      }
+    },
+    "report": {
+      "name": "Report",
+      "description": "Generates a report based on a predefined Word template.",
+      "report_info": {
+        "label": "Report Name",
+        "placeholder": "Enter report name"
+      }
+    },
+    "code": {
+      "name": "Code",
+      "description": "Execute custom code.",
+      "入参": "Input Parameters",
+      "执行代码": "Execute Code",
+      "出参": "Output Parameters"
+    },
+    "condition": {
+      "name": "Conditional Branch",
+      "description": "Executes different branches based on a condition expression."
+    },
+    "end": {
+      "name": "End",
+      "description": "Workflow ends here."
+    }
+  }
 }

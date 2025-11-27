@@ -459,10 +459,10 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             type='number'
             char
             linefeed
+            label={t('fileContentMaxLength')}
             data={
                 {
                     min: 0,
-                    label: t('fileContentMaxLength'),
                     value: formData.fileContentSize,
                 }
             }
@@ -550,7 +550,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
 }
 
 // node input form item
-export default function InputFormItem({ data, nodeId, onChange, onValidate, onVarEvent }) {
+export default function InputFormItem({ data, nodeId, onChange, onValidate, onVarEvent, i18nPrefix }) {
     const { t } = useTranslation('flow'); // 使用国际化
     const [isOpen, setIsOpen] = useState(false);
     const [editKey, setEditKey] = useState(""); // 控制编辑模式
@@ -713,7 +713,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
                 variant="outline"
                 className="border-primary text-primary mt-2"
             >
-                {data.label}
+                {t(`${i18nPrefix}label`)}
             </Button>
             {error && <p className="text-red-500 text-sm">{t("atLeastOneFormItem")}</p>}
 

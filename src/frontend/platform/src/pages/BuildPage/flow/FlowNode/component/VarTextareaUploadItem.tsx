@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import VarInput from "./VarInput";
 
-export default function VarTextareaUploadItem({ nodeId, data, onChange, onValidate, onVarEvent }) {
+export default function VarTextareaUploadItem({ nodeId, data, onChange, onValidate, onVarEvent, i18nPrefix }) {
     // console.log('data.value :>> ', data.value);
     const handleInputChange = (msg) => {
         onChange({ msg, files })
@@ -43,7 +43,8 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange, onValida
             </div>
             <VarInput
                 error={error}
-                placeholder={data.placeholder}
+                placeholder={t(`${i18nPrefix}placeholder`)}
+                label={t(`${i18nPrefix}label`)}
                 itemKey={data.key}
                 nodeId={nodeId}
                 paramItem={data}

@@ -34,8 +34,9 @@ const enum KnowledgeType {
 }
 type KnowledgeTypeValues = `${KnowledgeType}`;
 
-export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent, onValidate }) {
+export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent, onValidate, i18nPrefix }) {
     const { flow } = useFlowStore()
+    const { t } = useTranslation('flow')
 
     const currentTabRef = useRef(data.value.type)
     const [tabType, setTabType] = useState<KnowledgeTypeValues>(data.value.type)
@@ -43,7 +44,6 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
         return { label: el.label, value: el.key }
     }))
 
-    const { t } = useTranslation()
     const [options, setOptions] = useState<any>([]);
     const [fileOptions, setFileOptions] = useState<any>([])
     const originOptionsRef = useRef([])
@@ -185,7 +185,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
     return <div className='node-item mb-4'>
         <Label className="flex items-center bisheng-label mb-2">
             {data.required && <span className="text-red-500">*</span>}
-            {data.label}
+            {t(`${i18nPrefix}label`)}
         </Label>
         <MultiSelect
             id="knowledge-select-item"
@@ -197,7 +197,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
             hideSearch={tabType === KnowledgeType.Temp}
             value={value}
             options={tabType === KnowledgeType.Knowledge ? options : fileOptions}
-            placeholder={data.placeholder || ''}
+            placeholder={data.placeholder && t(`${i18nPrefix}placeholder`) || ''}
             searchPlaceholder={t('build.searchBaseName', { ns: 'bs' })}
             onChange={handleSelect}
             onLoad={() => { reload(1, ''); loadFiles() }}

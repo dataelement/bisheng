@@ -108,6 +108,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
     const runRef = useRef(null)
     const { message } = useToast()
     const [currentTab, setCurrentTab] = useState<undefined | string>(node.tab && node.tab.value)
+    const { t } = useTranslation('flow')
 
     // 检查知识库检索设置
     const hasKnowledgeSearchEnabled = useMemo(() => {
@@ -277,7 +278,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                 <div className='-nowheel bg-[#F7F8FB] dark:bg-background pb-5 rounded-b-[20px]'>
                     <div className={expend || ['output', 'condition', 'end'].includes(node.type) ? `` : 'h-0 overflow-hidden'}>
                         {node.tab && <NodeTabs
-                            data={node.tab}
+                            data={node}
                             onChange={(val) => {
                                 setCurrentTab(val)
                                 node.tab.value = val

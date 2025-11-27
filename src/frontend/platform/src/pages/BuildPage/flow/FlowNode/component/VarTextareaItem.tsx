@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import VarInput from "./VarInput";
 
-export default function VarTextareaItem({ nodeId, data, onChange, onValidate, onVarEvent }) {
+export default function VarTextareaItem({ nodeId, data, onChange, onValidate, onVarEvent, i18nPrefix }) {
     const [error, setError] = useState(false)
-    const { t } = useTranslation()
+    const { t } = useTranslation('flow')
 
     useEffect(() => {
         data.required && onValidate(() => {
@@ -28,7 +28,8 @@ export default function VarTextareaItem({ nodeId, data, onChange, onValidate, on
                 itemKey={data.key}
                 nodeId={nodeId}
                 paramItem={data}
-                placeholder={data.placeholder}
+                label={t(`${i18nPrefix}label`)}
+                placeholder={data.placeholder && t(`${i18nPrefix}placeholder`)}
                 error={error}
                 value={data.value}
                 onChange={onChange}

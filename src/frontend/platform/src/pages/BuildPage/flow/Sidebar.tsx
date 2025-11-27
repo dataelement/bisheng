@@ -81,9 +81,9 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
     const getNodeDataByTemp = (temp) => {
         return {
             type: temp.type,
-            name: temp.name,
+            name: t(`node.${temp.type}.name`),
             icon: <NodeLogo type={temp.type} />,
-            desc: temp.description
+            desc: t(`node.${temp.type}.description`)
         }
     }
 
@@ -156,8 +156,8 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
             <Tabs defaultValue="base" className="h-full" onValueChange={handleLoadTools}>
                 <div className="flex gap-1">
                     <TabsList className="">
-                        <TabsTrigger value="base">{t('basicNodes')}</TabsTrigger>
-                        <TabsTrigger value="tool">{t('toolNodes')}</TabsTrigger>
+                        <TabsTrigger className="min-w-20" value="base">{t('basicNodes')}</TabsTrigger>
+                        <TabsTrigger className="min-w-20" value="tool">{t('toolNodes')}</TabsTrigger>
                     </TabsList>
                     {!dropdown && <Button size="icon" variant="secondary" className={`${expand ? ' right-[-30px]' : 'right-[-46px]'} absolute bg-[#fff] dark:bg-gray-950 top-2 rounded-full size-8`} onClick={() => setExpand(!expand)}>
                         <ListVideo className={`size-4 ${expand ? 'rotate-180' : ''}`} />
@@ -195,7 +195,7 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
                                             onClick={() => dropdown && onClick({ type: item.type, node: tempData.find(tmp => tmp.type === item.type) })}
                                         >
                                             {item.icon}
-                                            <span className="text-sm">{item.name}</span>
+                                            <span className="text-sm text-left">{item.name}</span>
                                         </div>
                                     </TooltipTrigger>
                                     <TooltipContent side="right">

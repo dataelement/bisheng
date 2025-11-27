@@ -4,10 +4,12 @@ import { ToolIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
 import { CircleMinus } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
-export default function ToolItem({ data, onChange }) {
+export default function ToolItem({ data, onChange, i18nPrefix }) {
     // { key: string, label: string }[]
     const [value, setValue] = useState(() => data.value.map(el => ({ id: el.key, name: el.label })))
+    const { t } = useTranslation('flow')
 
     return <div>
         <div>
@@ -39,7 +41,7 @@ export default function ToolItem({ data, onChange }) {
             onChange(newValue.map(el => ({ key: el.id, label: el.name, tool_key: el.tool_key })))
         }}>
             <Button onClick={() => { }} variant='outline' className="border-primary text-primary mt-2">
-                {data.label}
+                {t(`${i18nPrefix}label`)}
             </Button>
         </ToolsSheet>
     </div>

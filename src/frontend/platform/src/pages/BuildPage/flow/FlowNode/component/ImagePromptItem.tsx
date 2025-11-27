@@ -7,12 +7,14 @@ import { ChevronDown, X } from "lucide-react"
 import React, { useCallback, useEffect, useState } from "react"
 import useFlowStore from "../../flowStore"
 import SelectVar from "./SelectVar"
+import { useTranslation } from "react-i18next"
 
-export default function ImagePromptItem({ nodeId, data, onChange, onVarEvent }) {
+export default function ImagePromptItem({ nodeId, data, onChange, onVarEvent, i18nPrefix }) {
     // value ''或[] 则认为open为false
     const [open, setOpen] = React.useState(data.open || false)
     const [value, setValue] = React.useState(() => data.value || []);
-    const [error, setError] = React.useState(false);
+    const [error] = React.useState(false);
+    const { t } = useTranslation('flow')
 
     const updateValue = (newValues) => {
         setValue(newValues);
@@ -68,8 +70,8 @@ export default function ImagePromptItem({ nodeId, data, onChange, onVarEvent }) 
     return <div className='node-item mb-4' data-key={data.key}>
         <div className=" flex justify-between items-center">
             <Label className="flex items-center bisheng-label">
-                {data.label}
-                {data.help && <QuestionTooltip content={data.help} />}
+                {t(`${i18nPrefix}label`)}
+                {data.help && <QuestionTooltip content={t(`${i18nPrefix}help`)} />}
             </Label>
             <Switch checked={open} onCheckedChange={(bln) => {
                 setOpen(bln)
@@ -95,7 +97,7 @@ export default function ImagePromptItem({ nodeId, data, onChange, onVarEvent }) 
                         {data.varZh?.[item]}
                         <X className="h-3 w-3 min-w-3" onClick={() => handleDelete(item)}></X>
                     </Badge>
-                    ) : <span className="text-gray-400 mt-0.5">{data.placeholder}</span>}
+                    ) : <span className="text-gray-400 mt-0.5">{data.placeholder && t(`${i18nPrefix}placeholder`)}</span>}
                 </div>
                 <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
             </div>

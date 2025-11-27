@@ -225,7 +225,7 @@ export default function VarInput({
                     </Label>
                     <div className="flex gap-2">
                         <SelectVar ref={selectVarRef} nodeId={nodeId} itemKey={itemKey} onSelect={handleInsertVariable}>
-                            <Tip content={"插入变量"} side={"top"}>
+                            <Tip content={t('insertVariable')} side={"top"}>
                                 <span className="text-muted-foreground hover:text-gray-800 text-xs"  >{"{x}"}</span>
                             </Tip>
                         </SelectVar>

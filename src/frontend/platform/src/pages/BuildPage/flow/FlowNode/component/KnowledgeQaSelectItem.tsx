@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
 
 
-export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValidate, onVarEvent }) {
+export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValidate, onVarEvent, i18nPrefix }) {
     const { t } = useTranslation('flow')
     const { flow } = useFlowStore()
     const [value, setValue] = useState<any>(() => data.value.map(el => {
@@ -91,7 +91,7 @@ export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValida
     return <div className='node-item mb-4'>
         <Label className="flex items-center bisheng-label mb-2">
             {data.required && <span className="text-red-500">*</span>}
-            {data.label}
+            {t(`${i18nPrefix}label`)}
         </Label>
         <MultiSelect
             id="knowledge-qaselect"
@@ -101,7 +101,7 @@ export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValida
             className={''}
             value={value}
             options={options}
-            placeholder={data.placeholder}
+            placeholder={t(`${i18nPrefix}placeholder`)}
             searchPlaceholder={t('build.searchBaseName', { ns: 'bs' })}
             onChange={handleSelect}
             onLoad={() => reload(1, '')}

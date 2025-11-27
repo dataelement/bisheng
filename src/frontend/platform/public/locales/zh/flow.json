@@ -203,11 +203,326 @@
   "retrievalResultLength": "检索结果长度",
   "controlResultTextLengthForModel": "通过此参数控制最终传给模型的知识库检索结果文本长度，超过模型支持的最大上下文长度可能会导致报错。",
   "rerankModelCannotBeEmpty": "重排模型不可为空",
+  "insertVariable": "插入变量",
   "uploadFile": "上传文件",
   "messageContentVariable": "消息内容变量",
   "cannotExceedMaxLength": "不能超过 {{maxLength}} 个字符",
   "roundRunResult": "第 {{index}} 轮运行结果",
   "searchResult": "检索结果",
   "resultTooLongDownloadToView": "检索结果过长，请下载后查看",
-  "downloadFullContent": "下载完整内容"
+  "downloadFullContent": "下载完整内容",
+  "allTypes": "全部类型",
+  "document": "文档",
+  "image": "图片",
+  "enterValidNumber": "请输入有效的数字",
+  "numberExceedsMaxLimit": "数字大小不能超过2的32次方。",
+  "unknownKnowledgeBase": "未知知识库",
+  "invalidOrDeletedMetadataField": "选择的元数据字段无效或已被删除",
+  "selectMetadataField": "条件 {index}: 请选择元数据字段",
+  "selectOperator": "条件 {index}: 请选择操作符",
+  "enterValue": "条件 {index}: 请输入数值",
+  "defaultNodeName": "元数据过滤",
+  "nodeError2": "节点错误：\"{fieldName}\"已失效。",
+  "metadataFieldValidationError": "验证元数据字段时发生错误",
+  "noInputNeeded": "无需输入",
+  "selectOption": "请选择",
+  "enterValue2": "输入值",
+  "selectTime": "选择时间",
+  "unknownField": "未知字段",
+  "loadingMetadataFields": "正在加载元数据字段...",
+  "searchMetadata": "搜索元数据",
+  "noMetadataFields": "暂无元数据字段",
+  "referenceFormatTip": "引用变量请调整格式为\"YYYY-MM-DD HH:mm:ss\"，如\"2025-01-10 21:08:20\"表示2025年1月10日21时08分20秒",
+  "+ Add Condition": "+ 添加条件",
+  "node": {
+    "start": {
+      "name": "开始",
+      "description": "工作流运行的起始节点。",
+      "开场引导": "开场引导",
+      "全局变量": "全局变量",
+      "guide_word": {
+        "label": "开场白",
+        "placeholder": "每次工作流开始执行时向用户发送此消息，支持 Markdown 格式，为空时不发送。"
+      },
+      "guide_question": {
+        "label": "引导问题",
+        "placeholder": "请输入引导问题",
+        "help": "为用户提供推荐问题，引导用户输入，超过3个时将随机选取3个。"
+      },
+      "user_info": {
+        "label": "用户信息"
+      },
+      "current_time": {
+        "label": "当前时间"
+      },
+      "preset_question": {
+        "label": "预置问题列表",
+        "placeholder": "输入批量预置问题",
+        "help": "适合文档审核、报告生成等场景，利用提前预置的问题批量进行 RAG 问答。"
+      }
+    },
+    "input": {
+      "name": "输入",
+      "description": "接收用户在会话页面的输入，支持 2 种形式：对话框输入，表单输入。",
+      "tab_dialog_input": {
+        "label": "对话框输入",
+        "help": "接收用户从对话框输入的内容。"
+      },
+      "tab_form_input": {
+        "label": "表单输入",
+        "help": "将会在用户会话界面弹出一个表单，接收用户从表单提交的内容。"
+      },
+      "user_input": {
+        "label": "输入文本内容"
+      },
+      "dialog_files_content": {
+        "label": "上传文件内容"
+      },
+      "dialog_files_content_size": {
+        "label": "文件内容长度上限"
+      },
+      "dialog_file_accept": {
+        "label": "上传文件类型"
+      },
+      "dialog_image_files": {
+        "label": "上传图片文件",
+        "help": "提取上传文件中的图片文件，当助手或大模型节点使用多模态大模型时，可传入此图片。"
+      },
+      "form_input": {
+        "label": "+ 添加表单项"
+      }
+    },
+    "output": {
+      "name": "输出",
+      "description": "可向用户发送文本和文件，并且支持进行更丰富的交互，例如请求用户批准进行某项敏感操作、允许用户在模型输出内容的基础上直接修改并提交。",
+      "message": {
+        "label": "消息内容",
+        "placeholder": "输入需要发送给用户的消息，例如“接下来我将执行 XX 操作，请您确认”，“以下是我的初版草稿，您可以在其基础上进行修改”"
+      },
+      "output_result": {
+        "label": "交互类型"
+      }
+    },
+    "llm": {
+      "name": "大模型",
+      "description": "调用大模型回答用户问题或者处理任务。",
+      "tab_single": {
+        "label": "单次运行"
+      },
+      "tab_batch": {
+        "label": "批量运行"
+      },
+      "batch_variable": {
+        "label": "批处理变量",
+        "placeholder": "请选择批处理变量",
+        "help": "选择需要批处理的变量，将会多次运行本节点，每次运行时从选择的变量中取一项赋值给batch_variable进行处理。"
+      },
+      "模型设置": "模型设置",
+      "提示词": "提示词",
+      "输出": "输出",
+      "model_id": {
+        "label": "模型",
+        "placeholder": "请在模型管理中配置 LLM 模型"
+      },
+      "temperature": {
+        "label": "温度"
+      },
+      "system_prompt": {
+        "label": "系统提示词"
+      },
+      "user_prompt": {
+        "label": "用户提示词"
+      },
+      "image_prompt": {
+        "label": "视觉",
+        "help": "当使用多模态大模型时，可通过此功能传入图片，结合图像内容进行问答"
+      },
+      "output_user": {
+        "label": "将输出结果展示在会话中",
+        "help": "一般在问答等场景可开启，文档审核、报告生成等场景可关闭。"
+      },
+      "output": {
+        "label": "输出变量",
+        "help": "模型输出内容将会存储在该变量中。"
+      }
+    },
+    "agent": {
+      "name": "助手",
+      "description": "AI 自主进行任务规划，选择合适的知识库、数据库或工具进行调用。",
+      "tab_single": {
+        "label": "单次运行"
+      },
+      "tab_batch": {
+        "label": "批量运行"
+      },
+      "batch_variable": {
+        "label": "批处理变量",
+        "placeholder": "请选择批处理变量",
+        "help": "选择需要批处理的变量，将会多次运行本节点，每次运行时从选择的变量中取一项赋值给batch_variable进行处理。"
+      },
+      "模型设置": "模型设置",
+      "提示词": "提示词",
+      "知识库": "知识库",
+      "数据库": "数据库",
+      "工具": "工具",
+      "输出": "输出",
+      "model_id": {
+        "label": "模型",
+        "placeholder": "请在系统模型设置中配置助手推理模型"
+      },
+      "temperature": {
+        "label": "温度"
+      },
+      "system_prompt": {
+        "label": "系统提示词",
+        "placeholder": "助手画像"
+      },
+      "user_prompt": {
+        "label": "用户提示词",
+        "placeholder": "用户消息内容"
+      },
+      "chat_history_flag": {
+        "label": "历史聊天记录",
+        "help": "带入模型上下文的历史消息条数，为 0 时代表不包含上下文信息"
+      },
+      "image_prompt": {
+        "label": "视觉",
+        "help": "当使用多模态大模型时，可通过此功能传入图片，结合图像内容进行问答"
+      },
+      "knowledge_id": {
+        "label": "检索知识库范围",
+        "placeholder": "请选择知识库"
+      },
+      "sql_agent": {
+        "label": "数据库配置"
+      },
+      "tool_list": {
+        "label": "+ 添加工具"
+      },
+      "output_user": {
+        "label": "将输出结果展示在会话中",
+        "help": "一般在问答等场景开启，文档审核、报告生成等场景可关闭。"
+      },
+      "output": {
+        "label": "输出变量",
+        "help": "模型输出内容将会存储在该变量中。"
+      }
+    },
+    "qa_retriever": {
+      "name": "QA知识库检索",
+      "description": "从 QA 知识库中检索问题以及对应的答案。",
+      "检索设置": "检索设置",
+      "输出": "输出",
+      "user_question": {
+        "label": "输入变量",
+        "placeholder": "请选择检索问题"
+      },
+      "qa_knowledge_id": {
+        "label": "QA知识库",
+        "placeholder": "请选择QA知识库"
+      },
+      "score": {
+        "label": "相似度阈值",
+        "help": "低于阈值的结果将会被过滤"
+      },
+      "retrieved_result": {
+        "label": "检索结果"
+      }
+    },
+    "rag": {
+      "name": "文档知识库问答",
+      "description": "根据用户问题从知识库中检索相关内容，结合检索结果调用大模型生成最终结果，支持多个问题并行执行。",
+      "知识库检索设置": "知识库检索设置",
+      "AI回复生成设置": "AI回复生成设置",
+      "输出": "输出",
+      "user_question": {
+        "label": "用户问题",
+        "placeholder": "请选择用户问题",
+        "help": "当选择多个问题时，将会多次运行本节点，每次运行时从批量问题中取一项进行处理。"
+      },
+      "knowledge": {
+        "label": "检索范围",
+        "placeholder": "请选择知识库"
+      },
+      "metadata_filter": {
+        "label": "元数据过滤"
+      },
+      "advanced_retrieval_switch": {
+        "label": "高级检索配置"
+      },
+      "retrieved_result": {
+        "label": "检索结果"
+      },
+      "system_prompt": {
+        "label": "系统提示词",
+        "value": "你是一位知识库问答助手，遵守以下规则回答问题：\n1. 请用中文严谨、专业地回答用户的问题。\n2. 回答时须严格基于【参考文本】中的内容：\n\n- 如果【参考文本】中有明确与用户问题相关的文字内容，请依据相关内容进行回答；如果【参考文本】中没有任何与用户问题相关的内容，则直接回复：“没有找到相关内容”。\n- 如果相关内容中包含 markdown 格式的图片（例如 ![image](路径/IMAGE_1.png)），必须严格保留其原始 markdown 格式，不得添加引号、代码块（`或```）或其他特殊符号，也不得修改图片路径，保证可以正常渲染 markdown 图片。\n3. 当【参考文本】中的内容来源于多个不同的信息源时，若相关内容存在明显差异或冲突，请分别列出这些差异或冲突的答案；若无差异或冲突，只给出一个统一的回答即可。"
+      },
+      "user_prompt": {
+        "label": "用户提示词",
+        "value": "用户问题：```{{#user_question#}}```\n参考文本：```{{#retrieved_result#}}```\n你的回答："
+      },
+      "model_id": {
+        "label": "模型",
+        "placeholder": "请在模型管理中配置 LLM 模型"
+      },
+      "temperature": {
+        "label": "温度"
+      },
+      "output_user": {
+        "label": "将输出结果展示在会话中",
+        "help": "一般在问答等场景开启，文档审核、报告生成等场景可关闭。"
+      },
+      "output_user_input": {
+        "label": "输出变量",
+        "help": "模型输出内容将会存储在该变量中。"
+      }
+    },
+    "knowledge_retriever": {
+      "name": "文档知识库检索",
+      "description": "根据用户问题从知识库中检索相关内容，结合检索结果调用大模型生成最终结果，支持多个问题并行执行。",
+      "知识库检索设置": "知识库检索设置",
+      "输出": "输出",
+      "user_question": {
+        "label": "用户问题",
+        "placeholder": "请选择用户问题",
+        "help": "当选择多个问题时，将会多次运行本节点，每次运行时从批量问题中取一项进行处理。"
+      },
+      "knowledge": {
+        "label": "检索范围",
+        "placeholder": "请选择知识库"
+      },
+      "metadata_filter": {
+        "label": "元数据过滤"
+      },
+      "advanced_retrieval_switch": {
+        "label": "高级检索配置"
+      },
+      "retrieved_result": {
+        "label": "检索结果"
+      }
+    },
+    "report": {
+      "name": "报告",
+      "description": "按照预设的word模板生成报告。",
+      "report_info": {
+        "label": "报告名称",
+        "placeholder": "请输入生成报告的名称"
+      }
+    },
+    "code": {
+      "name": "代码",
+      "description": "自定义需要执行的代码。",
+      "入参": "入参",
+      "执行代码": "执行代码",
+      "出参": "出参"
+    },
+    "condition": {
+      "name": "条件分支",
+      "description": "根据条件表达式执行不同的分支。"
+    },
+    "end": {
+      "name": "结束",
+      "description": "工作流运行到此结束。"
+    }
+  }
 }

@@ -1026,21 +1026,21 @@
     @apply p-3 border-t border-[#cad0de] dark:bg-background dark:border-gray-700
   }
 
-  .bisheng-flow-handle {
+  .bisheng-node .bisheng-flow-handle {
     @apply h-6 w-6 bg-transparent border-none flex justify-center items-center
   }
-  .bisheng-flow-handle:hover span{
+  .bisheng-node .bisheng-flow-handle:hover span{
     @apply size-10/12
   }
-  .bisheng-flow-handle span {
+  .bisheng-node .bisheng-flow-handle span {
     @apply w-2 h-2 bg-primary rounded-full transition-all relative pointer-events-none
   }
-  .bisheng-flow-handle span::before {
+  .bisheng-node .bisheng-flow-handle span::before {
     content: '';
     @apply absolute bg-[#fff] w-[1px] h-2/3 top-[3px] left-1/2 transform -translate-x-1/2 opacity-0 transition-opacity duration-300;
   }
   
-  .bisheng-flow-handle span::after {
+  .bisheng-node .bisheng-flow-handle span::after {
     content: '';
     @apply absolute bg-[#fff] h-[1px] w-2/3 left-[3px] top-1/2 transform -translate-y-1/2 opacity-0 transition-opacity duration-300;
   }
@@ -1049,8 +1049,8 @@
     @apply bg-primary;
   } */
   
-  .bisheng-flow-handle:hover span::before,
-  .bisheng-flow-handle:hover span::after {
+  .bisheng-node .bisheng-flow-handle:hover span::before,
+  .bisheng-node .bisheng-flow-handle:hover span::after {
     @apply opacity-100 ;
   }
   .textarea-badge{

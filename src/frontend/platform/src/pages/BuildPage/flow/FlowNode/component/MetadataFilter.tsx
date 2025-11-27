@@ -1,16 +1,16 @@
+import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
+import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import { Input } from "@/components/bs-ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Switch } from "@/components/bs-ui/switch";
-import { ChevronDown, CircleQuestionMark, Clock3, Hash, RefreshCcw, Search, Trash2, Type } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Badge } from "@/components/bs-ui/badge";
-import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { getKnowledgeDetailApi } from "@/controllers/API";
 import { format } from "date-fns";
-import useFlowStore from "../../flowStore";
+import { ChevronDown, CircleQuestionMark, Clock3, Hash, RefreshCcw, Search, Trash2, Type } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import NumberInput from "./NumberInput";
 import SelectVar from "./SelectVar";
 
@@ -40,6 +40,7 @@ interface MetadataFilterProps {
   nodeId?: string;
   node?: any;
   onVarEvent?: (validateFunc: () => Promise<string>) => void;
+  i18nPrefix: string
 }
 
 const MetadataFilter = ({
@@ -49,12 +50,13 @@ const MetadataFilter = ({
   selectedKnowledgeIds = () => [],
   nodeId,
   node,
-  onVarEvent
+  onVarEvent,
+  i18nPrefix
 }: MetadataFilterProps) => {
 
   const isInitialMount = useRef(true);
   const isUpdatingFromExternal = useRef(false);
-  const { flow } = useFlowStore();
+  const { t } = useTranslation('flow')
 
   const [isEnabled, setIsEnabled] = useState(data.value?.enabled ?? false);
   const [conditions, setConditions] = useState<MetadataCondition[]>(() => {
@@ -80,14 +82,14 @@ const MetadataFilter = ({
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
   const [isSelectOpen, setIsSelectOpen] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({});
-  
+
   // 用 ref 存储最新状态，绕开闭包问题
   const stateRef = useRef({
     conditions: conditions,
     availableMetadataState: availableMetadataState,
     isLoadingMetadata: isLoadingMetadata
   });
-  
+
   // 状态变化时同步更新 ref
   useEffect(() => {
     stateRef.current = {
@@ -105,15 +107,15 @@ const MetadataFilter = ({
     Time: ["equals", "not_equals", "greater_than", "less_than", "greater_than_or_equal", "less_than_or_equal"],
   };
   const operatorLabels = {
-    equals: "等于",
-    not_equals: "不等于",
-    contains: "包含",
-    not_contains: "不包含",
-    is_empty: "为空",
-    is_not_empty: "不为空",
-    starts_with: "开始为",
-    ends_with: "结束为",
-    regex: "正则",
+    equals: t('equals'),
+    not_equals: t('notEquals'),
+    contains: t('contains'),
+    not_contains: t('notContains'),
+    is_empty: t('isEmpty'),
+    is_not_empty: t('isNotEmpty'),
+    starts_with: t('startsWith'),
+    ends_with: t('endsWith'),
+    regex: t('regex'),
     greater_than: ">",
     less_than: "<",
     greater_than_or_equal: "≥",
@@ -128,7 +130,7 @@ const MetadataFilter = ({
       if (knowledgeIds.length > 0) {
         const knowledgeDetails = await getKnowledgeDetailApi(knowledgeIds);
         knowledgeDetails.forEach((detail: any) => {
-          const kbLabel = detail.name || detail.label || "未知知识库";
+          const kbLabel = detail.name || detail.label || t('unknownKnowledgeBase');
           const defaultFields = [
             { name: "document_id", type: "Number", icon: <Hash size={14} /> },
             { name: "document_name", type: "String", icon: <Type size={14} /> },
@@ -237,21 +239,21 @@ const MetadataFilter = ({
     if (isLoadingMetadata) return;
 
     const newFieldErrors = { ...fieldErrors };
-    
+
     conditions.forEach(cond => {
       if (!cond.metadataField) {
         if (newFieldErrors[cond.id]) delete newFieldErrors[cond.id];
         return;
       }
-      
+
       const isFieldValid = availableMetadataState.some(meta => meta.id === cond.metadataField);
       if (!isFieldValid) {
-        newFieldErrors[cond.id] = "选择的元数据字段无效或已被删除";
-      } else if (newFieldErrors[cond.id] === "选择的元数据字段无效或已被删除") {
+        newFieldErrors[cond.id] = t('invalidOrDeletedMetadataField');
+      } else if (newFieldErrors[cond.id] === t('invalidOrDeletedMetadataField')) {
         delete newFieldErrors[cond.id];
       }
     });
-    
+
     if (JSON.stringify(newFieldErrors) !== JSON.stringify(fieldErrors)) {
       setFieldErrors(newFieldErrors);
     }
@@ -262,14 +264,14 @@ const MetadataFilter = ({
     const { conditions } = stateRef.current;
     const errors = [];
     conditions.forEach((cond, index) => {
-      if (!cond.metadataField) errors.push(`条件 ${index + 1}: 请选择元数据字段`);
-      if (!cond.operator) errors.push(`条件 ${index + 1}: 请选择操作符`);
-      
+      if (!cond.metadataField) errors.push(t('selectMetadataField', { index: index + 1 }));
+      if (!cond.operator) errors.push(t('selectOperator', { index: index + 1 }));
+
       if (![`is_empty`, `is_not_empty`].includes(cond.operator) && cond.metadataField) {
-        // 实时获取字段类型
+        // Real-time fetch of field type
         const meta = stateRef.current.availableMetadataState.find(m => m.id === cond.metadataField);
         if (meta?.type === "Number" && !cond.value) {
-           errors.push(`条件 ${index + 1}: 请输入数值`);
+          errors.push(t('enterValue', { index: index + 1 }));
         }
       }
     });
@@ -281,7 +283,7 @@ const MetadataFilter = ({
     const isValid = conditions.every(cond => {
       if (!cond.metadataField || !cond.operator) return false;
       if ([`is_empty`, `is_not_empty`].includes(cond.operator)) return true;
-      
+
       const meta = stateRef.current.availableMetadataState.find(m => m.id === cond.metadataField);
       if (meta?.type === "Number") {
         return !!cond.value;
@@ -299,7 +301,7 @@ const MetadataFilter = ({
       onValidate(() => false);
       return;
     }
-    
+
     checkAllFieldsValidity();
     validateConditionsUI();
     onValidate(validateFunc);
@@ -323,47 +325,47 @@ const MetadataFilter = ({
     onChange(filterData);
   }, [isEnabled, relation, checkAllFieldsValidity, validateConditionsUI, validateFunc, onChange, onValidate]);
 
-const validateVars = useCallback(async (): Promise<string> => {
-  if (!isEnabled) return "";
-  
-  try {
-    const knowledgeIds = selectedKnowledgeIds();
-    if (knowledgeIds.length === 0) return "";
-    
-    const knowledgeDetails = await getKnowledgeDetailApi(knowledgeIds);
+  const validateVars = useCallback(async (): Promise<string> => {
+    if (!isEnabled) return "";
 
-    const validFieldIds = new Set<string>();
-    knowledgeDetails.forEach((detail: any) => {
+    try {
+      const knowledgeIds = selectedKnowledgeIds();
+      if (knowledgeIds.length === 0) return "";
 
-      const defaultFields = ["document_id", "document_name", "upload_time", "update_time", "uploader", "updater"];
-      defaultFields.forEach(field => {
-        validFieldIds.add(`${detail.id}-${field}`);
-      });
-      
-      if (detail.metadata_fields) {
-        detail.metadata_fields.forEach((field: any) => {
-          validFieldIds.add(`${detail.id}-${field.field_name}`);
+      const knowledgeDetails = await getKnowledgeDetailApi(knowledgeIds);
+
+      const validFieldIds = new Set<string>();
+      knowledgeDetails.forEach((detail: any) => {
+
+        const defaultFields = ["document_id", "document_name", "upload_time", "update_time", "uploader", "updater"];
+        defaultFields.forEach(field => {
+          validFieldIds.add(`${detail.id}-${field}`);
         });
+
+        if (detail.metadata_fields) {
+          detail.metadata_fields.forEach((field: any) => {
+            validFieldIds.add(`${detail.id}-${field.field_name}`);
+          });
+        }
+      });
+
+      const { conditions } = stateRef.current;
+      for (const condition of conditions) {
+        if (!condition.metadataField) continue;
+        if (!validFieldIds.has(condition.metadataField)) {
+          const fieldName = condition.metadataField.split("-").pop() || "";
+          // Get node name, or use default value
+          const nodeName = node?.name || t('defaultNodeName');
+          return `${nodeName} ${t('nodeError2', { fieldName })}`;
+        }
       }
-    });
-    
-    const { conditions } = stateRef.current;
-    for (const condition of conditions) {
-      if (!condition.metadataField) continue;
-      if (!validFieldIds.has(condition.metadataField)) {
-        const fieldName = condition.metadataField.split("-").pop() || "";
-        // 获取节点名称，如果没有则使用默认值
-        const nodeName = node?.name || "元数据过滤";
-        return `${nodeName}节点错误："${fieldName}"已失效。`;
-      }
+
+      return "";
+    } catch (error) {
+      console.error("Error validating metadata fields:", error);
+      return t('metadataFieldValidationError');
     }
-    
-    return "";
-  } catch (error) {
-    console.error("Error validating metadata fields:", error);
-    return "验证元数据字段时发生错误";
-  }
-}, [isEnabled, selectedKnowledgeIds, node]);
+  }, [isEnabled, selectedKnowledgeIds, node]);
 
   useEffect(() => {
     if (onVarEvent) {
@@ -384,7 +386,7 @@ const validateVars = useCallback(async (): Promise<string> => {
       meta.knowledgeBase.toLowerCase().includes(term)
     );
   }, [availableMetadataState, searchTerm]);
-  
+
   const addCondition = () => {
     setConditions(prev => [...prev, {
       id: generateUUID(8),
@@ -413,7 +415,7 @@ const validateVars = useCallback(async (): Promise<string> => {
           const selectedMeta = availableMetadataState.find(m => m.id === value);
           setFieldErrors(prev => {
             const newErrors = { ...prev };
-            if (!selectedMeta && value) newErrors[id] = "选择的元数据字段无效或已被删除";
+            if (!selectedMeta && value) newErrors[id] = t('invalidOrDeletedMetadataField');
             else delete newErrors[id];
             return newErrors;
           });
@@ -437,7 +439,9 @@ const validateVars = useCallback(async (): Promise<string> => {
   const renderValueInput = (condition: MetadataCondition) => {
     const metadataType = stateRef.current.availableMetadataState.find(m => m.id === condition.metadataField)?.type;
     const isEmptyOperator = [`is_empty`, `is_not_empty`].includes(condition.operator);
-    if (isEmptyOperator) return <Input placeholder="无需输入" value="" disabled className="bg-gray-100 h-8" />;
+
+    if (isEmptyOperator) return <Input placeholder={t('noInputNeeded')} value="" disabled className="bg-gray-100 h-8" />;
+
     if (condition.valueType === "reference") {
       const selectedLabel = condition.value
         ? condition.value.split('.').reduce((acc, part, index, array) => index === array.length - 1 ? `${acc}/${part}` : `${acc}.${part}`)
@@ -451,27 +455,28 @@ const validateVars = useCallback(async (): Promise<string> => {
             onSelect={(E: any, v: any) => updateCondition(condition.id, "value", `${E.name}.${v.value}`)}
           >
             <div className="no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400">
-              <span className="flex items-center flex-1 truncate">{selectedLabel || "请选择"}</span>
+              <span className="flex items-center flex-1 truncate">{selectedLabel || t('selectOption')}</span>
               <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
             </div>
           </SelectVar>
         </div>
       );
     }
-    if (metadataType === "String") return <Input placeholder="输入值" value={condition.value} onChange={(e) => updateCondition(condition.id, "value", e.target.value)} maxLength={255} className="h-8" />;
+
+    if (metadataType === "String") return <Input placeholder={t('enterValue2')} value={condition.value} onChange={(e) => updateCondition(condition.id, "value", e.target.value)} maxLength={255} className="h-8" />;
     if (metadataType === "Number") return (
       <div className="w-full mt-2">
         <NumberInput value={condition.value} onChange={(value) => updateCondition(condition.id, "value", value)} />
       </div>
     );
-    if (metadataType === "Time") return <DatePicker value={condition.value ? new Date(condition.value) : undefined} placeholder="选择时间" showTime onChange={(d) => updateCondition(condition.id, "value", d ? format(d, "yyyy-MM-dd'T'HH:mm:ss") : "")} />;
-    return <Input placeholder="输入值" value={condition.value} onChange={(e) => updateCondition(condition.id, "value", e.target.value)} className="h-8" />;
+    if (metadataType === "Time") return <DatePicker value={condition.value ? new Date(condition.value) : undefined} placeholder={t('selectTime')} showTime onChange={(d) => updateCondition(condition.id, "value", d ? format(d, "yyyy-MM-dd'T'HH:mm:ss") : "")} />;
+    return <Input placeholder={t('enterValue2')} value={condition.value} onChange={(e) => updateCondition(condition.id, "value", e.target.value)} className="h-8" />;
   };
 
   return (
     <div className="space-y-4 rounded-lg min-w-0 mb-4">
       <div className="flex items-center justify-between min-w-0">
-        <div className="flex items-center gap-2"><span className="text-sm font-medium text-gray-500">元数据过滤</span></div>
+        <div className="flex items-center gap-2"><span className="text-sm font-medium text-gray-500">{t(`${i18nPrefix}label`)}</span></div>
         <Switch checked={isEnabled} onCheckedChange={setIsEnabled} />
       </div>
       {isEnabled && (
@@ -490,9 +495,9 @@ const validateVars = useCallback(async (): Promise<string> => {
               const metadataType = stateRef.current.availableMetadataState.find(m => m.id === condition.metadataField)?.type;
               const isTimeType = metadataType === "Time";
               const hasError = !!fieldErrors[condition.id];
-              
+
               const selectedMeta = stateRef.current.availableMetadataState.find(m => m.id === condition.metadataField);
-              const displayName = selectedMeta ? selectedMeta.name : condition.metadataField.split("-").pop() || "未知字段";
+              const displayName = selectedMeta ? selectedMeta.name : condition.metadataField.split("-").pop() || t('unknownField');
               const displayIcon = selectedMeta ? selectedMeta.icon : null;
 
               return (
@@ -505,7 +510,7 @@ const validateVars = useCallback(async (): Promise<string> => {
                         onOpenChange={setIsSelectOpen}
                       >
                         <SelectTrigger className={`h-8 min-w-0`}>
-                          <SelectValue placeholder="选择变量">
+                          <SelectValue placeholder={t('selectVariable')}>
                             {condition.metadataField && (
                               <TooltipProvider>
                                 <Tooltip>
@@ -528,13 +533,13 @@ const validateVars = useCallback(async (): Promise<string> => {
                         <SelectContent>
                           <div className="max-h-60 overflow-y-auto">
                             {isLoadingMetadata ? (
-                              <div className="p-4 text-center text-sm text-gray-500">正在加载元数据字段...</div>
+                              <div className="p-4 text-center text-sm text-gray-500">{t('loadingMetadataFields')}</div>
                             ) : (
                               <>
                                 <div className="p-2 border-b">
                                   <div className="relative">
                                     <Search className="absolute left-3 top-2 h-3 w-3 text-muted-foreground" />
-                                    <input type="text" placeholder="搜索元数据" className="w-full pl-8 pr-2 py-1 text-[12px] border rounded" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onClick={(e) => e.stopPropagation()} />
+                                    <input type="text" placeholder={t('searchMetadata')} className="w-full pl-8 pr-2 py-1 text-[12px] border rounded" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onClick={(e) => e.stopPropagation()} />
                                   </div>
                                 </div>
                                 {filteredMetadata.length > 0 ? (
@@ -551,7 +556,7 @@ const validateVars = useCallback(async (): Promise<string> => {
                                     </SelectItem>
                                   ))
                                 ) : (
-                                  <div className="p-2 text-center text-xs text-gray-500">暂无元数据字段</div>
+                                  <div className="p-2 text-center text-xs text-gray-500">{t('noMetadataFields')}</div>
                                 )}
                               </>
                             )}
@@ -561,7 +566,7 @@ const validateVars = useCallback(async (): Promise<string> => {
                     </div>
                     <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[15%]' : 'max-w-[20%]'}`}>
                       <Select value={condition.operator} onValueChange={(value) => updateCondition(condition.id, "operator", value)} disabled={!condition.metadataField}>
-                        <SelectTrigger className="h-8 min-w-0"><SelectValue placeholder="选择条件" /></SelectTrigger>
+                        <SelectTrigger className="h-8 min-w-0"><SelectValue placeholder={t('selectCondition')} /></SelectTrigger>
                         <SelectContent>
                           {metadataType && operatorConfig[metadataType].map((op) => (
                             <SelectItem key={op} value={op}>{operatorLabels[op]}</SelectItem>
@@ -575,18 +580,18 @@ const validateVars = useCallback(async (): Promise<string> => {
                           <Select value={condition.valueType} onValueChange={(value: "reference" | "input") => updateCondition(condition.id, "valueType", value)}>
                             <SelectTrigger className="h-8 min-w-0">
                               <div className="flex items-center justify-between w-full">
-                                <span>{condition.valueType === "reference" ? "引用" : "输入"}</span>
+                                <span>{condition.valueType === "reference" ? t('reference') : t('input')}</span>
                                 {condition.valueType === "reference" && metadataType === "Time" && (
                                   <div className="relative group/info flex-shrink-0">
                                     <CircleQuestionMark size={16} className="text-gray-400" />
-                                    <div className="absolute bottom-full right-0 mb-2 hidden group-hover/info:block p-2 bg-black text-white text-xs rounded z-10">引用变量请调整格式为"YYYY-MM-DD HH:mm:ss"，如"2025-01-10 21:08:20"表示2025年1月10日21时08分20秒</div>
+                                    <div className="absolute bottom-full right-0 mb-2 hidden group-hover/info:block p-2 bg-black text-white text-xs rounded z-10">{t('referenceFormatTip')}</div>
                                   </div>
                                 )}
                               </div>
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="reference">引用</SelectItem>
-                              <SelectItem value="input">输入</SelectItem>
+                              <SelectItem value="reference">{t('reference')}</SelectItem>
+                              <SelectItem value="input">{t('input')}</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -601,7 +606,7 @@ const validateVars = useCallback(async (): Promise<string> => {
               );
             })}
           </div>
-          <Button onClick={addCondition} variant="outline" className="border-primary text-primary mt-2 h-8">+ 添加条件</Button>
+          <Button onClick={addCondition} variant="outline" className="border-primary text-primary mt-2 h-8">{t('+ Add Condition')}</Button>
         </div>
       )}
     </div>

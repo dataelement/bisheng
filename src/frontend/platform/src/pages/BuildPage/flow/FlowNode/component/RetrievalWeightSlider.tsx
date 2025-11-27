@@ -29,7 +29,7 @@ interface RetrievalConfigProps {
     onValidate?: (validate: () => string | false) => void;
 }
 
-const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onValidate }) => {
+const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onValidate, i18nPrefix }) => {
     const { t } = useTranslation('flow'); // 使用国际化
     const [keywordWeight, setKeywordWeight] = useState(data.value?.keyword_weight ?? 0.5);
     const [vectorWeight, setVectorWeight] = useState(1 - (data.value?.keyword_weight ?? 0.5));
@@ -112,7 +112,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
         <div className="space-y-2 rounded-lg mb-4">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-500">{t('advancedSearchSettings')}</span> {/* 国际化 */}
+                    <span className="text-sm font-medium text-gray-500">{t(`${i18nPrefix}label`)}</span>
                 </div>
                 <Switch
                     checked={searchSwitch}
@@ -123,14 +123,14 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
             {searchSwitch && (
                 <div className="flex items-center justify-between pl-4">
                     <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-500">{t('userAuthVerification')}</span> {/* 国际化 */}
+                        <span className="text-sm font-medium text-gray-500">{t('userAuthVerification')}</span>
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <HelpCircle className="h-4 w-4 text-gray-400 cursor-pointer" />
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                    <p className="max-w-xs">{t('enableToVerifyUserAccessToKnowledgeBase')}</p> {/* 国际化 */}
+                                    <p className="max-w-xs">{t('enableToVerifyUserAccessToKnowledgeBase')}</p>
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
@@ -145,14 +145,14 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
             {searchSwitch && (
                 <div className="space-y-4 pl-4">
                     <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-500">{t('retrieverWeightSettings')}</span> {/* 国际化 */}
+                        <span className="text-sm font-medium text-gray-500">{t('retrieverWeightSettings')}</span>
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <HelpCircle className="h-4 w-4 text-gray-400 cursor-pointer" />
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                    <p className="max-w-xs">{t('adjustWeightForVectorOrKeywordSearch')}</p> {/* 国际化 */}
+                                    <p className="max-w-xs">{t('adjustWeightForVectorOrKeywordSearch')}</p>
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
@@ -161,7 +161,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
                     <div className="space-y-2">
                         <div className="flex items-center gap-3">
                             <div className="flex flex-col items-start w-12">
-                                <span className="text-xs font-medium text-gray-600">{t('keyword')}</span> {/* 国际化 */}
+                                <span className="text-xs font-medium text-gray-600">{t('keyword')}</span>
                                 <span className="text-xs text-gray-500">{keywordWeight.toFixed(2)}</span>
                             </div>
 
@@ -177,7 +177,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
                             </div>
 
                             <div className="flex flex-col items-end w-12">
-                                <span className="text-xs font-medium text-gray-600">{t('vector')}</span> {/* 国际化 */}
+                                <span className="text-xs font-medium text-gray-600">{t('vector')}</span>
                                 <span className="text-xs text-gray-500">{vectorWeight.toFixed(2)}</span>
                             </div>
                         </div>
@@ -188,14 +188,14 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
             {searchSwitch && (
                 <div className="flex items-center justify-between pl-4">
                     <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-500">{t('retrievalResultReRank')}</span> {/* 国际化 */}
+                        <span className="text-sm font-medium text-gray-500">{t('retrievalResultReRank')}</span>
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <HelpCircle className="h-4 w-4 text-gray-400 cursor-pointer" />
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                    <p className="max-w-xs">{t('useRerankModelForReorderingResults')}</p> {/* 国际化 */}
+                                    <p className="max-w-xs">{t('useRerankModelForReorderingResults')}</p>
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
@@ -224,14 +224,14 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
             {searchSwitch && (
                 <div className="space-y-2 pl-4">
                     <div className="flex items-center gap-2">
-                        <label className="text-sm font-medium text-gray-500">{t('retrievalResultLength')}</label> {/* 国际化 */}
+                        <label className="text-sm font-medium text-gray-500">{t('retrievalResultLength')}</label>
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <HelpCircle className="h-4 w-4 text-gray-400 cursor-pointer" />
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                    <p className="max-w-xs">{t('controlResultTextLengthForModel')}</p> {/* 国际化 */}
+                                    <p className="max-w-xs">{t('controlResultTextLengthForModel')}</p>
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>

@@ -2,6 +2,7 @@ import { Label } from "@/components/bs-ui/label";
 import { Select, SelectContent, SelectTrigger } from "@/components/bs-ui/select";
 import { Check } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface FileTypeSelectProps {
     data: {
@@ -9,6 +10,7 @@ interface FileTypeSelectProps {
         value: 'all' | 'file' | 'image';
     };
     onChange: (value: 'all' | 'file' | 'image') => void;
+    i18nPrefix: string;
 }
 
 const options = [
@@ -22,8 +24,10 @@ const options = [
     }
 ];
 
-export default function FileTypeSelect({ data, onChange }: FileTypeSelectProps) {
+export default function FileTypeSelect({ data, onChange, i18nPrefix }: FileTypeSelectProps) {
     const [type, setType] = useState(data.value)
+    const { t } = useTranslation('flow')
+
     const handleSelect = (clickedValue: 'file' | 'image') => {
         let newValue: 'all' | 'file' | 'image' = type;
 
@@ -42,10 +46,10 @@ export default function FileTypeSelect({ data, onChange }: FileTypeSelectProps) 
 
     const getDisplayText = () => {
         switch (type) {
-            case 'all': return '全部类型';
-            case 'file': return '文档';
-            case 'image': return '图片';
-            default: return '全部类型';
+            case 'all': return t('allTypes');
+            case 'file': return t('document');
+            case 'image': return t('image');
+            default: return t('allTypes');
         }
     };
 
@@ -56,7 +60,7 @@ export default function FileTypeSelect({ data, onChange }: FileTypeSelectProps) 
     return (
         <div className='node-item flex gap-4 items-center mb-4'>
             <Label className="bisheng-label whitespace-nowrap">
-                {data.label}
+                {t(`${i18nPrefix}label`)}
             </Label>
             <Select >
                 <SelectTrigger>

@@ -4,9 +4,12 @@ import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { ChevronUp } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useUpdateVariableState } from "../flowNodeStore";
+import { useTranslation } from "react-i18next";
 
-export default function VarItem({ data: paramItem }) {
+export default function VarItem({ data: paramItem, i18nPrefix }) {
     const [open, setOpen] = useState(true)
+    const { t } = useTranslation('flow')
+
     // Update Preset Questions 
     const [_, forceUpdate] = useState(false)
     const [updateVariable] = useUpdateVariableState()
@@ -34,8 +37,8 @@ export default function VarItem({ data: paramItem }) {
     if (Array.isArray(paramItem.value) && paramItem.value.length > 0) return <div className="mb-2">
         <div className="flex justify-between items-center">
             <Label className="bisheng-label">
-                {paramItem.label}
-                {paramItem.help && <QuestionTooltip content={paramItem.help} />}
+                {t(`${i18nPrefix}label`)}
+                {paramItem.help && <QuestionTooltip content={t(`${i18nPrefix}help`)} />}
             </Label>
             <ChevronUp className={open ? 'rotate-180' : ''} onClick={() => setOpen(!open)} />
         </div>
@@ -50,8 +53,8 @@ export default function VarItem({ data: paramItem }) {
 
     return <div className="mb-4 flex justify-between items-center">
         <Label className="flex items-center bisheng-label">
-            {paramItem.label}
-            {paramItem.help && <QuestionTooltip content={paramItem.help} />}
+            {t(`${i18nPrefix}label`)}
+            {paramItem.help && <QuestionTooltip content={t(`${i18nPrefix}help`)} />}
         </Label>
         <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">{paramItem.key}</Badge>
     </div>

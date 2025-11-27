@@ -4,7 +4,7 @@ import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-export default function InputItem({ type = 'text', char = false, linefeed = false, data, onChange }) {
+export default function InputItem({ type = 'text', char = false, linefeed = false, data, onChange, i18nPrefix, label }) {
     const [value, setValue] = useState(data.value ? String(data.value) : '');
     const { t } = useTranslation('flow');
 
@@ -33,11 +33,12 @@ export default function InputItem({ type = 'text', char = false, linefeed = fals
             data-key={data.key}
         >
             <Label className="flex items-center bisheng-label">
-                {data.label}
-                {data.help && <QuestionTooltip content={data.help} />}
+                {label || data.label && t(`${i18nPrefix}label`)}
+                {data.help && <QuestionTooltip content={t(`${i18nPrefix}help`)} />}
             </Label>
             <div className={`nodrag ${char ? 'w-32 flex items-center gap-3' : ''} ${linefeed ? 'mt-2' : ''}`}>
                 <Input
+                    className="min-w-24"
                     value={value}
                     type={type}
                     min={data.min}
@@ -52,8 +53,8 @@ export default function InputItem({ type = 'text', char = false, linefeed = fals
     return (
         <div className='node-item mb-4' data-key={data.key}>
             <Label className="flex items-center bisheng-label">
-                {data.label}
-                {data.help && <QuestionTooltip content={data.help} />}
+                {data.label && t(`${i18nPrefix}label`)}
+                {data.help && <QuestionTooltip content={t(`${i18nPrefix}help`)} />}
             </Label>
             <Input
                 className="mt-2 nodrag"

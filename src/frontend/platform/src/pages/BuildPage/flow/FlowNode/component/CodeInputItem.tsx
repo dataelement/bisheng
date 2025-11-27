@@ -71,7 +71,7 @@ const Item = ({ nodeId, validate, sameKey, item, index, onUpdateItem, onDeleteIt
 };
 
 
-export default function CodeInputItem({ nodeId, data: paramItem, onValidate, onChange }) {
+export default function CodeInputItem({ nodeId, data: paramItem, onValidate, onChange, i18nPrefix }) {
     const { t } = useTranslation('flow');
     const [items, setItems] = useState(paramItem.value);
 
