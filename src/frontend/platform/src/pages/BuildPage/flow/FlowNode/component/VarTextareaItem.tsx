@@ -2,10 +2,9 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import VarInput from "./VarInput";
 
-export default function VarTextareaItem({ nodeId, data, onChange, onValidate, onVarEvent, i18nPrefix }) {
+export default function VarTextareaItem({ node, nodeId, data, onChange, onValidate, onVarEvent, i18nPrefix }) {
     const [error, setError] = useState(false)
     const { t } = useTranslation('flow')
-
     useEffect(() => {
         data.required && onValidate(() => {
             if (!data.value.trim()) {
@@ -28,7 +27,7 @@ export default function VarTextareaItem({ nodeId, data, onChange, onValidate, on
                 itemKey={data.key}
                 nodeId={nodeId}
                 paramItem={data}
-                label={t(`${i18nPrefix}label`)}
+                label={node.type === 'tool' ? data.label : t(`${i18nPrefix}label`)}
                 placeholder={data.placeholder && t(`${i18nPrefix}placeholder`)}
                 error={error}
                 value={data.value}
@@ -36,7 +35,7 @@ export default function VarTextareaItem({ nodeId, data, onChange, onValidate, on
                 onVarEvent={onVarEvent}
             >
             </VarInput>
-            <p className="bisheng-label text-xs">{data.desc}</p>
+            <p className="bisheng-label text-xs mt-1">{node.is_preset ? t(`tools.${node.tool_key}.params.${data.label}`, { ns: 'tool' }) : data.desc}</p>
         </div>
     );
 }

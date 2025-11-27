@@ -13,6 +13,7 @@ import { useQuery } from "react-query";
 import NodeLogo from "./FlowNode/NodeLogo";
 
 const ToolItem = ({ temp, index, dropdown, onDragStart, onClick }) => {
+    const { t } = useTranslation('tool');
     const sortData = useMemo(() => {
         const { children, is_preset } = temp;
         if (children) {
@@ -23,7 +24,7 @@ const ToolItem = ({ temp, index, dropdown, onDragStart, onClick }) => {
 
     return <AccordionItem key={temp.name} value={temp.name + index} className="border-none">
         <AccordionTrigger className="py-2 bisheng-label">
-            <span className="break-all">{temp.name}</span>
+            <span className="break-all text-left">{temp.is_preset === 1 ? t(`categories.${temp.name}.name`) : temp.name}</span>
         </AccordionTrigger>
         <AccordionContent className="pb-2">
             {
@@ -42,7 +43,7 @@ const ToolItem = ({ temp, index, dropdown, onDragStart, onClick }) => {
                                 }}
                                 draggable={!dropdown}
                                 onDragStart={(event) => {
-                                    onDragStart(event, { type: el.type, node: el })
+                                    onDragStart(event, { type: el.type, node: { ...el, is_preset: temp.is_preset === 1 } })
                                 }}
                                 onDragEnd={(event) => {
                                     document.body.removeChild(
@@ -57,11 +58,11 @@ const ToolItem = ({ temp, index, dropdown, onDragStart, onClick }) => {
                                 }}
                             >
                                 <NodeLogo type="tool" colorStr={el.name} />
-                                <span className="text-sm truncate">{el.name}</span>
+                                <span className="text-sm truncate">{temp.is_preset === 1 ? t(`tools.${el.tool_key}.name`) : el.name}</span>
                             </div>
                         </TooltipTrigger>
                         {el.description && <TooltipContent side="right">
-                            <div className="max-w-96 text-left break-all whitespace-normal">{el.description}</div>
+                            <div className="max-w-96 text-left break-all whitespace-normal">{temp.is_preset === 1 ? t(`tools.${el.tool_key}.desc`) : el.description}</div>
                         </TooltipContent>}
                     </Tooltip>
                 )

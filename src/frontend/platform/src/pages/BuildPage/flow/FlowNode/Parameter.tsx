@@ -69,7 +69,7 @@ export default function Parameter({
         case 'input_list':
             return <InputListItem node={node} data={item} preset={item.key === "preset_question"} onChange={handleOnNewValue} i18nPrefix={i18nPrefix} />;
         case 'var':
-            return <VarItem data={item} i18nPrefix={i18nPrefix} />
+            return <VarItem node={node} data={item} i18nPrefix={i18nPrefix} />
         case 'chat_history_num':
             return <HistoryNumItem data={item} onChange={handleOnNewValue} i18nPrefix={i18nPrefix} />
         case 'form':
@@ -83,6 +83,7 @@ export default function Parameter({
             />
         case 'var_textarea':
             return <VarTextareaItem
+                node={node}
                 nodeId={nodeId}
                 data={item}
                 onChange={handleOnNewValue}

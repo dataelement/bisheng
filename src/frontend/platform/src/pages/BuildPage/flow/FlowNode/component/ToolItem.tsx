@@ -36,6 +36,7 @@ export default function ToolItem({ data, onChange, i18nPrefix }) {
             ))}
         </div>
         <ToolsSheet select={value} onSelect={(val) => {
+            val.name = val.is_preset === 1 ? t(`tools.${val.tool_key}.name`, { ns: 'tool' }) : val.name
             const newValue = [...value, val]
             setValue(newValue)
             onChange(newValue.map(el => ({ key: el.id, label: el.name, tool_key: el.tool_key })))

@@ -270,7 +270,7 @@ const ToolSelector = ({
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <span className="truncate max-w-[240px]">{tool.name}</span>
+                                    <span className="truncate max-w-[240px]">{tool.is_preset === 1 ? t(`categories.${tool.name}.name`, { ns: 'tool' }) : tool.name}</span>
                                   </TooltipTrigger>
                                   <TooltipContent>
                                     <p>{tool.name}</p>
@@ -391,7 +391,7 @@ const ToolSelector = ({
                           <TooltipTrigger asChild>
                             <div className="flex flex-col min-w-0">
                               <p className="truncate max-w-[180px]">
-                                {tool.name.split(new RegExp(`(${toolSearchTerm})`, 'gi')).map((part, i) => (
+                                {(tool.is_preset === 1 ? t(`categories.${tool.name}.name`, { ns: 'tool' }) : tool.name).split(new RegExp(`(${toolSearchTerm})`, 'gi')).map((part, i) => (
                                   part.toLowerCase() === toolSearchTerm.toLowerCase() ? (
                                     <span key={i} className="bg-yellow-200">{part}</span>
                                   ) : (
@@ -402,7 +402,7 @@ const ToolSelector = ({
                               {/* 一级菜单描述 - 与二级菜单样式一致 */}
                               {tool.description && (
                                 <p className="text-xs text-gray-500 truncate mt-1 max-w-[260px]">
-                                  {tool.description}
+                                  {tool.is_preset === 1 ? t(`categories.${tool.name}.desc`, { ns: 'tool' }) : tool.description}
                                 </p>
                               )}
                             </div>
@@ -410,7 +410,7 @@ const ToolSelector = ({
                           <TooltipContent>
                             {tool.description && (
                               <p className='text-xs mt-1 max-w-[240px]'>
-                                {tool.description}
+                                {tool.is_preset === 1 ? t(`categories.${tool.name}.desc`, { ns: 'tool' }) : tool.description}
                               </p>
                             )}
                           </TooltipContent>
@@ -435,7 +435,7 @@ const ToolSelector = ({
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <p className="truncate max-w-[180px]">
-                                    {child.name.split(new RegExp(`(${toolSearchTerm})`, 'gi')).map((part, i) => (
+                                    {(tool.is_preset === 1 ? t(`tools.${child.tool_key}.name`, { ns: 'tool' }) : child.name).split(new RegExp(`(${toolSearchTerm})`, 'gi')).map((part, i) => (
                                       part.toLowerCase() === toolSearchTerm.toLowerCase() ? (
                                         <span key={i} className="bg-yellow-200">{part}</span>
                                       ) : (
@@ -445,7 +445,7 @@ const ToolSelector = ({
                                   </p>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p className='max-w-[240px]'>{child.name}</p>
+                                  <p className='max-w-[240px]'>{tool.is_preset === 1 ? t(`tools.${child.tool_key}.name`, { ns: 'tool' }) : child.name}</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
@@ -453,10 +453,10 @@ const ToolSelector = ({
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <p className="text-xs text-gray-500 truncate max-w-[260px] mt-1">{child.desc}</p>
+                                    <p className="text-xs text-gray-500 truncate max-w-[260px] mt-1">{tool.is_preset === 1 ? t(`tools.${child.tool_key}.desc`, { ns: 'tool' }) : child.desc}</p>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p className='max-w-[240px]'>{child.desc}</p>
+                                    <p className='max-w-[240px]'>{tool.is_preset === 1 ? t(`tools.${child.tool_key}.desc`, { ns: 'tool' }) : child.desc}</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>

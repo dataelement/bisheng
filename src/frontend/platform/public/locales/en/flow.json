@@ -522,6 +522,13 @@
     "end": {
       "name": "End",
       "description": "Workflow ends here."
+    },
+    "tool": {
+      "工具参数": "Tool Parameters",
+      "输出": "Output",
+      "output": {
+        "label": "Output Variable"
+      }
     }
   }
 }
