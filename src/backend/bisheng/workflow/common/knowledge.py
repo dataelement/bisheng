@@ -23,7 +23,7 @@ class ConditionOne(BaseModel):
     right_value_type: str = Field(..., description='Right value type')
     right_value: str = Field(..., description='Right value')
 
-    def convert_right_value(self, field_type: str, right_value: Any) -> Any:
+    def convert_right_value(self, field_type: str, right_value: Any, is_preset: bool) -> Any:
         if field_type in [MetadataFieldType.STRING.value, "text"]:
             right_value = str(right_value)
             if not right_value and self.comparison_operation not in ['is_empty', 'is_not_empty']:
@@ -31,11 +31,16 @@ class ConditionOne(BaseModel):
         elif field_type in [MetadataFieldType.NUMBER.value, 'int64', 'int8', 'int16', 'int32', 'int64']:
             right_value = int(right_value)
         elif field_type == MetadataFieldType.TIME.value:
-            try:
-                right_value = int(right_value)
-                right_value = datetime.fromtimestamp(right_value).strftime('%Y-%m-%d %H:%M:%S')
-            except ValueError:
-                right_value = datetime.fromisoformat(right_value).strftime('%Y-%m-%d %H:%M:%S')
+            if isinstance(right_value, int):
+                # timestamp
+                right_value = datetime.fromtimestamp(right_value)
+            else:
+                # iso format
+                right_value = datetime.fromisoformat(right_value)
+            if is_preset:
+                right_value = right_value.isoformat()
+            else:
+                right_value = int(right_value.timestamp())
         else:
             raise ValueError(f"Unsupported metadata field type: {field_type}")
         return right_value
@@ -63,7 +68,7 @@ class ConditionOne(BaseModel):
         if self.right_value_type == 'ref' and self.right_value:
             right_value = parent_node.get_other_node_variable(self.right_value)
         field_type = field_info.get('field_type')
-        right_value = self.convert_right_value(field_type, right_value)
+        right_value = self.convert_right_value(field_type, right_value, is_preset)
         if is_preset:
             field_key = self.convert_preset_filed()
         else:
