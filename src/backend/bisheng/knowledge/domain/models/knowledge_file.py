@@ -375,6 +375,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
                 statement += f" {logical} {key} {key_comparison} :{params_key}"
             else:
                 statement += f" {logical} {key} {key_comparison}"
+            params_index += 1
 
         with get_sync_db_session() as session:
             file_ids = []
