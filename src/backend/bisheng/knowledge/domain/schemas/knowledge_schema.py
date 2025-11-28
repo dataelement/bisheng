@@ -57,6 +57,14 @@ class UpdateKnowledgeMetadataFieldsReq(BaseModel):
                     f"new_field_name must start with a lowercase letter and contain only lowercase letters, numbers, and underscores, current value: {v}")
             return v
 
+        @field_validator('old_field_name')
+        @classmethod
+        def validate_old_field_name(cls, v: str) -> str:
+            # 不能为空
+            if not v:
+                raise ValueError("old_field_name cannot be empty")
+            return v
+
     knowledge_id: int = Field(..., description='知识库ID')
     metadata_fields: List[UpdateMetadataFieldName] = Field(..., description='要更新的元数据字段列表')
 
