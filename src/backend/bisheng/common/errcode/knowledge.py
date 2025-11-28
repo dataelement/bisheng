@@ -84,3 +84,9 @@ class KnowledgeMetadataFieldNotExistError(BaseErrorCode):
 class KnowledgeMetadataFieldImmutableError(BaseErrorCode):
     Code: int = 10983
     Msg: str = '内置元数据字段 {field_name} 不能修改'
+
+
+# 元数据值类型转换错误
+class KnowledgeMetadataValueTypeConvertError(BaseErrorCode):
+    Code: int = 10984
+    Msg: str = '元数据字段 {field_name} 值类型转换错误: {error_msg}'
