@@ -297,37 +297,36 @@ const MetadataFilter = ({
     return isValid;
   }, []);
 
-  useLayoutEffect(() => {
-    if (!isEnabled) {
-      onChange({ enabled: false });
-      onValidate(() => false);
-      return;
-    }
+useLayoutEffect(() => {
+  if (!isEnabled) {
+    onChange({ enabled: false });
+    onValidate(() => false);
+    return;
+  }
 
-    checkAllFieldsValidity();
-    validateConditionsUI();
-    onValidate(validateFunc);
+  checkAllFieldsValidity();
+  validateConditionsUI();
+  onValidate(validateFunc);
 
-    const filterData = {
-      enabled: true,
-      operator: relation,
-      conditions: stateRef.current.conditions.map(cond => {
-        const [knowledgeId, ...fieldParts] = cond.metadataField.split("-");
-        const metadata_field = fieldParts.join("-");
-        return {
-          id: cond.id,
-          knowledge_id: knowledgeId ? parseInt(knowledgeId, 10) : 0,
-          metadata_field: metadata_field || "",
-          comparison_operation: cond.operator,
-          right_value_type: cond.valueType === "reference" ? "ref" : "input",
-          right_value: cond.value,
-          right_label:cond.valueLabel
-        };
-      }),
-    };
-    onChange(filterData);
-  }, [isEnabled, relation, checkAllFieldsValidity, validateConditionsUI, validateFunc, onChange, onValidate]);
-
+  const filterData = {
+    enabled: true,
+    operator: relation,
+    conditions: conditions.map(cond => {
+      const [knowledgeId, ...fieldParts] = cond.metadataField.split("-");
+      const metadata_field = fieldParts.join("-");
+      return {
+        id: cond.id,
+        knowledge_id: knowledgeId ? parseInt(knowledgeId, 10) : 0,
+        metadata_field: metadata_field || "",
+        comparison_operation: cond.operator,
+        right_value_type: cond.valueType === "reference" ? "ref" : "input",
+        right_value: cond.value,
+        right_label: cond.valueLabel
+      };
+    }),
+  };
+  onChange(filterData);
+}, [isEnabled, relation, conditions, checkAllFieldsValidity, validateConditionsUI, validateFunc, onChange, onValidate]);
   const validateVars = useCallback(async (): Promise<string> => {
     if (!isEnabled) return "";
 
@@ -416,6 +415,7 @@ const MetadataFilter = ({
     setConditions(prev => prev.map(condition => {
       if (condition.id === id) {
         let updated = { ...condition, [field]: value };
+        
         if (field === "metadataField") {
           const selectedMeta = availableMetadataState.find(m => m.id === value);
           setFieldErrors(prev => {

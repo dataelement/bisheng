@@ -297,7 +297,7 @@ class RagUtils(BaseNode):
         all_milvus_filter = []
         all_es = []
         all_es_filter = []
-        self._multi_es_retriever = None
+        self._multi_milvus_retriever = None
         self._multi_es_retriever = None
         for knowledge_id, knowledge_info in self._knowledge_vector_list.items():
             knowledge = knowledge_info.get('knowledge')
