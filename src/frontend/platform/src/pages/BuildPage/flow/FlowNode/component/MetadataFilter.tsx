@@ -108,7 +108,7 @@ const MetadataFilter = ({
   const operatorConfig = {
     String: ["equals", "not_equals", "contains", "not_contains", "is_empty", "is_not_empty", "starts_with", "ends_with"],
     Number: ["equals", "not_equals", "greater_than", "less_than", "greater_than_or_equal", "less_than_or_equal"],
-    Time: ["equals", "not_equals", "greater_than", "less_than", "greater_than_or_equal", "less_than_or_equal"],
+    Time: ["equals", "not_equals","is_empty","is_not_empty", "greater_than", "less_than", "greater_than_or_equal", "less_than_or_equal"],
   };
   const operatorLabels = {
     equals: "等于",
@@ -271,6 +271,11 @@ const MetadataFilter = ({
     conditions.forEach((cond, index) => {
       if (!cond.metadataField) errors.push(`条件 ${index + 1}: 请选择元数据字段`);
       if (!cond.operator) errors.push(`条件 ${index + 1}: 请选择操作符`);
+        // 实时获取字段类型
+        const meta = stateRef.current.availableMetadataState.find(m => m.id === cond.metadataField);
+        if (meta?.type === "Number" && !cond.value && cond.valueType === "reference") {
+          errors.push(`条件 ${index + 1}: 请输入数值`);
+        }
     });
     return errors.length > 0 ? errors.join('; ') : false;
   }, []);
