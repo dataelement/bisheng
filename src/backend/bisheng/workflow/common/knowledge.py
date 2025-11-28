@@ -12,6 +12,7 @@ from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, MetadataFieldType
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.llm.domain import LLMService
+from bisheng.workflow.common.condition import ComparisonType
 from bisheng.workflow.nodes.base import BaseNode
 
 
@@ -25,13 +26,15 @@ class ConditionOne(BaseModel):
 
     def convert_right_value(self, field_type: str, right_value: Any, is_preset: bool) -> Any:
         # no need to convert right value for is_empty and is_not_empty
-        if self.comparison_operation in ['is_empty', 'is_not_empty']:
+        if self.comparison_operation in ['is_empty', 'is_not_empty'] or is_preset:
             return right_value
-        if field_type in [MetadataFieldType.STRING.value, "text"]:
+
+        # only for user metadata field, need to convert right value type
+        if field_type in [MetadataFieldType.STRING.value]:
             right_value = str(right_value)
             if not right_value:
                 raise ValueError("Right value cannot be empty for the selected comparison operation")
-        elif field_type in [MetadataFieldType.NUMBER.value, 'int64', 'int8', 'int16', 'int32', 'int64']:
+        elif field_type in [MetadataFieldType.NUMBER.value]:
             right_value = int(right_value)
         elif field_type == MetadataFieldType.TIME.value:
             if isinstance(right_value, int):
@@ -40,10 +43,7 @@ class ConditionOne(BaseModel):
             else:
                 # iso format
                 right_value = datetime.fromisoformat(right_value)
-            if is_preset:
-                right_value = right_value.isoformat()
-            else:
-                right_value = int(right_value.timestamp())
+            right_value = int(right_value.timestamp())
         else:
             raise ValueError(f"Unsupported metadata field type: {field_type}")
         return right_value
@@ -78,44 +78,52 @@ class ConditionOne(BaseModel):
             field_key = f"JSON_UNQUOTE(JSON_EXTRACT(`user_metadata`, '$.{self.metadata_field}.field_value'))"
 
         key_info = {}
-        if self.comparison_operation == "equals":
+        if self.comparison_operation == ComparisonType.EQUAL:
             key_info['comparison'] = '='
             key_info['value'] = right_value
-        elif self.comparison_operation == "not_equals":
+        elif self.comparison_operation == ComparisonType.NOT_EQUAL:
             key_info['comparison'] = '!='
             key_info['value'] = right_value
-        elif self.comparison_operation == "contains":
+        elif self.comparison_operation == ComparisonType.CONTAINS:
             key_info['comparison'] = 'like'
             key_info['value'] = f"%{right_value}%"
-        elif self.comparison_operation == "not_contains":
+        elif self.comparison_operation == ComparisonType.NOT_CONTAINS:
             key_info['comparison'] = 'not like'
             key_info['value'] = f"%{right_value}%"
-        elif self.comparison_operation == "starts_with":
+        elif self.comparison_operation == ComparisonType.STARTS_WITH:
             key_info['comparison'] = 'like'
             key_info['value'] = f"{right_value}%"
-        elif self.comparison_operation == "ends_with":
+        elif self.comparison_operation == ComparisonType.ENDS_WITH:
             key_info['comparison'] = 'like'
             key_info['value'] = f"%{right_value}"
-        elif self.comparison_operation == "is_empty":
+        elif self.comparison_operation == ComparisonType.IS_EMPTY:
             key_info['comparison'] = '='
             key_info['value'] = 'null'
-        elif self.comparison_operation == "is_not_empty":
+        elif self.comparison_operation == ComparisonType.IS_NOT_EMPTY:
             key_info['comparison'] = '!='
             key_info['value'] = 'null'
-        elif self.comparison_operation == "greater_than":
+        elif self.comparison_operation == ComparisonType.GREATER_THAN:
             key_info['comparison'] = '>'
             key_info['value'] = right_value
-        elif self.comparison_operation == "greater_than_or_equal":
+        elif self.comparison_operation == ComparisonType.GREATER_THAN_OR_EQUAL:
             key_info['comparison'] = '>='
             key_info['value'] = right_value
-        elif self.comparison_operation == "less_than":
+        elif self.comparison_operation == ComparisonType.LESS_THAN:
             key_info['comparison'] = '<'
             key_info['value'] = right_value
-        elif self.comparison_operation == "less_than_or_equal":
+        elif self.comparison_operation == ComparisonType.LESS_THAN_OR_EQUAL:
             key_info['comparison'] = '<='
             key_info['value'] = right_value
         else:
             raise ValueError(f"Unsupported comparison operation: {self.comparison_operation}")
+        if not is_preset and self.comparison_operation in [ComparisonType.GREATER_THAN,
+                                                           ComparisonType.GREATER_THAN_OR_EQUAL,
+                                                           ComparisonType.LESS_THAN,
+                                                           ComparisonType.LESS_THAN_OR_EQUAL]:
+            key_info['extra_filter'] = [{
+                'comparison': '!=',
+                'value': 'null'
+            }]
         return {field_key: key_info}
 
 
