@@ -8,6 +8,7 @@ from bisheng.api.services.knowledge_imp import decide_vectorstores, process_file
     KnowledgeUtils, delete_vector_files
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
+from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
@@ -16,7 +17,6 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     QAKnoweldgeDao,
     QAKnowledge,
 )
-from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.utils import generate_uuid
 from bisheng.worker import bisheng_celery
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
@@ -277,7 +277,7 @@ def insert_es(li: List, target: ElasticKeywordsSearch):
     logger.info("copy_es_done pk_size={}", len(res_list))
 
 
-@bisheng_celery.task()
+@bisheng_celery.task(acks_late=True)
 def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
     """ 异步解析一个入库成功的文件 """
     with logger.contextualize(trace_id=f'parse_file_{file_id}'):
@@ -333,7 +333,7 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
     return db_file, db_knowledge
 
 
-@bisheng_celery.task()
+@bisheng_celery.task(acks_late=True)
 def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
     """ 重试解析一个入库失败或者重名的文件 """
     with logger.contextualize(trace_id=f'retry_file_{file_id}'):
