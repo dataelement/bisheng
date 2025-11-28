@@ -311,7 +311,7 @@ useLayoutEffect(() => {
   const filterData = {
     enabled: true,
     operator: relation,
-    conditions: conditions.map(cond => {
+    conditions: stateRef.current.conditions.map(cond => {
       const [knowledgeId, ...fieldParts] = cond.metadataField.split("-");
       const metadata_field = fieldParts.join("-");
       return {
@@ -411,8 +411,9 @@ useLayoutEffect(() => {
     });
   };
 
-  const updateCondition = (id: string, field: keyof MetadataCondition, value: string) => {
-    setConditions(prev => prev.map(condition => {
+const updateCondition = (id: string, field: keyof MetadataCondition, value: string) => {
+  setConditions(prev => {
+    const newConditions = prev.map(condition => {
       if (condition.id === id) {
         let updated = { ...condition, [field]: value };
         
@@ -425,18 +426,41 @@ useLayoutEffect(() => {
             return newErrors;
           });
           if (selectedMeta) {
-            updated = { ...updated, operator: "", value: "", valueType: "input" };
+            updated = { 
+              ...updated, 
+              operator: "", 
+              value: "", 
+              valueType: "input",
+              valueLabel: ""
+            };
             if (selectedMeta.type === "Number") updated.value = "0";
           }
         }
-        if (field === "operator") updated.value = "";
-        if (field === "valueType") updated.value = "";
+        if (field === "operator") {
+          updated = { 
+            ...updated, 
+            value: "",
+            valueLabel: ""
+          };
+        }
+        if (field === "valueType") {
+          updated = { 
+            ...updated, 
+            value: "",
+            valueLabel: ""
+          };
+        }
+        
         return updated;
       }
       return condition;
-    }));
-  };
-
+    });
+    
+    // 更新 stateRef
+    stateRef.current.conditions = newConditions;
+    return newConditions;
+  });
+};
   const handleRelationChange = () => {
     setRelation(prev => prev === "and" ? "or" : "and");
   };
