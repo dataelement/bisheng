@@ -16,7 +16,7 @@ from bisheng.database.constants import AdminRole
 from bisheng.database.models.assistant import Assistant, AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowRead
 from bisheng.database.models.group import GroupDao
-from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeRead
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeRead
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupDao

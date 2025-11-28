@@ -195,7 +195,7 @@ export default function FeedbackComponent({ stop, onFeedback }: FeedbackComponen
             </div>
 
             {/* Feedback Input and Restart Button */}
-            <div className="flex gap-3 bg-white rounded-3xl border border-gray-100 relative -bottom-1 p-4">
+            <div className="flex gap-3 bg-white rounded-3xl border border-gray-100 relative -bottom-1 p-4 -left-[1px] w-[calc(100%+2px)]">
                 <div className="flex-1">
                     <Textarea
                         placeholder={localize('com_agent_unsatisfied_feedback')}

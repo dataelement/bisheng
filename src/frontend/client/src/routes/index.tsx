@@ -19,7 +19,7 @@ import LoginLayout from './Layouts/Login';
 import StartupLayout from './Layouts/Startup';
 import Root from './Root';
 import RouteErrorBoundary from './RouteErrorBoundary';
-import ShareRoute from './ShareRoute';
+// import ShareRoute from './ShareRoute';
 import Page404 from '~/pages/Page404';
 
 const AuthLayout = () => (

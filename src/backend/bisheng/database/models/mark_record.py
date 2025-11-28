@@ -6,8 +6,8 @@ from typing import List, Optional
 from sqlalchemy import Column, DateTime, delete, text
 from sqlmodel import Field, select
 
+from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session
-from bisheng.database.models.base import SQLModelSerializable
 
 
 class MarkRecordStatus(Enum):
@@ -24,10 +24,10 @@ class MarkRecordBase(SQLModelSerializable):
     task_id: int = Field(index=True)
     session_id: str = Field(index=True)
     status: int = Field(index=False, default=1)
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class MarkRecord(MarkRecordBase, table=True):

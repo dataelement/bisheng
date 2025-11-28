@@ -78,7 +78,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
                       // 若未选择模型，标记错误并返回提示信息
                       if (!selectedRerankModel) {
                           setRerankError(true);
-                          return '请选择重排模型'; // 可替换为i18n翻译文本
+                          return '重排模型不可为空';
                        }
                       // 校验通过
                       setRerankError(false);
@@ -233,7 +233,6 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
                     <div className="flex items-center gap-2">
                       
                         <span className="text-sm font-medium text-gray-500">
-                            <span className='text-red-500'>*</span>
                             检索结果重排
                         </span>
                         <TooltipProvider>
@@ -259,12 +258,12 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
             {rerankEnabled && searchSwitch && (
             <div className="pl-4">
                 <ModelSelect
-                close
-                label="重排模型"
-                 placeholder="请选择重排模型"
-                value={selectedRerankModel}
-                options={rerank}
-                onChange={(val) => setSelectedRerankModel(val)}
+                    close
+                    label=""
+                    placeholder="请选择重排模型"
+                    value={selectedRerankModel}
+                    options={rerank}
+                    onChange={(val) => setSelectedRerankModel(val)}
                 />
             </div>
             )}

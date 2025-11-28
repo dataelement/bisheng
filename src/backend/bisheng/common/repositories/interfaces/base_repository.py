@@ -39,6 +39,16 @@ class BaseRepository(ABC, Generic[T, ID]):
         pass
 
     @abstractmethod
+    async def find_by_ids(self, entity_ids: List[ID]) -> List[T]:
+        """根据多个ID查找实体"""
+        pass
+
+    @abstractmethod
+    def find_by_ids_sync(self, entity_ids: List[ID]) -> List[T]:
+        """同步根据多个ID查找实体"""
+        pass
+
+    @abstractmethod
     async def find_all(self, **filters) -> List[T]:
         """查找所有实体"""
         pass

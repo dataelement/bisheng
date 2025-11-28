@@ -2,9 +2,11 @@ import { Button } from "@/components/bs-ui/button";
 import { Input } from "@/components/bs-ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import Tip from "@/components/bs-ui/tooltip/tip";
+import { updateVariableNameByCode } from "@/util/flowUtils";
 import { ChevronDown, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from 'react-i18next';
+import { useUpdateVariableState } from "../flowNodeStore";
 import SelectVar from "./SelectVar";
 
 const Item = ({ nodeId, validate, sameKey, item, index, onUpdateItem, onDeleteItem }) => {
@@ -69,9 +71,9 @@ const Item = ({ nodeId, validate, sameKey, item, index, onUpdateItem, onDeleteIt
 };
 
 
-export default function CodeInputItem({ nodeId, data, onValidate, onChange }) {
+export default function CodeInputItem({ nodeId, data: paramItem, onValidate, onChange }) {
     const { t } = useTranslation('flow');
-    const [items, setItems] = useState(data.value);
+    const [items, setItems] = useState(paramItem.value);
 
     const handleAddItem = () => {
         setError(false)
@@ -95,7 +97,7 @@ export default function CodeInputItem({ nodeId, data, onValidate, onChange }) {
     const [error, setError] = useState(false)
     const [sameKey, setSameKey] = useState('')
     useEffect(() => {
-        data.required && onValidate(() => {
+        paramItem.required && onValidate(() => {
             setError(false)
             setTimeout(() => {
                 setError(true)
@@ -126,7 +128,26 @@ export default function CodeInputItem({ nodeId, data, onValidate, onChange }) {
         })
 
         return () => onValidate(() => { })
-    }, [data.value])
+    }, [paramItem.value])
+
+    // Update Preset Questions 
+    // const [_, forceUpdate] = useState(false)
+    const [updateVariable] = useUpdateVariableState()
+    useEffect(() => {
+        if (!updateVariable) return
+        const { action, question } = updateVariable
+        if (action === 'd') {
+            // delete paramItem.varZh[key]
+            // setValue('')
+            // onChange('')
+        } else if (action === 'u') {
+            const newItems = updateVariableNameByCode(paramItem, updateVariable)
+            if (newItems) {
+                setItems(newItems)
+                onChange(newItems)
+            }
+        }
+    }, [updateVariable])
 
     return (
         <div className="nowheel max-h-80 overflow-y-auto">

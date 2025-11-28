@@ -6,8 +6,8 @@ from typing import List, Optional
 from sqlalchemy import Column, DateTime, and_, delete, func, or_, text
 from sqlmodel import Field, select, update
 
+from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session
-from bisheng.database.models.base import SQLModelSerializable
 
 
 class MarkTaskStatus(Enum):
@@ -23,10 +23,10 @@ class MarkTaskBase(SQLModelSerializable):
     process_users: str = Field(index=False)  # 23,2323
     mark_user: Optional[str] = Field(default=None, index=True, nullable=True)
     status: Optional[int] = Field(index=False, default=1)
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class MarkTask(MarkTaskBase, table=True):

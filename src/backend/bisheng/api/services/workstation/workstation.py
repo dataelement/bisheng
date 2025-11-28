@@ -11,20 +11,20 @@ from pydantic import field_validator
 
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.knowledge import KnowledgeService
-from bisheng.api.services.knowledge import mixed_retrieval_recall
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig
 from bisheng.common.errcode.server import EmbeddingModelStatusError
-from bisheng.database.constants import MessageCategory
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
+from bisheng.core.ai.rerank.rrf_rerank import RRFRerank
+from bisheng.database.constants import MessageCategory
 from bisheng.database.models.gpts_tools import GptsToolsDao
-from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.database.models.user import UserDao
+from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.llm.domain.services import LLMService
-from bisheng.utils.embedding import create_knowledge_keyword_store, decide_embeddings
-from bisheng.utils.embedding import create_knowledge_vector_store
+from bisheng.utils.embedding import decide_embeddings
 
 
 class WorkStationService(BaseService):
@@ -104,7 +104,7 @@ class WorkStationService(BaseService):
         return cls.parse_config(config)
 
     @classmethod
-    async def uploadPersonalKnowledge(
+    def uploadPersonalKnowledge(
             cls,
             request: Request,
             login_user: UserPayload,
@@ -157,7 +157,7 @@ class WorkStationService(BaseService):
         return res, total
 
     @classmethod
-    def queryChunksFromDB(cls, question: str, login_user: UserPayload):
+    async def queryChunksFromDB(cls, question: str, login_user: UserPayload):
         """
         从数据库中查询相关知识块
         
@@ -169,39 +169,40 @@ class WorkStationService(BaseService):
             List[str]: 格式化后的知识库内容列表，格式为：
                 "[file name]:文件名\n[file content begin]\n内容\n[file content end]\n"
         """
-        knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None,
-                                                    KnowledgeTypeEnum.PRIVATE)
+        knowledge = await KnowledgeDao.aget_user_knowledge(login_user.user_id, knowledge_type=KnowledgeTypeEnum.PRIVATE)
 
         if not knowledge:
             return []
-
+        knowledge = knowledge[0]
         try:
-            _ = decide_embeddings(knowledge[0].model)
+            embedding = await LLMService.get_bisheng_embedding(model_id=knowledge.model)
         except Exception as e:
             raise EmbeddingModelStatusError(exception=e)
 
-        vector_store = create_knowledge_vector_store([str(knowledge[0].id)], login_user.user_name)
-        keyword_store = create_knowledge_keyword_store([str(knowledge[0].id)], login_user.user_name)
+        vector_store = KnowledgeRag.init_milvus_vectorstore(knowledge.collection_name, embeddings=embedding)
+        keyword_store = KnowledgeRag.init_es_vectorstore(knowledge.index_name)
 
         # 获取配置中的最大token数，如果没有配置则使用默认值
-        config = cls.get_config()
-        max_tokens = config.maxTokens if config else 1500
+        config = await cls.aget_config()
+        max_tokens = config.maxTokens if config else 15000
 
         # 获取知识库溯源模型 ID，如果没有配置则使用知识库的嵌入模型 ID
-        knowledge_llm = LLMService.get_knowledge_llm()
-        model_id = knowledge_llm.source_model_id
 
-        docs = mixed_retrieval_recall(question, vector_store, keyword_store, max_tokens, model_id)
-        logger.info(f"docs message: {docs}")
+        milvus_retriever = vector_store.as_retriever(search_kwargs={"k": 100})
+        es_retriever = keyword_store.as_retriever(search_kwargs={"k": 100})
+
+        milvus_docs = await milvus_retriever.ainvoke(question)
+        es_docs = await es_retriever.ainvoke(question)
+
+        rrf_rerank = RRFRerank(retrievers=[milvus_retriever, es_retriever])
+
+        finally_docs = await rrf_rerank.acompress_documents(documents=[milvus_docs, es_docs], query=question)
         # 将检索结果格式化为指定的模板格式
         formatted_results = []
-        if docs:
-            for doc in docs:
+        if finally_docs:
+            for doc in finally_docs:
                 # 获取文件名，优先从 metadata 中获取
-                file_name = doc.metadata.get('file_name', 'unknown_file')
-                if not file_name or file_name == 'unknown_file':
-                    # 尝试从其他字段获取文件名
-                    file_name = doc.metadata.get('source', doc.metadata.get('filename', 'unknown_file'))
+                file_name = doc.metadata.get('source') or doc.metadata.get('document_name')
 
                 # 获取文档内容
                 content = doc.page_content.strip()

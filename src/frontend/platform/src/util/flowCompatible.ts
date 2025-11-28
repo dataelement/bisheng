@@ -11,6 +11,7 @@ export const flowVersionCompatible = (flow) => {
             case 'output': comptibleOutput(node.data); break;
             case 'llm': comptibleLLM(node.data); break;
             case 'rag': comptibleRag(node.data); break;
+            case 'knowledge_retriever': comptibleKnowledgeRetriever(node.data); break;
         }
     })
     return flow
@@ -31,6 +32,15 @@ const comptibleRag = (node) => {
         );
 
         const knowledgeIndex = knowledgeGroup.params.findIndex(p => p.key === 'knowledge');
+         // 添加元数据过滤参数
+        const metadataFilterParam = {
+            key: "metadata_filter",
+            label: "元数据过滤",
+            type: "metadata_filter",
+            value: {},
+        };
+        knowledgeGroup.params.splice(knowledgeIndex + 1, 0, metadataFilterParam);
+
         // 构造高级检索配置参数
         const advancedParam = {
             key: "advanced_retrieval_switch",
@@ -53,13 +63,57 @@ const comptibleRag = (node) => {
         if (oldMaxChunkSizeParam) {
             advancedParam.value.max_chunk_size = oldMaxChunkSizeParam.value;
         }
-        knowledgeGroup.params.splice(knowledgeIndex + 1, 0, advancedParam);
+        knowledgeGroup.params.splice(knowledgeIndex + 2, 0, advancedParam);
 
         node.v = 2;
     }
+    if(node.v == 2){
+         const knowledgeGroup = node.group_params[0];
+        const metadataFilterExists = knowledgeGroup.params.some(p => p.key === 'metadata_filter');
+        if (!metadataFilterExists) {
+            const knowledgeIndex = knowledgeGroup.params.findIndex(p => p.key === 'knowledge');
+            const metadataFilterParam = {
+                key: "metadata_filter",
+                label: "元数据过滤",
+                type: "metadata_filter",
+                value: {},
+            };
+            knowledgeGroup.params.splice(knowledgeIndex + 1, 0, metadataFilterParam);
+        }
+        node.v = 3;
+    }
 }
 
+const comptibleKnowledgeRetriever = (node) => {
+    // 初始化版本（无v字段视为v1）
+    if (!node.v) {
+        node.v = 1;
+    }
 
+    // v1 → v2：确保元数据过滤参数存在
+    if (node.v == 1) {
+        console.log(node,89);
+        
+        const knowledgeGroup = node.group_params[0];
+        // 检查metadata_filter参数是否缺失
+        const metadataFilterExists = knowledgeGroup.params.some(p => p.key === 'metadata_filter');
+        
+        if (!metadataFilterExists) {
+            // 找到knowledge参数的位置，在其后插入元数据过滤参数
+            const knowledgeIndex = knowledgeGroup.params.findIndex(p => p.key === 'knowledge');
+            const metadataFilterParam = {
+                key: "metadata_filter",
+                label: "元数据过滤",
+                type: "metadata_filter",
+                value: {},
+            };
+            knowledgeGroup.params.splice(knowledgeIndex + 1, 0, metadataFilterParam);
+        }
+
+        // 升级版本号为v2
+        node.v = 2;
+    }
+};
 
 
 const comptibleStart = (node) => {

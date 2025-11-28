@@ -138,7 +138,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
       </div>
       
       <div className="relative flex-1 flex flex-col gap-4">
-        <h3 className="text-sm text-left font-medium text-gray-700">{t('splitRules')}:</h3>
+        <h3 className="text-sm text-left font-medium text-gray-700">{t('universalRules')}:</h3>
         <div className="flex flex-wrap gap-2">
           <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\n', 'after', '单换行后切分，用于分隔普通换行')}>\n✂️</Button>
           <Button className="px-2 h-6" variant="secondary" onClick={() => handleRegexClick('\\n\\n', 'after', '双换行后切分，用于分隔段落')}>\n\n✂️</Button>

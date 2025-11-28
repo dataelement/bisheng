@@ -5,9 +5,9 @@ from pymilvus import Collection
 
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import QA_save_knowledge, decide_vectorstores
-from bisheng.database.models.knowledge import KnowledgeDao, KnowledgeState
-from bisheng.database.models.knowledge_file import (
-    QAKnoweldgeDao, QAKnowledge, KnowledgeFileStatus, QAKnowledgeUpsert, QAStatus,
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState
+from bisheng.knowledge.domain.models.knowledge_file import (
+    QAKnoweldgeDao, QAKnowledge, QAKnowledgeUpsert, QAStatus,
 )
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.llm.domain import LLMService

@@ -4,13 +4,14 @@ import { Input } from "@/components/bs-ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import Tip from "@/components/bs-ui/tooltip/tip";
 import { generateUUID } from "@/components/bs-ui/utils";
+import { isVarInFlow, updateVariableNameByCondition } from "@/util/flowUtils";
 import { ChevronDown, RefreshCcw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from 'react-i18next';
 import { CustomHandle } from "..";
-import SelectVar from "./SelectVar";
 import useFlowStore from "../../flowStore";
-import { isVarInFlow } from "@/util/flowUtils";
+import { useUpdateVariableState } from "../flowNodeStore";
+import SelectVar from "./SelectVar";
 
 interface Item {
     id: string;  // UUID 类型的字符串
@@ -154,7 +155,7 @@ const Item = ({ nodeId, item, index, del, required, varErrors, onUpdateItem, onD
     );
 };
 
-export default function ConditionItem({ nodeId, node, data, onChange, onValidate, onVarEvent }) {
+export default function ConditionItem({ nodeId, node, data: paramItem, onChange, onValidate, onVarEvent }) {
     const { t } = useTranslation('flow'); // 获取翻译函数
     const [value, setValue] = useState([]);
     const [required, setRequired] = useState(false);
@@ -169,8 +170,8 @@ export default function ConditionItem({ nodeId, node, data, onChange, onValidate
     };
 
     useEffect(() => {
-        if (data.value && data.value.length) {
-            setValue(data.value);
+        if (paramItem.value && paramItem.value.length) {
+            setValue(paramItem.value);
         } else {
             handleAddCondition();
         }
@@ -218,8 +219,8 @@ export default function ConditionItem({ nodeId, node, data, onChange, onValidate
             setTimeout(() => {
                 setRequired(true);
             }, 100);
-            if (data.value.length === 0) return t('conditionBranchCannotBeEmpty'); // 条件分支不可为空
-            const res = data.value.some((item) => {
+            if (paramItem.value.length === 0) return t('conditionBranchCannotBeEmpty'); // 条件分支不可为空
+            const res = paramItem.value.some((item) => {
                 if (!item.conditions.length) return true;
                 return item.conditions.some((cds) => {
                     if (!cds.left_label) return true;
@@ -236,7 +237,7 @@ export default function ConditionItem({ nodeId, node, data, onChange, onValidate
         });
 
         return () => onValidate(() => { });
-    }, [data.value]);
+    }, [paramItem.value]);
 
     // 校验变量是否可用
     const { flow } = useFlowStore();
@@ -264,7 +265,26 @@ export default function ConditionItem({ nodeId, node, data, onChange, onValidate
     useEffect(() => {
         onVarEvent && onVarEvent(validateVarAvailble);
         return () => onVarEvent && onVarEvent(() => { });
-    }, [data, value]);
+    }, [paramItem, value]);
+
+    // Update Preset Questions 
+    // const [_, forceUpdate] = useState(false)
+    const [updateVariable] = useUpdateVariableState()
+    useEffect(() => {
+        if (!updateVariable) return
+        const { action, question } = updateVariable
+        if (action === 'd') {
+            // delete paramItem.varZh[key]
+            // setValue('')
+            // onChange('')
+        } else if (action === 'u') {
+            const newItems = updateVariableNameByCondition(paramItem, updateVariable)
+            if (newItems) {
+                setValue(newItems)
+                onChange(newItems)
+            }
+        }
+    }, [updateVariable])
 
     return (
         <div>

@@ -192,6 +192,59 @@ export async function readFileByLibDatabase({ id, page, pageSize = 20, name = ''
   return response
   // return { data, writeable, pages: Math.ceil(total / pageSize) }
 }
+/**
+ * 添加元数据
+ */
+export async function addMetadata(knowledge_id,metadata_fields) {
+  await axios.post(`/api/v1/knowledge/add_metadata_fields`, {
+    knowledge_id: knowledge_id,
+    metadata_fields: metadata_fields,
+  });
+}
+/**
+ * 修改元数据名称
+ */
+export async function updateMetadataFields(
+    knowledge_id: string | number,
+    updates: Array<{ old_field_name: string; new_field_name: string }>
+) {
+    await axios.put(`/api/v1/knowledge/update_metadata_fields`, {
+        knowledge_id: knowledge_id,
+        metadata_fields: updates,
+    });
+}
+/**
+ * 用户自定义元数据
+ */
+export async function saveUserMetadataApi (
+    knowledge_id: string | number,
+    updates: Array<{ field_name: string; field_value: any }>,
+     updated_at?: string | number
+) {
+    await axios.put(`/api/v1/knowledge/file/user_metadata`, {
+        knowledge_file_id: knowledge_id,
+        user_metadata_list: updates,
+        updated_at:updated_at
+    });
+}
+/**
+ * 删除元数据
+ */
+export async function deleteMetadataFields(
+    knowledge_id: string | number,
+    fieldNames: string[]
+) {
+    await axios.delete(`/api/v1/knowledge/delete_metadata_fields`, {
+        data: {
+            knowledge_id: knowledge_id,
+            field_names: fieldNames,
+        },
+    });
+}
+// 获取元数据
+export async function getMetaFile(file_id): Promise<any> {
+ return await axios.get(`/api/v1/knowledge/file/info/${file_id}`);
+}
 
 /**
  * 重试解析文件
@@ -983,12 +1036,13 @@ export async function updateKnowledge(data): Promise<any[]> {
 
 
 /**
- * 上传文件
+ * Knowledge Base Upload
  */
-export async function uploadFileApi({ fileKey, file, onProgress, onFinish, onFail, onAbort }:
+export async function uploadFileApi({ fileKey, knowledgeId, file, onProgress, onFinish, onFail, onAbort }:
   {
     fileKey: string,
     file: File,
+    knowledgeId: string,
     onProgress?: (progressEvent: number) => void,
     onFail?: (error: any) => void,
     onFinish?: (response: any) => void,
@@ -1015,7 +1069,7 @@ export async function uploadFileApi({ fileKey, file, onProgress, onFinish, onFai
       },
       signal: abortCtlr.signal,
     }
-    const response = await axios.post('/api/v1/knowledge/upload', formData, config);
+    const response = await axios.post(`/api/v1/knowledge/upload/${knowledgeId}`, formData, config);
     // 处理成功
     isFinished = true;
     onFinish(response);

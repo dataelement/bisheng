@@ -1,91 +1,102 @@
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import StepProgress from "@/components/bs-ui/step";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { retryKnowledgeFileApi, subUploadLibFile } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ChevronLeft } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import DialogWithRepeatFiles from "./components/DuplicateFileDialog";
 import FileUploadStep1 from "./components/FileUploadStep1";
 import FileUploadStep2, { Step2PersistState } from "./components/FileUploadStep2";
 import FileUploadStep4 from "./components/FileUploadStep4";
 import PreviewResult from "./components/PreviewResult";
-import { LoadingIcon } from "@/components/bs-icons/loading";
 
-// 正常模式固定步骤标签（4步）
-const NormalStepLabels = [
-  '上传文件',
-  '分段策略',
-  '原文对比',
-  '数据处理'
+// Normal mode fixed step labels (4 steps)
+const getNormalStepLabels = (t) => [
+  t('uploadFile'),
+  t('segmentStrategy'),
+  t('textComparison'),
+  t('dataProcessing')
 ];
 
 export default function FilesUpload() {
   const { t } = useTranslation('knowledge');
   const navigate = useNavigate();
   const location = useLocation();
-  const { id: knowledgeId } = useParams(); // 从路由获取知识库ID
+  const { id: knowledgeId } = useParams(); // Get knowledge base ID from route
   const { message } = useToast();
 
-  // 正常模式专属状态（无调整模式相关判断）
-  const [currentStep, setCurrentStep] = useState(1); // 初始步骤：1（上传文件）
-  const [resultFiles, setResultFiles] = useState([]); // 上传的文件列表
-  const [segmentRules, setSegmentRules] = useState(null); // 分段策略配置
+  // Normal mode exclusive states (no adjustment mode related logic)
+  const [currentStep, setCurrentStep] = useState(1); // Initial step: 1 (upload file)
+  const [resultFiles, setResultFiles] = useState([]); // Uploaded file list
+  const [segmentRules, setSegmentRules] = useState(null); // Segmentation strategy config
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isNextDisabled, setIsNextDisabled] = useState(false);
-  const [repeatFiles, setRepeatFiles] = useState([]); // 重复文件提醒
+  const [repeatFiles, setRepeatFiles] = useState([]); // Duplicate file reminder
   const [retryLoad, setRetryLoad] = useState(false);
 
-  // 关键新增：托管 Step2 的持久化状态
+  // Key addition: Manage Step2's persistent state
   const [step2PersistState, setStep2PersistState] = useState<Step2PersistState | undefined>();
 
-  // Ref管理
-  const fileUploadStep2Ref = useRef(null); // Step2（分段策略）组件引用
-  const _tempConfigRef = useRef({}); // 临时存储API配置
-  const submittingRef = useRef(false); // 防止重复提交
-  const repeatCallBackRef = useRef(() => setCurrentStep(4)); // 重复文件处理后跳转步骤（4：数据处理）
-
-  // 关键新增：接收 Step2 的状态更新，保存到父组件
+  // Ref management
+  const fileUploadStep2Ref = useRef(null); // Step2 (segmentation strategy) component reference
+  const _tempConfigRef = useRef({}); // Temporary storage of API config
+  const submittingRef = useRef(false); // Prevent duplicate submission
+  const repeatCallBackRef = useRef(() => setCurrentStep(4)); // Jump to step after duplicate file handling (4: data processing)
+  const isNextBtnClickRef = useRef(false); // Determine whether the next button is clicked
+  // Key addition: Receive Step2's state update, save to parent component
   const handleStep2StateChange = (state: Step2PersistState) => {
     setStep2PersistState(state);
   };
 
-  // 步骤1：文件上传完成，跳转步骤2
-  const handleStep1Next = (files) => {
+  // Step 1: File upload completed, jump to step 2
+  const handleStep1Next = async (files) => {
+    isNextBtnClickRef.current = true;
+
     setResultFiles(files);
-    setCurrentStep(2);
+
+    const _repeatFiles = files.filter(e => e.repeat);
+    if (_repeatFiles.length) {
+      setRepeatFiles(_repeatFiles.map(file => ({
+        ...file,
+        file_name: file.fileName,
+        remark: `${file.fileName} 对应已存在文件 ${file.fileName}`
+      })));
+    } else {
+      setCurrentStep(2);
+    }
   };
 
-  // 步骤2：分段策略完成，接收配置并跳转步骤3
+  // Step 2: Segmentation strategy completed, receive config and jump to step 3
   const handleStep2Next = (step, config) => {
     if (config) {
       setSegmentRules(config);
     }
-    setCurrentStep(3); // 固定跳步骤3（原文对比）
+    setCurrentStep(3); // Fixed jump to step 3 (original text comparison)
   };
 
-  // 步骤3：原文对比回调，控制下一步按钮禁用状态
+  // Step 3: Original text comparison callback, control next button disabled state
   const handlePreviewResult = (isSuccess) => {
     if (currentStep === 3) {
-      console.log("更新按钮状态：", { isSuccess, currentStep });
       setIsNextDisabled(!isSuccess);
     }
   };
 
-  // 下一步：按当前步骤跳转
+  // Next: Jump based on current step
   const handleNext = () => {
     switch (currentStep) {
-      case 2: // 步骤2→步骤3（分段→对比）
+      case 2: // Step 2 → Step 3 (segment → compare)
         if (fileUploadStep2Ref.current) {
           fileUploadStep2Ref.current.handleNext();
         }
         break;
-      case 3: // 步骤3→步骤4（对比→处理）
+      case 3: // Step 3 → Step 4 (compare → process)
         setCurrentStep(4);
         if (segmentRules) {
-          handleSave(segmentRules); // 保存配置
+          handleSave(segmentRules); // Save config
         }
         break;
       default:
@@ -93,41 +104,41 @@ export default function FilesUpload() {
     }
   };
 
-  // 上一步：按当前步骤回退
+  // Previous: Rollback based on current step
   const handleBack = () => {
     switch (currentStep) {
       case 1:
-        navigate(-1); // 步骤1回退：返回知识库列表
+        navigate(-1); // Step 1 rollback: return to knowledge base list
         break;
       case 2:
-        setCurrentStep(1); // 步骤2→步骤1
+        setCurrentStep(1); // Step 2 → Step 1
         break;
       case 3:
-        setCurrentStep(2); // 步骤3→步骤2
+        setCurrentStep(2); // Step 3 → Step 2
         break;
       case 4:
-        setCurrentStep(3); // 步骤4→步骤3
+        setCurrentStep(3); // Step 4 → Step 3
         break;
       default:
         break;
     }
   };
 
-  // API：保存分段策略配置（正常模式专属）
+  // API: Save segmentation strategy config (normal mode exclusive)
   const handleSave = (_config) => {
     if (submittingRef.current) return;
     submittingRef.current = true;
     setIsSubmitting(true);
 
     /**
-     * 将 UI 可见的换行转义("\\n")还原为真实换行("\n")
+     * Convert UI-visible newline escape sequences ("\\n") back to real newlines ("\n")
      */
     const normalizeSeparators = (arr) =>
       (arr || []).map((s) =>
         typeof s === 'string' ? s.replace(/\\n/g, '\n') : s
       );
 
-    // 正常模式API参数格式
+    // Normal mode API parameter format
     const apiConfig = {
       knowledge_id: Number(_config.rules.knowledgeId || knowledgeId),
       separator: normalizeSeparators(_config.rules.separator),
@@ -145,15 +156,21 @@ export default function FilesUpload() {
     };
 
     captureAndAlertRequestErrorHoc(subUploadLibFile(apiConfig).then(res => {
-      const _repeatFiles = res.filter(e => e.status === 3);
-      if (_repeatFiles.length) {
-        setRepeatFiles(_repeatFiles);
+      const repeatFilesRes = res.filter(e => e.status === 3);
+      if (repeatFilesRes.length) {
+        const newRepeatFiles = repeatFilesRes.filter(file =>
+          // Same timestamp, no overwrite
+          !resultFiles.some(item => item.fileName === file.file_name && item.time && item.time === file.update_time))
+        setRepeatFiles(newRepeatFiles);
+        if (!newRepeatFiles.length) {
+          handleRetry(repeatFilesRes)
+        }
       } else {
         message({ variant: 'success', description: t('addSuccess') });
         setCurrentStep(4);
       }
 
-      // 更新文件ID
+      // Update file ID
       setResultFiles(files => files.map((file, index) => ({
         ...file,
         fileId: res[index]?.id
@@ -166,22 +183,28 @@ export default function FilesUpload() {
     _tempConfigRef.current = apiConfig;
   };
 
-  // API：步骤1直接用默认配置保存（正常模式专属）
+  // API: Save directly with default config in step 1 (normal mode exclusive)
   const handleSaveByDefaultConfig = async (_config) => {
+    isNextBtnClickRef.current = false;
+
     await captureAndAlertRequestErrorHoc(subUploadLibFile(_config).then(res => {
       const _repeatFiles = res.filter(e => e.status === 3);
       if (_repeatFiles.length) {
         setRepeatFiles(_repeatFiles);
         repeatCallBackRef.current = () => navigate(-1);
       } else {
-        message({ variant: 'success', description: "添加成功" });
+        message({ variant: 'success', description: t('addSuccess') });
         navigate(-1);
       }
     }));
   };
 
-  // API：重试重复文件（覆盖上传）
+  // API: Retry duplicate files (overwrite upload)
   const handleRetry = (objs) => {
+    if (currentStep === 1 && isNextBtnClickRef.current) {
+      setRepeatFiles([]);
+      return setCurrentStep(2);
+    }
     setRetryLoad(true);
     const params = {
       knowledge_id: Number(_tempConfigRef.current.knowledge_id),
@@ -197,11 +220,31 @@ export default function FilesUpload() {
       setRetryLoad(false);
       message({ variant: 'success', description: t('addSuccess') });
       repeatCallBackRef.current();
-    }));
+    }), () => {
+      setRetryLoad(false);
+    });
   };
+
+  const handleUnRetry = () => {
+    if (currentStep === 1) {
+      const files = resultFiles.filter((item) => {
+        return repeatFiles.every((repeatItem) => {
+          return repeatItem.file_path !== item.file_path;
+        });
+      })
+      setResultFiles(files)
+      if (files.length === 0) {
+        return navigate(-1);
+      }
+      setRepeatFiles([]);
+      return setCurrentStep(2);
+    }
+    setRepeatFiles([]);
+    repeatCallBackRef.current();
+  }
   return (
     <div className="relative h-full flex flex-col">
-      {/* 顶部返回栏 */}
+      {/* Top return bar */}
       <div className="pt-4 px-4">
         <div className="flex items-center mb-4">
           <Button
@@ -212,31 +255,31 @@ export default function FilesUpload() {
           >
             <ChevronLeft />
           </Button>
-          <span className="text-foreground text-sm font-black pl-4">返回知识库</span>
+          <span className="text-foreground text-sm font-black pl-4">{t('backToKnowledge')}</span>
         </div>
 
-        {/* 正常模式步骤条（4步） */}
+        {/* Normal mode step progress (4 steps) */}
         <StepProgress
           align="center"
           currentStep={currentStep}
-          labels={NormalStepLabels.map(label => t(label))}
+          labels={getNormalStepLabels(t)}
         />
       </div>
 
-      {/* 步骤内容区域（正常模式专属步骤） */}
+      {/* Step content area (normal mode exclusive steps) */}
       <div className="flex flex-1 overflow-hidden px-4">
         <div className="w-full overflow-y-auto">
           <div className="h-full">
-            {/* 步骤1：文件上传（正常模式独有） */}
+            {/* Step 1: File upload (normal mode exclusive) */}
             {currentStep === 1 && (
               <FileUploadStep1
                 onNext={handleStep1Next}
                 onSave={handleSaveByDefaultConfig}
-                kId={knowledgeId} // 传递知识库ID
+                kId={knowledgeId} // Pass knowledge base ID
                 initialFiles={resultFiles}
               />
             )}
-            {/* 步骤2：分段策略 - 仅新增2个props传递 */}
+            {/* Step 2: Segmentation strategy - only added 2 props */}
             {currentStep === 2 && (
               <div className={currentStep === 2 ? "block" : "hidden"}>
                 <FileUploadStep2
@@ -247,16 +290,16 @@ export default function FilesUpload() {
                   onNext={handleStep2Next}
                   onPrev={handleBack}
                   kId={knowledgeId}
-                  persistState={step2PersistState} // 新增：传递保存的状态
-                  onPersistStateChange={handleStep2StateChange} // 新增：传递状态更新回调
+                  persistState={step2PersistState} // Added: Pass saved state
+                  onPersistStateChange={setStep2PersistState} // Added: Pass state update callback
                 />
               </div>
             )}
 
 
-            {/* 步骤3：原文对比 */}
+            {/* Step 3: Original text comparison */}
             {currentStep === 3 && segmentRules && (
-              <div className="block"> {/* 第三步显示时，第二步被隐藏但不卸载 */}
+              <div className="block"> {/* When step 3 is displayed, step 2 is hidden but not unmounted */}
                 <PreviewResult
                   rules={segmentRules.rules}
                   resultFiles={resultFiles}
@@ -288,7 +331,7 @@ export default function FilesUpload() {
                   showPreview={true}
                 />
 
-                {/* 步骤3底部按钮 */}
+                {/* Step 3 bottom buttons */}
                 <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
                   <Button variant="outline" onClick={handleBack}>
                     {t('previousStep')}
@@ -302,7 +345,7 @@ export default function FilesUpload() {
             )}
 
 
-            {/* 步骤4：数据处理 */}
+            {/* Step 4: Data processing */}
             {currentStep === 4 && (
               <FileUploadStep4 data={resultFiles} />
             )}
@@ -310,32 +353,15 @@ export default function FilesUpload() {
         </div>
       </div>
 
-      {/* 重复文件提醒弹窗（正常模式共用） */}
-      <Dialog open={!!repeatFiles.length} onOpenChange={b => !b && setRepeatFiles([])}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>{t('modalTitle')}</DialogTitle>
-            <DialogDescription>{t('modalMessage')}</DialogDescription>
-          </DialogHeader>
-          <ul className="overflow-y-auto max-h-[400px] py-2">
-            {repeatFiles.map(el => (
-              <li key={el.id} className="py-1 text-red-500 text-sm">{el.remark}</li>
-            ))}
-          </ul>
-          <DialogFooter>
-            <Button className="h-8" variant="outline" onClick={() => {
-              setRepeatFiles([]);
-              repeatCallBackRef.current();
-            }}>
-              {t('keepOriginal')}
-            </Button>
-            <Button className="h-8" disabled={retryLoad} onClick={() => handleRetry(repeatFiles)}>
-              {retryLoad && <span className="loading loading-spinner loading-xs mr-1"></span>}
-              {t('override')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Duplicate file reminder dialog (shared for normal mode) */}
+      <DialogWithRepeatFiles
+        repeatFiles={repeatFiles}
+        setRepeatFiles={setRepeatFiles}
+        unRetry={handleUnRetry}
+        onRetry={handleRetry}
+        retryLoad={retryLoad}
+        t={t}
+      />
     </div>
   );
 }

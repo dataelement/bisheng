@@ -1,5 +1,6 @@
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Select, SelectContent, SelectTrigger } from "@/components/bs-ui/select";
+import Tip from "@/components/bs-ui/tooltip/tip";
 import { cname } from "@/components/bs-ui/utils";
 import { cloneDeep } from "lodash-es";
 import { ChevronRight } from "lucide-react";
@@ -103,7 +104,7 @@ const SelectVar = forwardRef(({
                 // 过滤不相同tab
                 if (item.tab && param.tab && item.tab !== param.tab) return
                 // 过滤当前节点的output变量
-                if (nodeId === item.id && param.key.indexOf('output') === 0) return
+                if (nodeId === item.id &&( param.key.indexOf('output') === 0 || param.key.indexOf('retrieved') === 0)) return
                 // 不能选自己(相同变量名视为self) param.key
                 if (nodeId === item.id && param.key === itemKey) return
                 if (!param.global) return
@@ -275,7 +276,7 @@ const SelectVar = forwardRef(({
                     // 处理三级菜单
                     const { keys: nestedKeys, checkedCount: checkedCountL2 } = handleNestedItems(
                         keyL2,
-                        itemL2.param.value,
+                        itemL2.param.value.filter(e => e.label),
                         valueSet
                     );
                     Object.assign(acc, nestedKeys);
@@ -306,7 +307,7 @@ const SelectVar = forwardRef(({
             return data.param.value
                 // .slice(0, -1) // 排除最后一个元素
                 .map((item) => {
-                    tasks.push({
+                    item.label && tasks.push({
                         node: currentNode,
                         variable: { ...item, value: `${data.value}#${item.value}` },
                     })
@@ -332,14 +333,14 @@ const SelectVar = forwardRef(({
         onCheck(checked, tasks);
     };
 
-    return <Select open={open} onOpenChange={setOpen}>
+    return <Select open={open} onOpenChange={setOpen} >
         <SelectTrigger
             onClick={() => inputOpenRef.current = false}
             showIcon={false}
             className={cname('group shrink min-w-0 p-0 h-auto data-[placeholder]:text-inherit border-none bg-transparent shadow-none outline-none focus:shadow-none focus:outline-none focus:ring-0', className)}>
             {children}
         </SelectTrigger>
-        <SelectContent position="popper" avoidCollisions={false}>
+        <SelectContent position="popper" avoidCollisions={false} className=" overflow-auto">
             <div className="flex max-h-[360px] ">
                 {/* 三级级联菜单 */}
                 <div className="w-36 min-w-36 border-l first:border-none overflow-y-auto  scrollbar-hide">
@@ -400,7 +401,9 @@ const SelectVar = forwardRef(({
                                     onCheckedChange={(bln) => handleCheckClick(bln, currentMenuRef.current.id, q)}
                                     onClick={e => e.stopPropagation()}
                                 />}
-                                <span className="w-full overflow-hidden text-ellipsis truncate">{q.label}</span>
+                                <Tip content={q.label.length > 7 && q.label} side={"top"} >
+                                    <span className="w-full overflow-hidden text-ellipsis truncate">{q.label}</span>
+                                </Tip>
                                 {/* {value.includes(`${currentMenuRef.current.id}.${q.value}`) && <Check size={14} />} */}
                             </div>
                         )}

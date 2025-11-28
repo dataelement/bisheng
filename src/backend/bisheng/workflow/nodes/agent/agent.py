@@ -8,9 +8,9 @@ from loguru import logger
 from pydantic import BaseModel, field_validator, Field
 
 from bisheng.api.services.assistant_agent import AssistantAgent
-from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.llm.domain.services import LLMService
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.workflow.callback.event import StreamMsgOverData
@@ -174,7 +174,7 @@ class AgentNode(BaseNode):
                 name = f'{knowledge_id.split(".")[-1].replace("#", "")}_knowledge_{index}'
                 description = ''
                 for one in file_metadata_list:
-                    description += f'<{one.get("source")}>:<{one.get("title")}>'
+                    description += f'<{one.get("document_name")}>:<{one.get("abstract")}>; '
                 file_metadata = file_metadata_list[0]
                 vector_client = self.init_file_milvus(file_metadata)
                 es_client = self.init_file_es(file_metadata)
@@ -208,12 +208,12 @@ class AgentNode(BaseNode):
         embeddings = LLMService.get_knowledge_default_embedding()
         if not embeddings:
             raise Exception('没有配置默认的embedding模型')
-        file_ids = [file_metadata['file_id']]
+        file_ids = [file_metadata['document_id']]
         params = {
             'collection_name': self.get_milvus_collection_name(getattr(embeddings, 'model_id')),
             'partition_key': self.workflow_id,
             'embedding': embeddings,
-            'metadata_expr': f'file_id in {file_ids}'
+            'metadata_expr': f'document_id in {file_ids}'
         }
         return self._init_milvus(params)
 

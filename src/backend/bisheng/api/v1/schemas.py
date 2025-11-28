@@ -7,12 +7,12 @@ from orjson import orjson
 from pydantic import BaseModel, Field, model_validator, field_validator
 
 from bisheng.database.models.assistant import AssistantBase
-from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
 from bisheng.database.models.gpts_tools import AuthMethod, AuthType, GptsToolsRead
-from bisheng.database.models.knowledge import KnowledgeRead
 from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
+from bisheng.knowledge.domain.models.knowledge import KnowledgeRead
+from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 
 
 class CaptchaInput(BaseModel):
@@ -229,6 +229,8 @@ class UploadFileResponse(BaseModel):
     flowId: Optional[str] = None
     file_path: str
     relative_path: Optional[str] = None  # minio的相对路径，即object_name
+    repeat: bool = False  # 在知识库里是否重复
+    repeat_update_time: Optional[datetime] = None  # 如果重复，返回重复文件的更新时间
 
 
 class StreamData(BaseModel):
@@ -239,16 +241,6 @@ class StreamData(BaseModel):
         if isinstance(self.data, dict):
             return f'event: {self.event}\ndata: {orjson.dumps(self.data).decode()}\n\n'
         return f'event: {self.event}\ndata: {self.data}\n\n'
-
-
-class FinetuneCreateReq(BaseModel):
-    server: int = Field(description='关联的RT服务ID')
-    base_model: int = Field(description='基础模型ID')
-    model_name: str = Field(max_length=50, description='模型名称')
-    method: TrainMethod = Field(description='训练方法')
-    extra_params: Dict = Field(default_factory=dict, description='训练任务所需额外参数')
-    train_data: Optional[List[Dict]] = Field(default=None, description='个人训练数据')
-    preset_data: Optional[List[Dict]] = Field(default=None, description='预设训练数据')
 
 
 class CreateComponentReq(BaseModel):
@@ -488,21 +480,11 @@ class FileProcessBase(BaseModel):
         return values
 
 
-class FileChunkMetadata(BaseModel):
-    source: str = Field(default='', description='源文件名')
-    title: str = Field(default='', description='源文件内容总结的标题')
-    chunk_index: int = Field(default=0, description='文本块索引')
-    bbox: str = Field(default='', description='文本块bbox信息')
-    page: int = Field(default=0, description='文本块所在页码')
-    extra: str = Field(default='', description='文本块额外信息')
-    file_id: int = Field(default=0, description='文本块所属文件ID')
-
-
 # 文件分块数据格式
 class FileChunk(BaseModel):
     text: str = Field(..., description='文本块内容')
     parse_type: Optional[str] = Field(default=None, description='文本所属的文件解析类型')
-    metadata: FileChunkMetadata = Field(..., description='文本块元数据')
+    metadata: Metadata = Field(..., description='文本块元数据')
 
 
 # 预览文件分块内容请求参数
@@ -537,7 +519,7 @@ class KnowledgeFileReProcess(FileProcessBase):
     kb_file_id: int = Field(..., description='知识库文件ID')
     excel_rule: Optional[ExcelRule] = Field(default=None, description="Excel rules")
     callback_url: Optional[str] = Field(default=None, description='异步任务回调地址')
-    extra: Optional[str] = Field(default=None, description='附加信息')
+    extra: Optional[Dict] = Field(default=None, description='附加信息')
 
 
 class FrequentlyUsedChat(BaseModel):

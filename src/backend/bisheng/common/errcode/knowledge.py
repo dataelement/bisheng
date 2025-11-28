@@ -58,3 +58,35 @@ class KnowledgeNotQAError(BaseErrorCode):
 class KnowledgeNotExistError(BaseErrorCode):
     Code: int = 10970
     Msg: str = '知识库不存在'
+
+
+# 知识库文件不存在
+class KnowledgeFileNotExistError(BaseErrorCode):
+    Code: int = 10971
+    Msg: str = '知识库文件不存在'
+
+# 与内置元数据字段名称冲突
+class KnowledgeMetadataFieldConflictError(BaseErrorCode):
+    Code: int = 10980
+    Msg: str = '{field_name} 与内置元数据字段名称冲突'
+
+# 元数据字段已存在
+class KnowledgeMetadataFieldExistError(BaseErrorCode):
+    Code: int = 10981
+    Msg: str = '元数据字段 {field_name} 已存在'
+
+# 元数据字段不存在
+class KnowledgeMetadataFieldNotExistError(BaseErrorCode):
+    Code: int = 10982
+    Msg: str = '元数据字段 {field_name} 不存在'
+
+# 不能修改内置元数据字段
+class KnowledgeMetadataFieldImmutableError(BaseErrorCode):
+    Code: int = 10983
+    Msg: str = '内置元数据字段 {field_name} 不能修改'
+
+
+# 元数据值类型转换错误
+class KnowledgeMetadataValueTypeConvertError(BaseErrorCode):
+    Code: int = 10984
+    Msg: str = '元数据字段 {field_name} 值类型转换错误: {error_msg}'

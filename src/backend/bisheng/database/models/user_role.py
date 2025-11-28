@@ -5,9 +5,9 @@ from pydantic import BaseModel
 from sqlalchemy import Column, DateTime, text, delete
 from sqlmodel import Field, select
 
+from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.constants import AdminRole
-from bisheng.database.models.base import SQLModelSerializable
 
 
 class UserRoleBase(SQLModelSerializable):
@@ -16,8 +16,7 @@ class UserRoleBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP'),
-        onupdate=text('CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class UserRole(UserRoleBase, table=True):

@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy import Column, DateTime, text
 from sqlmodel import Field
 
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
 
 
 class ReportBase(SQLModelSerializable):
@@ -21,7 +21,7 @@ class ReportBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class Report(ReportBase, table=True):

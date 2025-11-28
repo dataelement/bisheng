@@ -65,7 +65,6 @@
     "basicNodes": "Basic Nodes",
     "toolNodes": "Tool Nodes",
     "workflowPreview": "Workflow Preview",
-    "runningNode": "Running {{nodeName}} node",
     "viewLogs": "View Logs",
     "running": "Running",
     "runSuccess": "Run Success",

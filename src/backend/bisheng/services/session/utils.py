@@ -2,8 +2,8 @@ import hashlib
 import random
 import string
 
+from bisheng.common.utils.util import orjson_dumps
 from bisheng.core.cache.utils import filter_json
-from bisheng.database.models.base import orjson_dumps
 
 
 def session_id_generator(size=6):

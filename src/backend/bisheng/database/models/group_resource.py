@@ -5,8 +5,8 @@ from typing import Dict, List, Optional
 from sqlalchemy import Column, DateTime, text, delete
 from sqlmodel import Field, select
 
+from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.database.models.base import SQLModelSerializable
 
 
 class ResourceTypeEnum(Enum):
@@ -24,7 +24,7 @@ class GroupResourceBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class GroupResource(GroupResourceBase, table=True):
@@ -61,8 +61,6 @@ class GroupResourceDao(GroupResourceBase):
             session.add_all(group_resources)
             session.commit()
             return group_resources
-
-
 
     @classmethod
     def get_group_resource(cls,

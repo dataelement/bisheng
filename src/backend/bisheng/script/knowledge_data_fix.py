@@ -7,8 +7,8 @@ import openpyxl
 from pymilvus import Collection
 
 from bisheng.api.services.knowledge_imp import decide_vectorstores, QA_save_knowledge, delete_vector_data
-from bisheng.database.models.knowledge import KnowledgeDao, Knowledge, KnowledgeTypeEnum
-from bisheng.database.models.knowledge_file import QAKnoweldgeDao, KnowledgeFileDao, QAKnowledge, KnowledgeFile, \
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, Knowledge, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_file import QAKnoweldgeDao, KnowledgeFileDao, QAKnowledge, KnowledgeFile, \
     QAStatus, KnowledgeFileStatus
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.worker.knowledge.file_worker import insert_milvus
@@ -62,7 +62,7 @@ def get_all_knowledge_files(knowledge_id: int) -> List[KnowledgeFile]:
     return all_files
 
 
-def _get_es_chunks_data(knowledge: Knowledge, es_obj=None, source: bool = False):
+def _get_es_chunks_data(knowledge: Knowledge, es_obj=None, source: bool = False, file_id: int = None):
     if not es_obj:
         embedding = decide_embeddings(knowledge.model)
         es_obj = decide_vectorstores(knowledge.index_name or knowledge.collection_name, "ElasticKeywordsSearch",
@@ -73,15 +73,18 @@ def _get_es_chunks_data(knowledge: Knowledge, es_obj=None, source: bool = False)
     def handle_hits(hits):
         for hit in hits:
             all_chunks.append({
-                "file_id": hit['fields']['metadata.file_id'][0],
-                "source": hit['fields']['metadata.source'][0],
-                "extra": hit['fields']['metadata.extra'][0],
+                "file_id": hit['fields'].get('metadata.file_id', [''])[0],
+                "source": hit['fields'].get('metadata.source', [''])[0],
+                "extra": hit['fields'].get('metadata.extra', [''])[0],
                 "_id": hit['_id'],
                 "_source": hit['_source'] if source else None,
             })
 
+    query = {"match_all": {}}
+    if file_id:
+        query = {"term": {"metadata.file_id": file_id}}
     result = es_client.search(index=knowledge.index_name or knowledge.collection_name,
-                              query={"match_all": {}},
+                              query=query,
                               size=5000,
                               scroll="5m",
                               source=source,
@@ -99,7 +102,8 @@ def _get_es_chunks_data(knowledge: Knowledge, es_obj=None, source: bool = False)
     return all_chunks
 
 
-def _get_milvus_chunks_data(knowledge: Knowledge, milvus_obj=None, all_fields_expect_pk: bool = False):
+def _get_milvus_chunks_data(knowledge: Knowledge, milvus_obj=None, all_fields_expect_pk: bool = False,
+                            file_id: int = None):
     if not milvus_obj:
         embedding = decide_embeddings(knowledge.model)
         milvus_obj = decide_vectorstores(knowledge.collection_name, "Milvus", embedding)
@@ -107,9 +111,12 @@ def _get_milvus_chunks_data(knowledge: Knowledge, milvus_obj=None, all_fields_ex
     output_fields = ["file_id", "extra", "source", "pk"]
     if all_fields_expect_pk:
         output_fields = [s.name for s in milvus_obj.col.schema.fields if s.name != "pk"]
+    expr = f"knowledge_id=='{knowledge.id}'" if knowledge.collection_name.startswith("partition_") else None
+    if file_id:
+        expr = f"{expr} and file_id=={file_id}" if expr else f"file_id == {file_id}"
     iterator = milvus_obj.col.query_iterator(
         batch_size=1000,
-        expr=f"knowledge_id=='{knowledge.id}'" if knowledge.collection_name.startswith("partition_") else None,
+        expr=expr,
         output_fields=output_fields,
         timeout=30,
     )

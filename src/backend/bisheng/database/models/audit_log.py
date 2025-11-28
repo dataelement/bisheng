@@ -4,8 +4,8 @@ from typing import List, Optional
 
 from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, JSON
 
+from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.database.models.base import SQLModelSerializable
 from bisheng.utils import generate_uuid
 
 
@@ -78,11 +78,8 @@ class AuditLogBase(SQLModelSerializable):
     ip_address: Optional[str] = Field(index=True, description="操作时客户端的IP地址")
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')), description="操作时间")
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')), description="操作时间")
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class AuditLog(AuditLogBase, table=True):

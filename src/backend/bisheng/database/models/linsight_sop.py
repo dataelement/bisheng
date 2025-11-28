@@ -9,7 +9,7 @@ from sqlmodel import Field, select, delete, col, or_, func, Column, Text, DateTi
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema
 from bisheng.core.database import get_async_db_session
 from bisheng.database.base import async_get_count
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
 
 
 class LinsightSOPBase(SQLModelSerializable):

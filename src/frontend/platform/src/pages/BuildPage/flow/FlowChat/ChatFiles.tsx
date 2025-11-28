@@ -10,6 +10,8 @@ import { useTranslation } from "react-i18next";
 
 // @accepts '.png,.jpg'
 export default function ChatFiles({ v, accepts, disabled, onChange }) {
+    console.log(accepts, 234);
+
     const { t } = useTranslation();
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
@@ -26,9 +28,20 @@ export default function ChatFiles({ v, accepts, disabled, onChange }) {
         const validFiles = [];
         const invalidFiles = [];
 
-        fileInputRef.current.value = ''
-        // Validate files based on file extensions
+        fileInputRef.current.value = '';
+        const allowedExtensions = accepts
+            ? new Set(accepts.split(',').map(ext => ext.trim().toLowerCase().replace(/^\./, '')))
+            : new Set();
+
         selectedFiles.forEach((file) => {
+            if (allowedExtensions.size > 0) {
+                const fileExt = getFileExtension(file.name).toLowerCase();
+                if (!allowedExtensions.has(fileExt)) {
+                    invalidFiles.push(t('chat.fileTypeNotAllowed', { name: file.name }));
+                    return;
+                }
+            }
+
             if (file.size <= fileSizeLimit) {
                 validFiles.push({ id: generateUUID(6), file });
             } else {

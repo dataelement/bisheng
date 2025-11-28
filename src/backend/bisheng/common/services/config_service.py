@@ -273,5 +273,10 @@ class ConfigService(Settings):
         all_config = self.get_all_config()
         return all_config.get(key, {})
 
+    async def aget_from_db(self, key: str):
+        # 先获取所有的key
+        all_config = await self.aget_all_config()
+        return all_config.get(key, {})
+
 
 settings = ConfigService.load_settings_from_yaml(config_file)

@@ -2,7 +2,7 @@ import json
 import os
 import re
 import time
-from typing import Any, Dict, List, Optional, BinaryIO, Union, Coroutine
+from typing import Any, Dict, List, Optional, Union
 
 import aiofiles
 import requests
@@ -33,13 +33,20 @@ from bisheng.api.services.patch_130 import (
     combine_multiple_md_files_to_raw_texts,
 )
 from bisheng.api.v1.schemas import ExcelRule
-from bisheng.core.cache.utils import file_download
+from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.common.errcode.knowledge import KnowledgeSimilarError, KnowledgeFileDeleteError
+from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
+from bisheng.core.cache.utils import file_download
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
-from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
-from bisheng.database.models.knowledge_file import (
+from bisheng.database.models.user import UserDao
+from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.interface.importing.utils import import_vectorstore
+from bisheng.interface.initialize.loading import instantiate_vectorstore
+from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileStatus,
@@ -49,11 +56,8 @@ from bisheng.database.models.knowledge_file import (
     QAKnowledgeUpsert,
     QAStatus,
 )
-from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.interface.importing.utils import import_vectorstore
-from bisheng.interface.initialize.loading import instantiate_vectorstore
+from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.llm.domain.services import LLMService
-from bisheng.common.services.config_service import settings
 from bisheng.utils import md5_hash, util
 from bisheng.utils.embedding import decide_embeddings
 from bisheng_langchain.rag.extract_info import extract_title, async_extract_title
@@ -82,9 +86,9 @@ class KnowledgeUtils:
     @classmethod
     def aggregate_chunk_metadata(cls, chunk: str, metadata: dict) -> str:
         # 拼接chunk和metadata中的数据，获取新的chunk
-        res = f"{{<file_title>{metadata.get('source', '')}</file_title>\n"
-        if metadata.get("title", ""):
-            res += f"<file_abstract>{metadata.get('title', '')}</file_abstract>\n"
+        res = f"{{<file_title>{metadata.get('document_name', '')}</file_title>\n"
+        if metadata.get("abstract", ""):
+            res += f"<file_abstract>{metadata.get('abstract', '')}</file_abstract>\n"
         res += f"<paragraph_content>{chunk}</paragraph_content>}}"
         return res
 
@@ -244,7 +248,7 @@ def process_file_task(
         chunk_size: int,
         chunk_overlap: int,
         callback_url: str = None,
-        extra_metadata: str = None,
+        extra_metadata: Dict = None,
         preview_cache_keys: List[str] = None,
         retain_images: int = 1,
         enable_formula: int = 1,
@@ -290,28 +294,21 @@ def delete_vector_files(file_ids: List[int], knowledge: Knowledge) -> bool:
     if not file_ids:
         return True
     logger.info(f"delete_files file_ids={file_ids} knowledge_id={knowledge.id}")
-    embeddings = FakeEmbedding()
-    vector_client = decide_vectorstores(knowledge.collection_name, "Milvus", embeddings)
+    logger.info("start init Milvus")
+    vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge=knowledge,
+                                                                        metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
+    logger.info("start init ES")
+    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge,
+                                                                metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
     # 如果collection不存在则不处理
     if vector_client.col:
-        vector_client.col.delete(expr=f"file_id in {file_ids}", timeout=10)
-    vector_client.close_connection(vector_client.alias)
+        vector_client.col.delete(expr=f"document_id in {file_ids}", timeout=10)
     logger.info(f"delete_milvus file_ids={file_ids}")
 
-    es_client = decide_vectorstores(
-        knowledge.index_name, "ElasticKeywordsSearch", embeddings
-    )
-    # for one in file_ids:
-    #     res = es_client.client.delete_by_query(
-    #         index=knowledge.index_name, query={"match": {"metadata.file_id": one}}
-    #     )
-    #
-    #     logger.info(f"act=delete_es file_id={one} res={res}")
-
-    if es_client.client.indices.exists(index=es_client.index_name):
+    if es_client.client.indices.exists(index=knowledge.index_name):
         res = es_client.client.delete_by_query(
-            index=es_client.index_name,
-            query={"terms": {"metadata.file_id": file_ids}},
+            index=knowledge.index_name,
+            query={"terms": {"metadata.document_id": file_ids}},
         )
         logger.info(f"act=delete_es file_ids={file_ids} res={res}")
 
@@ -432,7 +429,7 @@ def addEmbedding(
         chunk_overlap: int,
         knowledge_files: List[KnowledgeFile],
         callback: str = None,
-        extra_meta: str = None,
+        extra_meta: Dict = None,
         preview_cache_keys: List[str] = None,
         retain_images: int = 1,
         enable_formula: int = 1,
@@ -441,14 +438,12 @@ def addEmbedding(
 ):
     """将文件加入到向量和es库内"""
 
-    logger.info("start process files")
-    embeddings = decide_embeddings(model)
-
     logger.info("start init Milvus")
-    vector_client = decide_vectorstores(collection_name, "Milvus", embeddings)
-
-    logger.info("start init ElasticKeywordsSearch")
-    es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
+    vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge_id=knowledge_id,
+                                                                        metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
+    logger.info("start init ES")
+    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge_id=knowledge_id,
+                                                                metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
     minio_client = get_minio_storage_sync()
     for index, db_file in enumerate(knowledge_files):
         # 尝试从缓存中获取文件的分块
@@ -511,7 +506,7 @@ def add_file_embedding(
         separator_rule: List[str],
         chunk_size: int,
         chunk_overlap: int,
-        extra_meta: str = None,
+        extra_meta: Dict = None,
         preview_cache_key: str = None,
         knowledge_id: int = None,
         retain_images: int = 1,
@@ -565,14 +560,14 @@ def add_file_embedding(
             texts, metadatas = [], []
             for key, val in all_chunk_info.items():
                 texts.append(val["text"])
-                metadatas.append(val["metadata"])
+                metadatas.append(Metadata(**val["metadata"]))
     for index, one in enumerate(texts):
         if len(one) > 10000:
             raise ValueError(
                 "分段结果超长，请尝试在自定义策略中使用更多切分符（例如 \\n、。、\\.）进行切分"
             )
         # 入库时 拼接文件名和文档摘要
-        texts[index] = KnowledgeUtils.aggregate_chunk_metadata(one, metadatas[index])
+        texts[index] = KnowledgeUtils.aggregate_chunk_metadata(one, metadatas[index].model_dump())
 
     db_file.parse_type = parse_type
     # 存储ocr识别后的partitions结果
@@ -590,15 +585,22 @@ def add_file_embedding(
     logger.info(
         f"chunk_split file={db_file.id} file_name={db_file.file_name} size={len(texts)}"
     )
+    uploader = UserDao.get_user(user_id=db_file.user_id).user_name
+    if db_file.updater_id:
+        updater = UserDao.get_user(user_id=db_file.updater_id).user_name
+    else:
+        updater = uploader
     for metadata in metadatas:
-        metadata.update(
-            {
-                "file_id": db_file.id,
-                "knowledge_id": f"{db_file.knowledge_id}",
-                "extra": extra_meta or "",
-            }
-        )
+        metadata.document_id = db_file.id
+        metadata.knowledge_id = db_file.knowledge_id
+        if extra_meta:
+            metadata.user_metadata = metadata.user_metadata.update(extra_meta)
+        metadata.upload_time = int(db_file.create_time.timestamp())
+        metadata.update_time = int(db_file.update_time.timestamp())
+        metadata.uploader = uploader
+        metadata.updater = updater
 
+    metadatas = [metadata.model_dump() for metadata in metadatas]
     logger.info(f"add_vectordb file={db_file.id} file_name={db_file.file_name}")
     # 存入milvus
     vector_client.add_texts(texts=texts, metadatas=metadatas)
@@ -911,18 +913,19 @@ def read_chunk_text(
     raw_texts = [t.page_content for t in texts]
     logger.info(f"start_process_metadata file_name={file_name}")
     metadatas = [
-        {
-            "bbox": json.dumps({"chunk_bboxes": t.metadata.get("chunk_bboxes", "")}),
-            "page": (
+
+        Metadata(
+            bbox=json.dumps({"chunk_bboxes": t.metadata.get("chunk_bboxes", "")}),
+            page=(
                 t.metadata["chunk_bboxes"][0].get("page")
                 if t.metadata.get("chunk_bboxes", None)
                 else t.metadata.get("page", 0)
             ),
-            "source": file_name,
-            "title": t.metadata.get("title", ""),
-            "chunk_index": t_index,
-            "extra": "",
-        }
+            document_name=file_name,
+            abstract=t.metadata.get("title", ""),
+            chunk_index=t_index,
+            user_metadata={}
+        )
         for t_index, t in enumerate(texts)
     ]
     logger.info(f"file_chunk_over file_name=={file_name}")
@@ -943,7 +946,7 @@ async def async_read_chunk_text(
         filter_page_header_footer: int = 0,
         excel_rule: ExcelRule = None,
         no_summary: bool = False,
-) -> (List[str], List[dict], str, Any):  # type: ignore
+) -> (List[str], List[Metadata], str, Any):  # type: ignore
     """异步版本的 read_chunk_text"""
     llm = None
     if not no_summary:
@@ -1109,18 +1112,19 @@ async def async_read_chunk_text(
     raw_texts = [t.page_content for t in texts]
     logger.info(f"start_process_metadata file_name={file_name}")
     metadatas = [
-        {
-            "bbox": json.dumps({"chunk_bboxes": t.metadata.get("chunk_bboxes", "")}),
-            "page": (
+
+        Metadata(
+            bbox=json.dumps({"chunk_bboxes": t.metadata.get("chunk_bboxes", "")}),
+            page=(
                 t.metadata["chunk_bboxes"][0].get("page")
                 if t.metadata.get("chunk_bboxes", None)
                 else t.metadata.get("page", 0)
             ),
-            "source": file_name,
-            "title": t.metadata.get("title", ""),
-            "chunk_index": t_index,
-            "extra": "",
-        }
+            document_name=file_name,
+            abstract=t.metadata.get("title", ""),
+            chunk_index=t_index,
+            user_metadata={}
+        )
         for t_index, t in enumerate(texts)
     ]
     logger.info(f"file_chunk_over file_name=={file_name}")

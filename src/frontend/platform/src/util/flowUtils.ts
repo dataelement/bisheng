@@ -323,3 +323,124 @@ export function calculatePosition(nodes, position) {
     }
     return position
 }
+
+/**
+ * Update node Preset Questions  or node name
+ * use for selet textarea
+ */
+const createReg = (id) => [
+    new RegExp(`^[\\w_]+\\.([\\w_]+)?preset_question#${id}$`),
+    new RegExp(`^[\\w_]+\\.([\\w_]+)?preset_question_${id}$`)
+]
+export function updateVariableName(paramItem, questions) {
+    const { node, question } = questions
+
+    if (question) {
+        const [regWell, regUnderline] = createReg(question.id)
+
+        return Object.keys(paramItem.varZh).reduce((change, _key) => {
+            if (regWell.test(_key)) {
+                paramItem.varZh[_key] = paramItem.varZh[_key].replace(/\/[^\/]+$/, '/' + question.name)
+                return true
+            } else if (regUnderline.test(_key)) {
+                paramItem.varZh[_key] = paramItem.varZh[_key].replace(/_[^_]+$/, '_' + question.name)
+                return true
+            }
+            return change
+        }, false)
+    }
+
+    if (node) { // output has no node name, so no need to update
+        return Object.keys(paramItem.varZh).reduce((change, _key) => {
+            if (_key.startsWith(node.id)) {
+                paramItem.varZh[_key] = paramItem.varZh[_key].replace(/^[^\/]+\//, node.name + '/')
+                return true
+            }
+            return change
+        }, false)
+    }
+    return false
+}
+
+/**
+ * Update node Preset Questions  or node name
+ * use for code
+ */
+export function updateVariableNameByCode(paramItem, questions) {
+    const { node, question } = questions
+
+    if (question) {
+        const [regWell, regUnderline] = createReg(question.id)
+        const newItems = paramItem.value.reduce((change, item) => {
+            if (regWell.test(item.value)) {
+                item.label = item.label.replace(/\/[^\/]+$/, '/' + question.name)
+                return paramItem.value
+            } else if (regUnderline.test(item.value)) {
+                item.label = item.label.replace(/_[^_]+$/, '_' + question.name)
+                return paramItem.value
+            }
+            return change
+        }, null)
+        return newItems && [...newItems]
+    }
+
+    if (node) { // output has no node name, so no need to update
+        const newItems = paramItem.value.map(item => {
+            if (item.value.startsWith(node.id)) {
+                item.label = item.label.replace(/^[^\/]+\//, node.name + '/')
+            }
+            return item
+        }, null)
+        return newItems && [...newItems]
+    }
+    return null
+}
+
+
+/**
+ * Update node Preset Questions  or node name
+ * use for condition
+ */
+export function updateVariableNameByCondition(paramItem, questions) {
+    const { node, question } = questions
+
+    if (question) {
+        const [regWell, regUnderline] = createReg(question.id)
+
+        const replaceLabel = (conditionm, key, label) => {
+            if (regWell.test(conditionm[key])) {
+                conditionm[label] = conditionm[label].replace(/\/[^\/]+$/, '/' + question.name)
+            } else if (regUnderline.test(conditionm[key])) {
+                conditionm[label] = conditionm[label].replace(/_[^_]+$/, '_' + question.name)
+            }
+        }
+
+        return paramItem.value.map((item) => {
+            item.conditions.forEach(condition => {
+                replaceLabel(condition, 'left_var', 'left_label')
+                replaceLabel(condition, 'right_value', 'right_label')
+            })
+
+            return item
+        })
+    }
+
+    if (node) { // output has no node name, so no need to update
+        const replaceLabel = (conditionm, key, label) => {
+            if (conditionm[key].startsWith(node.id)) {
+                conditionm[label] = conditionm[label].replace(/^[^\/]+\//, node.name + '/')
+                return paramItem.value
+            }
+        }
+
+        return paramItem.value.map((item) => {
+            item.conditions.forEach(condition => {
+                replaceLabel(condition, 'left_var', 'left_label')
+                replaceLabel(condition, 'right_value', 'right_label')
+            })
+
+            return item
+        })
+    }
+    return null
+}

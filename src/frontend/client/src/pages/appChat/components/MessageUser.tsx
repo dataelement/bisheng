@@ -14,7 +14,10 @@ export default function MessageUser({ useName, data, showButton, disabledSearch 
     const localize = useLocalize()
 
     const msg = useMemo(() => {
-        return typeof data.message === 'string' ? data.message : data.message[data.chatKey]
+        const res = typeof data.message === 'string' ? data.message : data.message[data.chatKey]
+        // hack   handle user input json
+        const hackStr = typeof res === 'string' ? res : JSON.stringify(data.message)
+        return hackStr.replace(/\\n/g, '\n')
     }, [])
 
     const handleResend = (send) => {

@@ -4,8 +4,8 @@
 提供便捷的依赖注入和生命周期管理功能
 """
 import asyncio
-from typing import Optional, Dict, Any, TypeVar, List, Union
 from contextlib import asynccontextmanager, contextmanager
+from typing import Optional, Dict, Any, TypeVar, List, Union
 
 from loguru import logger
 
@@ -58,7 +58,7 @@ class ApplicationContextManager:
                 logger.info("Application context initialized successfully")
 
             except Exception as e:
-                logger.error(f"Failed to initialize application context: {e}")
+                logger.exception(f"Failed to initialize application context: {e}")
                 # 清理已初始化的资源
                 await self.async_close()
                 raise ContextError(f"Application context initialization failed: {e}") from e

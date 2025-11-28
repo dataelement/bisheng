@@ -23,7 +23,6 @@ export default function SystemModelConfig({ data, onBack }) {
             const serverAsrItem = { value: server.id, label: server.name, children: [] }
             const serverTtsItem = { value: server.id, label: server.name, children: [] }
             const rerankItem = { value: server.id, label: server.name, children: [] }
-console.log(data,878);
 
             server.models.forEach(model => {
              
@@ -45,14 +44,12 @@ console.log(data,878);
                     rerankItem.children.push(item)
                 }
             })
-            console.log(serverLlmItem,4223);
+
             if (serverLlmItem.children.length) llmOptions.push(serverLlmItem)
             if (serverEmbItem.children.length) embeddings.push(serverEmbItem)
             if (serverAsrItem.children.length) asrModel.push(serverAsrItem)
             if (serverTtsItem.children.length) ttsModel.push(serverTtsItem)
             if (rerankItem.children.length) rerank.push(rerankItem)
-
-
         });
 
         return { llmOptions, embeddings, asrModel, ttsModel,rerank}

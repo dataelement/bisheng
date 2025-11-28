@@ -183,7 +183,7 @@ export default function CardComponent<T>({
         </div>
         {edit
           && <div className="hidden group-hover:flex">
-            {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onSetting(data) }}><SettingIcon /></div>}
+            {/* {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onSetting(data) }}><SettingIcon /></div>} */}
             {isAdmin && type !== 'assistant' && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
             {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>}
           </div>

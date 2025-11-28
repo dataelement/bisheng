@@ -19,7 +19,7 @@ Typora 风格的 Markdown 转 PDF 转换器
 使用示例:
     from to_pdf import MarkdownToPdfConverter
     converter = MarkdownToPdfConverter()
-    converter.convert_file("README.md", "output.pdf")
+    converter.convert_file("README.md.md", "output.pdf")
 """
 
 import logging

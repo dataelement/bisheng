@@ -1,7 +1,7 @@
-from typing import Type, TypeVar, Optional, Any, Sequence, Union
+from typing import Type, TypeVar, Optional, Any, Sequence, Union, List, Coroutine
 
 from sqlalchemy import Row, RowMapping, func
-from sqlmodel import SQLModel, select, Session
+from sqlmodel import SQLModel, select, Session, col
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.repositories.interfaces.base_repository import BaseRepository
@@ -33,12 +33,12 @@ class BaseRepositoryImpl(BaseRepository[T, ID]):
 
     async def find_by_id(self, entity_id: ID) -> Optional[T]:
         """根据ID查找实体"""
-        entity = await self.session.get_one(entity_id)
+        entity = await self.session.get(self.model_class, entity_id)
         return entity
 
     def find_by_id_sync(self, entity_id: ID) -> Optional[T]:
         """同步根据ID查找实体"""
-        entity = self.session.get_one(entity_id)
+        entity = self.session.get(self.model_class, entity_id)
         return entity
 
     async def find_one(self, **filters) -> Optional[T]:
@@ -62,6 +62,18 @@ class BaseRepositoryImpl(BaseRepository[T, ID]):
                 query = query.where(getattr(self.model_class, field) == value)
         result = self.session.exec(query)
         return result.first()
+
+    async def find_by_ids(self, entity_ids: List[ID]) -> Sequence[Row[Any] | RowMapping | Any]:
+        """根据多个ID查找实体"""
+        query = select(self.model_class).where(col(self.model_class.id).in_(entity_ids))
+        result = await self.session.exec(query)
+        return result.all()
+
+    def find_by_ids_sync(self, entity_ids: List[ID]) -> Sequence[Row[Any] | RowMapping | Any]:
+        """同步根据多个ID查找实体"""
+        query = select(self.model_class).where(col(self.model_class.id).in_(entity_ids))
+        result = self.session.exec(query)
+        return result.all()
 
     async def find_all(self, **filters) -> Sequence[Row[Any] | RowMapping | Any]:
         """查找所有实体"""

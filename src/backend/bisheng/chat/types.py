@@ -12,6 +12,8 @@ class WorkType(Enum):
 
 
 class IgnoreException(Exception):
+    """ dont`t need print traceback stack """
+
     def __init__(self, message):
         self.message = message
         super().__init__(self.message)

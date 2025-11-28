@@ -1,16 +1,16 @@
 import { FileIcon } from "@/components/bs-icons/file";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Button } from '@/components/bs-ui/button';
-import { Dialog, DialogContent, DialogHeader } from '@/components/bs-ui/dialog';
+import { Dialog, DialogContent } from '@/components/bs-ui/dialog';
 import { SearchInput } from '@/components/bs-ui/input';
 import AutoPagination from '@/components/bs-ui/pagination/autoPagination';
 import ShadTooltip from "@/components/ShadTooltipComponent";
-import { delChunkApi, getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, readFileByLibDatabase, updateChunkApi } from '@/controllers/API';
+import { delChunkApi, getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, getKnowledgeDetailApi, readFileByLibDatabase, updateChunkApi, addMetadata, saveUserMetadataApi, getMetaFile } from '@/controllers/API';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useTable } from '@/util/hook';
 import { truncateString } from "@/util/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu';
-import { ArrowLeft, ChevronDown, ChevronUp, FileText, Search } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ChevronDown, ChevronUp, ClipboardPenLine, Edit2, FileText, Search, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -19,7 +19,12 @@ import ParagraphEdit from './ParagraphEdit';
 import PreviewFile from './PreviewFile';
 import PreviewParagraph from './PreviewParagraph';
 import Tip from "@/components/bs-ui/tooltip/tip";
+import { cname } from "@/components/bs-ui/utils";
+import React from "react";
+import { toast } from "@/components/bs-ui/toast/use-toast";
 
+// 导入元数据组件
+import { MainMetadataDialog, MetadataSideDialog, MetadataRow } from './MetadataDialog';
 
 export default function Paragraphs({ fileId, onBack }) {
     console.log('Props fileId:', fileId);
@@ -37,10 +42,27 @@ export default function Paragraphs({ fileId, onBack }) {
     const [fileUrl, setFileUrl] = useState('');
     const [chunks, setChunks] = useState([]);
     const [rawFiles, setRawFiles] = useState([]);
+    const [isKnowledgeAdmin, setIsKnowledgeAdmin] = useState(false);
+    
+    // 元数据相关状态
     const [metadataDialog, setMetadataDialog] = useState({
         open: false,
         file: null
     });
+    const [mainMetadataList, setMainMetadataList] = useState([]);
+    const [newMetadata, setNewMetadata] = useState({
+        name: '',
+        type: 'String'
+    });
+    const [metadataError, setMetadataError] = useState('');
+    const [sideDialog, setSideDialog] = useState({
+        type: null,
+        open: false
+    });
+    const [predefinedMetadata, setPredefinedMetadata] = useState([]);
+    const [searchTerm, setSearchTerm] = useState("");
+    const [fileInfor, setFileInfor] = useState();
+
     const [paragraph, setParagraph] = useState({
         fileId: '',
         chunkId: '',
@@ -55,7 +77,6 @@ export default function Paragraphs({ fileId, onBack }) {
     const isLoadingFilesRef = useRef(false);
     const isMountedRef = useRef(true);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-    const [searchTerm, setSearchTerm] = useState("");
     const searchInputRef = useRef(null);
     const isChangingRef = useRef(false);
     const [isInitReady, setIsInitReady] = useState(false);
@@ -65,7 +86,17 @@ export default function Paragraphs({ fileId, onBack }) {
     const latestPreviewUrlRef = useRef('');
     const latestOriginalUrlRef = useRef('');
     const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
-const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
+
+    // 右侧弹窗相关状态与ref
+    const mainMetadataDialogRef = useRef(null);
+    const [sideDialogPosition, setSideDialogPosition] = useState({ top: 0, left: 0 });
+    const [screenWidth, setScreenWidth] = useState(window.innerWidth);
+    const isSmallScreen = screenWidth < 1366;
+    const sideDialogWidth = isSmallScreen ? 240 : 300;
+    const [isSideDialogPositioned, setIsSideDialogPositioned] = useState(false);
+
+    const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
+
     useEffect(() => {
         // 切换chunk清空选中的高亮标注bbox
         setSelectedBbox([])
@@ -73,8 +104,7 @@ const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
 
     // 表格配置（完全保留原始逻辑）
     const tableConfig = useMemo(() => ({
-        file_ids: selectedFileId ? [selectedFileId] : [],
-         knowledge_id: id
+        file_ids: selectedFileId ? [selectedFileId] : []
     }), [selectedFileId]);
 
     const {
@@ -127,6 +157,42 @@ const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
     );
 
     const [load, setLoad] = useState(true);
+
+
+    const safeChunks = useMemo(() => {
+        if (!selectedFileId || !datalist.length) return [];
+        return (datalist || []).map((item, index) => ({
+            text: item?.text || '',
+            title: `分段${index + 1}`,
+            chunkIndex: item?.metadata?.chunk_index || index,
+            bbox: item?.metadata?.bbox
+        }));
+    }, [datalist, selectedFileId, chunkSwitchTrigger]);
+
+    const handleChunkChange = useCallback((chunkIndex, text) => {
+        let chunkIndexPage = chunkIndex % pageSize;
+        console.log('转换后的localIndex:', chunkIndexPage);
+
+        const bbox = { chunk_bboxes: selectedBbox };
+
+        const bboxStr = selectedBbox.length ? JSON.stringify(bbox) : safeChunks[chunkIndexPage]?.bbox || '';
+        captureAndAlertRequestErrorHoc(updateChunkApi({
+            knowledge_id: Number(id),
+            file_id: selectedFileId || currentFile?.id || '',
+            chunk_index: chunkIndex,
+            text,
+            bbox: bboxStr
+        }))
+        setChunks(chunks => chunks.map(chunk =>
+            chunk.chunkIndex === chunkIndex ? { ...chunk, bbox: bboxStr, text } : chunk
+        ));
+
+        refreshData(
+            (item) => item?.metadata?.chunk_index === chunkIndex,
+            (item) => ({ text, metadata: { ...item.metadata, bbox: bboxStr } })
+        );
+    }, [id, currentFile, refreshData, selectedBbox, safeChunks, pageSize, selectedFileId]);
+
     const fetchFileUrl = useCallback(async (fileId) => {
         console.log('获取文件URL:', fileId);
         if (!fileId) return '';
@@ -237,7 +303,7 @@ const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
             text: item.text || '',
             bbox: item.metadata?.bbox || {},
             activeLabels: {},
-             chunkIndex: item.metadata?.chunk_index, 
+            chunkIndex: item.metadata?.chunk_index || index,
             page: item.metadata?.page || 0,
             metadata: item.metadata || {}
         }));
@@ -260,8 +326,6 @@ const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
         // 立即更新UI，避免闪烁
         const selectedFile = rawFiles.find(f => String(f.id) === newFileId);
         if (selectedFile) {
-            console.log(selectedFile, fileUrl, previewUrl, 888);
-
             setCurrentFile({
                 label: selectedFile.file_name || '',
                 value: newFileId,
@@ -272,7 +336,7 @@ const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
                 filePath: fileUrl || previewUrl,
                 suffix: selectedFile.file_name?.split('.').pop() || '',
                 fileType: selectedFile.parse_type || 'unknown',
-                fullData: selectedFile || {}
+                fullData: selectedFile || {},
             });
             setSelectedFileId(newFileId);
         }
@@ -316,7 +380,7 @@ const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
                     pageSize: 4000,
                     status: 2
                 });
-
+                setIsKnowledgeAdmin(res.writeable)
                 const filesData = res?.data || [];
                 setRawFiles(filesData);
                 console.log('加载文件列表:', filesData);
@@ -339,7 +403,6 @@ const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
 
 
     useEffect(() => {
-        // 核心修复：增加hasInited判断，防止切换后重复初始化
         if (rawFiles.length === 0 || !isInitReady || !isMountedRef.current || !hasInited) return;
 
         // 只有在首次加载时执行自动选中，切换后不执行
@@ -353,38 +416,127 @@ const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
         }
     }, [rawFiles, isInitReady, fileId, handleFileChange, selectedFileId, hasInited]);
 
-    // 处理分段修改
-    const handleChunkChange = useCallback((chunkIndex, text) => {
-        let chunkIndexPage = chunkIndex % pageSize;
-        console.log('转换后的localIndex:', chunkIndexPage);
+    const handleDeleteMainMetadata = useCallback((id) => {
+        setMainMetadataList(prev => prev.filter(item => item.id !== id));
+    }, []);
 
-        // if(chunkIndex > 19){
-        //     chunkIndexPage = chunkIndex % pageSize;
-        // }
-        const bbox = { chunk_bboxes: selectedBbox };
-
-        // selectedBbox空数组时，使用safeChunks的bbox
-          const targetChunk = chunks.find(chunk => chunk.chunkIndex === chunkIndex);
-             const bboxStr = selectedBbox.length ? JSON.stringify(bbox) : targetChunk?.bbox;
-        captureAndAlertRequestErrorHoc(updateChunkApi({
-            knowledge_id: Number(id),
-            file_id: selectedFileId || currentFile?.id || '',
-            chunk_index: chunkIndex,
-            text,
-            bbox: bboxStr
-        }));
-
-        setChunks(chunks => chunks.map(chunk =>
-            chunk.chunkIndex === chunkIndex ? { ...chunk, bbox: bboxStr, text } : chunk
+    const handleMainMetadataValueChange = useCallback((id, value) => {
+        setMainMetadataList(prev => prev.map(item =>
+            item.id === id ? { ...item, value } : item
         ));
+    }, []);
 
-        refreshData(
-            (item) => item?.metadata?.chunk_index === chunkIndex,
-            (item) => ({ text, metadata: { ...item.metadata, bbox: bboxStr } })
-        );
-    }, [id, currentFile, refreshData, selectedBbox,chunks]);
+    const handleSaveNewMetadata = useCallback(async () => {
+        const name = newMetadata.name.trim();
+        const type = newMetadata.type;
 
-    // 格式化文件列表（完全保留原始逻辑）
+        if (!name) {
+            setMetadataError(t('名称不能为空。'));
+            return;
+        }
+
+        if (name.length > 255) {
+            setMetadataError(t('名称不能超过255个字符。'));
+            return;
+        }
+
+        const nameRegex = /^[a-z][a-z0-9_]*$/;
+        if (!nameRegex.test(name)) {
+            setMetadataError(t('必须以小写字母开头，且只能包含小写字母、数字和下划线。'));
+            return;
+        }
+
+        const exists = predefinedMetadata.some(item => item.name === name);
+        if (exists) {
+            setMetadataError(t('元数据名已存在。'));
+            return;
+        }
+
+        try {
+        await addMetadata(Number(id), [{
+            field_name: name,
+            field_type: type.toLowerCase()
+        }]);
+        const knowledgeDetails = await getKnowledgeDetailApi([id]);
+        const knowledgeDetail = knowledgeDetails[0];
+
+        if (knowledgeDetail && knowledgeDetail.metadata_fields) {
+          const formattedFields = Object.entries(knowledgeDetail.metadata_fields).map(([fieldName, fieldData]) => ({
+                id: `meta_${fieldName}`,
+                name: fieldData.field_name || fieldName,
+                type: fieldData.field_type.charAt(0).toUpperCase() + fieldData.field_type.slice(1),
+                updated: fieldData.updated_at,
+                updated_at: fieldData.updated_at || 0,
+            }));
+            setPredefinedMetadata(formattedFields);
+        }
+        setNewMetadata({ name: '', type: 'String' });
+        setMetadataError('');
+
+        setSideDialog({ type: 'search', open: true });
+
+        } catch (error) {
+            console.error("创建元数据字段失败:", error);
+            setMetadataError(t('该名称为系统内置元数据，不可使用'));
+        }
+    }, [newMetadata, predefinedMetadata, t, id]);
+
+    const handleSearchMetadataClick = useCallback(async () => {
+        try {
+            const knowledgeDetails = await getKnowledgeDetailApi([id]);
+            const knowledgeDetail = knowledgeDetails[0];
+
+            if (knowledgeDetail &&  knowledgeDetail.metadata_fields) {
+                const formattedFields = Object.entries(knowledgeDetail.metadata_fields).map(([fieldName, fieldData]) => ({
+                id: `meta_${fieldName}`,
+                name: fieldData.field_name || fieldName,
+                type: fieldData.field_type.charAt(0).toUpperCase() + fieldData.field_type.slice(1),
+                updated: fieldData.updated_at
+            }));
+                setPredefinedMetadata(formattedFields);
+            } else {
+                setPredefinedMetadata([]);
+            }
+        } catch (error) {
+            console.error("获取知识库元数据字段失败:", error);
+            setPredefinedMetadata([]);
+        } finally {
+            setMetadataError('');
+            setSideDialog({ type: 'search', open: true });
+            setSearchTerm("");
+        }
+    }, [id, t]);
+
+    const handleCreateMetadataClick = useCallback(() => {
+        setNewMetadata({ name: '', type: 'String' });
+        setMetadataError('');
+        setSideDialog({ type: 'create', open: true });
+    }, []);
+
+    const closeSideDialog = useCallback(() => {
+        setSideDialog({ type: null, open: false });
+        setMetadataError('');
+        setSearchTerm("");
+        setNewMetadata({ name: '', type: 'String' });
+        setIsSideDialogPositioned(false);
+    }, []);
+
+    const handleAddFromSearch = useCallback((metadata) => {
+        const exists = mainMetadataList.some(item => item.name === metadata.name);
+        if (exists) {
+            toast({ description: '该元数据已存在，不能重复添加。' });
+            return;
+        }
+        const newItem = {
+            ...metadata,
+            id: `temp_meta_${Date.now()}_${metadata.name}`, 
+            updated_at: Date.now(),
+            value: ''
+        };
+        setMainMetadataList(prev => [...prev, newItem]);
+        closeSideDialog();
+    }, [closeSideDialog, mainMetadataList]);
+
     const files = useMemo(() => {
         return (rawFiles || []).map(el => ({
             label: el?.file_name || '未命名文件',
@@ -400,30 +552,45 @@ const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
         }));
     }, [rawFiles]);
 
-    // 生成安全的chunks数据（完全保留原始逻辑）
-    const safeChunks = useMemo(() => {
-        if (!selectedFileId || !datalist.length) return [];
-        return (datalist || []).map((item, index) => ({
-            text: item?.text || '',
-            title: `分段${index + 1}`,
-            chunkIndex: item?.metadata?.chunk_index || index,
-            bbox: item?.metadata?.bbox
-        }));
-    }, [datalist, selectedFileId, chunkSwitchTrigger]);
+  const handleMetadataClick = useCallback(async () => {
+    if (currentFile?.fullData) {
+        try {
+            const res = await getMetaFile(currentFile.id);
+            setFileInfor(res);
+            const fetchedMetadata = res.user_metadata || [];
+            const metadataArray = Object.entries(fetchedMetadata).map(([fieldName, fieldData]) => ({
+                id: `meta_${fieldName}`,
+                name: fieldData.field_name || fieldName,
+                type: fieldData.field_type ? 
+                    fieldData.field_type.charAt(0).toUpperCase() + fieldData.field_type.slice(1).toLowerCase() : 
+                    'String',
+                value: fieldData.field_value || '',
+                originalValue: fieldData.field_value || '', 
+                updated_at: fieldData.updated_at || 0,
+            }));
+            const sortedMetadata = metadataArray.sort((a, b) => {
+                return (a.updated_at || 0) - (b.updated_at || 0);
+            });
 
-    // 打开元数据弹窗（完全保留原始逻辑）
-    const handleMetadataClick = useCallback(() => {
-        if (currentFile?.fullData) {
+        setMainMetadataList(sortedMetadata);
+
+            setMetadataDialog({
+                open: true,
+                file: currentFile.fullData
+            });
+        } catch (error) {
+            console.error("获取文件元数据失败:", error);
             setMetadataDialog({
                 open: true,
                 file: currentFile.fullData
             });
         }
-    }, [currentFile]);
+    }
+}, [currentFile]);
 
     // 调整分段策略（完全保留原始逻辑）
     const handleAdjustSegmentation = useCallback(() => {
-        const currentFileUrl = latestOriginalUrlRef.current; // 使用original_url而不是preview_url
+        const currentFileUrl = latestOriginalUrlRef.current;
         const currentPreviewUrl = latestPreviewUrlRef.current;
 
         navigate(`/filelib/adjust/${id}`, {
@@ -487,36 +654,32 @@ const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
             .replace(/\t/g, '\\t');
     }, []);
 
+    const handleDeleteChunk = useCallback((data) => {
+        const updatedChunks = chunks.filter(chunk => chunk.chunkIndex !== data);
+        setChunks(updatedChunks);
 
-const handleDeleteChunk = useCallback((data) => {
+        if (selectedChunkIndex === data) {
+            setSelectedBbox([]);
+        }
 
-  const updatedChunks = chunks.filter(chunk => chunk.chunkIndex !== data);
-  setChunks(updatedChunks);
+        captureAndAlertRequestErrorHoc(delChunkApi({
+            knowledge_id: Number(id),
+            file_id: selectedFileId || currentFile?.id || '',
+            chunk_index: data || 0
+        }));
 
-  // 清除选中的bbox（如果选中的是被删除的chunk）
-  if (selectedChunkIndex === data) {
-    setSelectedBbox([]);
-  }
+        reload();
 
-  captureAndAlertRequestErrorHoc(delChunkApi({
-    knowledge_id: Number(id),
-    file_id: selectedFileId || currentFile?.id || '',
-    chunk_index: data || 0
-  }));
+    }, [
+        id,
+        reload,
+        chunks,
+        selectedFileId,
+        currentFile?.id,
+        selectedChunkIndex,
+        setSelectedBbox
+    ]);
 
-  reload();
-
-}, [
-  id, 
-  reload, 
-  chunks, 
-  selectedFileId, 
-  currentFile?.id, 
-  setChunks, 
-  selectedChunkIndex, // 从store获取的选中chunkIndex
-  setSelectedBbox     // 从store获取的set方法
-]);
-    // 格式化文件大小（完全保留原始逻辑）
     const formatFileSize = useCallback((bytes) => {
         if (bytes === 0) return '0 Bytes';
 
@@ -586,7 +749,95 @@ const handleDeleteChunk = useCallback((data) => {
         latestFileUrlRef.current = fileUrl;
         latestPreviewUrlRef.current = previewUrl;
     }, [fileUrl, previewUrl]);
-    // 渲染部分（完全保留原始样式，无任何修改）
+
+    const updateSideDialogPosition = useCallback(() => {
+        if (!mainMetadataDialogRef.current || !sideDialog.open) return;
+
+        const rect = mainMetadataDialogRef.current.getBoundingClientRect();
+        const gap = isSmallScreen ? 0 : 4;
+        let left = rect.right + gap;
+
+        if (left + sideDialogWidth > screenWidth) {
+            left = screenWidth - sideDialogWidth - 8;
+        }
+
+        const newPosition = {
+            top: Math.max(rect.top, 8),
+            left: Math.max(left, 8)
+        };
+
+        setSideDialogPosition(newPosition);
+        setIsSideDialogPositioned(true);
+    }, [mainMetadataDialogRef, sideDialog.open, isSmallScreen, screenWidth, sideDialogWidth]);
+
+    useEffect(() => {
+        const handleResize = () => {
+            const newWidth = window.innerWidth;
+            setScreenWidth(newWidth);
+        };
+
+        window.addEventListener("resize", handleResize);
+        return () => window.removeEventListener("resize", handleResize);
+    }, []);
+
+    useEffect(() => {
+        if (!metadataDialog.open || !sideDialog.open) {
+            setIsSideDialogPositioned(false);
+            return;
+        }
+
+        const timer1 = setTimeout(() => {
+            updateSideDialogPosition();
+        }, 0);
+
+        const timer2 = setTimeout(() => {
+            updateSideDialogPosition();
+        }, 50);
+
+        const timer3 = setTimeout(() => {
+            updateSideDialogPosition();
+        }, 100);
+
+        return () => {
+            clearTimeout(timer1);
+            clearTimeout(timer2);
+            clearTimeout(timer3);
+        };
+    }, [metadataDialog.open, sideDialog.open, updateSideDialogPosition]);
+
+    const handleSaveUserMetadata = useCallback(async () => {
+        const knowledge_id = selectedFileId
+   const user_metadata_list = mainMetadataList.map(item => {
+       if (!item.id.startsWith('temp_') && item.updated_at !== undefined) {
+            return {
+                field_name: item.name,
+                field_value: item.value || '',
+                updated_at: item.updated_at,
+            };
+        }
+        return {
+            field_name: item.name,
+            field_value: item.value || '',
+            updated_at: item.updated_at || Math.floor(Date.now() / 1000),
+        };});
+        try {
+            await saveUserMetadataApi(knowledge_id, user_metadata_list);
+
+            toast({
+                title: t('成功'),
+                description: t('元数据已成功保存'),
+            });
+            setMetadataDialog(prev => ({ ...prev, open: false }));
+            setMetadataError('');
+        } catch (error) {
+              toast({
+                variant: 'error',
+                description: error,
+            });
+            console.error('保存元数据失败：', error);
+            setMetadataError(t('保存失败，请检查网络或联系管理员'));
+        }
+    }, [mainMetadataList, selectedFileId, t]);
 
     if (load) return <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
         <LoadingIcon />
@@ -717,6 +968,7 @@ const handleDeleteChunk = useCallback((data) => {
                         />
                     </div>
                     <Button variant="outline" onClick={handleMetadataClick} className="px-4 whitespace-nowrap">
+                        <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-1" />
                         {t('元数据')}
                     </Button>
                     <Tip content={!isEditable && '暂无操作权限'} side='top'>
@@ -795,48 +1047,22 @@ const handleDeleteChunk = useCallback((data) => {
                 />
             </div>
 
-            {/* 元数据弹窗 */}
-            <Dialog open={metadataDialog.open} onOpenChange={(open) => setMetadataDialog(prev => ({ ...prev, open }))}>
-                <DialogContent className="sm:max-w-[625px]">
-                    <DialogHeader>
-                        <h3 className="text-lg font-semibold">{t('文档元数据')}</h3>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
-                        <div className="space-y-2">
-                            {[
-                                {
-                                    label: t('文件名称'),
-                                    value: metadataDialog.file?.file_name,
-                                    isFileName: true
-                                },
-                                { label: t('原始文件大小'), value: metadataDialog.file?.file_size ? formatFileSize(metadataDialog.file.file_size) : null },
-                                {
-                                    label: t('创建时间'),
-                                    value: metadataDialog.file?.create_time ? metadataDialog.file.create_time.replace('T', ' ') : null
-                                },
-                                {
-                                    label: t('更新时间'),
-                                    value: metadataDialog.file?.update_time ? metadataDialog.file.update_time.replace('T', ' ') : null
-                                },
-                                {
-                                    label: t('切分策略'),
-                                    value: metadataDialog.file ? splitRuleDesc(metadataDialog.file) : null
-                                },
-                                { label: t('全文摘要'), value: metadataDialog.file?.title }
-                            ].map((item, index) => (
-                                item.value && (
-                                    <div key={index} className="grid grid-cols-4 gap-4 items-center">
-                                        <span className="text-sm text-muted-foreground col-span-1">{item.label}</span>
-                                        <span className={`col-span-3 text-sm ${item.isFileName ? 'truncate max-w-full' : ''}`}>
-                                            {item.value || t('none')}
-                                        </span>
-                                    </div>
-                                )
-                            ))}
-                        </div>
-                    </div>
-                </DialogContent>
-            </Dialog>
+            <MainMetadataDialog
+                metadataDialog={metadataDialog}
+                setMetadataDialog={setMetadataDialog}
+                mainMetadataList={mainMetadataList}
+                fileInfor={fileInfor}
+                isKnowledgeAdmin={isKnowledgeAdmin}
+                isSmallScreen={isSmallScreen}
+                t={t}
+                formatFileSize={formatFileSize}
+                splitRuleDesc={splitRuleDesc}
+                handleSaveUserMetadata={handleSaveUserMetadata}
+                handleSearchMetadataClick={handleSearchMetadataClick}
+                handleDeleteMainMetadata={handleDeleteMainMetadata}
+                handleMainMetadataValueChange={handleMainMetadataValueChange}
+                mainMetadataDialogRef={mainMetadataDialogRef}
+            />
 
             {/* 分段编辑弹窗 */}
             <Dialog open={paragraph.show} onOpenChange={(show) => setParagraph(prev => ({ ...prev, show }))}>
@@ -855,6 +1081,29 @@ const handleDeleteChunk = useCallback((data) => {
                     />
                 </DialogContent>
             </Dialog>
+
+            {/* 右侧元数据弹窗 */}
+            <MetadataSideDialog
+                sideDialog={sideDialog}
+                closeSideDialog={closeSideDialog}
+                predefinedMetadata={predefinedMetadata}
+                searchTerm={searchTerm}
+                setSearchTerm={setSearchTerm}
+                newMetadata={newMetadata}
+                setNewMetadata={setNewMetadata}
+                metadataError={metadataError}
+                setMetadataError={setMetadataError}
+                isKnowledgeAdmin={isKnowledgeAdmin}
+                isSmallScreen={isSmallScreen}
+                t={t}
+                sideDialogWidth={sideDialogWidth}
+                sideDialogPosition={sideDialogPosition}
+                isSideDialogPositioned={isSideDialogPositioned}
+                handleAddFromSearch={handleAddFromSearch}
+                handleCreateMetadataClick={handleCreateMetadataClick}
+                handleSaveNewMetadata={handleSaveNewMetadata}
+                setSideDialog={setSideDialog}
+            />
         </div>
     );
 }

@@ -330,20 +330,22 @@ async def async_file_download(file_path: str):
 
         minio_client = await get_minio_storage()
 
-        file_path = file_path.replace(minio_client.minio_config.sharepoint, minio_client.minio_config.endpoint)
-
-        r = await http_client.get(url=file_path, data_type="binary")
-
-        if r.status_code != 200:
-            raise ValueError('Check the url of your file; returned status code %s' % r.status_code)
-        # 检查Content-Disposition头来找出文件名
-        content_disposition = r.headers.get('Content-Disposition') if r.headers else None
-        filename = ''
-        if content_disposition:
-            filename = unquote(content_disposition).split('filename=')[-1].strip("\"'")
-        if not filename:
-            filename = unquote(urlparse(file_path).path.split('/')[-1])
-        file_path = save_download_file(r.body, 'bisheng', filename)
+        minio_share_host = minio_client.get_minio_share_host()
+        filename = unquote(urlparse(file_path).path.split('/')[-1])
+        if file_path.startswith(minio_share_host):
+            # download file from minio sdk
+            bucket_name, object_name = file_path.replace(minio_share_host, "", 1).lstrip("/").split('/', 1)
+            file_content = await minio_client.get_object(bucket_name, object_name)
+        else:
+            r = await http_client.get(url=file_path, data_type="binary")
+            if r.status_code != 200:
+                raise ValueError('Check the url of your file; returned status code %s' % r.status_code)
+            # 检查Content-Disposition头来找出文件名
+            content_disposition = r.headers.get('Content-Disposition') if r.headers else None
+            if content_disposition:
+                filename = unquote(content_disposition).split('filename=')[-1].strip("\"'")
+            file_content = r.body
+        file_path = save_download_file(file_content, 'bisheng', filename)
         return file_path, filename
     elif not os.path.isfile(file_path):
         raise ValueError('File path %s is not a valid file or url' % file_path)

@@ -14,7 +14,7 @@ export default function MessageNodeRun({ data }) {
                     {
                         <Loader2 className="text-primary animate-spin duration-300" />
                     }
-                    <span>{t('com_node_run_running')} {data.message.name} {t('com_node_run_node')}</span>
+                    <span>{data.message.name}</span>
                 </div>
             </div>
         </div>

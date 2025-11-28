@@ -18,19 +18,16 @@ class CustomMiddleware(BaseHTTPMiddleware):
             trace_id = request.headers.get('x-trace-id')
         else:
             trace_id = trace_id_generator()
-
+        # 有Nginx  二选一 得看NGINX 的配置
+        ip = get_request_ip(request)
+        path = request.url
         trace_id_var.set(trace_id)
 
+        logger.info(f"| {ip} | {request.method} {path}")
         start_time = time()
         response = await call_next(request)
         process_time = round(time() - start_time, 4)
-
-        # 有Nginx  二选一 得看NGINX 的配置
-        ip = get_request_ip(request)
-
-        ip = ip.split(',')[-1]
-        path = request.url
         response.headers["X-Process-Time"] = str(process_time)
         response.headers["X-Trace-ID"] = trace_id
-        logger.info(f"| {ip} | {path}：process_time={process_time}s")
+        logger.info(f"| {ip} | {request.method} {path} | process_time={process_time}s")
         return response

@@ -24,7 +24,7 @@ from bisheng.database.models.assistant import (Assistant, AssistantDao, Assistan
 from bisheng.database.models.flow import Flow, FlowDao, FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsTypeRead, GptsTools
 from bisheng.database.models.group_resource import GroupResourceDao, GroupResource, ResourceTypeEnum
-from bisheng.database.models.knowledge import KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao

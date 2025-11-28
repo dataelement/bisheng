@@ -7,9 +7,10 @@ import { CheckCircle2Icon, RefreshCw, RotateCw, XCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Progress, ProgressStatus } from ".";
 
-export default function ProgressItem({ analysis = false, item, onResulte, onDelete }: {
+export default function ProgressItem({ analysis = false, knowledgeId = '', item, onResulte, onDelete }: {
     analysis: boolean,
     item: Progress,
+    knowledgeId?: string,
     onResulte?: (id: string, res: any) => void
     onDelete?: (id: string) => void
 }) {
@@ -25,6 +26,7 @@ export default function ProgressItem({ analysis = false, item, onResulte, onDele
         uploadFileApi({
             fileKey: 'file',
             file: item.file,
+            knowledgeId,
             onProgress: (progress) => {
                 setProgress(progress)
             },
@@ -35,6 +37,8 @@ export default function ProgressItem({ analysis = false, item, onResulte, onDele
                     id: item.id,
                     fileName: item.fileName,
                     file_path: res.file_path,
+                    repeat: res.repeat,
+                    time: res.repeat_update_time
                 })
                 setRetrying(false)
             },
@@ -45,6 +49,8 @@ export default function ProgressItem({ analysis = false, item, onResulte, onDele
                     id: item.id,
                     fileName: item.fileName,
                     file_path: '',
+                    repeat: false,
+                    time: ''
                 })
                 setRetrying(false)
             },

@@ -3,25 +3,25 @@ import json
 import os
 from typing import List
 
-from bisheng.core.cache.redis_manager import get_redis_client
-from bisheng.core.database import get_async_db_session, get_database_connection
-from bisheng.common.services.config_service import settings
-from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
-from bisheng.database.models.template import Template
 from loguru import logger
 from sqlmodel import select, update, text
 
+from bisheng.common.services.config_service import settings
+from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.database import get_async_db_session, get_database_connection
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.component import Component
-from bisheng.database.models.role import Role
-from bisheng.database.models.user import User
+from bisheng.database.models.flow_version import FlowVersion
 from bisheng.database.models.gpts_tools import GptsTools
 from bisheng.database.models.gpts_tools import GptsToolsType
-from bisheng.database.models.sft_model import SftModel
-from bisheng.database.models.flow_version import FlowVersion
-from bisheng.database.models.user_role import UserRoleDao
 from bisheng.database.models.group import Group, DefaultGroup
+from bisheng.database.models.role import Role
 from bisheng.database.models.role_access import RoleAccess, AccessType
+from bisheng.database.models.template import Template
+from bisheng.database.models.user import User
+from bisheng.database.models.user_role import UserRoleDao
+from bisheng.finetune.domain.models.sft_model import SftModel
 
 
 async def init_default_data():

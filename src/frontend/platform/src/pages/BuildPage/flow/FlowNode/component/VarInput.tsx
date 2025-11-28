@@ -2,13 +2,15 @@ import { RbDragIcon } from "@/components/bs-icons/rbDrag";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/bs-ui/dialog";
 import { Label } from "@/components/bs-ui/label";
-import { isVarInFlow } from "@/util/flowUtils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import Tip from "@/components/bs-ui/tooltip/tip";
+import { isVarInFlow, updateVariableName } from "@/util/flowUtils";
 import { Expand, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
+import { useUpdateVariableState } from "../flowNodeStore";
 import SelectVar from "./SelectVar";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 
 function encodeHTMLEntities(text) {
     const textarea = document.createElement("textarea");
@@ -22,14 +24,14 @@ function decodeHTMLEntities(text) {
     return doc.documentElement.textContent;
 }
 // 解析富文本内容为保存格式
-function parseToValue(input, flowNode) {
+function parseToValue(input, paramItem) {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = input.replace(
         /<span[^>]*?>(.*?)<\/span>/g, // 匹配所有 <span> 标签
         (match, content) => {
             const _content = decodeHTMLEntities(content);
             // 在对象中查找匹配的 key
-            const key = Object.keys(flowNode.varZh).find((k) => flowNode.varZh[k] === _content);
+            const key = Object.keys(paramItem.varZh).find((k) => paramItem.varZh[k] === _content);
             return key ? `{{#${key}#}}` : content; // 如果找到 key，返回 key，否则保持原内容
         }
     );
@@ -56,7 +58,7 @@ export default function VarInput({
     nodeId,
     itemKey,
     placeholder = '',
-    flowNode,
+    paramItem,
     label = undefined,
     full = false,
     value,
@@ -87,12 +89,12 @@ export default function VarInput({
     useEffect(() => {
         onVarEvent && onVarEvent(validateVarAvailble);
         return () => onVarEvent && onVarEvent(() => { });
-    }, [flowNode]);
+    }, [paramItem]);
 
     const printPyRef = useRef(false); // 正在输入pyin
     const handleInput = () => {
         if (printPyRef.current) return;
-        const value = parseToValue(textareaRef.current.innerHTML, flowNode);
+        const value = parseToValue(textareaRef.current.innerHTML, paramItem);
         // console.log('textarea value :>> ', value);
         valueRef.current = value;
         setFullVarInputValue(value)
@@ -104,9 +106,9 @@ export default function VarInput({
         let error = '';
         const html = encodeHTMLEntities(input)
             .replace(/{{#(.*?)#}}/g, (a, part) => {
-                const _error = validate ? isVarInFlow(nodeId, flow.nodes, part, flowNode.varZh?.[part]) : ''
+                const _error = validate ? isVarInFlow(nodeId, flow.nodes, part, paramItem.varZh?.[part]) : ''
                 error = _error || error;
-                const msgZh = flowNode.varZh?.[part] || part;
+                const msgZh = paramItem.varZh?.[part] || part;
                 return `<span class=${_error ? 'textarea-error' : 'textarea-badge'} contentEditable="false">${msgZh}</span>`;
             })
             .replace(/\n/g, '<br>');
@@ -118,6 +120,22 @@ export default function VarInput({
         textareaRef.current.innerHTML = parseToHTML(value || '')[0];
         handleBlur();
     }, []);
+
+    // Update Preset Questions 
+    const [updateVariable] = useUpdateVariableState()
+    useEffect(() => {
+        if (!paramItem.varZh) return // No variables, no processing 
+        if (!updateVariable) return
+        const { action } = updateVariable
+        if (action === 'd') {
+            // delete paramItem.varZh[key]
+            // valueRef.current = valueRef.current.replaceAll(`{{#${key}#}}`, '')
+            // onChange(valueRef.current)
+        } else if (action === 'u') {
+            updateVariableName(paramItem, updateVariable)
+        }
+        textareaRef.current.innerHTML = parseToHTML(valueRef.current || '')[0];
+    }, [updateVariable])
 
     // 在光标位置插入内容
     function handleInsertVariable(item, _var, inputOpen) {
@@ -144,12 +162,12 @@ export default function VarInput({
         const key = `${item.id}.${_var.value}`;
         const label = `${item.name.trim()}/${_var.label}`;
 
-        if (flowNode.varZh) {
-            const existingProp = Object.keys(flowNode.varZh).find(prop => flowNode.varZh[prop] === label);
-            if (existingProp) delete flowNode.varZh[existingProp];
-            flowNode.varZh[key] = label;
+        if (paramItem.varZh) {
+            const existingProp = Object.keys(paramItem.varZh).find(prop => paramItem.varZh[prop] === label);
+            if (existingProp) delete paramItem.varZh[existingProp];
+            paramItem.varZh[key] = label;
         } else {
-            flowNode.varZh = { [key]: label };
+            paramItem.varZh = { [key]: label };
         }
 
         const html = `<span class="textarea-badge" contentEditable="false">${label}</span>`;
@@ -202,12 +220,14 @@ export default function VarInput({
                 </div>
                 : <div className="flex justify-between gap-1 border-b dark:border-gray-600 px-2 py-1" onClick={() => textareaRef.current.focus()}>
                     <Label className="bisheng-label text-xs" onClick={validateVarAvailble}>
-                        {flowNode.required && <span className="text-red-500">*</span>}
-                        {label ?? flowNode.label}
+                        {paramItem.required && <span className="text-red-500">*</span>}
+                        {label ?? paramItem.label}
                     </Label>
                     <div className="flex gap-2">
                         <SelectVar ref={selectVarRef} nodeId={nodeId} itemKey={itemKey} onSelect={handleInsertVariable}>
-                            <span className="text-muted-foreground hover:text-gray-800 text-xs"  >{"{x}"}</span>
+                            <Tip content={"插入变量"} side={"top"}>
+                                <span className="text-muted-foreground hover:text-gray-800 text-xs"  >{"{x}"}</span>
+                            </Tip>
                         </SelectVar>
                         {onUpload && (
                             <TooltipProvider>
@@ -241,7 +261,7 @@ export default function VarInput({
                                         nodeId={nodeId}
                                         itemKey={itemKey}
                                         placeholder={placeholder}
-                                        flowNode={flowNode}
+                                        paramItem={paramItem}
                                         value={fullVarInputValue}
                                         error={error}
                                         children={children}
@@ -384,5 +404,3 @@ function usePlaceholder(placeholder) {
 
     return { textareaRef: divRef, handleFocus, handleBlur, removePlaceholder };
 }
-
-
