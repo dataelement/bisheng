@@ -16,7 +16,8 @@ export default function MessageUser({ useName, data, showButton, disabledSearch 
     const msg = useMemo(() => {
         const res = typeof data.message === 'string' ? data.message : data.message[data.chatKey]
         // hack   handle user input json
-        return res === 'string' ? res : JSON.stringify(data.message)
+        const hackStr = typeof res === 'string' ? res : JSON.stringify(data.message)
+        return hackStr.replace(/\\n/g, '\n')
     }, [])
 
     const handleResend = (send) => {
