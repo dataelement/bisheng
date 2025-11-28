@@ -7,7 +7,7 @@ from bisheng.interface.custom.custom_component import CustomComponent
 
 try:
     # 通过ci去自动修改
-    __version__ = '2.2.0'
+    __version__ = '2.3.0-beta1'
 except metadata.PackageNotFoundError:
     # Case where package metadata is not available.
     __version__ = ''
