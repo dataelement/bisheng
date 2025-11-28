@@ -465,7 +465,8 @@ export default function Paragraphs({ fileId, onBack }) {
                 id: `meta_${fieldName}`,
                 name: fieldData.field_name || fieldName,
                 type: fieldData.field_type.charAt(0).toUpperCase() + fieldData.field_type.slice(1),
-                updated: fieldData.updated_at
+                updated: fieldData.updated_at,
+                updated_at: fieldData.updated_at || 0,
             }));
             setPredefinedMetadata(formattedFields);
         }
@@ -529,6 +530,7 @@ export default function Paragraphs({ fileId, onBack }) {
         const newItem = {
             ...metadata,
             id: `temp_meta_${Date.now()}_${metadata.name}`, 
+            updated_at: Date.now(),
             value: ''
         };
         setMainMetadataList(prev => [...prev, newItem]);
@@ -564,7 +566,7 @@ export default function Paragraphs({ fileId, onBack }) {
                     'String',
                 value: fieldData.field_value || '',
                 originalValue: fieldData.field_value || '', 
-                updated_at: fieldData.updated_at
+                updated_at: fieldData.updated_at || 0,
             }));
             const sortedMetadata = metadataArray.sort((a, b) => {
                 return (a.updated_at || 0) - (b.updated_at || 0);
@@ -806,19 +808,18 @@ export default function Paragraphs({ fileId, onBack }) {
     const handleSaveUserMetadata = useCallback(async () => {
         const knowledge_id = selectedFileId
    const user_metadata_list = mainMetadataList.map(item => {
-        const baseItem = {
-            field_name: item.name,
-            field_value: item.value || '',
-        };
-
-        if (!item.id.startsWith('temp_') && item.updated_at !== undefined && item.value === item.originalValue) {
+       if (!item.id.startsWith('temp_') && item.updated_at !== undefined) {
             return {
-                ...baseItem,
-                updated_at: item.updated_at 
+                field_name: item.name,
+                field_value: item.value || '',
+                updated_at: item.updated_at,
             };
         }
-        return baseItem;
-    });
+        return {
+            field_name: item.name,
+            field_value: item.value || '',
+            updated_at: item.updated_at || Math.floor(Date.now() / 1000),
+        };});
         try {
             await saveUserMetadataApi(knowledge_id, user_metadata_list);
 
