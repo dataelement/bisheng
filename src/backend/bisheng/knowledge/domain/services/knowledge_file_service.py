@@ -322,7 +322,6 @@ class KnowledgeFileService:
                     field_value = utils.metadata_value_type_convert(
                         value=item.field_value, target_type=field_type)
                     existing_item['field_value'] = field_value
-                    existing_item['updated_at'] = item.updated_at
                     current_user_metadata[item.field_name] = existing_item
                 except Exception as e:
                     raise KnowledgeMetadataValueTypeConvertError(
