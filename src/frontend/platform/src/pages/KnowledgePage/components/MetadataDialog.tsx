@@ -19,8 +19,6 @@ const TYPE_ICONS = {
 
 // 元数据行组件
 export const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onValueChange, isSmallScreen, t, showInput = true }) => {
-    console.log(item);
-    
     const handleInputChange = (e) => {
         onValueChange(item.id, e.target.value);
     };
