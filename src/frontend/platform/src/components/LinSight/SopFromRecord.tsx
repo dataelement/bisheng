@@ -451,7 +451,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, set
             </div>
 
             <div className="flex items-center justify-start mt-4">
-              <span>{t('importLinsight.selectedCount', { selectedCount: selectedRecordIds.length })}</span>
+              <span>{t('importLinsight.selectedCount', { count: selectedRecordIds.length })}</span>
               <Button
                 onClick={() => {
                   importSops(selectedRecords, false, false);

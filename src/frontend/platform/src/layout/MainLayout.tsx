@@ -1,7 +1,6 @@
 import {
     ApplicationIcon,
     BookOpenIcon,
-    EnIcon,
     EvaluatingIcon,
     GithubIcon,
     KnowledgeIcon,
@@ -18,7 +17,7 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
 import { locationContext } from "@/contexts/locationContext";
 import i18next from "i18next";
-import { ChevronDown, Globe, Lock, MoonStar, Sun } from "lucide-react";
+import { ChevronDown, Lock, MoonStar, Sun } from "lucide-react";
 import { Suspense, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -36,7 +35,7 @@ export default function MainLayout() {
     const { appConfig } = useContext(locationContext)
     // 角色
     const { user, setUser } = useContext(userContext);
-    const { language, options, changLanguage, t } = useLanguage(user)
+    const { language, languageNames, options, changLanguage, t } = useLanguage(user)
 
     const handleLogout = () => {
         bsConfirm({
@@ -98,18 +97,19 @@ export default function MainLayout() {
                             </Tooltip>
                         </TooltipProvider>
                         <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger className="h-8 w-8 bg-header-icon rounded-lg cursor-pointer my-4" onClick={changLanguage}>
-                                    <div className="">
-                                        {language === 'en'
-                                            ? <EnIcon className="side-bar-button-size dark:text-slate-50 mx-auto w-[19px] h-[19px]" />
-                                            : <Globe className="side-bar-button-size dark:text-slate-50 mx-auto w-[17px] h-[17px]" />}
-                                    </div>
-                                </TooltipTrigger>
-                                <TooltipContent><p>{options[language]}</p></TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                        <SelectHover
+                            triagger={
+                                <div className="h-8 px-3 bg-header-icon rounded-lg cursor-pointer my-4 flex items-center justify-center">
+                                    <span className="text-sm leading-8">{languageNames[language]}</span>
+                                    <ChevronDown className="ml-1 w-4 h-4" />
+                                </div>
+                            }>
+                            {Object.entries(options).map(([key, value]) => (
+                                <SelectHoverItem key={key} onClick={() => changLanguage(key)}>
+                                    <span>{value}</span>
+                                </SelectHoverItem>
+                            ))}
+                        </SelectHover>
                         <Separator className="mx-[23px] h-6 border-l my-5 border-[#dddddd]" orientation="vertical" />
                     </div>
                     <div className="flex items-center h-7 my-4">
@@ -261,8 +261,7 @@ const useLanguage = (user: User) => {
     }, [user])
 
     const { t } = useTranslation()
-    const changLanguage = () => {
-        const ln = language === 'zh' ? 'en' : 'zh'
+    const changLanguage = (ln: string) => {
         setLanguage(ln)
         localStorage.setItem('language-' + user.user_id, ln)
         localStorage.setItem('language', ln)
@@ -270,7 +269,8 @@ const useLanguage = (user: User) => {
     }
     return {
         language,
-        options: { en: '使用中文', zh: 'English' },
+        languageNames: { zh: '中文', en: 'English', ja: '日本語' },
+        options: { zh: '中文', en: 'English', ja: '日本語' },
         changLanguage,
         t
     }

@@ -1,7 +1,7 @@
 {
   "title": "BISHENG",
   "prompt": "Confirmation",
-    "unsupportedFileType": "Unsupported file types: {{extensions}}",
+  "unsupportedFileType": "Unsupported file types: {{extensions}}",
   "supportedFormatsWithImages": "Supported file formats: pdf (including scanned documents), txt, docx, ppt, pptx, md, html, xls, xlsx, csv, doc, png, jpg, jpeg, bmp; each file supports up to {{maxSize}}MB; pdf supports traceability positioning.",
   "supportedFormatsWithoutImages": "Supported file formats: pdf, txt, docx, doc, ppt, pptx, md, html, xls, xlsx, csv, each file supports up to {{maxSize}}MB",
   "example": {
@@ -340,11 +340,11 @@
       "rating": "Rating"
     },
     "pagination": {
-      "totalRecords": "Total {total} records",
+      "totalRecords": "Total {{total}}",
       "goToPage": "Go to",
       "page": "Page"
     },
-    "selectedCount": "{count} items selected",
+    "selectedCount": "{{count}} items selected",
     "batchImport": "Batch Import",
     "preview": {
       "title": "Preview",
@@ -363,6 +363,9 @@
     },
     "success": "Import successful",
     "error": "Import failed",
+    "guidelineManual": "Guideline Manual",
+    "noRunningResult": "No running result",
+    "runningResult": "Running result",
     "name": "Name",
     "creator": "Creator",
     "description": "Description",
@@ -945,7 +948,7 @@
     "parameterNameCannotBeEmpty": "Parameter name cannot be empty",
     "parameterNameMaxLengthExceeded": "Parameter name cannot exceed 1000 characters",
     "addMcpServer": "Add MCP Server",
-    "refresh":"Refresh",
+    "refresh": "Refresh",
     "gaodeMap": "Gaode Map",
     "gaodeMapSSE": "Gaode Map (SSE Protocol)",
     "gaodeMapStreamable": "Gaode Map (streamable Protocol)",
