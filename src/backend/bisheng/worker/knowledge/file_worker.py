@@ -18,7 +18,7 @@ from bisheng.database.models.knowledge_file import (
 )
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.utils import generate_uuid
-from bisheng.worker import bisheng_celery
+from bisheng.worker.main import bisheng_celery
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
 
 
