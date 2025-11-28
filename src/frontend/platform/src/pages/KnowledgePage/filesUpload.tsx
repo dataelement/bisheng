@@ -216,7 +216,9 @@ export default function FilesUpload() {
       setRetryLoad(false);
       message({ variant: 'success', description: t('addSuccess') });
       repeatCallBackRef.current();
-    }));
+    }), () => {
+      setRetryLoad(false);
+    });
   };
 
   const handleUnRetry = () => {
