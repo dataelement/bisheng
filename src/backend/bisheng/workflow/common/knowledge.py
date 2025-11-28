@@ -24,9 +24,12 @@ class ConditionOne(BaseModel):
     right_value: str = Field(..., description='Right value')
 
     def convert_right_value(self, field_type: str, right_value: Any, is_preset: bool) -> Any:
+        # no need to convert right value for is_empty and is_not_empty
+        if self.comparison_operation in ['is_empty', 'is_not_empty']:
+            return right_value
         if field_type in [MetadataFieldType.STRING.value, "text"]:
             right_value = str(right_value)
-            if not right_value and self.comparison_operation not in ['is_empty', 'is_not_empty']:
+            if not right_value:
                 raise ValueError("Right value cannot be empty for the selected comparison operation")
         elif field_type in [MetadataFieldType.NUMBER.value, 'int64', 'int8', 'int16', 'int32', 'int64']:
             right_value = int(right_value)
