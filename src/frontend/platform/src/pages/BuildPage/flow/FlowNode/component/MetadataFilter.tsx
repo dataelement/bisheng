@@ -273,7 +273,7 @@ const MetadataFilter = ({
       if (!cond.operator) errors.push(`条件 ${index + 1}: 请选择操作符`);
         // 实时获取字段类型
         const meta = stateRef.current.availableMetadataState.find(m => m.id === cond.metadataField);
-        if (meta?.type === "Number" && !cond.value && cond.valueType === "reference") {
+        if (meta?.type === "Number" && !cond.valueLabel && cond.valueType === "reference") {
           errors.push(`条件 ${index + 1}: 请输入数值`);
         }
     });

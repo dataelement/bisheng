@@ -6,7 +6,8 @@ from loguru import logger
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
-from bisheng.common.errcode.knowledge import KnowledgeFileNotExistError, KnowledgeMetadataFieldNotExistError
+from bisheng.common.errcode.knowledge import KnowledgeFileNotExistError, KnowledgeMetadataFieldNotExistError, \
+    KnowledgeMetadataFieldExistError, KnowledgeMetadataValueTypeConvertError
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.knowledge.domain import utils
@@ -188,31 +189,20 @@ class KnowledgeFileService:
         metadata_field_dict = {item['field_name']: MetadataField(**item) for item in
                                knowledge_model.metadata_fields or []}
 
-        knowledge_file_ids = [req.knowledge_file_id for req in add_file_metadata_req]
-        existing_files = await self.knowledge_file_repository.find_by_ids(knowledge_file_ids)
+        existing_files = await self.knowledge_file_repository.find_by_ids(
+            [req.knowledge_file_id for req in add_file_metadata_req])
 
-        # Map existing file IDs for quick lookup
-        existing_file_ids = [file.id for file in existing_files]
-
-        for knowledge_file_id in knowledge_file_ids:
-            if knowledge_file_id not in existing_file_ids:
-                raise KnowledgeFileNotExistError(msg="知识库文件ID:{knowledge_file_id} 不存在",
-                                                 knowledge_file_id=knowledge_file_id)
-
-        add_field_name_set = set([item.field_name for req in add_file_metadata_req for item in req.user_metadata_list])
-        for field_name in add_field_name_set:
-            if field_name not in metadata_field_dict.keys():
-                raise KnowledgeMetadataFieldNotExistError(field_name=field_name)
+        existing_files_dict = {file.id: file for file in existing_files}
 
         updated_knowledge_files = []
 
         for modify_file_metadata_req in add_file_metadata_req:
-            knowledge_file_model = await self.knowledge_file_repository.find_by_id(
-                entity_id=modify_file_metadata_req.knowledge_file_id)
+            knowledge_file_model = existing_files_dict.get(modify_file_metadata_req.knowledge_file_id)
 
+            # Check if knowledge file exists
             if not knowledge_file_model:
-                logger.warning(f"Knowledge file ID {modify_file_metadata_req.knowledge_file_id} does not exist.")
-                continue
+                raise KnowledgeFileNotExistError(
+                    msg=f"知识库文件ID:{modify_file_metadata_req.knowledge_file_id} 不存在")
 
             # Initialize metadata if it's None
             if knowledge_file_model.user_metadata is None:
@@ -220,27 +210,39 @@ class KnowledgeFileService:
 
             current_user_metadata = copy.deepcopy(knowledge_file_model.user_metadata)
 
-            # 添加新的元数据字段，避免重复添加相同字段
             for item in modify_file_metadata_req.user_metadata_list:
-                if item.field_name in metadata_field_dict.keys() and item.field_name not in current_user_metadata.keys():
-                    item_dict = item.model_dump()
-                    # 数据类型转换
-                    try:
-                        field_type = metadata_field_dict[item.field_name].field_type
-                        field_value = utils.metadata_value_type_convert(
-                            value=item_dict['field_value'], target_type=field_type)
-                        item_dict['field_value'] = field_value
-                    except Exception as e:
-                        logger.error(f"Metadata value type conversion error: {e}")
-                        continue
-                    item_dict['field_type'] = metadata_field_dict[item.field_name].field_type
-                    item_dict.pop('field_name')
-                    current_user_metadata[item.field_name] = item_dict
+                if item.field_name not in metadata_field_dict.keys():
+                    raise KnowledgeMetadataFieldNotExistError(field_name=item.field_name)
+
+                elif item.field_name in current_user_metadata.keys():
+                    raise KnowledgeMetadataFieldExistError(
+                        field_name=item.field_name,
+                        msg=f"知识库文件ID:{modify_file_metadata_req.knowledge_file_id} 已存在元数据字段:{item.field_name}"
+                    )
+
+                item_dict = item.model_dump()
+                # 数据类型转换
+                try:
+                    field_type = metadata_field_dict[item.field_name].field_type
+                    field_value = utils.metadata_value_type_convert(
+                        value=item_dict['field_value'], target_type=field_type)
+                    item_dict['field_value'] = field_value
+                except Exception as e:
+                    raise KnowledgeMetadataValueTypeConvertError(
+                        msg=f"元数据字段 {item.field_name} 值类型转换错误: {e}")
+
+                item_dict['field_type'] = metadata_field_dict[item.field_name].field_type
+                item_dict.pop('field_name')
+                current_user_metadata[item.field_name] = item_dict
 
             # 更新知识文件的用户元数据
             knowledge_file_model.user_metadata = current_user_metadata
             knowledge_file_model.updater_id = login_user.user_id
 
+            updated_knowledge_files.append(knowledge_file_model)
+
+        # 批量更新知识文件
+        for knowledge_file_model in updated_knowledge_files:
             knowledge_file_model = await self.knowledge_file_repository.update(knowledge_file_model)
 
             user_metadata = {key: value.get('field_value') for key, value in knowledge_file_model.user_metadata.items()}
@@ -257,8 +259,6 @@ class KnowledgeFileService:
                 knowledge_file_id=knowledge_file_model.id,
                 user_metadata=user_metadata
             )
-
-            updated_knowledge_files.append(knowledge_file_model)
 
         return updated_knowledge_files
 
@@ -282,15 +282,19 @@ class KnowledgeFileService:
         metadata_field_dict = {item['field_name']: MetadataField(**item) for item in
                                knowledge_model.metadata_fields or []}
 
+        existing_files = await self.knowledge_file_repository.find_by_ids(
+            [req.knowledge_file_id for req in modify_file_metadata_reqs])
+
+        existing_files_dict = {file.id: file for file in existing_files}
+
         updated_knowledge_files = []
 
         for modify_file_metadata_req in modify_file_metadata_reqs:
-            knowledge_file_model = await self.knowledge_file_repository.find_by_id(
-                entity_id=modify_file_metadata_req.knowledge_file_id)
+            knowledge_file_model = existing_files_dict.get(modify_file_metadata_req.knowledge_file_id)
 
             if not knowledge_file_model:
-                logger.warning(f"Knowledge file ID {modify_file_metadata_req.knowledge_file_id} does not exist.")
-                continue
+                raise KnowledgeFileNotExistError(
+                    msg=f"知识库文件ID:{modify_file_metadata_req.knowledge_file_id} 不存在")
 
             # Initialize metadata if it's None
             if knowledge_file_model.user_metadata is None:
@@ -300,25 +304,37 @@ class KnowledgeFileService:
 
             # 更新知识文件的用户元数据
             for item in modify_file_metadata_req.user_metadata_list:
-                if item.field_name in metadata_field_dict.keys():
-                    # 查找是否已存在该字段
-                    existing_item = next(
-                        (v for k, v in current_user_metadata.items() if k == item.field_name), None)
-                    if existing_item:
-                        try:
-                            # 数据类型
-                            field_type = metadata_field_dict[item.field_name].field_type
-                            # 更新已有字段的值和更新时间
-                            field_value = utils.metadata_value_type_convert(
-                                value=existing_item['field_value'], target_type=field_type)
-                            existing_item['field_value'] = field_value
-                            existing_item['updated_at'] = item.updated_at
-                        except Exception as e:
-                            logger.error(f"Metadata value type conversion error: {e}")
+
+                if item.field_name not in metadata_field_dict.keys():
+                    raise KnowledgeMetadataFieldNotExistError(field_name=item.field_name)
+
+                if item.field_name not in current_user_metadata.keys():
+                    raise KnowledgeMetadataFieldNotExistError(
+                        field_name=item.field_name,
+                        msg=f"知识库文件ID:{modify_file_metadata_req.knowledge_file_id} 不存在元数据字段:{item.field_name}"
+                    )
+
+                existing_item = current_user_metadata.get(item.field_name)
+                try:
+                    # 数据类型
+                    field_type = metadata_field_dict[item.field_name].field_type
+                    # 更新已有字段的值和更新时间
+                    field_value = utils.metadata_value_type_convert(
+                        value=item.field_value, target_type=field_type)
+                    existing_item['field_value'] = field_value
+                    existing_item['updated_at'] = item.updated_at
+                    current_user_metadata[item.field_name] = existing_item
+                except Exception as e:
+                    raise KnowledgeMetadataValueTypeConvertError(
+                        msg=f"元数据字段 {item.field_name} 值类型转换错误: {e}")
 
             knowledge_file_model.user_metadata = current_user_metadata
             knowledge_file_model.updater_id = login_user.user_id
 
+            updated_knowledge_files.append(knowledge_file_model)
+
+        # 批量更新知识文件
+        for knowledge_file_model in updated_knowledge_files:
             knowledge_file_model = await self.knowledge_file_repository.update(knowledge_file_model)
 
             user_metadata = {key: value.get('field_value') for key, value in knowledge_file_model.user_metadata.items()}
@@ -334,8 +350,6 @@ class KnowledgeFileService:
                 knowledge_file_id=knowledge_file_model.id,
                 user_metadata=user_metadata
             )
-
-            updated_knowledge_files.append(knowledge_file_model)
 
         return updated_knowledge_files
 
@@ -365,28 +379,39 @@ class KnowledgeFileService:
         ):
             raise UnAuthorizedError()
 
+        existing_files = await self.knowledge_file_repository.find_by_ids(
+            [req.knowledge_file_id for req in delete_user_metadata_req])
+
+        existing_files_dict = {file.id: file for file in existing_files}
+
         updated_knowledge_files = []
         for delete_metadata_req in delete_user_metadata_req:
-            knowledge_file_model = await self.knowledge_file_repository.find_by_id(
-                entity_id=delete_metadata_req.knowledge_file_id)
+            knowledge_file_model = existing_files_dict.get(delete_metadata_req.knowledge_file_id)
 
             if not knowledge_file_model:
-                logger.warning(f"Knowledge file ID {delete_metadata_req.knowledge_file_id} does not exist.")
-                continue
+                raise KnowledgeFileNotExistError(
+                    msg=f"知识库文件ID:{delete_metadata_req.knowledge_file_id} 不存在")
 
-            if knowledge_file_model.user_metadata is None:
-                knowledge_file_model.user_metadata = {}
-
-            current_user_metadata = copy.deepcopy(knowledge_file_model.user_metadata)
+            current_user_metadata = copy.deepcopy(knowledge_file_model.user_metadata) or {}
 
             # 删除指定的元数据字段
             for field_name in delete_metadata_req.field_names:
-                if field_name in current_user_metadata.keys():
-                    current_user_metadata.pop(field_name)
+
+                if field_name not in current_user_metadata.keys():
+                    raise KnowledgeMetadataFieldNotExistError(
+                        field_name=field_name,
+                        msg=f"知识库文件ID:{delete_metadata_req.knowledge_file_id} 不存在元数据字段:{field_name}"
+                    )
+
+                current_user_metadata.pop(field_name)
 
             knowledge_file_model.user_metadata = current_user_metadata
             knowledge_file_model.updater_id = login_user.user_id
 
+            updated_knowledge_files.append(knowledge_file_model)
+
+        # 批量更新知识文件
+        for knowledge_file_model in updated_knowledge_files:
             knowledge_file_model = await self.knowledge_file_repository.update(knowledge_file_model)
 
             user_metadata = {key: value.get('field_value') for key, value in knowledge_file_model.user_metadata.items()}
@@ -403,8 +428,6 @@ class KnowledgeFileService:
                 knowledge_file_id=knowledge_file_model.id,
                 user_metadata=user_metadata
             )
-
-            updated_knowledge_files.append(knowledge_file_model)
 
         return updated_knowledge_files
 

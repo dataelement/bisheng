@@ -14,7 +14,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus
 )
-from bisheng.worker import bisheng_celery
+from bisheng.worker.main import bisheng_celery
 
 
 @bisheng_celery.task(acks_late=True)

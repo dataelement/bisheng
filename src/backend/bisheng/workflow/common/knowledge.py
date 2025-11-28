@@ -147,7 +147,7 @@ class ConditionCases(BaseModel):
             one.field_name: one.model_dump() for one in KNOWLEDGE_RAG_METADATA_SCHEMA if
             one.field_name != "user_metadata"
         }
-        all_filter_field = {}
+        all_filter_field = []
         for condition in self.conditions:
             if int(condition.knowledge_id) != knowledge.id:
                 continue
@@ -158,7 +158,7 @@ class ConditionCases(BaseModel):
             else:
                 logger.warning(f"condition field {condition.metadata_field} not in knowledge metadata fields")
                 raise ValueError(f"field {condition.metadata_field} not in knowledge metadata fields")
-            all_filter_field.update(filter_field_info)
+            all_filter_field.append(filter_field_info)
         if not all_filter_field:
             return "", {}
 
