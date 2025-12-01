@@ -17,7 +17,7 @@ function Calendar({
 }: CalendarProps) {
     return (
         <DayPicker
-            locale={i18next.language === 'zh' ? zhCN : enUS}
+            locale={i18next.language === 'zh-Hans' ? zhCN : enUS}
             showOutsideDays={showOutsideDays}
             className={cname("p-3", className)}
             classNames={{

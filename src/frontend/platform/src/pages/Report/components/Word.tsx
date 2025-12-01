@@ -45,7 +45,7 @@ export default function Word({ data, workflow }) {
         },
         editorConfig: {
             callbackUrl: backUrl,
-            lang: i18next.language === 'zh' ? "zh-CN" : 'en',
+            lang: i18next.language === 'zh-Hans' ? "zh-CN" : 'en',
             mode: "edit",
             customization: {
                 anonymous: { request: false, label: "" },

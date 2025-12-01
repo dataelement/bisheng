@@ -138,7 +138,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
         const nameUnchanged = isEditMode && name === currentLib.name;
 
         if (!nameUnchanged && datalist.find(data => data.name === name && (!currentLib || data.id !== currentLib.id))) {
-            handleError(t('lib.nameExists',{ns:'bs'}));
+            handleError(t('lib.nameExists', { ns: 'bs' }));
             return;
         }
 
@@ -198,17 +198,17 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
     return <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[625px]">
             <DialogHeader>
-                <DialogTitle>{mode === 'create' ? t('lib.createLibrary',{ ns: 'bs' }) : t('knowledgeBaseSettings')}</DialogTitle>
+                <DialogTitle>{mode === 'create' ? t('lib.createLibrary', { ns: 'bs' }) : t('knowledgeBaseSettings')}</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-4 py-2">
                 {mode === 'edit' && currentLib && (
                     <div className="space-y-4">
                         <div className="flex items-center gap-48">
-                            <label className="bisheng-label text-sm text-gray-500">{t('lib.knowledgeBaseId',{ns:'bs'})}</label>
+                            <label className="bisheng-label text-sm text-gray-500">{t('lib.knowledgeBaseId', { ns: 'bs' })}</label>
                             <div className="text-sm">{currentLib.id}</div>
                         </div>
                         <div className="flex items-center gap-48">
-                            <label className="bisheng-label text-sm text-gray-500">{t('createTime',{ ns: 'bs' })}</label>
+                            <label className="bisheng-label text-sm text-gray-500">{t('createTime', { ns: 'bs' })}</label>
                             <div className="text-sm">
                                 {currentLib.create_time.replace('T', ' ')}
                             </div>
@@ -216,18 +216,18 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                     </div>
                 )}
                 <div className="">
-                    <label htmlFor="name" className="bisheng-label">{t('lib.libraryName',{ ns: 'bs' })}</label>
+                    <label htmlFor="name" className="bisheng-label">{t('lib.libraryName', { ns: 'bs' })}</label>
                     <span className="text-red-500">*</span>
                     <Input
                         name="name"
                         ref={nameRef}
                         defaultValue={mode === 'edit' && currentLib ? currentLib.name : ''}
-                        placeholder={t('lib.enterLibraryName',{ ns: 'bs' })}
+                        placeholder={t('lib.enterLibraryName', { ns: 'bs' })}
                         className={`col-span-3 ${error.name && 'border-red-400'}`}
                     />
                 </div>
                 <div className="">
-                    <label htmlFor="desc" className="bisheng-label">{t('lib.desc',{ ns: 'bs' })}</label>
+                    <label htmlFor="desc" className="bisheng-label">{t('lib.desc', { ns: 'bs' })}</label>
                     <Textarea
                         id="desc"
                         ref={descRef}
@@ -238,7 +238,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                     />
                 </div>
                 <div className="">
-                    <label htmlFor="model" className="bisheng-label">{t('lib.embeddingModelSelection',{ ns: 'bs' })}</label>
+                    <label htmlFor="model" className="bisheng-label">{t('lib.embeddingModelSelection', { ns: 'bs' })}</label>
                     {isLoading ? (
                         <div className="flex items-center gap-2 p-3 border rounded-md bg-gray-50">
                             <LoadIcon className="w-4 h-4 animate-spin" />
@@ -291,7 +291,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                             disabled={isSubmitting}
                         >
                             {isSubmitting && <LoadIcon className="mr-1" />}
-                            {t('createImport',{ ns: 'bs' })}
+                            {t('createImport', { ns: 'bs' })}
                         </Button>
                     </>
                 ) : (
@@ -364,7 +364,7 @@ export default function KnowledgeFile() {
     const handleDelete = (id) => {
         bsConfirm({
             title: t('prompt'),
-            desc: t('lib.confirmDeleteLibrary',{ ns: 'bs' }),
+            desc: t('lib.confirmDeleteLibrary', { ns: 'bs' }),
             onOk(next) {
                 captureAndAlertRequestErrorHoc(deleteFileLib(id).then(res => {
                     reload();
@@ -504,15 +504,14 @@ export default function KnowledgeFile() {
                                             <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">
                                                 {el.name}
                                             </div>
-                                            <QuestionTooltip
-                                                content={el.description || ''}
-                                                error={false}
-                                                className="w-full text-start"
+                                            <Tip
+                                                side="top"
+                                                content={el.description?.length > 30 ? el.description : ''}
                                             >
                                                 <div className="truncate max-w-[500px] text-[12px] text-[#5A5A5A] pt-1">
                                                     {el.description || ''}
                                                 </div>
-                                            </QuestionTooltip>
+                                            </Tip>
                                         </div>
                                     </div>
                                 </TableCell>
@@ -594,7 +593,7 @@ export default function KnowledgeFile() {
                                                     >
                                                         <div className="flex gap-2 items-center" >
                                                             <Copy className="w-4 h-4" />
-                                                            {t('lib.copy',{ ns: 'bs' })}
+                                                            {t('lib.copy', { ns: 'bs' })}
                                                         </div>
                                                     </SelectItem>
                                                 </Tip>

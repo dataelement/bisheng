@@ -252,9 +252,9 @@ export default function MainLayout() {
 };
 
 const useLanguage = (user: User) => {
-    const [language, setLanguage] = useState('zh')
+    const [language, setLanguage] = useState('zh-Hans')
     useEffect(() => {
-        const lang = user.user_id ? localStorage.getItem('language-' + user.user_id) : null
+        const lang = user.user_id ? localStorage.getItem('i18nextLng') : null
         if (lang) {
             setLanguage(lang)
         }
@@ -263,14 +263,16 @@ const useLanguage = (user: User) => {
     const { t } = useTranslation()
     const changLanguage = (ln: string) => {
         setLanguage(ln)
-        localStorage.setItem('language-' + user.user_id, ln)
-        localStorage.setItem('language', ln)
+        localStorage.setItem('i18nextLng', ln)
+        // workspace
+        localStorage.removeItem('lang')
+        document.cookie = `lang=${ln}; path=/; expires=${new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString()}`;
         i18next.changeLanguage(ln)
     }
     return {
         language,
-        languageNames: { zh: '中文', en: 'English', ja: '日本語' },
-        options: { zh: '中文', en: 'English', ja: '日本語' },
+        languageNames: { "zh-Hans": '中文', "en-US": 'English', ja: '日本語' },
+        options: { "zh-Hans": '中文', "en-US": 'English', ja: '日本語' },
         changLanguage,
         t
     }
