@@ -12,6 +12,7 @@ from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, MetadataFieldType
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.llm.domain import LLMService
+from bisheng.workflow.common.condition import ComparisonType
 from bisheng.workflow.nodes.base import BaseNode
 
 
@@ -23,18 +24,26 @@ class ConditionOne(BaseModel):
     right_value_type: str = Field(..., description='Right value type')
     right_value: str = Field(..., description='Right value')
 
-    @staticmethod
-    def convert_right_value(field_type: str, right_value: Any) -> Any:
-        if field_type in [MetadataFieldType.STRING.value, "text"]:
+    def convert_right_value(self, field_type: str, right_value: Any, is_preset: bool) -> Any:
+        # no need to convert right value for is_empty and is_not_empty
+        if self.comparison_operation in ['is_empty', 'is_not_empty'] or is_preset:
+            return right_value
+
+        # only for user metadata field, need to convert right value type
+        if field_type in [MetadataFieldType.STRING.value]:
             right_value = str(right_value)
-        elif field_type in [MetadataFieldType.NUMBER.value, 'int64', 'int8', 'int16', 'int32', 'int64']:
+            if not right_value:
+                raise ValueError("Right value cannot be empty for the selected comparison operation")
+        elif field_type in [MetadataFieldType.NUMBER.value]:
             right_value = int(right_value)
         elif field_type == MetadataFieldType.TIME.value:
-            try:
-                right_value = int(right_value)
-                right_value = datetime.fromtimestamp(right_value).strftime('%Y-%m-%d %H:%M:%S')
-            except ValueError:
-                right_value = datetime.fromisoformat(right_value).strftime('%Y-%m-%d %H:%M:%S')
+            if isinstance(right_value, int):
+                # timestamp
+                right_value = datetime.fromtimestamp(right_value)
+            else:
+                # iso format
+                right_value = datetime.fromisoformat(right_value)
+            right_value = int(right_value.timestamp())
         else:
             raise ValueError(f"Unsupported metadata field type: {field_type}")
         return right_value
@@ -62,51 +71,59 @@ class ConditionOne(BaseModel):
         if self.right_value_type == 'ref' and self.right_value:
             right_value = parent_node.get_other_node_variable(self.right_value)
         field_type = field_info.get('field_type')
-        right_value = self.convert_right_value(field_type, right_value)
+        right_value = self.convert_right_value(field_type, right_value, is_preset)
         if is_preset:
             field_key = self.convert_preset_filed()
         else:
             field_key = f"JSON_UNQUOTE(JSON_EXTRACT(`user_metadata`, '$.{self.metadata_field}.field_value'))"
 
         key_info = {}
-        if self.comparison_operation == "equals":
+        if self.comparison_operation == ComparisonType.EQUAL:
             key_info['comparison'] = '='
             key_info['value'] = right_value
-        elif self.comparison_operation == "not_equals":
+        elif self.comparison_operation == ComparisonType.NOT_EQUAL:
             key_info['comparison'] = '!='
             key_info['value'] = right_value
-        elif self.comparison_operation == "contains":
+        elif self.comparison_operation == ComparisonType.CONTAINS:
             key_info['comparison'] = 'like'
             key_info['value'] = f"%{right_value}%"
-        elif self.comparison_operation == "not_contains":
+        elif self.comparison_operation == ComparisonType.NOT_CONTAINS:
             key_info['comparison'] = 'not like'
             key_info['value'] = f"%{right_value}%"
-        elif self.comparison_operation == "starts_with":
+        elif self.comparison_operation == ComparisonType.STARTS_WITH:
             key_info['comparison'] = 'like'
             key_info['value'] = f"{right_value}%"
-        elif self.comparison_operation == "ends_with":
+        elif self.comparison_operation == ComparisonType.ENDS_WITH:
             key_info['comparison'] = 'like'
             key_info['value'] = f"%{right_value}"
-        elif self.comparison_operation == "is_empty":
-            key_info['comparison'] = 'is null'
-            key_info['value'] = None
-        elif self.comparison_operation == "is_not_empty":
-            key_info['comparison'] = 'is not null'
-            key_info['value'] = None
-        elif self.comparison_operation == "greater_than":
+        elif self.comparison_operation == ComparisonType.IS_EMPTY:
+            key_info['comparison'] = '='
+            key_info['value'] = 'null'
+        elif self.comparison_operation == ComparisonType.IS_NOT_EMPTY:
+            key_info['comparison'] = '!='
+            key_info['value'] = 'null'
+        elif self.comparison_operation == ComparisonType.GREATER_THAN:
             key_info['comparison'] = '>'
             key_info['value'] = right_value
-        elif self.comparison_operation == "greater_than_or_equals":
+        elif self.comparison_operation == ComparisonType.GREATER_THAN_OR_EQUAL:
             key_info['comparison'] = '>='
             key_info['value'] = right_value
-        elif self.comparison_operation == "less_than":
+        elif self.comparison_operation == ComparisonType.LESS_THAN:
             key_info['comparison'] = '<'
             key_info['value'] = right_value
-        elif self.comparison_operation == "less_than_or_equals":
+        elif self.comparison_operation == ComparisonType.LESS_THAN_OR_EQUAL:
             key_info['comparison'] = '<='
             key_info['value'] = right_value
         else:
             raise ValueError(f"Unsupported comparison operation: {self.comparison_operation}")
+        if not is_preset and self.comparison_operation in [ComparisonType.GREATER_THAN,
+                                                           ComparisonType.GREATER_THAN_OR_EQUAL,
+                                                           ComparisonType.LESS_THAN,
+                                                           ComparisonType.LESS_THAN_OR_EQUAL]:
+            key_info['extra_filter'] = [{
+                'comparison': '!=',
+                'value': 'null'
+            }]
         return {field_key: key_info}
 
 
@@ -130,7 +147,7 @@ class ConditionCases(BaseModel):
             one.field_name: one.model_dump() for one in KNOWLEDGE_RAG_METADATA_SCHEMA if
             one.field_name != "user_metadata"
         }
-        all_filter_field = {}
+        all_filter_field = []
         for condition in self.conditions:
             if int(condition.knowledge_id) != knowledge.id:
                 continue
@@ -141,7 +158,7 @@ class ConditionCases(BaseModel):
             else:
                 logger.warning(f"condition field {condition.metadata_field} not in knowledge metadata fields")
                 raise ValueError(f"field {condition.metadata_field} not in knowledge metadata fields")
-            all_filter_field.update(filter_field_info)
+            all_filter_field.append(filter_field_info)
         if not all_filter_field:
             return "", {}
 
@@ -184,7 +201,7 @@ class RagUtils(BaseNode):
 
         self._multi_milvus_retriever = None
         self._multi_es_retriever = None
-        self._init_knowledge_retriever = False
+        self._knowledge_vector_list = []
         self._retriever_kwargs = {"k": 100, "param": {"ef": 110}}
         self._rerank_model = None
 
@@ -279,21 +296,21 @@ class RagUtils(BaseNode):
 
     def init_knowledge_retriever(self):
         """ retriever from knowledge base """
-        if self._init_knowledge_retriever:
-            return
-        self._init_knowledge_retriever = True
-        ret = KnowledgeRag.get_multi_knowledge_vectorstore(
-            knowledge_ids=self._knowledge_value,
-            user_name=self.user_info.user_name,
-            check_auth=self._knowledge_auth,
-            include_es=self._keyword_weight > 0,
-            include_milvus=self._vector_weight > 0,
-        )
+        if not self._knowledge_vector_list:
+            self._knowledge_vector_list = KnowledgeRag.get_multi_knowledge_vectorstore(
+                knowledge_ids=self._knowledge_value,
+                user_name=self.user_info.user_name,
+                check_auth=self._knowledge_auth,
+                include_es=self._keyword_weight > 0,
+                include_milvus=self._vector_weight > 0,
+            )
         all_milvus = []
         all_milvus_filter = []
         all_es = []
         all_es_filter = []
-        for knowledge_id, knowledge_info in ret.items():
+        self._multi_milvus_retriever = None
+        self._multi_es_retriever = None
+        for knowledge_id, knowledge_info in self._knowledge_vector_list.items():
             knowledge = knowledge_info.get('knowledge')
             milvus_vector = knowledge_info.get('milvus')
             es_vector = knowledge_info.get('es')

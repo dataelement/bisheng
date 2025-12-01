@@ -364,7 +364,7 @@ export default function KnowledgeFile() {
     const handleDelete = (id) => {
         bsConfirm({
             title: t('prompt'),
-            desc: t('lib.confirmDeleteLibrary'),
+            desc: t('lib.confirmDeleteLibrary',{ ns: 'bs' }),
             onOk(next) {
                 captureAndAlertRequestErrorHoc(deleteFileLib(id).then(res => {
                     reload();

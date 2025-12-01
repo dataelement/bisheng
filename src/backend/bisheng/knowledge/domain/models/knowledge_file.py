@@ -353,28 +353,54 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     def filter_file_by_metadata_fields(cls, knowledge_id: int, logical: Literal["and", "or"],
-                                       metadata_filters: Dict[str, Any]) -> List[int]:
+                                       metadata_filters: List[Dict[str, Dict[str, Any]]]) -> List[int]:
         """
         根据用户自定义元数据字段过滤知识文件
         :param knowledge_id: 知识库ID
         :param logical: 逻辑操作符，支持 "AND" 或 "OR"
         :param metadata_filters: 用户自定义元数据字段及其对应的值
+          [{
+            field_a: {
+                'comparison': '=',
+                'value': 'some_value',
+                'extra_filter': [
+                    {
+                        'comparison': '!=',
+                        'value': 'other_value'
+                    }
+                ]
+            }
+          }]
         :return: 符合条件的知识文件ID列表
         """
 
-        statement = "select id from knowledgefile where knowledge_id = :knowledge_id"
+        statement = "select id from knowledgefile where knowledge_id = :knowledge_id and "
         params = {"knowledge_id": knowledge_id}
 
         params_index = 1
-        for key, key_info in metadata_filters.items():
-            key_comparison = key_info['comparison']
-            key_value = key_info['value']
-            if key_value is not None:
-                params_key = f"tmp_params_{params_index}"
-                params[params_key] = key_value
-                statement += f" {logical} {key} {key_comparison} :{params_key}"
-            else:
-                statement += f" {logical} {key} {key_comparison}"
+        field_statement = []
+        for metadata_filter in metadata_filters:
+            for key, key_info in metadata_filter.items():
+                key_comparison = key_info['comparison']
+                key_value = key_info['value']
+                extra_filter = key_info.get('extra_filter')
+                if key_value is not None:
+                    params_key = f"tmp_params_{params_index}"
+                    params[params_key] = key_value
+                    sub_statement = f"{key} {key_comparison} :{params_key}"
+                else:
+                    sub_statement = f"{key} {key_comparison}"
+                if extra_filter:
+                    for sub_info in extra_filter:
+                        params_index += 1
+                        params_key = f"tmp_params_{params_index}"
+                        params[params_key] = sub_info['value']
+                        sub_statement += f" AND {key} {sub_info['comparison']} :{params_key}"
+                    sub_statement = f"({sub_statement})"
+                field_statement.append(sub_statement)
+                params_index += 1
+        field_statement = f" {logical} ".join(field_statement)
+        statement += f"({field_statement})"
 
         with get_sync_db_session() as session:
             file_ids = []

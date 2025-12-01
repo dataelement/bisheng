@@ -20,6 +20,7 @@ interface MetadataCondition {
   operator: string;
   valueType: "reference" | "input";
   value: string;
+  valueLabel: string;
 }
 
 interface MetadataField {
@@ -69,6 +70,7 @@ const MetadataFilter = ({
         operator: cond.comparison_operation || "",
         valueType: cond.right_value_type === "ref" ? "reference" : "input",
         value: cond.right_value || "",
+        valueLabel: cond.right_label || "",
       }));
     }
     return [];
@@ -82,6 +84,8 @@ const MetadataFilter = ({
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
   const [isSelectOpen, setIsSelectOpen] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({});
+  const [error, setError] = useState(false)
+
 
   // 用 ref 存储最新状态，绕开闭包问题
   const stateRef = useRef({
@@ -104,7 +108,7 @@ const MetadataFilter = ({
   const operatorConfig = {
     String: ["equals", "not_equals", "contains", "not_contains", "is_empty", "is_not_empty", "starts_with", "ends_with"],
     Number: ["equals", "not_equals", "greater_than", "less_than", "greater_than_or_equal", "less_than_or_equal"],
-    Time: ["equals", "not_equals", "greater_than", "less_than", "greater_than_or_equal", "less_than_or_equal"],
+    Time: ["equals", "not_equals", "is_empty", "is_not_empty", "greater_than", "less_than", "greater_than_or_equal", "less_than_or_equal"],
   };
   const operatorLabels = {
     equals: t('equals'),
@@ -215,6 +219,7 @@ const MetadataFilter = ({
             operator: cond.comparison_operation || "",
             valueType: cond.right_value_type === "ref" ? "reference" : "input",
             value: cond.right_value || "",
+            valueLabel: cond.right_label || "",
           }));
           setConditions(newConditions);
         }
@@ -261,18 +266,17 @@ const MetadataFilter = ({
 
   // validateFunc 从 ref 拿最新 conditions
   const validateFunc = useCallback(() => {
-    const { conditions } = stateRef.current;
+    const { conditions, availableMetadataState } = stateRef.current;
     const errors = [];
     conditions.forEach((cond, index) => {
+
       if (!cond.metadataField) errors.push(t('selectMetadataField', { index: index + 1 }));
       if (!cond.operator) errors.push(t('selectOperator', { index: index + 1 }));
 
-      if (![`is_empty`, `is_not_empty`].includes(cond.operator) && cond.metadataField) {
-        // Real-time fetch of field type
-        const meta = stateRef.current.availableMetadataState.find(m => m.id === cond.metadataField);
-        if (meta?.type === "Number" && !cond.value) {
-          errors.push(t('enterValue', { index: index + 1 }));
-        }
+      // Real-time fetch of field type
+      const meta = stateRef.current.availableMetadataState.find(m => m.id === cond.metadataField);
+      if (meta?.type === "Number" && !cond.valueLabel && cond.valueType === "reference") {
+        errors.push(t('enterValue', { index: index + 1 }));
       }
     });
     return errors.length > 0 ? errors.join('; ') : false;
@@ -319,12 +323,12 @@ const MetadataFilter = ({
           comparison_operation: cond.operator,
           right_value_type: cond.valueType === "reference" ? "ref" : "input",
           right_value: cond.value,
+          right_label: cond.valueLabel
         };
       }),
     };
     onChange(filterData);
-  }, [isEnabled, relation, checkAllFieldsValidity, validateConditionsUI, validateFunc, onChange, onValidate]);
-
+  }, [isEnabled, relation, conditions, checkAllFieldsValidity, validateConditionsUI, validateFunc, onChange, onValidate]);
   const validateVars = useCallback(async (): Promise<string> => {
     if (!isEnabled) return "";
 
@@ -353,13 +357,14 @@ const MetadataFilter = ({
       for (const condition of conditions) {
         if (!condition.metadataField) continue;
         if (!validFieldIds.has(condition.metadataField)) {
+          setError(true)
           const fieldName = condition.metadataField.split("-").pop() || "";
-          // Get node name, or use default value
+          // 获取节点名称，如果没有则使用默认值
           const nodeName = node?.name || t('defaultNodeName');
           return `${nodeName} ${t('nodeError2', { fieldName })}`;
         }
       }
-
+      setError(false)
       return "";
     } catch (error) {
       console.error("Error validating metadata fields:", error);
@@ -394,6 +399,7 @@ const MetadataFilter = ({
       operator: "",
       valueType: "input",
       value: "",
+      valueLabel: ""
     }]);
   };
 
@@ -408,30 +414,55 @@ const MetadataFilter = ({
   };
 
   const updateCondition = (id: string, field: keyof MetadataCondition, value: string) => {
-    setConditions(prev => prev.map(condition => {
-      if (condition.id === id) {
-        let updated = { ...condition, [field]: value };
-        if (field === "metadataField") {
-          const selectedMeta = availableMetadataState.find(m => m.id === value);
-          setFieldErrors(prev => {
-            const newErrors = { ...prev };
-            if (!selectedMeta && value) newErrors[id] = t('invalidOrDeletedMetadataField');
-            else delete newErrors[id];
-            return newErrors;
-          });
-          if (selectedMeta) {
-            updated = { ...updated, operator: "", value: "", valueType: "input" };
-            if (selectedMeta.type === "Number") updated.value = "0";
-          }
-        }
-        if (field === "operator") updated.value = "";
-        if (field === "valueType") updated.value = "";
-        return updated;
-      }
-      return condition;
-    }));
-  };
+    setConditions(prev => {
+      const newConditions = prev.map(condition => {
+        if (condition.id === id) {
+          let updated = { ...condition, [field]: value };
 
+          if (field === "metadataField") {
+            const selectedMeta = availableMetadataState.find(m => m.id === value);
+            setFieldErrors(prev => {
+              const newErrors = { ...prev };
+              if (!selectedMeta && value) newErrors[id] = t('invalidOrDeletedMetadataField');
+              else delete newErrors[id];
+              return newErrors;
+            });
+            if (selectedMeta) {
+              updated = {
+                ...updated,
+                operator: "",
+                value: "",
+                valueType: "input",
+                valueLabel: ""
+              };
+              if (selectedMeta.type === "Number") updated.value = "0";
+            }
+          }
+          if (field === "operator") {
+            updated = {
+              ...updated,
+              value: "",
+              valueLabel: ""
+            };
+          }
+          if (field === "valueType") {
+            updated = {
+              ...updated,
+              value: "",
+              valueLabel: ""
+            };
+          }
+
+          return updated;
+        }
+        return condition;
+      });
+
+      // 更新 stateRef
+      stateRef.current.conditions = newConditions;
+      return newConditions;
+    });
+  };
   const handleRelationChange = () => {
     setRelation(prev => prev === "and" ? "or" : "and");
   };
@@ -443,8 +474,8 @@ const MetadataFilter = ({
     if (isEmptyOperator) return <Input placeholder={t('noInputNeeded')} value="" disabled className="bg-gray-100 h-8" />;
 
     if (condition.valueType === "reference") {
-      const selectedLabel = condition.value
-        ? condition.value.split('.').reduce((acc, part, index, array) => index === array.length - 1 ? `${acc}/${part}` : `${acc}.${part}`)
+      const selectedLabel = condition.valueLabel
+        ? condition.valueLabel.split('.').reduce((acc, part, index, array) => index === array.length - 1 ? `${acc}/${part}` : `${acc}.${part}`)
         : "";
       return (
         <div className="flex items-center gap-1 min-w-0">
@@ -452,7 +483,10 @@ const MetadataFilter = ({
             className="max-w-40 flex-1"
             nodeId={nodeId}
             itemKey={condition.id}
-            onSelect={(E: any, v: any) => updateCondition(condition.id, "value", `${E.name}.${v.value}`)}
+            onSelect={(E: any, v: any) => {
+              updateCondition(condition.id, "value", `${E.id}.${v.value}`);
+              updateCondition(condition.id, "valueLabel", `${E.name}/${v.label}`);
+            }}
           >
             <div className="no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400">
               <span className="flex items-center flex-1 truncate">{selectedLabel || t('selectOption')}</span>
@@ -509,7 +543,7 @@ const MetadataFilter = ({
                         onValueChange={(value) => updateCondition(condition.id, "metadataField", value)}
                         onOpenChange={setIsSelectOpen}
                       >
-                        <SelectTrigger className={`h-8 min-w-0`}>
+                        <SelectTrigger className={`h-8 min-w-0 ${error ? 'border-red-500 ring-1 ring-red-500' : ''}`}>
                           <SelectValue placeholder={t('selectVariable')}>
                             {condition.metadataField && (
                               <TooltipProvider>
@@ -574,42 +608,44 @@ const MetadataFilter = ({
                         </SelectContent>
                       </Select>
                     </div>
-                    {![`is_empty`, `is_not_empty`].includes(condition.operator) && (
-                      <>
-                        <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[16%]' : 'max-w-[20%]'}`}>
-                          <Select value={condition.valueType} onValueChange={(value: "reference" | "input") => updateCondition(condition.id, "valueType", value)}>
-                            <SelectTrigger className="h-8 min-w-0">
-                              <div className="flex items-center justify-between w-full">
-                                <span>{condition.valueType === "reference" ? t('reference') : t('input')}</span>
-                                {condition.valueType === "reference" && metadataType === "Time" && (
-                                  <div className="relative group/info flex-shrink-0">
-                                    <CircleQuestionMark size={16} className="text-gray-400" />
-                                    <div className="absolute bottom-full right-0 mb-2 hidden group-hover/info:block p-2 bg-black text-white text-xs rounded z-10">{t('referenceFormatTip')}</div>
-                                  </div>
-                                )}
-                              </div>
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="reference">{t('reference')}</SelectItem>
-                              <SelectItem value="input">{t('input')}</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[45%]' : 'max-w-[25%]'}`}>{renderValueInput(condition)}</div>
-                      </>
-                    )}
+                    {
+                      ![`is_empty`, `is_not_empty`].includes(condition.operator) && (
+                        <>
+                          <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[16%]' : 'max-w-[20%]'}`}>
+                            <Select value={condition.valueType} onValueChange={(value: "reference" | "input") => updateCondition(condition.id, "valueType", value)}>
+                              <SelectTrigger className="h-8 min-w-0">
+                                <div className="flex items-center justify-between w-full">
+                                  <span>{condition.valueType === "reference" ? t('reference') : t('input')}</span>
+                                  {condition.valueType === "reference" && metadataType === "Time" && (
+                                    <div className="relative group/info flex-shrink-0">
+                                      <CircleQuestionMark size={16} className="text-gray-400" />
+                                      <div className="absolute bottom-full right-0 mb-2 hidden group-hover/info:block p-2 bg-black text-white text-xs rounded z-10">{t('referenceFormatTip')}</div>
+                                    </div>
+                                  )}
+                                </div>
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="reference">{t('reference')}</SelectItem>
+                                <SelectItem value="input">{t('input')}</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[45%]' : 'max-w-[25%]'}`}>{renderValueInput(condition)}</div>
+                        </>
+                      )
+                    }
                     <div className={`flex-shrink-0 ${isTimeType ? 'max-w-[10%]' : 'max-w-[10%]'} flex justify-center`}>
                       <Trash2 size={18} onClick={() => deleteCondition(condition.id)} className="hover:text-red-600 cursor-pointer group-hover:opacity-100 opacity-0" />
                     </div>
-                  </div>
-                </div>
+                  </div >
+                </div >
               );
             })}
-          </div>
+          </div >
           <Button onClick={addCondition} variant="outline" className="border-primary text-primary mt-2 h-8">{t('+ Add Condition')}</Button>
-        </div>
+        </div >
       )}
-    </div>
+    </div >
   );
 };
 

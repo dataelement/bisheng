@@ -19,8 +19,6 @@ const TYPE_ICONS = {
 
 // 元数据行组件
 export const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onValueChange, isSmallScreen, t, showInput = true }) => {
-    console.log(item);
-    
     const handleInputChange = (e) => {
         onValueChange(item.id, e.target.value);
     };
@@ -97,7 +95,7 @@ export const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onVal
                             <input
                                 disabled={!isKnowledgeAdmin}
                                 type="number"
-                                value={item.value ?? 0}
+                                value={item.value === '' || item.value === null || item.value === undefined ? 0 : item.value}
                                 onChange={handleNumberChange}
                                 onBlur={(e) => {
                                     // 当失去焦点时，如果值为空字符串，则设置为0

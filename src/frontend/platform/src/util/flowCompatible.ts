@@ -63,7 +63,7 @@ const comptibleRag = (node) => {
         if (oldMaxChunkSizeParam) {
             advancedParam.value.max_chunk_size = oldMaxChunkSizeParam.value;
         }
-        knowledgeGroup.params.splice(knowledgeIndex + 1, 0, advancedParam);
+        knowledgeGroup.params.splice(knowledgeIndex + 2, 0, advancedParam);
 
         node.v = 2;
     }

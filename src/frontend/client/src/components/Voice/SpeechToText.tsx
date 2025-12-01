@@ -114,7 +114,12 @@ interface SpeechToTextComponentProps {
 
 const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProps) => {
     const { showToast } = useToastContext()
-    const [isRecording, setIsRecording] = useState(false)
+    const [isRecording, _setIsRecording] = useState(false)
+    const isRecordingRef = useRef(false)
+    const setIsRecording = useCallback((value: boolean) => {
+        isRecordingRef.current = value
+        _setIsRecording(value)
+    }, [_setIsRecording])
     const [isProcessing, setIsProcessing] = useState(false)
     const localize = useLocalize();
 
@@ -190,6 +195,7 @@ const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProp
             setIsProcessing(false)
             // Ten minute recording limit
             setTimeout(() => {
+                if (!isRecordingRef.current) return
                 setIsProcessing(true)
                 mediaRecorderRef.current?.stop()
                 setIsRecording(false)
@@ -247,6 +253,7 @@ const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProp
                     setIsProcessing(false)
                 } finally {
                     await cleanupResources()
+                    setIsProcessing(false)
                 }
             }
 

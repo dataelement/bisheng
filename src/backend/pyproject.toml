@@ -37,6 +37,7 @@ dependencies = [
     "langchain-milvus==0.2.1",
     "langchain-ollama>=0.3.0,<0.4.0",
     "langchain-openai>=0.3.16,<0.4.0",
+    "pymilvus>=2.5.10,<2.6.0",
     "langgraph>=0.3.27,<0.4.0",
     "llama-index>=0.12.52",
     "loguru>=0.7.3",

@@ -44,6 +44,8 @@ export default function RunLog({ data }) {
     if (assistantState.tool_list.length + assistantState.knowledge_list.length
         + assistantState.flow_list.length === 0) return null
 
+    if (data.type === 'end_cover') return null
+
     return <div className="py-1">
         <div className="rounded-sm border max-w-[90%]">
             <div className="flex justify-between items-center px-4 py-2 cursor-pointer" onClick={() => setOpen(!open)}>

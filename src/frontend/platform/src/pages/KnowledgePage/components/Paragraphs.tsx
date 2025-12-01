@@ -465,7 +465,8 @@ export default function Paragraphs({ fileId, onBack }) {
                 id: `meta_${fieldName}`,
                 name: fieldData.field_name || fieldName,
                 type: fieldData.field_type.charAt(0).toUpperCase() + fieldData.field_type.slice(1),
-                updated: fieldData.updated_at
+                updated: fieldData.updated_at,
+                updated_at: fieldData.updated_at || 0,
             }));
             setPredefinedMetadata(formattedFields);
         }
@@ -528,7 +529,8 @@ export default function Paragraphs({ fileId, onBack }) {
         }
         const newItem = {
             ...metadata,
-            id: `meta_${Date.now()}_${metadata.name}`,
+            id: `temp_meta_${Date.now()}_${metadata.name}`, 
+            updated_at: Date.now(),
             value: ''
         };
         setMainMetadataList(prev => [...prev, newItem]);
@@ -556,7 +558,6 @@ export default function Paragraphs({ fileId, onBack }) {
             const res = await getMetaFile(currentFile.id);
             setFileInfor(res);
             const fetchedMetadata = res.user_metadata || [];
-            console.log(fetchedMetadata,34);
             const metadataArray = Object.entries(fetchedMetadata).map(([fieldName, fieldData]) => ({
                 id: `meta_${fieldName}`,
                 name: fieldData.field_name || fieldName,
@@ -564,7 +565,8 @@ export default function Paragraphs({ fileId, onBack }) {
                     fieldData.field_type.charAt(0).toUpperCase() + fieldData.field_type.slice(1).toLowerCase() : 
                     'String',
                 value: fieldData.field_value || '',
-                updated_at: fieldData.updated_at
+                originalValue: fieldData.field_value || '', 
+                updated_at: fieldData.updated_at || 0,
             }));
             const sortedMetadata = metadataArray.sort((a, b) => {
                 return (a.updated_at || 0) - (b.updated_at || 0);
@@ -805,10 +807,19 @@ export default function Paragraphs({ fileId, onBack }) {
 
     const handleSaveUserMetadata = useCallback(async () => {
         const knowledge_id = selectedFileId
-        const user_metadata_list = mainMetadataList.map(item => ({
+   const user_metadata_list = mainMetadataList.map(item => {
+       if (!item.id.startsWith('temp_') && item.updated_at !== undefined) {
+            return {
+                field_name: item.name,
+                field_value: item.value || '',
+                updated_at: item.updated_at,
+            };
+        }
+        return {
             field_name: item.name,
-            field_value: item.value || ''
-        }))
+            field_value: item.value || '',
+            updated_at: item.updated_at || Math.floor(Date.now() / 1000),
+        };});
         try {
             await saveUserMetadataApi(knowledge_id, user_metadata_list);
 

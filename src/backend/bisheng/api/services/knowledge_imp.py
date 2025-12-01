@@ -303,15 +303,7 @@ def delete_vector_files(file_ids: List[int], knowledge: Knowledge) -> bool:
     # 如果collection不存在则不处理
     if vector_client.col:
         vector_client.col.delete(expr=f"document_id in {file_ids}", timeout=10)
-    vector_client.client.close()
     logger.info(f"delete_milvus file_ids={file_ids}")
-
-    # for one in file_ids:
-    #     res = es_client.client.delete_by_query(
-    #         index=knowledge.index_name, query={"match": {"metadata.file_id": one}}
-    #     )
-    #
-    #     logger.info(f"act=delete_es file_id={one} res={res}")
 
     if es_client.client.indices.exists(index=knowledge.index_name):
         res = es_client.client.delete_by_query(

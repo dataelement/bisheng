@@ -390,20 +390,23 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
 const ModelSelect = ({ options, value, disabled, onChange }: { options?: BsConfig['models'], disabled: boolean, value: number, onChange: (value: string) => void }) => {
 
   const label = useMemo(() => {
-    if (!options) return ''
-    // 默认选中第一个
-    if (!value) onChange(options[0].id + '')
-    const currentOpt = options.find(opt => Number(opt.id) === value)
-    if (currentOpt) {
-      return currentOpt.displayName
+    if (!options || options.length === 0 || value == null) return ''
+
+    const currentOpt = options.find(opt => String(opt.id) === String(value))
+    return currentOpt?.displayName ?? ''
+  }, [options, value])
+
+  useEffect(() => {
+    if (!options || options.length === 0) return
+
+    // 当前值是否在 options 里
+    const hasCurrent = options.find(opt => String(opt.id) === String(value))
+
+    // 没有值 / 值不合法时，默认选中第一个
+    if (!hasCurrent) {
+      onChange(String(options[0].id))
     } else {
-      if (options[0]) {
-        const id = options[0].id + ''
-        const currentOpt = options.find(opt => opt.id === id)
-        options[0] && onChange(id)
-        return currentOpt?.displayName
-      }
-      return ''
+      onChange(hasCurrent.id)
     }
   }, [options, value])
 
