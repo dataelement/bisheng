@@ -7,7 +7,7 @@ from bisheng.core.prompts.prompt_loader import PromptLoader
 logger = logging.getLogger(__name__)
 
 
-class PromptManager(BaseContextManager[PromptLoader], ABC):
+class PromptManager(BaseContextManager[PromptLoader]):
     """提示词管理器
 
     负责提示词的加载、缓存和管理

@@ -53,7 +53,7 @@ _EXCEPTION_HANDLERS = {
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await initialize_app_context(config=settings.model_dump())
+    await initialize_app_context(config=settings)
     initialize_services()
     setup_llm_caching()
     await init_default_data()
@@ -62,6 +62,7 @@ async def lifespan(app: FastAPI):
     teardown_services()
     thread_pool.tear_down()
     await close_app_context()
+
 
 
 def create_app():

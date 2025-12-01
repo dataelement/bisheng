@@ -9,7 +9,7 @@ from bisheng.core.storage.minio.minio_storage import MinioStorage
 logger = logging.getLogger(__name__)
 
 
-class MinioManager(BaseContextManager[MinioStorage], ABC):
+class MinioManager(BaseContextManager[MinioStorage]):
     """Minio 全局管理器
 
     负责管理 Minio 存储的全局生命周期，提供统一的访问接口

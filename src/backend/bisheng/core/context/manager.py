@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any, TypeVar, List, Union
 
 from loguru import logger
 
+from bisheng.core.config.settings import Settings
 from bisheng.core.context.base import (
     ContextRegistry,
     BaseContextManager,
@@ -33,7 +34,7 @@ class ApplicationContextManager:
         self._initialization_order: List[str] = []
         self._dependencies: Dict[str, List[str]] = {}
 
-    async def initialize(self, config: Optional[Dict[str, Any]] = None) -> None:
+    async def initialize(self, config: Settings) -> None:
         """初始化应用上下文
 
         Args:
@@ -63,17 +64,25 @@ class ApplicationContextManager:
                 await self.async_close()
                 raise ContextError(f"Application context initialization failed: {e}") from e
 
-    def _register_default_contexts(self, config: Dict[str, Any]) -> None:
+    def _register_default_contexts(self, config: Settings) -> None:
         """注册默认的上下文管理器"""
         try:
+
             from bisheng.core.database.manager import DatabaseManager
-            self.register_context(DatabaseManager(database_url=config.get('database_url')))
+            self.register_context(DatabaseManager(database_url=config.database_url))
 
             from bisheng.core.cache.redis_manager import RedisManager
-            self.register_context(RedisManager(redis_url=config.get('redis_url')))
+            self.register_context(RedisManager(redis_url=config.redis_url))
 
             from bisheng.core.storage.minio.minio_manager import MinioManager
-            self.register_context(MinioManager(minio_config=config.get('object_storage').get('minio')))
+            self.register_context(MinioManager(minio_config=config.object_storage.minio))
+
+            from bisheng.core.search.elasticsearch.manager import EsConnManager, statistics_es_name
+            self.register_context(EsConnManager(es_hosts=config.get_search_conf().elasticsearch_url,
+                                                **config.get_search_conf().ssl_verify))
+            self.register_context(EsConnManager(es_hosts=config.get_search_conf().statistics_elasticsearch_url,
+                                                name=statistics_es_name,
+                                                **config.get_search_conf().statistics_ssl_verify))
 
             from bisheng.core.external.http_client.http_client_manager import HttpClientManager
             self.register_context(HttpClientManager())
@@ -379,7 +388,7 @@ class ApplicationContextManager:
 app_context = ApplicationContextManager()
 
 
-async def initialize_app_context(config: Optional[Dict[str, Any]] = None) -> None:
+async def initialize_app_context(config: Settings) -> None:
     """
     初始化全局应用上下文
     :param config:
