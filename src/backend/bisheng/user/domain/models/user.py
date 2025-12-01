@@ -3,11 +3,13 @@ from typing import List, Optional
 
 from pydantic import field_validator
 from sqlalchemy import Column, DateTime, func, text
-from sqlmodel import Field, select
+from sqlmodel import Field, select, Relationship
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.constants import AdminRole, DefaultRole
+from bisheng.database.models.group import Group
+from bisheng.database.models.role import Role
 from bisheng.database.models.user_group import UserGroup
 from bisheng.user.domain.models.user_role import UserRole
 
@@ -39,6 +41,11 @@ class User(UserBase, table=True):
     password_update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')), description='密码最近的修改时间')
 
+    # 定义groups和roles的查询关系
+    groups: List["Group"] = Relationship(link_model=UserGroup)
+    roles: List["Role"] = Relationship(link_model=UserRole)
+
+
     __tablename__ = "user"
 
 
@@ -51,13 +58,13 @@ class UserRead(UserBase):
 
 
 class UserQuery(UserBase):
-    user_id: Optional[int] = None
-    user_name: Optional[str] = None
+    pass
+
 
 
 class UserLogin(UserBase):
     password: str
-    user_name: str
+
     captcha_key: Optional[str] = None
     captcha: Optional[str] = None
 

@@ -11,8 +11,16 @@ from bisheng.database.constants import AdminRole
 
 
 class UserRoleBase(SQLModelSerializable):
-    user_id: int = Field(index=True)
-    role_id: int = Field(index=True)
+    user_id: Optional[int] = Field(
+        default=None,
+        foreign_key="user.user_id",
+        primary_key=True
+    )
+    role_id: int = Field(
+        default=None,
+        foreign_key="role.id",
+        primary_key=True
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

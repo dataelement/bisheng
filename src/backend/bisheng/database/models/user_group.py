@@ -10,8 +10,17 @@ from bisheng.database.models.group import DefaultGroup
 
 
 class UserGroupBase(SQLModelSerializable):
-    user_id: int = Field(index=True, description='用户id')
-    group_id: int = Field(index=True, description='组id')
+    user_id: Optional[int] = Field(
+        default=None,
+        foreign_key="user.user_id",
+        primary_key=True
+    )
+
+    group_id: Optional[int] = Field(
+        default=None,
+        foreign_key="group.id",
+        primary_key=True
+    )
     is_group_admin: bool = Field(default=False, index=False, description='是否是组管理员')  # 管理员不属于此用户组
     remark: Optional[str] = Field(default=None, index=False)
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(

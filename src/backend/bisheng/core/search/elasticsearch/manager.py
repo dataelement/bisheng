@@ -50,7 +50,7 @@ async def get_es_connection() -> AsyncElasticsearch:
         logger.warning(f"EsConnManager not found in app_context. Registering a new instance.")
         try:
             from bisheng.common.services.config_service import settings
-            app_context.register_instance(
+            app_context.register_context(
                 EsConnManager(es_hosts=settings.get_search_conf().elasticsearch_url
                                        ** settings.get_search_conf().ssl_verify
                               ))
@@ -70,7 +70,7 @@ async def get_statistics_es_connection() -> AsyncElasticsearch:
         try:
             from bisheng.common.services.config_service import settings
 
-            app_context.register_instance(
+            app_context.register_context(
                 EsConnManager(es_hosts=settings.get_search_conf().statistics_elasticsearch_url,
                               name=statistics_es_name,
                               **settings.get_search_conf().statistics_ssl_verify
@@ -91,7 +91,7 @@ def get_es_connection_sync() -> Elasticsearch:
         logger.warning(f"EsConnManager not found in app_context. Registering a new instance.")
         try:
             from bisheng.common.services.config_service import settings
-            app_context.register_instance(
+            app_context.register_context(
                 EsConnManager(es_hosts=settings.get_search_conf().elasticsearch_url,
                               **settings.get_search_conf().ssl_verify
                               ))
@@ -101,7 +101,7 @@ def get_es_connection_sync() -> Elasticsearch:
             raise KeyError(f"EsConnManager not found in app_context and failed to register a new instance.") from e
 
 
-def get_statistics_es_connection_sync() -> ESConnection:
+def get_statistics_es_connection_sync() -> Elasticsearch:
     """同步获取统计 Elasticsearch 连接实例"""
     from bisheng.core.context.manager import app_context
     try:
@@ -111,7 +111,7 @@ def get_statistics_es_connection_sync() -> ESConnection:
         try:
             from bisheng.common.services.config_service import settings
 
-            app_context.register_instance(
+            app_context.register_context(
                 EsConnManager(es_hosts=settings.get_search_conf().statistics_elasticsearch_url,
                               name=statistics_es_name,
                               **settings.get_search_conf().statistics_ssl_verify
