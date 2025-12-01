@@ -10,20 +10,77 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 
-// 类型图标常量
+// Types
+interface MetadataItem {
+    id: string;
+    name: string;
+    type: 'String' | 'Number' | 'Time';
+    value?: string;
+    description?: string;
+    updated?: number;
+    updated_at?: string;
+}
+
+interface FileInfo {
+    id?: string;
+    file_name?: string;
+    create_time?: string;
+    update_time?: string;
+    creat_user?: string;
+    update_user?: string;
+    file_size?: number;
+    split_rule?: string;
+    title?: string;
+    user_metadata?: Record<string, any>;
+}
+
+interface MetadataDialogProps {
+    open: boolean;
+    file: FileInfo | null;
+}
+
+interface SideDialogProps {
+    type: 'search' | 'create' | null;
+    open: boolean;
+}
+
+interface NewMetadata {
+    name: string;
+    type: 'String' | 'Number' | 'Time';
+}
+
+// Type icon constants
 const TYPE_ICONS = {
     String: <Type />,
     Number: <Hash />,
     Time: <Clock3 />
 };
 
-// 元数据行组件
-export const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onValueChange, isSmallScreen, t, showInput = true }) => {
-    const handleInputChange = (e) => {
+// Metadata row component
+export const MetadataRow = React.memo(({
+    isKnowledgeAdmin,
+    item,
+    onDelete,
+    onValueChange,
+    isSmallScreen,
+    t,
+    showInput = true
+}: {
+    isKnowledgeAdmin: boolean;
+    item: MetadataItem;
+    onDelete: (id: string) => void;
+    onValueChange: (id: string, value: string) => void;
+    isSmallScreen: boolean;
+    t: (key: string) => string;
+    showInput?: boolean;
+}) => {
+    console.log(item);
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         onValueChange(item.id, e.target.value);
     };
 
-    const handleNumberChange = (e) => {
+    const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         if (value === '' || /^-?\d*\.?\d*$/.test(value)) {
             onValueChange(item.id, value);
@@ -83,7 +140,7 @@ export const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onVal
                                 value={item.value || ''}
                                 onChange={handleInputChange}
                                 maxLength={255}
-                                placeholder={t('请输入文本')}
+                                placeholder={t('metadatainfor.enterText')}
                                 className={cname(
                                     "w-full px-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                                     isSmallScreen ? "py-0.5 text-xs h-6" : "py-1 text-sm h-7"
@@ -97,10 +154,10 @@ export const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onVal
                                 type="number"
                                 value={item.value === '' || item.value === null || item.value === undefined ? 0 : item.value}
                                 onChange={handleNumberChange}
-                                onBlur={(e) => {
-                                    // 当失去焦点时，如果值为空字符串，则设置为0
+                                onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
+                                    // When losing focus, if value is empty string, set to 0
                                     if (e.target.value === '') {
-                                        onValueChange(item.id, 0);
+                                        onValueChange(item.id, '0');
                                     }
                                 }}
                                 className={cname(
@@ -113,10 +170,10 @@ export const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onVal
                         {item.type === 'Time' && (
                             <DatePicker
                                 disabled={!isKnowledgeAdmin}
-                                value={item.value}
-                                placeholder={t('选择时间')}
+                                value={item.value ? new Date(item.value) : undefined}
+                                placeholder={t('metadatainfor.selectTime')}
                                 showTime={true}
-                                onChange={(selectedDate) => {
+                                onChange={(selectedDate: Date | undefined) => {
                                     const formattedValue = selectedDate
                                         ? format(selectedDate, 'yyyy-MM-dd HH:mm:ss')
                                         : '';
@@ -132,7 +189,7 @@ export const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onVal
                 onClick={() => onDelete(item.id)}
                 disabled={!isKnowledgeAdmin}
                 className="p-1 rounded transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                title={t('删除')}
+                title={t('metacommon.delete')}
             >
                 <Trash2 size={isSmallScreen ? 18 : 20} className="text-gray-500" />
             </button>
@@ -142,7 +199,7 @@ export const MetadataRow = React.memo(({ isKnowledgeAdmin, item, onDelete, onVal
 
 MetadataRow.displayName = 'MetadataRow';
 
-// 主元数据弹窗组件
+// Main metadata dialog component
 export const MainMetadataDialog = React.memo(({
     metadataDialog,
     setMetadataDialog,
@@ -158,9 +215,24 @@ export const MainMetadataDialog = React.memo(({
     handleDeleteMainMetadata,
     handleMainMetadataValueChange,
     mainMetadataDialogRef
+}: {
+    metadataDialog: MetadataDialogProps;
+    setMetadataDialog: (dialog: MetadataDialogProps) => void;
+    mainMetadataList: MetadataItem[];
+    fileInfor: FileInfo | undefined;
+    isKnowledgeAdmin: boolean;
+    isSmallScreen: boolean;
+    t: (key: string) => string;
+    formatFileSize: (bytes: number) => string;
+    splitRuleDesc: (file: FileInfo) => string;
+    handleSaveUserMetadata: () => void;
+    handleSearchMetadataClick: () => void;
+    handleDeleteMainMetadata: (id: string) => void;
+    handleMainMetadataValueChange: (id: string, value: string) => void;
+    mainMetadataDialogRef: React.RefObject<HTMLDivElement>;
 }) => {
     return (
-        <Dialog open={metadataDialog.open} onOpenChange={(open) => setMetadataDialog(prev => ({ ...prev, open }))}>
+        <Dialog open={metadataDialog.open} onOpenChange={(open) => setMetadataDialog({ ...metadataDialog, open })}>
             <DialogContent
                 ref={mainMetadataDialogRef}
                 className="sm:max-w-[525px] max-w-[625px] h-[80vh] flex flex-col"
@@ -169,7 +241,7 @@ export const MainMetadataDialog = React.memo(({
                 }}
             >
                 <DialogHeader>
-                    <h3 className="text-lg font-semibold">{t('元数据')}</h3>
+                    <h3 className="text-lg font-semibold">{t('metadatainfor.title')}</h3>
                 </DialogHeader>
 
                 <div className="flex-1 overflow-y-auto min-h-0">
@@ -179,7 +251,7 @@ export const MainMetadataDialog = React.memo(({
                         className="py-2 w-full flex items-center justify-center gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mb-4"
                     >
                         <Plus size={16} />
-                        <span>{t('添加元数据')}</span>
+                        <span>{t('metadatainfor.addMetadata')}</span>
                     </button>
 
                     {mainMetadataList.length > 0 && (
@@ -200,46 +272,52 @@ export const MainMetadataDialog = React.memo(({
                     )}
 
                     <div className="grid gap-4 py-4">
-                        <div className="font-medium">文档信息</div>
+                        <div className="font-medium">{t('fileinfor.documentInfo')}</div>
                         {fileInfor && <div className="space-y-2">
                             {[
                                 {
-                                    label: t('文件id'),
+                                    label: t('fileinfor.fileId'),
                                     value: fileInfor?.id,
                                 },
                                 {
-                                    label: t('文件名称'),
+                                    label: t('fileinfor.fileName'),
                                     value: fileInfor?.file_name,
                                     isFileName: true
                                 },
                                 {
-                                    label: t('创建时间'),
-                                    value: fileInfor?.create_time ? metadataDialog.file.create_time.replace('T', ' ') : null
+                                    label: t('fileinfor.createTime'),
+                                    value: fileInfor?.create_time ? metadataDialog.file?.create_time?.replace('T', ' ') : null
                                 },
                                 {
-                                    label: t('更新时间'),
+                                    label: t('fileinfor.updateTime'),
                                     value: fileInfor?.update_time ? fileInfor?.update_time.replace('T', ' ') : null
                                 },
                                 {
-                                    label: t('创建者'),
+                                    label: t('fileinfor.creator'),
                                     value: fileInfor?.creat_user,
                                 },
                                 {
-                                    label: t('更新者'),
+                                    label: t('fileinfor.updater'),
                                     value: fileInfor?.update_user,
                                 },
-                                { label: t('原始文件大小'), value: fileInfor?.file_size ? formatFileSize(metadataDialog.file.file_size) : null },
                                 {
-                                    label: t('切分策略'),
+                                    label: t('fileinfor.originalFileSize'),
+                                    value: fileInfor?.file_size ? formatFileSize(metadataDialog.file?.file_size || 0) : null
+                                },
+                                {
+                                    label: t('fileinfor.splitStrategy'),
                                     value: fileInfor ? splitRuleDesc(fileInfor) : null
                                 },
-                                { label: t('全文摘要'), value: metadataDialog.file?.title }
+                                {
+                                    label: t('fileinfor.fullTextSummary'),
+                                    value: metadataDialog.file?.title
+                                }
                             ].map((item, index) => (
                                 item.value && (
                                     <div key={index} className="grid grid-cols-4 gap-4 items-center">
                                         <span className="text-sm text-muted-foreground col-span-1">{item.label}</span>
                                         <span className={`col-span-3 text-sm ${item.isFileName ? 'truncate max-w-full' : ''}`}>
-                                            {item.value || t('none')}
+                                            {item.value || t('metacommon.none')}
                                         </span>
                                     </div>
                                 )
@@ -251,10 +329,10 @@ export const MainMetadataDialog = React.memo(({
                 <div className="flex justify-end gap-2 pt-4 border-t border-gray-200 flex-shrink-0">
                     <Button
                         variant="outline"
-                        onClick={() => setMetadataDialog(prev => ({ ...prev, open: false }))}
+                        onClick={() => setMetadataDialog({ ...metadataDialog, open: false })}
                         className={cname(isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm")}
                     >
-                        {t('取消')}
+                        {t('metacommon.cancel')}
                     </Button>
                     <Button
                         onClick={handleSaveUserMetadata}
@@ -264,7 +342,7 @@ export const MainMetadataDialog = React.memo(({
                             isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm"
                         )}
                     >
-                        {t('保存')}
+                        {t('metacommon.save')}
                     </Button>
                 </div>
             </DialogContent>
@@ -274,7 +352,7 @@ export const MainMetadataDialog = React.memo(({
 
 MainMetadataDialog.displayName = 'MainMetadataDialog';
 
-// 右侧弹窗组件
+// Right sidebar dialog component
 export const MetadataSideDialog = React.memo(({
     sideDialog,
     closeSideDialog,
@@ -295,8 +373,28 @@ export const MetadataSideDialog = React.memo(({
     handleCreateMetadataClick,
     handleSaveNewMetadata,
     setSideDialog
+}: {
+    sideDialog: SideDialogProps;
+    closeSideDialog: () => void;
+    predefinedMetadata: MetadataItem[];
+    searchTerm: string;
+    setSearchTerm: (term: string) => void;
+    newMetadata: NewMetadata;
+    setNewMetadata: (metadata: NewMetadata) => void;
+    metadataError: string;
+    setMetadataError: (error: string) => void;
+    isKnowledgeAdmin: boolean;
+    isSmallScreen: boolean;
+    t: (key: string) => string;
+    sideDialogWidth: number;
+    sideDialogPosition: { top: number; left: number };
+    isSideDialogPositioned: boolean;
+    handleAddFromSearch: (metadata: MetadataItem) => void;
+    handleCreateMetadataClick: () => void;
+    handleSaveNewMetadata: () => void;
+    setSideDialog: (dialog: SideDialogProps) => void;
 }) => {
-    const searchInputRef = useRef(null);
+    const searchInputRef = useRef<HTMLInputElement>(null);
 
     const filteredPredefinedMetadata = useMemo(() => {
         return predefinedMetadata
@@ -312,38 +410,39 @@ export const MetadataSideDialog = React.memo(({
     }, [predefinedMetadata, searchTerm]);
 
     const SideDialogContent = useMemo(() =>
-        React.forwardRef(({ children, className, ...props }, ref) => (
-            <DialogPrimitive.Portal>
-                <DialogPrimitive.Content
-                    ref={ref}
-                    {...props}
-                    className={cname(
-                        "fixed z-50 flex flex-col border bg-background dark:bg-[#303134] shadow-lg sm:rounded-lg",
-                        `w-[${sideDialogWidth}px]`,
-                        isSmallScreen ? "p-3 text-sm" : "p-5",
-                        className
-                    )}
-                    style={{
-                        top: `${sideDialogPosition.top}px`,
-                        left: `${sideDialogPosition.left}px`,
-                        transform: "none",
-                        maxHeight: "80vh",
-                        opacity: isSideDialogPositioned ? 1 : 0,
-                        transition: 'opacity 0.05s ease-in-out'
-                    }}
-                >
-                    {children}
-                    <DialogPrimitive.Close
-                        className="absolute right-3 top-3 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
-                        onClick={closeSideDialog}
+        React.forwardRef<HTMLDivElement, React.ComponentProps<typeof DialogPrimitive.Content>>(
+            ({ children, className, ...props }, ref) => (
+                <DialogPrimitive.Portal>
+                    <DialogPrimitive.Content
+                        ref={ref}
+                        {...props}
+                        className={cname(
+                            "fixed z-50 flex flex-col border bg-background dark:bg-[#303134] shadow-lg sm:rounded-lg",
+                            `w-[${sideDialogWidth}px]`,
+                            isSmallScreen ? "p-3 text-sm" : "p-5",
+                            className
+                        )}
+                        style={{
+                            top: `${sideDialogPosition.top}px`,
+                            left: `${sideDialogPosition.left}px`,
+                            transform: "none",
+                            maxHeight: "80vh",
+                            opacity: isSideDialogPositioned ? 1 : 0,
+                            transition: 'opacity 0.05s ease-in-out'
+                        }}
                     >
-                        <X className={isSmallScreen ? "h-3 w-3" : "h-4 w-4"} />
-                        <span className="sr-only">Close</span>
-                    </DialogPrimitive.Close>
-                </DialogPrimitive.Content>
-            </DialogPrimitive.Portal>
-        ))
-        , [sideDialogWidth, isSmallScreen, sideDialogPosition, isSideDialogPositioned, closeSideDialog]);
+                        {children}
+                        <DialogPrimitive.Close
+                            className="absolute right-3 top-3 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
+                            onClick={closeSideDialog}
+                        >
+                            <X className={isSmallScreen ? "h-3 w-3" : "h-4 w-4"} />
+                            <span className="sr-only">Close</span>
+                        </DialogPrimitive.Close>
+                    </DialogPrimitive.Content>
+                </DialogPrimitive.Portal>
+            )
+        ), [sideDialogWidth, isSmallScreen, sideDialogPosition, isSideDialogPositioned, closeSideDialog]);
 
     SideDialogContent.displayName = "SideDialogContent";
 
@@ -360,23 +459,23 @@ export const MetadataSideDialog = React.memo(({
                                 <input
                                     ref={searchInputRef}
                                     type="text"
-                                    placeholder={t('搜索元数据')}
+                                    placeholder={t('metadatainfor.searchMetadata')}
                                     className={cname(
                                         "w-full pl-9 pr-3 py-2 text-sm bg-white rounded-md outline-none ring-1 ring-gray-200",
                                         isSmallScreen ? "text-xs py-1.5" : ""
                                     )}
                                     value={searchTerm}
-                                    onChange={(e) => {
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                                         e.stopPropagation();
                                         setSearchTerm(e.target.value);
                                     }}
-                                    onKeyDown={(e) => {
+                                    onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
                                         e.stopPropagation();
                                         if (e.key === 'Escape') {
                                             closeSideDialog();
                                         }
                                     }}
-                                    onClick={(e) => {
+                                    onClick={(e: React.MouseEvent<HTMLInputElement>) => {
                                         e.stopPropagation();
                                     }}
                                 />
@@ -386,7 +485,7 @@ export const MetadataSideDialog = React.memo(({
                         <div className="flex-1 min-h-0 mt-2 mb-2 overflow-y-auto">
                             <div
                                 className="h-full overflow-y-auto"
-                                onWheel={(e) => {
+                                onWheel={(e: React.WheelEvent<HTMLDivElement>) => {
                                     e.stopPropagation();
                                 }}
                             >
@@ -442,7 +541,7 @@ export const MetadataSideDialog = React.memo(({
                                     className="py-2 w-full flex items-center justify-center gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                 >
                                     <Plus size={isSmallScreen ? 14 : 16} />
-                                    <span>{t('新建元数据')}</span>
+                                    <span>{t('metadatainfor.createMetadata')}</span>
                                 </button>
                             </div>
                         </div>
@@ -452,18 +551,20 @@ export const MetadataSideDialog = React.memo(({
                 {sideDialog.type === 'create' && (
                     <>
                         <DialogHeader>
-                            <h3 className={cname("text-lg font-semibold", isSmallScreen ? "text-base" : "")}>{t('新建元数据')}</h3>
-                            <DialogDescription className={isSmallScreen ? "text-xs" : ""}>请输入新元数据的名称和类型。</DialogDescription>
+                            <h3 className={cname("text-lg font-semibold", isSmallScreen ? "text-base" : "")}>{t('metadatainfor.createMetadata')}</h3>
+                            <DialogDescription className={isSmallScreen ? "text-xs" : ""}>
+                                {t('metadatainfor.enterNewMetadataInfo')}
+                            </DialogDescription>
                         </DialogHeader>
 
                         <div className="grid gap-4 py-4">
                             <div className="space-y-1.5">
-                                <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>{t('类型')}</label>
+                                <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>{t('metadatainfor.type')}</label>
                                 <div className="flex gap-1">
-                                    {['String', 'Number', 'Time'].map((type) => (
+                                    {(['String', 'Number', 'Time'] as const).map((type) => (
                                         <button
                                             key={type}
-                                            onClick={() => setNewMetadata(prev => ({ ...prev, type: type }))}
+                                            onClick={() => setNewMetadata(prev => ({ ...prev, type }))}
                                             className={cname(
                                                 "flex-1 rounded-md font-medium transition-colors",
                                                 newMetadata.type === type
@@ -479,15 +580,15 @@ export const MetadataSideDialog = React.memo(({
                             </div>
 
                             <div className="space-y-1.5">
-                                <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>{t('名称')}</label>
+                                <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>{t('metadatainfor.name')}</label>
                                 <input
                                     type="text"
                                     value={newMetadata.name}
-                                    onChange={(e) => {
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                                         setNewMetadata(prev => ({ ...prev, name: e.target.value }));
                                         if (metadataError) setMetadataError('');
                                     }}
-                                    placeholder={t('请输入元数据名称')}
+                                    placeholder={t('metadatainfor.enterMetadataName')}
                                     className={cname(
                                         "w-full px-3 py-2 border rounded-md text-sm",
                                         isSmallScreen ? "text-xs h-8 py-1.5" : "",
@@ -512,7 +613,7 @@ export const MetadataSideDialog = React.memo(({
                                 onClick={() => setSideDialog({ type: 'search', open: true })}
                                 className={cname(isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm")}
                             >
-                                {t('取消')}
+                                {t('metacommon.cancel')}
                             </Button>
                             <Button
                                 onClick={handleSaveNewMetadata}
@@ -521,7 +622,7 @@ export const MetadataSideDialog = React.memo(({
                                     isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm"
                                 )}
                             >
-                                {t('保存')}
+                                {t('metacommon.save')}
                             </Button>
                         </div>
                     </>

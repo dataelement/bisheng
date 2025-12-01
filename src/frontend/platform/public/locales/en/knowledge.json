@@ -1,4 +1,65 @@
 {
+    "metacommon": {
+        "delete": "Delete",
+        "cancel": "Cancel",
+        "save": "Save",
+        "none": "None"
+    },
+    "metadatainfor": {
+        "title": "Metadata",
+        "addMetadata": "Add Metadata",
+        "enterText": "Enter text",
+        "selectTime": "Select time",
+        "searchMetadata": "Search metadata",
+        "createMetadata": "Create Metadata",
+        "enterNewMetadataInfo": "Please enter the name and type for the new metadata.",
+        "type": "Type",
+        "name": "Name",
+        "enterMetadataName": "Enter metadata name"
+    },
+    "fileinfor": {
+        "documentInfo": "Document Information",
+        "fileId": "File ID",
+        "fileName": "File Name",
+        "createTime": "Create Time",
+        "updateTime": "Update Time",
+        "creator": "Creator",
+        "updater": "Updater",
+        "originalFileSize": "Original File Size",
+        "splitStrategy": "Split Strategy",
+        "fullTextSummary": "Full Text Summary"
+    },
+    "common": {
+        "back": "Back",
+        "success": "Success",
+        "noPermission": "No operation permission"
+    },
+    "file": {
+        "selectFile": "Select File",
+        "searchFiles": "Search Files",
+        "previewNotAvailable": "File preview not available",
+        "fileNotFound": "Selected file not found",
+        "changeFailed": "File change failed",
+        "loadFailed": "Failed to load file list",
+        "unnamedFile": "Unnamed File",
+        "excelRule": "Every {{length}} rows as a segment"
+    },
+    "segment": {
+        "searchSegments": "Search Segments",
+        "adjustStrategy": "Adjust Segmentation Strategy",
+        "noData": "No segment data"
+    },
+    "metadialog": {
+        "title": "Metadata",
+        "nameRequired": "Name cannot be empty.",
+        "nameTooLong": "Name cannot exceed 255 characters.",
+        "nameInvalid": "Must start with a lowercase letter and can only contain lowercase letters, numbers, and underscores.",
+        "nameExists": "Metadata name already exists.",
+        "nameReserved": "This name is reserved for system metadata and cannot be used.",
+        "saveSuccess": "Metadata saved successfully",
+        "saveFailed": "Save failed, please check network or contact administrator",
+        "alreadyExists": "This metadata already exists and cannot be added again."
+    },
     "knowledgeBaseSettings": "Knowledge Settings",
     "enterKnowledgeBaseDescription": "Please enter knowledge base description",
     "noAvailableModels": "No available models",

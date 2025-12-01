@@ -1,4 +1,65 @@
 {
+    "metacommon": {
+        "delete": "删除",
+        "cancel": "取消",
+        "save": "保存",
+        "none": "无"
+    },
+    "metadatainfor": {
+        "title": "元数据",
+        "addMetadata": "添加元数据",
+        "enterText": "请输入文本",
+        "selectTime": "选择时间",
+        "searchMetadata": "搜索元数据",
+        "createMetadata": "新建元数据",
+        "enterNewMetadataInfo": "请输入新元数据的名称和类型。",
+        "type": "类型",
+        "name": "名称",
+        "enterMetadataName": "请输入元数据名称"
+    },
+    "fileinfor": {
+        "documentInfo": "文档信息",
+        "fileId": "文件ID",
+        "fileName": "文件名称",
+        "createTime": "创建时间",
+        "updateTime": "更新时间",
+        "creator": "创建者",
+        "updater": "更新者",
+        "originalFileSize": "原始文件大小",
+        "splitStrategy": "切分策略",
+        "fullTextSummary": "全文摘要"
+    },
+    "common": {
+        "back": "返回",
+        "success": "成功",
+        "noPermission": "暂无操作权限"
+    },
+    "file": {
+        "selectFile": "选择文件",
+        "searchFiles": "搜索文件",
+        "previewNotAvailable": "文件无法预览",
+        "fileNotFound": "未找到选中的文件",
+        "changeFailed": "文件切换失败",
+        "loadFailed": "加载文件列表失败",
+        "unnamedFile": "未命名文件",
+        "excelRule": "每 {{length}} 行作为一个分段"
+    },
+    "segment": {
+        "searchSegments": "搜索分段",
+        "adjustStrategy": "调整分段策略",
+        "noData": "无分段数据"
+    },
+    "metadialog": {
+        "title": "元数据",
+        "nameRequired": "名称不能为空。",
+        "nameTooLong": "名称不能超过255个字符。",
+        "nameInvalid": "必须以小写字母开头，且只能包含小写字母、数字和下划线。",
+        "nameExists": "元数据名已存在。",
+        "nameReserved": "该名称为系统内置元数据，不可使用",
+        "saveSuccess": "元数据已成功保存",
+        "saveFailed": "保存失败，请检查网络或联系管理员",
+        "alreadyExists": "该元数据已存在，不能重复添加。"
+    },
     "knowledgeBaseSettings": "知识库设置",
     "enterKnowledgeBaseDescription": "请输入知识库描述",
     "noAvailableModels": "暂无可用模型",
@@ -12,14 +73,14 @@
     "previewHint": "左侧点击按钮预览结果",
     "uploadHint": "请先完成文件上传",
     "nameRequired": "知识库名称不可为空",
-      "documentDataParsingCompleted": "文档数据解析已完成",
-  "documentDataBeingPrepared": "文档数据正在准备中",
-  "youCanReturn": "您可以返回知识库文件列表查看解析状态",
-  "returnToKnowledgeBase": "返回知识库",
-  "buildKnowledgeBaseQaAgent": "构建知识库问答智能体",
-  "afterDocumentParsing": "文档解析完成后。使用预制的知识库问答模版建立智能体，并测试问答效果",
-  "documentKnowledgeQa": "文档知识库问答-",
-  "retrieveDocumentKnowledge": "检索文档知识库，根据检索结果进行回答。",
+    "documentDataParsingCompleted": "文档数据解析已完成",
+    "documentDataBeingPrepared": "文档数据正在准备中",
+    "youCanReturn": "您可以返回知识库文件列表查看解析状态",
+    "returnToKnowledgeBase": "返回知识库",
+    "buildKnowledgeBaseQaAgent": "构建知识库问答智能体",
+    "afterDocumentParsing": "文档解析完成后。使用预制的知识库问答模版建立智能体，并测试问答效果",
+    "documentKnowledgeQa": "文档知识库问答-",
+    "retrieveDocumentKnowledge": "检索文档知识库，根据检索结果进行回答。",
     "characters": "字符",
     "retainImagesTooltip": "解析时将保留文档中的图片内容，以支持问答时图文并茂的回复。",
     "minRowGreaterThanMaxRow": "最小行不能大于最大行",

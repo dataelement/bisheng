@@ -9,6 +9,7 @@ import DocxPreview from "./DocxFileViewer";
 import { convertJsonData } from "./ParagraphEdit";
 import { Partition } from "./PreviewResult";
 import TxtFileViewer from "./TxtFileViewer";
+import ExcelPreview from "./ExcelPreview";
 
 export default function PreviewFile({
   urlState,
@@ -115,25 +116,25 @@ export default function PreviewFile({
       });
     });
 
-  if (labelsMap.size) {
-    setRePostion(!rePostion);
-    setLabelsMap(labelsMap);
-    labelsMapRef.current = labelsMap;
-  }
-}, [suffix, chunks, selectedChunkIndex, isUnsType, partitions]);
-useEffect(() => {
-  // 当 chunks 变化且存在选中的 chunkIndex 时，检查该 chunk 是否仍存在
-  if (selectedChunkIndex !== -1) {
-    const chunkExists = chunks.some(c => c.chunkIndex === selectedChunkIndex);
-    if (!chunkExists) {
-      // 清除该 chunk 对应的标签
-      setLabelsMap(new Map());
-      labelsMapRef.current = new Map();
-      delete labelsMapTempRef.current[selectedChunkIndex];
-      setSelectedBbox([]);
+    if (labelsMap.size) {
+      setRePostion(!rePostion);
+      setLabelsMap(labelsMap);
+      labelsMapRef.current = labelsMap;
     }
-  }
-}, [chunks, selectedChunkIndex, setLabelsMap, setSelectedBbox]);
+  }, [suffix, chunks, selectedChunkIndex, isUnsType, partitions]);
+  useEffect(() => {
+    // 当 chunks 变化且存在选中的 chunkIndex 时，检查该 chunk 是否仍存在
+    if (selectedChunkIndex !== -1) {
+      const chunkExists = chunks.some(c => c.chunkIndex === selectedChunkIndex);
+      if (!chunkExists) {
+        // 清除该 chunk 对应的标签
+        setLabelsMap(new Map());
+        labelsMapRef.current = new Map();
+        delete labelsMapTempRef.current[selectedChunkIndex];
+        setSelectedBbox([]);
+      }
+    }
+  }, [chunks, selectedChunkIndex, setLabelsMap, setSelectedBbox]);
   // 5. 页面滚动和定位逻辑（对齐ParagraphEdit的postion计算）
   useEffect(() => {
     setPostion(prev => [prev[0], prev[1] + selectedChunkDistanceFactor]);
@@ -256,6 +257,10 @@ useEffect(() => {
           alt="预览图片"
         />
       );
+      case 'xlsx':
+      case 'xls':
+      case 'csv':
+        return <ExcelPreview filePath={previewUrl || url} />;
       default:
         return <div className="flex justify-center items-center h-full text-gray-400">
           <div className="text-center">
@@ -306,8 +311,6 @@ useEffect(() => {
     }
   }, [])
 
-  // 2. 调整Excel文件过滤逻辑
-  if (['xlsx', 'xls', 'csv'].includes(file.suffix)) return null
 
 
   return <div className={cn('relative', step === 3 ? "w-full" : "w-1/2", step === 2 ? "-mt-9 w-full" : "")} onClick={e => {
