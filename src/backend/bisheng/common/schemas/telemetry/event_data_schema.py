@@ -43,6 +43,7 @@ class ToolInvocationEventData(BaseEventData):
 
     app_id: str
     app_name: str
+    app_type: ApplicationTypeEnum
     tool_id: int
     tool_name: str
     tool_type: int  # 什么类型的工具，比如：API、MCP、预置.
@@ -75,4 +76,14 @@ class NewKnowledgeBaseEventData(BaseEventData):
     kb_id: int
     kb_name: str
     kb_type: KnowledgeTypeEnum
-    
+
+
+
+class FileParseEventData(BaseEventData):
+    """Data model for file parse events."""
+
+    _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.FILE_PARSE
+
+    parse_type: Literal['etl4lm', 'un_etl4lm']
+    status: Literal['success', 'failed', 'parse_failed']
+    app_type: ApplicationTypeEnum

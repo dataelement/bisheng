@@ -1,5 +1,6 @@
 from typing import Any
 
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.tool.domain.services.executor import ToolExecutor
 from bisheng.workflow.nodes.base import BaseNode
@@ -21,7 +22,8 @@ class ToolNode(BaseNode):
         if self._tool:
             return
         self._tool = ToolExecutor.init_by_tool_id_sync(tool_id=self._tool_info.id, app_id=self.workflow_id,
-                                                       app_name=self.workflow_name, user_id=self.user_id)
+                                                       app_name=self.workflow_name,
+                                                       app_type=ApplicationTypeEnum.WORKFLOW, user_id=self.user_id)
 
     def _run(self, unique_id: str):
         self._init_tool()

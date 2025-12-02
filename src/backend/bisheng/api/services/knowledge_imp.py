@@ -33,9 +33,10 @@ from bisheng.api.services.patch_130 import (
     combine_multiple_md_files_to_raw_texts,
 )
 from bisheng.api.v1.schemas import ExcelRule
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.common.errcode.knowledge import KnowledgeSimilarError, KnowledgeFileDeleteError
+from bisheng.common.schemas.telemetry.event_data_schema import FileParseEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
@@ -63,6 +64,7 @@ from bisheng.llm.domain.services import LLMService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import md5_hash, util
 from bisheng.utils.embedding import decide_embeddings
+from bisheng.utils.exceptions import EtlException, FileParseException
 from bisheng_langchain.rag.extract_info import extract_title, async_extract_title
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 
@@ -455,6 +457,7 @@ def addEmbedding(
             preview_cache_key = (
                 preview_cache_keys[index] if index < len(preview_cache_keys) else None
             )
+        status = 'failed'
         try:
             logger.info(
                 f"process_file_begin file_id={db_file.id} file_name={db_file.file_name}"
@@ -478,17 +481,35 @@ def addEmbedding(
                 filter_page_header_footer=filter_page_header_footer,
             )
             db_file.status = KnowledgeFileStatus.SUCCESS.value
+            status = 'success'
+        except FileParseException as e:
+            logger.exception(
+                f"process_file_fail file_id={db_file.id} file_name={db_file.file_name}"
+            )
+            db_file.status = KnowledgeFileStatus.FAILED.value
+            db_file.remark = str(e)[:500]
+            status = 'parse_failed'
         except Exception as e:
             logger.exception(
                 f"process_file_fail file_id={db_file.id} file_name={db_file.file_name}"
             )
             db_file.status = KnowledgeFileStatus.FAILED.value
             db_file.remark = str(e)[:500]
+            status = 'failed'
         finally:
             logger.info(
                 f"process_file_end file_id={db_file.id} file_name={db_file.file_name}"
             )
             KnowledgeFileDao.update(db_file)
+            telemetry_service.log_event_sync(user_id=db_file.user_id,
+                                             event_type=BaseTelemetryTypeEnum.FILE_PARSE,
+                                             trace_id=trace_id_var.get(),
+                                             event_data=FileParseEventData(
+                                                 parse_type=db_file.parse_type,
+                                                 status=status,
+                                                 app_type=ApplicationTypeEnum.KNOWLEDGE_BASE
+                                             ))
+
             if callback:
                 inp = {
                     "file_name": db_file.file_name,
@@ -536,20 +557,26 @@ def add_file_embedding(
         if "excel_rule" in split_rule:
             excel_rule = ExcelRule(**split_rule["excel_rule"])
     # # extract text from file
-    texts, metadatas, parse_type, partitions = read_chunk_text(
-        filepath,
-        db_file.file_name,
-        separator,
-        separator_rule,
-        chunk_size,
-        chunk_overlap,
-        knowledge_id=knowledge_id,
-        retain_images=retain_images,
-        enable_formula=enable_formula,
-        force_ocr=force_ocr,
-        filter_page_header_footer=filter_page_header_footer,
-        excel_rule=excel_rule,
-    )
+    try:
+        texts, metadatas, parse_type, partitions = read_chunk_text(
+            filepath,
+            db_file.file_name,
+            separator,
+            separator_rule,
+            chunk_size,
+            chunk_overlap,
+            knowledge_id=knowledge_id,
+            retain_images=retain_images,
+            enable_formula=enable_formula,
+            force_ocr=force_ocr,
+            filter_page_header_footer=filter_page_header_footer,
+            excel_rule=excel_rule,
+        )
+    except EtlException as e:
+        db_file.parse_type = ParseType.ETL4LM.value
+        raise FileParseException(str(e)) from e
+    except Exception as e:
+        raise FileParseException(str(e)) from e
     if len(texts) == 0:
         raise ValueError("文件解析为空")
     # 缓存中有数据则用缓存中的数据去入库，因为是用户在界面编辑过的
@@ -851,18 +878,21 @@ def read_chunk_text(
                     raise Exception('The file is damaged.')
             etl4lm_settings = settings.get_knowledge().etl4lm
             parse_type = ParseType.ETL4LM.value
-            loader = Etl4lmLoader(
-                file_name,
-                input_file,
-                unstructured_api_url=etl4lm_settings.url,
-                ocr_sdk_url=etl4lm_settings.ocr_sdk_url,
-                force_ocr=bool(force_ocr),
-                enable_formular=bool(enable_formula),
-                timeout=etl4lm_settings.timeout,
-                filter_page_header_footer=bool(filter_page_header_footer),
-                knowledge_id=knowledge_id,
-            )
-            documents = loader.load()
+            try:
+                loader = Etl4lmLoader(
+                    file_name,
+                    input_file,
+                    unstructured_api_url=etl4lm_settings.url,
+                    ocr_sdk_url=etl4lm_settings.ocr_sdk_url,
+                    force_ocr=bool(force_ocr),
+                    enable_formular=bool(enable_formula),
+                    timeout=etl4lm_settings.timeout,
+                    filter_page_header_footer=bool(filter_page_header_footer),
+                    knowledge_id=knowledge_id,
+                )
+                documents = loader.load()
+            except Exception as e:
+                raise EtlException(str(e)) from e
             partitions = loader.partitions
             partitions = parse_partitions(partitions)
         else:
