@@ -260,7 +260,11 @@ export default function PreviewFile({
       case 'xlsx':
       case 'xls':
       case 'csv':
-        return <ExcelPreview filePath={previewUrl || url} />;
+        return(
+          <div>
+            <ExcelPreview filePath={previewUrl || url} />
+          </div>
+        )
       default:
         return <div className="flex justify-center items-center h-full text-gray-400">
           <div className="text-center">

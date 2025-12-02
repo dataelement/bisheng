@@ -148,7 +148,7 @@ export default function Files({ onPreview }) {
     const handleBatchDelete = () => {
         bsConfirm({
             title: t('prompt'),
-            desc: t('确认删除选中文件', { count: selectedFileObjs.length }),
+            desc: t('confirmDeleteSelectedFiles', { count: selectedFileObjs.length }),
             onOk(next) {
                 captureAndAlertRequestErrorHoc(Promise.all(
                     selectedFileObjs.map(file => deleteFile(file.id))
@@ -181,7 +181,7 @@ export default function Files({ onPreview }) {
                 const excel_rule = JSON.parse(el.split_rule).excel_rule
                 return {
                     ...el,
-                    strategy: ['', `Every ${excel_rule?.slice_length} rows as one segment`]
+                    strategy: ['', t('everyRowsAsOneSegment', { count: excel_rule?.slice_length })]
                 }
             }
             if (!el.split_rule) return {
@@ -196,14 +196,14 @@ export default function Files({ onPreview }) {
                 strategy: [data.length > 2 ? data.slice(0, 2).join(',') : '', data.join(',')]
             }
         })
-    }, [datalist])
+    }, [datalist, t])
 
     const splitRuleDesc = (el) => {
         if (!el.split_rule) return el.strategy[1].replace(/\n/g, '\\n')
         const suffix = el.file_name.split('.').pop().toUpperCase()
         const excel_rule = JSON.parse(el.split_rule).excel_rule
         if (!excel_rule) return el.strategy[1].replace(/\n/g, '\\n')
-        return ['XLSX', 'XLS', 'CSV'].includes(suffix) ? `Every ${excel_rule.slice_length} rows as one segment` : el.strategy[1].replace(/\n/g, '\\n')
+        return ['XLSX', 'XLS', 'CSV'].includes(suffix) ? t('everyRowsAsOneSegment', { count: excel_rule.slice_length }) : el.strategy[1].replace(/\n/g, '\\n')
     }
 
     // Check if there are selected parsing failed files
@@ -231,15 +231,16 @@ export default function Files({ onPreview }) {
         }
         setIsFilterOpen(open);
     };
- useEffect(() => {
+
+    useEffect(() => {
         // Load metadata when dialog opens and knowledge base ID exists
         if (metadataOpen && id) { // Note: dependency is metadataOpen, not open
             const fetchMetadata = async () => {
                 try {
                     // Call API to get knowledge base details
-                      const knowledgeDetails = await getKnowledgeDetailApi([id]);
+                    const knowledgeDetails = await getKnowledgeDetailApi([id]);
                     const knowledgeDetail = knowledgeDetails[0]; // Get first knowledge base details
-                 if (knowledgeDetail && knowledgeDetail.metadata_fields) {
+                    if (knowledgeDetail && knowledgeDetail.metadata_fields) {
                         setMetadataFields(knowledgeDetail.metadata_fields);
                     } else {
                         setMetadataFields([]); // Set to empty array if no metadata
@@ -251,11 +252,12 @@ export default function Files({ onPreview }) {
                 }
             };
             fetchMetadata();
-        }else if (!metadataOpen) {
+        } else if (!metadataOpen) {
             // Clear metadata state when dialog closes
             setMetadataFields([]);
         }
     }, [metadataOpen, id]);
+
     return (
         <div className="relative">
             

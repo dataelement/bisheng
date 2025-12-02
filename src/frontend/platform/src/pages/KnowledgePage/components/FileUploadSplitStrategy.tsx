@@ -3,95 +3,63 @@ import { Button } from '@/components/bs-ui/button';
 import { Input } from '@/components/bs-ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/bs-ui/radio';
 import { generateUUID } from '@/components/bs-ui/utils';
-import i18next from 'i18next';
 import { useState, useEffect } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
 
-// Generate stable strategy ID (consistent with parent component)
+// Generate stable strategy ID
 const getStrategyId = (regexStr, position) => {
-  // Simple hash function to ensure same content generates same ID
   let hash = 0;
   const str = `${regexStr}-${position}`;
   for (let i = 0; i < str.length; i++) {
     hash = ((hash << 5) - hash) + str.charCodeAt(i);
-    hash = hash & hash; // Convert to 32bit integer
+    hash = hash & hash;
   }
   return `strategy-${Math.abs(hash)}`;
 };
 
 // Predefined rules mapping table
-const PREDEFINED_RULES = {
+const PREDEFINED_RULES_CONFIG = {
   '\\n': {
     key: 'singleNewlineRule',
-    display: {
-      zh: '\\n✂️',
-      en: '\\n✂️'
-    },
     defaultPosition: 'after'
   },
   '\\n\\n': {
     key: 'doubleNewlineRule', 
-    display: {
-      zh: '\\n\\n✂️',
-      en: '\\n\\n✂️'
-    },
     defaultPosition: 'after'
   },
   '第.{1,3}章': {
     key: 'chapterRule',
-    display: {
-      zh: '✂️第.{1,3}章',
-      en: '✂️Chapter.{1,3}'
-    },
     defaultPosition: 'before'
   },
   '第.{1,3}条': {
     key: 'articleRule',
-    display: {
-      zh: '✂️第.{1,3}条',
-      en: '✂️Article.{1,3}'
-    },
     defaultPosition: 'before'
   },
   '。': {
     key: 'chinesePeriodRule',
-    display: {
-      zh: '。✂️',
-      en: '。✂️'
-    },
     defaultPosition: 'after'
   },
   '\\.': {
     key: 'englishPeriodRule',
-    display: {
-      zh: '\\.✂️',
-      en: '\\.✂️'
-    },
     defaultPosition: 'after'
   }
 };
 
 const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) => {
-  const { t } = useTranslation('knowledge')
+  const { t } = useTranslation('knowledge');
   const [customRegex, setCustomRegex] = useState('');
   const [position, setPosition] = useState('after');
-  const [currentLanguage, setCurrentLanguage] = useState(i18next.language);
 
-  // Monitor language changes
-  useEffect(() => {
-    const handleLanguageChange = (lng) => {
-      setCurrentLanguage(lng);
-    };
+  const getPredefinedRuleDisplay = (ruleKey) => {
+    return t(`predefinedRules.${ruleKey}`, { defaultValue: ruleKey });
+  };
 
-    i18next.on('languageChanged', handleLanguageChange);
-    
-    return () => {
-      i18next.off('languageChanged', handleLanguageChange);
-    };
-  }, []);
+  const getRuleDescription = (ruleKey, ruleParams = {}) => {
+    return t(`splitRules.${ruleKey}`, ruleParams);
+  };
 
-  // Data migration: One-time conversion of old data to new format
+
   useEffect(() => {
     const needsMigration = strategies.some(strategy => 
       strategy.rule && !strategy.ruleKey
@@ -99,24 +67,20 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
 
     if (needsMigration) {
       const migratedStrategies = strategies.map(strategy => {
-        // If already in new format, return directly
         if (strategy.ruleKey) return strategy;
 
-        // Process old format data
         const regex = strategy.regex;
-        const predefinedRule = Object.entries(PREDEFINED_RULES).find(([pattern, rule]) => 
+        const predefinedRule = Object.entries(PREDEFINED_RULES_CONFIG).find(([pattern, rule]) => 
           pattern === regex
         );
 
         if (predefinedRule) {
-          // Predefined rule
           return {
             ...strategy,
             ruleKey: predefinedRule[1].key,
             rule: undefined
           };
         } else if (strategy.rule && strategy.rule.startsWith('自定义规则: ')) {
-          // Custom rule
           const customRegex = strategy.rule.replace('自定义规则: ', '');
           return {
             ...strategy,
@@ -125,7 +89,6 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
             rule: undefined
           };
         } else {
-          // Unrecognized rule, keep as is
           return strategy;
         }
       });
@@ -158,13 +121,13 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
     }
   };
 
-  const handleRegexClick = (reg) => {
-    const predefinedRule = PREDEFINED_RULES[reg];
+  const handleRegexClick = (regex) => {
+    const predefinedRule = PREDEFINED_RULES_CONFIG[regex];
     if (!predefinedRule) return;
 
     const newStrategy = {
-      id: getStrategyId(reg, predefinedRule.defaultPosition),
-      regex: reg,
+      id: getStrategyId(regex, predefinedRule.defaultPosition),
+      regex: regex,
       position: predefinedRule.defaultPosition,
       ruleKey: predefinedRule.key
     };
@@ -175,20 +138,15 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
     setStrategies(strategies.filter(item => item.id !== id));
   };
 
-  // Get strategy description text (real-time translation)
   const getStrategyDescription = (strategy) => {
-    if (strategy.ruleKey === 'customRule') {
-      return t(strategy.ruleKey, strategy.ruleParams || { regex: strategy.regex });
-    }
-    return t(strategy.ruleKey || '');
+    return getRuleDescription(strategy.ruleKey, strategy.ruleParams || { regex: strategy.regex });
   };
 
-  // Get button display text
   const getButtonDisplay = (regex) => {
-    const rule = PREDEFINED_RULES[regex];
-    if (!rule) return regex;
+    const ruleConfig = PREDEFINED_RULES_CONFIG[regex];
+    if (!ruleConfig) return regex;
     
-    return rule.display[currentLanguage] || rule.display.zh;
+    return getPredefinedRuleDisplay(ruleConfig.key);
   };
 
   return (
@@ -221,7 +179,6 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                                 <span className='ml-3 text-xs text-gray-500'>{getStrategyDescription(strategy)}</span>
                               </>
                             )}
-                            {/* Right gradient mask */}
                             <div className="absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-accent to-transparent pointer-events-none"></div>
                             <DelIcon
                               onClick={() => handleDelete(strategy.id)}
@@ -233,7 +190,6 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                     </Draggable>
                   ))}
 
-                  {/* Add placeholders until 5 */}
                   {strategies.length < 5 && (
                     Array(5 - strategies.length).fill(null).map((_, index) => (
                       <div
@@ -258,7 +214,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
       <div className="relative flex-1 flex flex-col gap-4">
         <h3 className="text-sm text-left font-medium text-gray-700">{t('universalRules')}:</h3>
         <div className="flex flex-wrap gap-2">
-          {Object.entries(PREDEFINED_RULES).map(([regex, rule]) => (
+          {Object.keys(PREDEFINED_RULES_CONFIG).map((regex) => (
             <Button 
               key={regex}
               className="px-2 h-6" 

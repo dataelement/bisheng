@@ -643,9 +643,8 @@ export default function Paragraphs({ fileId, onBack }) {
     }), [currentFile, fileUrl, id]);
 
     // Preview display judgment (keep original logic)
-    const isExcelFile = currentFile && ['xlsx', 'xls', 'csv'].includes(currentFile.suffix?.toLowerCase());
+    // const isExcelFile = currentFile && ['xlsx', 'xls', 'csv'].includes(currentFile.suffix?.toLowerCase());
     const isPreviewVisible =
-        !isExcelFile &&
         selectedFileId &&
         currentFile &&
         (previewUrl || fileUrl) && // Compatible with either previewUrl or fileUrl having value
@@ -659,7 +658,7 @@ export default function Paragraphs({ fileId, onBack }) {
             return "flex justify-center bg-background-main min-h-0";
         }
         return "flex bg-background-main min-h-0";
-    }, [isPreviewVisible, isParagraphVisible, isExcelFile]);
+    }, [isPreviewVisible, isParagraphVisible,]);
 
     useEffect(() => {
         latestFileUrlRef.current = fileUrl;

@@ -74,8 +74,6 @@ export const MetadataRow = React.memo(({
     t: (key: string) => string;
     showInput?: boolean;
 }) => {
-    console.log(item);
-
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         onValueChange(item.id, e.target.value);
     };

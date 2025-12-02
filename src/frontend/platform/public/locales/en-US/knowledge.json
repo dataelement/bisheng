@@ -1,4 +1,26 @@
 {
+   "predefinedRules": {
+    "singleNewlineRule": "\\n✂️",
+    "doubleNewlineRule": "\\n\\n✂️",
+    "chapterRule": "✂️Chapter.{1,3}",
+    "articleRule": "✂️Article.{1,3}",
+    "chinesePeriodRule": "。✂️",
+    "englishPeriodRule": "\\.✂️"
+  },
+   "filePathEmpty": "File path is empty",
+  "fileLoadFailed": "File loading failed",
+  "fileContentEmpty": "File content is empty",
+  "excelContentEmpty": "Excel content is empty",
+  "unsupportedType": "Unsupported type: {{type}}, only CSV/XLSX/XLS are supported",
+  "sheetParseError": "Sheet parsing error",
+  "unknownError": "Unknown error",
+  "currentSheetNoData": "Current sheet has no data",
+  "rowNumber": "Row",
+  "defaultColumnName": "Column {{index}}",
+  "loading": "Loading file...",
+  "supportedFormats": "Supports CSV, XLSX, XLS formats",
+  "previewFailed": "Preview failed",
+  "downloadOriginal": "Download original file",
     "metacommon": {
         "delete": "Delete",
         "cancel": "Cancel",
@@ -17,6 +39,8 @@
         "name": "Name",
         "enterMetadataName": "Enter metadata name"
     },
+    "everyRowsAsOneSegment": "Every {{count}} rows as one segment",
+    "confirmDeleteSelectedFiles": "Confirm delete selected files ({{count}})",
     "fileinfor": {
         "documentInfo": "Document Information",
         "fileId": "File ID",
@@ -266,12 +290,12 @@
     },
     "universalRules": "Universal Segmentation Rules",
     "splitRules": {
-        "singleNewline": "Split after single newline, for separating normal line breaks",
-        "doubleNewline": "Split after double newline, for separating paragraphs",
-        "chapter": "Split before 'Chapter X', for splitting chapters",
-        "article": "Split before 'Article X', for splitting articles",
-        "chinesePeriod": "Split after Chinese period, for Chinese sentence segmentation",
-        "englishPeriod": "Split after English period, for English sentence segmentation",
+        "singleNewlineRule": "Split after single newline, for separating normal line breaks",
+        "doubleNewlineRule": "Split after double newline, for separating paragraphs",
+        "chapterRule": "Split before 'Chapter X', for splitting chapters",
+        "articleRule": "Split before 'Article X', for splitting articles",
+        "chinesePeriodRule": "Split after Chinese period, for Chinese sentence segmentation",
+        "englishPeriodRule": "Split after English period, for English sentence segmentation",
         "customRule": "Custom rule"
     },
     "fileNotSupported": "File preview not supported",
