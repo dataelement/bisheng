@@ -151,7 +151,7 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
         event.dataTransfer.setData("flownodedata", JSON.stringify(data));
     }
 
-    return <div className={`${dropdown ? 'relative' : 'absolute'} max-w-56 z-40 h-full transition-transform ${expand ? 'p-2' : 'py-2 translate-x-[-200px]'}`}>
+    return <div className={`${dropdown ? 'relative' : 'absolute'} max-w-60 z-40 h-full transition-transform ${expand ? 'p-2' : 'py-2 translate-x-[-200px]'}`}>
         <div className="bg-background rounded-2xl shadow-md h-full p-2">
             {/* tab */}
             <Tabs defaultValue="base" className="h-full" onValueChange={handleLoadTools}>

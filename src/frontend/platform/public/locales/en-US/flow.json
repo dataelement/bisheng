@@ -408,7 +408,7 @@
       }
     },
     "qa_retriever": {
-      "name": "QA Knowledge Retrieval",
+      "name": "QA Retrieval",
       "description": "Retrieves Q&A pairs from the QA knowledge base.",
       "检索设置": "Retrieval Settings",
       "输出": "Output",
@@ -429,7 +429,7 @@
       }
     },
     "rag": {
-      "name": "Document Knowledge Base Q&A",
+      "name": "Document Retrieval",
       "description": "Searches knowledge bases and generates final answers using an LLM. Supports parallel question processing.",
       "知识库检索设置": "Retrieval Settings",
       "AI回复生成设置": "AI Response Settings",
@@ -477,7 +477,7 @@
       }
     },
     "knowledge_retriever": {
-      "name": "Document Knowledge Retrieval",
+      "name": "Document Knowledge Base Retrieval",
       "description": "Retrieves content from the knowledge base based on user questions.",
       "知识库检索设置": "Retrieval Settings",
       "输出": "Output",
@@ -516,7 +516,7 @@
       "出参": "Output Parameters"
     },
     "condition": {
-      "name": "Conditional Branch",
+      "name": "Condition",
       "description": "Executes different branches based on a condition expression."
     },
     "end": {
