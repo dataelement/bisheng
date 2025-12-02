@@ -16,14 +16,18 @@ from bisheng.chat.client import ChatClient
 from bisheng.chat.clients.workflow_client import WorkflowClient
 from bisheng.chat.types import IgnoreException, WorkType
 from bisheng.chat.utils import process_node_data
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.chat import (DocumentParseError, InputDataParseError,
                                          LLMExecutionError, SkillDeletedError,
                                          SkillNotOnlineError)
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
+from bisheng.common.services import telemetry_service
 from bisheng.core.cache.flow import InMemoryCache
 from bisheng.core.cache.manager import Subject, cache_manager
 from bisheng.core.database import get_sync_db_session
+from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import Flow, FlowType, FlowDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.graph.utils import find_next_node
@@ -268,6 +272,7 @@ class ChatManager:
             websocket: WebSocket,
             user_id: int,
             gragh_data: dict = None,
+            source: str = "platform"
     ):
         # 建立连接，并存储映射，兼容不复用ws 场景
         key_list = set([get_cache_key(flow_id, chat_id)])
@@ -334,7 +339,8 @@ class ChatManager:
                     'user_id': user_id,
                     'payload': payload,
                     'graph_data': gragh_data,
-                    'context_dict': context_dict
+                    'context_dict': context_dict,
+                    'source': source
                 }
                 if payload:
                     await self._process_when_payload(flow_id, chat_id, **process_param)
@@ -417,7 +423,7 @@ class ChatManager:
         payload = kwargs.get('payload')
         key = get_cache_key(flow_id, chat_id)
         context = kwargs.get('context_dict').get(key)
-
+        source = kwargs.get('source', 'platform')
         status_ = context.get('status')
 
         if payload and status_ != 'init':
@@ -441,13 +447,27 @@ class ChatManager:
                         'user_name': UserDao.get_user(user_id).user_name,
                     })
                     flow_info = FlowDao.get_flow_by_id(flow_id)
-                    MessageSessionDao.insert_one(MessageSession(
+                    message_session = await MessageSessionDao.async_insert_one(MessageSession(
                         chat_id=chat_id,
                         flow_id=flow_id,
                         flow_name=flow_info.name,
                         flow_type=FlowType.FLOW.value,
                         user_id=user_id,
                     ))
+
+                    # 记录Telemetry日志
+                    await telemetry_service.log_event(user_id=login_user.user_id,
+                                                      event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
+                                                      trace_id=trace_id_var.get(),
+                                                      event_data=NewMessageSessionEventData(
+                                                          session_id=message_session.chat_id,
+                                                          app_id=flow_id,
+                                                          source=source,  # type: ignore
+                                                          app_name=flow_info.name,
+                                                          app_type=FlowType.FLOW
+                                                      )
+                                                      )
+
                     AuditLogService.create_chat_flow(login_user, get_request_ip(websocket),
                                                      flow_id, flow_info)
         start_resp.type = 'start'

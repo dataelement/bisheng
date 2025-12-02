@@ -55,7 +55,9 @@ async def union_websocket(flow_id: str,
                 chat_id,
                 websocket,
                 settings.get_from_db('default_operator').get('user'),
-                gragh_data=graph_data)
+                gragh_data=graph_data,
+                source="api"
+            )
     except Exception as exc:
         logger.exception('union_websocket error: ')
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=str(exc))

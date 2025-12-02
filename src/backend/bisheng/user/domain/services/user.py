@@ -135,6 +135,6 @@ class UserService:
         # 记录Telemetry日志
         await telemetry_service.log_event(user_id=db_user.user_id, event_type=BaseTelemetryTypeEnum.USER_LOGIN,
                                           trace_id=trace_id_var.get(),
-                                          event_data=UserLoginEventData(login_method="password"))
+                                          event_data=UserLoginEventData(method="password"))
 
         return resp_200(UserRead(access_token=access_token, **db_user.__dict__))

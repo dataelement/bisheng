@@ -114,7 +114,7 @@ async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends
         # 记录Telemetry日志
         await telemetry_service.log_event(user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.USER_LOGIN,
                                           trace_id=trace_id_var.get(),
-                                          event_data=UserLoginEventData(login_method="oss"))
+                                          event_data=UserLoginEventData(method="oss"))
 
         return resp_200({'access_token': access_token, 'refresh_token': access_token})
     else:

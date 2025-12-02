@@ -6,3 +6,7 @@ class BaseTelemetryTypeEnum(str, Enum):
 
     # 用户登录事件
     USER_LOGIN = "user_login"
+
+    # 新增会话事件
+    NEW_MESSAGE_SESSION = "new_message_session"
+
