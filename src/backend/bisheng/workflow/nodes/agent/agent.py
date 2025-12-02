@@ -159,9 +159,7 @@ class AgentNode(BaseNode):
         tools = []
         for index, knowledge_id in enumerate(self._knowledge_ids):
             if self._knowledge_type == 'knowledge':
-                knowledge_tool = ToolExecutor.init_knowledge_tool_sync(knowledge_id, app_id=self.workflow_id,
-                                                                       app_name=self.workflow_name,
-                                                                       user_id=self.user_id,
+                knowledge_tool = ToolExecutor.init_knowledge_tool_sync(knowledge_id,
                                                                        llm=self._llm,
                                                                        **knowledge_retriever)
                 tools.append(knowledge_tool)

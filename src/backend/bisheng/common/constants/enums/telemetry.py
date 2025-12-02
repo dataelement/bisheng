@@ -39,6 +39,9 @@ class BaseTelemetryTypeEnum(str, Enum):
     # 新增会话事件
     NEW_MESSAGE_SESSION = "new_message_session"
 
+    # 文件解析事件
+    FILE_PARSE = "file_parse"
+
     # 删除会话事件
     DELETE_MESSAGE_SESSION = "delete_message_session"
 

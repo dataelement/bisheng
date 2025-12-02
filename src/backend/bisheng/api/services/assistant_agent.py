@@ -125,9 +125,13 @@ class AssistantAgent(AssistantUtils):
             else:
                 flow_links.append(link)
         if tool_ids:
-            tools = await ToolExecutor.init_by_tool_ids(tool_ids, app_id=self.assistant.id,
+            tools = await ToolExecutor.init_by_tool_ids(tool_ids,
+                                                        app_id=self.assistant.id,
                                                         app_name=self.assistant.name,
-                                                        user_id=self.invoke_user_id, llm=self.llm, callbacks=callbacks)
+                                                        app_type=1,
+                                                        user_id=self.invoke_user_id,
+                                                        llm=self.llm,
+                                                        callbacks=callbacks)
 
         # flow + knowledge
         flow_data = FlowDao.get_flow_by_ids([link.flow_id for link in flow_links if link.flow_id])
@@ -136,10 +140,7 @@ class AssistantAgent(AssistantUtils):
         for link in flow_links:
             knowledge_id = link.knowledge_id
             if knowledge_id:
-                knowledge_tool = await ToolExecutor.init_knowledge_tool(knowledge_id, app_id=self.assistant.id,
-                                                                        app_name=self.assistant.name,
-                                                                        user_id=self.invoke_user_id,
-                                                                        llm=self.llm, callbacks=callbacks,
+                knowledge_tool = await ToolExecutor.init_knowledge_tool(knowledge_id, llm=self.llm, callbacks=callbacks,
                                                                         **self.knowledge_retriever)
                 tools.append(knowledge_tool)
             else:

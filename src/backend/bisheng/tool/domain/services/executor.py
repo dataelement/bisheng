@@ -5,7 +5,7 @@ from typing import Any, Annotated, Optional, Dict, List
 from langchain_core.tools import BaseTool, ArgsSchema
 from pydantic import Field, SkipValidation
 
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, StatusEnum
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, StatusEnum, ApplicationTypeEnum
 from bisheng.common.schemas.telemetry.event_data_schema import ToolInvocationEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -58,9 +58,10 @@ def wrapper_tool_sync(func):
 
 
 class ToolExecutor(BaseTool):
-    # must provide fields
+    # must provide fields for telemetry logging
     app_id: str = Field(..., description="Application Identifier")
     app_name: str = Field(..., description="Application Name")
+    app_type: ApplicationTypeEnum = Field(..., description="Application Type")
     user_id: int = Field(..., description="Invoke User ID")
 
     # bisheng tool fields
@@ -77,11 +78,11 @@ class ToolExecutor(BaseTool):
     tool_instance: BaseTool = Field(..., description="Langchain Tool Instance")
 
     @classmethod
-    def init_by_tool_instance(cls, base_tool: BaseTool, tool: GptsTools, app_id: str, app_name: str,
-                              user_id: int) -> BaseTool:
+    def init_by_tool_instance(cls, base_tool: BaseTool, tool: GptsTools, *, app_id: str, app_name: str,
+                              app_type: ApplicationTypeEnum, user_id: int) -> BaseTool:
         return cls(name=base_tool.name, description=base_tool.description, args_schema=base_tool.args_schema,
                    tool_instance=base_tool,
-                   app_id=app_id, app_name=app_name, user_id=user_id,
+                   app_id=app_id, app_name=app_name, app_type=app_type, user_id=user_id,
                    tool_id=tool.id, tool_is_preset=tool.is_preset, tool_name=tool.name)
 
     @staticmethod
@@ -138,8 +139,8 @@ class ToolExecutor(BaseTool):
                                     **kwargs)
 
     @classmethod
-    def _init_by_tool_and_type(cls, tool: GptsTools, tool_type: GptsToolsType, app_id: str, app_name: str, user_id: int,
-                               **kwargs) -> BaseTool:
+    def _init_by_tool_and_type(cls, tool: GptsTools, tool_type: GptsToolsType, *, app_id: str, app_name: str,
+                               app_type: ApplicationTypeEnum, user_id: int, **kwargs) -> BaseTool:
         if tool.is_preset == ToolPresetType.PRESET.value:
             tool_instance = cls._init_preset_tool(tool, tool_type, **kwargs)
         elif tool.is_preset == ToolPresetType.API.value:
@@ -149,11 +150,11 @@ class ToolExecutor(BaseTool):
         else:
             raise ValueError(f"Unsupported tool preset type: {tool.is_preset}")
         return cls.init_by_tool_instance(base_tool=tool_instance, tool=tool, app_id=app_id,
-                                         app_name=app_name, user_id=user_id)
+                                         app_name=app_name, app_type=app_type, user_id=user_id)
 
     @classmethod
     async def init_by_tool_id(cls, tool_id: int = None, tool: GptsTools = None, *, app_id: str, app_name: str,
-                              user_id: int, **kwargs) -> BaseTool:
+                              app_type: ApplicationTypeEnum, user_id: int, **kwargs) -> BaseTool:
         if not tool_id and not tool:
             raise ValueError("Either tool_id or tool must be provided.")
         if not tool:
@@ -164,11 +165,12 @@ class ToolExecutor(BaseTool):
         if not tool_type:
             raise ValueError(f"Tool type with id {tool.type} not found.")
         return cls._init_by_tool_and_type(tool=tool, tool_type=tool_type, app_id=app_id, app_name=app_name,
-                                          user_id=user_id, **kwargs)
+                                          app_type=app_type, user_id=user_id, **kwargs)
 
     @classmethod
-    def _init_tools(cls, tools: List[GptsTools], tool_types_map: Dict[int, GptsToolsType],
-                    app_id: str, app_name: str, user_id: int, **kwargs) -> List[BaseTool]:
+    def _init_tools(cls, tools: List[GptsTools], tool_types_map: Dict[int, GptsToolsType], *,
+                    app_id: str, app_name: str, app_type: ApplicationTypeEnum,
+                    user_id: int, **kwargs) -> List[BaseTool]:
         result = []
         for tool in tools:
             tool_type = tool_types_map.get(tool.type)
@@ -176,32 +178,35 @@ class ToolExecutor(BaseTool):
                 raise ValueError(f"Tool type with id {tool.type} not found.")
             result.append(
                 cls._init_by_tool_and_type(tool=tool, tool_type=tool_type, app_id=app_id,
-                                           app_name=app_name, user_id=user_id, **kwargs)
+                                           app_name=app_name, app_type=app_type, user_id=user_id, **kwargs)
             )
         return result
 
     @classmethod
-    async def init_by_tool_ids(cls, tool_ids: list[int], app_id: str, app_name: str, user_id: int, **kwargs) \
-            -> List[BaseTool]:
+    async def init_by_tool_ids(cls, tool_ids: list[int], *, app_id: str, app_name: str, app_type: ApplicationTypeEnum,
+                               user_id: int, **kwargs) -> List[BaseTool]:
         tools = await GptsToolsDao.aget_list_by_ids(tool_ids)
         tool_type_ids = [tool.type for tool in tools]
         tool_types = await GptsToolsDao.aget_all_tool_type(list(set(tool_type_ids)))
         tool_type_map = {tool_type.id: tool_type for tool_type in tool_types}
 
-        return cls._init_tools(tools, tool_type_map, app_id, app_name, user_id, **kwargs)
+        return cls._init_tools(tools, tool_type_map, app_id=app_id, app_name=app_name, app_type=app_type,
+                               user_id=user_id, **kwargs)
 
     @classmethod
-    def init_by_tool_ids_sync(cls, tool_ids: list[int], app_id: str, app_name: str, user_id: int, **kwargs) \
-            -> List[BaseTool]:
+    def init_by_tool_ids_sync(cls, tool_ids: list[int], app_id: str, app_name: str, app_type: ApplicationTypeEnum,
+                              user_id: int, **kwargs) -> List[BaseTool]:
         tools = GptsToolsDao.get_list_by_ids(tool_ids)
         tool_type_ids = [tool.type for tool in tools]
         tool_types = GptsToolsDao.get_all_tool_type(list(set(tool_type_ids)))
         tool_type_map = {tool_type.id: tool_type for tool_type in tool_types}
 
-        return cls._init_tools(tools, tool_type_map, app_id, app_name, user_id, **kwargs)
+        return cls._init_tools(tools, tool_type_map, app_id=app_id, app_name=app_name, app_type=app_type,
+                               user_id=user_id, **kwargs)
 
     @classmethod
-    def init_by_tool_id_sync(cls, tool_id: int, app_id: str, app_name: str, user_id: int, **kwargs) -> BaseTool:
+    def init_by_tool_id_sync(cls, tool_id: int, *, app_id: str, app_name: str, app_type: ApplicationTypeEnum,
+                             user_id: int, **kwargs) -> BaseTool:
         tool = GptsToolsDao.get_one_tool(tool_id=tool_id)
         if not tool:
             raise ValueError(f"Tool with id {tool_id} not found.")
@@ -210,7 +215,7 @@ class ToolExecutor(BaseTool):
             raise ValueError(f"Tool type with id {tool.type} not found.")
 
         return cls._init_by_tool_and_type(tool=tool, tool_type=tool_type, app_id=app_id, app_name=app_name,
-                                          user_id=user_id, **kwargs)
+                                          app_type=app_type, user_id=user_id, **kwargs)
 
     @classmethod
     def _init_knowledge_rag_tool(cls, knowledge: Knowledge, **kwargs) -> BaseTool:
@@ -219,8 +224,7 @@ class ToolExecutor(BaseTool):
                                                         **kwargs)
 
     @classmethod
-    async def init_knowledge_tool(cls, knowledge_id: int, app_id: str, app_name: str,
-                                  user_id: int, **kwargs) -> BaseTool:
+    async def init_knowledge_tool(cls, knowledge_id: int, **kwargs) -> BaseTool:
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id=knowledge_id)
         if not knowledge:
             raise ValueError(f"Knowledge with id {knowledge_id} not found.")
@@ -230,8 +234,7 @@ class ToolExecutor(BaseTool):
                                             elastic_retriever=es_client.as_retriever(), **kwargs)
 
     @classmethod
-    def init_knowledge_tool_sync(cls, knowledge_id: int, app_id: str, app_name: str,
-                                 user_id: int, **kwargs) -> BaseTool:
+    def init_knowledge_tool_sync(cls, knowledge_id: int, **kwargs) -> BaseTool:
         knowledge = KnowledgeDao.query_by_id(knowledge_id=knowledge_id)
         if not knowledge:
             raise ValueError(f"Knowledge with id {knowledge_id} not found.")
@@ -261,6 +264,7 @@ class ToolExecutor(BaseTool):
             "event_data": ToolInvocationEventData(
                 app_id=self.app_id,
                 app_name=self.app_name,
+                app_type=self.app_type,
                 tool_id=self.tool_id,
                 tool_name=self.tool_name,
                 tool_type=self.tool_type,
