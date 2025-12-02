@@ -21,11 +21,15 @@ from bisheng.api.v1.schemas import (AddChatMessages, BuildStatus, BuiltResponse,
                                     UnifiedResponseModel, resp_200)
 from bisheng.chat.manager import ChatManager
 from bisheng.chat_session.domain.chat import ChatSessionService
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.chat import ChatServiceError, SkillDeletedError, SkillNotBuildError, SkillNotOnlineError
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, DeleteMessageSessionEventData
+from bisheng.common.services import telemetry_service
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.database import get_sync_db_session
+from bisheng.core.logger import trace_id_var
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao
@@ -188,6 +192,30 @@ def copy(conversationId: str = Body(..., description='会话id', embed=True), ):
     conversation = MessageSessionDao.get_one(conversationId)
     conversation.chat_id = uuid4().hex
     conversation = MessageSessionDao.insert_one(conversation)
+
+    if conversation.flow_type == FlowType.FLOW.value:
+        app_type = ApplicationTypeEnum.SKILL
+    elif conversation.flow_type == FlowType.WORKFLOW.value:
+        app_type = ApplicationTypeEnum.WORKFLOW
+    elif conversation.flow_type == FlowType.ASSISTANT.value:
+        app_type = ApplicationTypeEnum.ASSISTANT
+    elif conversation.flow_type == FlowType.LINSIGHT.value:
+        app_type = ApplicationTypeEnum.LINSIGHT
+    else:
+        app_type = ApplicationTypeEnum.DAILY_CHAT
+
+    # 记录Telemetry日志
+    telemetry_service.log_event_sync(user_id=conversation.user_id,
+                                     event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
+                                     trace_id=trace_id_var.get(),
+                                     event_data=NewMessageSessionEventData(
+                                         session_id=conversation.chat_id,
+                                         app_id=conversation.flow_id,
+                                         source="platform",
+                                         app_name=conversation.flow_name,
+                                         app_type=app_type
+                                     )
+                                     )
     msg_list = ChatMessageDao.get_messages_by_chat_id(conversationId)
     if msg_list:
         for msg in msg_list:
@@ -225,6 +253,13 @@ def del_chat_id(*,
 
     # 设置会话的删除状态
     MessageSessionDao.delete_session(chat_id)
+
+    # 记录Telemetry日志
+    telemetry_service.log_event_sync(user_id=login_user.user_id,
+                                     event_type=BaseTelemetryTypeEnum.DELETE_MESSAGE_SESSION,
+                                     trace_id=trace_id_var.get(),
+                                     event_data=DeleteMessageSessionEventData(session_id=chat_id)
+                                     )
 
     return resp_200(message='删除成功')
 
@@ -279,7 +314,7 @@ def add_chat_messages(*,
         # 新建会话
         # 判断下是助手还是技能, 写审计日志
         if flow_info:
-            MessageSessionDao.insert_one(MessageSession(
+            session_info = MessageSessionDao.insert_one(MessageSession(
                 chat_id=chat_id,
                 flow_id=flow_id,
                 flow_type=flow_info.flow_type,
@@ -294,7 +329,7 @@ def add_chat_messages(*,
         else:
             assistant_info = AssistantDao.get_one_assistant(flow_id)
             if assistant_info:
-                MessageSessionDao.insert_one(MessageSession(
+                session_info = MessageSessionDao.insert_one(MessageSession(
                     chat_id=chat_id,
                     flow_id=flow_id,
                     flow_type=FlowType.ASSISTANT.value,
@@ -304,6 +339,29 @@ def add_chat_messages(*,
                 ))
                 AuditLogService.create_chat_assistant(login_user, get_request_ip(request),
                                                       flow_id)
+        if session_info:
+            if session_info.flow_type == FlowType.FLOW.value:
+                app_type = ApplicationTypeEnum.SKILL
+            elif session_info.flow_type == FlowType.WORKFLOW.value:
+                app_type = ApplicationTypeEnum.WORKFLOW
+            elif session_info.flow_type == FlowType.ASSISTANT.value:
+                app_type = ApplicationTypeEnum.ASSISTANT
+            elif session_info.flow_type == FlowType.LINSIGHT.value:
+                app_type = ApplicationTypeEnum.LINSIGHT
+            else:
+                app_type = ApplicationTypeEnum.DAILY_CHAT
+
+            # 记录Telemetry日志
+            telemetry_service.log_event_sync(user_id=login_user.user_id,
+                                             event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
+                                             trace_id=trace_id_var.get(),
+                                             event_data=NewMessageSessionEventData(
+                                                 session_id=session_info.session_id,
+                                                 app_id=flow_id,
+                                                 source="platform",
+                                                 app_name=session_info.flow_name,
+                                                 app_type=app_type
+                                             ))
 
     return resp_200(data=message_dbs, message='添加成功')
 

@@ -11,11 +11,15 @@ from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.types import WorkType
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.assistant import (AssistantDeletedError, AssistantNotOnlineError,
                                               AssistantOtherError)
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
+from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
+from bisheng.core.logger import trace_id_var
 from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessageDao, ChatMessage as ChatMessageModel
@@ -62,17 +66,16 @@ class ChatClient:
         await self.websocket.send_json(message.dict())
 
     async def handle_message(self, message: Dict[any, any]):
-        trace_id = generate_uuid()
-        logger.info(f'client_id={self.client_key} trace_id={trace_id} message={message}')
-        with logger.contextualize(trace_id=trace_id):
-            # 处理客户端发过来的信息, 提交到线程池内执行
-            if self.work_type == WorkType.GPTS:
-                thread_pool.submit(trace_id,
-                                   self.wrapper_task,
-                                   trace_id,
-                                   self.handle_gpts_message,
-                                   message,
-                                   trace_id=trace_id)
+        logger.info(f'client_id={self.client_key} handle_message start, message: {message}')
+        trace_id = trace_id_var.get()
+        # 处理客户端发过来的信息, 提交到线程池内执行
+        if self.work_type == WorkType.GPTS:
+            thread_pool.submit(trace_id,
+                               self.wrapper_task,
+                               trace_id,
+                               self.handle_gpts_message,
+                               message,
+                               trace_id=trace_id)
                 # await self.handle_gpts_message(message)
 
     async def wrapper_task(self, task_id: str, fn: Callable, *args, **kwargs):
@@ -118,6 +121,19 @@ class ChatClient:
                 flow_type=FlowType.ASSISTANT.value,
                 user_id=self.user_id,
             ))
+
+            # 记录Telemetry日志
+            await telemetry_service.log_event(user_id=self.user_id,
+                                              event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
+                                              trace_id=trace_id_var.get(),
+                                              event_data=NewMessageSessionEventData(
+                                                  session_id=self.chat_id,
+                                                  app_id=self.client_id,
+                                                  source="platform",
+                                                  app_name=self.db_assistant.name,
+                                                  app_type=ApplicationTypeEnum.ASSISTANT
+                                              )
+                                              )
             AuditLogService.create_chat_assistant(self.login_user, get_request_ip(self.request), self.client_id)
         return msg
 

@@ -8,8 +8,12 @@ from pydantic import field_validator
 from sqlalchemy import Column, DateTime, String, and_, func, or_, text
 from sqlmodel import JSON, Field, select, update
 
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.common.schemas.telemetry.event_data_schema import NewApplicationEventData
+from bisheng.common.services import telemetry_service
 from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.logger import trace_id_var
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAccessDao
 from bisheng.user.domain.models.user_role import UserRoleDao
@@ -120,6 +124,28 @@ class FlowDao(FlowBase):
             session.add(flow_version)
             session.commit()
             session.refresh(flow_info)
+
+            if flow_type == FlowType.FLOW.value:
+                app_type = ApplicationTypeEnum.SKILL
+            elif flow_type == FlowType.WORKFLOW.value:
+                app_type = ApplicationTypeEnum.WORKFLOW
+            elif flow_type == FlowType.ASSISTANT.value:
+                app_type = ApplicationTypeEnum.ASSISTANT
+            elif flow_type == FlowType.LINSIGHT.value:
+                app_type = ApplicationTypeEnum.LINSIGHT
+            else:
+                app_type = ApplicationTypeEnum.DAILY_CHAT
+
+            # 记录Telemetry日志
+            telemetry_service.log_event_sync(user_id=flow_info.user_id,
+                                             event_type=BaseTelemetryTypeEnum.NEW_APPLICATION,
+                                             trace_id=trace_id_var.get(),
+                                             event_data=NewApplicationEventData(
+                                                 app_id=flow_info.id,
+                                                 app_name=flow_info.name,
+                                                 app_type=app_type.value
+                                             ))
+
             return flow_info
 
     @classmethod

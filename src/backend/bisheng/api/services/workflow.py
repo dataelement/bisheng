@@ -8,9 +8,12 @@ from bisheng.api.v1.schema.workflow import WorkflowEvent, WorkflowEventType, Wor
     WorkflowOutputSchema
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.chat.utils import SourceType
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.flow import WorkFlowInitError
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
+from bisheng.common.services import telemetry_service
+from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao, FlowStatus, FlowType
 from bisheng.database.models.flow import UserLinkType
 from bisheng.database.models.flow_version import FlowVersionDao
@@ -200,6 +203,11 @@ class WorkFlowService(BaseService):
             await FlowVersionDao.change_current_version(flow_id, version_info)
         db_flow.status = status
         await FlowDao.aupdate_flow(db_flow)
+        await telemetry_service.log_event(
+            user_id=login_user.user_id,
+            event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
+            trace_id=trace_id_var.get()
+        )
         return
 
     @classmethod

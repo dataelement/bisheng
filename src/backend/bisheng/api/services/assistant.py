@@ -11,12 +11,16 @@ from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
                                     StreamData, UnifiedResponseModel, resp_200, resp_500)
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
                                               AssistantNotEditError, AssistantNotExistsError, ToolTypeRepeatError,
                                               ToolTypeIsPresetError)
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
+from bisheng.common.schemas.telemetry.event_data_schema import NewApplicationEventData
+from bisheng.common.services import telemetry_service
 from bisheng.core.cache import InMemoryCache
+from bisheng.core.logger import trace_id_var
 from bisheng.database.models.assistant import (Assistant, AssistantDao, AssistantLinkDao,
                                                AssistantStatus)
 from bisheng.database.models.flow import Flow, FlowDao, FlowType
@@ -167,6 +171,17 @@ class AssistantService(BaseService, AssistantUtils):
         assistant, _, _ = await cls.get_auto_info(assistant, login_user)
         assistant = AssistantDao.create_assistant(assistant)
 
+        # 记录Telemetry日志
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.NEW_APPLICATION,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=NewApplicationEventData(
+                                              app_id=assistant.id,
+                                              app_name=assistant.name,
+                                              app_type=ApplicationTypeEnum.ASSISTANT
+                                          )
+                                          )
+
         cls.create_assistant_hook(request, assistant, login_user)
         return resp_200(data=AssistantInfo(**assistant.dict(),
                                            tool_list=[],
@@ -209,6 +224,9 @@ class AssistantService(BaseService, AssistantUtils):
             return UnAuthorizedError.return_resp()
 
         AssistantDao.delete_assistant(assistant)
+        telemetry_service.log_event_sync(user_id=login_user.user_id,
+                                         event_type=BaseTelemetryTypeEnum.DELETE_APPLICATION,
+                                         trace_id=trace_id_var.get())
         cls.delete_assistant_hook(request, login_user, assistant)
         return resp_200()
 
@@ -292,6 +310,8 @@ class AssistantService(BaseService, AssistantUtils):
         assistant.update_time = datetime.now()
         assistant.max_token = req.max_token
         AssistantDao.update_assistant(assistant)
+        telemetry_service.log_event_sync(user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
+                                         trace_id=trace_id_var.get())
 
         # 更新助手关联信息
         if req.tool_list is not None:
@@ -347,6 +367,8 @@ class AssistantService(BaseService, AssistantUtils):
                 return AssistantInitError.return_resp('助手编译报错：' + str(e))
         assistant.status = status
         AssistantDao.update_assistant(assistant)
+        telemetry_service.log_event_sync(user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
+                                         trace_id=trace_id_var.get())
         cls.update_assistant_hook(request, login_user, assistant)
         return resp_200()
 
@@ -363,6 +385,9 @@ class AssistantService(BaseService, AssistantUtils):
 
         assistant.prompt = prompt
         AssistantDao.update_assistant(assistant)
+        telemetry_service.log_event_sync(user_id=user_payload.user_id,
+                                         event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
+                                         trace_id=trace_id_var.get())
         return resp_200()
 
     @classmethod

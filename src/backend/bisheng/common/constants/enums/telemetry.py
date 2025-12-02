@@ -58,8 +58,8 @@ class BaseTelemetryTypeEnum(str, Enum):
     DELETE_KNOWLEDGE_BASE = "delete_knowledge_base"
 
     # 知识库文件上传事件
-    UPLOAD_KNOWLEDGE_BASE_FILE = "upload_knowledge_base_file"
+    NEW_KNOWLEDGE_FILE = "new_knowledge_file"
 
     # 知识库文件删除事件
-    DELETE_KNOWLEDGE_BASE_FILE = "delete_knowledge_base_file"
+    DELETE_KNOWLEDGE_FILE = "delete_knowledge_file"
 

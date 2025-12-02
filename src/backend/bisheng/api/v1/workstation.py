@@ -21,14 +21,18 @@ from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import FrequentlyUsedChat
 from bisheng.api.v1.schemas import WorkstationConfig, resp_200, ExcelRule, UnifiedResponseModel
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
 from bisheng.common.errcode.workstation import WebSearchToolNotFoundError, ConversationNotFoundError, \
     AgentAlreadyExistsError
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
+from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import file_download, save_download_file, save_uploaded_file
+from bisheng.core.logger import trace_id_var
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
@@ -325,6 +329,19 @@ async def chat_completions(
                     flow_type=FlowType.WORKSTATION.value,
                     user_id=login_user.user_id,
                 ))
+
+            # 记录Telemetry日志
+            await telemetry_service.log_event(user_id=login_user.user_id,
+                                              event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
+                                              trace_id=trace_id_var.get(),
+                                              event_data=NewMessageSessionEventData(
+                                                  session_id=conversationId,
+                                                  app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                                                  source="platform",
+                                                  app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+                                                  app_type=ApplicationTypeEnum.DAILY_CHAT
+                                              )
+                                              )
 
         conversaiton = await MessageSessionDao.async_get_one(conversationId)
         if conversaiton is None:

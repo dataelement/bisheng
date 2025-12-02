@@ -16,14 +16,17 @@ from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
                                     UpdateKnowledgeReq, KnowledgeFileReProcess)
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError, \
     KnowledgePreviewError, KnowledgeNotQAError, KnowledgeNoEmbeddingError, KnowledgeNotExistError
 from bisheng.common.errcode.server import NoLlmModelConfigError
 from bisheng.common.schemas.api import resp_200, resp_500, resp_502, UnifiedResponseModel
+from bisheng.common.services import telemetry_service
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_uploaded_file
+from bisheng.core.logger import trace_id_var
 from bisheng.database.models.role_access import AccessType
 from bisheng.knowledge.api.dependencies import get_knowledge_service, get_knowledge_file_service
 from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
@@ -536,6 +539,9 @@ def qa_delete(*,
 
     knowledge_imp.delete_vector_data(knowledge, ids)
     QAKnoweldgeDao.delete_batch(ids)
+    telemetry_service.log_event_sync(user_id=login_user.user_id,
+                                     event_type=BaseTelemetryTypeEnum.DELETE_KNOWLEDGE_FILE,
+                                     trace_id=trace_id_var.get())
     return resp_200()
 
 
@@ -742,6 +748,12 @@ def post_import_file(*,
                 insert_data.append(QACreate)
                 all_questions = all_questions | tmp_questions
         result = QAKnoweldgeDao.batch_insert_qa(insert_data)
+
+        telemetry_service.log_event_sync(
+            user_id=login_user.user_id,
+            event_type=BaseTelemetryTypeEnum.NEW_KNOWLEDGE_FILE,
+            trace_id=trace_id_var.get()
+        )
 
         # async task add qa into milvus and es
         for one in result:

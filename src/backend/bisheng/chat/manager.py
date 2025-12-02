@@ -16,7 +16,7 @@ from bisheng.chat.client import ChatClient
 from bisheng.chat.clients.workflow_client import WorkflowClient
 from bisheng.chat.types import IgnoreException, WorkType
 from bisheng.chat.utils import process_node_data
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.chat import (DocumentParseError, InputDataParseError,
@@ -464,7 +464,7 @@ class ChatManager:
                                                           app_id=flow_id,
                                                           source=source,  # type: ignore
                                                           app_name=flow_info.name,
-                                                          app_type=FlowType.FLOW
+                                                          app_type=ApplicationTypeEnum.SKILL
                                                       )
                                                       )
 

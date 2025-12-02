@@ -12,6 +12,9 @@ from bisheng.api.services.knowledge_imp import (decide_vectorstores, delete_es, 
                                                 text_knowledge)
 from bisheng.api.v1.schemas import (ChunkInput, KnowledgeFileOne, KnowledgeFileProcess,
                                     resp_200, resp_500, ExcelRule)
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
+from bisheng.common.services import telemetry_service
+from bisheng.core.logger import trace_id_var
 from bisheng.open_endpoints.domain.schemas.filelib import APIAddQAParam, APIAppendQAParam, QueryQAParam
 from bisheng.open_endpoints.domain.utils import get_default_operator
 from bisheng.core.cache.utils import file_download, save_download_file
@@ -317,7 +320,7 @@ def append_qa(*,
 def delete_qa_data(*, qa_id: int, question: Optional[str] = None):
     """ 删除qa 问题对信息 """
     qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(qa_id)
-
+    login_user = get_default_operator()
     if not qa:
         raise HTTPException(status_code=404, detail='qa 不存在')
 
@@ -326,6 +329,9 @@ def delete_qa_data(*, qa_id: int, question: Optional[str] = None):
         QAKnoweldgeDao.update(qa)
     else:
         QAKnoweldgeDao.delete_batch([qa_id])
+        telemetry_service.log_event_sync(user_id=login_user.user_id,
+                                         event_type=BaseTelemetryTypeEnum.DELETE_KNOWLEDGE_FILE,
+                                         trace_id=trace_id_var.get())
     try:
         knowledge = KnowledgeDao.query_by_id(qa.knowledge_id)
         knowledge_imp.delete_vector_data(knowledge, file_ids=[qa_id])

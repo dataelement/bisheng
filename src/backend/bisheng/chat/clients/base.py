@@ -8,6 +8,7 @@ from loguru import logger
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.types import WorkType
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.core.logger import trace_id_var
 from bisheng.database.models.message import ChatMessage as ChatMessageModel
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.utils import generate_uuid
@@ -45,18 +46,18 @@ class BaseClient(ABC):
 
     async def handle_message(self, message: Dict[any, any]):
         """ 处理客户端发过来的信息, 提交到线程池内执行 """
-        trace_id = generate_uuid()
+        trace_id = trace_id_var.get()
         logger.info(f'client_id={self.client_key} trace_id={trace_id} message={message}')
-        with logger.contextualize(trace_id=trace_id):
-            if message.get('action') == 'stop':
-                await self._handle_message(message)
-                return
-            thread_pool.submit(trace_id,
-                               self.wrapper_task,
-                               trace_id,
-                               self._handle_message,
-                               message,
-                               trace_id=trace_id)
+
+        if message.get('action') == 'stop':
+            await self._handle_message(message)
+            return
+        thread_pool.submit(trace_id,
+                           self.wrapper_task,
+                           trace_id,
+                           self._handle_message,
+                           message,
+                           trace_id=trace_id)
 
     @abstractmethod
     async def _handle_message(self, message: Dict[any, any]):

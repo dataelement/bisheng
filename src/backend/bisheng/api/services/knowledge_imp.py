@@ -33,12 +33,15 @@ from bisheng.api.services.patch_130 import (
     combine_multiple_md_files_to_raw_texts,
 )
 from bisheng.api.v1.schemas import ExcelRule
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.common.errcode.knowledge import KnowledgeSimilarError, KnowledgeFileDeleteError
+from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
 from bisheng.core.cache.utils import file_download
 from bisheng.core.database import get_sync_db_session
+from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
@@ -1305,6 +1308,11 @@ def add_qa(db_knowledge: Knowledge, data: QAKnowledgeUpsert) -> QAKnowledge:
                 delete_vector_data(db_knowledge, [data.id])
             else:
                 qa = QAKnoweldgeDao.insert_qa(data)
+                telemetry_service.log_event_sync(
+                    user_id=qa.user_id,
+                    event_type=BaseTelemetryTypeEnum.NEW_KNOWLEDGE_FILE,
+                    trace_id=trace_id_var.get()
+                )
 
             # 对question进行embedding，然后录入知识库
             qa = QA_save_knowledge(db_knowledge, qa)

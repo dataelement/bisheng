@@ -11,10 +11,13 @@ from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import FlowVersionCreate, resp_200
 from bisheng.chat.types import WorkType
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.flow import WorkflowNameExistsError, WorkFlowOnlineEditError, AppWriteAuthError
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
+from bisheng.common.services import telemetry_service
 from bisheng.core.database import get_sync_db_session
+from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, FlowType, FlowUpdate, \
@@ -261,6 +264,11 @@ async def update_flow(*,
             continue
         setattr(db_flow, key, value)
     db_flow = await FlowDao.aupdate_flow(db_flow)
+    await telemetry_service.log_event(
+        user_id=login_user.user_id,
+        event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
+        trace_id=trace_id_var.get()
+    )
     await FlowService.update_flow_hook(request, login_user, db_flow)
     return resp_200(db_flow)
 

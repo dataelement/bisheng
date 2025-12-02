@@ -24,6 +24,7 @@ from bisheng.api.v1.schemas import (
     KnowledgeFileProcess,
     UpdatePreviewFileChunk, ExcelRule, KnowledgeFileReProcess,
 )
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
@@ -32,8 +33,11 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeExistError,
     KnowledgeNoEmbeddingError,
 )
+from bisheng.common.schemas.telemetry.event_data_schema import NewKnowledgeBaseEventData
+from bisheng.common.services import telemetry_service
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
 from bisheng.core.cache.utils import file_download, async_file_download
+from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
 from bisheng.database.models.group_resource import (
     GroupResource,
@@ -178,6 +182,14 @@ class KnowledgeService(KnowledgeUtils):
         # 插入到数据库
         db_knowledge.user_id = login_user.user_id
         db_knowledge = KnowledgeDao.insert_one(db_knowledge)
+        telemetry_service.log_event_sync(user_id=login_user.user_id,
+                                         event_type=BaseTelemetryTypeEnum.NEW_KNOWLEDGE_BASE,
+                                         trace_id=trace_id_var.get(),
+                                         event_data=NewKnowledgeBaseEventData(
+                                             kb_id=db_knowledge.id,
+                                             kb_name=db_knowledge.name,
+                                             kb_type=db_knowledge.model_type
+                                         ))
 
         try:
             vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge=db_knowledge,
@@ -215,6 +227,16 @@ class KnowledgeService(KnowledgeUtils):
         AuditLogService.create_knowledge(
             login_user, get_request_ip(request), knowledge.id
         )
+
+        telemetry_service.log_event_sync(user_id=login_user.user_id,
+                                         event_type=BaseTelemetryTypeEnum.NEW_KNOWLEDGE_BASE,
+                                         trace_id=trace_id_var.get(),
+                                         event_data=NewKnowledgeBaseEventData(
+                                             kb_id=knowledge.id,
+                                             kb_name=knowledge.name,
+                                             kb_type=knowledge.model_type
+                                         ))
+
         return True
 
     @classmethod
@@ -272,6 +294,10 @@ class KnowledgeService(KnowledgeUtils):
 
         # 删除mysql数据
         KnowledgeDao.delete_knowledge(knowledge_id, only_clear)
+
+        telemetry_service.log_event_sync(user_id=login_user.user_id,
+                                         event_type=BaseTelemetryTypeEnum.DELETE_KNOWLEDGE_BASE,
+                                         trace_id=trace_id_var.get())
 
         if not only_clear:
             cls.delete_knowledge_hook(request, login_user, knowledge)
@@ -753,6 +779,11 @@ class KnowledgeService(KnowledgeUtils):
             updater_name=login_user.user_name,
         )
         db_file = KnowledgeFileDao.add_file(db_file)
+        telemetry_service.log_event_sync(
+            user_id=login_user.user_id,
+            event_type=BaseTelemetryTypeEnum.NEW_KNOWLEDGE_FILE,
+            trace_id=trace_id_var.get(),
+        )
         # 原始文件保存
         db_file.object_name = KnowledgeUtils.get_knowledge_file_object_name(db_file.id, db_file.file_name)
         minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=db_file.object_name,
@@ -868,6 +899,9 @@ class KnowledgeService(KnowledgeUtils):
         # 处理vectordb
         delete_knowledge_file_vectors(file_ids)
         KnowledgeFileDao.delete_batch(file_ids)
+        telemetry_service.log_event_sync(user_id=login_user.user_id,
+                                         event_type=BaseTelemetryTypeEnum.DELETE_KNOWLEDGE_FILE,
+                                         trace_id=trace_id_var.get())
 
         # 删除知识库文件的审计日志
         cls.delete_knowledge_file_hook(

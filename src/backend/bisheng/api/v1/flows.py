@@ -9,11 +9,14 @@ from starlette.responses import StreamingResponse
 from bisheng.api.services.flow import FlowService
 from bisheng.api.utils import build_flow_no_yield, remove_api_keys
 from bisheng.api.v1.schemas import (FlowCompareReq, FlowListRead, FlowVersionCreate, StreamData, resp_200)
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.flow import FlowOnlineEditError, FlowNameExistsError
 from bisheng.common.errcode.http_error import UnAuthorizedError, ServerError, NotFoundError
+from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import (Flow, FlowCreate, FlowDao, FlowRead, FlowType, FlowUpdate)
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
@@ -184,6 +187,11 @@ def delete_flow(*,
     if not login_user.access_check(db_flow.user_id, flow_id, access_type):
         return UnAuthorizedError.return_resp()
     FlowDao.delete_flow(db_flow)
+    telemetry_service.log_event(
+        user_id=login_user.user_id,
+        event_type=BaseTelemetryTypeEnum.DELETE_APPLICATION,
+        trace_id=trace_id_var.get()
+    )
     FlowService.delete_flow_hook(request, login_user, db_flow)
     return resp_200(message='删除成功')
 

@@ -2,8 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, StatusEnum
-from bisheng.database.models.flow import FlowType
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, StatusEnum, ApplicationTypeEnum
+from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 
 
 class BaseEventData(BaseModel):
@@ -29,7 +29,7 @@ class NewMessageSessionEventData(BaseEventData):
 
     session_id: str
     # 应用类型
-    app_type: FlowType
+    app_type: ApplicationTypeEnum
     # 应用名称
     app_name: str
     # 应用id
@@ -64,4 +64,15 @@ class NewApplicationEventData(BaseEventData):
 
     app_id: str
     app_name: str
-    app_type: FlowType
+    app_type: ApplicationTypeEnum
+
+
+class NewKnowledgeBaseEventData(BaseEventData):
+    """Data model for new knowledge base events."""
+
+    _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.NEW_KNOWLEDGE_BASE
+
+    kb_id: int
+    kb_name: str
+    kb_type: KnowledgeTypeEnum
+    

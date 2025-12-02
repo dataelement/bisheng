@@ -10,16 +10,21 @@ from loguru import logger
 from bisheng.api.v1.schemas import (ProcessResponse, UploadFileResponse,
                                     resp_200)
 from bisheng.chat.utils import judge_source, process_source_document
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
+from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.cache.utils import save_uploaded_file, upload_file_to_minio
+from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.interface.types import get_all_types_dict
+from bisheng.open_endpoints.domain.utils import get_default_operator_async
 from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.services.deps import get_session_service, get_task_service
 from bisheng.services.task.service import TaskService
@@ -168,6 +173,8 @@ async def process_flow(
     logger.info(
         f'act=api_call sessionid={session_id} flow_id={flow_id} inputs={inputs} tweaks={tweaks}')
 
+    login_user = await get_default_operator_async()
+
     try:
         flow = FlowDao.get_flow_by_id(flow_id)
         if flow is None:
@@ -227,14 +234,14 @@ async def process_flow(
         source, result = await judge_source(answer, source_documents, session_id, extra)
 
         try:
-            question = ChatMessage(user_id=1,
+            question = ChatMessage(user_id=login_user.user_id,
                                    is_bot=False,
                                    type='end',
                                    chat_id=session_id,
                                    category='question',
                                    flow_id=flow_id,
                                    message=json.dumps(inputs))
-            message = ChatMessage(user_id=1,
+            message = ChatMessage(user_id=login_user.user_id,
                                   is_bot=True,
                                   chat_id=session_id,
                                   flow_id=flow_id,
@@ -251,8 +258,21 @@ async def process_flow(
                         flow_id=flow_id,
                         flow_name=flow.name,
                         flow_type=FlowType.FLOW.value,
-                        user_id=1,
+                        user_id=login_user.user_id,
                     ))
+
+                # 记录Telemetry日志
+                await telemetry_service.log_event(user_id=login_user.user_id,
+                                                  event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
+                                                  trace_id=trace_id_var.get(),
+                                                  event_data=NewMessageSessionEventData(
+                                                      session_id=session_id,
+                                                      app_id=flow_id,
+                                                      source=source,  # type: ignore
+                                                      app_name=flow.name,
+                                                      app_type=ApplicationTypeEnum.SKILL
+                                                  )
+                                                  )
             except Exception as e:
                 logger.warning(f'insert repeat session error: {e}')
 

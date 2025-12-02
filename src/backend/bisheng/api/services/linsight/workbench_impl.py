@@ -17,13 +17,17 @@ from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
     SubmitFileSchema
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.linsight import LinsightToolInitError, LinsightBishengLLMError, LinsightGenerateSopError
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
+from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_file_to_folder, CACHE_DIR
+from bisheng.core.logger import trace_id_var
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models import LinsightSessionVersion
@@ -139,16 +143,6 @@ class LinsightWorkbenchImpl:
             # 生成唯一会话ID
             chat_id = uuid.uuid4().hex
 
-            # 创建消息会话
-            message_session = MessageSession(
-                chat_id=chat_id,
-                flow_id='',
-                flow_name='新对话',
-                flow_type=FlowType.LINSIGHT.value,
-                user_id=login_user.user_id
-            )
-            await MessageSessionDao.async_insert_one(message_session)
-
             # 处理文件（如果存在）
             processed_files = await cls._process_submitted_files(submit_obj.files, chat_id)
 
@@ -163,6 +157,30 @@ class LinsightWorkbenchImpl:
                 files=processed_files
             )
             linsight_session_version = await LinsightSessionVersionDao.insert_one(linsight_session_version)
+
+            # 创建消息会话
+            message_session = MessageSession(
+                chat_id=chat_id,
+                flow_id=linsight_session_version.id,
+                flow_name='新对话',
+                flow_type=FlowType.LINSIGHT.value,
+                user_id=login_user.user_id
+            )
+
+            message_session = await MessageSessionDao.async_insert_one(message_session)
+
+            # 记录Telemetry日志
+            await telemetry_service.log_event(user_id=login_user.user_id,
+                                              event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
+                                              trace_id=trace_id_var.get(),
+                                              event_data=NewMessageSessionEventData(
+                                                  session_id=message_session.chat_id,
+                                                  app_id=ApplicationTypeEnum.LINSIGHT.value,
+                                                  source="platform",
+                                                  app_name=ApplicationTypeEnum.LINSIGHT.value,
+                                                  app_type=ApplicationTypeEnum.LINSIGHT
+                                              )
+                                              )
 
             return message_session, linsight_session_version
 
