@@ -12,7 +12,7 @@ from bisheng.database.models.assistant import AssistantDao
 
 async def test_init_tools():
     assistant = AssistantDao.get_one_assistant(UUID("379988576e884c62b3c2c4015245ddb6"))
-    gpts_agent = AssistantAgent(assistant, "123")
+    gpts_agent = AssistantAgent(assistant, "123", 1)
     await gpts_agent.init_assistant()
     print(gpts_agent)
 

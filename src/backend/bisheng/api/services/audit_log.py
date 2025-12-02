@@ -15,7 +15,6 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.assistant import AssistantDao, Assistant
 from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
 from bisheng.database.models.flow import FlowDao, Flow, FlowType
-from bisheng.database.models.gpts_tools import GptsToolsType
 from bisheng.database.models.group import Group
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.message import ChatMessageDao, LikedType
@@ -23,6 +22,7 @@ from bisheng.database.models.role import Role
 from bisheng.database.models.session import MessageSessionDao, SensitiveStatus
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, Knowledge
+from bisheng.tool.domain.models.gpts_tools import GptsToolsType
 from bisheng.user.domain.models.user import UserDao, User
 from bisheng.utils import generate_uuid
 

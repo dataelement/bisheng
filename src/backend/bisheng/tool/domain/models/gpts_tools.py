@@ -1,6 +1,5 @@
 import json
 from datetime import datetime
-from enum import Enum
 from typing import Dict, List, Optional
 
 from pydantic import model_validator
@@ -9,19 +8,8 @@ from sqlmodel import Field, or_, select, Text, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.database.constants import ToolPresetType
 from bisheng.utils import md5_hash, generate_uuid
-
-
-class AuthMethod(Enum):
-    NO = 0
-    API_KEY = 1
-
-
-class AuthType(Enum):
-    BASIC = "basic"
-    BEARER = "bearer"
-    CUSTOM = "custom"
+from ..const import AuthType, ToolPresetType
 
 
 class GptsToolsBase(SQLModelSerializable):
@@ -145,10 +133,24 @@ class GptsToolsDao(GptsToolsBase):
             return session.exec(statement).first()
 
     @classmethod
+    async def aget_one_tool(cls, tool_id: int) -> GptsTools:
+        statement = select(GptsTools).where(GptsTools.id == tool_id)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.first()
+
+    @classmethod
     def get_list_by_ids(cls, tool_ids: List[int]) -> List[GptsTools]:
-        statement = select(GptsTools).where(GptsTools.id.in_(tool_ids)).where(GptsTools.is_delete == 0)
+        statement = select(GptsTools).where(col(GptsTools.id).in_(tool_ids)).where(GptsTools.is_delete == 0)
         with get_sync_db_session() as session:
             return session.exec(statement).all()
+
+    @classmethod
+    async def aget_list_by_ids(cls, tool_ids: List[int]) -> List[GptsTools]:
+        statement = select(GptsTools).where(col(GptsTools.id).in_(tool_ids)).where(GptsTools.is_delete == 0)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
 
     @classmethod
     def get_list_by_user(cls, user_id: int, page: int = 0, page_size: int = 0) -> List[GptsTools]:
@@ -199,6 +201,17 @@ class GptsToolsDao(GptsToolsBase):
                 GptsToolsType.id.in_(tool_type_ids)
             )
             return session.exec(statement).all()
+
+    @classmethod
+    async def aget_all_tool_type(cls, tool_type_ids: List[int]) -> List[GptsToolsType]:
+        """ get tool types by tool ids """
+        statement = select(GptsToolsType).filter(
+            col(GptsToolsType.is_delete) == 0,
+            col(GptsToolsType.id).in_(tool_type_ids)
+        )
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
 
     @classmethod
     def get_preset_tool_type(cls) -> List[GptsToolsType]:
@@ -310,6 +323,16 @@ class GptsToolsDao(GptsToolsBase):
         with get_sync_db_session() as session:
             statement = select(GptsToolsType).where(GptsToolsType.id == tool_type_id)
             return session.exec(statement).first()
+
+    @classmethod
+    async def aget_one_tool_type(cls, tool_type_id: int) -> GptsToolsType:
+        """
+        异步获取某个类别的详情，包含openapi的schema协议内容
+        """
+        statement = select(GptsToolsType).where(GptsToolsType.id == tool_type_id)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.first()
 
     @classmethod
     def get_one_tool_type_by_name(cls, user_id: int, tool_type_name: str) -> GptsToolsType:

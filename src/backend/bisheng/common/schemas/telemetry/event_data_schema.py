@@ -1,7 +1,8 @@
-from pydantic import BaseModel
 from typing import Literal, Any
 
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
+from pydantic import BaseModel
+
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, StatusEnum
 from bisheng.database.models.flow import FlowType
 
 
@@ -40,6 +41,17 @@ class NewMessageSessionEventData(BaseEventData):
     app_id: str
     # 会话来源 平台、API
     source: Literal["platform", "api"]
+
+
+class ToolInvocationEventData(BaseEventData):
+    _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.TOOL_INVOKE
+
+    app_id: str
+    app_name: str
+    tool_id: int
+    tool_name: str
+    tool_type: int  # 什么类型的工具，比如：API、MCP、预置.
+    status: StatusEnum
 
 
 if __name__ == '__main__':

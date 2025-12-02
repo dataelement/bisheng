@@ -21,7 +21,7 @@ from bisheng.utils import md5_hash, get_request_ip
 from bisheng.utils.constants import RSA_KEY
 from .auth import LoginUser, AuthJwt
 from .captcha import verify_captcha
-from .const import USER_PASSWORD_ERROR, USER_CURRENT_SESSION
+from ..const import USER_PASSWORD_ERROR, USER_CURRENT_SESSION
 
 
 class UserService:

@@ -8,7 +8,6 @@ from loguru import logger
 
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import read_chunk_text
-from bisheng.api.utils import md5_hash
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.chat.types import IgnoreException
 from bisheng.core.cache.utils import file_download
@@ -206,7 +205,7 @@ class InputNode(BaseNode):
         all_metadata = []
         all_file_content = ''
         original_file_path = []
-        file_id = md5_hash(f'{key}:{value[0]}')
+        file_id = generate_uuid()
         image_files_path = []
         file_content_max_size = int(key_info.get('file_content_size', 15000))
         file_content_length = 0

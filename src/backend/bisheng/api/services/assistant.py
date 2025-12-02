@@ -9,7 +9,6 @@ from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
-from bisheng.api.services.tool import ToolServices
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
                                     StreamData, UnifiedResponseModel, resp_200, resp_500)
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -18,11 +17,9 @@ from bisheng.common.errcode.assistant import (AssistantInitError, AssistantNameR
                                               ToolTypeIsPresetError)
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.core.cache import InMemoryCache
-from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.assistant import (Assistant, AssistantDao, AssistantLinkDao,
                                                AssistantStatus)
 from bisheng.database.models.flow import Flow, FlowDao, FlowType
-from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsTypeRead, GptsTools
 from bisheng.database.models.group_resource import GroupResourceDao, GroupResource, ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.session import MessageSessionDao
@@ -31,6 +28,9 @@ from bisheng.database.models.user_group import UserGroupDao
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.llm.domain.services import LLMService
 from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.tool.domain.const import ToolPresetType
+from bisheng.tool.domain.models.gpts_tools import GptsToolsDao, GptsToolsTypeRead, GptsTools
+from bisheng.tool.domain.services.tool import ToolServices
 from bisheng.user.domain.models.user import UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import get_request_ip
@@ -164,7 +164,7 @@ class AssistantService(BaseService, AssistantUtils):
                     break
 
         # 自动生成描述
-        assistant, _, _ = await cls.get_auto_info(assistant)
+        assistant, _, _ = await cls.get_auto_info(assistant, login_user)
         assistant = AssistantDao.create_assistant(assistant)
 
         cls.create_assistant_hook(request, assistant, login_user)
@@ -228,13 +228,13 @@ class AssistantService(BaseService, AssistantUtils):
         return True
 
     @classmethod
-    async def auto_update_stream(cls, assistant_id: str, prompt: str):
+    async def auto_update_stream(cls, assistant_id: str, prompt: str, login_user: UserPayload):
         """ 重新生成助手的提示词和工具选择, 只调用模型能力不修改数据库数据 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         assistant.prompt = prompt
 
         # 初始化llm
-        auto_agent = AssistantAgent(assistant, '')
+        auto_agent = AssistantAgent(assistant, '', login_user.user_id)
         await auto_agent.init_auto_update_llm()
 
         # 流式生成提示词
@@ -339,7 +339,7 @@ class AssistantService(BaseService, AssistantUtils):
 
         # 尝试初始化agent，初始化成功则上线、否则不上线
         if status == AssistantStatus.ONLINE.value:
-            tmp_agent = AssistantAgent(assistant, '')
+            tmp_agent = AssistantAgent(assistant, '', login_user.user_id)
             try:
                 await tmp_agent.init_assistant()
             except Exception as e:
@@ -587,13 +587,13 @@ class AssistantService(BaseService, AssistantUtils):
         return False
 
     @classmethod
-    async def get_auto_info(cls, assistant: Assistant) -> (Assistant, List[int], List[int]):
+    async def get_auto_info(cls, assistant: Assistant, login_user: UserPayload) -> (Assistant, List[int], List[int]):
         """
         自动生成助手的prompt，自动选择工具和技能
         return：助手信息，工具ID列表，技能ID列表
         """
         # 初始化agent
-        auto_agent = AssistantAgent(assistant, '')
+        auto_agent = AssistantAgent(assistant, '', login_user.user_id)
         await auto_agent.init_auto_update_llm()
 
         # 自动生成描述

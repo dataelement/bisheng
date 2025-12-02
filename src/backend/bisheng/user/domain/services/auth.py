@@ -272,6 +272,13 @@ class LoginUser(BaseModel):
         return login_user
 
     @classmethod
+    def init_login_user_sync(cls, user_id: int, user_name: str) -> Self:
+        user_roles = UserRoleDao.get_user_roles(user_id)
+        role_ids = [user_role.role_id for user_role in user_roles]
+        login_user = cls(user_id=user_id, user_name=user_name, user_role=role_ids)
+        return login_user
+
+    @classmethod
     async def get_login_user(cls, auth_jwt: AuthJwt = Depends()) -> Self:
         subject = auth_jwt.get_subject()
         return await cls.init_login_user(user_id=subject['user_id'], user_name=subject['user_name'])

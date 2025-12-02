@@ -13,11 +13,7 @@ def get_default_operator() -> UserPayload:
     login_user = UserDao.get_user(user_id)
     if not login_user:
         raise HTTPException(status_code=500, detail='未找到default_operator中user的用户信息')
-    login_user = UserPayload(**{
-        'user_id': login_user.user_id,
-        'user_name': login_user.user_name,
-        'role': ''
-    })
+    login_user = UserPayload.init_login_user_sync(user_id=login_user.user_id, user_name=login_user.username)
     return login_user
 
 
@@ -29,9 +25,6 @@ async def get_default_operator_async() -> UserPayload:
     login_user = await UserDao.aget_user(user_id)
     if not login_user:
         raise HTTPException(status_code=500, detail='未找到default_operator中user的用户信息')
-    login_user = UserPayload(**{
-        'user_id': login_user.user_id,
-        'user_name': login_user.user_name,
-        'role': ''
-    })
+    login_user = await UserPayload.init_login_user(user_id=login_user.user_id, user_name=login_user.username)
+
     return login_user

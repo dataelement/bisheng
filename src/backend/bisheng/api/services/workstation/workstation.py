@@ -17,12 +17,12 @@ from bisheng.common.errcode.server import EmbeddingModelStatusError
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.core.ai.rerank.rrf_rerank import RRFRerank
 from bisheng.database.constants import MessageCategory
-from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.llm.domain.services import LLMService
+from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils.embedding import decide_embeddings
 

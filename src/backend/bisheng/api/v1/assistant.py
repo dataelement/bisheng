@@ -8,8 +8,6 @@ from fastapi.responses import StreamingResponse
 from loguru import logger
 
 from bisheng.api.services.assistant import AssistantService
-from bisheng.api.services.openapi import OpenApiSchema
-from bisheng.api.services.tool import ToolServices
 from bisheng.api.v1.schemas import (AssistantCreateReq, AssistantUpdateReq,
                                     DeleteToolTypeReq, StreamData, TestToolReq,
                                     resp_200, resp_500)
@@ -18,13 +16,15 @@ from bisheng.chat.types import WorkType
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.core.cache.redis_manager import get_redis_client
-from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.assistant import Assistant
-from bisheng.database.models.gpts_tools import GptsToolsTypeRead
 from bisheng.mcp_manage.langchain.tool import McpTool
 from bisheng.mcp_manage.manager import ClientManager
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.tool.domain.const import ToolPresetType
+from bisheng.tool.domain.models.gpts_tools import GptsToolsTypeRead
+from bisheng.tool.domain.services.openapi import OpenApiSchema
+from bisheng.tool.domain.services.tool import ToolServices
 from bisheng.utils import generate_uuid
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 
@@ -110,7 +110,8 @@ async def auto_update_assistant_task(*, request: Request, login_user: UserPayloa
 
 # 自动优化prompt和工具选择
 @router.get('/auto', response_class=StreamingResponse)
-async def auto_update_assistant(*, task_id: str = Query(description='优化任务唯一ID')):
+async def auto_update_assistant(*, task_id: str = Query(description='优化任务唯一ID'),
+                                login_user: UserPayload = Depends(UserPayload.get_login_user)):
     redis_client = await get_redis_client()
     task = await redis_client.aget(f'auto_update_task:{task_id}')
     if not task:
@@ -120,18 +121,14 @@ async def auto_update_assistant(*, task_id: str = Query(description='优化任�
 
     async def event_stream():
         try:
-            async for message in AssistantService.auto_update_stream(assistant_id, prompt):
+            async for message in AssistantService.auto_update_stream(assistant_id, prompt, login_user):
                 yield message
             yield str(StreamData(event='message', data={'type': 'end', 'data': ''}))
         except Exception as e:
             logger.exception('assistant auto update error')
             yield str(StreamData(event='message', data={'type': 'end', 'message': str(e)}))
 
-    try:
-        return StreamingResponse(event_stream(), media_type='text/event-stream')
-    except Exception as exc:
-        logger.error(exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+    return StreamingResponse(event_stream(), media_type='text/event-stream')
 
 
 # 更新助手的提示词

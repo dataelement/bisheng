@@ -240,18 +240,16 @@ class RagUtils(BaseNode):
 
         # 4. limit  by max_chunk_size
         doc_num, doc_content_sum = 0, 0
+        same_file_id = set()
         for doc in finally_docs:
-            doc_content_sum += len(doc.page_content)
             if doc_content_sum > self._max_chunk_size:
                 break
+            doc_content_sum += len(doc.page_content)
+            same_file_id.add(doc.metadata.get('document_id') or doc.metadata.get('file_id'))
             doc_num += 1
         finally_docs = finally_docs[:doc_num]
 
         logger.debug(f'retrieve finally chunks: {finally_docs}')
-        same_file_id = set()
-        for one in finally_docs:
-            file_id = one.metadata.get('document_id') or one.metadata.get('file_id')
-            same_file_id.add(file_id)
         if len(same_file_id) == 1:
             # 来自同一个文件，则按照chunk_index排序
             finally_docs.sort(key=lambda x: x.metadata.get('chunk_index', 0))

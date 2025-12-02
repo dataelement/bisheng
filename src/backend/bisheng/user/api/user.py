@@ -13,7 +13,6 @@ from fastapi.security import OAuth2PasswordBearer
 from loguru import logger
 from sqlmodel import select
 
-from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.schemas import resp_200, CreateUserReq
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
@@ -105,7 +104,7 @@ async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends
         # 设置登录用户当前的cookie, 比jwt有效期多一个小时
         redis_client = await get_redis_client()
         await redis_client.aset(USER_CURRENT_SESSION.format(user_exist.user_id), access_token,
-                                ACCESS_TOKEN_EXPIRE_TIME + 3600)
+                                settings.cookie_conf.jwt_token_expire_time + 3600)
 
         # 记录审计日志
         login_user = await LoginUser.init_login_user(user_id=user_exist.user_id, user_name=user_exist.user_name)

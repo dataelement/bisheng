@@ -13,7 +13,6 @@ from loguru import logger
 from sse_starlette import EventSourceResponse
 
 from bisheng.api.services import knowledge_imp
-from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.services.workstation import (SSECallbackClient, WorkstationConversation,
@@ -21,7 +20,7 @@ from bisheng.api.services.workstation import (SSECallbackClient, WorkstationConv
 from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import FrequentlyUsedChat
-from bisheng.api.v1.schemas import WorkstationConfig, resp_200, WSPrompt, ExcelRule, UnifiedResponseModel
+from bisheng.api.v1.schemas import WorkstationConfig, resp_200, ExcelRule, UnifiedResponseModel
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
@@ -32,12 +31,13 @@ from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import file_download, save_download_file, save_uploaded_file
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.models.flow import FlowType
-from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.llm.domain.llm import BishengLLM
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+from bisheng.tool.domain.services.executor import ToolExecutor
 
 router = APIRouter(prefix='/workstation', tags=['WorkStation'])
 
@@ -271,14 +271,15 @@ async def genTitle(human: str, assistant: str, llm: BishengLLM, conversationId: 
         await MessageSessionDao.async_insert_one(session)
 
 
-async def webSearch(query: str, web_search_config: WSPrompt):
+async def webSearch(query: str, user_id: int):
     """
     联网搜索
     """
     web_search_info = GptsToolsDao.get_tool_by_tool_key("web_search")
     if not web_search_info:
         raise WebSearchToolNotFoundError(exception=Exception("No web_search tool found in database"))
-    web_search_tool = await AssistantAgent.init_tools_by_tool_ids([web_search_info.id], None)
+    web_search_tool = await ToolExecutor.init_by_tool_id(web_search_info.id, app_id='normal', app_name='normal',
+                                                         user_id=user_id)
     if not web_search_tool:
         raise WebSearchToolNotFoundError(exception=Exception("No web_search tool found in gpts tools"))
     search_list = await web_search_tool[0].ainvoke(input={"query": query})
@@ -396,7 +397,7 @@ async def chat_completions(
                 if searchRes.content == '1':
                     logger.info(f'需要联网搜索, prompt={data.text}')
                     # 如果需要联网搜索，则调用搜索接口
-                    search_res, web_list = await webSearch(data.text, wsConfig.webSearch)
+                    search_res, web_list = await webSearch(data.text, user_id=login_user.user_id)
                     content = {'content': [{'type': 'search_result', 'search_result': web_list}]}
                     yield SSEResponse(event='on_search_result',
                                       data=delta(id=stepId, delta=content)).toString()

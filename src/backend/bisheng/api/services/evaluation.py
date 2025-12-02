@@ -335,7 +335,7 @@ def add_evaluation_task(evaluation_id: int):
             assistant = AssistantDao.get_one_assistant(evaluation.unique_id)
             if not assistant:
                 raise Exception("Assistant not found")
-            gpts_agent = AssistantAgent(assistant_info=assistant, chat_id="")
+            gpts_agent = AssistantAgent(assistant_info=assistant, chat_id="", invoke_user_id=evaluation.user_id)
             asyncio.run(gpts_agent.init_assistant())
             for index, one in enumerate(csv_data):
                 messages = asyncio.run(gpts_agent.run(one.get('question')))

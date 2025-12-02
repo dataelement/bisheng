@@ -27,14 +27,16 @@ class TempState(TypedDict):
 class GraphEngine:
 
     def __init__(self,
-                 user_id: str = None,
+                 user_id: int = None,
                  workflow_id: str = None,
+                 workflow_name: str = '',
                  workflow_data: Dict = None,
                  async_mode: bool = False,
                  max_steps: int = 0,
                  callback: BaseCallback = None):
         self.user_id = user_id
         self.workflow_id = workflow_id
+        self.workflow_name = workflow_name
         self.workflow_data = workflow_data
         self.max_steps = max_steps
         self.async_mode = async_mode
@@ -215,7 +217,8 @@ class GraphEngine:
                                                       target_edges=self.edges.get_target_edges(
                                                           node_data.id),
                                                       max_steps=self.max_steps,
-                                                      callback=self.callback)
+                                                      callback=self.callback,
+                                                      workflow_name=self.workflow_name)
             if node_instance.is_condition_node():
                 self.condition_nodes.append(node_instance.id)
             self.nodes_map[node_data.id] = node_instance

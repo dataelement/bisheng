@@ -120,11 +120,12 @@ async def upload_report_file(
 
 
 @router.post('/run_once', status_code=200)
-async def run_once(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
-                   node_input: Optional[dict] = None,  # 节点的入参
-                   node_data: dict = None):
+def run_once(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
+             node_input: Optional[dict] = None,  # 节点的入参
+             node_data: dict = None,
+             workflow_id: str = Body(..., description='工作流ID')):
     """ 单节点运行 """
-    result = WorkFlowService.run_once(login_user, node_input, node_data)
+    result = WorkFlowService.run_once(login_user, node_input, node_data, workflow_id)
 
     return resp_200(data=result)
 

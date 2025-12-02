@@ -15,9 +15,9 @@ from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import (OpenAIChatCompletionReq,
                                     OpenAIChatCompletionResp, OpenAIChoice)
-from bisheng.open_endpoints.domain.utils import get_default_operator
 from bisheng.chat.types import WorkType
 from bisheng.common.services.config_service import settings
+from bisheng.open_endpoints.domain.utils import get_default_operator
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 
@@ -71,7 +71,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
         chat_history = chat_history[:-1]
 
     # 初始化助手agent
-    agent = AssistantAgent(assistant_info, '')
+    agent = AssistantAgent(assistant_info, '', invoke_user_id=login_user.user_id)
     await agent.init_assistant()
 
     # 判断模型是否支持流式调用

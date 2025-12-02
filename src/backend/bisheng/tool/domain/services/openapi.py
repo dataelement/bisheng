@@ -1,17 +1,20 @@
 import json
+from typing import Dict
 
-from bisheng.database.models.gpts_tools import AuthMethod, AuthType
+from bisheng.tool.domain.const import AuthMethod, AuthType
 
 
 class OpenApiSchema:
 
     def __init__(self, contents: dict):
+        self.parameter_name = None
+        self.api_location = None
         self.contents = contents
         self.version = contents['openapi']
         self.info = contents['info']
         self.title = self.info['title']
         self.auth_type = 'basic'
-        self.auth_method = 0 
+        self.auth_method = 0
         self.description = self.info.get('description', '')
         self.default_server = ''
         self.apis = []
@@ -27,16 +30,6 @@ class OpenApiSchema:
             self.default_server = servers[0]['url']
         else:
             self.default_server = servers['url']
-
-        # if self.contents.get('components') and self.contents['components'].get('securitySchemes') is not None:
-        #     self.auth_type = 'custom' if self.contents['components']['securitySchemes']['ApiKeyAuth']['type'] == 'apiKey' else 'basic'
-        #     s = self.contents['components']['securitySchemes']['ApiKeyAuth']['schema']
-        #     if self.contents['components']['securitySchemes']['ApiKeyAuth']['type'] == 'http':
-        #         self.auth_type = s
-        #
-        #     self.auth_method= 1 if self.contents['components']['securitySchemes']['ApiKeyAuth']['type'] == 'apiKey' or 'http' else 0
-        #     self.api_location= self.contents['components']['securitySchemes']['ApiKeyAuth']['in']
-        #     self.parameter_name= self.contents['components']['securitySchemes']['ApiKeyAuth']['name']
 
         security_schemes = self.contents.get('components', {}).get('securitySchemes', {})
         api_key_auth = security_schemes.get('ApiKeyAuth', {})
@@ -69,7 +62,7 @@ class OpenApiSchema:
                     'path': path,
                     'method': method,
                     'description': method_info.get('description', '')
-                    or method_info.get('summary', ''),
+                                   or method_info.get('summary', ''),
                     'operationId': method_info['operationId'],
                     'parameters': [],
                 }
@@ -108,18 +101,19 @@ class OpenApiSchema:
     @staticmethod
     def parse_openapi_tool_params(name: str,
                                   description: str,
-                                  extra: str,
+                                  extra: str | Dict,
                                   server_host: str,
                                   auth_method: int,
                                   auth_type: str = None,
                                   api_key: str = None):
+        if isinstance(extra, str):
+            extra = json.loads(extra)
         # 拼接请求头
         headers = {}
         if auth_method == AuthMethod.API_KEY.value:
             if auth_type == AuthType.CUSTOM.value:
-                extra_json = json.loads(extra)
-                location = extra_json["api_location"]
-                parameter_name= extra_json["parameter_name"]
+                location = extra["api_location"]
+                parameter_name = extra["parameter_name"]
                 if location == "header":
                     headers = {parameter_name: api_key}
             elif auth_type == AuthType.BASIC.value:
@@ -129,7 +123,7 @@ class OpenApiSchema:
 
         # 返回初始化 openapi所需的入参
         params = {
-            'params': json.loads(extra),
+            'params': extra,
             'headers': headers,
             'api_key': api_key,
             'url': server_host,

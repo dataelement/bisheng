@@ -9,17 +9,17 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict
 
 from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.services.openapi import OpenApiSchema
 from bisheng.api.services.tool.langchain_tool.search_knowledge import SearchKnowledgeBase
 from bisheng.api.utils import get_url_content
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.assistant import ToolTypeNotExistsError, ToolTypeRepeatError
 from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
-from bisheng.database.constants import ToolPresetType
-from bisheng.database.models.gpts_tools import GptsToolsDao, GptsTools, GptsToolsType, GptsToolsTypeRead
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType
 from bisheng.mcp_manage.manager import ClientManager
+from bisheng.tool.domain.const import ToolPresetType
+from bisheng.tool.domain.models.gpts_tools import GptsToolsDao, GptsTools, GptsToolsType, GptsToolsTypeRead
+from bisheng.tool.domain.services.openapi import OpenApiSchema
 from bisheng.utils import md5_hash, get_request_ip
 from bisheng_langchain.gpts.load_tools import load_tools
 

@@ -12,10 +12,8 @@ from fastapi import UploadFile
 from langchain_core.tools import BaseTool
 from loguru import logger
 
-from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.knowledge_imp import decide_vectorstores, async_read_chunk_text
 from bisheng.api.services.linsight.sop_manage import SOPManageService
-from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
     SubmitFileSchema
@@ -30,7 +28,6 @@ from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
-from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum
 from bisheng.database.models.linsight_sop import LinsightSOPRecord
@@ -39,6 +36,9 @@ from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.knowledge.domain.models.knowledge import KnowledgeRead, KnowledgeTypeEnum
 from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.services import LLMService
+from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+from bisheng.tool.domain.services.executor import ToolExecutor
+from bisheng.tool.domain.services.tool import ToolServices
 from bisheng.utils import util
 from bisheng.utils.util import async_calculate_md5
 from bisheng_langchain.linsight.const import ExecConfig
@@ -835,7 +835,7 @@ class LinsightWorkbenchImpl:
         )
 
     @classmethod
-    async def _init_bisheng_code_tool(cls, config_tool_ids: List[int], file_dir: str) -> List[BaseTool]:
+    async def _init_bisheng_code_tool(cls, config_tool_ids: List[int], file_dir: str, user_id: int) -> List[BaseTool]:
         """
         特殊处理初始化毕昇的代码解释器工具
         """
@@ -866,8 +866,9 @@ class LinsightWorkbenchImpl:
 
         bisheng_code_tool.extra = code_config
 
-        tools = AssistantAgent.sync_init_preset_tools([bisheng_code_tool], None, None)
-        return tools
+        tools = await ToolExecutor.init_by_tool_id(tool=bisheng_code_tool, app_id='lisight', app_name='linsight',
+                                                   user_id=user_id)
+        return [tools]
 
     @classmethod
     async def init_linsight_config_tools(cls, session_version: LinsightSessionVersion,
@@ -899,7 +900,8 @@ class LinsightWorkbenchImpl:
 
         # todo 更好的工具初始化方案
         if need_upload and file_dir:
-            bisheng_code_tool = await cls._init_bisheng_code_tool(config_tool_ids, file_dir)
+            bisheng_code_tool = await cls._init_bisheng_code_tool(config_tool_ids, file_dir,
+                                                                  user_id=session_version.user_id)
             tools.extend(bisheng_code_tool)
 
         # 过滤有效的工具ID
@@ -907,7 +909,8 @@ class LinsightWorkbenchImpl:
 
         # 初始化工具
         if valid_tool_ids:
-            tools.extend(await AssistantAgent.init_tools_by_tool_ids(valid_tool_ids, llm=llm))
+            tools.extend(await ToolExecutor.init_by_tool_ids(valid_tool_ids, app_id='lisight', app_name='linsight',
+                                                             user_id=session_version.user_id))
 
         return tools
 

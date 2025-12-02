@@ -108,7 +108,10 @@ class WorkFlowService(BaseService):
         return data, total
 
     @classmethod
-    def run_once(cls, login_user: UserPayload, node_input: Dict[str, any], node_data: Dict[any, any]):
+    def run_once(cls, login_user: UserPayload, node_input: Dict[str, any], node_data: Dict[any, any], workflow_id: str):
+        workflow_info = FlowDao.get_flow_by_id(workflow_id)
+        if not workflow_info:
+            raise NotFoundError()
 
         node_data = BaseNodeData(**node_data.get('data', {}))
         base_callback = BaseCallback()
@@ -117,7 +120,8 @@ class WorkFlowService(BaseService):
         node = NodeFactory.instance_node(node_type=node_data.type,
                                          node_data=node_data,
                                          user_id=login_user.user_id,
-                                         workflow_id='tmp_workflow_single_node',
+                                         workflow_id=workflow_info.id,
+                                         workflow_name=workflow_info.name,
                                          graph_state=graph_state,
                                          target_edges=None,
                                          max_steps=233,
@@ -186,7 +190,7 @@ class WorkFlowService(BaseService):
         if status == FlowStatus.ONLINE.value:
             # workflow的初始化校验
             try:
-                _ = Workflow(flow_id, login_user.user_id, version_info.data, False,
+                _ = Workflow(flow_id, db_flow.name, login_user.user_id, version_info.data, False,
                              10,
                              10,
                              None)
