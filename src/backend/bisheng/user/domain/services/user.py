@@ -6,12 +6,16 @@ from fastapi import Request, Depends
 
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.schemas import CreateUserReq
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.errcode.user import (UserNameAlreadyExistError,
                                          UserNeedGroupAndRoleError, UserForbiddenError, CaptchaError, UserValidateError,
                                          UserPasswordMaxTryError, UserPasswordExpireError)
 from bisheng.common.schemas.api import resp_200
+from bisheng.common.schemas.telemetry.event_data_schema import UserLoginEventData
+from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
+from bisheng.core.logger import trace_id_var
 from bisheng.user.domain.models.user import User, UserDao, UserLogin, UserRead
 from bisheng.utils import md5_hash, get_request_ip
 from bisheng.utils.constants import RSA_KEY
@@ -127,4 +131,10 @@ class UserService:
         # 记录审计日志
         AuditLogService.user_login(LoginUser(user_id=db_user.user_id, user_name=db_user.user_name),
                                    get_request_ip(request))
+
+        # 记录Telemetry日志
+        await telemetry_service.log_event(user_id=db_user.user_id, event_type=BaseTelemetryTypeEnum.USER_LOGIN,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=UserLoginEventData(login_method="password"))
+
         return resp_200(UserRead(access_token=access_token, **db_user.__dict__))

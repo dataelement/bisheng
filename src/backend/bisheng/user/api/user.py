@@ -35,6 +35,10 @@ from ..domain.models.user_role import UserRole, UserRoleCreate, UserRoleDao
 from ..domain.services.auth import AuthJwt, LoginUser
 from ..domain.services.captcha import verify_captcha
 from ..domain.services.user import UserService
+from ...common.constants.enums.telemetry import BaseTelemetryTypeEnum
+from ...common.schemas.telemetry.event_data_schema import UserLoginEventData
+from ...common.services import telemetry_service
+from ...core.logger import trace_id_var
 
 # build router
 router = APIRouter(prefix='', tags=['User'])
@@ -106,6 +110,12 @@ async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends
         # 记录审计日志
         login_user = await LoginUser.init_login_user(user_id=user_exist.user_id, user_name=user_exist.user_name)
         AuditLogService.user_login(login_user, get_request_ip(request))
+
+        # 记录Telemetry日志
+        await telemetry_service.log_event(user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.USER_LOGIN,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=UserLoginEventData(login_method="oss"))
+
         return resp_200({'access_token': access_token, 'refresh_token': access_token})
     else:
         raise ValueError('不支持接口')

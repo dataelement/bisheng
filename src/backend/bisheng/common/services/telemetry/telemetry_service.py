@@ -1,4 +1,7 @@
+import asyncio
 import logging
+from asyncio import Semaphore
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 from elasticsearch import AsyncElasticsearch, Elasticsearch, exceptions as es_exceptions
@@ -57,6 +60,11 @@ class BaseTelemetryService(object):
     def __init__(self):
         self._es_client: Optional[AsyncElasticsearch] = None
         self._es_client_sync: Optional[Elasticsearch] = None
+
+        # 线程池，用于同步方法
+        self.thread_pool = ThreadPoolExecutor(max_workers=10)
+        # 创建一个信号量，限制并发数量
+        self._semaphore = Semaphore(10)
 
     async def _ensure_index(self):
         """Initialize the Elasticsearch index safely"""
@@ -162,6 +170,35 @@ class BaseTelemetryService(object):
     def index_name(self) -> str:
         return self._index_name
 
+    # record event task
+    async def _record_event_task(self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str,
+                                event_data: T_EventData):
+
+        # 获取信号量
+        async with self._semaphore:
+            try:
+                logger.debug(f"Recording telemetry event for user_id {user_id}, event_type {event_type}")
+                # 获取用户信息 (带异常捕获)
+                user_context = await self._init_user_context(user_id)
+                if not user_context:
+                    # 即使查不到用户，建议也记录日志，但 user_context 为空或默认值
+                    logger.warning(f"User context missing for user_id {user_id}, logging anonymously")
+                    # 可以根据需求决定是否 return，或者构建一个空的 Context
+
+                # 构建 Event
+                event_info = BaseTelemetryEvent(
+                    event_type=event_type,
+                    user_context=user_context,  # 允许为 None 或需调整 Schema 允许 Optional
+                    trace_id=trace_id,
+                    event_data=event_data
+                )
+
+                # 发送 (Fire and Forget)
+                await self._es_client.index(index=self.index_name, document=event_info.model_dump())
+
+            except Exception as e:
+                logger.error(f"Error in record_event_task: {e}", exc_info=True)
+
     async def log_event(self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str,
                         event_data: T_EventData):
         """异步记录事件到 Elasticsearch (Safe Version)"""
@@ -174,27 +211,36 @@ class BaseTelemetryService(object):
             if not self._index_initialized:
                 await self._ensure_index()
 
-            # 获取用户信息 (带异常捕获)
-            user_context = await self._init_user_context(user_id)
-            if not user_context:
-                # 即使查不到用户，建议也记录日志，但 user_context 为空或默认值
-                logger.warning(f"User context missing for user_id {user_id}, logging anonymously")
-                # 可以根据需求决定是否 return，或者构建一个空的 Context
-
-            # 构建 Event
-            event_info = BaseTelemetryEvent(
-                event_type=event_type,
-                user_context=user_context,  # 允许为 None 或需调整 Schema 允许 Optional
-                trace_id=trace_id,
-                event_data=event_data
+            # 异步记录事件
+            asyncio.create_task(
+                self._record_event_task(
+                    user_id=user_id,
+                    event_type=event_type,
+                    trace_id=trace_id,
+                    event_data=event_data
+                )
             )
-
-            # 发送 (Fire and Forget)
-            await self._es_client.index(index=self.index_name, document=event_info.model_dump())
 
         except Exception as e:
             # 吞掉异常，不要让日志系统搞崩主业务
             logger.error(f"Failed to log telemetry event: {e}", exc_info=True)
+
+    # record event task thread sync
+    def _record_event_task_sync(self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str,
+                               event_data: T_EventData):
+        try:
+            logger.debug(f"Recording telemetry event sync for user_id {user_id}, event_type {event_type}")
+            user_context = self._init_user_context_sync(user_id)
+
+            event_info = BaseTelemetryEvent(
+                event_type=event_type,
+                user_context=user_context,
+                trace_id=trace_id,
+                event_data=event_data
+            )
+            self._es_client_sync.index(index=self.index_name, document=event_info.model_dump())
+        except Exception as e:
+            logger.error(f"Failed to log telemetry event sync in thread: {e}", exc_info=True)
 
     def log_event_sync(self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str,
                        event_data: T_EventData):
@@ -206,15 +252,14 @@ class BaseTelemetryService(object):
             if not self._index_initialized:
                 self._ensure_index_sync()
 
-            user_context = self._init_user_context_sync(user_id)
-
-            event_info = BaseTelemetryEvent(
-                event_type=event_type,
-                user_context=user_context,
-                trace_id=trace_id,
-                event_data=event_data
+            # 使用线程池执行同步任务
+            self.thread_pool.submit(
+                self._record_event_task_sync,
+                user_id,
+                event_type,
+                trace_id,
+                event_data
             )
-            self._es_client_sync.index(index=self.index_name, document=event_info.model_dump())
         except Exception as e:
             logger.error(f"Failed to log telemetry event sync: {e}", exc_info=True)
 

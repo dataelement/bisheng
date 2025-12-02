@@ -45,7 +45,7 @@ async def get_es_connection() -> AsyncElasticsearch:
     """获取 Elasticsearch 连接实例"""
     from bisheng.core.context.manager import app_context
     try:
-        return await app_context.async_get_instance(EsConnManager.name).es_connection
+        return (await app_context.async_get_instance(EsConnManager.name)).es_connection
     except KeyError:
         logger.warning(f"EsConnManager not found in app_context. Registering a new instance.")
         try:
@@ -54,7 +54,7 @@ async def get_es_connection() -> AsyncElasticsearch:
                 EsConnManager(es_hosts=settings.get_search_conf().elasticsearch_url
                                        ** settings.get_search_conf().ssl_verify
                               ))
-            return await app_context.async_get_instance(EsConnManager.name).es_connection
+            return (await app_context.async_get_instance(EsConnManager.name)).es_connection
         except Exception as e:
             logger.error(f"Failed to register EsConnManager: {e}")
             raise KeyError(f"EsConnManager not found in app_context and failed to register a new instance.") from e
@@ -64,7 +64,7 @@ async def get_statistics_es_connection() -> AsyncElasticsearch:
     """获取统计 Elasticsearch 连接实例"""
     from bisheng.core.context.manager import app_context
     try:
-        return await app_context.async_get_instance(statistics_es_name).es_connection
+        return (await app_context.async_get_instance(statistics_es_name)).es_connection
     except KeyError:
         logger.warning(f"Statistics EsConnManager not found in app_context. Registering a new instance.")
         try:
@@ -75,7 +75,7 @@ async def get_statistics_es_connection() -> AsyncElasticsearch:
                               name=statistics_es_name,
                               **settings.get_search_conf().statistics_ssl_verify
                               ))
-            return await app_context.async_get_instance(statistics_es_name).es_connection
+            return (await app_context.async_get_instance(statistics_es_name)).es_connection
         except Exception as e:
             logger.error(f"Failed to register Statistics EsConnManager: {e}")
             raise KeyError(
