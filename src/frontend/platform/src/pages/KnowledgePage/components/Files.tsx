@@ -153,6 +153,7 @@ export default function Files({ onPreview }) {
                 captureAndAlertRequestErrorHoc(Promise.all(
                     selectedFileObjs.map(file => deleteFile(file.id))
                 ).then(() => {
+                    setPage(1);
                     reload();
                     setSelectedFileObjs([]);
                     setIsAllSelected(false);

@@ -508,7 +508,7 @@ export function MetadataManagementDialog({
                             <div className="space-y-3">
                                 <TypeSelector newType={newType} setNewType={setNewType} isSmallScreen={isSmallScreen} />
                                 <div className="space-y-1.5">
-                                    <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>{t('name')}</label>
+                                    <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>{t('metadatainfor.name')}</label>
                                     <Input
                                         id="create-metadata-name" value={newName} onChange={(e) => { setNewName(e.target.value); if (error) setError(""); }}
                                         placeholder={t('pleaseEnter')} autoComplete="off" autoFocus
