@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from typing import List, Generic, TypeVar, Optional
+from typing import List, Generic, TypeVar, Optional, Any
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -38,4 +38,15 @@ class BaseTelemetryEvent(BaseModel, Generic[T_EventData]):
     timestamp: int = Field(default_factory=lambda: int(datetime.now(tz=timezone.utc).timestamp()))
     user_context: UserContext = Field(..., description="User context information")
     trace_id: str = Field(..., description="Trace identifier for correlating events")
-    event_data: T_EventData = Field(..., description="Event-specific data, varies by event type")
+    event_data: Optional[T_EventData] = Field(None, description="Event-specific data payload")
+
+    def model_dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Override model_dump to exclude None values by default."""
+
+        dict_data = super().model_dump(*args, **kwargs)
+
+        event_name = self.event_data.event_name
+
+        dict_data['event_data'] = {f"{event_name}_{k}": v for k, v in dict_data['event_data'].items()}
+
+        return dict_data

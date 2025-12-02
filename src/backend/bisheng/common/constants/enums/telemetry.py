@@ -5,6 +5,27 @@ class StatusEnum(str, Enum):
     SUCCESS = 'success'
     FAILED = 'failed'
 
+# 广义应用类型枚举
+class ApplicationTypeEnum(str, Enum):
+    """应用类型枚举"""
+
+    # 工作流应用
+    WORKFLOW = "workflow"
+    # 技能应用
+    SKILL = "skill"
+    # 助手应用
+    ASSISTANT = "assistant"
+    # 灵思应用
+    LINSIGHT = "linsight"
+    # 日常对话应用
+    DAILY_CHAT = "daily_chat"
+    # 知识库应用
+    KNOWLEDGE_BASE = "knowledge_base"
+    # RAG溯源
+    RAG_TRACEABILITY = "rag_traceability"
+    # 评测应用
+    EVALUATION = "evaluation"
+
 
 class BaseTelemetryTypeEnum(str, Enum):
     """基础的遥测事件类型枚举"""
@@ -17,3 +38,28 @@ class BaseTelemetryTypeEnum(str, Enum):
 
     # 新增会话事件
     NEW_MESSAGE_SESSION = "new_message_session"
+
+    # 删除会话事件
+    DELETE_MESSAGE_SESSION = "delete_message_session"
+
+    # 新建应用事件
+    NEW_APPLICATION = "new_application"
+
+    # 编辑应用事件
+    EDIT_APPLICATION = "edit_application"
+
+    # 删除应用事件
+    DELETE_APPLICATION = "delete_application"
+
+    # 新增知识库事件
+    NEW_KNOWLEDGE_BASE = "new_knowledge_base"
+
+    # 删除知识库事件
+    DELETE_KNOWLEDGE_BASE = "delete_knowledge_base"
+
+    # 知识库文件上传事件
+    UPLOAD_KNOWLEDGE_BASE_FILE = "upload_knowledge_base_file"
+
+    # 知识库文件删除事件
+    DELETE_KNOWLEDGE_BASE_FILE = "delete_knowledge_base_file"
+

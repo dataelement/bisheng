@@ -1,4 +1,4 @@
-from typing import Literal, Any
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -9,14 +9,9 @@ from bisheng.database.models.flow import FlowType
 class BaseEventData(BaseModel):
     """All event-specific data models should inherit from this base class for type constraints."""
 
-    def model_dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        """Override model_dump to exclude None values by default."""
-
-        dict_data = super().model_dump(*args, **kwargs)
-
-        event_name = self._event_name.value
-
-        return {f"{event_name}_{key}": value for key, value in dict_data.items()}
+    @property
+    def event_name(self) -> BaseTelemetryTypeEnum:
+        return self._event_name
 
 
 class UserLoginEventData(BaseEventData):
@@ -54,17 +49,19 @@ class ToolInvocationEventData(BaseEventData):
     status: StatusEnum
 
 
-if __name__ == '__main__':
-    # 测试 UserLoginEventData
-    login_event = UserLoginEventData(method="oauth")
-    print(login_event.model_dump())
+class DeleteMessageSessionEventData(BaseEventData):
+    """Data model for delete message session events."""
 
-    # 测试 NewMessageSessionEventData
-    new_session_event = NewMessageSessionEventData(
-        session_id="12345",
-        app_type=FlowType.FLOW,
-        app_name="TestApp",
-        app_id="app_001",
-        source="platform"
-    )
-    print(new_session_event.model_dump())
+    _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.DELETE_MESSAGE_SESSION
+
+    session_id: str
+
+
+class NewApplicationEventData(BaseEventData):
+    """Data model for new application events."""
+
+    _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.NEW_APPLICATION
+
+    app_id: str
+    app_name: str
+    app_type: FlowType

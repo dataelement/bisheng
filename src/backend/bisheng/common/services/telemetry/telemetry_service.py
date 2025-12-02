@@ -172,7 +172,7 @@ class BaseTelemetryService(object):
 
     # record event task
     async def _record_event_task(self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str,
-                                event_data: T_EventData):
+                                event_data: T_EventData = None):
 
         # 获取信号量
         async with self._semaphore:
@@ -200,7 +200,7 @@ class BaseTelemetryService(object):
                 logger.error(f"Error in record_event_task: {e}", exc_info=True)
 
     async def log_event(self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str,
-                        event_data: T_EventData):
+                        event_data: T_EventData = None):
         """异步记录事件到 Elasticsearch (Safe Version)"""
         try:
             # 确保 ES 连接
@@ -227,7 +227,7 @@ class BaseTelemetryService(object):
 
     # record event task thread sync
     def _record_event_task_sync(self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str,
-                               event_data: T_EventData):
+                                event_data: T_EventData = None):
         try:
             logger.debug(f"Recording telemetry event sync for user_id {user_id}, event_type {event_type}")
             user_context = self._init_user_context_sync(user_id)
@@ -243,7 +243,7 @@ class BaseTelemetryService(object):
             logger.error(f"Failed to log telemetry event sync in thread: {e}", exc_info=True)
 
     def log_event_sync(self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str,
-                       event_data: T_EventData):
+                       event_data: T_EventData = None):
         """同步记录事件到 Elasticsearch (Safe Version)"""
         try:
             if not self._es_client_sync:
