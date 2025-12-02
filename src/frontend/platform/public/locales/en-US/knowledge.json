@@ -42,7 +42,10 @@
         "changeFailed": "File change failed",
         "loadFailed": "Failed to load file list",
         "unnamedFile": "Unnamed File",
-        "excelRule": "Every {{length}} rows as a segment"
+        "excelRule": "Every {{length}} rows as a segment",
+        "noSearchResults": "No matching files found",
+        "noFiles": "No files available",
+        "noMoreFiles": "No more files"
     },
     "segment": {
         "searchSegments": "Search Segments",

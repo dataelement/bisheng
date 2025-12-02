@@ -128,9 +128,11 @@ export const onlineWorkflowApi = async (data: { flow_id, version_id, status }) =
  * 单节点运行
  * 
  */
-export const runWorkflowNodeApi = async (node_input, data): Promise<any> => {
+export const runWorkflowNodeApi = async ({ node_input, data, workflow_id }): Promise<any> => {
     return await axios.post(`/api/v1/workflow/run_once`, {
-        node_input, node_data: {
+        node_input,
+        workflow_id,
+        node_data: {
             id: data.id,
             data,
         }

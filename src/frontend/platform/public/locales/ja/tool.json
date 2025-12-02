@@ -385,5 +385,5 @@
     "pleaseSelect": "選択してください",
     "fieldCannotBeEmpty": "{{label}}は空にできません",
     "jinaApiKeyLabel": "Jina API Key",
-    "siliconflowApiKeyLabel": "SiliconFlow API Key"Ø
+    "siliconflowApiKeyLabel": "SiliconFlow API Key"
 }

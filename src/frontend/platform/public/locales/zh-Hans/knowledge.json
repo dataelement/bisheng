@@ -42,7 +42,10 @@
         "changeFailed": "文件切换失败",
         "loadFailed": "加载文件列表失败",
         "unnamedFile": "未命名文件",
-        "excelRule": "每 {{length}} 行作为一个分段"
+        "excelRule": "每 {{length}} 行作为一个分段",
+        "noSearchResults": "未找到匹配的文件",
+        "noFiles": "暂无文件",
+        "noMoreFiles": "没有更多文件了"
     },
     "segment": {
         "searchSegments": "搜索分段",

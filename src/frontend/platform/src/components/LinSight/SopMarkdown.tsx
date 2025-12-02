@@ -4,6 +4,7 @@ import { useQuery } from "react-query";
 import Vditor from "vditor";
 import "vditor/dist/index.css";
 import SopToolsDown from "./SopToolsDown";
+import { useTranslation } from "react-i18next";
 
 // Error tool tooltip
 const ToolErrorTip = () => {
@@ -238,6 +239,8 @@ export default SopMarkdown;
 const useSopTools = (tools) => {
     const nameToValueRef = useRef({});
     const valueToNameRef = useRef({});
+    const { t } = useTranslation('tool');
+
     const files = []
     const { data: orgTools } = useQuery({
         queryKey: ['OrgTools'],
@@ -271,7 +274,7 @@ const useSopTools = (tools) => {
         // 1. Convert files data
         if (files && files.length > 0) {
             const fileNode = {
-                label: "上传文件",
+                label: t('uploadFile'),
                 value: "",
                 desc: '',
                 children: []
@@ -294,7 +297,7 @@ const useSopTools = (tools) => {
         // 2. Convert orgTools data
         if (orgTools && orgTools.length > 0) {
             tree.push({
-                label: "组织知识库",
+                label: t('organizeKnowledgeBase'),
                 value: "org_knowledge_base", // 使用特殊标识避免ID冲突
                 desc: '',
                 children: orgTools.map(tool => {
@@ -315,12 +318,12 @@ const useSopTools = (tools) => {
         // 3. Convert PersonalTool data (single object to array)
         if (personalTool && personalTool[0]) {
             tree.push({
-                label: personalTool[0].name,
+                label: t(personalTool[0].name),
                 value: personalTool[0].id,
                 desc: '',
                 children: [] // Personal knowledge base has no children
             });
-            const name = personalTool[0].name;
+            const name = t(personalTool[0].name);
             const value = `${personalTool[0].name}的储存信息:{'知识库储存在语义检索库中的id':'${personalTool[0].id}'}`
             nameToValueRef.current[name] = value;
             valueToNameRef.current[value] = name;
@@ -330,18 +333,18 @@ const useSopTools = (tools) => {
         if (linsightTools && linsightTools.length > 0) {
             linsightTools.forEach(toolGroup => {
                 tree.push({
-                    label: toolGroup.name,
+                    label: t(toolGroup.name),
                     value: toolGroup.id,
-                    desc: toolGroup.description,
+                    desc: t(toolGroup.name + 'desc'),
                     children: (toolGroup.children || []).map(child => {
-                        const name = child.name;
+                        const name = t(child.name);
                         const value = `${child.tool_key}`
                         nameToValueRef.current[name] = value;
                         valueToNameRef.current[value] = name;
                         return {
-                            label: child.name,
+                            label: name,
                             value: child.tool_key,
-                            desc: child.desc,
+                            desc: t(child.name + 'desc'),
                             children: [] // No children for second-level nodes
                         }
                     })
@@ -351,19 +354,20 @@ const useSopTools = (tools) => {
         // 5. Convert tools data
         if (tools && tools.length > 0) {
             tools.forEach(toolGroup => {
+                const isPreset = toolGroup.is_preset === 1;
                 toolGroup.children.length && tree.push({
-                    label: toolGroup.name,
+                    label: isPreset ? t(`categories.${toolGroup.name}.name`) : toolGroup.name,
                     value: toolGroup.id,
-                    desc: toolGroup.description,
+                    desc: isPreset ? t(`categories.${toolGroup.name}.desc`) : toolGroup.description,
                     children: (toolGroup.children || []).map(child => {
-                        const name = child.name;
+                        const name = isPreset ? t(`tools.${child.tool_key}.name`) : child.name;
                         const value = `${child.tool_key}`
                         nameToValueRef.current[name] = value;
                         valueToNameRef.current[value] = name;
                         return {
-                            label: child.name,
+                            label: name,
                             value: child.tool_key,
-                            desc: child.desc,
+                            desc: isPreset ? t(`tools.${child.tool_key}.desc`) : child.desc,
                             children: []
                         }
                     })
@@ -372,7 +376,7 @@ const useSopTools = (tools) => {
         }
 
         return tree;
-    }, [linsightTools, personalTool, orgTools, files, tools]);
+    }, [linsightTools, personalTool, orgTools, files, tools, t]);
 
     console.log('Combined tree structure:', buildTreeData);
     return { nameToValueRef, valueToNameRef, buildTreeData };

@@ -14,6 +14,7 @@ import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "../flowStore";
 import NodeLogo from "./NodeLogo";
+import { useParams } from "react-router-dom";
 
 interface Input {
     key: string,
@@ -62,6 +63,7 @@ export const RunTest = forwardRef((props, ref) => {
     const { message } = useToast()
     const { t } = useTranslation('flow')
     const [currentIndex, setCurrentIndex] = useState(0)
+    const { id: workflow_id } = useParams();
 
     useEffect(() => {
         if (!open) {
@@ -161,13 +163,14 @@ export const RunTest = forwardRef((props, ref) => {
         setLoading(true)
         setResults([])
         await captureAndAlertRequestErrorHoc(
-            runWorkflowNodeApi(
-                inputs.reduce((result, input) => {
+            runWorkflowNodeApi({
+                node_input: inputs.reduce((result, input) => {
                     result[`${input.key}`] = input.value;
                     return result;
                 }, {}),
-                node
-            ).then(res => {
+                data: node,
+                workflow_id
+            }).then(res => {
                 const result = res.map(el => TranslationName(el)) // .map(item => ({ title: item.key, text: item.value }))
                 setCurrentIndex(0)
                 setResults(result)

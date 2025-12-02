@@ -4,27 +4,24 @@ import { Button } from '@/components/bs-ui/button';
 import { Dialog, DialogContent } from '@/components/bs-ui/dialog';
 import { SearchInput } from '@/components/bs-ui/input';
 import AutoPagination from '@/components/bs-ui/pagination/autoPagination';
+import { toast } from "@/components/bs-ui/toast/use-toast";
+import Tip from "@/components/bs-ui/tooltip/tip";
 import ShadTooltip from "@/components/ShadTooltipComponent";
-import { delChunkApi, getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, getKnowledgeDetailApi, readFileByLibDatabase, updateChunkApi, addMetadata, saveUserMetadataApi, getMetaFile } from '@/controllers/API';
+import { addMetadata, delChunkApi, getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, getKnowledgeDetailApi, getMetaFile, saveUserMetadataApi, updateChunkApi } from '@/controllers/API';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useTable } from '@/util/hook';
-import { truncateString } from "@/util/utils";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu';
-import { AlertCircle, ArrowLeft, ChevronDown, ChevronUp, ClipboardPenLine, Edit2, FileText, Search, Trash2, X } from 'lucide-react';
+import { ArrowLeft, ClipboardPenLine, FileText } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import useKnowledgeStore from '../useKnowledgeStore';
+import FileSelector from "./FileSelector";
 import ParagraphEdit from './ParagraphEdit';
 import PreviewFile from './PreviewFile';
 import PreviewParagraph from './PreviewParagraph';
-import Tip from "@/components/bs-ui/tooltip/tip";
-import { cname } from "@/components/bs-ui/utils";
-import React from "react";
-import { toast } from "@/components/bs-ui/toast/use-toast";
 
 // Import metadata components
-import { MainMetadataDialog, MetadataSideDialog, MetadataRow } from './MetadataDialog';
+import { MainMetadataDialog, MetadataSideDialog } from './MetadataDialog';
 
 export default function Paragraphs({ fileId, onBack }) {
     console.log('Props fileId:', fileId);
@@ -36,14 +33,15 @@ export default function Paragraphs({ fileId, onBack }) {
     const [hasInited, setHasInited] = useState(false);
     const location = useLocation();
     const [chunkSwitchTrigger, setChunkSwitchTrigger] = useState(0);
+
     // State management
-    const [selectedFileId, setSelectedFileId] = useState('');
+    const [selectedFileId, setSelectedFileId] = useState(fileId + '');
     const [currentFile, setCurrentFile] = useState(null);
     const [fileUrl, setFileUrl] = useState('');
     const [chunks, setChunks] = useState([]);
     const [rawFiles, setRawFiles] = useState([]);
     const [isKnowledgeAdmin, setIsKnowledgeAdmin] = useState(false);
-    
+
     // Metadata related states
     const [metadataDialog, setMetadataDialog] = useState({
         open: false,
@@ -73,13 +71,9 @@ export default function Paragraphs({ fileId, onBack }) {
     const [selectError, setSelectError] = useState(null);
     const [isFetchingUrl, setIsFetchingUrl] = useState(false);
     const [partitions, setPartitions] = useState()
-    // Refs (keep original definitions)
-    const isLoadingFilesRef = useRef(false);
-    const isMountedRef = useRef(true);
-    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-    const searchInputRef = useRef(null);
+
+    // Refs
     const isChangingRef = useRef(false);
-    const [isInitReady, setIsInitReady] = useState(false);
     const [previewUrl, setPreviewUrl] = useState()
     const [hasChunkBboxes, setHasChunkBboxes] = useState(false);
     const latestFileUrlRef = useRef('');
@@ -104,7 +98,8 @@ export default function Paragraphs({ fileId, onBack }) {
 
     // Table configuration (keep original logic)
     const tableConfig = useMemo(() => ({
-        file_ids: selectedFileId ? [selectedFileId] : []
+        file_ids: selectedFileId ? [selectedFileId] : [],
+        unInitData: true
     }), [selectedFileId]);
 
     const {
@@ -306,20 +301,11 @@ export default function Paragraphs({ fileId, onBack }) {
         setChunks(generatedChunks);
     }, [datalist, selectedFileId]);
 
-    const handleFileChange = useCallback(async (newFileId) => {
-        console.log('File change triggered:', newFileId, 'Current selected:', selectedFileId);
-
-        // Force type conversion to avoid type mismatch
-        newFileId = String(newFileId);
-        const currentId = String(selectedFileId);
-
-        if (newFileId === currentId || !newFileId || rawFiles.length === 0) {
-            setIsDropdownOpen(false);
-            return;
-        }
+    const handleFileChange = useCallback(async (newFileId, selectedFile) => {
+        console.log('File change triggered:', newFileId, 'Current selected:', selectedFile);
 
         // Immediately update UI to avoid flickering
-        const selectedFile = rawFiles.find(f => String(f.id) === newFileId);
+        // const selectedFile = rawFiles.find(f => String(f.id) === newFileId);
         if (selectedFile) {
             setCurrentFile({
                 label: selectedFile.file_name || '',
@@ -340,17 +326,16 @@ export default function Paragraphs({ fileId, onBack }) {
         setSelectError(null);
         setIsFetchingUrl(true);
         setChunks([]);
-        setIsDropdownOpen(false);
         setFileUrl('');
         setPreviewUrl('');
         latestOriginalUrlRef.current = '';
 
         try {
-            if (!selectedFile) throw new Error(t('file.fileNotFound'));
+            // if (!selectedFile) throw new Error(t('file.fileNotFound'));
 
             if (filterData) filterData({ file_ids: [newFileId] });
             await fetchFileUrl(newFileId);
-            await reload();
+            if (!filterData) await reload();
             setChunkSwitchTrigger(prev => prev + 1);
         } catch (err) {
             console.error('File change failed:', err);
@@ -362,52 +347,12 @@ export default function Paragraphs({ fileId, onBack }) {
         }
     }, [rawFiles, fetchFileUrl, filterData, reload, selectedFileId, fileUrl, previewUrl, t]);
 
+    // 初始化时设置默认选中的文件 ID
     useEffect(() => {
-        const loadFiles = async () => {
-            if (isLoadingFilesRef.current || !isMountedRef.current) return;
-            isLoadingFilesRef.current = true;
-
-            try {
-                const res = await readFileByLibDatabase({
-                    id,
-                    page: 1,
-                    pageSize: 4000,
-                    status: 2
-                });
-                setIsKnowledgeAdmin(res.writeable)
-                const filesData = res?.data || [];
-                setRawFiles(filesData);
-                console.log('Loaded file list:', filesData);
-
-                setIsInitReady(true);
-                setHasInited(true); // Mark as initialized
-            } catch (err) {
-                console.error('Failed to load files:', err);
-                setSelectError(t('file.loadFailed'));
-                setIsInitReady(true);
-                setHasInited(true); // Mark as initialized even if failed
-            } finally {
-                isLoadingFilesRef.current = false;
-            }
-        };
-
-        loadFiles();
-        return () => { isMountedRef.current = false; };
-    }, [id, t]);
-
-    useEffect(() => {
-        if (rawFiles.length === 0 || !isInitReady || !isMountedRef.current || !hasInited) return;
-
-        // Only perform auto-selection on first load, not after switching
-        if (!selectedFileId) {
-            const targetFileId = fileId ? String(fileId) : String(rawFiles[0]?.id || '');
-            console.log('Target file ID (after rawFiles ready):', targetFileId);
-
-            if (targetFileId) {
-                handleFileChange(targetFileId);
-            }
+        if (fileId && !selectedFileId) {
+            setSelectedFileId(String(fileId));
         }
-    }, [rawFiles, isInitReady, fileId, handleFileChange, selectedFileId, hasInited]);
+    }, [fileId, selectedFileId]);
 
     const handleDeleteMainMetadata = useCallback((id) => {
         setMainMetadataList(prev => prev.filter(item => item.id !== id));
@@ -495,7 +440,6 @@ export default function Paragraphs({ fileId, onBack }) {
         } finally {
             setMetadataError('');
             setSideDialog({ type: 'search', open: true });
-            setSearchTerm("");
         }
     }, [id, t]);
 
@@ -508,7 +452,6 @@ export default function Paragraphs({ fileId, onBack }) {
     const closeSideDialog = useCallback(() => {
         setSideDialog({ type: null, open: false });
         setMetadataError('');
-        setSearchTerm("");
         setNewMetadata({ name: '', type: 'String' });
         setIsSideDialogPositioned(false);
     }, []);
@@ -521,7 +464,7 @@ export default function Paragraphs({ fileId, onBack }) {
         }
         const newItem = {
             ...metadata,
-            id: `temp_meta_${Date.now()}_${metadata.name}`, 
+            id: `temp_meta_${Date.now()}_${metadata.name}`,
             updated_at: Date.now(),
             value: ''
         };
@@ -529,40 +472,25 @@ export default function Paragraphs({ fileId, onBack }) {
         closeSideDialog();
     }, [closeSideDialog, mainMetadataList, t]);
 
-    const files = useMemo(() => {
-        return (rawFiles || []).map(el => ({
-            label: el?.file_name || t('file.unnamedFile'),
-            value: String(el?.id || ''),
-            id: el?.id || '',
-            name: el?.file_name || '',
-            size: el?.size || 0,
-            type: el?.file_name?.split('.').pop() || '',
-            filePath: el?.object_name || '',
-            suffix: el?.file_name?.split('.').pop() || '',
-            fileType: el?.parse_type || 'unknown',
-            fullData: el || {}
-        }));
-    }, [rawFiles, t]);
-
-  const handleMetadataClick = useCallback(async () => {
-    if (currentFile?.fullData) {
-        try {
-            const res = await getMetaFile(currentFile.id);
-            setFileInfor(res);
-            const fetchedMetadata = res.user_metadata || [];
-            const metadataArray = Object.entries(fetchedMetadata).map(([fieldName, fieldData]) => ({
-                id: `meta_${fieldName}`,
-                name: fieldData.field_name || fieldName,
-                type: fieldData.field_type ? 
-                    fieldData.field_type.charAt(0).toUpperCase() + fieldData.field_type.slice(1).toLowerCase() : 
-                    'String',
-                value: fieldData.field_value || '',
-                originalValue: fieldData.field_value || '', 
-                updated_at: fieldData.updated_at || 0,
-            }));
-            const sortedMetadata = metadataArray.sort((a, b) => {
-                return (a.updated_at || 0) - (b.updated_at || 0);
-            });
+    const handleMetadataClick = useCallback(async () => {
+        if (currentFile?.fullData) {
+            try {
+                const res = await getMetaFile(currentFile.id);
+                setFileInfor(res);
+                const fetchedMetadata = res.user_metadata || [];
+                const metadataArray = Object.entries(fetchedMetadata).map(([fieldName, fieldData]) => ({
+                    id: `meta_${fieldName}`,
+                    name: fieldData.field_name || fieldName,
+                    type: fieldData.field_type ?
+                        fieldData.field_type.charAt(0).toUpperCase() + fieldData.field_type.slice(1).toLowerCase() :
+                        'String',
+                    value: fieldData.field_value || '',
+                    originalValue: fieldData.field_value || '',
+                    updated_at: fieldData.updated_at || 0,
+                }));
+                const sortedMetadata = metadataArray.sort((a, b) => {
+                    return (a.updated_at || 0) - (b.updated_at || 0);
+                });
 
                 setMainMetadataList(sortedMetadata);
 
@@ -693,11 +621,6 @@ export default function Paragraphs({ fileId, onBack }) {
         }
     }, []);
 
-    // Filter dropdown files (keep original logic)
-    const filteredFiles = files.filter(file =>
-        file.label.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
     // Preview component rule configuration (keep original logic)
     const previewRules = useMemo(() => ({
         fileList: currentFile ? [{
@@ -722,7 +645,6 @@ export default function Paragraphs({ fileId, onBack }) {
     // Preview display judgment (keep original logic)
     const isExcelFile = currentFile && ['xlsx', 'xls', 'csv'].includes(currentFile.suffix?.toLowerCase());
     const isPreviewVisible =
-        isInitReady && // New: Ensure component initialization is complete to avoid async data not loaded
         !isExcelFile &&
         selectedFileId &&
         currentFile &&
@@ -801,19 +723,20 @@ export default function Paragraphs({ fileId, onBack }) {
 
     const handleSaveUserMetadata = useCallback(async () => {
         const knowledge_id = selectedFileId
-   const user_metadata_list = mainMetadataList.map(item => {
-       if (!item.id.startsWith('temp_') && item.updated_at !== undefined) {
+        const user_metadata_list = mainMetadataList.map(item => {
+            if (!item.id.startsWith('temp_') && item.updated_at !== undefined) {
+                return {
+                    field_name: item.name,
+                    field_value: item.value || '',
+                    updated_at: item.updated_at,
+                };
+            }
             return {
                 field_name: item.name,
                 field_value: item.value || '',
-                updated_at: item.updated_at,
+                updated_at: item.updated_at || Math.floor(Date.now() / 1000),
             };
-        }
-        return {
-            field_name: item.name,
-            field_value: item.value || '',
-            updated_at: item.updated_at || Math.floor(Date.now() / 1000),
-        };});
+        });
         try {
             await saveUserMetadataApi(knowledge_id, user_metadata_list);
 
@@ -833,12 +756,11 @@ export default function Paragraphs({ fileId, onBack }) {
         }
     }, [mainMetadataList, selectedFileId, t]);
 
-    if (load) return <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-        <LoadingIcon />
-    </div>
-
     return (
         <div className="relative flex flex-col h-[calc(100vh-64px)]">
+            {load && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,1)] dark:bg-blur-shared">
+                <LoadingIcon />
+            </div>}
             {/* Top navigation bar */}
             <div className="flex justify-between items-center px-4 pt-4 pb-4">
                 <div className="min-w-72 max-w-[440px] flex items-center gap-2">
@@ -850,107 +772,12 @@ export default function Paragraphs({ fileId, onBack }) {
                             <ArrowLeft className="side-bar-button-size" />
                         </button>
                     </ShadTooltip>
-                    <div className="relative">
-                        <DropdownMenu onOpenChange={setIsDropdownOpen}>
-                            <DropdownMenuTrigger asChild>
-                                <div className={`
-                    flex items-center gap-2 max-w-[480px] px-3 py-2 rounded-md cursor-pointer
-                    hover:bg-gray-100 ${isDropdownOpen ? 'ring-1 ring-gray-300' : ''}
-                `}>
-                                    {selectedFileId ? (
-                                        <>
-                                            <FileIcon
-                                                type={(() => {
-                                                    const targetFile = files.find(f => f.value === selectedFileId);
-                                                    if (!targetFile) return 'txt'; // Default to 'txt' if file doesn't exist
-                                                    const parts = targetFile.label.split('.');
-                                                    return parts.length > 1 ? parts.pop().toLowerCase() : 'txt';
-                                                })()}
-                                                className="size-[30px] min-w-[30px]"
-                                            />
-                                            <div className="truncate">{files.find(f => f.value === selectedFileId)?.label || ''}</div>
-                                        </>
-                                    ) : (
-                                        <span>{t('file.selectFile')}</span>
-                                    )}
-                                    {isDropdownOpen ? (
-                                        <ChevronUp className="ml-2 h-4 w-4 opacity-50" />
-                                    ) : (
-                                        <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
-                                    )}
-                                </div>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                                className="w-[300px] border border-gray-200 bg-white shadow-md p-0 z-[100]"
-                                align="start"
-                                sideOffset={5}
-                                style={{ zIndex: 9999 }}
-                                onCloseAutoFocus={(e) => e.preventDefault()} // Prevent auto blur
-                            >
-                                <div className="p-2 border-b border-gray-200">
-                                    <div className="relative">
-                                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500" />
-                                        <input
-                                            ref={searchInputRef}
-                                            type="text"
-                                            placeholder={t('file.searchFiles')}
-                                            className="w-full pl-9 pr-3 py-2 text-sm bg-white rounded-md outline-none ring-1 ring-gray-200"
-                                            value={searchTerm}
-                                            onChange={(e) => {
-                                                e.stopPropagation();
-                                                setSearchTerm(e.target.value);
-                                            }}
-                                            onKeyDown={(e) => {
-                                                e.stopPropagation();
-                                                if (e.key === 'Escape') {
-                                                    setIsDropdownOpen(false);
-                                                }
-                                            }}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                            }}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="max-h-[300px] overflow-y-auto">
-                                    {filteredFiles.map((file) => (
-                                        <DropdownMenuItem
-                                            key={file.value}
-                                            onSelect={(e) => {
-                                                e.preventDefault();
-                                                // Core fix 3: Execute synchronously, remove setTimeout to avoid async blocking on first entry
-                                                handleFileChange(file.value);
-                                                setSearchTerm("");
-                                                setIsDropdownOpen(false); // Force close menu
-                                            }}
-                                            className="cursor-pointer hover:bg-gray-50 px-3 py-2 relative"
-                                        >
-                                            <div className="flex items-center gap-3 w-full h-full">
-                                                <FileIcon
-                                                    type={(() => {
-                                                        const parts = file.label.split('.');
-                                                        return parts.length > 1 ? parts.pop().toLowerCase() : 'txt';
-                                                    })()}
-                                                    className="size-[30px] min-w-[30px] text-current"
-                                                />
-                                                <span className="flex-1 min-w-0 truncate">
-                                                    {truncateString(file.label, 35)}
-                                                </span>
-                                                {file.value === selectedFileId && (
-                                                    <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
-                                                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </DropdownMenuItem>
-                                    ))}
-                                </div>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                        {selectError && (
-                            <p className="absolute text-sm text-red-500 mt-1">{selectError}</p>
-                        )}
-                    </div>
+                    <FileSelector
+                        knowledgeId={id}
+                        selectedFileId={selectedFileId}
+                        onFileChange={handleFileChange}
+                        disabled={false}
+                    />
                 </div>
 
                 <div className="flex items-center gap-2 ml-auto">
