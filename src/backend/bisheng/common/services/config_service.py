@@ -8,7 +8,7 @@ from bisheng.common.models.config import ConfigKeyEnum, Config
 from bisheng.common.repositories.implementations.config_repository_impl import ConfigRepositoryImpl
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.config.settings import Settings, PasswordConf, SystemLoginMethod, \
-    WorkflowConf, LinsightConf
+    WorkflowConf, LinsightConf, KnowledgeConf
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 
 config_file = os.getenv('config', 'config.yaml')
@@ -219,17 +219,17 @@ class ConfigService(Settings):
                 else:
                     raise Exception('initdb_config not found, please check your system config')
 
-    def get_knowledge(self):
+    def get_knowledge(self) -> KnowledgeConf:
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
         all_config = self.get_all_config()
         ret = all_config.get('knowledges', {})
-        return ret
+        return KnowledgeConf(**ret)
 
-    async def async_get_knowledge(self):
+    async def async_get_knowledge(self) -> KnowledgeConf:
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
         all_config = await self.aget_all_config()
         ret = all_config.get('knowledges', {})
-        return ret
+        return KnowledgeConf(**ret)
 
     def get_default_llm(self):
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取

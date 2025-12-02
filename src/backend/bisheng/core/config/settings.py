@@ -180,6 +180,18 @@ class CookieConf(BaseModel):
     jwt_iss: str = Field(default='bisheng', description="JwtToken的签发者")
 
 
+class Etl4lmConf(BaseModel):
+    """ Etl4lm 配置 """
+    url: str = Field(default='', description='etl4lm服务地址')
+    timeout: int = Field(default=600, description='etl4lm服务请求超时时间（秒）')
+    ocr_sdk_url: str = Field(default='', description='etl4lm ocr sdk服务地址')
+
+
+class KnowledgeConf(BaseModel):
+    """ Knowledge 配置 """
+    etl4lm: Etl4lmConf
+
+
 class Settings(BaseModel):
     """ Application Settings """
     model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True, extra='ignore')
@@ -297,7 +309,6 @@ class Settings(BaseModel):
             if key != 'dev' and not value:
                 values[key] = []
         return values
-
 
     def get_minio_conf(self) -> MinioConf:
         return self.object_storage.minio

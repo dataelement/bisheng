@@ -123,14 +123,10 @@ def get_config(
     """ 获取评价相关的模型配置 """
     ret = WorkStationService.get_config()
 
-    etl4lm_settings = bisheng_settings.get_knowledge().get("etl4lm", {})
-    etl_for_lm_url = etl4lm_settings.get("url", None)
-    if ret:
-        ret = ret.model_dump()
-    else:
-        ret = {}
+    etl_for_lm_url = bisheng_settings.get_knowledge().etl4lm.url
+    ret = ret.model_dump() if ret else {}
+    
     ret['enable_etl4lm'] = bool(etl_for_lm_url)
-
     linsight_invitation_code = bisheng_settings.get_all_config().get('linsight_invitation_code', None)
     ret['linsight_invitation_code'] = linsight_invitation_code if linsight_invitation_code else False
     ret['linsight_cache_dir'] = "./"

@@ -50,8 +50,7 @@ def get_env():
     """获取环境变量参数"""
     uns_support = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'html', 'pdf', 'csv']
 
-    etl4lm_settings = bisheng_settings.get_knowledge().get("etl4lm", {})
-    etl_for_lm_url = etl4lm_settings.get("url", None)
+    etl_for_lm_url = bisheng_settings.get_knowledge().etl4lm.url
     if etl_for_lm_url:
         uns_support.extend(['png', 'jpg', 'jpeg', 'bmp'])
 

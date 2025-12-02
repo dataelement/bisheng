@@ -456,7 +456,6 @@ def addEmbedding(
             logger.info(
                 f"process_file_begin file_id={db_file.id} file_name={db_file.file_name}"
             )
-            # TODO:TJU: 多list里面取值
             add_file_embedding(
                 vector_client,
                 es_client,
@@ -773,7 +772,7 @@ def read_chunk_text(
     # excel 文件的处理单独出来
     partitions = []
     texts = []
-    etl_for_lm_url = settings.get_knowledge().get("etl4lm", {}).get("url", None)
+    etl_for_lm_url = settings.get_knowledge().etl4lm.url
     file_extension_name = file_name.split(".")[-1].lower()
 
     if file_extension_name in ["xls", "xlsx", "csv"]:
@@ -847,20 +846,20 @@ def read_chunk_text(
                 # 判断文件是否损坏
                 if is_pdf_damaged(input_file):
                     raise Exception('The file is damaged.')
-            etl4lm_settings = settings.get_knowledge().get("etl4lm", {})
+            etl4lm_settings = settings.get_knowledge().etl4lm
+            parse_type = ParseType.ETL4LM.value
             loader = Etl4lmLoader(
                 file_name,
                 input_file,
-                unstructured_api_url=etl4lm_settings.get("url", ""),
-                ocr_sdk_url=etl4lm_settings.get("ocr_sdk_url", ""),
+                unstructured_api_url=etl4lm_settings.url,
+                ocr_sdk_url=etl4lm_settings.ocr_sdk_url,
                 force_ocr=bool(force_ocr),
                 enable_formular=bool(enable_formula),
-                timeout=etl4lm_settings.get("timeout", 60),
+                timeout=etl4lm_settings.timeout,
                 filter_page_header_footer=bool(filter_page_header_footer),
                 knowledge_id=knowledge_id,
             )
             documents = loader.load()
-            parse_type = ParseType.ETL4LM.value
             partitions = loader.partitions
             partitions = parse_partitions(partitions)
         else:
@@ -972,7 +971,7 @@ async def async_read_chunk_text(
     # excel 文件的处理单独出来
     partitions = []
     texts = []
-    etl_for_lm_url = (await settings.async_get_knowledge()).get("etl4lm", {}).get("url", None)
+    etl_for_lm_url = (await settings.async_get_knowledge()).etl4lm.url
     file_extension_name = file_name.split(".")[-1].lower()
 
     if file_extension_name in ["xls", "xlsx", "csv"]:
@@ -1046,15 +1045,15 @@ async def async_read_chunk_text(
                 # 判断文件是否损坏
                 if is_pdf_damaged(input_file):
                     raise Exception('The file is damaged.')
-            etl4lm_settings = (await settings.async_get_knowledge()).get("etl4lm", {})
+            etl4lm_settings = (await settings.async_get_knowledge()).etl4lm
             loader = Etl4lmLoader(
                 file_name,
                 input_file,
-                unstructured_api_url=etl4lm_settings.get("url", ""),
-                ocr_sdk_url=etl4lm_settings.get("ocr_sdk_url", ""),
+                unstructured_api_url=etl4lm_settings.url,
+                ocr_sdk_url=etl4lm_settings.ocr_sdk_url,
                 force_ocr=bool(force_ocr),
                 enable_formular=bool(enable_formula),
-                timeout=etl4lm_settings.get("timeout", 60),
+                timeout=etl4lm_settings.timeout,
                 filter_page_header_footer=bool(filter_page_header_footer),
                 knowledge_id=knowledge_id,
             )
