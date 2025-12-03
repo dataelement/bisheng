@@ -21,7 +21,7 @@ export default function ChatInput({ readOnly, v }) {
 
     const placholder = useMemo(() => {
         return inputDisabled ?
-            (inputMsg ? localize(getErrorI18nKey(inputMsg)) : ' ')
+            (inputMsg.code ? localize(getErrorI18nKey(inputMsg.code), inputMsg.data) : ' ')
             : localize('com_ui_please_enter_question')
     }, [inputDisabled, inputMsg, localize])
 
@@ -75,7 +75,7 @@ export default function ChatInput({ readOnly, v }) {
             */}
             <div className="absolute w-full flex justify-center left-0 -top-14">
                 {/* {!showStop && chatState?.flow?.flow_type === 10 && !inputMsg  & 运行结束展示 */}
-                {showReRun && !inputMsg && !showStop && <Button
+                {showReRun && !inputMsg.code && !showStop && <Button
                     className="rounded-full bg-primary/10 bg-blue-50 text-primary"
                     variant="ghost"
                     disabled={readOnly}

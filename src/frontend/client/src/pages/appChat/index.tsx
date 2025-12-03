@@ -36,7 +36,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
         let flowData: FlowData | null = null
         let messages: ChatMessageType[] = []
         const currentData = chats[cid]
-        let error = ''
+        let error = { code: '', data: null }
 
         setChatId(cid!) // 切换会话
 
@@ -54,7 +54,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
                 ])
 
                 if (flowRes.status_code !== 200) {
-                    error = AppLostMessage
+                    error = { code: AppLostMessage, data: null }
                     const lostFlow = await getDeleteFlowApi(cid)
                     flowRes.data = {
                         id: lostFlow.data.flow_id,
@@ -88,7 +88,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
                 ]);
 
                 if (assistantRes.status_code !== 200) {
-                    error = AppLostMessage;
+                    error = { code: AppLostMessage, data: null };
                     const lostFlow = await getDeleteFlowApi(cid)
                     assistantRes.data = {
                         name: lostFlow.data.flow_name,
@@ -112,7 +112,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
         }));
 
         if (shareToken) {
-            error = ''
+            error = { code: '', data: null }
         }
         // 更新状态
         // !!flow.data?.nodes.find(node => ["VariableNode", "InputFileNode"].includes(node.data.type))
