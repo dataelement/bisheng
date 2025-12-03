@@ -62,7 +62,7 @@ async def upload_file(
         # 调用实现类处理文件上传
         upload_result = await LinsightWorkbenchImpl.upload_file(file)
 
-        background_tasks.add_task(LinsightWorkbenchImpl.parse_file, upload_result)
+        background_tasks.add_task(LinsightWorkbenchImpl.parse_file, upload_result, login_user.user_id)
 
         result = {
             "file_id": upload_result.get("file_id"),
@@ -971,7 +971,7 @@ async def integrated_execute(
 
                 # 异步解析文件，增加超时控制
                 parse_result = await asyncio.wait_for(
-                    LinsightWorkbenchImpl.parse_file(upload_result),
+                    LinsightWorkbenchImpl.parse_file(upload_result, login_user.user_id),
                     timeout=300  # 5分钟超时
                 )
 

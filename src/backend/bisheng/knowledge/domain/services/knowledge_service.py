@@ -11,9 +11,9 @@ from bisheng.common.errcode.knowledge import KnowledgeNotExistError, KnowledgeMe
 from bisheng.database.models.role_access import AccessType
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
 from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
     UpdateKnowledgeMetadataFieldsReq
-from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
 from bisheng.utils.util import retry_async
 
 
@@ -68,7 +68,7 @@ class KnowledgeService:
         return knowledge_model
 
     #  Update Milvus and Elasticsearch metadata field names
-    async def update_vectorstore_metadata_field_names(self, knowledge_model, field_name_map):
+    async def update_vectorstore_metadata_field_names(self, invoke_user_id: int, knowledge_model, field_name_map):
         """Update metadata field names in Milvus and Elasticsearch vector stores."""
         # Update Milvus metadata field names
         # milvus_vectorstore = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge=knowledge_model)
@@ -80,7 +80,7 @@ class KnowledgeService:
 
         knowledge_model_files = await self.knowledge_file_repository.find_all(knowledge_id=knowledge_model.id)
 
-        vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(knowledge=knowledge_model,
+        vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(invoke_user_id, knowledge=knowledge_model,
                                                                              metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
 
         es_client = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=knowledge_model,
@@ -212,13 +212,14 @@ class KnowledgeService:
         # Milvus and ES metadata field name update logic
         background_tasks.add_task(
             self.update_vectorstore_metadata_field_names,
+            login_user.user_id,
             knowledge_model,
             field_name_map
         )
 
         return knowledge_model
 
-    async def delete_vectorstore_metadata_fields(self, knowledge_model, field_names: list[str]):
+    async def delete_vectorstore_metadata_fields(self, invoke_user_id: int, knowledge_model, field_names: list[str]):
         """Delete metadata fields in Milvus and Elasticsearch vector stores."""
         # Delete Milvus metadata fields
         # milvus_vectorstore = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge=knowledge_model)
@@ -230,7 +231,7 @@ class KnowledgeService:
 
         knowledge_model_files = await self.knowledge_file_repository.find_all(knowledge_id=knowledge_model.id)
 
-        vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(knowledge=knowledge_model,
+        vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(invoke_user_id, knowledge=knowledge_model,
                                                                              metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
 
         es_client = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=knowledge_model,
@@ -338,6 +339,7 @@ class KnowledgeService:
         # Milvus and ES metadata field deletion logic
         background_tasks.add_task(
             self.delete_vectorstore_metadata_fields,
+            login_user.user_id,
             knowledge_model,
             field_names
         )

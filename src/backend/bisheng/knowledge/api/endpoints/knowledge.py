@@ -551,9 +551,10 @@ def qa_auto_question(
         number: int = Body(default=3, embed=True),
         ori_question: str = Body(default='', embed=True),
         answer: str = Body(default='', embed=True),
+        login_user: UserPayload = Depends(UserPayload.get_login_user)
 ):
     """通过大模型自动生成问题"""
-    questions = knowledge_imp.recommend_question(ori_question, number=number, answer=answer)
+    questions = knowledge_imp.recommend_question(login_user.user_id, ori_question, number=number, answer=answer)
     return resp_200(data={'questions': questions})
 
 
@@ -797,7 +798,7 @@ def get_knowledge_status(*, login_user: UserPayload = Depends(UserPayload.get_lo
     if private_knowledge.state == KnowledgeState.FAILED.value:
         # 延迟导入以避免循环导入
         from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
-        rebuild_knowledge_celery.delay(private_knowledge.id, str(private_knowledge.model))
+        rebuild_knowledge_celery.delay(private_knowledge.id, int(private_knowledge.model), login_user.user_id)
         # 返回502状态码和相应提示信息
         return resp_502(
             message="个人知识库embedding模型已更换，正在重建知识库，请稍后再试"
@@ -866,13 +867,13 @@ def update_knowledge_model(*,
 
             # 延迟导入以避免循环导入
             from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
-            rebuild_knowledge_celery.delay(knowledge.id, str(req_data.model_id))
+            rebuild_knowledge_celery.delay(knowledge.id, req_data.model_id, login_user.user_id)
 
         elif knowledge.type == KnowledgeTypeEnum.QA.value:
 
             # 延迟导入以避免循环导入
             from bisheng.worker.knowledge.qa import rebuild_qa_knowledge_celery
-            rebuild_qa_knowledge_celery.delay(knowledge.id, str(req_data.model_id))
+            rebuild_qa_knowledge_celery.delay(knowledge.id, req_data.model_id, login_user.user_id)
 
         logger.info(f"Started rebuild task for knowledge_id={knowledge.id} with model_id={req_data.model_id}")
 

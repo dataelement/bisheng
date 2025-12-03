@@ -64,7 +64,7 @@ async def update_workbench_llm(
         login_user: UserPayload = Depends(UserPayload.get_admin_user),
         config_obj: WorkbenchModelConfig = Body(..., description="模型配置对象")):
     """ 更新灵思相关的模型配置 """
-    ret = await LLMService.update_workbench_llm(config_obj, background_tasks)
+    ret = await LLMService.update_workbench_llm(login_user.user_id, config_obj, background_tasks)
     return resp_200(data=ret)
 
 

@@ -63,9 +63,10 @@ class KnowledgeFileService:
         return knowledge_file_info_res
 
     @staticmethod
-    async def modify_milvus_file_user_metadata(knowledge_model, knowledge_file_id, user_metadata: dict):
+    async def modify_milvus_file_user_metadata(invoke_user_id: int, knowledge_model, knowledge_file_id,
+                                               user_metadata: dict):
         """修改 Milvus 中文件的用户元数据"""
-        vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(knowledge=knowledge_model,
+        vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(invoke_user_id, knowledge=knowledge_model,
                                                                              metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
 
         # 先查出所有数据
@@ -157,6 +158,7 @@ class KnowledgeFileService:
 
         # 修改 Milvus, Elasticsearch 中的对应元数据
         await self.modify_milvus_file_user_metadata(
+            login_user.user_id,
             knowledge_model=knowledge_model,
             knowledge_file_id=knowledge_file_model.id,
             user_metadata=user_metadata
@@ -249,6 +251,7 @@ class KnowledgeFileService:
 
             # 修改 Milvus, Elasticsearch 中的对应元数据
             await self.modify_milvus_file_user_metadata(
+                login_user.user_id,
                 knowledge_model=knowledge_model,
                 knowledge_file_id=knowledge_file_model.id,
                 user_metadata=user_metadata
@@ -339,6 +342,7 @@ class KnowledgeFileService:
             user_metadata = {key: value.get('field_value') for key, value in knowledge_file_model.user_metadata.items()}
             # 修改 Milvus, Elasticsearch 中的对应元数据
             await self.modify_milvus_file_user_metadata(
+                login_user.user_id,
                 knowledge_model=knowledge_model,
                 knowledge_file_id=knowledge_file_model.id,
                 user_metadata=user_metadata
@@ -417,6 +421,7 @@ class KnowledgeFileService:
 
             # 修改 Milvus, Elasticsearch 中的对应元数据
             await self.modify_milvus_file_user_metadata(
+                login_user.user_id,
                 knowledge_model=knowledge_model,
                 knowledge_file_id=knowledge_file_model.id,
                 user_metadata=user_metadata

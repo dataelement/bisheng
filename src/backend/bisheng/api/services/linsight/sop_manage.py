@@ -34,7 +34,6 @@ from bisheng.llm.domain.models import LLMDao
 from bisheng.llm.domain.services import LLMService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import util
-from bisheng.utils.embedding import decide_embeddings
 from bisheng_langchain.rag.init_retrievers import KeywordRetriever, BaselineVectorRetriever
 from bisheng_langchain.retrievers import EnsembleRetriever
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
@@ -319,7 +318,7 @@ class SOPManageService:
         return sop_pages
 
     @staticmethod
-    async def add_sop(sop_obj: SOPManagementSchema, user_id) -> UnifiedResponseModel | None:
+    async def add_sop(sop_obj: SOPManagementSchema, user_id: int) -> UnifiedResponseModel | None:
         """
         添加新的SOP
         :param user_id:
@@ -345,7 +344,8 @@ class SOPManageService:
 
         vector_store_id = uuid.uuid4().hex
 
-        embeddings = decide_embeddings(emb_model_id)
+        embeddings = await LLMService.get_bisheng_linsight_embedding(model_id=embed_info.id,
+                                                                     invoke_user_id=user_id)
         try:
             vector_client: Milvus = decide_vectorstores(
                 SOPManageService.collection_name, "Milvus", embeddings
@@ -396,7 +396,8 @@ class SOPManageService:
                 return NoEmbeddingModelError.return_resp()
 
             vector_store_id = existing_sop[0].vector_store_id
-            embeddings = decide_embeddings(emb_model_id)
+            embeddings = await LLMService.get_bisheng_linsight_embedding(invoke_user_id=sop_obj.user_id,
+                                                                         model_id=int(emb_model_id))
 
             # 更新向量存储
             try:
@@ -470,7 +471,7 @@ class SOPManageService:
 
     # sop 库检索
     @classmethod
-    async def search_sop(cls, query: str, k: int = 3) -> (List[Document], BaseErrorCode | None):
+    async def search_sop(cls, invoke_user_id: int, query: str, k: int = 3) -> (List[Document], BaseErrorCode | None):
         """
         搜索SOP
         :param k:
@@ -489,7 +490,8 @@ class SOPManageService:
             else:
                 try:
                     emb_model_id = workbench_conf.embedding_model.id
-                    embeddings = decide_embeddings(emb_model_id)
+                    embeddings = await LLMService.get_bisheng_linsight_embedding(invoke_user_id=invoke_user_id,
+                                                                                 model_id=int(emb_model_id))
                     await embeddings.aembed_query("test")
                 except Exception as e:
                     logger.error(f"向量检索模型初始化失败: {str(e)}")
@@ -501,7 +503,8 @@ class SOPManageService:
             retrievers = []
             if vector_search and es_search:
                 emb_model_id = workbench_conf.embedding_model.id
-                embeddings = decide_embeddings(emb_model_id)
+                embeddings = await LLMService.get_bisheng_linsight_embedding(invoke_user_id=invoke_user_id,
+                                                                             model_id=int(emb_model_id))
 
                 vector_client: Milvus = decide_vectorstores(
                     SOPManageService.collection_name, "Milvus", embeddings
@@ -531,7 +534,8 @@ class SOPManageService:
             elif vector_search and not es_search:
                 # 仅使用向量检索
                 emb_model_id = workbench_conf.embedding_model.id
-                embeddings = decide_embeddings(emb_model_id)
+                embeddings = await LLMService.get_bisheng_linsight_embedding(invoke_user_id=invoke_user_id,
+                                                                             model_id=int(emb_model_id))
 
                 vector_client: Milvus = decide_vectorstores(
                     SOPManageService.collection_name, "Milvus", embeddings

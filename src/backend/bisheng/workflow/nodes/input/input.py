@@ -158,7 +158,8 @@ class InputNode(BaseNode):
         metadatas = []
         try:
             file_rule = FileProcessBase(knowledge_id=0)
-            texts, metadatas, _, _ = read_chunk_text(filepath, file_name, file_rule.separator, file_rule.separator_rule,
+            texts, metadatas, _, _ = read_chunk_text(self.user_id, filepath, file_name, file_rule.separator,
+                                                     file_rule.separator_rule,
                                                      file_rule.chunk_size, 0, None,
                                                      file_rule.retain_images, file_rule.enable_formula,
                                                      file_rule.force_ocr,
@@ -177,7 +178,7 @@ class InputNode(BaseNode):
         """
         # 1、获取默认的embedding模型
         if self._embedding is None:
-            embedding = LLMService.get_knowledge_default_embedding()
+            embedding = LLMService.get_knowledge_default_embedding(self.user_id)
             if not embedding:
                 raise Exception('没有配置默认的embedding模型')
             self._embedding = embedding

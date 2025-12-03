@@ -724,12 +724,13 @@ class LinsightWorkbenchImpl:
         return upload_result
 
     @classmethod
-    async def parse_file(cls, upload_result: Dict) -> Dict:
+    async def parse_file(cls, upload_result: Dict, invoke_user_id: int) -> Dict:
         """
         解析上传的文件
 
         Args:
             upload_result: 上传结果
+            invoke_user_id: 调用用户ID
 
         Returns:
             解析结果
@@ -745,7 +746,7 @@ class LinsightWorkbenchImpl:
             collection_name = f"{cls.COLLECTION_NAME_PREFIX}{workbench_conf.embedding_model.id}"
 
             # 异步执行文件解析
-            parse_result = await cls._parse_file(file_id, file_path, original_filename,
+            parse_result = await cls._parse_file(invoke_user_id, file_id, file_path, original_filename,
                                                  collection_name, workbench_conf)
 
             # 缓存解析结果
@@ -765,7 +766,7 @@ class LinsightWorkbenchImpl:
         return parse_result
 
     @classmethod
-    async def _parse_file(cls, file_id: str, file_path: str, original_filename: str,
+    async def _parse_file(cls, invoke_user_id: int, file_id: str, file_path: str, original_filename: str,
                           collection_name: str, workbench_conf) -> Dict:
         """
         同步解析文件
@@ -783,6 +784,7 @@ class LinsightWorkbenchImpl:
         # 读取文件内容
         try:
             texts, _, parse_type, _ = await async_read_chunk_text(
+                invoke_user_id=invoke_user_id,
                 input_file=file_path,
                 file_name=original_filename,
                 separator=['\n\n', '\n'],
@@ -803,7 +805,7 @@ class LinsightWorkbenchImpl:
             markdown_md5 = await async_calculate_md5(markdown_bytes)
 
             # 处理向量存储
-            await cls._process_vector_storage(texts, file_id, collection_name, workbench_conf)
+            await cls._process_vector_storage(invoke_user_id, texts, file_id, collection_name, workbench_conf)
 
             return {
                 "file_id": file_id,
@@ -826,11 +828,12 @@ class LinsightWorkbenchImpl:
             }
 
     @classmethod
-    async def _process_vector_storage(cls, texts: List[str], file_id: str,
+    async def _process_vector_storage(cls, invoke_user_id: int, texts: List[str], file_id: str,
                                       collection_name: str, workbench_conf) -> None:
         """处理向量存储"""
         # 创建embeddings
-        embeddings = await LLMService.get_bisheng_embedding(model_id=workbench_conf.embedding_model.id)
+        embeddings = await LLMService.get_bisheng_linsight_embedding(model_id=workbench_conf.embedding_model.id,
+                                                                     invoke_user_id=invoke_user_id)
 
         # 创建向量存储
         vector_client = decide_vectorstores(collection_name, "Milvus", embeddings)

@@ -7,8 +7,8 @@ from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.llm.domain import LLMService
 from bisheng.script.knowledge_data_fix import get_all_knowledge_files, _get_milvus_chunks_data, _get_es_chunks_data
-from bisheng.utils.embedding import decide_embeddings
 
 user_map = {}
 
@@ -54,7 +54,7 @@ def convert_milvus_data(knowledge: Knowledge, all_file: List[KnowledgeFile], new
     # convert_milvus_chunk
     # 新的Milvus对象
 
-    embedding = decide_embeddings(knowledge.model)
+    embedding = LLMService.get_bisheng_knowledge_embedding_sync(0, model_id=int(knowledge.model))
     new_milvus = KnowledgeRag.init_milvus_vectorstore(new_collection_name, embedding,
                                                       metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
 
@@ -119,7 +119,7 @@ def convert_one_knowledge_data(knowledge: Knowledge):
     new_collection_name = f"{old_collection_name}_new"
     new_index_name = f"{old_index_name}_new"
     try:
-        old_milvus_vector = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge)
+        old_milvus_vector = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge)
         old_fields = old_milvus_vector.col.schema.fields
         old_fields = {field.name: field for field in old_fields}
         if "document_id" in old_fields:

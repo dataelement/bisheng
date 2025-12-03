@@ -185,7 +185,6 @@ class BishengLLM(BishengBase, BaseChatModel):
     model_name: Optional[str] = Field(default='', description="后端服务保存的model名称")
     streaming: Optional[bool] = Field(default=None, description="是否使用流式输出", alias="stream")
     temperature: Optional[float] = Field(default=None, description="模型生成的温度")
-    cache: Optional[bool] = Field(default=None, description="是否使用缓存")
 
     llm: Optional[BaseChatModel] = Field(default=None)
 
@@ -209,7 +208,6 @@ class BishengLLM(BishengBase, BaseChatModel):
     def _init_client(self, model_info: LLMModel, server_info: LLMServer, **kwargs):
         ignore_online = kwargs.get('ignore_online', False)
         self.temperature = kwargs.get('temperature', None)
-        self.cache = kwargs.get('cache', None)
         self.streaming = kwargs.get('streaming', None)
 
         if not model_info:
@@ -268,8 +266,6 @@ class BishengLLM(BishengBase, BaseChatModel):
 
         if self.temperature is not None:
             default_params['temperature'] = self.temperature
-        if self.cache is not None:
-            default_params['cache'] = self.cache
         if model_config.get('max_tokens'):
             default_params['max_tokens'] = model_config.get('max_tokens')
         return default_params

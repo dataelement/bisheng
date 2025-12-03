@@ -5,6 +5,7 @@ from langchain_core.documents import Document
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.core.ai.rerank.rrf_rerank import RRFRerank
 from bisheng.core.vectorstore.multi_retriever import MultiRetriever
@@ -284,7 +285,11 @@ class RagUtils(BaseNode):
             return
         if self._rerank_model:
             return
-        self._rerank_model = LLMService.get_bisheng_rerank_sync(model_id=self._rerank_model_id)
+        self._rerank_model = LLMService.get_bisheng_rerank_sync(model_id=self._rerank_model_id,
+                                                                app_id=self.workflow_id,
+                                                                app_name=self.workflow_name,
+                                                                app_type=ApplicationTypeEnum.WORKFLOW,
+                                                                user_id=self.user_id)
 
     def init_multi_retriever(self):
         if self._knowledge_type == "knowledge":
@@ -296,6 +301,7 @@ class RagUtils(BaseNode):
         """ retriever from knowledge base """
         if not self._knowledge_vector_list:
             self._knowledge_vector_list = KnowledgeRag.get_multi_knowledge_vectorstore(
+                invoke_user_id=self.user_id,
                 knowledge_ids=self._knowledge_value,
                 user_name=self.user_info.user_name,
                 check_auth=self._knowledge_auth,
@@ -352,7 +358,7 @@ class RagUtils(BaseNode):
             self._multi_es_retriever = None
             self._multi_milvus_retriever = None
             return
-        embeddings = LLMService.get_knowledge_default_embedding()
+        embeddings = LLMService.get_knowledge_default_embedding(self.user_id)
         if not embeddings:
             raise Exception('没有配置知识库默认embedding模型')
 

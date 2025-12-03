@@ -442,7 +442,7 @@ class ChatManager:
                 exist_session = MessageSessionDao.get_one(chat_id=chat_id)
                 if not exist_session:  # 说明是新建会话
                     websocket = self.active_connections[key]
-                    login_user = UserPayload(**{
+                    login_user = await UserPayload.init_login_user(**{
                         'user_id': user_id,
                         'user_name': UserDao.get_user(user_id).user_name,
                     })

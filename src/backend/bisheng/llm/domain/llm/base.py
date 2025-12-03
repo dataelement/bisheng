@@ -30,8 +30,11 @@ class BishengBase(BaseModel):
             model_id=model_id,
             model_info=model_info,
             server_info=server_info,
+            app_id=kwargs['app_id'],
+            app_type=kwargs['app_type'],
+            app_name=kwargs['app_name'],
+            user_id=kwargs['user_id'],
         )
-        instance._init_client(model_info, server_info, **kwargs)
         return instance
 
     @classmethod

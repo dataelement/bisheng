@@ -8,6 +8,7 @@ from langgraph.prebuilt import create_react_agent
 from loguru import logger
 from pydantic import BaseModel, field_validator, Field
 
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.llm.domain.services import LLMService
 from bisheng.tool.domain.services.executor import ToolExecutor
@@ -72,9 +73,11 @@ class AgentNode(BaseNode):
         self._chat_history_num = self.node_params['chat_history_flag']['value']
 
         self._llm = LLMService.get_bisheng_llm_sync(model_id=self.node_params['model_id'],
-                                                    temperature=self.node_params.get(
-                                                        'temperature', 0.3),
-                                                    cache=False)
+                                                    temperature=self.node_params.get('temperature', 0.3),
+                                                    app_id=self.workflow_id,
+                                                    app_name=self.workflow_name,
+                                                    app_type=ApplicationTypeEnum.WORKFLOW,
+                                                    user_id=self.user_id)
 
         # 是否输出结果给用户
         self._output_user = self.node_params.get('output_user', False)
@@ -159,7 +162,7 @@ class AgentNode(BaseNode):
         tools = []
         for index, knowledge_id in enumerate(self._knowledge_ids):
             if self._knowledge_type == 'knowledge':
-                knowledge_tool = ToolExecutor.init_knowledge_tool_sync(knowledge_id,
+                knowledge_tool = ToolExecutor.init_knowledge_tool_sync(self.user_id, knowledge_id,
                                                                        llm=self._llm,
                                                                        **knowledge_retriever)
                 tools.append(knowledge_tool)
@@ -185,7 +188,7 @@ class AgentNode(BaseNode):
 
     def init_file_milvus(self, file_metadata: Dict) -> BaseRetriever:
         """ 初始化用户选择的临时文件的milvus """
-        embeddings = LLMService.get_knowledge_default_embedding()
+        embeddings = LLMService.get_knowledge_default_embedding(self.user_id)
         if not embeddings:
             raise Exception('没有配置默认的embedding模型')
         file_ids = [file_metadata['document_id']]

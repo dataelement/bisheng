@@ -155,11 +155,12 @@ def copy_qa_knowledge_celery(source_knowledge_id: int, target_knowledge_id: int,
 
 
 @bisheng_celery.task
-def rebuild_qa_knowledge_celery(knowledge_id: int, embedding_model_id: str):
+def rebuild_qa_knowledge_celery(knowledge_id: int, embedding_model_id: int, invoke_user_id: int):
     """
      重建QA知识库,向量存储
     :param knowledge_id:
     :param embedding_model_id:
+    :param invoke_user_id:
     :return:
     """
     trace_id_var.set(f'rebuild_qa_knowledge_{knowledge_id}')
@@ -194,7 +195,8 @@ def rebuild_qa_knowledge_celery(knowledge_id: int, embedding_model_id: str):
             knowledge_info.state = KnowledgeState.PUBLISHED.value
             return
 
-        embeddings = LLMService.get_bisheng_embedding_sync(model_id=embedding_model_id)
+        embeddings = LLMService.get_bisheng_knowledge_embedding_sync(model_id=embedding_model_id,
+                                                                     invoke_user_id=invoke_user_id)
         milvus_db: Milvus = decide_vectorstores(
             knowledge_info.collection_name, "Milvus", embeddings
         )

@@ -24,7 +24,6 @@ from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, Knowledge
 from bisheng.llm.domain.services import LLMService
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.user.domain.models.user import UserDao
-from bisheng.utils.embedding import decide_embeddings
 
 
 class WorkStationService(BaseService):
@@ -127,11 +126,11 @@ class WorkStationService(BaseService):
         req_data = KnowledgeFileProcess(knowledge_id=knowledge.id,
                                         file_list=[KnowledgeFileOne(file_path=file_path)])
         try:
-            _ = decide_embeddings(knowledge.model)
+            _ = LLMService.get_bisheng_knowledge_embedding(login_user.user_id, int(knowledge.model))
         except Exception as e:
             raise EmbeddingModelStatusError(exception=e)
         res = KnowledgeService.process_knowledge_file(request,
-                                                      UserPayload(user_id=login_user.user_id),
+                                                      login_user,
                                                       background_tasks, req_data)
         return res
 
@@ -150,7 +149,7 @@ class WorkStationService(BaseService):
             return [], 0
         res, total, _ = KnowledgeService.get_knowledge_files(
             request,
-            UserPayload(user_id=login_user.user_id),
+            login_user,
             knowledge[0].id,
             page=page,
             page_size=size)
@@ -175,7 +174,8 @@ class WorkStationService(BaseService):
             return []
         knowledge = knowledge[0]
         try:
-            embedding = await LLMService.get_bisheng_embedding(model_id=knowledge.model)
+            embedding = await LLMService.get_bisheng_daily_embedding(model_id=int(knowledge.model),
+                                                                     invoke_user_id=login_user.user_id)
         except Exception as e:
             raise EmbeddingModelStatusError(exception=e)
 

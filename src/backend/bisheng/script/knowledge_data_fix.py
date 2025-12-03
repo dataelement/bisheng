@@ -10,7 +10,7 @@ from bisheng.api.services.knowledge_imp import decide_vectorstores, QA_save_know
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import QAKnoweldgeDao, KnowledgeFileDao, QAKnowledge, KnowledgeFile, \
     QAStatus, KnowledgeFileStatus
-from bisheng.utils.embedding import decide_embeddings
+from bisheng.llm.domain import LLMService
 from bisheng.worker.knowledge.file_worker import insert_milvus
 
 _output_path = os.path.join(os.path.dirname(__file__), 'output')
@@ -64,7 +64,7 @@ def get_all_knowledge_files(knowledge_id: int) -> List[KnowledgeFile]:
 
 def _get_es_chunks_data(knowledge: Knowledge, es_obj=None, source: bool = False, file_id: int = None):
     if not es_obj:
-        embedding = decide_embeddings(knowledge.model)
+        embedding = LLMService.get_bisheng_knowledge_embedding_sync(0, model_id=int(knowledge.model))
         es_obj = decide_vectorstores(knowledge.index_name or knowledge.collection_name, "ElasticKeywordsSearch",
                                      embedding)
     es_client = es_obj.client
@@ -105,7 +105,7 @@ def _get_es_chunks_data(knowledge: Knowledge, es_obj=None, source: bool = False,
 def _get_milvus_chunks_data(knowledge: Knowledge, milvus_obj=None, all_fields_expect_pk: bool = False,
                             file_id: int = None):
     if not milvus_obj:
-        embedding = decide_embeddings(knowledge.model)
+        embedding = LLMService.get_bisheng_knowledge_embedding_sync(0, model_id=int(knowledge.model))
         milvus_obj = decide_vectorstores(knowledge.collection_name, "Milvus", embedding)
     all_milvus_chunks = []
     output_fields = ["file_id", "extra", "source", "pk"]
@@ -230,7 +230,7 @@ def _file_row(knowledge: Knowledge, file: KnowledgeFile | QAKnowledge, milvus_fl
 
 def _init_knowledge_obj(knowledge: Knowledge):
     try:
-        embedding = decide_embeddings(knowledge.model)
+        embedding = LLMService.get_bisheng_knowledge_embedding_sync(0, model_id=int(knowledge.model))
     except Exception as e:
         print(
             f"!!!! skip knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name} because embedding model error: {e}")
@@ -352,7 +352,7 @@ def scan_knowledge_error_data():
 
 def _sync_milvus_new_collection_name(knowledge: Knowledge, milvus_obj) -> bool:
     """ copy knowledge data to new milvus collection name """
-    embedding = decide_embeddings(knowledge.model)
+    embedding = LLMService.get_bisheng_knowledge_embedding_sync(0, model_id=int(knowledge.model))
     new_collection_name = knowledge.index_name or knowledge.collection_name
     if new_collection_name == knowledge.collection_name:
         return milvus_obj

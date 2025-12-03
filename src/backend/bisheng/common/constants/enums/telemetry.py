@@ -26,6 +26,8 @@ class ApplicationTypeEnum(str, Enum):
     RAG_TRACEABILITY = "rag_traceability"
     # 评测应用
     EVALUATION = "evaluation"
+    # 模型连通性测试
+    MODEL_TEST = "model_test"
 
 
 class BaseTelemetryTypeEnum(str, Enum):

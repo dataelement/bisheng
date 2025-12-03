@@ -9,8 +9,8 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.models import LLMDao
-from bisheng.utils.embedding import decide_embeddings
 
 
 class ToolInput(BaseModel):
@@ -79,7 +79,8 @@ class SearchKnowledgeBase(BaseTool):
         if not file_info:
             raise Exception("文件不存在或已被删除")
         class_obj = import_vectorstore('Milvus')
-        embeddings = decide_embeddings(file_info.get("embedding_model_id"))
+        embeddings = await LLMService.get_bisheng_linsight_embedding(session_info.user_id,
+                                                                     file_info.get("embedding_model_id"))
         params = {
             'collection_name': file_info.get("collection_name"),
             'embedding': embeddings,
@@ -99,7 +100,7 @@ class SearchKnowledgeBase(BaseTool):
         if not embed_info:
             # "知识库配置的embedding模型不存在或已被删除"
             raise Exception("知识库配置的embedding模型不存在或已被删除")
-        embeddings = decide_embeddings(knowledge_info.model)
+        embeddings = await LLMService.get_bisheng_knowledge_embedding(0, model_id=int(knowledge_info.model))
         milvus_client = decide_vectorstores(
             knowledge_info.collection_name, "Milvus", embeddings, knowledge_id=knowledge_id
         )

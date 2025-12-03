@@ -4,6 +4,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.llm.domain.services import LLMService
 from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
 from bisheng.workflow.nodes.base import BaseNode
@@ -37,7 +38,10 @@ class LLMNode(BaseNode):
         # 初始化llm对象
         self._llm = LLMService.get_bisheng_llm_sync(model_id=self.node_params['model_id'],
                                                     temperature=self.node_params.get('temperature', 0.3),
-                                                    cache=False)
+                                                    app_id=self.workflow_id,
+                                                    app_name=self.workflow_name,
+                                                    app_type=ApplicationTypeEnum.WORKFLOW,
+                                                    user_id=self.user_id)
 
     def _run(self, unique_id: str):
         self._system_prompt_list = []

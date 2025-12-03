@@ -224,21 +224,21 @@ class ToolExecutor(BaseTool):
                                                         **kwargs)
 
     @classmethod
-    async def init_knowledge_tool(cls, knowledge_id: int, **kwargs) -> BaseTool:
+    async def init_knowledge_tool(cls, invoke_user_id: int, knowledge_id: int, **kwargs) -> BaseTool:
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id=knowledge_id)
         if not knowledge:
             raise ValueError(f"Knowledge with id {knowledge_id} not found.")
-        vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(knowledge)
+        vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(invoke_user_id, knowledge)
         es_client = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge)
         return cls._init_knowledge_rag_tool(knowledge=knowledge, vector_retriever=vector_client.as_retriever(),
                                             elastic_retriever=es_client.as_retriever(), **kwargs)
 
     @classmethod
-    def init_knowledge_tool_sync(cls, knowledge_id: int, **kwargs) -> BaseTool:
+    def init_knowledge_tool_sync(cls, invoke_user_id: int, knowledge_id: int, **kwargs) -> BaseTool:
         knowledge = KnowledgeDao.query_by_id(knowledge_id=knowledge_id)
         if not knowledge:
             raise ValueError(f"Knowledge with id {knowledge_id} not found.")
-        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge)
+        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(invoke_user_id, knowledge)
         es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge)
         return cls._init_knowledge_rag_tool(knowledge, vector_retriever=vector_client.as_retriever(),
                                             elastic_retriever=es_client.as_retriever(), **kwargs)

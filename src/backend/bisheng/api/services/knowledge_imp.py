@@ -63,7 +63,6 @@ from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.llm.domain.services import LLMService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import md5_hash, util
-from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.exceptions import EtlException, FileParseException
 from bisheng_langchain.rag.extract_info import extract_title, async_extract_title
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
@@ -300,7 +299,7 @@ def delete_vector_files(file_ids: List[int], knowledge: Knowledge) -> bool:
         return True
     logger.info(f"delete_files file_ids={file_ids} knowledge_id={knowledge.id}")
     logger.info("start init Milvus")
-    vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge=knowledge,
+    vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=knowledge,
                                                                         metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
     logger.info("start init ES")
     es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge,
@@ -395,7 +394,7 @@ def decide_vectorstores(
     return instantiate_vectorstore(vector_store, class_object=class_obj, params=param)
 
 
-def decide_knowledge_llm() -> Any:
+def decide_knowledge_llm(invoke_user_id: int) -> Any:
     """获取用来总结知识库chunk的 llm对象"""
     # 获取llm配置
     knowledge_llm = LLMService.get_knowledge_llm()
@@ -405,11 +404,15 @@ def decide_knowledge_llm() -> Any:
 
     # 获取llm对象
     return LLMService.get_bisheng_llm_sync(
-        model_id=knowledge_llm.extract_title_model_id, cache=False
-    )
+        model_id=knowledge_llm.extract_title_model_id,
+
+        app_id=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
+        app_name=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
+        app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
+        user_id=invoke_user_id)
 
 
-async def async_decide_knowledge_llm() -> Any:
+async def async_decide_knowledge_llm(invoke_user_id: int) -> Any:
     """获取用来总结知识库chunk的 llm对象"""
     # 获取llm配置
     knowledge_llm = await LLMService.aget_knowledge_llm()
@@ -419,8 +422,12 @@ async def async_decide_knowledge_llm() -> Any:
 
     # 获取llm对象
     return await LLMService.get_bisheng_llm(
-        model_id=knowledge_llm.extract_title_model_id, cache=False
-    )
+        model_id=knowledge_llm.extract_title_model_id,
+
+        app_id=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
+        app_name=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
+        app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
+        user_id=invoke_user_id)
 
 
 def addEmbedding(
@@ -444,7 +451,8 @@ def addEmbedding(
     """将文件加入到向量和es库内"""
 
     logger.info("start init Milvus")
-    vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge_id=knowledge_id,
+    vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge_files[0].updater_id,
+                                                                        knowledge_id=knowledge_id,
                                                                         metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
     logger.info("start init ES")
     es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge_id=knowledge_id,
@@ -559,6 +567,7 @@ def add_file_embedding(
     # # extract text from file
     try:
         texts, metadatas, parse_type, partitions = read_chunk_text(
+            db_file.user_id,
             filepath,
             db_file.file_name,
             separator,
@@ -756,8 +765,9 @@ def parse_document_title(title: str) -> str:
 
 
 def read_chunk_text(
-        input_file,
-        file_name,
+        invoke_user_id: int,
+        input_file: str,
+        file_name: str,
         separator: Optional[List[str]],
         separator_rule: Optional[List[str]],
         chunk_size: int,
@@ -769,7 +779,6 @@ def read_chunk_text(
         filter_page_header_footer: int = 0,
         excel_rule: ExcelRule = None,
         no_summary: bool = False,
-
 ) -> (List[str], List[dict], str, Any):  # type: ignore
     """
     0：chunks text
@@ -781,7 +790,7 @@ def read_chunk_text(
     llm = None
     if not no_summary:
         try:
-            llm = decide_knowledge_llm()
+            llm = decide_knowledge_llm(invoke_user_id)
             knowledge_llm = LLMService.get_knowledge_llm()
         except Exception as e:
             logger.exception("knowledge_llm_error:")
@@ -965,8 +974,9 @@ def read_chunk_text(
 
 
 async def async_read_chunk_text(
-        input_file,
-        file_name,
+        invoke_user_id: int,
+        input_file: str,
+        file_name: str,
         separator: Optional[List[str]],
         separator_rule: Optional[List[str]],
         chunk_size: int,
@@ -983,7 +993,7 @@ async def async_read_chunk_text(
     llm = None
     if not no_summary:
         try:
-            llm = await async_decide_knowledge_llm()
+            llm = await async_decide_knowledge_llm(invoke_user_id)
             knowledge_llm = await LLMService.aget_knowledge_llm()
         except Exception as e:
             logger.exception("knowledge_llm_error:")
@@ -1167,7 +1177,8 @@ def text_knowledge(
         db_knowledge: Knowledge, db_file: KnowledgeFile, documents: List[Document]
 ):
     """使用text 导入knowledge"""
-    embeddings = decide_embeddings(db_knowledge.model)
+    embeddings = LLMService.get_bisheng_knowledge_embedding_sync(model_id=int(db_knowledge.model),
+                                                                 invoke_user_id=db_file.user_id)
     vectore_client = decide_vectorstores(
         db_knowledge.collection_name, "Milvus", embeddings
     )
@@ -1279,7 +1290,8 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
     extra.update({"answer": answer, "main_question": questions[0]})
     docs = [Document(page_content=question, metadata=extra) for question in questions]
     try:
-        embeddings = decide_embeddings(db_knowledge.model)
+        embeddings = LLMService.get_bisheng_knowledge_embedding_sync(invoke_user_id=QA.user_id,
+                                                                     model_id=int(db_knowledge.model))
         vector_client = decide_vectorstores(
             db_knowledge.collection_name, "Milvus", embeddings
         )
@@ -1480,7 +1492,7 @@ def delete_vector_data(knowledge: Knowledge, file_ids: List[int]):
     return True
 
 
-def recommend_question(question: str, answer: str, number: int = 3) -> List[str]:
+def recommend_question(invoke_user_id: int, question: str, answer: str, number: int = 3) -> List[str]:
     from langchain.chains.llm import LLMChain
     from langchain_core.prompts.prompt import PromptTemplate
 
@@ -1509,7 +1521,7 @@ def recommend_question(question: str, answer: str, number: int = 3) -> List[str]
 
         你生成的{number}个相似问题：
     """
-    llm = LLMService.get_knowledge_similar_llm()
+    llm = LLMService.get_knowledge_similar_llm(invoke_user_id)
     if not llm:
         raise KnowledgeSimilarError.http_exception()
 

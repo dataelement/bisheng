@@ -16,7 +16,6 @@ from bisheng.common.init_data import init_default_data
 from bisheng.common.services.config_service import settings
 from bisheng.core.context import initialize_app_context, close_app_context
 from bisheng.core.logger import set_logger_config
-from bisheng.interface.utils import setup_llm_caching
 from bisheng.services.utils import initialize_services, teardown_services
 from bisheng.utils.http_middleware import CustomMiddleware
 from bisheng.utils.threadpool import thread_pool
@@ -57,7 +56,6 @@ _EXCEPTION_HANDLERS = {
 async def lifespan(app: FastAPI):
     await initialize_app_context(config=settings)
     initialize_services()
-    setup_llm_caching()
     await init_default_data()
     # LangfuseInstance.update()
     yield

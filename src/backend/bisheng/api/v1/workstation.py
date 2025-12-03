@@ -129,7 +129,7 @@ def get_config(
 
     etl_for_lm_url = bisheng_settings.get_knowledge().etl4lm.url
     ret = ret.model_dump() if ret else {}
-    
+
     ret['enable_etl4lm'] = bool(etl_for_lm_url)
     linsight_invitation_code = bisheng_settings.get_all_config().get('linsight_invitation_code', None)
     ret['linsight_invitation_code'] = linsight_invitation_code if linsight_invitation_code else False
@@ -290,12 +290,13 @@ async def webSearch(query: str, user_id: int):
     return search_res, search_list
 
 
-def getFileContent(filepath):
+def getFileContent(filepath: str, invoke_user_id: int):
     """
     获取文件内容
     """
     filepath_local, file_name = file_download(filepath)
     raw_texts, _, _, _ = knowledge_imp.read_chunk_text(
+        invoke_user_id,
         filepath_local,
         file_name,
         ['\n\n', '\n'],
@@ -436,7 +437,7 @@ async def chat_completions(
             elif data.files:
                 #  获取文件全文
                 filecontent = '\n'.join(
-                    [getFileContent(file.get('filepath')) for file in data.files])
+                    [getFileContent(file.get('filepath'), login_user.user_id) for file in data.files])
                 prompt = wsConfig.fileUpload.prompt.format(file_content=filecontent[:max_token],
                                                            question=data.text)
             if prompt != data.text:

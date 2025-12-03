@@ -350,7 +350,7 @@ def add_evaluation_task(evaluation_id: int):
             for index, one in enumerate(csv_data):
                 one["answer"] = execute_workflow_get_answer(workflow_info, evaluation, one.get('question', ""))
 
-        _llm = LLMService.get_evaluation_llm_object()
+        _llm = LLMService.get_evaluation_llm_object(evaluation.user_id)
         llm = LangchainLLM(_llm)
         data_samples = {
             "question": [one.get('question') for one in csv_data],

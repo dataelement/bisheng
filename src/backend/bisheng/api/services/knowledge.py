@@ -192,7 +192,8 @@ class KnowledgeService(KnowledgeUtils):
                                          ))
 
         try:
-            vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge=db_knowledge,
+            vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id,
+                                                                                knowledge=db_knowledge,
                                                                                 metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
             es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge,
                                                                         metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
@@ -438,6 +439,7 @@ class KnowledgeService(KnowledgeUtils):
 
         # 切分文本
         texts, metadatas, parse_type, partitions = await async_read_chunk_text(
+            login_user.user_id,
             filepath,
             file_name,
             req_data.separator,
@@ -449,7 +451,8 @@ class KnowledgeService(KnowledgeUtils):
             enable_formula=req_data.enable_formula,
             filter_page_header_footer=req_data.filter_page_header_footer,
             retain_images=req_data.retain_images,
-            excel_rule=excel_rule
+            excel_rule=excel_rule,
+            no_summary=True,
         )
         if len(texts) == 0:
             raise ValueError("文件解析为空")
@@ -1070,7 +1073,7 @@ class KnowledgeService(KnowledgeUtils):
         logger.info(
             f"act=update_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}"
         )
-        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(db_knowledge)
+        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)
         # search metadata
         output_fields = [s.name for s in vector_client.col.schema.fields if s.name != "vector"]
         res = vector_client.col.query(
@@ -1138,7 +1141,7 @@ class KnowledgeService(KnowledgeUtils):
         logger.info(
             f"act=delete_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}"
         )
-        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(db_knowledge)
+        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)
         res = vector_client.col.delete(
             expr=f"document_id == {file_id} && chunk_index == {chunk_index}",
             timeout=10,

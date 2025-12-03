@@ -4,8 +4,7 @@ from loguru import logger
 
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import (
-    decide_vectorstores,
-    decide_embeddings
+    decide_vectorstores
 )
 from bisheng.core.logger import trace_id_var
 from bisheng.interface.embeddings.custom import FakeEmbedding
@@ -15,17 +14,19 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus
 )
+from bisheng.llm.domain import LLMService
 from bisheng.worker.main import bisheng_celery
 
 
 @bisheng_celery.task(acks_late=True)
-def rebuild_knowledge_celery(knowledge_id: int, new_model_id: str) -> str:
+def rebuild_knowledge_celery(knowledge_id: int, new_model_id: int, invoke_user_id: int) -> str:
     """
     重建知识库的异步任务
     
     Args:
         knowledge_id: 知识库ID
         new_model_id: 新的embedding模型ID
+        invoke_user_id: 调用用户ID
         
     Returns:
         str: 任务执行结果
@@ -61,7 +62,7 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: str) -> str:
         logger.info(f"Updated {len(files)} files to rebuilding status")
 
         # 3. 根据index_name从es中拿到chunk信息，重新embedding插入milvus
-        success_files, failed_files = _rebuild_embeddings(knowledge, files, new_model_id)
+        success_files, failed_files = _rebuild_embeddings(knowledge, files, new_model_id, invoke_user_id)
 
         # 4. 更新文件状态
         KnowledgeFileDao.update_status_bulk(success_files, KnowledgeFileStatus.SUCCESS)
@@ -130,8 +131,8 @@ def _delete_es_files(knowledge: Knowledge, file_ids: List[int]):
         logger.exception(f"Failed to delete ES files for knowledge_id={knowledge.id}: {str(e)}")
 
 
-def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_model_id: str) -> tuple[
-    List[int], List[int]]:
+def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_model_id: int, invoke_user_id: int) -> \
+        tuple[List[int], List[int]]:
     """
     重建embeddings
 
@@ -150,7 +151,8 @@ def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_mo
 
         # 获取新的embedding模型并创建Milvus客户端
         logger.info(f"[DEBUG] 开始初始化新的embedding模型，model_id={new_model_id}")
-        new_embeddings = decide_embeddings(new_model_id)
+        new_embeddings = LLMService.get_bisheng_knowledge_embedding_sync(model_id=new_model_id,
+                                                                         invoke_user_id=invoke_user_id)
         logger.info(
             f"[DEBUG] 成功创建embedding模型实例: {type(new_embeddings).__name__}, model_id={getattr(new_embeddings, 'model_id', 'unknown')}")
 

@@ -16,6 +16,7 @@ from loguru import logger
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import InputRequest
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.errcode.assistant import AssistantModelEmptyError, AssistantModelNotConfigError
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
 from bisheng.database.models.flow import FlowDao, FlowStatus
@@ -97,7 +98,11 @@ class AssistantAgent(AssistantUtils):
         # 初始化llm
         self.llm = await LLMService.get_bisheng_llm(model_id=default_llm.model_id,
                                                     temperature=self.assistant.temperature,
-                                                    streaming=default_llm.streaming)
+                                                    streaming=default_llm.streaming,
+                                                    app_id=self.assistant.id,
+                                                    app_name=self.assistant.name,
+                                                    app_type=ApplicationTypeEnum.ASSISTANT,
+                                                    user_id=self.invoke_user_id)
 
     async def init_auto_update_llm(self):
         """ 初始化自动优化prompt等信息的llm实例 """
@@ -107,7 +112,11 @@ class AssistantAgent(AssistantUtils):
 
         self.llm = await LLMService.get_bisheng_llm(model_id=assistant_llm.auto_llm.model_id,
                                                     temperature=self.assistant.temperature,
-                                                    streaming=assistant_llm.auto_llm.streaming)
+                                                    streaming=assistant_llm.auto_llm.streaming,
+                                                    app_id=self.assistant.id,
+                                                    app_name=self.assistant.name,
+                                                    app_type=ApplicationTypeEnum.ASSISTANT,
+                                                    user_id=self.invoke_user_id)
 
     async def init_tools(self, callbacks: Callbacks = None):
         """通过名称获取tool 列表
@@ -140,7 +149,8 @@ class AssistantAgent(AssistantUtils):
         for link in flow_links:
             knowledge_id = link.knowledge_id
             if knowledge_id:
-                knowledge_tool = await ToolExecutor.init_knowledge_tool(knowledge_id, llm=self.llm, callbacks=callbacks,
+                knowledge_tool = await ToolExecutor.init_knowledge_tool(self.invoke_user_id, knowledge_id, llm=self.llm,
+                                                                        callbacks=callbacks,
                                                                         **self.knowledge_retriever)
                 tools.append(knowledge_tool)
             else:
