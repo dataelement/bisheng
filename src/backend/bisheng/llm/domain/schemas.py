@@ -2,8 +2,8 @@ from typing import Optional, List
 
 from pydantic import Field, BaseModel
 
+from bisheng.llm.domain.models import LLMModelBase, LLMServerBase
 from bisheng_langchain.linsight.const import TaskMode
-from .domain.models import LLMModelBase, LLMServerBase
 
 
 class LLMModelInfo(LLMModelBase):

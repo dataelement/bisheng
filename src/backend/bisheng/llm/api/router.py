@@ -3,7 +3,7 @@ from fastapi import APIRouter, Request, Depends, Body, Query, BackgroundTasks, U
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200, UnifiedResponseModel
 from ..domain import LLMService
-from ..schemas import KnowledgeLLMConfig, AssistantLLMConfig, EvaluationLLMConfig, LLMServerCreateReq, \
+from ..domain.schemas import KnowledgeLLMConfig, AssistantLLMConfig, EvaluationLLMConfig, LLMServerCreateReq, \
     WorkbenchModelConfig
 
 router = APIRouter(prefix='/llm', tags=['LLM'])

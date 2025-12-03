@@ -6,7 +6,7 @@ from sqlmodel import Field, select, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.llm.const import LLMModelType
+from bisheng.llm.domain.const import LLMModelType
 
 
 class LLMServerBase(SQLModelSerializable):

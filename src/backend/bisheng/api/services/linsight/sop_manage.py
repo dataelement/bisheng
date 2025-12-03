@@ -28,7 +28,7 @@ from bisheng.common.services.config_service import settings
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.models.linsight_sop import LinsightSOP, LinsightSOPDao, LinsightSOPRecord
 from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.llm.const import LLMModelType
+from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.models import LLMDao
 from bisheng.llm.domain.services import LLMService

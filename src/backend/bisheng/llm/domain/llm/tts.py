@@ -6,7 +6,7 @@ from bisheng.common.errcode.server import NoTtsModelConfigError, TtsModelConfigD
     TtsModelTypeError, TtsProviderDeletedError, TtsModelOfflineError
 from bisheng.core.ai import BaseTTSClient, OpenAITTSClient, \
     AliyunTTSClient, AzureOpenAITTSClient
-from bisheng.llm.const import LLMModelType, LLMServerType
+from bisheng.llm.domain.const import LLMModelType, LLMServerType
 from bisheng.llm.domain.models import LLMServer, LLMModel
 from .base import BishengBase
 from ..utils import wrapper_bisheng_model_limit_check_async

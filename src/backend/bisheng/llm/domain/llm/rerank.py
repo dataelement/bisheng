@@ -8,9 +8,9 @@ from pydantic import Field
 from typing_extensions import Self
 
 from bisheng.core.ai import XinferenceRerank, CommonRerank, DashScopeRerank
+from bisheng.llm.domain.const import LLMServerType, LLMModelType
 from .llm import BishengBase
 from ..utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_limit_check_async
-from ...const import LLMServerType, LLMModelType
 
 
 def _get_xinference_params(params: dict, server_config: dict, model_config: dict) -> dict:
