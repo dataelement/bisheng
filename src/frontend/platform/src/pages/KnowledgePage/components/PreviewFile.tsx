@@ -20,6 +20,8 @@ export default function PreviewFile({
   step,
   setChunks,
   edit = false,
+  resultFiles,
+  etl,
   previewUrl
 }: {
   urlState: { load: boolean; url: string };
@@ -44,7 +46,16 @@ export default function PreviewFile({
   }, [rawFiles, file]);
 
   const targetFile = matchedRawFile || file;
-  const fileParseType = targetFile.parse_type;
+  let fileParseType = '';
+  if(step === 2){
+    fileParseType = resultFiles[0].isEtl4lm
+  }else if(step === 3 && etl){
+    fileParseType = etl
+  } else {
+    fileParseType = targetFile.fileType;
+  }
+  console.log(targetFile,resultFiles,step,3);
+  
   const fileName = targetFile.name || file.fileName || file.name;
   const suffix = useMemo(() => {
     return fileName?.split('.').pop()?.toLowerCase() || '';
@@ -327,7 +338,7 @@ export default function PreviewFile({
         <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
       </div>
     </div>
-    <div className={`relative overflow-y-auto ${edit ? 'h-[calc(100vh-206px)]' : 'h-[calc(100vh-284px)]'}`}>
+    <div className={`relative ${['csv', 'xlsx','xls'].includes(file.suffix)? '':"overflow-y-auto"}  ${edit ? 'h-[calc(100vh-206px)]' : 'h-[calc(100vh-284px)]'}`}>
       {render(file.suffix)}
     </div>
   </div>

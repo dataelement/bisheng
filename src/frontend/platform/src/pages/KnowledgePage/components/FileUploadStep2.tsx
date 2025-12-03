@@ -164,7 +164,7 @@ const FileUploadStep2 = forwardRef(({
 
         const nextStep = step + 1;
         if (step === 2 || displayStep === 2) {
-            const config = { applyEachCell, cellGeneralConfig, rules };
+            const config = { applyEachCell, cellGeneralConfig, rules,resultFiles };
             setApplyRule(config);
             setSelectedChunkIndex(-1);
             return onNext(nextStep, config);
@@ -279,6 +279,7 @@ const FileUploadStep2 = forwardRef(({
                             showPreview={showPreview}
                             step={step}
                             previewCount={previewCount}
+                            resultFiles={resultFiles}
                             kId={kId}
                             rules={applyRule.rules}
                             applyEachCell={applyRule.applyEachCell}

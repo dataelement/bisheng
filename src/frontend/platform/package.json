@@ -69,6 +69,7 @@
     "vditor": "file:local-packages/vditor-3.11.1.tgz",
     "web-vitals": "^4.1.1",
     "xlsx": "^0.18.5",
+    "xlsx-populate": "^1.21.0",
     "zustand": "^4.5.2"
   },
   "scripts": {
