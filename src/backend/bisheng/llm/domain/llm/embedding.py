@@ -9,9 +9,9 @@ from typing_extensions import Self
 
 from bisheng.core.ai import OllamaEmbeddings, OpenAIEmbeddings, AzureOpenAIEmbeddings, DashScopeEmbeddings
 from .base import BishengBase
+from ..models import LLMModel, LLMServer
 from ..utils import wrapper_bisheng_model_limit_check
-from ...const import LLMServerType
-from ...models.llm_server import LLMModel, LLMServer, LLMModelType
+from ...const import LLMServerType, LLMModelType
 
 
 def _get_user_kwargs(model_config: dict) -> dict:

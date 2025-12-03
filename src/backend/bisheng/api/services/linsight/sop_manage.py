@@ -30,8 +30,8 @@ from bisheng.database.models.linsight_sop import LinsightSOP, LinsightSOPDao, Li
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.llm.const import LLMModelType
 from bisheng.llm.domain.llm import BishengLLM
+from bisheng.llm.domain.models import LLMDao
 from bisheng.llm.domain.services import LLMService
-from bisheng.llm.models import LLMDao
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import util
 from bisheng.utils.embedding import decide_embeddings

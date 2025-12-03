@@ -37,7 +37,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (KnowledgeFileDao, Kn
 from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
     UpdateKnowledgeMetadataFieldsReq, ModifyKnowledgeFileMetaDataReq
 from bisheng.llm.const import LLMModelType
-from bisheng.llm.models import LLMDao
+from bisheng.llm.domain.models import LLMDao
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, calc_data_sha256
 from bisheng.worker.knowledge.qa import insert_qa_celery

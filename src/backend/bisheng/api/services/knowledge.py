@@ -62,7 +62,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileStatus, ParseType,
 )
 from bisheng.llm.const import LLMModelType
-from bisheng.llm.models import LLMDao
+from bisheng.llm.domain.models import LLMDao
 from bisheng.user.domain.models.user import UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid, generate_knowledge_index_name

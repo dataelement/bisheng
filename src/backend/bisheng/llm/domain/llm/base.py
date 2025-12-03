@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing_extensions import Self
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
-from ...models import LLMModel, LLMServer, LLMDao
+from ..models import LLMModel, LLMServer, LLMDao
 
 
 class BishengBase(BaseModel):
