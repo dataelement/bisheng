@@ -78,7 +78,6 @@ class NewKnowledgeBaseEventData(BaseEventData):
     kb_type: KnowledgeTypeEnum
 
 
-
 class FileParseEventData(BaseEventData):
     """Data model for file parse events."""
 
@@ -86,4 +85,17 @@ class FileParseEventData(BaseEventData):
 
     parse_type: Literal['etl4lm', 'un_etl4lm']
     status: Literal['success', 'failed', 'parse_failed']
+    app_type: ApplicationTypeEnum
+
+
+class MessageFeedbackEventData(BaseEventData):
+    """Data model for message feedback events."""
+
+    _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.MESSAGE_FEEDBACK
+
+    message_id: int
+    operation_type: Literal['like', 'dislike', 'copy']
+
+    app_id: str
+    app_name: str
     app_type: ApplicationTypeEnum

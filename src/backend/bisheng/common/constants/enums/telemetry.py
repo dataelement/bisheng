@@ -5,6 +5,7 @@ class StatusEnum(str, Enum):
     SUCCESS = 'success'
     FAILED = 'failed'
 
+
 # 广义应用类型枚举
 class ApplicationTypeEnum(str, Enum):
     """应用类型枚举"""
@@ -66,3 +67,5 @@ class BaseTelemetryTypeEnum(str, Enum):
     # 知识库文件删除事件
     DELETE_KNOWLEDGE_FILE = "delete_knowledge_file"
 
+    # 会话消息反馈事件
+    MESSAGE_FEEDBACK = "message_feedback"

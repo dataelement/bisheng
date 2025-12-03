@@ -187,7 +187,7 @@ def delete_flow(*,
     if not login_user.access_check(db_flow.user_id, flow_id, access_type):
         return UnAuthorizedError.return_resp()
     FlowDao.delete_flow(db_flow)
-    telemetry_service.log_event(
+    telemetry_service.log_event_sync(
         user_id=login_user.user_id,
         event_type=BaseTelemetryTypeEnum.DELETE_APPLICATION,
         trace_id=trace_id_var.get()

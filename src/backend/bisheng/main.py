@@ -33,6 +33,7 @@ def handle_http_exception(req: Request, exc: Exception) -> ORJSONResponse:
         msg = {'status_code': exc.code, 'status_message': exc.message,
                'data': data}
     else:
+        logger.exception('Unhandled exception')
         msg = {'status_code': 500, 'status_message': str(exc)}
     logger.error(f'{req.method} {req.url} {str(exc)}')
     return ORJSONResponse(content=msg)
@@ -47,6 +48,7 @@ def handle_request_validation_error(req: Request, exc: RequestValidationError) -
 _EXCEPTION_HANDLERS = {
     HTTPException: handle_http_exception,
     RequestValidationError: handle_request_validation_error,
+    BaseErrorCode: handle_http_exception,
     Exception: handle_http_exception
 }
 
@@ -62,7 +64,6 @@ async def lifespan(app: FastAPI):
     teardown_services()
     thread_pool.tear_down()
     await close_app_context()
-
 
 
 def create_app():

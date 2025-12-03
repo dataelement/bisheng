@@ -3,6 +3,7 @@ from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict
 from typing_extensions import Self
 
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from ...models import LLMModel, LLMServer, LLMDao
 
 
@@ -10,6 +11,12 @@ class BishengBase(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_by_name=True, validate_by_alias=True)
 
     model_id: int = Field(description="后端服务保存的model唯一ID")
+
+    # field for telemetry logging
+    app_id: str = Field(..., description='application id')
+    app_type: ApplicationTypeEnum = Field(..., description='application type')
+    app_name: str = Field(..., description='application name')
+    user_id: int = Field(..., description='invoke user id')
 
     # bisheng强相关的业务参数
     model_info: Optional[LLMModel] = Field(default=None, description="模型配置信息")
