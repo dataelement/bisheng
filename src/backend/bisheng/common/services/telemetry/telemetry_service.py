@@ -11,6 +11,7 @@ from bisheng.common.schemas.telemetry.base_telemetry_schema import T_EventData, 
     UserGroupInfo, UserRoleInfo
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.search.elasticsearch.manager import get_statistics_es_connection, get_statistics_es_connection_sync
+from bisheng.user.domain.models.user import User
 from bisheng.user.domain.repositories.implementations.user_repository_impl import UserRepositoryImpl
 
 logger = logging.getLogger(__name__)
@@ -114,6 +115,12 @@ class BaseTelemetryService(object):
             user_repository = UserRepositoryImpl(session)
             user = await user_repository.get_user_with_groups_and_roles_by_user_id(user_id)
 
+        if not user:
+            user = User(
+                user_id=user_id,
+                user_name=str(user_id)
+            )
+
         if user.groups is None:
             user.groups = []
         if user.roles is None:
@@ -142,6 +149,12 @@ class BaseTelemetryService(object):
         with get_sync_db_session() as session:
             user_repository = UserRepositoryImpl(session)
             user = user_repository.get_user_with_groups_and_roles_by_user_id_sync(user_id)
+
+        if not user:
+            user = User(
+                user_id=user_id,
+                user_name=str(user_id)
+            )
 
         if user.groups is None:
             user.groups = []
@@ -172,7 +185,7 @@ class BaseTelemetryService(object):
 
     # record event task
     async def _record_event_task(self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str,
-                                event_data: T_EventData = None):
+                                 event_data: T_EventData = None):
 
         # 获取信号量
         async with self._semaphore:
