@@ -52,7 +52,7 @@ export default function InputListItem({ node, data, preset, onChange, i18nPrefix
         const _val = val.slice(0, val.length - 1)
         onChange(_val)
 
-        setDebouncePresetQuestion(info)
+        info && setDebouncePresetQuestion(info)
     }
 
     return <div className='node-item mb-4'>

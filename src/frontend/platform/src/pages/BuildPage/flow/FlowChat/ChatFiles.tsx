@@ -10,7 +10,6 @@ import { useTranslation } from "react-i18next";
 
 // @accepts '.png,.jpg'
 export default function ChatFiles({ v, accepts, disabled, onChange }) {
-    console.log(accepts, 234);
 
     const { t } = useTranslation();
     const [files, setFiles] = useState([]);

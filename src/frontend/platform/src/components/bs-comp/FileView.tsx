@@ -258,7 +258,9 @@ export default function FileView({
                     const [width, height] = [entry.contentRect.width, entry.contentRect.height];
                     setBoxSize({ width, height });
                     const warpDom = document.getElementById('warp-pdf');
-                    warpDom.style.setProperty("--scale-factor", width / fileWidthRef.current + '');
+                    if (warpDom) {
+                        warpDom.style.setProperty("--scale-factor", width / fileWidthRef.current + '');
+                    }
                 }
             }
         }, 300);

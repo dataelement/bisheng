@@ -36,7 +36,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
     // const { uploadFlow } = useFlowStore()
     const { t, i18n } = useTranslation('flow')
     const [modelVersionId, setModelVersionId] = useState(0)
-
+    const navigate = useNavigate()
     const { state } = useLocation();
     const loca = state?.flow; // 获取传递的 flow 数据
 
