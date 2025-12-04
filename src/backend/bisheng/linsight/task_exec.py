@@ -6,7 +6,6 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional, List, Dict, Callable
 
-from bisheng.api.services.tool import ToolServices
 from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
@@ -26,6 +25,7 @@ from bisheng.linsight import utils as linsight_execute_utils
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.services import LLMService
+from bisheng.tool.domain.services.tool import ToolServices
 from bisheng_langchain.linsight.agent import LinsightAgent
 from bisheng_langchain.linsight.const import TaskStatus, ExecConfig
 from bisheng_langchain.linsight.event import NeedUserInput, GenerateSubTask, ExecStep, TaskStart, TaskEnd, BaseEvent
