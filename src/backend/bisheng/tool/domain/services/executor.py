@@ -267,6 +267,6 @@ class ToolExecutor(BaseTool):
                 app_type=self.app_type,
                 tool_id=self.tool_id,
                 tool_name=self.tool_name,
-                tool_type=self.tool_type,
+                tool_type=self.tool_is_preset,
                 status=status
             )}
