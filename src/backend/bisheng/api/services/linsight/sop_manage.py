@@ -7,6 +7,7 @@ import openpyxl
 from fastapi import UploadFile
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
+from langchain_core.language_models import BaseChatModel
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from loguru import logger
 
@@ -29,7 +30,6 @@ from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.models.linsight_sop import LinsightSOP, LinsightSOPDao, LinsightSOPRecord
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.llm.domain.const import LLMModelType
-from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.models import LLMDao
 from bisheng.llm.domain.services import LLMService
 from bisheng.user.domain.models.user import UserDao
@@ -45,7 +45,7 @@ class SOPManageService:
     collection_name = "col_linsight_sop"
 
     @staticmethod
-    async def generate_sop_summary(sop_content: str, llm: BishengLLM = None) -> Dict[str, str]:
+    async def generate_sop_summary(invoke_user_id: int, sop_content: str, llm: BaseChatModel = None) -> Dict[str, str]:
         """生成SOP摘要"""
         default_summary = {"sop_title": "SOP名称", "sop_description": "SOP描述"}
 
@@ -53,7 +53,9 @@ class SOPManageService:
             if llm is None:
                 workbench_conf = await LLMService.get_workbench_llm()
                 linsight_conf = settings.get_linsight_conf()
-                llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=linsight_conf.default_temperature)
+                llm = await LLMService.get_bisheng_linsight_llm(invoke_user_id=invoke_user_id,
+                                                                model_id=workbench_conf.task_model.id,
+                                                                temperature=linsight_conf.default_temperature)
             prompt_service = await get_prompt_manager()
             prompt_obj = prompt_service.render_prompt(
                 namespace="sop",
@@ -84,7 +86,7 @@ class SOPManageService:
         添加SOP记录
         """
         if not sop_record.description:
-            sop_summary = await SOPManageService.generate_sop_summary(sop_record.content, None)
+            sop_summary = await SOPManageService.generate_sop_summary(sop_record.user_id, sop_record.content, None)
             sop_record.description = sop_summary["sop_description"]
 
         return await LinsightSOPDao.create_sop_record(sop_record)

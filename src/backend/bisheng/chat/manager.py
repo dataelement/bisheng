@@ -9,7 +9,9 @@ from typing import Any, Dict, List
 from fastapi import Request, WebSocket, WebSocketDisconnect, status
 from loguru import logger
 
+from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
+from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse, FileResponse
 from bisheng.chat.client import ChatClient
@@ -22,7 +24,7 @@ from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.chat import (DocumentParseError, InputDataParseError,
                                          LLMExecutionError, SkillDeletedError,
                                          SkillNotOnlineError)
-from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, WebsocketAliveEventData
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.flow import InMemoryCache
 from bisheng.core.cache.manager import Subject, cache_manager
@@ -208,6 +210,7 @@ class ChatManager:
             work_type: WorkType,
             websocket: WebSocket,
             graph_data: dict = None):
+        start_time = time.time()
         client_key = generate_uuid()
         if work_type == WorkType.GPTS:
             chat_client = ChatClient(request,
@@ -264,6 +267,24 @@ class ChatManager:
             except Exception as e:
                 logger.exception(e)
             self.clear_client(client_key)
+            if work_type == WorkType.GPTS:
+                app_info = await AssistantService.get_one_assistant(client_id)
+                app_type = ApplicationTypeEnum.ASSISTANT
+            else:
+                app_info = await WorkFlowService.get_one_workflow_simple_info(client_id)
+                app_type = ApplicationTypeEnum.WORKFLOW
+            app_name = app_info.app_name if app_info else 'unknown'
+            await telemetry_service.log_event(user_id=login_user.user_id,
+                                              event_type=BaseTelemetryTypeEnum.WEBSOCKET_ALIVE,
+                                              trace_id=trace_id_var.get(),
+                                              event_data=WebsocketAliveEventData(
+                                                  app_id=client_id,
+                                                  app_name=app_name,
+                                                  app_type=app_type,
+                                                  chat_id=chat_id,
+                                                  start_time=int(start_time),
+                                                  end_time=int(time.time()),
+                                              ))
 
     async def handle_websocket(
             self,
@@ -274,6 +295,7 @@ class ChatManager:
             gragh_data: dict = None,
             source: str = "platform"
     ):
+        start_time = time.time()
         # 建立连接，并存储映射，兼容不复用ws 场景
         key_list = set([get_cache_key(flow_id, chat_id)])
         await self.connect(flow_id, chat_id, websocket)
@@ -411,6 +433,17 @@ class ChatManager:
             except Exception as e:
                 logger.exception(e)
             self.disconnect(flow_id, chat_id)
+            flow_info = await WorkFlowService.get_one_workflow_simple_info(flow_id)
+            await telemetry_service.log_event(user_id=user_id, event_type=BaseTelemetryTypeEnum.WEBSOCKET_ALIVE,
+                                              trace_id=trace_id_var.get(),
+                                              event_data=WebsocketAliveEventData(
+                                                  app_id=flow_id,
+                                                  app_name=flow_info.name if flow_info else 'unknown',
+                                                  app_type=ApplicationTypeEnum.SKILL,
+                                                  chat_id=chat_id,
+                                                  start_time=int(start_time),
+                                                  end_time=int(time.time()),
+                                              ))
 
     async def _process_when_payload(self, flow_id: str, chat_id: str,
                                     autogen_pool: ThreadPoolManager, **kwargs):

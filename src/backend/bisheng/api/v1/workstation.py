@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from datetime import datetime
 from typing import Optional, Union
 from urllib.parse import unquote
@@ -27,7 +28,7 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
 from bisheng.common.errcode.workstation import WebSearchToolNotFoundError, ConversationNotFoundError, \
     AgentAlreadyExistsError
-from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, WebsocketAliveEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.cache.redis_manager import get_redis_client
@@ -37,6 +38,7 @@ from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
+from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.llm import BishengLLM
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
@@ -316,6 +318,7 @@ async def chat_completions(
         data: APIChatCompletion,
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
+    start_time = time.time()
     try:
         wsConfig = await WorkStationService.aget_config()
         conversationId = data.conversationId
@@ -372,7 +375,11 @@ async def chat_completions(
                 ))
 
         # 掉用bishengllm 实现sse 返回
-        bishengllm = BishengLLM(model_id=data.model)
+        bishengllm = await LLMService.get_bisheng_llm(model_id=data.model,
+                                                      app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                                                      app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+                                                      app_type=ApplicationTypeEnum.DAILY_CHAT,
+                                                      user_id=login_user.user_id)
 
         # 模型掉用实现流式输出
         SSEClient = SSECallbackClient()
@@ -536,7 +543,21 @@ async def chat_completions(
             asyncio.create_task(
                 genTitle(data.text, final_result.content if final_result else final_res, bishengllm, conversationId))
 
-    return StreamingResponse(event_stream(), media_type='text/event-stream')
+    try:
+        return StreamingResponse(event_stream(), media_type='text/event-stream')
+    finally:
+        telemetry_service.log_event(user_id=login_user.user_id,
+                                    event_type=BaseTelemetryTypeEnum.WEBSOCKET_ALIVE,
+                                    trace_id=trace_id_var.get(),
+                                    event_data=WebsocketAliveEventData(
+                                        app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                                        app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+                                        app_type=ApplicationTypeEnum.DAILY_CHAT,
+                                        chat_id=conversationId,
+
+                                        start_time=int(start_time),
+                                        end_time=int(time.time())
+                                    ))
 
 
 @router.get('/app/frequently_used')

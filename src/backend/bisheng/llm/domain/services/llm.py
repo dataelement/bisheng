@@ -432,6 +432,14 @@ class LLMService:
         return BishengLLM(**kwargs)
 
     @classmethod
+    async def get_bisheng_linsight_llm(cls, invoke_user_id: int, **kwargs) -> BaseChatModel:
+        return await BishengLLM.get_bisheng_llm(app_id=ApplicationTypeEnum.LINSIGHT.value,
+                                                app_name=ApplicationTypeEnum.LINSIGHT.value,
+                                                app_type=ApplicationTypeEnum.LINSIGHT,
+                                                user_id=invoke_user_id,
+                                                **kwargs)
+
+    @classmethod
     async def get_bisheng_rerank(cls, **kwargs) -> BaseDocumentCompressor:
         return await BishengRerank.get_bisheng_rerank(**kwargs)
 

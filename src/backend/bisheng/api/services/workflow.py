@@ -14,7 +14,7 @@ from bisheng.common.errcode.flow import WorkFlowInitError
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.services import telemetry_service
 from bisheng.core.logger import trace_id_var
-from bisheng.database.models.flow import FlowDao, FlowStatus, FlowType
+from bisheng.database.models.flow import FlowDao, FlowStatus, FlowType, Flow
 from bisheng.database.models.flow import UserLinkType
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
@@ -421,3 +421,10 @@ class WorkFlowService(BaseService):
             one['logo'] = cls.get_logo_share_link(one['logo'])
 
         return data, total
+
+    @classmethod
+    async def get_one_workflow_simple_info(cls, workflow_id: str) -> Flow | None:
+        """
+        获取单个工作流详情
+        """
+        return await FlowDao.get_one_flow_simple(workflow_id)

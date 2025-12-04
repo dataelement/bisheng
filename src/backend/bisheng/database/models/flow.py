@@ -444,3 +444,25 @@ class FlowDao(FlowBase):
                 'update_time': one[8]
             })
         return data, total
+
+    @classmethod
+    async def get_one_flow_simple(cls, flow_id: str) -> Optional[Flow]:
+        """ get simple info of one flow by id. not contain data field """
+        statement = select(Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id,
+                           Flow.status, Flow.create_time, Flow.update_time).where(Flow.id == flow_id)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            one = result.first()
+            if not one:
+                return None
+            return Flow(**{
+                'id': one[0],
+                'name': one[1],
+                'description': one[2],
+                'flow_type': one[3],
+                'logo': one[4],
+                'user_id': one[5],
+                'status': one[6],
+                'create_time': one[7],
+                'update_time': one[8]
+            })

@@ -91,13 +91,15 @@ class LinsightWorkbenchImpl:
         """Bisheng LLM相关错误"""
 
     @classmethod
-    async def _get_llm(cls) -> (BishengLLM, Any):
+    async def _get_llm(cls, invoke_user_id: int) -> (BishengLLM, Any):
         # 获取并验证工作台配置
         workbench_conf = await cls._get_workbench_config()
 
         # 创建LLM实例
         linsight_conf = settings.get_linsight_conf()
-        llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=linsight_conf.default_temperature)
+        llm = await LLMService.get_bisheng_linsight_llm(invoke_user_id=invoke_user_id,
+                                                        model_id=workbench_conf.task_model.id,
+                                                        temperature=linsight_conf.default_temperature)
         return llm, workbench_conf
 
     @classmethod
@@ -259,7 +261,7 @@ class LinsightWorkbenchImpl:
             包含任务标题的字典
         """
         try:
-            llm, _ = await cls._get_llm()
+            llm, _ = await cls._get_llm(login_user.user_id)
 
             # 生成prompt
             prompt = await cls._generate_title_prompt(question)
@@ -385,7 +387,7 @@ class LinsightWorkbenchImpl:
                 return
             try:
                 # 创建LLM和工具
-                llm, workbench_conf = await cls._get_llm()
+                llm, workbench_conf = await cls._get_llm(session_version.user_id)
             except Exception as e:
                 logger.error(f"生成SOP内容失败: session_version_id={linsight_session_version_id}, error={str(e)}")
                 raise cls.BishengLLMError(str(e))
@@ -970,7 +972,7 @@ class LinsightWorkbenchImpl:
             file_list = await cls.prepare_file_list(session_version_model)
 
             # 创建LLM和工具
-            llm, workbench_conf = await cls._get_llm()
+            llm, workbench_conf = await cls._get_llm(session_version_model.user_id)
             tools = await cls._prepare_tools(session_version_model, llm)
 
             # 获取历史摘要

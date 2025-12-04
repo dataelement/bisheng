@@ -23,14 +23,18 @@ from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPMan
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
     SubmitFileSchema, LinsightToolSchema, ToolChildrenSchema
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.common.errcode.linsight import LinsightQuestionError, LinsightUseUpError, LinsightModifySopError, \
     LinsightStartTaskError, LinsightSessionVersionRunningError, LinsightQueueStatusError, FileUploadError, \
     SopShowcaseError
 from bisheng.common.errcode.server import InvalidOperationError, ResourceDownloadError
+from bisheng.common.schemas.telemetry.event_data_schema import WebsocketAliveEventData
+from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
     LinsightSessionVersion
@@ -587,7 +591,7 @@ async def task_message_stream(
     :param session_version_id:
     :return:
     """
-
+    start_time = time.time()
     try:
         message_handler = MessageStreamHandle(websocket=websocket, session_version_id=session_version_id)
 
@@ -596,6 +600,20 @@ async def task_message_stream(
     except Exception as e:
         await websocket.close(code=1000, reason=str(e))
         return
+    finally:
+        session_version_info = await LinsightSessionVersionDao.get_by_id(session_version_id)
+
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.WEBSOCKET_ALIVE,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=WebsocketAliveEventData(
+                                              app_id=ApplicationTypeEnum.LINSIGHT.value,
+                                              app_name=ApplicationTypeEnum.LINSIGHT.value,
+                                              app_type=ApplicationTypeEnum.LINSIGHT,
+                                              chat_id=session_version_info.session_id if session_version_info else "",
+                                              start_time=int(start_time),
+                                              end_time=int(time.time())
+                                          ))
 
 
 # 批量下载任务文件

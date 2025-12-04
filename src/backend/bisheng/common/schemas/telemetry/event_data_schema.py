@@ -126,3 +126,34 @@ class ModelInvokeEventData(BaseEventData):
     output_token: int  # 输出token数
     cache_token: int  # 缓存token数
     total_token: int  # 总token数
+
+
+class WebsocketAliveEventData(BaseEventData):
+    """Data model for websocket alive events."""
+
+    _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.WEBSOCKET_ALIVE
+
+    app_id: str
+    app_name: str
+    app_type: ApplicationTypeEnum
+
+    chat_id: str | None
+
+    start_time: int
+    end_time: int
+
+
+class ApplicationInvokeEventData(BaseEventData):
+    """Data model for application invoke events."""
+
+    _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.APPLICATION_INVOKE
+
+    app_id: str
+    app_name: str
+    app_type: ApplicationTypeEnum
+
+    chat_id: str | None
+
+    start_time: int
+    end_time: int
+    process_time: int

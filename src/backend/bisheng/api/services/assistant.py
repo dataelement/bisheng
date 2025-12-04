@@ -148,6 +148,11 @@ class AssistantService(BaseService, AssistantUtils):
                                            flow_list=flow_list,
                                            knowledge_list=knowledge_list))
 
+    @classmethod
+    async def get_one_assistant(cls, assistant_id: str) -> Optional[Assistant]:
+        assistant = await AssistantDao.aget_one_assistant(assistant_id)
+        return assistant
+
     # 创建助手
     @classmethod
     async def create_assistant(cls, request: Request, login_user: UserPayload, assistant: Assistant) \

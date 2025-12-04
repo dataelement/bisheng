@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional, List, Dict, Callable
 
+from langchain_core.language_models import BaseChatModel
 from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
@@ -23,7 +24,6 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
     LinsightSessionVersion
 from bisheng.linsight import utils as linsight_execute_utils
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
-from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.services import LLMService
 from bisheng.tool.domain.services.tool import ToolServices
 from bisheng_langchain.linsight.agent import LinsightAgent
@@ -60,7 +60,7 @@ class LinsightWorkflowTask:
         self.file_dir: Optional[str] = None
         self.session_version_id: Optional[str] = None
         self.step_event_extra_files: List[Dict] = []  # 用于存储步骤事件额外处理的文件信息
-        self.llm: Optional[BishengLLM] = None  # 用于存储LLM实例
+        self.llm: Optional[BaseChatModel] = None  # 用于存储LLM实例
 
     # ==================== 资源管理 ====================
 
@@ -132,7 +132,7 @@ class LinsightWorkflowTask:
         await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
 
         # 初始化执行组件
-        self.llm = await self._get_llm()
+        self.llm = await self._get_llm(invoke_user_id=session_model.user_id)
         tools = await self._generate_tools(session_model)
         try:
             # 生成工具列表
@@ -186,12 +186,14 @@ class LinsightWorkflowTask:
 
     # ==================== 组件初始化 ====================
 
-    async def _get_llm(self) -> BishengLLM:
+    async def _get_llm(self, invoke_user_id: int) -> BaseChatModel:
         """获取LLM实例"""
         try:
             workbench_conf = await LLMService.get_workbench_llm()
             linsight_conf = settings.get_linsight_conf()
-            return BishengLLM(model_id=workbench_conf.task_model.id, temperature=linsight_conf.default_temperature)
+            return await LLMService.get_bisheng_linsight_llm(invoke_user_id=invoke_user_id,
+                                                             model_id=workbench_conf.task_model.id,
+                                                             temperature=linsight_conf.default_temperature)
         except Exception as e:
             raise TaskExecutionError("任务已终止，请联系管理员检查灵思任务执行模型状态")
 

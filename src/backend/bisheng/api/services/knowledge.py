@@ -67,7 +67,6 @@ from bisheng.user.domain.models.user import UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid, generate_knowledge_index_name
 from bisheng.utils import get_request_ip
-from bisheng.worker.knowledge import file_worker
 
 
 class KnowledgeService(KnowledgeUtils):
@@ -556,6 +555,8 @@ class KnowledgeService(KnowledgeUtils):
             background_tasks: BackgroundTasks,
             req_data: KnowledgeFileProcess,
     ) -> List[KnowledgeFile]:
+        from bisheng.worker.knowledge import file_worker
+
         """处理上传的文件"""
         knowledge, failed_files, process_files, preview_cache_keys = (
             cls.save_knowledge_file(login_user, req_data)
@@ -606,6 +607,7 @@ class KnowledgeService(KnowledgeUtils):
         :param req_data:
         :return:
         """
+        from bisheng.worker.knowledge import file_worker
 
         knowledge = await KnowledgeDao.async_query_by_id(req_data.knowledge_id)
         if not knowledge:
@@ -644,6 +646,8 @@ class KnowledgeService(KnowledgeUtils):
             background_tasks: BackgroundTasks,
             req_data: dict,
     ):
+        from bisheng.worker.knowledge import file_worker
+
         db_file_retry = req_data.get("file_objs")
         if not db_file_retry:
             return []
@@ -890,6 +894,8 @@ class KnowledgeService(KnowledgeUtils):
     def delete_knowledge_file(
             cls, request: Request, login_user: UserPayload, file_ids: List[int]
     ):
+        from bisheng.worker.knowledge import file_worker
+
         knowledge_file = KnowledgeFileDao.select_list(file_ids)
         if not knowledge_file:
             raise NotFoundError.http_exception()
@@ -1225,6 +1231,8 @@ class KnowledgeService(KnowledgeUtils):
             login_user: UserPayload,
             knowledge: Knowledge,
     ) -> Any:
+        from bisheng.worker.knowledge import file_worker
+
         await KnowledgeDao.async_update_state(knowledge.id, KnowledgeState.COPYING, update_time=knowledge.update_time)
         knowldge_dict = knowledge.model_dump()
         knowldge_dict.pop("id")
