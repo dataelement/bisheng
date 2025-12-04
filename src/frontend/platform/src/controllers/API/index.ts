@@ -849,6 +849,10 @@ export async function getChatHistory(flowId: string, chatId: string, pageSize: n
  * 赞 踩消息
  */
 export const likeChatApi = (chatId, liked) => {
+  liked && copyTrackingApi({
+    message_id: chatId,
+    operation_type: liked === 1 ? 'like' : 'dislike'
+  })
   return axios.post(`/api/v1/liked`, { message_id: chatId, liked });
 };
 
@@ -863,7 +867,18 @@ export const disLikeCommentApi = (message_id, comment) => {
  * 点击复制上报
  * */
 export const copyTrackingApi = (msgId) => {
+  trackingApi({
+    message_id: msgId,
+    operation_type: 'copy'
+  })
   return axios.post(`/api/v1/chat/copied`, { message_id: msgId });
+}
+
+/**
+ * Tracking
+ */
+export const trackingApi = (data: { message_id: string, operation_type: 'dislike' | 'like' | 'copy' }) => {
+  return axios.post(`/api/v1/session/chat/message/telemetry`, data);
 }
 
 /**

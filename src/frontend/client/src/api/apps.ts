@@ -68,6 +68,7 @@ export const baseMsgItem = {
  * 赞 踩消息
  */
 export const likeChatApi = (msgId, liked) => {
+    liked && trackingApi({ message_id: msgId, operation_type: liked === 1 ? 'like' : 'dislike' });
     return request.post(`/api/v1/liked`, { message_id: msgId, liked });
 };
 
@@ -75,6 +76,7 @@ export const likeChatApi = (msgId, liked) => {
  * 点击复制上报
  * */
 export const copyTrackingApi = (msgId) => {
+    trackingApi({ message_id: msgId, operation_type: 'copy' });
     return request.post(`/api/v1/chat/copied`, { message_id: msgId });
 }
 
@@ -85,6 +87,12 @@ export const disLikeCommentApi = (message_id, comment) => {
     return request.post(`/api/v1/chat/comment`, { message_id, comment });
 };
 
+/**
+ * Tracking
+ */
+export const trackingApi = (data: { message_id: string, operation_type: 'dislike' | 'like' | 'copy' }) => {
+    return request.post(`/api/v1/session/chat/message/telemetry`, data);
+}
 
 /**
  * 技能 工作流详情
