@@ -45,6 +45,9 @@ class BaseTelemetryEvent(BaseModel, Generic[T_EventData]):
 
         dict_data = super().model_dump(*args, **kwargs)
 
+        if self.event_data is None:
+            return dict_data
+
         event_name = self.event_data.event_name
 
         dict_data['event_data'] = {f"{event_name}_{k}": v for k, v in dict_data['event_data'].items()}
