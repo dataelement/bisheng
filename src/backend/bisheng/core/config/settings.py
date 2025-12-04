@@ -4,6 +4,7 @@ import os
 import re
 from typing import Dict, List, Optional, Union
 
+from celery.schedules import crontab
 from cryptography.fernet import Fernet
 from loguru import logger
 from pydantic import ConfigDict, BaseModel, Field, field_validator, model_validator
@@ -140,6 +141,7 @@ class WorkflowConf(BaseModel):
 class CeleryConf(BaseModel):
     """ Celery 配置 """
     task_routers: Optional[Dict] = Field(default_factory=dict, description='任务路由配置')
+    beat_schedule: Optional[Dict] = Field(default_factory=dict, description='定时任务配置')
 
     @model_validator(mode='after')
     def validate(self):
@@ -148,6 +150,16 @@ class CeleryConf(BaseModel):
                 "bisheng.worker.knowledge.*": {"queue": "knowledge_celery"},  # 知识库相关任务
                 "bisheng.worker.workflow.*": {"queue": "workflow_celery"},  # 工作流执行相关任务
             }
+        if 'telemetry_mid_user_increment' not in self.beat_schedule:
+            self.beat_schedule['telemetry_mid_user_increment'] = {
+                'task': 'bisheng.worker.telemetry.mid_table.sync_mid_user_increment',
+                'schedule': crontab('*/30 0 * * *'),  # 00:30 exec every day
+            }
+
+        # convert str to crontab
+        for key, task_info in self.beat_schedule.items():
+            if isinstance(task_info['schedule'], str):
+                self.beat_schedule[key]['schedule'] = crontab(task_info['schedule'])
         return self
 
 
