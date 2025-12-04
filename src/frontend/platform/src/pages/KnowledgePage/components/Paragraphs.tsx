@@ -720,6 +720,10 @@ export default function Paragraphs({ fileId, onBack }) {
         };
     }, [metadataDialog.open, sideDialog.open, updateSideDialogPosition]);
 
+    const handleWriteableChange = (writable: boolean) => {
+        setIsKnowledgeAdmin(writable);
+    }
+
     const handleSaveUserMetadata = useCallback(async () => {
         const knowledge_id = selectedFileId
         const user_metadata_list = mainMetadataList.map(item => {
@@ -774,6 +778,7 @@ export default function Paragraphs({ fileId, onBack }) {
                     <FileSelector
                         knowledgeId={id}
                         selectedFileId={selectedFileId}
+                        onWriteableChange={handleWriteableChange}
                         onFileChange={handleFileChange}
                         disabled={false}
                     />

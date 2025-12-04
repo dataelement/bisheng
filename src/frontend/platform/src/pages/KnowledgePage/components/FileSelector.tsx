@@ -11,6 +11,7 @@ interface FileSelectorProps {
     knowledgeId: string | number;
     selectedFileId: string;
     onFileChange: (fileId: string, fileData: any) => void;
+    onWriteableChange: (writeable: boolean) => void;
     disabled?: boolean;
     className?: string;
 }
@@ -42,6 +43,7 @@ export default function FileSelector({
     knowledgeId,
     selectedFileId,
     onFileChange,
+    onWriteableChange,
     disabled = false,
     className = ''
 }: FileSelectorProps) {
@@ -105,8 +107,11 @@ export default function FileSelector({
                 name: searchQuery,
                 status: 2 // 只加载已解析成功的文件
             });
-
+            if (onWriteableChange) {
+                onWriteableChange(res.writeable);
+            }
             const filesData = res?.data || [];
+            
             const formattedFiles: FileOption[] = filesData.map((el: FileData) => ({
                 label: el?.file_name || t('file.unnamedFile'),
                 value: String(el?.id || ''),

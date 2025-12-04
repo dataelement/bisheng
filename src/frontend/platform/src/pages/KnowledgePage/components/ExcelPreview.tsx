@@ -632,7 +632,7 @@ const ExcelPreview = ({ filePath }) => {
           ref={tableContainerRef}
           className="flex-1 border border-gray-200 bg-white relative overflow-auto"
           style={{
-            minHeight: screenSize === "small" ? "520px" : "684px",
+            minHeight: screenSize === "small" ? "480px" : "684px",
             maxHeight: "calc(100vh - 300px)",
             width: "100%",
             maxWidth: getTableContainerMaxWidth(),
