@@ -16,6 +16,7 @@ class UserGroupInfo(BaseModel):
 class UserRoleInfo(BaseModel):
     role_id: int
     role_name: str
+    group_id: int
 
 
 class UserContext(BaseModel):
@@ -25,7 +26,7 @@ class UserContext(BaseModel):
     user_role_infos: List[UserRoleInfo] = Field(default_factory=list)
 
 
-T_EventData = TypeVar("T_EventData", bound='BaseEventData')
+T_EventData = TypeVar("T_EventData", bound=BaseEventData)
 
 
 class BaseTelemetryEvent(BaseModel, Generic[T_EventData]):

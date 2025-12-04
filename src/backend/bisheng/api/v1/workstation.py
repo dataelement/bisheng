@@ -278,7 +278,10 @@ async def webSearch(query: str, user_id: int):
     web_search_info = GptsToolsDao.get_tool_by_tool_key("web_search")
     if not web_search_info:
         raise WebSearchToolNotFoundError(exception=Exception("No web_search tool found in database"))
-    web_search_tool = await ToolExecutor.init_by_tool_id(web_search_info.id, app_id='normal', app_name='normal',
+    web_search_tool = await ToolExecutor.init_by_tool_id(web_search_info.id,
+                                                         app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                                                         app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+                                                         app_type=ApplicationTypeEnum.DAILY_CHAT,
                                                          user_id=user_id)
     if not web_search_tool:
         raise WebSearchToolNotFoundError(exception=Exception("No web_search tool found in gpts tools"))

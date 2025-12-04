@@ -141,6 +141,7 @@ class AgentNode(BaseNode):
         if self._tools:
             tool_ids = [int(one['key']) for one in self._tools]
             return ToolExecutor.init_by_tool_ids_sync(tool_ids, app_id=self.workflow_id, app_name=self.workflow_name,
+                                                      app_type=ApplicationTypeEnum.WORKFLOW,
                                                       user_id=self.user_id)
         else:
             return []

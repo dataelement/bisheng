@@ -6,6 +6,7 @@ from pydantic import SecretStr
 
 from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
 from bisheng.api.services.workstation import WorkStationService
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.tool.domain.services.executor import ToolExecutor
 from bisheng.tool.domain.services.tool import ToolServices
 from bisheng_langchain.linsight.agent import LinsightAgent
@@ -33,6 +34,7 @@ async def get_linsight_agent():
     ws_config = await WorkStationService.aget_config()
     config_tool_ids = LinsightWorkbenchImpl._extract_tool_ids(ws_config.linsightConfig.tools or [])
     tools = await ToolExecutor.init_by_tool_ids(config_tool_ids, app_id='linsight_test', app_name='linsight_test',
+                                                app_type=ApplicationTypeEnum.LINSIGHT,
                                                 user_id=0, llm=chat)
     # 获取灵思预置的工具，本地文件处理和知识库检索
     linsight_tools = await ToolServices.init_linsight_tools(root_path=root_path)

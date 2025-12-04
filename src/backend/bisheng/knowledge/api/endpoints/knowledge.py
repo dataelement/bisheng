@@ -587,26 +587,9 @@ async def get_export_url(*,
     if keyword:
         question = keyword
 
-    def get_qa_source(source):
-        '0: 未知 1: 手动；2: 审计, 3: api'
-        if int(source) == 1:
-            return "手动创建"
-        elif int(source) == 2:
-            return "审计创建"
-        elif int(source) == 3:
-            return "api创建"
-        return "未知"
-
-    def get_status(statu):
-        if int(statu) == 1:
-            return "开启"
-        return "关闭"
-
     page_num = 1
     total_num = 0
     page_size = max_lines
-    user_list = UserDao.get_all_users()
-    user_map = {user.user_id: user.user_name for user in user_list}
     file_list = []
     file_pr = datetime.now().strftime('%Y%m%d%H%M%S')
     file_index = 1
@@ -621,12 +604,7 @@ async def get_export_url(*,
         for qa in data:
             qa_dict_list.append({
                 "问题": qa['questions'][0],
-                "答案": json.loads(qa['answers'])[0],
-                # "类型":get_qa_source(qa['source']),
-                # "创建时间":qa['create_time'],
-                # "更新时间":qa['update_time'],
-                # "创建者":user_map.get(qa['user_id'], qa['user_id']),
-                # "状态":get_status(qa['status']),
+                "答案": json.loads(qa['answers'])[0]
             })
             for index, question in enumerate(qa['questions']):
                 if index == 0:

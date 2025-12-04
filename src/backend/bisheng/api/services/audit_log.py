@@ -27,6 +27,7 @@ from bisheng.user.domain.models.user import UserDao, User
 from bisheng.utils import generate_uuid
 
 
+# todo change to async or submit thread pool
 class AuditLogService:
 
     @classmethod

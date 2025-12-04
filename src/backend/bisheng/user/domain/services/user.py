@@ -1,5 +1,6 @@
 from base64 import b64decode
 from datetime import datetime
+from typing import List
 
 import rsa
 from fastapi import Request, Depends
@@ -129,8 +130,8 @@ class UserService:
                                 auth_jwt.cookie_conf.jwt_token_expire_time + 3600)
 
         # 记录审计日志
-        AuditLogService.user_login(LoginUser(user_id=db_user.user_id, user_name=db_user.user_name),
-                                   get_request_ip(request))
+        login_user = await LoginUser.init_login_user(db_user.user_id, db_user.password)
+        AuditLogService.user_login(login_user, get_request_ip(request))
 
         # 记录Telemetry日志
         await telemetry_service.log_event(user_id=db_user.user_id, event_type=BaseTelemetryTypeEnum.USER_LOGIN,
@@ -138,3 +139,10 @@ class UserService:
                                           event_data=UserLoginEventData(method="password"))
 
         return resp_200(UserRead(access_token=access_token, **db_user.__dict__))
+
+    @classmethod
+    def get_user_by_time_range(cls, start_time: datetime, end_time: datetime,
+                               page: int = 1, page_size: int = 100) -> List[User]:
+        """ 根据创建时间获取用户列表 """
+        return UserDao.get_user_with_group_role(page=page, page_size=page_size,
+                                                start_time=start_time, end_time=end_time)

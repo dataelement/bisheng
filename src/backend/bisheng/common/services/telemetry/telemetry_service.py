@@ -39,7 +39,8 @@ INDEX_MAPPING = {
                         "type": "object",
                         "properties": {
                             "role_id": {"type": "integer"},
-                            "role_name": {"type": "keyword"}
+                            "role_name": {"type": "keyword"},
+                            "group_id": {"type": "integer"},
                         }
                     }
                 }
@@ -138,7 +139,8 @@ class BaseTelemetryService(object):
             user_role_infos=[
                 UserRoleInfo(
                     role_id=role.id,
-                    role_name=role.role_name
+                    role_name=role.role_name,
+                    group_id=role.group_id,
                 ) for role in user.roles
             ]
         )
@@ -173,7 +175,8 @@ class BaseTelemetryService(object):
             user_role_infos=[
                 UserRoleInfo(
                     role_id=role.id,
-                    role_name=role.role_name
+                    role_name=role.role_name,
+                    group_id=role.group_id,
                 ) for role in user.roles
             ]
         )

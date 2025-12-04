@@ -45,7 +45,6 @@ class User(UserBase, table=True):
     groups: List["Group"] = Relationship(link_model=UserGroup)
     roles: List["Role"] = Relationship(link_model=UserRole)
 
-
     __tablename__ = "user"
 
 
@@ -59,7 +58,6 @@ class UserRead(UserBase):
 
 class UserQuery(UserBase):
     pass
-
 
 
 class UserLogin(UserBase):
@@ -253,5 +251,21 @@ class UserDao(UserBase):
         statement = select(User)
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
+        with get_sync_db_session() as session:
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_user_with_group_role(cls, start_time: datetime = None, end_time: datetime = None, page: int = 0,
+                                 page_size: int = 0) -> List[User]:
+        statement = select(User)
+        if start_time and end_time:
+            statement = statement.where(User.create_time >= start_time, User.create_time < end_time)
+        if page and page_size:
+            statement = statement.offset((page - 1) * page_size).limit(page_size)
+        statement = statement.order_by(User.user_id)
+        statement = statement.options(
+            selectinload(User.groups),  # type: ignore
+            selectinload(User.roles)  # type: ignore
+        )
         with get_sync_db_session() as session:
             return session.exec(statement).all()

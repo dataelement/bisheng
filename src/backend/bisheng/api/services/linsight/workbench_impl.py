@@ -887,7 +887,9 @@ class LinsightWorkbenchImpl:
 
         bisheng_code_tool.extra = code_config
 
-        tools = await ToolExecutor.init_by_tool_id(tool=bisheng_code_tool, app_id='lisight', app_name='linsight',
+        tools = await ToolExecutor.init_by_tool_id(tool=bisheng_code_tool, app_id=ApplicationTypeEnum.LINSIGHT.value,
+                                                   app_name=ApplicationTypeEnum.LINSIGHT.value,
+                                                   app_type=ApplicationTypeEnum.LINSIGHT,
                                                    user_id=user_id)
         return [tools]
 
@@ -930,7 +932,9 @@ class LinsightWorkbenchImpl:
 
         # 初始化工具
         if valid_tool_ids:
-            tools.extend(await ToolExecutor.init_by_tool_ids(valid_tool_ids, app_id='lisight', app_name='linsight',
+            tools.extend(await ToolExecutor.init_by_tool_ids(valid_tool_ids, app_id=ApplicationTypeEnum.LINSIGHT.value,
+                                                             app_name=ApplicationTypeEnum.LINSIGHT.value,
+                                                             app_type=ApplicationTypeEnum.LINSIGHT,
                                                              user_id=session_version.user_id))
 
         return tools
