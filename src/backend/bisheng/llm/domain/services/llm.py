@@ -627,28 +627,27 @@ class LLMService:
         return WorkbenchModelConfig(**ret)
 
     @classmethod
-    async def invoke_workbench_asr(cls, file: UploadFile) -> str:
-        """
-        调用工作台的asr模型 将语音转为文字
-        :param file:
-        :return:
-        """
+    async def invoke_workbench_asr(cls, login_user: UserPayload, file: UploadFile) -> str:
+        """ 调用工作台的asr模型 将语音转为文字 """
         if not file:
             raise ServerError.http_exception("no file upload")
         workbench_llm = await cls.get_workbench_llm()
         if not workbench_llm.asr_model or not workbench_llm.asr_model.id:
             raise NoAsrModelConfigError.http_exception()
-        model_info = await cls.get_bisheng_asr(model_id=int(workbench_llm.asr_model.id))
+        model_info = await LLMDao.aget_model_by_id(int(workbench_llm.asr_model.id))
         if not model_info:
             raise AsrModelConfigDeletedError.http_exception()
-        asr_client = await cls.get_bisheng_asr(model_id=int(workbench_llm.asr_model.id))
+        asr_client = await cls.get_bisheng_asr(model_id=int(workbench_llm.asr_model.id),
+                                               app_id=ApplicationTypeEnum.ASR.value,
+                                               app_name=ApplicationTypeEnum.ASR.value,
+                                               app_type=ApplicationTypeEnum.ASR,
+                                               user_id=login_user.id)
         return await asr_client.ainvoke(file.file)
 
     @classmethod
-    async def invoke_workbench_tts(cls, text: str) -> str:
+    async def invoke_workbench_tts(cls, login_user: UserPayload, text: str) -> str:
         """
         调用工作台的tts模型 将文字转为语音
-        :param text:
         :return: minio的路径
         """
 
@@ -669,7 +668,11 @@ class LLMService:
         if cache_value:
             return cache_value
 
-        tts_client = await cls.get_bisheng_tts(model_id=int(workbench_llm.tts_model.id))
+        tts_client = await cls.get_bisheng_tts(model_id=int(workbench_llm.tts_model.id),
+                                               app_id=ApplicationTypeEnum.TTS.value,
+                                               app_name=ApplicationTypeEnum.TTS.value,
+                                               app_type=ApplicationTypeEnum.TTS,
+                                               user_id=login_user.id)
         audio_bytes = await tts_client.ainvoke(text)
         # upload to minio
         object_name = f"tts/{generate_uuid()}.mp3"

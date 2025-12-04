@@ -137,7 +137,7 @@ class AssistantAgent(AssistantUtils):
             tools = await ToolExecutor.init_by_tool_ids(tool_ids,
                                                         app_id=self.assistant.id,
                                                         app_name=self.assistant.name,
-                                                        app_type=1,
+                                                        app_type=ApplicationTypeEnum.ASSISTANT,
                                                         user_id=self.invoke_user_id,
                                                         llm=self.llm,
                                                         callbacks=callbacks)

@@ -28,6 +28,10 @@ class ApplicationTypeEnum(str, Enum):
     EVALUATION = "evaluation"
     # 模型连通性测试
     MODEL_TEST = "model_test"
+    # ASR
+    ASR = "asr"
+    # TTS
+    TTS = "tts"
 
 
 class BaseTelemetryTypeEnum(str, Enum):
@@ -71,3 +75,6 @@ class BaseTelemetryTypeEnum(str, Enum):
 
     # 会话消息反馈事件
     MESSAGE_FEEDBACK = "message_feedback"
+
+    # 模型调用事件
+    MODEL_INVOKE = "model_invoke"

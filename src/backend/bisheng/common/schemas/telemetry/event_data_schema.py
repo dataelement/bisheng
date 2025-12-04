@@ -99,3 +99,30 @@ class MessageFeedbackEventData(BaseEventData):
     app_id: str
     app_name: str
     app_type: ApplicationTypeEnum
+
+
+class ModelInvokeEventData(BaseEventData):
+    """Data model for model invoke events."""
+
+    _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.MODEL_INVOKE
+
+    model_id: int
+    model_name: str
+    model_type: str
+    model_server_id: int
+    model_server_name: str
+
+    app_id: str
+    app_name: str
+    app_type: ApplicationTypeEnum
+
+    start_time: int
+    end_time: int
+    first_token_cost_time: int  # ms
+
+    status: StatusEnum
+    is_stream: bool
+    input_token: int  # 输入token数
+    output_token: int  # 输出token数
+    cache_token: int  # 缓存token数
+    total_token: int  # 总token数

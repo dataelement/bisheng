@@ -6,6 +6,8 @@ from typing import Dict, List, Set, Tuple
 
 from loguru import logger
 
+from bisheng.core.logger import trace_id_var
+
 
 class ThreadPoolManager:
 
@@ -33,26 +35,25 @@ class ThreadPoolManager:
             return future
 
     async def acontext_wrapper(self, func, *args, **kwargs):
-        trace_id = kwargs.pop('trace_id', '2')
         start_wait = time.time()
-        with logger.contextualize(trace_id=trace_id):
-            result = await func(*args, **kwargs)
-            end_wait = time.time()  # Time when the task actually started
-            logger.info(
-                f'aTask_waited={end_wait - start_wait:.2f} seconds and {func.__name__} executed={time.time() - end_wait:.2f} seconds',
-            )
-            return result
+        kwargs.pop('trace_id', '2')
+        result = await func(*args, **kwargs)
+        end_wait = time.time()  # Time when the task actually started
+        logger.info(
+            f'aTask_waited={end_wait - start_wait:.2f} seconds and {func.__name__} executed={time.time() - end_wait:.2f} seconds',
+        )
+        return result
 
     def context_wrapper(self, func, *args, **kwargs):
         trace_id = kwargs.pop('trace_id', '2')
         start_wait = time.time()
-        with logger.contextualize(trace_id=trace_id):
-            result = func(*args, **kwargs)
-            end_wait = time.time()  # Time when the task actually started
-            logger.info(
-                f'Task_waited={end_wait - start_wait:.2f} seconds and executed={time.time() - end_wait:.2f} seconds',
-            )
-            return result
+        trace_id_var.set(trace_id)
+        result = func(*args, **kwargs)
+        end_wait = time.time()  # Time when the task actually started
+        logger.info(
+            f'Task_waited={end_wait - start_wait:.2f} seconds and executed={time.time() - end_wait:.2f} seconds',
+        )
+        return result
 
     async def as_completed(self,
                            key_list: Set[str]) -> List[Tuple[str, concurrent.futures.Future]]:

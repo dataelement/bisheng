@@ -17,7 +17,7 @@ from bisheng.common.services.config_service import settings
 from bisheng.core.context import initialize_app_context, close_app_context
 from bisheng.core.logger import set_logger_config
 from bisheng.services.utils import initialize_services, teardown_services
-from bisheng.utils.http_middleware import CustomMiddleware
+from bisheng.utils.http_middleware import CustomMiddleware, WebSocketLoggingMiddleware
 from bisheng.utils.threadpool import thread_pool
 
 
@@ -90,6 +90,7 @@ def create_app():
     )
 
     app.add_middleware(CustomMiddleware)
+    app.add_middleware(WebSocketLoggingMiddleware)
 
     @app.exception_handler(AuthJWTException)
     def authjwt_exception_handler(request: Request, exc: AuthJWTException):

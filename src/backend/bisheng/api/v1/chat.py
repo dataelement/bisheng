@@ -546,13 +546,13 @@ async def chat(
             # 调试时，每次都初始化对象
             chat_manager.set_cache(get_cache_key(flow_id, chat_id), None)
 
-        with logger.contextualize(trace_id=chat_id):
-            logger.info('websocket_verify_ok begin=handle_websocket')
-            await chat_manager.handle_websocket(flow_id,
-                                                chat_id,
-                                                websocket,
-                                                user_id,
-                                                gragh_data=graph_data)
+        trace_id_var.set(chat_id)
+        logger.info('websocket_verify_ok begin=handle_websocket')
+        await chat_manager.handle_websocket(flow_id,
+                                            chat_id,
+                                            websocket,
+                                            user_id,
+                                            gragh_data=graph_data)
     except WebSocketException as exc:
         await ChatServiceError(exception=exc).websocket_close_message(websocket=websocket)
     except Exception as exc:

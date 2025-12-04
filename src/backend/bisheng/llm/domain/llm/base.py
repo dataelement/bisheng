@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Dict
 
 from pydantic import BaseModel, Field, ConfigDict
 from typing_extensions import Self
@@ -11,6 +11,7 @@ class BishengBase(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_by_name=True, validate_by_alias=True)
 
     model_id: int = Field(description="后端服务保存的model唯一ID")
+    model_name: str = Field(default='', description='model name in mysql')
 
     # field for telemetry logging
     app_id: str = Field(..., description='application id')
@@ -23,17 +24,15 @@ class BishengBase(BaseModel):
     server_info: Optional[LLMServer] = Field(default=None, description="服务提供方信息")
 
     @classmethod
-    async def get_class_instance(cls, **kwargs) -> Self:
+    async def get_class_instance(cls, **kwargs: Dict) -> Self:
         model_id: int | None = kwargs.pop('model_id', None)
         model_info, server_info = await cls.get_model_server_info(model_id)
         instance = cls(
             model_id=model_id,
+            model_name=model_info.model_name,
             model_info=model_info,
             server_info=server_info,
-            app_id=kwargs['app_id'],
-            app_type=kwargs['app_type'],
-            app_name=kwargs['app_name'],
-            user_id=kwargs['user_id'],
+            **kwargs
         )
         return instance
 

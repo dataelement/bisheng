@@ -65,6 +65,7 @@ def _get_openai_params(params: dict, server_config: dict, model_config: dict) ->
         params['base_url'] = params['base_url'].rstrip('/')
     if server_config.get('openai_proxy'):
         params['openai_proxy'] = server_config.get('openai_proxy')
+    params['stream_usage'] = True
 
     user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
@@ -182,7 +183,6 @@ class BishengLLM(BishengBase, BaseChatModel):
      Use the llm model that has been launched in model management
     """
 
-    model_name: Optional[str] = Field(default='', description="后端服务保存的model名称")
     streaming: Optional[bool] = Field(default=None, description="是否使用流式输出", alias="stream")
     temperature: Optional[float] = Field(default=None, description="模型生成的温度")
 
