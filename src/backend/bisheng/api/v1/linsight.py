@@ -30,7 +30,7 @@ from bisheng.common.errcode.linsight import LinsightQuestionError, LinsightUseUp
     LinsightStartTaskError, LinsightSessionVersionRunningError, LinsightQueueStatusError, FileUploadError, \
     SopShowcaseError
 from bisheng.common.errcode.server import InvalidOperationError, ResourceDownloadError
-from bisheng.common.schemas.telemetry.event_data_schema import WebsocketAliveEventData
+from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData, ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
@@ -192,6 +192,7 @@ async def generate_sop(
     """
 
     logger.info(f"开始生成与重新规划灵思SOP，灵思会话版本ID: {linsight_session_version_id} ")
+    start_time = time.time()
 
     session_version = await LinsightSessionVersionDao.get_by_id(linsight_session_version_id)
 
@@ -241,7 +242,35 @@ async def generate_sop(
             "data": json.dumps({"message": "SOP生成与重新规划完成"})
         }
 
-    return EventSourceResponse(event_generator())
+    try:
+        return EventSourceResponse(event_generator())
+    finally:
+        end_time = time.time()
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=ApplicationAliveEventData(
+                                              app_id=ApplicationTypeEnum.LINSIGHT.value,
+                                              app_name=ApplicationTypeEnum.LINSIGHT.value,
+                                              app_type=ApplicationTypeEnum.LINSIGHT,
+                                              chat_id=session_version.session_id,
+
+                                              start_time=int(start_time),
+                                              end_time=int(end_time)
+                                          ))
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=ApplicationProcessEventData(
+                                              app_id=ApplicationTypeEnum.LINSIGHT.value,
+                                              app_name=ApplicationTypeEnum.LINSIGHT.value,
+                                              app_type=ApplicationTypeEnum.LINSIGHT,
+                                              chat_id=session_version.session_id,
+
+                                              start_time=int(start_time),
+                                              end_time=int(end_time),
+                                              process_time=int((end_time - start_time) * 1000)
+                                          ))
 
 
 # workbench 修改sop
@@ -440,14 +469,6 @@ async def submit_feedback(
         if feedback is not None and feedback.strip() != "":
             await SOPManageService.update_sop_record_feedback(session_version_model.id, feedback)
 
-            # # 重新生成SOP记录到记录表
-            # background_tasks.add_task(
-            #     LinsightWorkbenchImpl.feedback_regenerate_sop_task,
-            #     session_version_model,
-            #     feedback
-            # )
-            # pass
-
         return resp_200(data=True, message="提交成功")
 
 
@@ -601,18 +622,32 @@ async def task_message_stream(
         await websocket.close(code=1000, reason=str(e))
         return
     finally:
+        end_time = time.time()
         session_version_info = await LinsightSessionVersionDao.get_by_id(session_version_id)
 
         await telemetry_service.log_event(user_id=login_user.user_id,
-                                          event_type=BaseTelemetryTypeEnum.WEBSOCKET_ALIVE,
+                                          event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
                                           trace_id=trace_id_var.get(),
-                                          event_data=WebsocketAliveEventData(
+                                          event_data=ApplicationAliveEventData(
                                               app_id=ApplicationTypeEnum.LINSIGHT.value,
                                               app_name=ApplicationTypeEnum.LINSIGHT.value,
                                               app_type=ApplicationTypeEnum.LINSIGHT,
                                               chat_id=session_version_info.session_id if session_version_info else "",
                                               start_time=int(start_time),
-                                              end_time=int(time.time())
+                                              end_time=int(end_time)
+                                          ))
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=ApplicationProcessEventData(
+                                              app_id=ApplicationTypeEnum.LINSIGHT.value,
+                                              app_name=ApplicationTypeEnum.LINSIGHT.value,
+                                              app_type=ApplicationTypeEnum.LINSIGHT,
+                                              chat_id=session_version_info.session_id if session_version_info else "",
+
+                                              start_time=int(start_time),
+                                              end_time=int(end_time),
+                                              process_time=int((end_time - start_time) * 1000)
                                           ))
 
 

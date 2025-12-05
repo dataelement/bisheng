@@ -2,6 +2,10 @@ import time
 
 from loguru import logger
 
+from bisheng.api.services.workflow import WorkFlowService
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
+from bisheng.common.schemas.telemetry.event_data_schema import ApplicationProcessEventData
+from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao
@@ -79,7 +83,25 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: i
 def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int):
     """ 执行workflow """
     trace_id_var.set(unique_id)
-    _execute_workflow(unique_id, workflow_id, chat_id, user_id)
+    start_time = time.time()
+    try:
+        _execute_workflow(unique_id, workflow_id, chat_id, user_id)
+    finally:
+        end_time = time.time()
+        workflow_info = WorkFlowService.get_one_workflow_simple_info_sync(workflow_id)
+        telemetry_service.log_event_sync(user_id=user_id,
+                                         event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
+                                         trace_id=trace_id_var.get(),
+                                         event_data=ApplicationProcessEventData(
+                                             app_id=workflow_id,
+                                             app_name=workflow_info.name if workflow_info else workflow_id,
+                                             app_type=ApplicationTypeEnum.WORKFLOW,
+                                             chat_id=chat_id,
+
+                                             start_time=int(start_time),
+                                             end_time=int(end_time),
+                                             process_time=int((end_time - start_time) * 1000)
+                                         ))
 
 
 def _continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: str):
@@ -111,7 +133,25 @@ def _continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: 
 def continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: str):
     """ 继续执行workflow """
     trace_id_var.set(unique_id)
-    _continue_workflow(unique_id, workflow_id, chat_id, user_id)
+    start_time = time.time()
+    try:
+        _continue_workflow(unique_id, workflow_id, chat_id, user_id)
+    finally:
+        end_time = time.time()
+        workflow_info = WorkFlowService.get_one_workflow_simple_info_sync(workflow_id)
+        telemetry_service.log_event_sync(user_id=user_id,
+                                         event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
+                                         trace_id=trace_id_var.get(),
+                                         event_data=ApplicationProcessEventData(
+                                             app_id=workflow_id,
+                                             app_name=workflow_info.name if workflow_info else workflow_id,
+                                             app_type=ApplicationTypeEnum.WORKFLOW,
+                                             chat_id=chat_id,
+
+                                             start_time=int(start_time),
+                                             end_time=int(end_time),
+                                             process_time=int((end_time - start_time) * 1000)
+                                         ))
 
 
 @bisheng_celery.task

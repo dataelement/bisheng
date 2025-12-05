@@ -16,6 +16,7 @@ from loguru import logger
 from pydantic import SecretStr, ValidationError, create_model
 from pydantic.fields import FieldInfo
 
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.utils import file_download
 from bisheng.interface.agents.base import agent_creator
@@ -253,6 +254,7 @@ def instantiate_llm(node_type, class_object, params: Dict, user_llm_request: boo
     # This is a workaround so JinaChat works until streaming is implemented
     # if "openai_api_base" in params and "jina" in params["openai_api_base"]:
     # False if condition is True
+    params.pop('cache', None)
     if is_openai_v1() and params.get('openai_proxy'):
         params['http_client'] = httpx.Client(proxies=params.get('openai_proxy'))
         params['http_async_client'] = httpx.AsyncClient(proxies=params.get('openai_proxy'))
@@ -270,7 +272,11 @@ def instantiate_llm(node_type, class_object, params: Dict, user_llm_request: boo
             params['max_tokens'] = int(params['max_tokens'])
         elif not isinstance(params.get('max_tokens'), int):
             params.pop('max_tokens', None)
-
+    if node_type == 'BishengLLM':
+        params['app_id'] = "flow(will be deprecated)"
+        params['app_name'] = "flow(will be deprecated)"
+        params['app_type'] = ApplicationTypeEnum.SKILL
+        params['user_id'] = params.get('user_id', 0)
     llm = class_object(**params)
     llm_config = settings.get_from_db('llm_request')
     # 支持request_timeout & max_retries
@@ -465,7 +471,11 @@ def instantiate_embedding(class_object, params: Dict):
             del params['openai_proxy']
         if class_object.__name__ == 'OpenAIEmbeddings':
             params['check_embedding_ctx_length'] = False
-
+        elif class_object.__name__ == 'BishengEmbedding':
+            params['app_id'] = "flow(will be deprecated)"
+            params['app_name'] = "flow(will be deprecated)"
+            params['app_type'] = ApplicationTypeEnum.SKILL
+            params['user_id'] = params.get('user_id', 0)
         return class_object(**params)
     except ValidationError:
         params = {key: value for key, value in params.items() if key in class_object.__fields__}

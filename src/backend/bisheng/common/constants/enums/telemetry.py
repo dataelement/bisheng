@@ -79,8 +79,8 @@ class BaseTelemetryTypeEnum(str, Enum):
     # 模型调用事件
     MODEL_INVOKE = "model_invoke"
 
-    # websocket alive事件
-    WEBSOCKET_ALIVE = "websocket_alive"
+    # 在线会话数
+    APPLICATION_ALIVE = "application_alive"
 
-    # application invoke event
-    APPLICATION_INVOKE = "application_invoke"
+    # 会话运行时长
+    APPLICATION_PROCESS = "application_process"

@@ -38,7 +38,7 @@ class BaseTelemetryEvent(BaseModel, Generic[T_EventData]):
     event_type: BaseTelemetryTypeEnum = Field(..., description="Type of the telemetry event")
     timestamp: int = Field(default_factory=lambda: int(datetime.now(tz=timezone.utc).timestamp()))
     user_context: UserContext = Field(..., description="User context information")
-    trace_id: str = Field(..., description="Trace identifier for correlating events")
+    trace_id: Optional[str] = Field(default=None, description="Trace identifier for correlating events")
     event_data: Optional[T_EventData] = Field(None, description="Event-specific data payload")
 
     def model_dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:

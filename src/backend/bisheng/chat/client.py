@@ -1,4 +1,5 @@
 import json
+import time
 from queue import Queue
 from typing import Dict, Callable, List
 
@@ -16,7 +17,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.assistant import (AssistantDeletedError, AssistantNotOnlineError,
                                               AssistantOtherError)
-from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.logger import trace_id_var
@@ -24,7 +25,6 @@ from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessageDao, ChatMessage as ChatMessageModel
 from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 from bisheng.utils.threadpool import thread_pool
 from bisheng_langchain.gpts.message_types import LiberalToolMessage
@@ -76,11 +76,12 @@ class ChatClient:
                                self.handle_gpts_message,
                                message,
                                trace_id=trace_id)
-                # await self.handle_gpts_message(message)
+            # await self.handle_gpts_message(message)
 
     async def wrapper_task(self, task_id: str, fn: Callable, *args, **kwargs):
         # 包装处理函数为异步任务
         self.task_ids.append(task_id)
+        start_time = time.time()
         try:
             # 执行处理函数
             await fn(*args, **kwargs)
@@ -89,6 +90,20 @@ class ChatClient:
         finally:
             # 执行完成后将任务id从列表移除
             self.task_ids.remove(task_id)
+            end_time = time.time()
+            await telemetry_service.log_event(user_id=self.user_id,
+                                              event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
+                                              trace_id=trace_id_var.get(),
+                                              event_data=ApplicationProcessEventData(
+                                                  app_id=self.client_id,
+                                                  app_name=self.db_assistant.name if self.db_assistant else "",
+                                                  app_type=ApplicationTypeEnum.ASSISTANT,
+                                                  chat_id=self.chat_id,
+
+                                                  start_time=int(start_time),
+                                                  end_time=int(end_time),
+                                                  process_time=int((end_time - start_time) * 1000)
+                                              ))
 
     async def add_message(self, msg_type: str, message: str, category: str, remark: str = ''):
         self.chat_history.append({

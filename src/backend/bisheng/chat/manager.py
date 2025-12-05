@@ -24,7 +24,7 @@ from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.chat import (DocumentParseError, InputDataParseError,
                                          LLMExecutionError, SkillDeletedError,
                                          SkillNotOnlineError)
-from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, WebsocketAliveEventData
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, ApplicationAliveEventData
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.flow import InMemoryCache
 from bisheng.core.cache.manager import Subject, cache_manager
@@ -275,9 +275,9 @@ class ChatManager:
                 app_type = ApplicationTypeEnum.WORKFLOW
             app_name = app_info.app_name if app_info else 'unknown'
             await telemetry_service.log_event(user_id=login_user.user_id,
-                                              event_type=BaseTelemetryTypeEnum.WEBSOCKET_ALIVE,
+                                              event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
                                               trace_id=trace_id_var.get(),
-                                              event_data=WebsocketAliveEventData(
+                                              event_data=ApplicationAliveEventData(
                                                   app_id=client_id,
                                                   app_name=app_name,
                                                   app_type=app_type,
@@ -299,7 +299,7 @@ class ChatManager:
         # 建立连接，并存储映射，兼容不复用ws 场景
         key_list = set([get_cache_key(flow_id, chat_id)])
         await self.connect(flow_id, chat_id, websocket)
-        # autogen_pool = ThreadPoolManager(max_workers=1, thread_name_prefix='autogen')
+        logger.info("act=ws_connected flow_id={} chat_id={} user_id={}", flow_id, chat_id, user_id)
         context_dict = {
             get_cache_key(flow_id, chat_id): {
                 'status': 'init',
@@ -434,9 +434,9 @@ class ChatManager:
                 logger.exception(e)
             self.disconnect(flow_id, chat_id)
             flow_info = await WorkFlowService.get_one_workflow_simple_info(flow_id)
-            await telemetry_service.log_event(user_id=user_id, event_type=BaseTelemetryTypeEnum.WEBSOCKET_ALIVE,
+            await telemetry_service.log_event(user_id=user_id, event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
                                               trace_id=trace_id_var.get(),
-                                              event_data=WebsocketAliveEventData(
+                                              event_data=ApplicationAliveEventData(
                                                   app_id=flow_id,
                                                   app_name=flow_info.name if flow_info else 'unknown',
                                                   app_type=ApplicationTypeEnum.SKILL,

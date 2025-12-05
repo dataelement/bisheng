@@ -1,5 +1,6 @@
 import copy
 import json
+import time
 from typing import Annotated, List, Optional, Union
 from uuid import UUID
 
@@ -12,8 +13,10 @@ from bisheng.api.v1.schemas import (ProcessResponse, UploadFileResponse,
 from bisheng.chat.utils import judge_source, process_source_document
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
-from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, ApplicationAliveEventData, \
+    ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync
@@ -174,14 +177,15 @@ async def process_flow(
         f'act=api_call sessionid={session_id} flow_id={flow_id} inputs={inputs} tweaks={tweaks}')
 
     login_user = await get_default_operator_async()
-
+    flow = await FlowDao.aget_flow_by_id(flow_id)
+    if flow is None or flow.data is None:
+        raise NotFoundError()
+    start_time = time.time()
+    if session_id is None:
+        # Generate a session ID
+        session_id = get_session_service().generate_key(session_id=session_id,
+                                                        data_graph=flow.data)
     try:
-        flow = FlowDao.get_flow_by_id(flow_id)
-        if flow is None:
-            raise ValueError(f'Flow {flow_id} not found')
-        if flow.data is None:
-            raise ValueError(f'Flow {flow_id} has no data')
-
         graph_data = flow.data
         if tweaks:
             try:
@@ -206,10 +210,7 @@ async def process_flow(
         else:
             logger.warning('This is an experimental feature and may not work as expected.'
                            'Please report any issues to our GitHub repository.')
-            if session_id is None:
-                # Generate a session ID
-                session_id = get_session_service().generate_key(session_id=session_id,
-                                                                data_graph=graph_data)
+
             task_id, task = await task_service.launch_task(
                 process_graph_cached_task if task_service.use_celery else process_graph_cached,
                 graph_data,
@@ -306,6 +307,30 @@ async def process_flow(
         # Log stack trace
         logger.exception(e)
         raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        end_time = time.time()
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=ApplicationAliveEventData(
+                                              app_id=flow_id,
+                                              app_name=flow.name,
+                                              app_type=ApplicationTypeEnum.SKILL,
+                                              chat_id=session_id,
+                                              start_time=int(start_time),
+                                              end_time=int(end_time)))
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=ApplicationProcessEventData(
+                                              app_id=flow_id,
+                                              app_name=flow.name,
+                                              app_type=ApplicationTypeEnum.SKILL,
+                                              chat_id=session_id,
+                                              start_time=int(start_time),
+                                              end_time=int(end_time),
+                                              process_time=int((end_time - start_time) * 1000)
+                                          ))
 
 
 async def _upload_file(file: UploadFile, object_name_prefix: str, file_supports: List[str] = None,

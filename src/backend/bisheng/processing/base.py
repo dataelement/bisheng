@@ -1,9 +1,10 @@
 import asyncio
 from typing import Tuple, Union
 
+from loguru import logger
+
 from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler, StreamingLLMCallbackHandler
 from bisheng.processing.process import fix_memory_inputs, format_actions
-from loguru import logger
 
 
 async def get_result_and_steps(langchain_object, inputs: Union[dict, str], **kwargs):
@@ -26,7 +27,7 @@ async def get_result_and_steps(langchain_object, inputs: Union[dict, str], **kwa
         asyc = True
         try:
             async_callbacks = [AsyncStreamingLLMCallbackHandler(**kwargs)]
-            output = await langchain_object.acall(inputs, callbacks=async_callbacks)
+            output = await langchain_object.ainvoke(inputs, callbacks=async_callbacks)
         except Exception as exc:
             # make the error message more informative
             logger.exception(exc)

@@ -428,3 +428,10 @@ class WorkFlowService(BaseService):
         获取单个工作流详情
         """
         return await FlowDao.get_one_flow_simple(workflow_id)
+
+    @classmethod
+    def get_one_workflow_simple_info_sync(cls, workflow_id: str) -> Optional[Flow]:
+        """
+        获取单个工作流详情（同步版）
+        """
+        return FlowDao.get_one_flow_simple_sync(workflow_id)

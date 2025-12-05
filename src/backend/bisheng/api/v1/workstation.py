@@ -28,7 +28,8 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
 from bisheng.common.errcode.workstation import WebSearchToolNotFoundError, ConversationNotFoundError, \
     AgentAlreadyExistsError
-from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, WebsocketAliveEventData
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, ApplicationAliveEventData, \
+    ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.cache.redis_manager import get_redis_client
@@ -546,17 +547,31 @@ async def chat_completions(
     try:
         return StreamingResponse(event_stream(), media_type='text/event-stream')
     finally:
+        end_time = time.time()
         await telemetry_service.log_event(user_id=login_user.user_id,
-                                          event_type=BaseTelemetryTypeEnum.WEBSOCKET_ALIVE,
+                                          event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
                                           trace_id=trace_id_var.get(),
-                                          event_data=WebsocketAliveEventData(
+                                          event_data=ApplicationAliveEventData(
                                               app_id=ApplicationTypeEnum.DAILY_CHAT.value,
                                               app_name=ApplicationTypeEnum.DAILY_CHAT.value,
                                               app_type=ApplicationTypeEnum.DAILY_CHAT,
                                               chat_id=conversationId,
 
                                               start_time=int(start_time),
-                                              end_time=int(time.time())
+                                              end_time=int(end_time)
+                                          ))
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=ApplicationProcessEventData(
+                                              app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                                              app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+                                              app_type=ApplicationTypeEnum.DAILY_CHAT,
+                                              chat_id=conversationId,
+
+                                              start_time=int(start_time),
+                                              end_time=int(end_time),
+                                              process_time=int((end_time - start_time) * 1000)
                                           ))
 
 

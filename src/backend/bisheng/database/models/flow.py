@@ -466,3 +466,25 @@ class FlowDao(FlowBase):
                 'create_time': one[7],
                 'update_time': one[8]
             })
+
+    @classmethod
+    def get_one_flow_simple_sync(cls, flow_id: str) -> Optional[Flow]:
+        """ get simple info of one flow by id. not contain data field """
+        statement = select(Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id,
+                           Flow.status, Flow.create_time, Flow.update_time).where(Flow.id == flow_id)
+        with get_sync_db_session() as session:
+            result = session.exec(statement)
+            one = result.first()
+            if not one:
+                return None
+            return Flow(**{
+                'id': one[0],
+                'name': one[1],
+                'description': one[2],
+                'flow_type': one[3],
+                'logo': one[4],
+                'user_id': one[5],
+                'status': one[6],
+                'create_time': one[7],
+                'update_time': one[8]
+            })

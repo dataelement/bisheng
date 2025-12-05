@@ -128,10 +128,10 @@ class ModelInvokeEventData(BaseEventData):
     total_token: int  # 总token数
 
 
-class WebsocketAliveEventData(BaseEventData):
+class ApplicationAliveEventData(BaseEventData):
     """Data model for websocket alive events."""
 
-    _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.WEBSOCKET_ALIVE
+    _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.APPLICATION_ALIVE
 
     app_id: str
     app_name: str
@@ -143,10 +143,10 @@ class WebsocketAliveEventData(BaseEventData):
     end_time: int
 
 
-class ApplicationInvokeEventData(BaseEventData):
+class ApplicationProcessEventData(BaseEventData):
     """Data model for application invoke events."""
 
-    _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.APPLICATION_INVOKE
+    _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.APPLICATION_PROCESS
 
     app_id: str
     app_name: str
