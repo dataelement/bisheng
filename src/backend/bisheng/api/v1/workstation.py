@@ -546,18 +546,18 @@ async def chat_completions(
     try:
         return StreamingResponse(event_stream(), media_type='text/event-stream')
     finally:
-        telemetry_service.log_event(user_id=login_user.user_id,
-                                    event_type=BaseTelemetryTypeEnum.WEBSOCKET_ALIVE,
-                                    trace_id=trace_id_var.get(),
-                                    event_data=WebsocketAliveEventData(
-                                        app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-                                        app_name=ApplicationTypeEnum.DAILY_CHAT.value,
-                                        app_type=ApplicationTypeEnum.DAILY_CHAT,
-                                        chat_id=conversationId,
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.WEBSOCKET_ALIVE,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=WebsocketAliveEventData(
+                                              app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                                              app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+                                              app_type=ApplicationTypeEnum.DAILY_CHAT,
+                                              chat_id=conversationId,
 
-                                        start_time=int(start_time),
-                                        end_time=int(time.time())
-                                    ))
+                                              start_time=int(start_time),
+                                              end_time=int(time.time())
+                                          ))
 
 
 @router.get('/app/frequently_used')
