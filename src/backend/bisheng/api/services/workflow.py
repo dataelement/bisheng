@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Dict, Optional
 
 from fastapi.encoders import jsonable_encoder
@@ -435,3 +436,11 @@ class WorkFlowService(BaseService):
         获取单个工作流详情（同步版）
         """
         return FlowDao.get_one_flow_simple_sync(workflow_id)
+
+    @classmethod
+    def get_all_apps_by_time_range_sync(cls, start_time: datetime, end_time: datetime, page: int = 1,
+                                        page_size: int = 100) -> list[dict]:
+        """
+        根据时间范围获取所有应用
+        """
+        return FlowDao.get_all_app_by_time_range_sync(start_time, end_time, page, page_size)

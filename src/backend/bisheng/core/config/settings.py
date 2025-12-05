@@ -155,6 +155,21 @@ class CeleryConf(BaseModel):
                 'task': 'bisheng.worker.telemetry.mid_table.sync_mid_user_increment',
                 'schedule': crontab('*/30 0 * * *'),  # 00:30 exec every day
             }
+        if 'telemetry_mid_knowledge_increment' not in self.beat_schedule:
+            self.beat_schedule['telemetry_mid_knowledge_increment'] = {
+                'task': 'bisheng.worker.telemetry.mid_table.sync_mid_knowledge_increment',
+                'schedule': crontab('*/30 0 * * *'),  # 00:30 exec every day
+            }
+        if 'telemetry_sync_mid_app_increment' not in self.beat_schedule:
+            self.beat_schedule['telemetry_sync_mid_app_increment'] = {
+                'task': 'bisheng.worker.telemetry.mid_table.sync_mid_app_increment',
+                'schedule': crontab('*/30 0 * * *'),  # 00:30 exec every day
+            }
+        if 'telemetry_sync_mid_user_interact_dtl' not in self.beat_schedule:
+            self.beat_schedule['telemetry_sync_mid_user_interact_dtl'] = {
+                'task': 'bisheng.worker.telemetry.mid_table.sync_mid_user_interact_dtl',
+                'schedule': crontab('*/30 0 * * *'),  # 00:30 exec every day
+            }
 
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():

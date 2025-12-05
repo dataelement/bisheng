@@ -141,8 +141,8 @@ class UserService:
         return resp_200(UserRead(access_token=access_token, **db_user.__dict__))
 
     @classmethod
-    def get_user_by_time_range(cls, start_time: datetime, end_time: datetime,
-                               page: int = 1, page_size: int = 100) -> List[User]:
-        """ 根据创建时间获取用户列表 """
-        return UserDao.get_user_with_group_role(page=page, page_size=page_size,
+    def get_user_all_info(cls, *, start_time: datetime = None, end_time: datetime = None, user_ids: List[int] = None,
+                          page: int = 1, page_size: int = 100) -> List[User]:
+        """ 获取用户信息，包含用户组和角色信息 """
+        return UserDao.get_user_with_group_role(page=page, page_size=page_size, user_ids=user_ids,
                                                 start_time=start_time, end_time=end_time)

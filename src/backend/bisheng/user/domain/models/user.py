@@ -3,7 +3,8 @@ from typing import List, Optional
 
 from pydantic import field_validator
 from sqlalchemy import Column, DateTime, func, text
-from sqlmodel import Field, select, Relationship
+from sqlalchemy.orm import selectinload
+from sqlmodel import Field, select, Relationship, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
@@ -255,13 +256,15 @@ class UserDao(UserBase):
             return session.exec(statement).all()
 
     @classmethod
-    def get_user_with_group_role(cls, start_time: datetime = None, end_time: datetime = None, page: int = 0,
-                                 page_size: int = 0) -> List[User]:
+    def get_user_with_group_role(cls, *, start_time: datetime = None, end_time: datetime = None,
+                                 user_ids: List[int] = None, page: int = 0, page_size: int = 0) -> List[User]:
         statement = select(User)
         if start_time and end_time:
             statement = statement.where(User.create_time >= start_time, User.create_time < end_time)
         if page and page_size:
             statement = statement.offset((page - 1) * page_size).limit(page_size)
+        if user_ids:
+            statement = statement.where(col(User.user_id).in_(user_ids))
         statement = statement.order_by(User.user_id)
         statement = statement.options(
             selectinload(User.groups),  # type: ignore

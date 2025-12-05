@@ -488,3 +488,38 @@ class FlowDao(FlowBase):
                 'create_time': one[7],
                 'update_time': one[8]
             })
+
+    @classmethod
+    def get_all_app_by_time_range_sync(cls, start_time: datetime, end_time: datetime, page: int = 0,
+                                       page_size: int = 0):
+        sub_query = select(
+            Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id,
+            Flow.status, Flow.create_time, Flow.update_time).union_all(
+            select(Assistant.id, Assistant.name, Assistant.desc, FlowType.ASSISTANT.value,
+                   Assistant.logo, Assistant.user_id, Assistant.status, Assistant.create_time,
+                   Assistant.update_time).where(Assistant.is_delete == 0)).subquery()
+
+        statement = select(sub_query.c.id, sub_query.c.name, sub_query.c.description,
+                           sub_query.c.flow_type, sub_query.c.logo, sub_query.c.user_id,
+                           sub_query.c.status, sub_query.c.create_time, sub_query.c.update_time)
+        statement = statement.where(and_(sub_query.c.create_time >= start_time,
+                                         sub_query.c.create_time < end_time))
+        if page and page_size:
+            statement = statement.offset((page - 1) * page_size).limit(page_size)
+        statement = statement.order_by(sub_query.c.create_time.asc())
+        with get_sync_db_session() as session:
+            result = session.exec(statement).all()
+            data = []
+            for one in result:
+                data.append({
+                    'id': one[0],
+                    'name': one[1],
+                    'description': one[2],
+                    'flow_type': one[3],
+                    'logo': one[4],
+                    'user_id': one[5],
+                    'status': one[6],
+                    'create_time': one[7],
+                    'update_time': one[8]
+                })
+            return data

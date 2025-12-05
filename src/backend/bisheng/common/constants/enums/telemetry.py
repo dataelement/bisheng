@@ -33,6 +33,8 @@ class ApplicationTypeEnum(str, Enum):
     # TTS
     TTS = "tts"
 
+    UNKNOWN = "unknown"
+
 
 class BaseTelemetryTypeEnum(str, Enum):
     """基础的遥测事件类型枚举"""
