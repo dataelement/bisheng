@@ -146,7 +146,7 @@ async def process_flow_old(
         history_count: Annotated[int, Body(embed=True)] = 10,
         clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
         session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
-        task_service: 'TaskService' = Depends(get_task_service),
+        task_service: TaskService = Depends(get_task_service),
         sync: Annotated[bool, Body(embed=True)] = True,
 ):
     return await process_flow(flow_id, inputs, tweaks, history_count, clear_cache, session_id,
@@ -163,7 +163,7 @@ async def process_flow(
         history_count: Annotated[int, Body(embed=True)] = 10,
         clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
         session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
-        task_service: 'TaskService' = Depends(get_task_service),
+        task_service: TaskService = Depends(get_task_service),
         sync: Annotated[bool, Body(embed=True)] = True,  # noqa: F821
         sse: Annotated[bool, Body(embed=True)] = False,
 ):
