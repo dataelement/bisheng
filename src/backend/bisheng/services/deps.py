@@ -1,11 +1,10 @@
-from typing import TYPE_CHECKING
-
 from bisheng.services import ServiceType, service_manager
 
-if TYPE_CHECKING:
-    from bisheng.services.session.service import SessionService
-    from bisheng.services.task.service import TaskService
-    # from sqlmodel import Session
+from bisheng.services.session.service import SessionService
+from bisheng.services.task.service import TaskService
+
+
+# from sqlmodel import Session
 
 # def get_credential_service() -> "CredentialService":
 #     return service_manager.get(ServiceType.CREDENTIAL_SERVICE)  # type: ignore
@@ -36,13 +35,12 @@ if TYPE_CHECKING:
 #     return service_manager.get(ServiceType.CACHE_SERVICE)  # type: ignore
 
 
-def get_session_service() -> 'SessionService':
+def get_session_service() -> SessionService:
     return service_manager.get(ServiceType.SESSION_SERVICE)  # type: ignore
 
 
-def get_task_service() -> 'TaskService':
+def get_task_service() -> TaskService:
     return service_manager.get(ServiceType.TASK_SERVICE)  # type: ignore
-
 
 # def get_chat_service() -> "ChatService":
 #     return service_manager.get(ServiceType.CHAT_SERVICE)  # type: ignore
