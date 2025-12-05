@@ -33,7 +33,7 @@ class ConditionOne(BaseModel):
             return left_value == right_value
         elif self.comparison_operation == ComparisonType.NOT_EQUAL:
             return left_value != right_value
-        elif self.comparison_operation == ComparisonType.GREATER_THAN:
+        elif self.comparison_operation == ComparisonType.CONTAINS:
             return left_value.find(right_value) != -1
         elif self.comparison_operation == ComparisonType.NOT_CONTAINS:
             return left_value.find(right_value) == -1
