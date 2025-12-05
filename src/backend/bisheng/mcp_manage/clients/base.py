@@ -1,19 +1,14 @@
-from abc import abstractmethod
-from contextlib import AsyncExitStack, asynccontextmanager
+from abc import abstractmethod, ABC
+from contextlib import asynccontextmanager
 from typing import Any
 
 from mcp import ClientSession
 
 
-class BaseMcpClient(object):
+class BaseMcpClient(ABC):
     """
     Base class for MCP clients.
     """
-
-    def __init__(self, **kwargs):
-        self.exit_stack = AsyncExitStack()
-
-        self.client_session: ClientSession | None = None
 
     @abstractmethod
     async def get_transport(self):

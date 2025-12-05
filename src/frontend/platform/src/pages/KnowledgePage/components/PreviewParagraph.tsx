@@ -239,7 +239,7 @@ const EditMarkdown = ({ data, active, oneLeft, fileSuffix, onClick, onDel, onCha
 }
 
 // 分段结果列表
-export default function PreviewParagraph({ fileId, previewCount, edit, fileSuffix, loading, chunks, className, onDel, onChange }) {
+export default function PreviewParagraph({ fileId, page = 1, previewCount, edit, fileSuffix, loading, chunks, className, onDel, onChange }) {
     const containerRef = useRef(null);
     const [visibleItems, setVisibleItems] = useState(10); // 初始加载数量
     const loadingRef = useRef(false);
@@ -260,7 +260,7 @@ export default function PreviewParagraph({ fileId, previewCount, edit, fileSuffi
         if (containerRef.current) {
             containerRef.current.scrollTop = 0;
         }
-    }, [fileId, setSelectedChunkIndex]);
+    }, [page, fileId, setSelectedChunkIndex]);
 
     // 懒加载逻辑
     useEffect(() => {

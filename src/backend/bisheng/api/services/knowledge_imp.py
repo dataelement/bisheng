@@ -33,14 +33,17 @@ from bisheng.api.services.patch_130 import (
     combine_multiple_md_files_to_raw_texts,
 )
 from bisheng.api.v1.schemas import ExcelRule
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.common.errcode.knowledge import KnowledgeSimilarError, KnowledgeFileDeleteError
+from bisheng.common.schemas.telemetry.event_data_schema import FileParseEventData
+from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
 from bisheng.core.cache.utils import file_download
 from bisheng.core.database import get_sync_db_session
+from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
-from bisheng.database.models.user import UserDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
@@ -58,8 +61,9 @@ from bisheng.knowledge.domain.models.knowledge_file import (
 )
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.llm.domain.services import LLMService
+from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import md5_hash, util
-from bisheng.utils.embedding import decide_embeddings
+from bisheng.utils.exceptions import EtlException, FileParseException
 from bisheng_langchain.rag.extract_info import extract_title, async_extract_title
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 
@@ -295,7 +299,7 @@ def delete_vector_files(file_ids: List[int], knowledge: Knowledge) -> bool:
         return True
     logger.info(f"delete_files file_ids={file_ids} knowledge_id={knowledge.id}")
     logger.info("start init Milvus")
-    vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge=knowledge,
+    vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=knowledge,
                                                                         metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
     logger.info("start init ES")
     es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge,
@@ -390,7 +394,7 @@ def decide_vectorstores(
     return instantiate_vectorstore(vector_store, class_object=class_obj, params=param)
 
 
-def decide_knowledge_llm() -> Any:
+def decide_knowledge_llm(invoke_user_id: int) -> Any:
     """获取用来总结知识库chunk的 llm对象"""
     # 获取llm配置
     knowledge_llm = LLMService.get_knowledge_llm()
@@ -400,11 +404,15 @@ def decide_knowledge_llm() -> Any:
 
     # 获取llm对象
     return LLMService.get_bisheng_llm_sync(
-        model_id=knowledge_llm.extract_title_model_id, cache=False
-    )
+        model_id=knowledge_llm.extract_title_model_id,
+
+        app_id=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
+        app_name=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
+        app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
+        user_id=invoke_user_id)
 
 
-async def async_decide_knowledge_llm() -> Any:
+async def async_decide_knowledge_llm(invoke_user_id: int) -> Any:
     """获取用来总结知识库chunk的 llm对象"""
     # 获取llm配置
     knowledge_llm = await LLMService.aget_knowledge_llm()
@@ -414,8 +422,12 @@ async def async_decide_knowledge_llm() -> Any:
 
     # 获取llm对象
     return await LLMService.get_bisheng_llm(
-        model_id=knowledge_llm.extract_title_model_id, cache=False
-    )
+        model_id=knowledge_llm.extract_title_model_id,
+
+        app_id=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
+        app_name=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
+        app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
+        user_id=invoke_user_id)
 
 
 def addEmbedding(
@@ -439,7 +451,8 @@ def addEmbedding(
     """将文件加入到向量和es库内"""
 
     logger.info("start init Milvus")
-    vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge_id=knowledge_id,
+    vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge_files[0].updater_id,
+                                                                        knowledge_id=knowledge_id,
                                                                         metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
     logger.info("start init ES")
     es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge_id=knowledge_id,
@@ -452,11 +465,11 @@ def addEmbedding(
             preview_cache_key = (
                 preview_cache_keys[index] if index < len(preview_cache_keys) else None
             )
+        status = 'failed'
         try:
             logger.info(
                 f"process_file_begin file_id={db_file.id} file_name={db_file.file_name}"
             )
-            # TODO:TJU: 多list里面取值
             add_file_embedding(
                 vector_client,
                 es_client,
@@ -476,17 +489,35 @@ def addEmbedding(
                 filter_page_header_footer=filter_page_header_footer,
             )
             db_file.status = KnowledgeFileStatus.SUCCESS.value
+            status = 'success'
+        except FileParseException as e:
+            logger.exception(
+                f"process_file_fail file_id={db_file.id} file_name={db_file.file_name}"
+            )
+            db_file.status = KnowledgeFileStatus.FAILED.value
+            db_file.remark = str(e)[:500]
+            status = 'parse_failed'
         except Exception as e:
             logger.exception(
                 f"process_file_fail file_id={db_file.id} file_name={db_file.file_name}"
             )
             db_file.status = KnowledgeFileStatus.FAILED.value
             db_file.remark = str(e)[:500]
+            status = 'failed'
         finally:
             logger.info(
                 f"process_file_end file_id={db_file.id} file_name={db_file.file_name}"
             )
             KnowledgeFileDao.update(db_file)
+            telemetry_service.log_event_sync(user_id=db_file.user_id,
+                                             event_type=BaseTelemetryTypeEnum.FILE_PARSE,
+                                             trace_id=trace_id_var.get(),
+                                             event_data=FileParseEventData(
+                                                 parse_type=db_file.parse_type,
+                                                 status=status,
+                                                 app_type=ApplicationTypeEnum.KNOWLEDGE_BASE
+                                             ))
+
             if callback:
                 inp = {
                     "file_name": db_file.file_name,
@@ -534,20 +565,27 @@ def add_file_embedding(
         if "excel_rule" in split_rule:
             excel_rule = ExcelRule(**split_rule["excel_rule"])
     # # extract text from file
-    texts, metadatas, parse_type, partitions = read_chunk_text(
-        filepath,
-        db_file.file_name,
-        separator,
-        separator_rule,
-        chunk_size,
-        chunk_overlap,
-        knowledge_id=knowledge_id,
-        retain_images=retain_images,
-        enable_formula=enable_formula,
-        force_ocr=force_ocr,
-        filter_page_header_footer=filter_page_header_footer,
-        excel_rule=excel_rule,
-    )
+    try:
+        texts, metadatas, parse_type, partitions = read_chunk_text(
+            db_file.user_id,
+            filepath,
+            db_file.file_name,
+            separator,
+            separator_rule,
+            chunk_size,
+            chunk_overlap,
+            knowledge_id=knowledge_id,
+            retain_images=retain_images,
+            enable_formula=enable_formula,
+            force_ocr=force_ocr,
+            filter_page_header_footer=filter_page_header_footer,
+            excel_rule=excel_rule,
+        )
+    except EtlException as e:
+        db_file.parse_type = ParseType.ETL4LM.value
+        raise FileParseException(str(e)) from e
+    except Exception as e:
+        raise FileParseException(str(e)) from e
     if len(texts) == 0:
         raise ValueError("文件解析为空")
     # 缓存中有数据则用缓存中的数据去入库，因为是用户在界面编辑过的
@@ -727,8 +765,9 @@ def parse_document_title(title: str) -> str:
 
 
 def read_chunk_text(
-        input_file,
-        file_name,
+        invoke_user_id: int,
+        input_file: str,
+        file_name: str,
         separator: Optional[List[str]],
         separator_rule: Optional[List[str]],
         chunk_size: int,
@@ -740,7 +779,6 @@ def read_chunk_text(
         filter_page_header_footer: int = 0,
         excel_rule: ExcelRule = None,
         no_summary: bool = False,
-
 ) -> (List[str], List[dict], str, Any):  # type: ignore
     """
     0：chunks text
@@ -752,7 +790,7 @@ def read_chunk_text(
     llm = None
     if not no_summary:
         try:
-            llm = decide_knowledge_llm()
+            llm = decide_knowledge_llm(invoke_user_id)
             knowledge_llm = LLMService.get_knowledge_llm()
         except Exception as e:
             logger.exception("knowledge_llm_error:")
@@ -773,7 +811,7 @@ def read_chunk_text(
     # excel 文件的处理单独出来
     partitions = []
     texts = []
-    etl_for_lm_url = settings.get_knowledge().get("etl4lm", {}).get("url", None)
+    etl_for_lm_url = settings.get_knowledge().etl4lm.url
     file_extension_name = file_name.split(".")[-1].lower()
 
     if file_extension_name in ["xls", "xlsx", "csv"]:
@@ -847,20 +885,23 @@ def read_chunk_text(
                 # 判断文件是否损坏
                 if is_pdf_damaged(input_file):
                     raise Exception('The file is damaged.')
-            etl4lm_settings = settings.get_knowledge().get("etl4lm", {})
-            loader = Etl4lmLoader(
-                file_name,
-                input_file,
-                unstructured_api_url=etl4lm_settings.get("url", ""),
-                ocr_sdk_url=etl4lm_settings.get("ocr_sdk_url", ""),
-                force_ocr=bool(force_ocr),
-                enable_formular=bool(enable_formula),
-                timeout=etl4lm_settings.get("timeout", 60),
-                filter_page_header_footer=bool(filter_page_header_footer),
-                knowledge_id=knowledge_id,
-            )
-            documents = loader.load()
+            etl4lm_settings = settings.get_knowledge().etl4lm
             parse_type = ParseType.ETL4LM.value
+            try:
+                loader = Etl4lmLoader(
+                    file_name,
+                    input_file,
+                    unstructured_api_url=etl4lm_settings.url,
+                    ocr_sdk_url=etl4lm_settings.ocr_sdk_url,
+                    force_ocr=bool(force_ocr),
+                    enable_formular=bool(enable_formula),
+                    timeout=etl4lm_settings.timeout,
+                    filter_page_header_footer=bool(filter_page_header_footer),
+                    knowledge_id=knowledge_id,
+                )
+                documents = loader.load()
+            except Exception as e:
+                raise EtlException(str(e)) from e
             partitions = loader.partitions
             partitions = parse_partitions(partitions)
         else:
@@ -933,8 +974,9 @@ def read_chunk_text(
 
 
 async def async_read_chunk_text(
-        input_file,
-        file_name,
+        invoke_user_id: int,
+        input_file: str,
+        file_name: str,
         separator: Optional[List[str]],
         separator_rule: Optional[List[str]],
         chunk_size: int,
@@ -951,7 +993,7 @@ async def async_read_chunk_text(
     llm = None
     if not no_summary:
         try:
-            llm = await async_decide_knowledge_llm()
+            llm = await async_decide_knowledge_llm(invoke_user_id)
             knowledge_llm = await LLMService.aget_knowledge_llm()
         except Exception as e:
             logger.exception("knowledge_llm_error:")
@@ -972,7 +1014,7 @@ async def async_read_chunk_text(
     # excel 文件的处理单独出来
     partitions = []
     texts = []
-    etl_for_lm_url = (await settings.async_get_knowledge()).get("etl4lm", {}).get("url", None)
+    etl_for_lm_url = (await settings.async_get_knowledge()).etl4lm.url
     file_extension_name = file_name.split(".")[-1].lower()
 
     if file_extension_name in ["xls", "xlsx", "csv"]:
@@ -1046,15 +1088,15 @@ async def async_read_chunk_text(
                 # 判断文件是否损坏
                 if is_pdf_damaged(input_file):
                     raise Exception('The file is damaged.')
-            etl4lm_settings = (await settings.async_get_knowledge()).get("etl4lm", {})
+            etl4lm_settings = (await settings.async_get_knowledge()).etl4lm
             loader = Etl4lmLoader(
                 file_name,
                 input_file,
-                unstructured_api_url=etl4lm_settings.get("url", ""),
-                ocr_sdk_url=etl4lm_settings.get("ocr_sdk_url", ""),
+                unstructured_api_url=etl4lm_settings.url,
+                ocr_sdk_url=etl4lm_settings.ocr_sdk_url,
                 force_ocr=bool(force_ocr),
                 enable_formular=bool(enable_formula),
-                timeout=etl4lm_settings.get("timeout", 60),
+                timeout=etl4lm_settings.timeout,
                 filter_page_header_footer=bool(filter_page_header_footer),
                 knowledge_id=knowledge_id,
             )
@@ -1135,7 +1177,8 @@ def text_knowledge(
         db_knowledge: Knowledge, db_file: KnowledgeFile, documents: List[Document]
 ):
     """使用text 导入knowledge"""
-    embeddings = decide_embeddings(db_knowledge.model)
+    embeddings = LLMService.get_bisheng_knowledge_embedding_sync(model_id=int(db_knowledge.model),
+                                                                 invoke_user_id=db_file.user_id)
     vectore_client = decide_vectorstores(
         db_knowledge.collection_name, "Milvus", embeddings
     )
@@ -1247,7 +1290,8 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
     extra.update({"answer": answer, "main_question": questions[0]})
     docs = [Document(page_content=question, metadata=extra) for question in questions]
     try:
-        embeddings = decide_embeddings(db_knowledge.model)
+        embeddings = LLMService.get_bisheng_knowledge_embedding_sync(invoke_user_id=QA.user_id,
+                                                                     model_id=int(db_knowledge.model))
         vector_client = decide_vectorstores(
             db_knowledge.collection_name, "Milvus", embeddings
         )
@@ -1306,6 +1350,11 @@ def add_qa(db_knowledge: Knowledge, data: QAKnowledgeUpsert) -> QAKnowledge:
                 delete_vector_data(db_knowledge, [data.id])
             else:
                 qa = QAKnoweldgeDao.insert_qa(data)
+                telemetry_service.log_event_sync(
+                    user_id=qa.user_id,
+                    event_type=BaseTelemetryTypeEnum.NEW_KNOWLEDGE_FILE,
+                    trace_id=trace_id_var.get()
+                )
 
             # 对question进行embedding，然后录入知识库
             qa = QA_save_knowledge(db_knowledge, qa)
@@ -1443,7 +1492,7 @@ def delete_vector_data(knowledge: Knowledge, file_ids: List[int]):
     return True
 
 
-def recommend_question(question: str, answer: str, number: int = 3) -> List[str]:
+def recommend_question(invoke_user_id: int, question: str, answer: str, number: int = 3) -> List[str]:
     from langchain.chains.llm import LLMChain
     from langchain_core.prompts.prompt import PromptTemplate
 
@@ -1472,7 +1521,7 @@ def recommend_question(question: str, answer: str, number: int = 3) -> List[str]
 
         你生成的{number}个相似问题：
     """
-    llm = LLMService.get_knowledge_similar_llm()
+    llm = LLMService.get_knowledge_similar_llm(invoke_user_id)
     if not llm:
         raise KnowledgeSimilarError.http_exception()
 

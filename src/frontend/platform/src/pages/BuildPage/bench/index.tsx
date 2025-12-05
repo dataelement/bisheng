@@ -1,6 +1,7 @@
 // src/features/chat-config/ChatConfig.tsx
 import { Button } from "@/components/bs-ui/button";
-import { Card, CardContent } from "@/components/bs-ui/card";
+import { CardContent } from "@/components/bs-ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Label } from "@/components/bs-ui/label";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { generateUUID } from "@/components/bs-ui/utils";
@@ -8,21 +9,18 @@ import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { getWorkstationConfigApi, setWorkstationConfigApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { t } from "i18next";
+import { Settings } from "lucide-react";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
 import { FormInput } from "./FormInput";
 import { IconUploadSection } from "./IconUploadSection";
 import { Model, ModelManagement } from "./ModelManagement";
 import Preview from "./Preview";
 import { ToggleSection } from "./ToggleSection";
 import { WebSearchConfig } from "./WebSearchConfig";
-import { Settings } from "lucide-react";
-import { useWebSearchStore } from "../tools/webSearchStore";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
-import { getAssistantToolsApi, updateAssistantToolApi } from "@/controllers/API/assistant";
-import { useTranslation } from "react-i18next";
-import { t } from "i18next";
 
 
 export interface FormErrors {
@@ -121,7 +119,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const systemPromptRef = useRef<HTMLDivElement>(null);
     const appCenterWelcomeRef = useRef<HTMLDivElement>(null);
     const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
-    // 新增：模型管理容器的ref
+    // New: ref for model management container
     const modelManagementContainerRef = useRef<HTMLDivElement>(null);
 
     const { t } = useTranslation()
@@ -143,14 +141,14 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         systemPromptRef,
         appCenterWelcomeRef,
         appCenterDescriptionRef,
-        modelManagementContainerRef, // 传入新增的ref
+        modelManagementContainerRef, // Pass in the new ref
     }, parentFormData, parentSetFormData);
 
     useEffect(() => {
         modelRefs.current = modelRefs.current.slice(0, formData.models.length);
     }, [formData.models]);
     const [webSearchDialogOpen, setWebSearchDialogOpen] = useState(false);
-    // 非admin角色跳走
+    // Redirect non-admin users
     const { user } = useContext(userContext);
     const navigate = useNavigate()
     const [open, setOpen] = useState(false);
@@ -166,19 +164,6 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             [`${type}Icon`]: { ...prev[`${type}Icon`], image: fileUrl, relative_path: relativePath }
         }));
     };
-    const handleWebSearchSave = async (config) => {
-        const res = await getAssistantToolsApi('default');
-        const webSearchTool = res.find(tool => tool.name === "联网搜索");
-
-        if (!webSearchTool) {
-            console.error("Web search tool not found");
-            return;
-        }
-        const toolId = webSearchTool.id;
-        setFormData(prev => ({ ...prev, webSearch: config }));
-        await updateAssistantToolApi(toolId, config);
-        setWebSearchDialogOpen(false)
-    }
     const handleModelChange = (index: number, id: string) => {
         const newModels = [...formData.models];
         newModels[index].id = id;
@@ -200,11 +185,11 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const handleOpenWebSearchSettings = () => {
         setWebSearchDialogOpen(true);
     };
-    // 在父组件中添加这个方法
+    // Add this method in the parent component
     const handleWebSearchChange = useCallback((field: string, value: any) => {
-        console.log('更新字段:', field, '新值:', value);
+        console.log('Updating field:', field, 'New value:', value);
 
-        // 更新本地状态
+        // Update local state
         setFormData(prev => ({
             ...prev,
             webSearch: {
@@ -294,7 +279,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             />
                         </div>
 
-                        {/* 新增的应用中心描述输入框 */}
+                        {/* New application center description input */}
                         <div ref={appCenterDescriptionRef}>
                             <FormInput
                                 label={t('chatConfig.appCenterDescription')}
@@ -306,7 +291,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                         </div>
 
                         {/* Model Management */}
-                        {/* 绑定模型管理容器ref */}
+                        {/* Bind model management container ref */}
                         <div className="mb-6" ref={modelManagementContainerRef}>
                             <p className="text-lg font-bold mb-2">{t('chatConfig.modelManagement')}</p>
                             <div className="mb-6">
@@ -349,11 +334,11 @@ export default function index({ formData: parentFormData, setFormData: parentSet
 
                         {/* Toggle Sections */}
                         {/* <ToggleSection
-                            title="语音输入"
+                            title="Voice Input"
                             enabled={formData.voiceInput.enabled}
                             onToggle={(enabled) => toggleFeature('voiceInput', enabled)}
                         >
-                            <Label className="bisheng-label">语音输入模型选择</Label>
+                            <Label className="bisheng-label">Voice Input Model Selection</Label>
                             <div className="mt-3">
                                 <Select value={""} onValueChange={(val) => { }}>
                                     <SelectTrigger>
@@ -457,14 +442,15 @@ interface UseChatConfigProps {
     systemPromptRef: React.RefObject<HTMLDivElement>;
     appCenterWelcomeRef: React.RefObject<HTMLDivElement>;
     appCenterDescriptionRef: React.RefObject<HTMLDivElement>;
-    modelManagementContainerRef: React.RefObject<HTMLDivElement>; // 新增
+    modelManagementContainerRef: React.RefObject<HTMLDivElement>; // New
 }
 
 const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormData) => {
+    const { t } = useTranslation()
+
     const [formData, setFormData] = useState<ChatConfigForm>(parentFormData || {
         menuShow: true,
-
-        systemPrompt: "你是BISHENG智能问答助手，你的任务是根据用户问题进行回答。在回答时，请注意以下几点：- 当前时间是{cur_date}。- 不要泄露任何敏感信息，回答应基于一般性知识和逻辑。- 确保回答不违反法律法规、道德准则和公序良俗。",
+        systemPrompt: t('chatConfig.systemPrompt2'),
         sidebarIcon: { enabled: true, image: '', relative_path: '' },
         assistantIcon: { enabled: true, image: '', relative_path: '' },
         sidebarSlogan: '',
@@ -483,22 +469,7 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
                 api_key: '',
                 base_url: 'https://api.bing.microsoft.com/v7.0/search'
             },
-            prompt: `# 以下内容是基于用户发送的消息的搜索结果:
-{search_results}
-在我给你的搜索结果中，每个结果都是[webpage X begin]...[webpage X end]格式的，X代表每篇文章的数字索引。请在适当的情况下在句子末尾引用上下文。请按照引用编号[citation:X]的格式在答案中对应部分引用上下文。如果一句话源自多个上下文，请列出所有相关的引用编号，例如:cite[3]:cite[5]，切记不要将引用集中在最后返回引用编号，而是在答案对应部分列出。
-在回答时，请注意以下几点：
-- 今天是{cur_date}。
-- 并非搜索结果的所有内容都与用户的问题密切相关，你需要结合问题，对搜索结果进行甄别、筛选。
-- 对于列举类的问题（如列举所有航班信息），尽量将答案控制在10个要点以内，并告诉用户可以查看搜索来源、获得完整信息。优先提供信息完整、最相关的列举项；如非必要，不要主动告诉用户搜索结果未提供的内容。
-- 对于创作类的问题（如写论文），请务必在正文的段落中引用对应的参考编号，例如:cite[3]:cite[5]，不能只在文章末尾引用。你需要解读并概括用户的题目要求，选择合适的格式，充分利用搜索结果并抽取重要信息，生成符合用户要求、极具思想深度、富有创造力与专业性的答案。你的创作篇幅需要尽可能延长，对于每一个要点的论述要推测用户的意图，给出尽可能多角度的回答要点，且务必信息量大、论述详尽。
-- 如果回答很长，请尽量结构化、分段落总结。如果需要分点作答，尽量控制在5个点以内，并合并相关的内容。
-- 对于客观类的问答，如果问题的答案非常简短，可以适当补充一到两句相关信息，以丰富内容。
-- 你需要根据用户要求和回答内容选择合适、美观的回答格式，确保可读性强。
-- 你的回答应该综合多个相关网页来回答，不能重复引用一个网页。
-- 除非用户要求，否则你回答的语言需要和用户提问的语言保持一致。
-
-# 用户消息为：
-{question}`,
+            prompt: t('chatConfig.webSearchPrompt'),
         },
         knowledgeBase: {
             enabled: true, prompt: `{retrieved_file_content}
@@ -509,7 +480,8 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
 {question}`,
         },
     });
-    // 简单深比较，避免父子相互 set 导致的循环刷新
+
+    // Simple deep comparison to avoid circular refresh caused by parent-child mutual setting
     const isDeepEqual = (a: any, b: any) => {
         try {
             return JSON.stringify(a) === JSON.stringify(b);
@@ -537,11 +509,7 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
             getWorkstationConfigApi().then((res) => {
                 if (res) {
                     // 确保 systemPrompt 有值
-                    const defaultSystemPrompt = `你是BISHENG智能问答助手，你的任务是根据用户问题进行回答。
-在回答时，请注意以下几点：
-- 当前时间是{cur_date}。
-- 不要泄露任何敏感信息，回答应基于一般性知识和逻辑。
-- 确保回答不违反法律法规、道德准则和公序良俗。`
+                    const defaultSystemPrompt = t('chatConfig.webSearchPrompt')
                     const systemPrompt = res.systemPrompt || defaultSystemPrompt;
 
                     setFormData((prev) => {
@@ -570,7 +538,7 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
         setFormData(prev => ({ ...prev, [field]: value }));
 
         if (value.length >= maxLength) {
-            setErrors(prev => ({ ...prev, [field]: `最多${maxLength}个字符` }));
+            setErrors(prev => ({ ...prev, [field]: t('chatConfig.errors.maxCharacters', { count: maxLength }) }));
         } else {
             setErrors(prev => ({ ...prev, [field]: '' }));
         }
@@ -643,7 +611,7 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
             isValid = false;
         }
 
-        // 验证应用中心描述
+        // Validate application center description
         if (formData.applicationCenterDescription.length > 1000) {
             newErrors.applicationCenterDescription = t('chatConfig.errors.maxCharacters', { count: 1000 });
             if (!firstErrorRef) firstErrorRef = refs.appCenterDescriptionRef;
@@ -653,10 +621,10 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
         if (formData.models.length === 0) {
             newErrors.model = t('chatConfig.errors.atLeastOneModel');
             if (!firstErrorRef) {
-                // 修改：使用模型管理容器ref作为优先滚动目标
+                // Modified: Use model management container ref as priority scroll target
                 firstErrorRef = refs.modelManagementContainerRef.current
                     ? { current: refs.modelManagementContainerRef.current }
-                    : refs.sidebarSloganRef; // 保留默认回退
+                    : refs.sidebarSloganRef; // Keep default fallback
             }
             isValid = false;
         }
@@ -782,8 +750,8 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
             welcomeMessage: formData.welcomeMessage.trim(),
             functionDescription: formData.functionDescription.trim(),
             inputPlaceholder: formData.inputPlaceholder.trim(),
-            applicationCenterWelcomeMessage: formData.applicationCenterWelcomeMessage.trim() || '探索BISHENG的智能体',
-            applicationCenterDescription: formData.applicationCenterDescription.trim() || '您可以在这里选择需要的智能体来进行生产与工作~',
+            applicationCenterWelcomeMessage: formData.applicationCenterWelcomeMessage.trim() || t('chatConfig.appCenterWelcomePlaceholder'),
+            applicationCenterDescription: formData.applicationCenterDescription.trim() || t('chatConfig.appCenterDescriptionPlaceholder'),
             maxTokens: formData.maxTokens || 15000,
         };
 

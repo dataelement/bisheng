@@ -8,11 +8,12 @@ from pydantic import BaseModel, Field, model_validator, field_validator
 
 from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.flow import FlowCreate, FlowRead
-from bisheng.database.models.gpts_tools import AuthMethod, AuthType, GptsToolsRead
 from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeRead
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
+from bisheng.tool.domain.const import AuthMethod, AuthType
+from bisheng.tool.domain.models.gpts_tools import GptsToolsRead
 
 
 class CaptchaInput(BaseModel):

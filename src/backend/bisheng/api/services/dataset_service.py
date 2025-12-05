@@ -1,11 +1,12 @@
 from typing import Dict, List, Optional
 
+from fastapi import HTTPException
+
 from bisheng.api.services.base import BaseService
 from bisheng.api.v1.schema.dataset_param import CreateDatasetParam
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.dataset import Dataset, DatasetCreate, DatasetDao, DatasetRead
-from bisheng.database.models.user import UserDao
-from fastapi import HTTPException
+from bisheng.user.domain.models.user import UserDao
 
 
 class DatasetService(BaseService):
@@ -50,7 +51,6 @@ class DatasetService(BaseService):
         # 处理文件
         object_name = f'/dataset/{dataset.id}/{dataset.name}'
         if data.file_url:
-
             # MinioClient().upload_minio()
             dataset.object_name = object_name
         if data.qa_list:

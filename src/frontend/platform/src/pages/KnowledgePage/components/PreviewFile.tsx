@@ -9,6 +9,7 @@ import DocxPreview from "./DocxFileViewer";
 import { convertJsonData } from "./ParagraphEdit";
 import { Partition } from "./PreviewResult";
 import TxtFileViewer from "./TxtFileViewer";
+import ExcelPreview from "./ExcelPreview";
 
 export default function PreviewFile({
   urlState,
@@ -19,6 +20,8 @@ export default function PreviewFile({
   step,
   setChunks,
   edit = false,
+  resultFiles,
+  etl,
   previewUrl
 }: {
   urlState: { load: boolean; url: string };
@@ -43,7 +46,16 @@ export default function PreviewFile({
   }, [rawFiles, file]);
 
   const targetFile = matchedRawFile || file;
-  const fileParseType = targetFile.parse_type;
+  let fileParseType = '';
+  if(step === 2){
+    fileParseType = resultFiles[0].isEtl4lm
+  }else if(step === 3 && etl){
+    fileParseType = etl
+  } else {
+    fileParseType = targetFile.fileType;
+  }
+  console.log(targetFile,resultFiles,step,3);
+  
   const fileName = targetFile.name || file.fileName || file.name;
   const suffix = useMemo(() => {
     return fileName?.split('.').pop()?.toLowerCase() || '';
@@ -115,25 +127,25 @@ export default function PreviewFile({
       });
     });
 
-  if (labelsMap.size) {
-    setRePostion(!rePostion);
-    setLabelsMap(labelsMap);
-    labelsMapRef.current = labelsMap;
-  }
-}, [suffix, chunks, selectedChunkIndex, isUnsType, partitions]);
-useEffect(() => {
-  // 当 chunks 变化且存在选中的 chunkIndex 时，检查该 chunk 是否仍存在
-  if (selectedChunkIndex !== -1) {
-    const chunkExists = chunks.some(c => c.chunkIndex === selectedChunkIndex);
-    if (!chunkExists) {
-      // 清除该 chunk 对应的标签
-      setLabelsMap(new Map());
-      labelsMapRef.current = new Map();
-      delete labelsMapTempRef.current[selectedChunkIndex];
-      setSelectedBbox([]);
+    if (labelsMap.size) {
+      setRePostion(!rePostion);
+      setLabelsMap(labelsMap);
+      labelsMapRef.current = labelsMap;
     }
-  }
-}, [chunks, selectedChunkIndex, setLabelsMap, setSelectedBbox]);
+  }, [suffix, chunks, selectedChunkIndex, isUnsType, partitions]);
+  useEffect(() => {
+    // 当 chunks 变化且存在选中的 chunkIndex 时，检查该 chunk 是否仍存在
+    if (selectedChunkIndex !== -1) {
+      const chunkExists = chunks.some(c => c.chunkIndex === selectedChunkIndex);
+      if (!chunkExists) {
+        // 清除该 chunk 对应的标签
+        setLabelsMap(new Map());
+        labelsMapRef.current = new Map();
+        delete labelsMapTempRef.current[selectedChunkIndex];
+        setSelectedBbox([]);
+      }
+    }
+  }, [chunks, selectedChunkIndex, setLabelsMap, setSelectedBbox]);
   // 5. 页面滚动和定位逻辑（对齐ParagraphEdit的postion计算）
   useEffect(() => {
     setPostion(prev => [prev[0], prev[1] + selectedChunkDistanceFactor]);
@@ -256,6 +268,14 @@ useEffect(() => {
           alt="预览图片"
         />
       );
+      case 'xlsx':
+      case 'xls':
+      case 'csv':
+        return(
+          <div>
+            <ExcelPreview filePath={previewUrl || url} />
+          </div>
+        )
       default:
         return <div className="flex justify-center items-center h-full text-gray-400">
           <div className="text-center">
@@ -306,8 +326,6 @@ useEffect(() => {
     }
   }, [])
 
-  // 2. 调整Excel文件过滤逻辑
-  if (['xlsx', 'xls', 'csv'].includes(file.suffix)) return null
 
 
   return <div className={cn('relative', step === 3 ? "w-full" : "w-1/2", step === 2 ? "-mt-9 w-full" : "")} onClick={e => {
@@ -320,7 +338,7 @@ useEffect(() => {
         <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
       </div>
     </div>
-    <div className={`relative overflow-y-auto ${edit ? 'h-[calc(100vh-206px)]' : 'h-[calc(100vh-284px)]'}`}>
+    <div className={`relative ${['csv', 'xlsx','xls'].includes(file.suffix)? '':"overflow-y-auto"}  ${edit ? 'h-[calc(100vh-206px)]' : 'h-[calc(100vh-284px)]'}`}>
       {render(file.suffix)}
     </div>
   </div>

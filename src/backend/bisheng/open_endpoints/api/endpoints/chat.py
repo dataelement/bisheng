@@ -2,19 +2,22 @@ import json
 from typing import List, Optional
 from uuid import UUID
 
+from fastapi import APIRouter, Body, WebSocket, status
+from fastapi.middleware.wsgi import WSGIMiddleware
+from loguru import logger
+
+a = WSGIMiddleware
+
 from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.services.utils import set_flow_knowledge_id
 from bisheng.api.v1.schemas import ChatInput, resp_200
-from bisheng.open_endpoints.domain.schemas.message import SyncMessage
 from bisheng.chat.manager import ChatManager
+from bisheng.common.services.config_service import settings
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
+from bisheng.open_endpoints.domain.schemas.message import SyncMessage
 from bisheng.processing.process import process_tweaks
-from bisheng.common.services.config_service import settings
-from bisheng.utils import generate_uuid
-from loguru import logger
-from fastapi import APIRouter, Body, WebSocket, status
 
 router = APIRouter(prefix='/chat', tags=['OpenAPI', 'Chat'])
 chat_manager = ChatManager()
@@ -48,14 +51,14 @@ async def union_websocket(flow_id: str,
         # vectordatabase update
         if knowledge_id:
             set_flow_knowledge_id(graph_data, knowledge_id)
-        trace_id = generate_uuid()
-        with logger.contextualize(trace_id=trace_id):
-            await chat_manager.handle_websocket(
-                flow_id,
-                chat_id,
-                websocket,
-                settings.get_from_db('default_operator').get('user'),
-                gragh_data=graph_data)
+        await chat_manager.handle_websocket(
+            flow_id,
+            chat_id,
+            websocket,
+            settings.get_from_db('default_operator').get('user'),
+            gragh_data=graph_data,
+            source="api"
+        )
     except Exception as exc:
         logger.exception('union_websocket error: ')
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=str(exc))

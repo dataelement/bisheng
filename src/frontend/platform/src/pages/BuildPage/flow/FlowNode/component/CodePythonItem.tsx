@@ -5,7 +5,7 @@ import { Expand } from "lucide-react";
 import { useContext, useState } from "react";
 import AceEditor from "react-ace";
 
-export default function CodePythonItem({ data, onChange }) {
+export default function CodePythonItem({ data, onChange, i18nPrefix }) {
     const { dark } = useContext(darkContext);
     const [code, setCode] = useState(data.value);
 

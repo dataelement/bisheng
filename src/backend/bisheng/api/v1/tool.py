@@ -2,10 +2,10 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends
 
-from bisheng.api.services.tool import ToolServices
-from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
-from bisheng.database.constants import ToolPresetType
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.tool.domain.const import ToolPresetType
+from bisheng.tool.domain.services.tool import ToolServices
 
 router = APIRouter(prefix='/tool', tags=['Tool'])
 
@@ -22,7 +22,7 @@ async def get_linsight_tools():
 @router.get("/manage", summary="获取有管理权限的工具列表", response_model=UnifiedResponseModel)
 async def get_manage_tools(
         is_preset: Optional[int] = None,
-        login_user: UserPayload = Depends(get_login_user)):
+        login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     获取有管理权限的工具列表
     """

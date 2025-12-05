@@ -19,10 +19,10 @@ from loguru import logger
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.flow import FlowService
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import build_flow, build_input_keys_response
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import (UnifiedResponseModel, resp_200)
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.core.cache import InMemoryCache
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
@@ -30,9 +30,9 @@ from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.evaluation import (Evaluation, EvaluationDao, ExecType, EvaluationTaskStatus)
 from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersion
-from bisheng.database.models.user import UserDao
 from bisheng.graph.graph.base import Graph
 from bisheng.llm.domain.services import LLMService
+from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow
@@ -335,7 +335,7 @@ def add_evaluation_task(evaluation_id: int):
             assistant = AssistantDao.get_one_assistant(evaluation.unique_id)
             if not assistant:
                 raise Exception("Assistant not found")
-            gpts_agent = AssistantAgent(assistant_info=assistant, chat_id="")
+            gpts_agent = AssistantAgent(assistant_info=assistant, chat_id="", invoke_user_id=evaluation.user_id)
             asyncio.run(gpts_agent.init_assistant())
             for index, one in enumerate(csv_data):
                 messages = asyncio.run(gpts_agent.run(one.get('question')))
@@ -350,7 +350,7 @@ def add_evaluation_task(evaluation_id: int):
             for index, one in enumerate(csv_data):
                 one["answer"] = execute_workflow_get_answer(workflow_info, evaluation, one.get('question', ""))
 
-        _llm = LLMService.get_evaluation_llm_object()
+        _llm = LLMService.get_evaluation_llm_object(evaluation.user_id)
         llm = LangchainLLM(_llm)
         data_samples = {
             "question": [one.get('question') for one in csv_data],

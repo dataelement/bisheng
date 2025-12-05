@@ -268,13 +268,17 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
     const handleWsMessage = (data) => {
         if (data.category === 'error') {
             const { status_code, status_message, data: params } = data.message
-            setInputLock({ locked: true, reason: t(`errors.${status_code}`, params) })
+            if(status_code === 500) {
+                setInputLock({ locked: true, reason: data.message.message })
+            } else {
+                setInputLock({ locked: true, reason: t(`errors.${status_code}`, params) })
+            }
 
             // 记录
-            const errorMsg = status_code == 500 ? status_message : t(`errors.${status_code}`, params)
+            const errorMsg = status_code == 500 ? status_message || data.message.message : t(`errors.${status_code}`, params)
             addNotification({
                 type: 'error',
-                title: '运行异常',
+                title: 'runtime error',
                 description: errorMsg
             })
 
@@ -347,7 +351,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             detail: {
                 nodeId: node_id,
                 action: isError ? '' : data.type === 'start' ? 'loading' : 'success',
-                data: isError ? { 'error': data.message.reason } : data.message.log_data // 缓存TODO
+                data: isError ? [[{ key: 'error', type: 'params', value: data.message.reason }]] : data.message.log_data // 缓存TODO
             }
         })
         window.dispatchEvent(event)

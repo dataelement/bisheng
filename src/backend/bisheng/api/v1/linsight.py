@@ -18,29 +18,32 @@ from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.linsight.message_stream_handle import MessageStreamHandle
 from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
-from bisheng.api.services.user_service import get_login_user, UserPayload, get_admin_user
 from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
     SubmitFileSchema, LinsightToolSchema, ToolChildrenSchema
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.common.errcode.linsight import LinsightQuestionError, LinsightUseUpError, LinsightModifySopError, \
     LinsightStartTaskError, LinsightSessionVersionRunningError, LinsightQueueStatusError, FileUploadError, \
     SopShowcaseError
 from bisheng.common.errcode.server import InvalidOperationError, ResourceDownloadError
+from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData, ApplicationProcessEventData
+from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
-from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum, KnowledgeDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
     LinsightSessionVersion
 from bisheng.database.models.linsight_sop import LinsightSOPDao, LinsightSOPRecord
+from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum, KnowledgeDao
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import util
-from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(prefix="/linsight", tags=["灵思"])
 
@@ -50,7 +53,7 @@ router = APIRouter(prefix="/linsight", tags=["灵思"])
 async def upload_file(
         background_tasks: BackgroundTasks,
         file: UploadFile = File(...),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
     灵思上传文件
     :param background_tasks:
@@ -63,7 +66,7 @@ async def upload_file(
         # 调用实现类处理文件上传
         upload_result = await LinsightWorkbenchImpl.upload_file(file)
 
-        background_tasks.add_task(LinsightWorkbenchImpl.parse_file, upload_result)
+        background_tasks.add_task(LinsightWorkbenchImpl.parse_file, upload_result, login_user.user_id)
 
         result = {
             "file_id": upload_result.get("file_id"),
@@ -82,7 +85,7 @@ async def upload_file(
 @router.post("/workbench/file-parsing-status", summary="获取文件解析状态", response_model=UnifiedResponseModel)
 async def get_file_parsing_status(
         file_ids: List[str] = Body(..., description="文件ID列表", embed=True),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
     获取文件解析状态
     :param file_ids:
@@ -107,7 +110,7 @@ async def get_file_parsing_status(
 @router.post("/workbench/submit", summary="提交灵思用户问题请求")
 async def submit_linsight_workbench(
         submit_obj: LinsightQuestionSubmitSchema = Body(..., description="灵思用户问题提交对象"),
-        login_user: UserPayload = Depends(get_login_user)) -> EventSourceResponse:
+        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> EventSourceResponse:
     """
     提交灵思用户问题请求
     :param submit_obj:
@@ -176,7 +179,7 @@ async def generate_sop(
         reexecute: bool = Body(False, description="是否重新执行生成SOP"),
         sop_id: int = Body(None, description="精选案例的ID"),
         example_session_version_id: str = Body(default=None, description="参考案例的linsight_version_id"),
-        login_user: UserPayload = Depends(get_login_user)) -> EventSourceResponse:
+        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> EventSourceResponse:
     """
     生成与重新规划灵思SOP
     :param previous_session_version_id:
@@ -189,6 +192,7 @@ async def generate_sop(
     """
 
     logger.info(f"开始生成与重新规划灵思SOP，灵思会话版本ID: {linsight_session_version_id} ")
+    start_time = time.time()
 
     session_version = await LinsightSessionVersionDao.get_by_id(linsight_session_version_id)
 
@@ -238,7 +242,35 @@ async def generate_sop(
             "data": json.dumps({"message": "SOP生成与重新规划完成"})
         }
 
-    return EventSourceResponse(event_generator())
+    try:
+        return EventSourceResponse(event_generator())
+    finally:
+        end_time = time.time()
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=ApplicationAliveEventData(
+                                              app_id=ApplicationTypeEnum.LINSIGHT.value,
+                                              app_name=ApplicationTypeEnum.LINSIGHT.value,
+                                              app_type=ApplicationTypeEnum.LINSIGHT,
+                                              chat_id=session_version.session_id,
+
+                                              start_time=int(start_time),
+                                              end_time=int(end_time)
+                                          ))
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=ApplicationProcessEventData(
+                                              app_id=ApplicationTypeEnum.LINSIGHT.value,
+                                              app_name=ApplicationTypeEnum.LINSIGHT.value,
+                                              app_type=ApplicationTypeEnum.LINSIGHT,
+                                              chat_id=session_version.session_id,
+
+                                              start_time=int(start_time),
+                                              end_time=int(end_time),
+                                              process_time=int((end_time - start_time) * 1000)
+                                          ))
 
 
 # workbench 修改sop
@@ -246,7 +278,7 @@ async def generate_sop(
 async def modify_sop(
         sop_content: str = Body(..., description="SOP内容"),
         linsight_session_version_id: str = Body(..., description="灵思会话版本ID"),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
     修改灵思SOP
     :param sop_content:
@@ -276,7 +308,7 @@ async def modify_sop(
 async def start_execute_sop(
         background_tasks: BackgroundTasks,
         linsight_session_version_id: str = Body(..., description="灵思会话版本ID", embed=True),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
     开始执行灵思SOP
     :param linsight_session_version_id:
@@ -328,7 +360,7 @@ async def user_input(
         linsight_execute_task_id: str = Body(..., description="灵思执行任务ID"),
         input_content: str = Body(..., description="用户输入内容"),
         files: Optional[List[SubmitFileSchema]] = Body(None, description="用户上传的文件"),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
     用户输入
     :param files:
@@ -367,7 +399,7 @@ async def submit_feedback(
         score: int = Body(0, ge=0, le=5, description="用户评分，1-5分"),
         is_reexecute: bool = Body(False, description="是否重新执行"),
         cancel_feedback: bool = Body(False, description="取消反馈"),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
     提交执行结果反馈
     :param background_tasks:
@@ -437,14 +469,6 @@ async def submit_feedback(
         if feedback is not None and feedback.strip() != "":
             await SOPManageService.update_sop_record_feedback(session_version_model.id, feedback)
 
-            # # 重新生成SOP记录到记录表
-            # background_tasks.add_task(
-            #     LinsightWorkbenchImpl.feedback_regenerate_sop_task,
-            #     session_version_model,
-            #     feedback
-            # )
-            # pass
-
         return resp_200(data=True, message="提交成功")
 
 
@@ -452,7 +476,7 @@ async def submit_feedback(
 @router.post("/workbench/terminate-execute", summary="终止执行灵思", response_model=UnifiedResponseModel)
 async def terminate_execute(
         linsight_session_version_id: str = Body(..., description="灵思会话版本ID", embed=True),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
     终止执行灵思
     :param linsight_session_version_id:
@@ -513,7 +537,7 @@ async def terminate_execute(
 @router.get("/workbench/session-version-list", summary="获取当前会话所有灵思信息", response_model=UnifiedResponseModel)
 async def get_linsight_session_version_list(
         session_id: str = Query(..., description="会话ID"),
-        login_user: UserPayload = Depends(get_login_user),
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
         share_link: Union['ShareLink', None] = Depends(header_share_token_parser)
 ) -> UnifiedResponseModel:
     """
@@ -548,7 +572,7 @@ async def get_linsight_session_version_list(
 @router.get("/workbench/execute-task-detail", summary="获取执行任务详情", response_model=UnifiedResponseModel)
 async def get_execute_task_detail(
         session_version_id: str = Query(..., description="灵思会话版本ID"),
-        login_user: UserPayload = Depends(get_login_user),
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
         share_link: Union['ShareLink', None] = Depends(header_share_token_parser)) -> UnifiedResponseModel:
     """
     获取执行任务详情
@@ -580,7 +604,7 @@ async def get_execute_task_detail(
 async def task_message_stream(
         websocket: WebSocket,
         session_version_id: str = Query(..., description="灵思会话版本ID"),
-        Authorize: AuthJWT = Depends()):
+        login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws)):
     """
     建立灵思任务消息流 websocket
     :param Authorize:
@@ -588,13 +612,8 @@ async def task_message_stream(
     :param session_version_id:
     :return:
     """
-
+    start_time = time.time()
     try:
-        Authorize.jwt_required(auth_from='websocket', websocket=websocket)
-        payload = Authorize.get_jwt_subject()
-        payload = json.loads(payload)
-        login_user = UserPayload(**payload)
-
         message_handler = MessageStreamHandle(websocket=websocket, session_version_id=session_version_id)
 
         await message_handler.connect()
@@ -602,6 +621,34 @@ async def task_message_stream(
     except Exception as e:
         await websocket.close(code=1000, reason=str(e))
         return
+    finally:
+        end_time = time.time()
+        session_version_info = await LinsightSessionVersionDao.get_by_id(session_version_id)
+
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=ApplicationAliveEventData(
+                                              app_id=ApplicationTypeEnum.LINSIGHT.value,
+                                              app_name=ApplicationTypeEnum.LINSIGHT.value,
+                                              app_type=ApplicationTypeEnum.LINSIGHT,
+                                              chat_id=session_version_info.session_id if session_version_info else "",
+                                              start_time=int(start_time),
+                                              end_time=int(end_time)
+                                          ))
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=ApplicationProcessEventData(
+                                              app_id=ApplicationTypeEnum.LINSIGHT.value,
+                                              app_name=ApplicationTypeEnum.LINSIGHT.value,
+                                              app_type=ApplicationTypeEnum.LINSIGHT,
+                                              chat_id=session_version_info.session_id if session_version_info else "",
+
+                                              start_time=int(start_time),
+                                              end_time=int(end_time),
+                                              process_time=int((end_time - start_time) * 1000)
+                                          ))
 
 
 # 批量下载任务文件
@@ -609,7 +656,7 @@ async def task_message_stream(
 async def batch_download_files(
         zip_name: str = Body(..., description="压缩包名称"),
         file_info_list: List[DownloadFilesSchema] = Body(..., description="文件信息列表"),
-        login_user: UserPayload = Depends(get_login_user)):
+        login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     批量下载任务文件
     :param zip_name:
@@ -641,7 +688,7 @@ async def batch_download_files(
 @router.get("/workbench/queue-status", summary="获取灵思队列排队状态", response_model=UnifiedResponseModel)
 async def get_queue_status(
         session_version_id: str = Query(..., description="灵思会话版本ID"),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
     获取灵思队列排队状态
     :param session_version_id:
@@ -664,7 +711,7 @@ async def get_queue_status(
 async def download_md_to_pdf_or_docx(
         file_info: DownloadFilesSchema = Body(..., description="文件信息"),
         to_type: Literal["pdf", "docx"] = Body(..., description="转换的目标文件类型，pdf或docx"),
-        login_user: UserPayload = Depends(get_login_user)):
+        login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     灵思md转pdf or docx 下载
     :param file_info:
@@ -709,7 +756,7 @@ async def download_md_to_pdf_or_docx(
 @router.post("/sop/add", summary="添加灵思SOP", response_model=UnifiedResponseModel)
 async def add_sop(
         sop_obj: SOPManagementSchema = Body(..., description="SOP对象"),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
     添加灵思SOP
     :return:
@@ -724,7 +771,7 @@ async def add_sop(
 @router.post("/sop/update", summary="更新灵思SOP", response_model=UnifiedResponseModel)
 async def update_sop(
         sop_obj: SOPManagementUpdateSchema = Body(..., description="SOP对象"),
-        login_user: UserPayload = Depends(get_admin_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(UserPayload.get_admin_user)) -> UnifiedResponseModel:
     """
     更新灵思SOP
     :return:
@@ -740,7 +787,7 @@ async def get_sop_list(
         page: int = Query(1, ge=1, description="页码"),
         page_size: int = Query(10, ge=1, le=100, description="每页数量"),
         sort: Literal["asc", "desc"] = Query("desc", description="排序方式，asc或desc"),
-        login_user: UserPayload = Depends(get_admin_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(UserPayload.get_admin_user)) -> UnifiedResponseModel:
     """
     获取灵思SOP列表
     :return:
@@ -753,7 +800,7 @@ async def get_sop_list(
 
 
 @router.get("/sop/record", summary="获取灵思SOP记录", response_model=UnifiedResponseModel)
-async def get_sop_record(login_user: UserPayload = Depends(get_admin_user),
+async def get_sop_record(login_user: UserPayload = Depends(UserPayload.get_admin_user),
                          keyword: str = Query(None, description="搜索关键字"),
                          sort: str = Query(default='desc', description="排序方式，asc或desc"),
                          page: int = Query(1, ge=1, description="页码"),
@@ -764,7 +811,7 @@ async def get_sop_record(login_user: UserPayload = Depends(get_admin_user),
 
 @router.post("/sop/record/sync", summary="同步sop记录到sop库", response_model=UnifiedResponseModel)
 async def sync_sop_record(
-        login_user: UserPayload = Depends(get_admin_user),
+        login_user: UserPayload = Depends(UserPayload.get_admin_user),
         record_ids: list[int] = Body(..., description="sop记录表里的唯一id"),
         override: Optional[bool] = Body(default=False,
                                         description="是否强制覆盖"),
@@ -791,7 +838,7 @@ async def upload_sop_file(
         override: Optional[bool] = Body(default=False, description="是否强制覆盖"),
         save_new: Optional[bool] = Body(default=False, description="是否另存为新sop"),
         ignore_error: Optional[bool] = Body(default=False, description="是否忽略文件找那个错误的记录"),
-        login_user: UserPayload = Depends(get_admin_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(UserPayload.get_admin_user)) -> UnifiedResponseModel:
     """
     批量导入SOP入库
     """
@@ -813,7 +860,7 @@ async def upload_sop_file(
 @router.delete("/sop/remove", summary="删除灵思SOP", response_model=UnifiedResponseModel)
 async def remove_sop(
         sop_ids: List[int] = Body(..., description="SOP唯一ID列表", embed=True),
-        login_user: UserPayload = Depends(get_admin_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(UserPayload.get_admin_user)) -> UnifiedResponseModel:
     """
     删除灵思SOP
     :return:
@@ -827,7 +874,7 @@ async def get_sop_banner(
         page: int = Query(1, ge=1, description="页码"),
         page_size: int = Query(10, ge=1, le=100, description="每页数量"),
         sort: Literal["asc", "desc"] = Query("desc", description="排序方式，asc或desc"),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
     设置或取消灵思SOP库的精选案例
     :return:
@@ -840,7 +887,7 @@ async def get_sop_banner(
 async def set_sop_banner(
         sop_id: int = Body(..., description="SOP唯一ID"),
         showcase: bool = Body(..., description="是否设置为精选案例"),
-        login_user: UserPayload = Depends(get_admin_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(UserPayload.get_admin_user)) -> UnifiedResponseModel:
     """
     设置或取消灵思SOP库的精选案例
     :return:
@@ -866,7 +913,7 @@ async def set_sop_banner(
 async def get_sop_showcase_result(
         sop_id: int = Query(None, description="SOP唯一ID"),
         linsight_version_id: str = Query(None, description="灵思会话版本ID，优先使用该参数"),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     if not linsight_version_id:
         # 校验SOP是否存在
         existing_sop = await LinsightSOPDao.get_sops_by_ids([sop_id])
@@ -906,7 +953,7 @@ async def integrated_execute(
         body_param: str = Form(..., description="请求体参数，JSON字符串",
                                example='{"query": "请帮我写一个Python函数，计算两个数的和。", "tool_ids": [1, 2], "org_knowledge_enabled": true, "personal_knowledge_enabled": false}'),
         files: List[UploadFile] = File(None, description="上传的文件列表"),
-        login_user: UserPayload = Depends(get_login_user)
+        login_user: UserPayload = Depends(UserPayload.get_login_user)
 ) -> EventSourceResponse:
     """
     灵思一体化执行接口
@@ -977,7 +1024,7 @@ async def integrated_execute(
 
                 # 异步解析文件，增加超时控制
                 parse_result = await asyncio.wait_for(
-                    LinsightWorkbenchImpl.parse_file(upload_result),
+                    LinsightWorkbenchImpl.parse_file(upload_result, login_user.user_id),
                     timeout=300  # 5分钟超时
                 )
 

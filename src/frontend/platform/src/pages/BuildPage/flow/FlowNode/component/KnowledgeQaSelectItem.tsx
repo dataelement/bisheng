@@ -6,8 +6,8 @@ import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
 
 
-export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValidate, onVarEvent }) {
-    const { t } = useTranslation()
+export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValidate, onVarEvent, i18nPrefix }) {
+    const { t } = useTranslation('flow')
     const { flow } = useFlowStore()
     const [value, setValue] = useState<any>(() => data.value.map(el => {
         return { label: el.label, value: el.key }
@@ -76,7 +76,7 @@ export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValida
                 //     nodeName: flow.nodes.find(node => node.id === nodeId).data.name,
                 //     varNameCn: ''
                 // });
-                error = `${flow.nodes.find(node => node.id === nodeId).data.name}节点错误：${el.label}不存在.`
+                error = `${flow.nodes.find(node => node.id === nodeId).data.name} ${t('nodeError')}: ${el.label} ${t('doesNotExist')}.`
                 error && _errorKeys.push(el.value);
             }
             setErrorKeys(_errorKeys);
@@ -91,7 +91,7 @@ export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValida
     return <div className='node-item mb-4'>
         <Label className="flex items-center bisheng-label mb-2">
             {data.required && <span className="text-red-500">*</span>}
-            {data.label}
+            {t(`${i18nPrefix}label`)}
         </Label>
         <MultiSelect
             id="knowledge-qaselect"
@@ -101,8 +101,8 @@ export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValida
             className={''}
             value={value}
             options={options}
-            placeholder={data.placeholder}
-            searchPlaceholder={t('build.searchBaseName')}
+            placeholder={t(`${i18nPrefix}placeholder`)}
+            searchPlaceholder={t('build.searchBaseName', { ns: 'bs' })}
             onChange={handleSelect}
             onLoad={() => reload(1, '')}
             onSearch={(val) => reload(1, val)}

@@ -24,37 +24,37 @@ Extracted statements:
   }}
 ]
 
-Question: 公司2021年的研发费用占营业收入的比例是多少？
-Answer: 根据提供的信息，公司2021年的研发费用占营业收入的比例为15.86%。
-Ground truth: 根据公司招股书披露数据，公司2021年的研发费用占营业收入的比例为15.86%。
+Question: What was the company's R&D expense as a percentage of revenue in 2021?
+Answer: According to the information provided, the company's R&D expense accounted for 15.86% of revenue in 2021.
+Ground truth: According to the company's prospectus data, the company's R&D expense accounted for 15.86% of revenue in 2021.
 Extracted statements:
 [
   {{
-    "statements that are present in both the answer and the ground truth": ["公司2021年的研发费用占营业收入的比例为15.86%"],
+    "statements that are present in both the answer and the ground truth": ["The company's R&D expense accounted for 15.86% of revenue in 2021"],
     "statements present in the answer but not found in the ground truth": [],
     "relevant statements found in the ground truth but omitted in the answer": []
   }}
 ]
 
-Question: 达梦2021年的息税折旧摊销前利润是多少？
-Answer: 达梦2021年的息税折旧摊销前利润为49,189.87万元。
-Ground truth: 根据达梦数据库招股书披露数据，达梦2021年的息税折旧摊销前利润为49,189.85万元。
+Question: What was the EBITDA of Dameng in 2021?
+Answer: Dameng's EBITDA in 2021 was 491,898,700 yuan.
+Ground truth: According to Dameng Database's prospectus data, Dameng's EBITDA in 2021 was 491,898,500 yuan.
 Extracted statements:
 [
   {{
     "statements that are present in both the answer and the ground truth": [],
-    "statements present in the answer but not found in the ground truth": ["达梦2021年的息税折旧摊销前利润为49,189.87万元"],
-    "relevant statements found in the ground truth but omitted in the answer": ["根据达梦数据库招股书披露数据，达梦2021年的息税折旧摊销前利润为49,189.85万元"]
+    "statements present in the answer but not found in the ground truth": ["Dameng's EBITDA in 2021 was 491,898,700 yuan"],
+    "relevant statements found in the ground truth but omitted in the answer": ["According to Dameng Database's prospectus data, Dameng's EBITDA in 2021 was 491,898,500 yuan"]
   }}
 ]
 
-Question: 达梦2022年的应收账款周转率是多少？
-Answer: 根据提供的信息，无法得知达梦2022年的应收账款周转率。
-Ground truth: 很抱歉，达梦尚未披露2022年报数据。
+Question: What was Dameng's accounts receivable turnover ratio in 2022?
+Answer: Based on the information provided, Dameng's accounts receivable turnover ratio in 2022 is unknown.
+Ground truth: Sorry, Dameng has not yet disclosed its 2022 annual report data.
 Extracted statements:
 [
   {{
-    "statements that are present in both the answer and the ground truth": ["无法得知达梦2022年的应收账款周转率"],
+    "statements that are present in both the answer and the ground truth": ["Dameng's 2022 accounts receivable turnover ratio is unknown"],
     "statements present in the answer but not found in the ground truth": [],
     "relevant statements found in the ground truth but omitted in the answer": [],
   }}

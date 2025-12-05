@@ -11,28 +11,10 @@ import { useTranslation } from "react-i18next";
 import MessageMarkDown from "./MessageMarkDown";
 import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
-// 颜色列表
-const colorList = [
-    "#111",
-    "#FF5733",
-    "#3498DB",
-    "#27AE60",
-    "#E74C3C",
-    "#9B59B6",
-    "#F1C40F",
-    "#34495E",
-    "#16A085",
-    "#E67E22",
-    "#95A5A6"
-]
 
 export default function MessageBsChoose({ type = 'choose', logo, data }: { type?: string, logo: string, data: WorkflowMessage }) {
     const { t } = useTranslation()
-    const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
-
-    const avatarColor = colorList[
-        (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
-    ]
+    const { data: linsightConfig } = useLinsightConfig();
 
     const [selected, setSelected] = useState(data.message.hisValue || '')
     const handleSelect = (obj) => {

@@ -3,27 +3,99 @@ import { Button } from '@/components/bs-ui/button';
 import { Input } from '@/components/bs-ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/bs-ui/radio';
 import { generateUUID } from '@/components/bs-ui/utils';
-import i18next from 'i18next';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
 
-// 生成稳定的策略ID（与父组件保持一致）
+// Generate stable strategy ID
 const getStrategyId = (regexStr, position) => {
-  // 简单的哈希函数，确保相同内容生成相同ID
   let hash = 0;
   const str = `${regexStr}-${position}`;
   for (let i = 0; i < str.length; i++) {
     hash = ((hash << 5) - hash) + str.charCodeAt(i);
-    hash = hash & hash; // Convert to 32bit integer
+    hash = hash & hash;
   }
   return `strategy-${Math.abs(hash)}`;
 };
 
+// Predefined rules mapping table
+const PREDEFINED_RULES_CONFIG = {
+  '\\n': {
+    key: 'singleNewlineRule',
+    defaultPosition: 'after'
+  },
+  '\\n\\n': {
+    key: 'doubleNewlineRule', 
+    defaultPosition: 'after'
+  },
+  '第.{1,3}章': {
+    key: 'chapterRule',
+    defaultPosition: 'before'
+  },
+  '第.{1,3}条': {
+    key: 'articleRule',
+    defaultPosition: 'before'
+  },
+  '。': {
+    key: 'chinesePeriodRule',
+    defaultPosition: 'after'
+  },
+  '\\.': {
+    key: 'englishPeriodRule',
+    defaultPosition: 'after'
+  }
+};
+
 const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) => {
-  const { t } = useTranslation('knowledge')
+  const { t } = useTranslation('knowledge');
   const [customRegex, setCustomRegex] = useState('');
   const [position, setPosition] = useState('after');
+
+  const getPredefinedRuleDisplay = (ruleKey) => {
+    return t(`predefinedRules.${ruleKey}`, { defaultValue: ruleKey });
+  };
+
+  const getRuleDescription = (ruleKey, ruleParams = {}) => {
+    return t(`splitRules.${ruleKey}`, ruleParams);
+  };
+
+
+  useEffect(() => {
+    const needsMigration = strategies.some(strategy => 
+      strategy.rule && !strategy.ruleKey
+    );
+
+    if (needsMigration) {
+      const migratedStrategies = strategies.map(strategy => {
+        if (strategy.ruleKey) return strategy;
+
+        const regex = strategy.regex;
+        const predefinedRule = Object.entries(PREDEFINED_RULES_CONFIG).find(([pattern, rule]) => 
+          pattern === regex
+        );
+
+        if (predefinedRule) {
+          return {
+            ...strategy,
+            ruleKey: predefinedRule[1].key,
+            rule: undefined
+          };
+        } else if (strategy.rule && strategy.rule.startsWith('自定义规则: ')) {
+          const customRegex = strategy.rule.replace('自定义规则: ', '');
+          return {
+            ...strategy,
+            ruleKey: 'customRule',
+            ruleParams: { regex: customRegex },
+            rule: undefined
+          };
+        } else {
+          return strategy;
+        }
+      });
+
+      setStrategies(migratedStrategies);
+    }
+  }, [strategies, setStrategies]);
 
   const handleDragEnd = (result) => {
     if (!result.destination) return;
@@ -41,41 +113,45 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
         id: getStrategyId(customRegex.trim(), position),
         regex: customRegex.trim(),
         position,
-        rule: `自定义规则: ${customRegex.trim()}`
+        ruleKey: 'customRule',
+        ruleParams: { regex: customRegex.trim() }
       };
       setStrategies([...strategies, newStrategy]);
       setCustomRegex('');
-      // 检查是否已存在相同策略
-      // const exists = strategies.some(s => s.id === newStrategy.id);
-      // if (!exists) {
-      //   setStrategies([...strategies, newStrategy]);
-      //   setCustomRegex('');
-      // }
     }
   };
 
-  const handleRegexClick = (reg, pos, rule) => {
+  const handleRegexClick = (regex) => {
+    const predefinedRule = PREDEFINED_RULES_CONFIG[regex];
+    if (!predefinedRule) return;
+
     const newStrategy = {
-      id: getStrategyId(reg, pos),
-      regex: reg,
-      position: pos,
-      rule
+      id: getStrategyId(regex, predefinedRule.defaultPosition),
+      regex: regex,
+      position: predefinedRule.defaultPosition,
+      ruleKey: predefinedRule.key
     };
     setStrategies([...strategies, newStrategy]);
-    // 检查是否已存在相同策略
-    // const exists = strategies.some(s => s.id === newStrategy.id);
-    // if (!exists) {
-    //   setStrategies([...strategies, newStrategy]);
-    // }
   };
 
   const handleDelete = (id) => {
     setStrategies(strategies.filter(item => item.id !== id));
   };
 
+  const getStrategyDescription = (strategy) => {
+    return getRuleDescription(strategy.ruleKey, strategy.ruleParams || { regex: strategy.regex });
+  };
+
+  const getButtonDisplay = (regex) => {
+    const ruleConfig = PREDEFINED_RULES_CONFIG[regex];
+    if (!ruleConfig) return regex;
+    
+    return getPredefinedRuleDisplay(ruleConfig.key);
+  };
+
   return (
     <div className='flex gap-6'>
-      {/* 左侧拖拽区域 */}
+      {/* Left drag area */}
       <div className='flex-1'>
         <div className='py-2 px-0 pr-1 overflow-y-auto max-h-[11.5rem] select-none'>
           <DragDropContext onDragEnd={handleDragEnd}>
@@ -95,15 +171,14 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                             {strategy.position === 'before' ? (
                               <>
                                 <span>✂️{strategy.regex}</span>
-                                <span className='ml-3 text-xs text-gray-500'>{strategy.rule}</span>
+                                <span className='ml-3 text-xs text-gray-500'>{getStrategyDescription(strategy)}</span>
                               </>
                             ) : (
                               <>
                                 <span>{strategy.regex}✂️</span>
-                                <span className='ml-3 text-xs text-gray-500'>{strategy.rule}</span>
+                                <span className='ml-3 text-xs text-gray-500'>{getStrategyDescription(strategy)}</span>
                               </>
                             )}
-                            {/* 右侧渐变遮罩 */}
                             <div className="absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-accent to-transparent pointer-events-none"></div>
                             <DelIcon
                               onClick={() => handleDelete(strategy.id)}
@@ -115,7 +190,6 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                     </Draggable>
                   ))}
 
-                  {/* 添加占位符直到5个 */}
                   {strategies.length < 5 && (
                     Array(5 - strategies.length).fill(null).map((_, index) => (
                       <div
@@ -140,14 +214,16 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
       <div className="relative flex-1 flex flex-col gap-4">
         <h3 className="text-sm text-left font-medium text-gray-700">{t('universalRules')}:</h3>
         <div className="flex flex-wrap gap-2">
-          <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\n', 'after', '单换行后切分，用于分隔普通换行')}>\n✂️</Button>
-          <Button className="px-2 h-6" variant="secondary" onClick={() => handleRegexClick('\\n\\n', 'after', '双换行后切分，用于分隔段落')}>\n\n✂️</Button>
-          {i18next.language === 'zh' && <>
-            <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}章', 'before', '"第X章"前切分，切分章节等')}>{'✂️第.{1,3}章'}</Button>
-            <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}条', 'before', '"第X条"前切分，切分条目等')}>{'✂️第.{1,3}条'}</Button>
-          </>}
-          <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('。', 'after', '中文句号后切分，中文断句')}>。✂️</Button>
-          <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\.', 'after', '英文句号后切分，英文断句')}>\.✂️</Button>
+          {Object.keys(PREDEFINED_RULES_CONFIG).map((regex) => (
+            <Button 
+              key={regex}
+              className="px-2 h-6" 
+              variant='secondary' 
+              onClick={() => handleRegexClick(regex)}
+            >
+              {getButtonDisplay(regex)}
+            </Button>
+          ))}
         </div>
         
         <h3 className="text-sm text-left font-medium text-gray-700"> {t('addCustomRule')}:</h3>
@@ -166,7 +242,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
         <RadioGroup value={position} onValueChange={setPosition} className="flex items-center text-sm">
           <RadioGroupItem value="before" />{t('before')}
           <RadioGroupItem value="after" />{t('after')}
-          <span>切分</span>
+          <span>{t('split')}</span>
         </RadioGroup>
         
         <div className="flex justify-end absolute right-0 bottom-0">

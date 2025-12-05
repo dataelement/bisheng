@@ -77,12 +77,12 @@ class BaseErrorCode(Exception):
         }
 
     # websocket error message
-    async def websocket_close_message(self, websocket: WebSocket):
+    async def websocket_close_message(self, websocket: WebSocket, close_ws: bool = True):
         reason = {
             "status_code": self.code,
             "status_message": self.message,
             "data": {"exception": str(self), **self.kwargs}
         }
         await websocket.send_json({"category": "error", "type": "end", "message": reason})
-
-        await websocket.close(reason=self.message[:10])
+        if close_ws:
+            await websocket.close(reason=self.message[:10])

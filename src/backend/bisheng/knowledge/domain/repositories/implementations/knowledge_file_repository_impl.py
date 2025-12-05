@@ -32,7 +32,7 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         for knowledge_file in knowledge_files:
             if knowledge_file.user_metadata:
                 # 按更新时间排序
-                sorted_user_metadata = dict(sorted(knowledge_file.user_metadata.items(), key=lambda item: item[1].get("updated_at", 0), reverse=True))
+                sorted_user_metadata = dict(sorted(knowledge_file.user_metadata.items(), key=lambda item: item[1].get("updated_at", 0), reverse=False))
                 user_metadata_dict[knowledge_file.id] = sorted_user_metadata
             else:
                 user_metadata_dict[knowledge_file.id] = {}

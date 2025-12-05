@@ -8,7 +8,6 @@ from loguru import logger
 
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import read_chunk_text
-from bisheng.api.utils import md5_hash
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.chat.types import IgnoreException
 from bisheng.core.cache.utils import file_download
@@ -159,7 +158,8 @@ class InputNode(BaseNode):
         metadatas = []
         try:
             file_rule = FileProcessBase(knowledge_id=0)
-            texts, metadatas, _, _ = read_chunk_text(filepath, file_name, file_rule.separator, file_rule.separator_rule,
+            texts, metadatas, _, _ = read_chunk_text(self.user_id, filepath, file_name, file_rule.separator,
+                                                     file_rule.separator_rule,
                                                      file_rule.chunk_size, 0, None,
                                                      file_rule.retain_images, file_rule.enable_formula,
                                                      file_rule.force_ocr,
@@ -178,7 +178,7 @@ class InputNode(BaseNode):
         """
         # 1、获取默认的embedding模型
         if self._embedding is None:
-            embedding = LLMService.get_knowledge_default_embedding()
+            embedding = LLMService.get_knowledge_default_embedding(self.user_id)
             if not embedding:
                 raise Exception('没有配置默认的embedding模型')
             self._embedding = embedding
@@ -206,7 +206,7 @@ class InputNode(BaseNode):
         all_metadata = []
         all_file_content = ''
         original_file_path = []
-        file_id = md5_hash(f'{key}:{value[0]}')
+        file_id = generate_uuid()
         image_files_path = []
         file_content_max_size = int(key_info.get('file_content_size', 15000))
         file_content_length = 0

@@ -1,4 +1,6 @@
 import base64
+import contextvars
+import functools
 import hashlib
 import hmac
 import os
@@ -50,3 +52,20 @@ def generate_short_high_entropy_string(length=32):
     short_str = base64.urlsafe_b64encode(combined).decode().rstrip('=')[:length]
 
     return short_str
+
+
+# --- 定义装饰器 ---
+def transfer_trace_id(func):
+    """
+    装饰器：自动将当前上下文（包含 trace_id）复制到被装饰函数的执行环境中。
+    适用于 Thread 或 Executor。
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        # 1. 这里的代码还在父线程执行，捕获上下文
+        ctx = contextvars.copy_context()
+        # 2. 使用 ctx.run 在捕获的上下文中运行原函数
+        return ctx.run(func, *args, **kwargs)
+
+    return wrapper

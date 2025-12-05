@@ -2,15 +2,15 @@ from fastapi import APIRouter, Depends, Body, Request
 from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
-from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.v1.schemas import resp_200, resp_500
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.utils import get_request_ip
 
 router = APIRouter(prefix='/invite', tags=['InviteCode'])
 
 
 @router.post('/code')
-async def create_invite_code(request: Request, login_user: UserPayload = Depends(get_admin_user),
+async def create_invite_code(request: Request, login_user: UserPayload = Depends(UserPayload.get_admin_user),
                              name: str = Body(..., description='批次名称'),
                              num: int = Body(..., description='当前批次的邀请码数量'),
                              limit: int = Body(..., description='当前批次邀请码的使用次数限制')):
@@ -28,7 +28,7 @@ async def create_invite_code(request: Request, login_user: UserPayload = Depends
 
 
 @router.post('/bind')
-async def bind_invite_code(request: Request, login_user: UserPayload = Depends(get_login_user),
+async def bind_invite_code(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
                            code: str = Body(..., embed=True, description='邀请码')):
     """
     绑定邀请码
@@ -42,7 +42,7 @@ async def bind_invite_code(request: Request, login_user: UserPayload = Depends(g
 
 
 @router.get('/code')
-async def get_bind_code_num(request: Request, login_user: UserPayload = Depends(get_login_user)):
+async def get_bind_code_num(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     获取用户绑定的有效的邀请码的可使用次数
     """

@@ -161,7 +161,7 @@ export default function App() {
   }, [t])
   // init language
   useEffect(() => {
-    const lang = user?.user_id ? localStorage.getItem('language-' + user.user_id) : null
+    const lang = user?.user_id ? localStorage.getItem('i18nextLng') : null
     if (lang) {
       i18next.changeLanguage(lang)
     }

@@ -1,11 +1,11 @@
 from uuid import UUID
 
-from bisheng.api.services.flow import FlowService
-from bisheng.api.services.user_service import UserPayload
-from bisheng.open_endpoints.api.endpoints.assistant import get_default_operator
-from bisheng.common.services.config_service import settings
 from fastapi import APIRouter, HTTPException, Query, Request
 from loguru import logger
+
+from bisheng.api.services.flow import FlowService
+from bisheng.common.services.config_service import settings
+from bisheng.open_endpoints.api.endpoints.assistant import get_default_operator
 
 router = APIRouter(prefix='/flows', tags=['OpenAPI', 'FlowV2'])
 
@@ -21,13 +21,8 @@ async def get_flow(request: Request, flow_id: UUID):
     if not settings.get_from_db("default_operator").get("enable_guest_access"):
         raise HTTPException(status_code=403, detail="无权限访问")
     default_user = get_default_operator()
-    login_user = UserPayload(**{
-        'user_id': default_user.user_id,
-        'user_name': default_user.user_name,
-        'role': ''
-    })
 
-    return await FlowService.get_one_flow(login_user, flow_id)
+    return await FlowService.get_one_flow(default_user, flow_id)
 
 
 @router.get('', status_code=200)
@@ -42,9 +37,8 @@ def get_flow_list(request: Request,
     公开的获取技能信息的接口
     """
     logger.info(f'public_get_flow_list  ip: {request.client.host} user_id={user_id}')
+    login_user = get_default_operator()
 
-    user_id = user_id if user_id else settings.get_from_db('default_operator').get('user')
-    login_user = UserPayload(**{'user_id': user_id, 'role': ''})
     try:
         return FlowService.get_all_flows(login_user, name, status, tag_id, page_num, page_size)
     except Exception as e:

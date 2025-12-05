@@ -16,7 +16,6 @@ from bisheng.api.services.knowledge_imp import (
     process_file_task,
     async_read_chunk_text,
 )
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.knowledge import KnowledgeFileResp
 from bisheng.api.v1.schemas import (
     FileChunk,
@@ -25,15 +24,20 @@ from bisheng.api.v1.schemas import (
     KnowledgeFileProcess,
     UpdatePreviewFileChunk, ExcelRule, KnowledgeFileReProcess,
 )
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
 from bisheng.common.errcode.knowledge import (
     KnowledgeChunkError,
     KnowledgeExistError,
     KnowledgeNoEmbeddingError,
 )
+from bisheng.common.schemas.telemetry.event_data_schema import NewKnowledgeBaseEventData
+from bisheng.common.services import telemetry_service
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
 from bisheng.core.cache.utils import file_download, async_file_download
+from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
 from bisheng.database.models.group_resource import (
     GroupResource,
@@ -41,9 +45,7 @@ from bisheng.database.models.group_resource import (
     ResourceTypeEnum,
 )
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
-from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.database.models.user_role import UserRoleDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import (
@@ -59,11 +61,12 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus, ParseType,
 )
-from bisheng.llm.const import LLMModelType
-from bisheng.llm.models import LLMDao
+from bisheng.llm.domain.const import LLMModelType
+from bisheng.llm.domain.models import LLMDao
+from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid, generate_knowledge_index_name
 from bisheng.utils import get_request_ip
-from bisheng.worker.knowledge import file_worker
 
 
 class KnowledgeService(KnowledgeUtils):
@@ -178,9 +181,18 @@ class KnowledgeService(KnowledgeUtils):
         # 插入到数据库
         db_knowledge.user_id = login_user.user_id
         db_knowledge = KnowledgeDao.insert_one(db_knowledge)
+        telemetry_service.log_event_sync(user_id=login_user.user_id,
+                                         event_type=BaseTelemetryTypeEnum.NEW_KNOWLEDGE_BASE,
+                                         trace_id=trace_id_var.get(),
+                                         event_data=NewKnowledgeBaseEventData(
+                                             kb_id=db_knowledge.id,
+                                             kb_name=db_knowledge.name,
+                                             kb_type=db_knowledge.model_type
+                                         ))
 
         try:
-            vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge=db_knowledge,
+            vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id,
+                                                                                knowledge=db_knowledge,
                                                                                 metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
             es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge,
                                                                         metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
@@ -215,6 +227,16 @@ class KnowledgeService(KnowledgeUtils):
         AuditLogService.create_knowledge(
             login_user, get_request_ip(request), knowledge.id
         )
+
+        telemetry_service.log_event_sync(user_id=login_user.user_id,
+                                         event_type=BaseTelemetryTypeEnum.NEW_KNOWLEDGE_BASE,
+                                         trace_id=trace_id_var.get(),
+                                         event_data=NewKnowledgeBaseEventData(
+                                             kb_id=knowledge.id,
+                                             kb_name=knowledge.name,
+                                             kb_type=knowledge.model_type
+                                         ))
+
         return True
 
     @classmethod
@@ -272,6 +294,10 @@ class KnowledgeService(KnowledgeUtils):
 
         # 删除mysql数据
         KnowledgeDao.delete_knowledge(knowledge_id, only_clear)
+
+        telemetry_service.log_event_sync(user_id=login_user.user_id,
+                                         event_type=BaseTelemetryTypeEnum.DELETE_KNOWLEDGE_BASE,
+                                         trace_id=trace_id_var.get())
 
         if not only_clear:
             cls.delete_knowledge_hook(request, login_user, knowledge)
@@ -412,6 +438,7 @@ class KnowledgeService(KnowledgeUtils):
 
         # 切分文本
         texts, metadatas, parse_type, partitions = await async_read_chunk_text(
+            login_user.user_id,
             filepath,
             file_name,
             req_data.separator,
@@ -423,7 +450,8 @@ class KnowledgeService(KnowledgeUtils):
             enable_formula=req_data.enable_formula,
             filter_page_header_footer=req_data.filter_page_header_footer,
             retain_images=req_data.retain_images,
-            excel_rule=excel_rule
+            excel_rule=excel_rule,
+            no_summary=True,
         )
         if len(texts) == 0:
             raise ValueError("文件解析为空")
@@ -527,6 +555,8 @@ class KnowledgeService(KnowledgeUtils):
             background_tasks: BackgroundTasks,
             req_data: KnowledgeFileProcess,
     ) -> List[KnowledgeFile]:
+        from bisheng.worker.knowledge import file_worker
+
         """处理上传的文件"""
         knowledge, failed_files, process_files, preview_cache_keys = (
             cls.save_knowledge_file(login_user, req_data)
@@ -577,6 +607,7 @@ class KnowledgeService(KnowledgeUtils):
         :param req_data:
         :return:
         """
+        from bisheng.worker.knowledge import file_worker
 
         knowledge = await KnowledgeDao.async_query_by_id(req_data.knowledge_id)
         if not knowledge:
@@ -615,6 +646,8 @@ class KnowledgeService(KnowledgeUtils):
             background_tasks: BackgroundTasks,
             req_data: dict,
     ):
+        from bisheng.worker.knowledge import file_worker
+
         db_file_retry = req_data.get("file_objs")
         if not db_file_retry:
             return []
@@ -753,6 +786,11 @@ class KnowledgeService(KnowledgeUtils):
             updater_name=login_user.user_name,
         )
         db_file = KnowledgeFileDao.add_file(db_file)
+        telemetry_service.log_event_sync(
+            user_id=login_user.user_id,
+            event_type=BaseTelemetryTypeEnum.NEW_KNOWLEDGE_FILE,
+            trace_id=trace_id_var.get(),
+        )
         # 原始文件保存
         db_file.object_name = KnowledgeUtils.get_knowledge_file_object_name(db_file.id, db_file.file_name)
         minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=db_file.object_name,
@@ -856,6 +894,8 @@ class KnowledgeService(KnowledgeUtils):
     def delete_knowledge_file(
             cls, request: Request, login_user: UserPayload, file_ids: List[int]
     ):
+        from bisheng.worker.knowledge import file_worker
+
         knowledge_file = KnowledgeFileDao.select_list(file_ids)
         if not knowledge_file:
             raise NotFoundError.http_exception()
@@ -868,6 +908,9 @@ class KnowledgeService(KnowledgeUtils):
         # 处理vectordb
         delete_knowledge_file_vectors(file_ids)
         KnowledgeFileDao.delete_batch(file_ids)
+        telemetry_service.log_event_sync(user_id=login_user.user_id,
+                                         event_type=BaseTelemetryTypeEnum.DELETE_KNOWLEDGE_FILE,
+                                         trace_id=trace_id_var.get())
 
         # 删除知识库文件的审计日志
         cls.delete_knowledge_file_hook(
@@ -1036,7 +1079,7 @@ class KnowledgeService(KnowledgeUtils):
         logger.info(
             f"act=update_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}"
         )
-        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(db_knowledge)
+        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)
         # search metadata
         output_fields = [s.name for s in vector_client.col.schema.fields if s.name != "vector"]
         res = vector_client.col.query(
@@ -1104,7 +1147,7 @@ class KnowledgeService(KnowledgeUtils):
         logger.info(
             f"act=delete_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}"
         )
-        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(db_knowledge)
+        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)
         res = vector_client.col.delete(
             expr=f"document_id == {file_id} && chunk_index == {chunk_index}",
             timeout=10,
@@ -1188,6 +1231,8 @@ class KnowledgeService(KnowledgeUtils):
             login_user: UserPayload,
             knowledge: Knowledge,
     ) -> Any:
+        from bisheng.worker.knowledge import file_worker
+
         await KnowledgeDao.async_update_state(knowledge.id, KnowledgeState.COPYING, update_time=knowledge.update_time)
         knowldge_dict = knowledge.model_dump()
         knowldge_dict.pop("id")

@@ -12,33 +12,37 @@ from fastapi import UploadFile
 from langchain_core.tools import BaseTool
 from loguru import logger
 
-from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.knowledge_imp import decide_vectorstores, async_read_chunk_text
 from bisheng.api.services.linsight.sop_manage import SOPManageService
-from bisheng.api.services.tool import ToolServices
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
     SubmitFileSchema
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.linsight import LinsightToolInitError, LinsightBishengLLMError, LinsightGenerateSopError
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
+from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_file_to_folder, CACHE_DIR
+from bisheng.core.logger import trace_id_var
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
-from bisheng.database.models.gpts_tools import GptsToolsDao
-from bisheng.knowledge.domain.models.knowledge import KnowledgeRead, KnowledgeTypeEnum
 from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum
 from bisheng.database.models.linsight_sop import LinsightSOPRecord
 from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.knowledge.domain.models.knowledge import KnowledgeRead, KnowledgeTypeEnum
 from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.services import LLMService
+from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+from bisheng.tool.domain.services.executor import ToolExecutor
+from bisheng.tool.domain.services.tool import ToolServices
 from bisheng.utils import util
 from bisheng.utils.util import async_calculate_md5
 from bisheng_langchain.linsight.const import ExecConfig
@@ -87,13 +91,15 @@ class LinsightWorkbenchImpl:
         """Bisheng LLM相关错误"""
 
     @classmethod
-    async def _get_llm(cls) -> (BishengLLM, Any):
+    async def _get_llm(cls, invoke_user_id: int) -> (BishengLLM, Any):
         # 获取并验证工作台配置
         workbench_conf = await cls._get_workbench_config()
 
         # 创建LLM实例
         linsight_conf = settings.get_linsight_conf()
-        llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=linsight_conf.default_temperature)
+        llm = await LLMService.get_bisheng_linsight_llm(invoke_user_id=invoke_user_id,
+                                                        model_id=workbench_conf.task_model.id,
+                                                        temperature=linsight_conf.default_temperature)
         return llm, workbench_conf
 
     @classmethod
@@ -139,16 +145,6 @@ class LinsightWorkbenchImpl:
             # 生成唯一会话ID
             chat_id = uuid.uuid4().hex
 
-            # 创建消息会话
-            message_session = MessageSession(
-                chat_id=chat_id,
-                flow_id='',
-                flow_name='新对话',
-                flow_type=FlowType.LINSIGHT.value,
-                user_id=login_user.user_id
-            )
-            await MessageSessionDao.async_insert_one(message_session)
-
             # 处理文件（如果存在）
             processed_files = await cls._process_submitted_files(submit_obj.files, chat_id)
 
@@ -163,6 +159,30 @@ class LinsightWorkbenchImpl:
                 files=processed_files
             )
             linsight_session_version = await LinsightSessionVersionDao.insert_one(linsight_session_version)
+
+            # 创建消息会话
+            message_session = MessageSession(
+                chat_id=chat_id,
+                flow_id=linsight_session_version.id,
+                flow_name='新对话',
+                flow_type=FlowType.LINSIGHT.value,
+                user_id=login_user.user_id
+            )
+
+            message_session = await MessageSessionDao.async_insert_one(message_session)
+
+            # 记录Telemetry日志
+            await telemetry_service.log_event(user_id=login_user.user_id,
+                                              event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
+                                              trace_id=trace_id_var.get(),
+                                              event_data=NewMessageSessionEventData(
+                                                  session_id=message_session.chat_id,
+                                                  app_id=ApplicationTypeEnum.LINSIGHT.value,
+                                                  source="platform",
+                                                  app_name=ApplicationTypeEnum.LINSIGHT.value,
+                                                  app_type=ApplicationTypeEnum.LINSIGHT
+                                              )
+                                              )
 
             return message_session, linsight_session_version
 
@@ -241,7 +261,7 @@ class LinsightWorkbenchImpl:
             包含任务标题的字典
         """
         try:
-            llm, _ = await cls._get_llm()
+            llm, _ = await cls._get_llm(login_user.user_id)
 
             # 生成prompt
             prompt = await cls._generate_title_prompt(question)
@@ -367,7 +387,7 @@ class LinsightWorkbenchImpl:
                 return
             try:
                 # 创建LLM和工具
-                llm, workbench_conf = await cls._get_llm()
+                llm, workbench_conf = await cls._get_llm(session_version.user_id)
             except Exception as e:
                 logger.error(f"生成SOP内容失败: session_version_id={linsight_session_version_id}, error={str(e)}")
                 raise cls.BishengLLMError(str(e))
@@ -706,12 +726,13 @@ class LinsightWorkbenchImpl:
         return upload_result
 
     @classmethod
-    async def parse_file(cls, upload_result: Dict) -> Dict:
+    async def parse_file(cls, upload_result: Dict, invoke_user_id: int) -> Dict:
         """
         解析上传的文件
 
         Args:
             upload_result: 上传结果
+            invoke_user_id: 调用用户ID
 
         Returns:
             解析结果
@@ -727,7 +748,7 @@ class LinsightWorkbenchImpl:
             collection_name = f"{cls.COLLECTION_NAME_PREFIX}{workbench_conf.embedding_model.id}"
 
             # 异步执行文件解析
-            parse_result = await cls._parse_file(file_id, file_path, original_filename,
+            parse_result = await cls._parse_file(invoke_user_id, file_id, file_path, original_filename,
                                                  collection_name, workbench_conf)
 
             # 缓存解析结果
@@ -747,7 +768,7 @@ class LinsightWorkbenchImpl:
         return parse_result
 
     @classmethod
-    async def _parse_file(cls, file_id: str, file_path: str, original_filename: str,
+    async def _parse_file(cls, invoke_user_id: int, file_id: str, file_path: str, original_filename: str,
                           collection_name: str, workbench_conf) -> Dict:
         """
         同步解析文件
@@ -765,6 +786,7 @@ class LinsightWorkbenchImpl:
         # 读取文件内容
         try:
             texts, _, parse_type, _ = await async_read_chunk_text(
+                invoke_user_id=invoke_user_id,
                 input_file=file_path,
                 file_name=original_filename,
                 separator=['\n\n', '\n'],
@@ -785,7 +807,7 @@ class LinsightWorkbenchImpl:
             markdown_md5 = await async_calculate_md5(markdown_bytes)
 
             # 处理向量存储
-            await cls._process_vector_storage(texts, file_id, collection_name, workbench_conf)
+            await cls._process_vector_storage(invoke_user_id, texts, file_id, collection_name, workbench_conf)
 
             return {
                 "file_id": file_id,
@@ -808,11 +830,12 @@ class LinsightWorkbenchImpl:
             }
 
     @classmethod
-    async def _process_vector_storage(cls, texts: List[str], file_id: str,
+    async def _process_vector_storage(cls, invoke_user_id: int, texts: List[str], file_id: str,
                                       collection_name: str, workbench_conf) -> None:
         """处理向量存储"""
         # 创建embeddings
-        embeddings = await LLMService.get_bisheng_embedding(model_id=workbench_conf.embedding_model.id)
+        embeddings = await LLMService.get_bisheng_linsight_embedding(model_id=workbench_conf.embedding_model.id,
+                                                                     invoke_user_id=invoke_user_id)
 
         # 创建向量存储
         vector_client = decide_vectorstores(collection_name, "Milvus", embeddings)
@@ -835,7 +858,7 @@ class LinsightWorkbenchImpl:
         )
 
     @classmethod
-    async def _init_bisheng_code_tool(cls, config_tool_ids: List[int], file_dir: str) -> List[BaseTool]:
+    async def _init_bisheng_code_tool(cls, config_tool_ids: List[int], file_dir: str, user_id: int) -> List[BaseTool]:
         """
         特殊处理初始化毕昇的代码解释器工具
         """
@@ -866,8 +889,11 @@ class LinsightWorkbenchImpl:
 
         bisheng_code_tool.extra = code_config
 
-        tools = AssistantAgent.sync_init_preset_tools([bisheng_code_tool], None, None)
-        return tools
+        tools = await ToolExecutor.init_by_tool_id(tool=bisheng_code_tool, app_id=ApplicationTypeEnum.LINSIGHT.value,
+                                                   app_name=ApplicationTypeEnum.LINSIGHT.value,
+                                                   app_type=ApplicationTypeEnum.LINSIGHT,
+                                                   user_id=user_id)
+        return [tools]
 
     @classmethod
     async def init_linsight_config_tools(cls, session_version: LinsightSessionVersion,
@@ -899,7 +925,8 @@ class LinsightWorkbenchImpl:
 
         # todo 更好的工具初始化方案
         if need_upload and file_dir:
-            bisheng_code_tool = await cls._init_bisheng_code_tool(config_tool_ids, file_dir)
+            bisheng_code_tool = await cls._init_bisheng_code_tool(config_tool_ids, file_dir,
+                                                                  user_id=session_version.user_id)
             tools.extend(bisheng_code_tool)
 
         # 过滤有效的工具ID
@@ -907,7 +934,10 @@ class LinsightWorkbenchImpl:
 
         # 初始化工具
         if valid_tool_ids:
-            tools.extend(await AssistantAgent.init_tools_by_tool_ids(valid_tool_ids, llm=llm))
+            tools.extend(await ToolExecutor.init_by_tool_ids(valid_tool_ids, app_id=ApplicationTypeEnum.LINSIGHT.value,
+                                                             app_name=ApplicationTypeEnum.LINSIGHT.value,
+                                                             app_type=ApplicationTypeEnum.LINSIGHT,
+                                                             user_id=session_version.user_id))
 
         return tools
 
@@ -942,7 +972,7 @@ class LinsightWorkbenchImpl:
             file_list = await cls.prepare_file_list(session_version_model)
 
             # 创建LLM和工具
-            llm, workbench_conf = await cls._get_llm()
+            llm, workbench_conf = await cls._get_llm(session_version_model.user_id)
             tools = await cls._prepare_tools(session_version_model, llm)
 
             # 获取历史摘要

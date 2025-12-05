@@ -4,6 +4,7 @@ import os
 import re
 from typing import Dict, List, Optional, Union
 
+from celery.schedules import crontab
 from cryptography.fernet import Fernet
 from loguru import logger
 from pydantic import ConfigDict, BaseModel, Field, field_validator, model_validator
@@ -81,12 +82,26 @@ class ElasticsearchConf(BaseModel):
     """ elasticsearch 配置 """
     elasticsearch_url: Optional[str] = Field(default='http://127.0.0.1:9200', alias='url',
                                              description='elasticsearch访问地址')
+
     ssl_verify: Optional[str | dict] = Field(default='{"basic_auth": ("elastic", "elastic")}', description='额外的参数')
+
+    # 数据看板elasticsearch 连接参数
+    statistics_elasticsearch_url: Optional[str] = Field(None, description='数据看板elasticsearch访问地址')
+    statistics_ssl_verify: Optional[str | dict] = Field(default='{"basic_auth": ("elastic", "elastic")}',
+                                                        description='数据看板elasticsearch 额外的参数')
 
     @model_validator(mode='after')
     def validate(self):
         if isinstance(self.ssl_verify, str):
             self.ssl_verify = ast.literal_eval(self.ssl_verify)
+
+        if isinstance(self.statistics_ssl_verify, str):
+            self.statistics_ssl_verify = ast.literal_eval(self.statistics_ssl_verify)
+
+        if not self.statistics_elasticsearch_url:
+            self.statistics_elasticsearch_url = self.elasticsearch_url
+            self.statistics_ssl_verify = self.ssl_verify
+
         return self
 
 
@@ -126,6 +141,7 @@ class WorkflowConf(BaseModel):
 class CeleryConf(BaseModel):
     """ Celery 配置 """
     task_routers: Optional[Dict] = Field(default_factory=dict, description='任务路由配置')
+    beat_schedule: Optional[Dict] = Field(default_factory=dict, description='定时任务配置')
 
     @model_validator(mode='after')
     def validate(self):
@@ -134,6 +150,31 @@ class CeleryConf(BaseModel):
                 "bisheng.worker.knowledge.*": {"queue": "knowledge_celery"},  # 知识库相关任务
                 "bisheng.worker.workflow.*": {"queue": "workflow_celery"},  # 工作流执行相关任务
             }
+        if 'telemetry_mid_user_increment' not in self.beat_schedule:
+            self.beat_schedule['telemetry_mid_user_increment'] = {
+                'task': 'bisheng.worker.telemetry.mid_table.sync_mid_user_increment',
+                'schedule': crontab('*/30 0 * * *'),  # 00:30 exec every day
+            }
+        if 'telemetry_mid_knowledge_increment' not in self.beat_schedule:
+            self.beat_schedule['telemetry_mid_knowledge_increment'] = {
+                'task': 'bisheng.worker.telemetry.mid_table.sync_mid_knowledge_increment',
+                'schedule': crontab('*/30 0 * * *'),  # 00:30 exec every day
+            }
+        if 'telemetry_sync_mid_app_increment' not in self.beat_schedule:
+            self.beat_schedule['telemetry_sync_mid_app_increment'] = {
+                'task': 'bisheng.worker.telemetry.mid_table.sync_mid_app_increment',
+                'schedule': crontab('*/30 0 * * *'),  # 00:30 exec every day
+            }
+        if 'telemetry_sync_mid_user_interact_dtl' not in self.beat_schedule:
+            self.beat_schedule['telemetry_sync_mid_user_interact_dtl'] = {
+                'task': 'bisheng.worker.telemetry.mid_table.sync_mid_user_interact_dtl',
+                'schedule': crontab('*/30 0 * * *'),  # 00:30 exec every day
+            }
+
+        # convert str to crontab
+        for key, task_info in self.beat_schedule.items():
+            if isinstance(task_info['schedule'], str):
+                self.beat_schedule[key]['schedule'] = crontab(task_info['schedule'])
         return self
 
 
@@ -151,6 +192,31 @@ class LinsightConf(BaseModel):
     retry_temperature: float = Field(default=1, description='react模式json解析失败后重试时模型温度')
     file_content_length: int = Field(default=5000, description='拆分子任务时读取文件内容的字符数，超过后会截断')
     max_file_content_num: int = Field(default=3, description='拆分子任务时读取文件数量，按修改时间倒序')
+
+
+class CookieConf(BaseModel):
+    """ Cookie 配置 """
+    max_age: Optional[int] = Field(default=None, description="Cookie 的最大存活时间，单位为秒")
+    path: str = Field(default='/', description="Cookie 的路径属性")
+    domain: Optional[str] = Field(default=None, description="Cookie 的域属性")
+    secure: bool = Field(default=False, description="是否启用 secure 属性")
+    httponly: bool = Field(default=True, description="是否启用 HttpOnly 属性")
+    samesite: str = Field(default=None, description="SameSite 属性，可选值为 'lax', 'strict', 'none'")
+
+    jwt_token_expire_time: int = Field(default=86400, description="JwtToken的的过期时间，单位为秒")
+    jwt_iss: str = Field(default='bisheng', description="JwtToken的签发者")
+
+
+class Etl4lmConf(BaseModel):
+    """ Etl4lm 配置 """
+    url: str = Field(default='', description='etl4lm服务地址')
+    timeout: int = Field(default=600, description='etl4lm服务请求超时时间（秒）')
+    ocr_sdk_url: str = Field(default='', description='etl4lm ocr sdk服务地址')
+
+
+class KnowledgeConf(BaseModel):
+    """ Knowledge 配置 """
+    etl4lm: Etl4lmConf
 
 
 class Settings(BaseModel):
@@ -198,6 +264,7 @@ class Settings(BaseModel):
     object_storage: ObjectStore = ObjectStore()
     workflow_conf: WorkflowConf = WorkflowConf()
     celery_task: CeleryConf = CeleryConf()
+    cookie_conf: CookieConf = CookieConf()
 
     @field_validator('database_url')
     @classmethod
@@ -269,3 +336,12 @@ class Settings(BaseModel):
             if key != 'dev' and not value:
                 values[key] = []
         return values
+
+    def get_minio_conf(self) -> MinioConf:
+        return self.object_storage.minio
+
+    def get_vectors_conf(self) -> VectorStores:
+        return self.vector_stores
+
+    def get_search_conf(self) -> ElasticsearchConf:
+        return self.vector_stores.elasticsearch

@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends
 
-from bisheng.common.dependencies.user_deps import get_login_user
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
 from bisheng.finetune.domain.models.model_deploy import ModelDeployDao
 from bisheng.finetune.domain.models.server import Server, ServerCreate, ServerDao
 from ...common.errcode.http_error import NotFoundError
 
 # build router
-router = APIRouter(prefix='/server', tags=['server'], dependencies=[Depends(get_login_user)])
+router = APIRouter(prefix='/server', tags=['server'], dependencies=[Depends(UserPayload.get_login_user)])
 
 
 @router.post('/add')

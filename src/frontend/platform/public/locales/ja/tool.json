@@ -1,0 +1,408 @@
+{
+    "categories": {
+        "代码执行器": {
+            "name": "コード実行器",
+            "desc": "コードを実行して、グラフの描画やファイル処理などのプログラム関連操作を完了します"
+        },
+        "天眼查": {
+            "name": "天眼查",
+            "desc": "企業情報検索"
+        },
+        "Jina AI": {
+            "name": "Jina AI",
+            "desc": "指定されたウェブサイト（PDFをサポート）を大モデルが処理できるMarkdown形式に変換します"
+        },
+        "联网搜索": {
+            "name": "インターネット検索",
+            "desc": "インターネット情報を検索し、異なる検索エンジンを使って結果を返します。現在、Bing、博查、Jina 深層検索、SerpApi、Tavilyがサポートされています。"
+        },
+        "Dalle3绘画": {
+            "name": "Dalle3絵画",
+            "desc": "OpenAIのテキストから画像生成モデル"
+        },
+        "Firecrawl": {
+            "name": "Firecrawl",
+            "desc": "指定されたURLからウェブコンテンツをクロールし、Markdown形式に変換します"
+        },
+        "SiliconFlow": {
+            "name": "SiliconFlow",
+            "desc": "テキストプロンプトに基づいて高品質な画像を生成します。FluxおよびStable Diffusionモデルに対応"
+        },
+        "飞书消息": {
+            "name": "Feishuメッセージ",
+            "desc": "指定されたユーザーまたはグループチャットにメッセージを送信することができます"
+        },
+        "Bing web搜索": {
+            "name": "Bingウェブ検索",
+            "desc": "Bing検索エンジンを使用してインターネット情報を検索できます。天気、為替、時事など"
+        },
+        "发送邮件": {
+            "name": "メール送信",
+            "desc": "SMTPプロトコルを使用して電子メールを送信する"
+        },
+        "企业微信": {
+            "name": "企業WeChat",
+            "desc": "企業WeChatボットでグループメッセージを送信するツール"
+        },
+        "钉钉": {
+            "name": "DingTalk",
+            "desc": "DingTalkグループボットでメッセージを送信するツール"
+        },
+        "论文获取": {
+            "name": "論文取得",
+            "desc": "Arxivウェブサイトから論文を検索するツール、検索キーワードを入力します"
+        },
+        "计算器": {
+            "name": "電卓",
+            "desc": "Python内蔵ツールを使って数学的な式を計算"
+        },
+        "经济金融数据": {
+            "name": "経済金融データ",
+            "desc": "株式、ファンド、先物などの市場データや、マクロ経済、企業財務データを含む金融ビッグデータプラットフォーム"
+        },
+        "时间": {
+            "name": "時間",
+            "desc": "現在の時間を取得"
+        }
+    },
+    "tools": {
+        "bisheng_code_interpreter": {
+            "name": "コード実行器",
+            "desc": "Pythonおよびshellコードを実行し、600秒以内に結果を返します。数学、プログラミング、画像、ファイル関連の問題に適しています。",
+            "params": {
+                "python_code": "評価する純粋なPythonスクリプト。\n内容はmain.pyに入ります。\nマークダウン形式ではなく、通常のPythonコードである必要があります。"
+            }
+        },
+        "tianyancha_riskinfo": {
+            "name": "企業天眼リスク",
+            "desc": "キーワード（会社名、会社ID、登録番号または社会信用コード）を使用して企業に関連する天眼リスクリストを取得できます。企業自身/周辺/警告リスク情報を含みます。",
+            "params": {
+                "query": "検索キーワード（会社名、会社ID、登録番号または社会信用コード）"
+            }
+        },
+        "tianyancha_company_holders": {
+            "name": "企業株主",
+            "desc": "会社名またはIDを使って企業の株主情報を取得できます。株主情報には株主名、出資比率、出資額、株主数などの詳細情報が含まれます。",
+            "params": {
+                "query": "検索キーワード（会社名、会社ID、登録番号または社会信用コード）"
+            }
+        },
+        "tianyancha_company_change_info": {
+            "name": "企業工商情報変更記録",
+            "desc": "会社名またはIDを使って企業の変更記録を取得できます。変更記録には工商変更事項、変更前後の情報などが含まれます。",
+            "params": {
+                "query": "検索キーワード（会社名、会社ID、登録番号または社会信用コード）"
+            }
+        },
+        "tianyancha_ic_info": {
+            "name": "企業工商情報",
+            "desc": "会社名またはIDを使って企業の基本情報、主要人物、株主情報、対外投資、支店などの情報を取得できます。",
+            "params": {
+                "query": "検索キーワード（会社名、会社ID、登録番号または社会信用コード）"
+            }
+        },
+        "tianyancha_law_suit_case": {
+            "name": "企業法的訴訟",
+            "desc": "会社名またはIDを使って企業の法的訴訟情報を取得できます。訴訟情報には案件名、訴訟理由、案件身分、案号などの詳細情報が含まれます。",
+            "params": {
+                "query": "検索キーワード（会社名、会社ID、登録番号または社会信用コード）"
+            }
+        },
+        "tianyancha_judicial_risk": {
+            "name": "企業司法リスク",
+            "desc": "会社名またはIDを使って法的訴訟、裁判所の公告、開廷公告、失信人、実行人、立案情報、配達公告などの司法リスク情報を取得できます。",
+            "params": {
+                "query": "検索キーワード（会社名、会社ID、登録番号または社会信用コード）"
+            }
+        },
+        "tianyancha_ip_rights": {
+            "name": "企業知的財産情報",
+            "desc": "会社名またはIDを使って商標、特許、著作権、ソフトウェア著作権、ウェブサイトの登録などの知的財産情報を取得できます。",
+            "params": {
+                "query": "検索キーワード（会社名、会社ID、登録番号または社会信用コード）"
+            }
+        },
+        "tianyancha_get_company_baseinfo": {
+            "name": "企業基本情報",
+            "desc": "会社名またはIDを使って企業の基本情報を取得できます。基本情報には会社名、法人、設立日、経営状態、登録資本金などが含まれます。",
+            "params": {
+                "query": "検索キーワード（会社名、会社ID、登録番号または社会信用コード）"
+            }
+        },
+        "tianyancha_search_company": {
+            "name": "企業検索",
+            "desc": "キーワードを使って企業リストを取得できます。リストには会社名、ID、設立日、経営状態、社会信用コードなどが含まれます。",
+            "params": {
+                "query": "検索キーワード（会社名、会社ID、登録番号または社会信用コード）"
+            }
+        },
+        "tianyancha_all_companys_by_company": {
+            "name": "人物所有会社",
+            "desc": "会社名またはIDと人物名を使って企業人物が所有するすべての関連会社を取得できます。法人、株主、取締役などの情報を含みます。",
+            "params": {
+                "query": "人物名",
+                "name": "会社名"
+            }
+        },
+        "jina_get_markdown": {
+            "name": "単一ページ取得",
+            "desc": "指定されたURL（PDFもサポート）をクロールし、大モデルが処理できるMarkdown形式に変換します。",
+            "params": {
+                "target_url": "取得するターゲットURL"
+            }
+        },
+        "web_search": {
+            "name": "インターネット検索",
+            "desc": "クエリを使用してインターネット検索を実行し、結果を返します。",
+            "params": {
+                "query": "Bing検索で調べるクエリ"
+            }
+        },
+        "dalle_image_generator": {
+            "name": "Dalle3絵画",
+            "desc": "プロンプトに基づいて画像を生成します。",
+            "params": {
+                "query": "画像に関する説明"
+            }
+        },
+        "fire_search_crawl": {
+            "name": "深層クロール | Crawlモード",
+            "desc": "指定されたURLとすべてのアクセス可能なサブページの内容をクロールし、返します。",
+            "params": {
+                "target_url": "クロールする開始URL"
+            }
+        },
+        "fire_search_scrape": {
+            "name": "単一ページクロール | Scrapeモード",
+            "desc": "指定されたURLのページの内容をクロールし、サブページはクロールしません。",
+            "params": {
+                "target_url": "クロールするウェブサイトのURL"
+            }
+        },
+        "silicon_flux": {
+            "name": "Flux",
+            "desc": "Fluxモデルを使用して、ユーザーのプロンプトに基づいて画像を生成します",
+            "params": {
+                "prompt": "画像の説明として使用するプロンプト（英語を推奨）"
+            }
+        },
+        "silicon_stable_diffusion": {
+            "name": "Stable Diffusion",
+            "desc": "Stable Diffusionモデルを使用して、ユーザーのプロンプトに基づいて画像を生成します",
+            "params": {
+                "prompt": "画像生成用のプロンプト",
+                "negative_prompt": "画像に含めたくない内容"
+            }
+        },
+        "feishu_get_chat_messages": {
+            "name": "指定されたチャットメッセージの取得",
+            "desc": "個別チャットまたはグループチャットの履歴メッセージを素早く取得できます",
+            "params": {
+                "container_id": "個別チャットまたはグループチャットのID、またはトピックID",
+                "container_id_type": "コンテナタイプ。選択肢：chat（個別チャット、グループチャット）またはthread（トピック）",
+                "start_time": "取得する履歴メッセージの開始時刻、秒単位のタイムスタンプ。注意：threadタイプのコンテナでは、特定の時間範囲でのメッセージ取得はサポートされていません。",
+                "end_time": "取得する履歴メッセージの終了時刻、秒単位のタイムスタンプ。注意：threadタイプのコンテナでは、特定の時間範囲でのメッセージ取得はサポートされていません。",
+                "page_size": "ページサイズ、1回のリクエストで返されるデータの件数、デフォルトは20、範囲は1〜50。",
+                "sort_type": "並べ替えのタイプ。選択肢：ByCreateTimeAsc（メッセージ作成時間の昇順）またはByCreateTimeDesc（メッセージ作成時間の降順）",
+                "page_token": "ページトークン。最初のリクエストでは空欄、リストの他の項目がある場合は、新しいpage_tokenが返され、次回のリクエストで使用します"
+            }
+        },
+        "feishu_send_message": {
+            "name": "指定されたユーザーまたはグループチャットにメッセージを送信",
+            "desc": "指定されたユーザーまたはグループチャットにメッセージを送信できます",
+            "params": {
+                "message": "送信するテキストメッセージの内容",
+                "receive_id": "メッセージを受信するユーザーまたはグループのID",
+                "receive_id_type": "受信者のIDタイプ。選択肢：open_id（ユーザーのアプリ内ID）、union_id（ユーザーの開発者下のID）、user_id（ユーザーのテナント内ID）、email（ユーザーの実際のメールアドレス）、chat_id（グループID）"
+            }
+        },
+        "bing_search": {
+            "name": "Bingウェブ検索",
+            "desc": "クエリを使ってBing検索を実行し、結果を返します。",
+            "params": {
+                "query": "Bing検索で調べるクエリ"
+            }
+        },
+        "email_send_email": {
+            "name": "メール送信",
+            "desc": "1つまたは複数のメールアドレスにメールを送信（複数のアドレスは\",\"で区切ります）",
+            "params": {
+                "receiver": "受信者のメールアドレス",
+                "subject": "メールの件名",
+                "content": "メールの本文内容"
+            }
+        },
+        "wechat_send_message": {
+            "name": "企業WeChatグループメッセージ送信",
+            "desc": "企業WeChatボットを使用して、指定された企業WeChatグループにメッセージを迅速に送信",
+            "params": {
+                "url": "WeChatボットのWebhook URL",
+                "message": "送信するメッセージ内容"
+            }
+        },
+        "ding_send_message": {
+            "name": "DingTalkグループメッセージ送信",
+            "desc": "DingTalkグループボットを使用して、指定されたDingTalkグループにメッセージを迅速に送信",
+            "params": {
+                "url": "カスタムボットのWebhook URL",
+                "message": "送信するテキストメッセージの内容"
+            }
+        },
+        "arxiv": {
+            "name": "論文取得",
+            "desc": "Arxivウェブサイトから論文を検索するツール。検索キーワードを入力します。",
+            "params": {
+                "query": "検索クエリ"
+            }
+        },
+        "calculator": {
+            "name": "電卓",
+            "desc": "Python内蔵ツールを使って数学的な式を計算",
+            "params": {}
+        },
+        "macro_bond_zh_us_rate": {
+            "name": "中美国債收益率",
+            "desc": "このAPIは、指定された期間[start_date,end_date]内の取引日の中国とアメリカの2年、5年、10年、30年、10年-2年債の利回りデータを返します。start_dateは開始日、end_dateは終了日です。日付形式は例：2024-04-07です。",
+            "params": {
+                "start_date": "開始月（YYYY-MM-DD形式）",
+                "end_date": "終了月（YYYY-MM-DD形式）"
+            }
+        },
+        "macro_china_pmi": {
+            "name": "PMI",
+            "desc": "中国のPMI（購買担当者指数）の月次統計データ。データには、製造業PMI、製造業PMIの前年比、非製造業PMI、非製造業PMIの前年比が含まれます。",
+            "params": {
+                "start_date": "開始月（YYYY-MM-DD形式）",
+                "end_date": "終了月（YYYY-MM-DD形式）"
+            }
+        },
+        "macro_china_consumer_goods_retail": {
+            "name": "社会消費品小売総額",
+            "desc": "中国の社会消費品小売総額の月次統計データ。データには、月、当月の合計額、前年比・環比、年初累計額とその前年比が含まれます。",
+            "params": {
+                "start_date": "開始月（YYYY-MM-DD形式）",
+                "end_date": "終了月（YYYY-MM-DD形式）"
+            }
+        },
+        "macro_china_money_supply": {
+            "name": "貨幣供給量",
+            "desc": "中国の貨幣供給量に関する月次統計データ。データには、月、M0、M1、M2の数量、および前年比・環比が含まれます。",
+            "params": {
+                "start_date": "開始月（YYYY-MM-DD形式）",
+                "end_date": "終了月（YYYY-MM-DD形式）"
+            }
+        },
+        "macro_china_ppi": {
+            "name": "PPI",
+            "desc": "中国の工業製品卸売価格指数（PPI）の月次統計データ。データには、月、当月のPPI、当月の前年比、当年のPPI累計値が含まれます。",
+            "params": {
+                "start_date": "開始月（YYYY-MM-DD形式）",
+                "end_date": "終了月（YYYY-MM-DD形式）"
+            }
+        },
+        "macro_china_cpi": {
+            "name": "CPI",
+            "desc": "中国の消費者物価指数(CPI、前年同月=100)の月次統計データ。データには、月、全国のCPI、前年比・環比、年初累計CPI、都市別CPI、農村別CPIが含まれます。",
+            "params": {
+                "start_date": "開始月（YYYY-MM-DD形式）",
+                "end_date": "終了月（YYYY-MM-DD形式）"
+            }
+        },
+        "macro_china_gdp_yearly": {
+            "name": "GDP",
+            "desc": "中国の国内総生産（GDP）の四半期ごとの統計データ。データには、四半期、当年の累積GDPおよび前年比、第一・第二・第三産業のGDPとその前年比が含まれます。",
+            "params": {
+                "start_date": "開始月（YYYY-MM-DD形式）",
+                "end_date": "終了月（YYYY-MM-DD形式）"
+            }
+        },
+        "macro_china_shrzgm": {
+            "name": "社会資金調達規模の増加",
+            "desc": "中国の社会資金調達規模の増加に関する月次統計データ。データには、月、社会資金調達規模の増加額（単位：億元）や、資金調達の内訳データが含まれます。",
+            "params": {
+                "start_date": "開始月（YYYY-MM-DD形式）",
+                "end_date": "終了月（YYYY-MM-DD形式）"
+            }
+        },
+        "sina_history_KLine": {
+            "name": "株式の歴史的取引データ",
+            "desc": "中国A株（上海、深セン、北京証券取引所）の株式や指数の歴史的取引データを取得します。データには、時間、始値、高値、安値、終値、取引量が含まれます。",
+            "params": {
+                "date": "取得したい日付（例：2024-03-26）",
+                "stock_exchange": "取引所の略称。取引所で上場されている株式や発表される指数の取引所。\"sh\"（上海証券取引所）、\"sz\"（深セン証券取引所）、\"bj\"（北京証券取引所）を選択可能。",
+                "stock_symbol": "6桁の株式または指数コード。株式や指数コードを調べる必要がある場合もあります。"
+            }
+        },
+        "sina_realtime_info": {
+            "name": "株式のリアルタイムデータ",
+            "desc": "中国A株（上海、深セン、北京証券取引所）の株式や指数のリアルタイム取引データを取得します。データには、現在の価格、変動額、変動率、取引量、取引額が含まれます。",
+            "params": {
+                "prefix": "前缀。\"stock_symbol\"が株式コードの場合は、\"s_\"を入力。\n指数コードの場合は空白にします。",
+                "stock_exchange": "取引所の略称。取引所で上場されている株式や発表される指数の取引所。",
+                "stock_symbol": "6桁の株式または指数コード。"
+            }
+        },
+        "get_current_time": {
+            "name": "現在の時間",
+            "desc": "現在の時間を取得します。タイムゾーンが指定されていない場合、UTC+8の時間が使用されます。",
+            "params": {}
+        }
+    },
+    "addMcpServer": "MCPサーバーを追加",
+    "refresh": "更新",
+    "refreshSuccess": "更新に成功しました",
+    "executionModeLabel": "コード実行方式",
+    "executionLocalLabel": "ローカル実行",
+    "executionE2bLabel": "E2Bサンドボックス実行",
+    "serviceProviderLabel": "サービスプロバイダ",
+    "providerPrivateLabel": "自己ホスティング",
+    "providerPrivateTooltip": "E2Bをローカル環境に事前にデプロイし、ドメインを自己ホスティングのURLに指向させ、API Keyの認証をE2Bのバックエンドで処理します。",
+    "providerOfficialLabel": "公式クラウド",
+    "providerOfficialTooltip": "E2B公式クラウドサービスを使用し、E2B公式からAPI Keyを取得する必要があります。",
+    "domainCannotBeEmpty": "ドメインは空にできません",
+    "apiKeyCannotBeEmpty": "API Keyは空にできません",
+    "enterApiKeyPlaceholder": "API Keyを入力してください",
+    "enterApiKey": "API Keyを入力してください",
+    "timeoutTooltip": "クロール操作が中止される前にページ応答を待機する最大時間（ミリ秒単位）。",
+    "deepCrawlDetailConfigDescription": "深層クロールの詳細設定（以下の設定はCrawlモードにのみ有効です）",
+    "maxdepthTooltip": "入力されたURLに対してクロールする最大の深さ。",
+    "limitTooltip": "クロールする最大ページ数。",
+    "azureEndpointPlaceholder": "例: https://xxx.openai.azure.com/",
+    "openaiApiVersionPlaceholder": "例: 2024-02-01",
+    "emailAccountLabel": "メールアカウント（送信者のメールアドレス）",
+    "emailPasswordLabel": "メールパスワード（送信者のメールパスワード）",
+    "smtpServerLabel": "SMTPサーバー（送信者SMTPサーバーのアドレス）",
+    "smtpPortLabel": "SMTPポート（送信者SMTPサーバーのポート）",
+    "encryptMethodLabel": "暗号化方式（送信サーバーの暗号化方法）",
+    "encryptMethodNoneLabel": "暗号化なし",
+    "encryptMethodSslLabel": "SSL暗号化",
+    "encryptMethodStarttlsLabel": "STARTTLS暗号化",
+    "invalidEmailMessage": "有効なメールアドレスを入力してください",
+    "invalidSmtpServerMessage": "有効なSMTPサーバーアドレスを入力してください",
+    "invalidPortMessage": "有効なポート番号を入力してください",
+    "feishuAppIdTooltip": "アプリケーションのユニークID。",
+    "feishuAppSecretTooltip": "アプリケーションの秘密鍵。アプリ作成時にプラットフォームから生成されます。",
+    "pleaseSelect": "選択してください",
+    "fieldCannotBeEmpty": "{{label}}は空にできません",
+    "jinaApiKeyLabel": "Jina API Key",
+    "siliconflowApiKeyLabel": "SiliconFlow API Key",
+    "uploadFile": "ファイルをアップロード",
+    "organizeKnowledgeBase": "ナレッジベース整理",
+    "个人知识库": "個人ナレッジベース",
+    "知识库和文件内容检索": "ナレッジ・ファイル検索",
+    "知识库和文件内容检索desc": "組織/個人ナレッジとローカルファイルの内容を検索します。",
+    "文件操作": "ファイル操作",
+    "文件操作desc": "ローカルファイルの閲覧・検索・編集ツール集。",
+    "获取所有文件和目录": "全ファイル・ディレクトリ取得",
+    "获取所有文件和目录desc": "指定ディレクトリ内の全ファイルとサブディレクトリを一覧表示します。",
+    "获取文件详细信息": "ファイル詳細取得",
+    "获取文件详细信息desc": "ファイル名、サイズ、パス、文字数、行数などの詳細を取得します。",
+    "搜索文件": "ファイル検索",
+    "搜索文件desc": "指定ディレクトリ内でファイルやサブディレクトリを検索します。",
+    "读取文件内容": "ファイル内容を読む",
+    "读取文件内容desc": "ローカルテキストファイルの内容を読み込みます。",
+    "写入文件内容": "ファイルに書き込む",
+    "写入文件内容desc": "テキストを追記し、存在しない場合は新規作成します。",
+    "替换文件指定行范围内容": "行範囲を置換",
+    "替换文件指定行范围内容desc": "ファイル内の指定行範囲を置き換えます。"
+}

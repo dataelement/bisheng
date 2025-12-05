@@ -6,7 +6,7 @@ from pydantic import BaseModel, field_validator
 
 from bisheng.database.models.message import ChatMessage, ChatMessageQuery
 from bisheng.database.models.session import MessageSession
-from bisheng.database.models.user import User
+from bisheng.user.domain.models.user import User
 
 
 class AppChatList(BaseModel):

@@ -13,6 +13,7 @@ import { useQuery } from "react-query";
 import NodeLogo from "./FlowNode/NodeLogo";
 
 const ToolItem = ({ temp, index, dropdown, onDragStart, onClick }) => {
+    const { t } = useTranslation('tool');
     const sortData = useMemo(() => {
         const { children, is_preset } = temp;
         if (children) {
@@ -23,7 +24,7 @@ const ToolItem = ({ temp, index, dropdown, onDragStart, onClick }) => {
 
     return <AccordionItem key={temp.name} value={temp.name + index} className="border-none">
         <AccordionTrigger className="py-2 bisheng-label">
-            <span className="break-all">{temp.name}</span>
+            <span className="break-all text-left">{temp.is_preset === 1 ? t(`categories.${temp.name}.name`) : temp.name}</span>
         </AccordionTrigger>
         <AccordionContent className="pb-2">
             {
@@ -42,7 +43,7 @@ const ToolItem = ({ temp, index, dropdown, onDragStart, onClick }) => {
                                 }}
                                 draggable={!dropdown}
                                 onDragStart={(event) => {
-                                    onDragStart(event, { type: el.type, node: el })
+                                    onDragStart(event, { type: el.type, node: { ...el, is_preset: temp.is_preset === 1 } })
                                 }}
                                 onDragEnd={(event) => {
                                     document.body.removeChild(
@@ -57,11 +58,11 @@ const ToolItem = ({ temp, index, dropdown, onDragStart, onClick }) => {
                                 }}
                             >
                                 <NodeLogo type="tool" colorStr={el.name} />
-                                <span className="text-sm truncate">{el.name}</span>
+                                <span className="text-sm truncate">{temp.is_preset === 1 ? t(`tools.${el.tool_key}.name`) : el.name}</span>
                             </div>
                         </TooltipTrigger>
                         {el.description && <TooltipContent side="right">
-                            <div className="max-w-96 text-left break-all whitespace-normal">{el.description}</div>
+                            <div className="max-w-96 text-left break-all whitespace-normal">{temp.is_preset === 1 ? t(`tools.${el.tool_key}.desc`) : el.description}</div>
                         </TooltipContent>}
                     </Tooltip>
                 )
@@ -81,9 +82,9 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
     const getNodeDataByTemp = (temp) => {
         return {
             type: temp.type,
-            name: temp.name,
+            name: t(`node.${temp.type}.name`),
             icon: <NodeLogo type={temp.type} />,
-            desc: temp.description
+            desc: t(`node.${temp.type}.description`)
         }
     }
 
@@ -150,14 +151,14 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
         event.dataTransfer.setData("flownodedata", JSON.stringify(data));
     }
 
-    return <div className={`${dropdown ? 'relative' : 'absolute'} max-w-56 z-40 h-full transition-transform ${expand ? 'p-2' : 'py-2 translate-x-[-200px]'}`}>
+    return <div className={`${dropdown ? 'relative' : 'absolute'} max-w-60 z-40 h-full transition-transform ${expand ? 'p-2' : 'py-2 translate-x-[-200px]'}`}>
         <div className="bg-background rounded-2xl shadow-md h-full p-2">
             {/* tab */}
             <Tabs defaultValue="base" className="h-full" onValueChange={handleLoadTools}>
                 <div className="flex gap-1">
                     <TabsList className="">
-                        <TabsTrigger value="base">{t('basicNodes')}</TabsTrigger>
-                        <TabsTrigger value="tool">{t('toolNodes')}</TabsTrigger>
+                        <TabsTrigger className="min-w-20" value="base">{t('basicNodes')}</TabsTrigger>
+                        <TabsTrigger className="min-w-20" value="tool">{t('toolNodes')}</TabsTrigger>
                     </TabsList>
                     {!dropdown && <Button size="icon" variant="secondary" className={`${expand ? ' right-[-30px]' : 'right-[-46px]'} absolute bg-[#fff] dark:bg-gray-950 top-2 rounded-full size-8`} onClick={() => setExpand(!expand)}>
                         <ListVideo className={`size-4 ${expand ? 'rotate-180' : ''}`} />
@@ -195,7 +196,7 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
                                             onClick={() => dropdown && onClick({ type: item.type, node: tempData.find(tmp => tmp.type === item.type) })}
                                         >
                                             {item.icon}
-                                            <span className="text-sm">{item.name}</span>
+                                            <span className="text-sm text-left">{item.name}</span>
                                         </div>
                                     </TooltipTrigger>
                                     <TooltipContent side="right">

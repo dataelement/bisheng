@@ -16,7 +16,7 @@ export default function Prompt() {
     const { assistantState, dispatchAssistant } = useAssistantStore()
 
     useEffect(() => {
-        // 新建助手自动开启优化
+        // Automatically enable optimization for new assistants
         if (window.assistantCreate && assistantState.prompt) {
             setOpen(true)
             delete window.assistantCreate

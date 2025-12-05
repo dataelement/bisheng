@@ -11,16 +11,14 @@ from loguru import logger
 
 from bisheng.api import router, router_rpc
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.services.config_service import settings
+from bisheng.common.exceptions.auth import AuthJWTException
 from bisheng.common.init_data import init_default_data
+from bisheng.common.services.config_service import settings
 from bisheng.core.context import initialize_app_context, close_app_context
 from bisheng.core.logger import set_logger_config
-from bisheng.interface.utils import setup_llm_caching
 from bisheng.services.utils import initialize_services, teardown_services
-from bisheng.utils.http_middleware import CustomMiddleware
+from bisheng.utils.http_middleware import CustomMiddleware, WebSocketLoggingMiddleware
 from bisheng.utils.threadpool import thread_pool
-from fastapi_jwt_auth import AuthJWT
-from fastapi_jwt_auth.exceptions import AuthJWTException
 
 
 def handle_http_exception(req: Request, exc: Exception) -> ORJSONResponse:
@@ -34,6 +32,7 @@ def handle_http_exception(req: Request, exc: Exception) -> ORJSONResponse:
         msg = {'status_code': exc.code, 'status_message': exc.message,
                'data': data}
     else:
+        logger.exception('Unhandled exception')
         msg = {'status_code': 500, 'status_message': str(exc)}
     logger.error(f'{req.method} {req.url} {str(exc)}')
     return ORJSONResponse(content=msg)
@@ -48,15 +47,15 @@ def handle_request_validation_error(req: Request, exc: RequestValidationError) -
 _EXCEPTION_HANDLERS = {
     HTTPException: handle_http_exception,
     RequestValidationError: handle_request_validation_error,
+    BaseErrorCode: handle_http_exception,
     Exception: handle_http_exception
 }
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await initialize_app_context(config=settings.model_dump())
+    await initialize_app_context(config=settings)
     initialize_services()
-    setup_llm_caching()
     await init_default_data()
     # LangfuseInstance.update()
     yield
@@ -91,11 +90,7 @@ def create_app():
     )
 
     app.add_middleware(CustomMiddleware)
-
-    @AuthJWT.load_config
-    def get_config():
-        from bisheng.api.JWT import Settings
-        return Settings()
+    app.add_middleware(WebSocketLoggingMiddleware)
 
     @app.exception_handler(AuthJWTException)
     def authjwt_exception_handler(request: Request, exc: AuthJWTException):

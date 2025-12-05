@@ -53,7 +53,6 @@ function parseToValue(input, paramItem) {
     return traverseNodes(tempDiv);
 }
 
-
 export default function VarInput({
     nodeId,
     itemKey,
@@ -197,12 +196,107 @@ export default function VarInput({
         handleInput();
     }
 
+    const handleCopy = (e) => {
+        e.preventDefault();
+
+        const selection = window.getSelection();
+        if (!selection.rangeCount) return;
+        const range = selection.getRangeAt(0);
+        const selectedText = range.cloneContents();
+
+        // Create a new temporary element to store the selected content
+        const wrapper = document.createElement('div');
+        wrapper.appendChild(selectedText);
+
+        if (paramItem.varZh) {
+            try {
+                const jsonStr = JSON.stringify(paramItem.varZh);
+                wrapper.setAttribute('data-custom-data', encodeURIComponent(jsonStr));
+            } catch (err) {
+                console.error('json.stringify varZh failed', err);
+            }
+        }
+
+        // Set the clipboard data
+        e.clipboardData.setData('text/html', wrapper.outerHTML);
+        e.clipboardData.setData('text/plain', selection.toString());
+    }
+
     const handlePaste = (e) => {
-        // fomat text
-        e.preventDefault(); // 阻止默认粘贴行为
-        const text = e.clipboardData.getData('text'); // 从剪贴板中获取纯文本内容
-        document.execCommand('insertText', false, text);
+        e.preventDefault();
+
+        // 1. Get the HTML content
+        let copiedHtml = e.clipboardData.getData('text/html');
+        const copiedText = e.clipboardData.getData('text/plain');
+
+        // If the clipboard doesn't contain HTML, directly insert the plain text and return
+        if (!copiedHtml) {
+            document.execCommand('insertText', false, copiedText);
+            return;
+        }
+
+        // 2. Parse the HTML
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(copiedHtml, 'text/html');
+
+        const dataEl = doc.querySelector('[data-custom-data]');
+        if (dataEl) {
+            const rawData = dataEl.getAttribute('data-custom-data');
+            if (rawData) {
+                try {
+                    const parsedData = JSON.parse(decodeURIComponent(rawData));
+                    console.log('Cross-window data detected:', parsedData);
+
+                    if (paramItem.varZh) {
+                        paramItem.varZh = { ...paramItem.varZh, ...parsedData };
+                    } else {
+                        paramItem.varZh = parsedData;
+                    }
+                } catch (err) {
+                    console.error('Cross-window data error:', err);
+                }
+            }
+        }
+        // 3. Define a recursive processing function
+        const processNodes = (node) => {
+            let result = '';
+
+            node.childNodes.forEach((child) => {
+                // If it is a text node, directly append the text
+                if (child.nodeType === Node.TEXT_NODE) {
+                    result += child.textContent;
+                }
+                // If it is an element node
+                else if (child.nodeType === Node.ELEMENT_NODE) {
+                    // Core logic: if it is a target badge element, keep its HTML (including styles and classes)
+                    if (child.tagName.toLowerCase() === 'span' && child.classList.contains('textarea-badge')) {
+                        result += child.outerHTML;
+                    }
+                    // Special handling: if it is a line break tag, convert it to a space or newline (optional, to prevent text from sticking together)
+                    else if (child.tagName.toLowerCase() === 'br') {
+                        // Here you can decide whether to convert <br> to '\n' or simply ignore it
+                        // result += '\n'; 
+                    }
+                    // For all other tags: ignore the tag itself, recursively extract the content of its child nodes
+                    else {
+                        result += processNodes(child);
+                    }
+                }
+            });
+
+            return result;
+        };
+
+        // 4. Execute the processing
+        const cleanHtml = processNodes(doc.body);
+
+        console.log('Cleaned mixed content:', cleanHtml);
+
+        // 5. Insert the content
+        // Note: Since the span tags are retained, you still need to use insertHTML
+        document.execCommand('insertHTML', false, cleanHtml);
     };
+
     // resize
     const heightClass = mini ? 'max-h-64' : full ? 'min-h-64' : 'max-h-64 min-h-[80px]';
     const { height, handleMouseDown } = useResize(textareaRef, mini ? 40 : 80, 40);
@@ -225,7 +319,7 @@ export default function VarInput({
                     </Label>
                     <div className="flex gap-2">
                         <SelectVar ref={selectVarRef} nodeId={nodeId} itemKey={itemKey} onSelect={handleInsertVariable}>
-                            <Tip content={"插入变量"} side={"top"}>
+                            <Tip content={t('insertVariable')} side={"top"}>
                                 <span className="text-muted-foreground hover:text-gray-800 text-xs"  >{"{x}"}</span>
                             </Tip>
                         </SelectVar>
@@ -242,7 +336,7 @@ export default function VarInput({
                                         </Button>
                                     </TooltipTrigger>
                                     <TooltipContent>
-                                        <p>上传文件</p>
+                                        <p>{t('uploadFile')}</p>
                                     </TooltipContent>
                                 </Tooltip>
                             </TooltipProvider>
@@ -262,6 +356,7 @@ export default function VarInput({
                                         itemKey={itemKey}
                                         placeholder={placeholder}
                                         paramItem={paramItem}
+                                        label={label}
                                         value={fullVarInputValue}
                                         error={error}
                                         children={children}
@@ -284,6 +379,7 @@ export default function VarInput({
                 style={{ height }}
                 onInput={handleInput}
                 onPaste={handlePaste}
+                onCopy={handleCopy}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
                 onCompositionStart={() => printPyRef.current = true}

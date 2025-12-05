@@ -195,7 +195,7 @@ export async function readFileByLibDatabase({ id, page, pageSize = 20, name = ''
 /**
  * 添加元数据
  */
-export async function addMetadata(knowledge_id,metadata_fields) {
+export async function addMetadata(knowledge_id, metadata_fields) {
   await axios.post(`/api/v1/knowledge/add_metadata_fields`, {
     knowledge_id: knowledge_id,
     metadata_fields: metadata_fields,
@@ -205,45 +205,45 @@ export async function addMetadata(knowledge_id,metadata_fields) {
  * 修改元数据名称
  */
 export async function updateMetadataFields(
-    knowledge_id: string | number,
-    updates: Array<{ old_field_name: string; new_field_name: string }>
+  knowledge_id: string | number,
+  updates: Array<{ old_field_name: string; new_field_name: string }>
 ) {
-    await axios.put(`/api/v1/knowledge/update_metadata_fields`, {
-        knowledge_id: knowledge_id,
-        metadata_fields: updates,
-    });
+  await axios.put(`/api/v1/knowledge/update_metadata_fields`, {
+    knowledge_id: knowledge_id,
+    metadata_fields: updates,
+  });
 }
 /**
  * 用户自定义元数据
  */
-export async function saveUserMetadataApi (
-    knowledge_id: string | number,
-    updates: Array<{ field_name: string; field_value: any }>,
-     updated_at?: string | number
+export async function saveUserMetadataApi(
+  knowledge_id: string | number,
+  updates: Array<{ field_name: string; field_value: any }>,
+  updated_at?: string | number
 ) {
-    await axios.put(`/api/v1/knowledge/file/user_metadata`, {
-        knowledge_file_id: knowledge_id,
-        user_metadata_list: updates,
-        updated_at:updated_at
-    });
+  await axios.put(`/api/v1/knowledge/file/user_metadata`, {
+    knowledge_file_id: knowledge_id,
+    user_metadata_list: updates,
+    updated_at: updated_at
+  });
 }
 /**
  * 删除元数据
  */
 export async function deleteMetadataFields(
-    knowledge_id: string | number,
-    fieldNames: string[]
+  knowledge_id: string | number,
+  fieldNames: string[]
 ) {
-    await axios.delete(`/api/v1/knowledge/delete_metadata_fields`, {
-        data: {
-            knowledge_id: knowledge_id,
-            field_names: fieldNames,
-        },
-    });
+  await axios.delete(`/api/v1/knowledge/delete_metadata_fields`, {
+    data: {
+      knowledge_id: knowledge_id,
+      field_names: fieldNames,
+    },
+  });
 }
 // 获取元数据
 export async function getMetaFile(file_id): Promise<any> {
- return await axios.get(`/api/v1/knowledge/file/info/${file_id}`);
+  return await axios.get(`/api/v1/knowledge/file/info/${file_id}`);
 }
 
 /**
@@ -463,12 +463,13 @@ export function previewFileSplitApi(
 /**
  * 获取知识库下的切分段落
  */
-export async function getKnowledgeChunkApi(params): Promise<{ models: string[] }> {
+export async function getKnowledgeChunkApi(params): Promise<any> {
   let queryStr = ''
   if (params.file_ids?.length) {
     queryStr = params.file_ids.map(id => `file_ids=${id}`).join('&');
   } else {
     delete params.file_ids;
+    return Promise.resolve({ data: [] });
   }
   return await axios.get(`/api/v1/knowledge/chunk?${queryStr}`, { params });
 }
@@ -848,6 +849,10 @@ export async function getChatHistory(flowId: string, chatId: string, pageSize: n
  * 赞 踩消息
  */
 export const likeChatApi = (chatId, liked) => {
+  liked && copyTrackingApi({
+    message_id: chatId,
+    operation_type: liked === 1 ? 'like' : 'dislike'
+  })
   return axios.post(`/api/v1/liked`, { message_id: chatId, liked });
 };
 
@@ -862,7 +867,18 @@ export const disLikeCommentApi = (message_id, comment) => {
  * 点击复制上报
  * */
 export const copyTrackingApi = (msgId) => {
+  trackingApi({
+    message_id: msgId,
+    operation_type: 'copy'
+  })
   return axios.post(`/api/v1/chat/copied`, { message_id: msgId });
+}
+
+/**
+ * Tracking
+ */
+export const trackingApi = (data: { message_id: string, operation_type: 'dislike' | 'like' | 'copy' }) => {
+  return axios.post(`/api/v1/session/chat/message/telemetry`, data);
 }
 
 /**

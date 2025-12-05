@@ -1,3 +1,4 @@
+import time
 import uuid
 from typing import Optional, List
 from uuid import UUID
@@ -12,10 +13,14 @@ from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schema.workflow import WorkflowStream, WorkflowEvent, WorkflowEventType
 from bisheng.api.v1.schemas import resp_200
-from bisheng.open_endpoints.domain.utils import get_default_operator
 from bisheng.chat.types import WorkType
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData
+from bisheng.common.services import telemetry_service
+from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao, FlowType
+from bisheng.open_endpoints.domain.utils import get_default_operator
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow
 from bisheng.workflow.common.workflow import WorkflowStatus
@@ -33,6 +38,12 @@ async def invoke_workflow(request: Request,
                                                            description='会话ID,一次workflow调用的唯一标识')):
     login_user = get_default_operator()
     workflow_id = workflow_id.hex
+    # 查询工作流信息
+    workflow_info = await FlowDao.aget_flow_by_id(workflow_id)
+    if not workflow_info:
+        raise NotFoundError.http_exception()
+    if workflow_info.flow_type != FlowType.WORKFLOW.value:
+        raise NotFoundError.http_exception()
 
     # 解析出chat_id和unique_id
     if not session_id:
@@ -42,15 +53,9 @@ async def invoke_workflow(request: Request,
     else:
         chat_id = session_id.split('_', 1)[0]
         unique_id = session_id
+    start_time = time.time()
     logger.debug(f'invoke_workflow: {workflow_id}, {session_id}')
-    workflow = RedisCallback(unique_id, workflow_id, chat_id, str(login_user.user_id))
-
-    # 查询工作流信息
-    workflow_info = FlowDao.get_flow_by_id(workflow_id)
-    if not workflow_info:
-        raise NotFoundError.http_exception()
-    if workflow_info.flow_type != FlowType.WORKFLOW.value:
-        raise NotFoundError.http_exception()
+    workflow = RedisCallback(unique_id, workflow_id, chat_id, login_user.user_id)
 
     # 查询工作流状态
     status_info = workflow.get_workflow_status()
@@ -94,6 +99,17 @@ async def invoke_workflow(request: Request,
     if not stream:
         async for _ in handle_workflow_event(res):
             pass
+        end_time = time.time()
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=ApplicationAliveEventData(
+                                              app_id=workflow_id,
+                                              app_name=workflow_info.name,
+                                              app_type=ApplicationTypeEnum.WORKFLOW,
+                                              chat_id=session_id,
+                                              start_time=int(start_time),
+                                              end_time=int(end_time)))
         return resp_200(data={
             'session_id': session_id,
             'events': res
@@ -103,6 +119,18 @@ async def invoke_workflow(request: Request,
     except Exception as exc:
         logger.exception(f'invoke_workflow error: {str(exc)}')
         return ORJSONResponse(status_code=500, content=str(exc))
+    finally:
+        end_time = time.time()
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=ApplicationAliveEventData(
+                                              app_id=workflow_id,
+                                              app_name=workflow_info.name,
+                                              app_type=ApplicationTypeEnum.WORKFLOW,
+                                              chat_id=session_id,
+                                              start_time=int(start_time),
+                                              end_time=int(end_time)))
 
 
 @router.post('/stop')

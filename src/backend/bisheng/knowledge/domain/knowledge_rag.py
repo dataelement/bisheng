@@ -32,17 +32,19 @@ class KnowledgeRag:
         return knowledge
 
     @classmethod
-    async def init_knowledge_milvus_vectorstore(cls, knowledge: Knowledge = None,
+    async def init_knowledge_milvus_vectorstore(cls, invoke_user_id: int, knowledge: Knowledge = None,
                                                 knowledge_id: int = None, **kwargs) -> Milvus:
         knowledge = await cls._get_knowledge(knowledge, knowledge_id)
-        embedding = await LLMService.get_bisheng_embedding(model_id=knowledge.model)
+        embedding = await LLMService.get_bisheng_knowledge_embedding(model_id=int(knowledge.model),
+                                                                     invoke_user_id=invoke_user_id)
         return cls.init_milvus_vectorstore(knowledge.collection_name, embedding, **kwargs)
 
     @classmethod
-    def init_knowledge_milvus_vectorstore_sync(cls, knowledge: Knowledge = None,
+    def init_knowledge_milvus_vectorstore_sync(cls, invoke_user_id: int, knowledge: Knowledge = None,
                                                knowledge_id: int = None, **kwargs) -> Milvus:
         knowledge = cls._get_knowledge_sync(knowledge, knowledge_id)
-        embedding = LLMService.get_bisheng_embedding_sync(model_id=knowledge.model)
+        embedding = LLMService.get_bisheng_knowledge_embedding_sync(model_id=int(knowledge.model),
+                                                                    invoke_user_id=invoke_user_id)
         return cls.init_milvus_vectorstore(knowledge.collection_name, embedding, **kwargs)
 
     @classmethod
@@ -58,8 +60,8 @@ class KnowledgeRag:
         return cls.init_es_vectorstore_sync(knowledge.index_name, **kwargs)
 
     @classmethod
-    def get_multi_knowledge_vectorstore(cls, knowledge_ids: list[int], user_name: str = None, check_auth: bool = True,
-                                        include_es: bool = True, include_milvus: bool = True) \
+    def get_multi_knowledge_vectorstore(cls, invoke_user_id: int, knowledge_ids: list[int], user_name: str = None,
+                                        check_auth: bool = True, include_es: bool = True, include_milvus: bool = True) \
             -> Dict[int, Dict[str, VectorStore | Knowledge]]:
         """ get multiple knowledge vectorstore, including milvus and es
             return: {
@@ -87,7 +89,7 @@ class KnowledgeRag:
                 "es": None,
             }
             if include_milvus:
-                vectorstore = cls.init_knowledge_milvus_vectorstore_sync(knowledge)
+                vectorstore = cls.init_knowledge_milvus_vectorstore_sync(invoke_user_id, knowledge)
                 ret[knowledge.id]["milvus"] = vectorstore
             if include_es:
                 es_vectorstore = cls.init_knowledge_es_vectorstore_sync(knowledge)

@@ -1,6 +1,7 @@
 import { Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export const WebSearchConfig = ({
     config,
@@ -19,6 +20,7 @@ export const WebSearchConfig = ({
     onChange: (field: string, value: any) => void;
     errors?: Record<string, any>;
 }) => {
+    const { t } = useTranslation();
 
     // Store parameters for all tools separately
     const [toolsParams, setToolsParams] = useState<Record<string, any>>({
@@ -41,7 +43,7 @@ export const WebSearchConfig = ({
 
     return (
         <>
-            <Label className="bisheng-label">联网搜索提示词</Label>
+            <Label className="bisheng-label">{t('bench.webSearchPrompt')}</Label>
             <div className="mt-3">
                 <Textarea
                     value={config.prompt || config}

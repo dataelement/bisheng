@@ -10,9 +10,9 @@ from sqlmodel.sql.expression import Select, SelectOfScalar, col
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
-from bisheng.database.models.user import UserDao
-from bisheng.database.models.user_role import UserRoleDao
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
+from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.models.user_role import UserRoleDao
 
 
 class KnowledgeTypeEnum(Enum):
@@ -461,3 +461,17 @@ class KnowledgeDao(KnowledgeBase):
             if not only_clear:
                 session.exec(delete(Knowledge).where(Knowledge.id == knowledge_id))
             session.commit()
+
+    @classmethod
+    def get_knowledge_by_time_range(cls, start_time: datetime, end_time: datetime, page: int = 0,
+                                    page_size: int = 0) -> List[Knowledge]:
+        """ 根据创建时间范围获取知识库列表 """
+        statement = select(Knowledge).where(
+            Knowledge.create_time >= start_time,
+            Knowledge.create_time < end_time
+        )
+        if page and page_size:
+            statement = statement.offset((page - 1) * page_size).limit(page_size)
+        statement = statement.order_by(col(Knowledge.id).asc())
+        with get_sync_db_session() as session:
+            return session.exec(statement).all()

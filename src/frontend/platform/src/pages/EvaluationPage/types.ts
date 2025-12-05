@@ -29,10 +29,10 @@ export const EvaluationScoreLabelMap = {
     label: "F1",
   },
   [EvaluationScore.answer_precision]: {
-    label: "准确率",
+    label: "evaluation.precision",
   },
   [EvaluationScore.answer_recall]: {
-    label: "召回率",
+    label: "evaluation.recall",
   },
 };
 

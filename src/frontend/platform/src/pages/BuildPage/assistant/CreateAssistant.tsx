@@ -84,7 +84,7 @@ ${t('build.exampleTwo')}
             const res = await captureAndAlertRequestErrorHoc(createAssistantsApi(formData.name, formData.roleAndTasks, formData.url))
             if (res) {
                 //@ts-ignore
-                window.assistantCreate = true // 标记新建助手
+                window.assistantCreate = true // Mark as creating new assistant
                 navigate('/assistant/' + res.id)
             }
             setLoading(false)

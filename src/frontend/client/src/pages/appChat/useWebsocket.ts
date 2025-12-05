@@ -102,13 +102,13 @@ export const useWebSocket = (helpers) => {
         ws.onclose = (event) => {
             console.log('close chatId:>> ', helpers.chatId);
             console.error('ws close :>> ', event);
-            helpers.handleMsgError('', true)
+            helpers.handleMsgError({ code: '', data: null }, true)
             // todo 错误消息写入消息下面
         }
 
         ws.onerror = (error) => {
             console.error('链接异常error', helpers.chatId, error);
-            helpers.handleMsgError('')
+            helpers.handleMsgError({ code: '', data: null })
         }
     }
     const handleMessages = (data, _ws) => {
@@ -122,6 +122,7 @@ export const useWebSocket = (helpers) => {
             // helpers.stopShow(true)
         } else if (data.type === 'close' && data.category === 'processing') {
             helpers.stopShow(false)
+            helpers.message.closeAllLogMsg(helpers.chatId);
         }
 
         // messages
@@ -136,10 +137,10 @@ export const useWebSocket = (helpers) => {
                 code = data.message.status_code
                 message = data.message.status_message
             }
-            helpers.handleMsgError(code)
+            helpers.handleMsgError({ code, data: data.message?.data })
             if (![10421, 13002].includes(code)) {
                 showToast({
-                    message: code === 500 ? message : localize(getErrorI18nKey(String(code))),
+                    message: code === 500 ? message : localize(getErrorI18nKey(String(code)), data.message?.data),
                     severity: NotificationSeverity.ERROR,
                 })
             }
@@ -160,7 +161,6 @@ export const useWebSocket = (helpers) => {
             // helpers.flow.flow_type === 10 && helpers.reRunShow(true) // 成环的工作流不展示重跑按钮
             helpers.message.streamMsg(helpers.chatId, data)
         } else if (data.category === 'end_cover' && data.type === 'end_cover') {
-            // helpers.handleMsgError('')
             _ws.send(JSON.stringify({ action: 'stop' }))
             return helpers.message.endMsg(helpers.chatId, data)
         }
@@ -189,7 +189,6 @@ export const useWebSocket = (helpers) => {
         /***** 技能 end******/
         if (data.type === 'close' && data.category === 'processing') {
             helpers.message.insetSeparator(helpers.chatId, 'com_chat_round_finished')
-            // helpers.handleMsgError('')
             // 重启会话按钮,接收close确认后端处理结束后重启会话
             if (restartCallBack.current) {
                 restartCallBack.current()

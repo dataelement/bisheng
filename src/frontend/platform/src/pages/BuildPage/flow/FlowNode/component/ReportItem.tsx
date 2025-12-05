@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ReportWordEdit from './ReportWordEdit';
 
-export default function ReportItem({ nodeId, data, onChange, onValidate }) {
+export default function ReportItem({ nodeId, data, onChange, onValidate, i18nPrefix }) {
     const { t } = useTranslation('flow');
     const [value, setValue] = useState({
         name: data.value.file_name || '',
@@ -40,12 +40,12 @@ export default function ReportItem({ nodeId, data, onChange, onValidate }) {
         <div className='node-item mb-4 nodrag' data-key={data.key}>
             <Label className='bisheng-label'>
                 {data.required && <span className='text-red-500'>*</span>}
-                {data.label}
+                {t(`${i18nPrefix}label`)}
             </Label>
             <Input
                 value={value.name}
                 className={`mt-2 ${error && 'border-red-500'}`}
-                placeholder={data.placeholder}
+                placeholder={t(`${i18nPrefix}placeholder`)}
                 maxLength={100}
                 showCount
                 onChange={(e) => {

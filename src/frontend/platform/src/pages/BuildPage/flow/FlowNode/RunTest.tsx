@@ -14,6 +14,7 @@ import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "../flowStore";
 import NodeLogo from "./NodeLogo";
+import { useParams } from "react-router-dom";
 
 interface Input {
     key: string,
@@ -25,7 +26,7 @@ interface Input {
 
 export const ResultText = ({ title, value }: { title: string, value: any }) => {
     const [copyed, setCopied] = useState(false)
-    const [text, setText] = useState(() => {
+    const [text] = useState(() => {
         if (typeof value === 'object') {
             return JSON.stringify(value, null, 2)
         } else if (Array.isArray(value)) {
@@ -62,6 +63,7 @@ export const RunTest = forwardRef((props, ref) => {
     const { message } = useToast()
     const { t } = useTranslation('flow')
     const [currentIndex, setCurrentIndex] = useState(0)
+    const { id: workflow_id } = useParams();
 
     useEffect(() => {
         if (!open) {
@@ -150,24 +152,25 @@ export const RunTest = forwardRef((props, ref) => {
                 return true
             }
         })
-        
+
         // save cache
         const cacheData = inputs.reduce((res, input) => {
             res[input.key] = input.value
             return res
         }, {})
         setRunCache(node.id, cacheData)
-        
+
         setLoading(true)
         setResults([])
         await captureAndAlertRequestErrorHoc(
-            runWorkflowNodeApi(
-                inputs.reduce((result, input) => {
+            runWorkflowNodeApi({
+                node_input: inputs.reduce((result, input) => {
                     result[`${input.key}`] = input.value;
                     return result;
                 }, {}),
-                node
-            ).then(res => {
+                data: node,
+                workflow_id
+            }).then(res => {
                 const result = res.map(el => TranslationName(el)) // .map(item => ({ title: item.key, text: item.value }))
                 setCurrentIndex(0)
                 setResults(result)
@@ -263,12 +266,12 @@ export const RunTest = forwardRef((props, ref) => {
                         <Select value={currentIndex + ""} onValueChange={(val => setCurrentIndex(Number(val)))}>
                             <SelectTrigger className="w-[180px]">
                                 {/* <SelectValue /> */}
-                                <span>第 {currentIndex + 1} 轮运行结果</span>
+                                <span>{t('roundRunResult', { index: currentIndex + 1 })}</span>
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectGroup>
                                     {
-                                        results.map((_, index) => <SelectItem key={index} value={index + ""}>第 {index + 1} 轮运行结果</SelectItem>)
+                                        results.map((_, index) => <SelectItem key={index} value={index + ""}>{t('roundRunResult', { index: index + 1 })}</SelectItem>)
                                     }
                                 </SelectGroup>
                             </SelectContent>

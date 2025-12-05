@@ -5,6 +5,7 @@ from langchain_core.documents import Document
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.core.ai.rerank.rrf_rerank import RRFRerank
 from bisheng.core.vectorstore.multi_retriever import MultiRetriever
@@ -240,18 +241,16 @@ class RagUtils(BaseNode):
 
         # 4. limit  by max_chunk_size
         doc_num, doc_content_sum = 0, 0
+        same_file_id = set()
         for doc in finally_docs:
-            doc_content_sum += len(doc.page_content)
             if doc_content_sum > self._max_chunk_size:
                 break
+            doc_content_sum += len(doc.page_content)
+            same_file_id.add(doc.metadata.get('document_id') or doc.metadata.get('file_id'))
             doc_num += 1
         finally_docs = finally_docs[:doc_num]
 
         logger.debug(f'retrieve finally chunks: {finally_docs}')
-        same_file_id = set()
-        for one in finally_docs:
-            file_id = one.metadata.get('document_id') or one.metadata.get('file_id')
-            same_file_id.add(file_id)
         if len(same_file_id) == 1:
             # 来自同一个文件，则按照chunk_index排序
             finally_docs.sort(key=lambda x: x.metadata.get('chunk_index', 0))
@@ -286,7 +285,11 @@ class RagUtils(BaseNode):
             return
         if self._rerank_model:
             return
-        self._rerank_model = LLMService.get_bisheng_rerank_sync(model_id=self._rerank_model_id)
+        self._rerank_model = LLMService.get_bisheng_rerank_sync(model_id=self._rerank_model_id,
+                                                                app_id=self.workflow_id,
+                                                                app_name=self.workflow_name,
+                                                                app_type=ApplicationTypeEnum.WORKFLOW,
+                                                                user_id=self.user_id)
 
     def init_multi_retriever(self):
         if self._knowledge_type == "knowledge":
@@ -298,6 +301,7 @@ class RagUtils(BaseNode):
         """ retriever from knowledge base """
         if not self._knowledge_vector_list:
             self._knowledge_vector_list = KnowledgeRag.get_multi_knowledge_vectorstore(
+                invoke_user_id=self.user_id,
                 knowledge_ids=self._knowledge_value,
                 user_name=self.user_info.user_name,
                 check_auth=self._knowledge_auth,
@@ -354,7 +358,7 @@ class RagUtils(BaseNode):
             self._multi_es_retriever = None
             self._multi_milvus_retriever = None
             return
-        embeddings = LLMService.get_knowledge_default_embedding()
+        embeddings = LLMService.get_knowledge_default_embedding(self.user_id)
         if not embeddings:
             raise Exception('没有配置知识库默认embedding模型')
 

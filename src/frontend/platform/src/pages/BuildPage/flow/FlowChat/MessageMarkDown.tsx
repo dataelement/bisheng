@@ -11,7 +11,7 @@ import remarkMath from "remark-math";
 
 const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, chat, flowType }) {
 
-    const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
+    const { data: linsightConfig } = useLinsightConfig();
     function filterMermaidBlocks(input) {
         const closedMermaidPattern = /```mermaid[\s\S]*?```/g;
         const openMermaidPattern = /```mermaid[\s\S]*$/g;

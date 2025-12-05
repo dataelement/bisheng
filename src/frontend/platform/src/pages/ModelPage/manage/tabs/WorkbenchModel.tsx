@@ -66,7 +66,6 @@ export default function WorkbenchModel({ onBack }) {
     const lastSaveFormDataRef = useRef(null)
     const [saveload, setSaveLoad] = useState(false)
 
-    // 关键：使用 react-query 的 isLoading 作为加载状态，移除手动 loading 状态
     const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
 
     const handleSave = async () => {
@@ -106,10 +105,10 @@ export default function WorkbenchModel({ onBack }) {
                 tts_model: { id: newConfig?.tts_model?.id }
             };
             if(response !== false){
-                message({ variant: 'success', description: '保存成功！' });
+                message({ variant: 'success', description: t('model.saveSuccess') });
             }
         } catch (err) {
-            message({ variant: 'error', description: '保存失败，请重试！' });
+            message({ variant: 'error', description: t('model.saveFailed') });
         } finally {
             setSaveLoad(false);
         }
@@ -125,11 +124,11 @@ export default function WorkbenchModel({ onBack }) {
     const handleSaveWithConfirm = () => {
         if (checkEmbeddingModified()) {
             bsConfirm({
-                title: '提示',
-                desc: '修改 embedding 模型可能会消耗大量模型资源且耗时较久，确认修改？',
+                title: t('model.tip'),
+                desc: t('model.confirmEmbeddingChange'),
                 showClose: true,
-                okTxt: '确认',
-                canelTxt: '取消',
+                okTxt: t('model.confirm'),
+                canelTxt: t('model.cancel'),
                 onOk(next) {
                     handleSave().then(next);
                 },
@@ -141,9 +140,8 @@ export default function WorkbenchModel({ onBack }) {
     };
 
     useEffect(() => {
-        // 1. 处理请求错误
         if (error) {
-            message({ variant: 'error', description: '获取配置失败，请刷新页面重试！' });
+            message({ variant: 'error', description: t('model.fetchConfigFailed') });
             return;
         }
 
@@ -166,9 +164,8 @@ export default function WorkbenchModel({ onBack }) {
                 tts_model: { id: linsightConfig.tts_model?.id }
             };
         }
-    }, [linsightConfig, error, message, defalutPrompt]); // 补充所有依赖
+    }, [linsightConfig, error, message, defalutPrompt, t]);
 
-    // 直接使用 react-query 的 isLoading 控制加载状态
     if (loading) return (
         <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <LoadingIcon />
@@ -204,37 +201,37 @@ export default function WorkbenchModel({ onBack }) {
                     <div className="flex-1">
                         <Label className="bisheng-label">
                             <span>{t('model.executionMode')}</span>
-                            <QuestionTooltip className="relative top-0.5 ml-1" content="一般情况可选择 function call 模式，模型不支持 function call 或追求最佳任务执行效果时可选择 ReAct 模式"></QuestionTooltip>
+                            <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.executionModeTooltip')}></QuestionTooltip>
                         </Label>
                         <Select
                             value={form.executionMode}
                             onValueChange={(val) => setForm({ ...form, executionMode: val })}
                         >
                             <SelectTrigger className="w-full">
-                                <SelectValue placeholder="选择执行模式" />
+                                <SelectValue placeholder={t('model.selectExecutionMode')} />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="func_call">Function Call</SelectItem>
-                                <SelectItem value="react">ReAct</SelectItem>
+                                <SelectItem value="func_call">{t('model.functionCall')}</SelectItem>
+                                <SelectItem value="react">{t('model.react')}</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
                 </div>
             </div>
-            <h3 className="bisheng-label">{t('工作台语音模型')}</h3>
+            <h3 className="bisheng-label">{t('model.workbenchVoiceModel')}</h3>
             <div className="border rounded-lg p-4 -mt-3 space-y-4">
                 <ModelSelect
                     close
-                    label={t('语音转文字（ASR）模型')}
-                    tooltipText={'用于工作台\\应用的语音转文字场景'}
+                    label={t('model.asrModel')}
+                    tooltipText={t('model.asrModelTooltip')}
                     value={form.asrModelId}
                     options={asrModel}
                     onChange={(val) => setForm({ ...form, asrModelId: val })}
                 />
                 <ModelSelect
                     close
-                    label={t('文字转语音（TTS）模型')}
-                    tooltipText={t('用于工作台\\应用的文字转语音场景')}
+                    label={t('model.ttsModel')}
+                    tooltipText={t('model.ttsModelTooltip')}
                     value={form.ttsModelId}
                     options={ttsModel}
                     onChange={(val) => setForm({ ...form, ttsModelId: val })}
@@ -259,7 +256,7 @@ export default function WorkbenchModel({ onBack }) {
 export function useLinsightConfig() {
     return useQuery({
         queryKey: ["linsightModelConfig"],
-        queryFn: () => captureAndAlertRequestErrorHoc(getLinsightModelConfig()), // 统一错误捕获
+        queryFn: () => captureAndAlertRequestErrorHoc(getLinsightModelConfig()),
         select: (data) => {
             const safeConfig = data || {
                 task_model: null,
@@ -271,7 +268,7 @@ export function useLinsightConfig() {
             };
             return safeConfig;
         },
-        retry: 1, // 失败自动重试1次，提升稳定性
+        retry: 1,
     });
 }
 

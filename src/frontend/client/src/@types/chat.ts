@@ -82,7 +82,7 @@ export interface RunningStatus {
   /** 输入框禁用状态 */
   inputDisabled: boolean;
   /** 失败原因 */
-  error: string;
+  error: { code: string, data: any };
   /** 展示form表单 */
   inputForm: any;
   /** 展示上传按钮 */

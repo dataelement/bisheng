@@ -31,3 +31,16 @@ class CustomMiddleware(BaseHTTPMiddleware):
         response.headers["X-Trace-ID"] = trace_id
         logger.info(f"| {ip} | {request.method} {path} | process_time={process_time}s")
         return response
+
+
+class WebSocketLoggingMiddleware:
+    """WebSocket 日志中间件"""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "websocket":
+            trace_id = trace_id_generator()
+            trace_id_var.set(trace_id)
+        await self.app(scope, receive, send)

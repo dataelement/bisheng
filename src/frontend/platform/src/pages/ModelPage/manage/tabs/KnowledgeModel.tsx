@@ -51,6 +51,7 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
 
 
 const PromptDialog = ({ value, onChange, onRestore, onSave, children }) => {
+    const { t } = useTranslation('model')
     const [open, setOpen] = useState(false)
     const modifyNotSavedRef = useRef(false)
     const [textValue, setTextValue] = useState(value)
@@ -61,8 +62,8 @@ const PromptDialog = ({ value, onChange, onRestore, onSave, children }) => {
     const handleCancel = () => {
         if (modifyNotSavedRef.current) {
             return bsConfirm({
-                title: '取消修改',
-                desc: "您的修改尚未保存，确定要退出吗？",
+                title: t('model.cancelEdit'),
+                desc: t('model.confirmCancelEdit'),
                 onOk: (next) => {
                     next();
                     setOpen(false);
@@ -81,10 +82,10 @@ const PromptDialog = ({ value, onChange, onRestore, onSave, children }) => {
         </DialogTrigger>
         <DialogContent  className="sm:max-w-[625px] bg-background-login">
             <DialogHeader>
-                <DialogTitle>编辑提示词</DialogTitle>
+                <DialogTitle>{t('model.editPrompt')}</DialogTitle>
             </DialogHeader>
             <div>
-                <Label className="bisheng-label">文档知识库摘要提示词</Label>
+                <Label className="bisheng-label">{t('model.docKnowledgeAbstractPrompt')}</Label>
                 <Textarea
                     value={textValue}
                     onChange={(e) => {
@@ -96,14 +97,14 @@ const PromptDialog = ({ value, onChange, onRestore, onSave, children }) => {
                 />
             </div>
             <DialogFooter>
-                <Button variant="outline" className="px-11" type="button" onClick={handleCancel}>取消</Button>
+                <Button variant="outline" className="px-11" type="button" onClick={handleCancel}>{t('model.cancel')}</Button>
                 <Button disabled={false} type="submit" className="px-11" onClick={() => {
                     modifyNotSavedRef.current = false
                     onSave(textValue)
                     setOpen(false)
                     onChange(textValue)
                 }}>
-                    保存
+                    {t('model.save')}
                 </Button>
             </DialogFooter>
         </DialogContent>
@@ -173,7 +174,7 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
             ...lastSaveFormDataRef.current,
             abstract_prompt: prompt ?? form.abstractPrompt
         }).then(res => {
-            message({ variant: 'success', description: '提示词已保存' })
+            message({ variant: 'success', description: t('model.promptSaved') })
         }))
     }
 
@@ -214,7 +215,6 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
                 options={llmOptions}
                 onChange={(val) => setForm({ ...form, qaSimilarModelId: val })}
             />
-            {/* 知识库摘要提示词编辑 */}
             <div className="absolute top-44 -right-28">
                 <PromptDialog
                     value={form.abstractPrompt}
@@ -222,8 +222,8 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
                     onSave={handleSavePrompt}
                     onRestore={() => setForm({ ...form, abstractPrompt: lastSaveFormDataRef.current.abstract_prompt })}
                 >
-                    <Tip content={"文档知识库上传文件时，对文件进行摘要的提示词"} side={"top"}>
-                        <Button variant="link"><Settings size={14} className="mr-1" /> 编辑提示词</Button>
+                    <Tip content={t('model.docKnowledgeAbstractPromptTooltip')} side={"top"}>
+                        <Button variant="link"><Settings size={14} className="mr-1" /> {t('model.editPromptButton')}</Button>
                     </Tip>
                 </PromptDialog>
             </div>

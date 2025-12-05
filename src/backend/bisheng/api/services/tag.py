@@ -4,7 +4,7 @@ from typing import List
 from fastapi import Request, HTTPException
 from loguru import logger
 
-from bisheng.api.services.user_service import UserPayload
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.tag import TagExistError, TagNotExistError
 from bisheng.common.models.config import ConfigDao, ConfigKeyEnum, Config

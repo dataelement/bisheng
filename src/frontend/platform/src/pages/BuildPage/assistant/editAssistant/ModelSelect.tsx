@@ -1,10 +1,10 @@
 import Cascader from "@/components/bs-ui/select/cascader";
 import { useModel } from "@/pages/ModelPage/manage";
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 
 export default function ModelSelect({ type = 'assistant', modelType = 'llm', value, onChange }) {
-
-    // const [configServers, setConfigServers] = useState([])
+    const { t } = useTranslation();
 
     const { llmOptions, embeddings, isLoading } = useModel(type === 'assistant' ? type : 'llm')
 
@@ -30,7 +30,7 @@ export default function ModelSelect({ type = 'assistant', modelType = 'llm', val
 
     if (isLoading) return null
     return <Cascader
-        selectPlaceholder="选择一个模型"
+        selectPlaceholder={t('build.selectModel')}
         defaultValue={defaultValue}
         options={modelType === 'llm' ? llmOptions : embeddings}
         onChange={(val) => onChange(val[1])}

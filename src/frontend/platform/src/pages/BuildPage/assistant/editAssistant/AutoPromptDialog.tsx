@@ -64,7 +64,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                     }
                     break
             }
-            // 自动滚动
+            // Auto scroll
             areaRef.current.scrollTop = areaRef.current.scrollHeight;
         };
 
@@ -95,7 +95,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
     }
 
     /**
-     * 使用
+     * Use
      */
     const { message } = useToast()
     // state
@@ -104,7 +104,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
     const [question, setQuestion] = useState<string[]>([])
     const [tools, setTools] = useState<AssistantTool[]>([])
     const [flows, setFlows] = useState<FlowType[]>([])
-    // 更新提示词
+    // Update prompt
     const handleUsePropmt = () => {
         const value = areaRef.current.value
         dispatchAssistant('setPrompt', { prompt: value })
@@ -158,7 +158,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
         dispatchAssistant('setTools', { tool_list: tools })
         dispatchAssistant('setFlows', { flow_list: flows })
         dispatchAssistant('setQuestion', { guide_question: [...question, ''] })
-        // 收集结果
+        // Collect results
         message({
             variant: 'success',
             title: t('tip'),
@@ -170,7 +170,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
     return <DialogContent className="sm:max-w-[925px] bg-background-login max-h-[90vh] overflow-hidden flex flex-col" close={false}>
     <div className="flex-1 overflow-y-auto">
         <div className="flex">
-            {/* 提示词 */}
+            {/* Prompt */}
             <div className="w-[50%] relative pr-6">
                 <div className="flex items-center justify-between">
                     <span className="text-lg font-semibold leading-none tracking-tight flex">{t('build.portraitOptimization')}{LoadType.Prompt === loading && <LoadIcon className="ml-2 text-gray-600" />}</span>
@@ -183,19 +183,19 @@ export default function AutoPromptDialog({ onOpenChange }) {
                     <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.Prompt <= loading} size="sm" onClick={handleUsePropmt}>{t('build.use')}</Button>
                 </div>
             </div>
-            {/* 自动配置 */}
+            {/* Automatic configuration */}
             <div className="w-[50%] border-l pl-6">
                 <div>
                     <span className="text-lg font-semibold leading-none tracking-tight">{t('build.automaticallyConfigurations')}</span>
                 </div>
                 <div className="">
-                    {/* 开场白 */}
+                    {/* Opening statement */}
                     <div className="group relative pb-12 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
                         <div className="text-md mb-2 font-medium leading-none flex">{t('build.openingRemarks')}{LoadType.GuideWord === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
                         <Textarea ref={guideAreaRef} className="bg-transparent border-none bg-gray-50 dark:bg-[#171717]"></Textarea>
                         <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.GuideWord <= loading} size="sm" onClick={handleUseGuide}>{t('build.use')}</Button>
                     </div>
-                    {/* 引导词 */}
+                    {/* Guide questions */}
                     <div className="group relative pb-12 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
                         <div className="text-md mb-2 font-medium leading-none flex">{t('build.guidingQuestions')}{LoadType.GuideQuestion === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
                         {
@@ -205,7 +205,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                         }
                         <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.GuideQuestion <= loading} size="sm" onClick={handleUserQuestion}>{t('build.use')}</Button>
                     </div>
-                    {/* 工具 */}
+                    {/* Tools */}
                     <div className="group relative pb-10 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
                         <div className="text-md mb-2 font-medium leading-none flex">{t('build.tools')}{LoadType.Tool === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
                         <div className="pt-1">
@@ -224,7 +224,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                             onClick={handleUseTools}
                         >{t('build.use')}</Button>
                     </div>
-                    {/* 技能 */}
+                    {/* Skills */}
                     <div className="group relative pb-10 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
                         <div className="text-md mb-2 font-medium leading-none flex">{t('build.skill')}{LoadType.Flow === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
                         <div className="pt-1">
@@ -248,7 +248,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
             </div>
         </div>
     </div>
-    {/* 底部按钮区域 - 固定在底部 */}
+    {/* Bottom button area - fixed at bottom */}
     <DialogFooter className="border-t mt-2">
         <DialogClose>
             <Button variant="outline" className="px-11" type="button">{t('cancle')}</Button>

@@ -1,6 +1,4 @@
 import logging
-from abc import ABC
-
 from bisheng.core.context import BaseContextManager
 from bisheng.core.context.base import T
 from bisheng.core.external.http_client.client import AsyncHttpClient
@@ -8,7 +6,7 @@ from bisheng.core.external.http_client.client import AsyncHttpClient
 logger = logging.getLogger(__name__)
 
 
-class HttpClientManager(BaseContextManager[AsyncHttpClient], ABC):
+class HttpClientManager(BaseContextManager[AsyncHttpClient]):
     """HTTP 客户端管理器
 
     继承自 BaseContextManager，提供 HTTP 客户端的生命周期管理

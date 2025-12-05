@@ -1,6 +1,5 @@
-import { Button } from "@/components/bs-ui/button";
 import { LoadIcon } from "@/components/bs-icons";
-import { ReactNode } from "react";
+import { Button } from "@/components/bs-ui/button";
 
 interface SopActionsBarProps {
     importFromRecord: () => void;

@@ -7,14 +7,15 @@ import openpyxl
 from fastapi import UploadFile
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
+from langchain_core.language_models import BaseChatModel
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from loguru import logger
 
 from bisheng.api.services.knowledge_imp import decide_vectorstores, extract_code_blocks
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
 from bisheng.api.v1.schema.linsight_schema import SopRecordRead
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.linsight import (
@@ -24,17 +25,15 @@ from bisheng.common.errcode.linsight import (
 from bisheng.common.errcode.server import (
     NoEmbeddingModelError, EmbeddingModelNotExistError, EmbeddingModelTypeError
 )
+from bisheng.common.services.config_service import settings
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.models.linsight_sop import LinsightSOP, LinsightSOPDao, LinsightSOPRecord
-from bisheng.database.models.user import UserDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.llm.const import LLMModelType
-from bisheng.llm.domain.llm import BishengLLM
+from bisheng.llm.domain.const import LLMModelType
+from bisheng.llm.domain.models import LLMDao
 from bisheng.llm.domain.services import LLMService
-from bisheng.llm.models import LLMDao
-from bisheng.common.services.config_service import settings
+from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import util
-from bisheng.utils.embedding import decide_embeddings
 from bisheng_langchain.rag.init_retrievers import KeywordRetriever, BaselineVectorRetriever
 from bisheng_langchain.retrievers import EnsembleRetriever
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
@@ -46,7 +45,7 @@ class SOPManageService:
     collection_name = "col_linsight_sop"
 
     @staticmethod
-    async def generate_sop_summary(sop_content: str, llm: BishengLLM = None) -> Dict[str, str]:
+    async def generate_sop_summary(invoke_user_id: int, sop_content: str, llm: BaseChatModel = None) -> Dict[str, str]:
         """生成SOP摘要"""
         default_summary = {"sop_title": "SOP名称", "sop_description": "SOP描述"}
 
@@ -54,7 +53,9 @@ class SOPManageService:
             if llm is None:
                 workbench_conf = await LLMService.get_workbench_llm()
                 linsight_conf = settings.get_linsight_conf()
-                llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=linsight_conf.default_temperature)
+                llm = await LLMService.get_bisheng_linsight_llm(invoke_user_id=invoke_user_id,
+                                                                model_id=workbench_conf.task_model.id,
+                                                                temperature=linsight_conf.default_temperature)
             prompt_service = await get_prompt_manager()
             prompt_obj = prompt_service.render_prompt(
                 namespace="sop",
@@ -85,7 +86,7 @@ class SOPManageService:
         添加SOP记录
         """
         if not sop_record.description:
-            sop_summary = await SOPManageService.generate_sop_summary(sop_record.content, None)
+            sop_summary = await SOPManageService.generate_sop_summary(sop_record.user_id, sop_record.content, None)
             sop_record.description = sop_summary["sop_description"]
 
         return await LinsightSOPDao.create_sop_record(sop_record)
@@ -319,7 +320,7 @@ class SOPManageService:
         return sop_pages
 
     @staticmethod
-    async def add_sop(sop_obj: SOPManagementSchema, user_id) -> UnifiedResponseModel | None:
+    async def add_sop(sop_obj: SOPManagementSchema, user_id: int) -> UnifiedResponseModel | None:
         """
         添加新的SOP
         :param user_id:
@@ -345,7 +346,8 @@ class SOPManageService:
 
         vector_store_id = uuid.uuid4().hex
 
-        embeddings = decide_embeddings(emb_model_id)
+        embeddings = await LLMService.get_bisheng_linsight_embedding(model_id=embed_info.id,
+                                                                     invoke_user_id=user_id)
         try:
             vector_client: Milvus = decide_vectorstores(
                 SOPManageService.collection_name, "Milvus", embeddings
@@ -396,7 +398,8 @@ class SOPManageService:
                 return NoEmbeddingModelError.return_resp()
 
             vector_store_id = existing_sop[0].vector_store_id
-            embeddings = decide_embeddings(emb_model_id)
+            embeddings = await LLMService.get_bisheng_linsight_embedding(invoke_user_id=sop_obj.user_id,
+                                                                         model_id=int(emb_model_id))
 
             # 更新向量存储
             try:
@@ -470,7 +473,7 @@ class SOPManageService:
 
     # sop 库检索
     @classmethod
-    async def search_sop(cls, query: str, k: int = 3) -> (List[Document], BaseErrorCode | None):
+    async def search_sop(cls, invoke_user_id: int, query: str, k: int = 3) -> (List[Document], BaseErrorCode | None):
         """
         搜索SOP
         :param k:
@@ -489,7 +492,8 @@ class SOPManageService:
             else:
                 try:
                     emb_model_id = workbench_conf.embedding_model.id
-                    embeddings = decide_embeddings(emb_model_id)
+                    embeddings = await LLMService.get_bisheng_linsight_embedding(invoke_user_id=invoke_user_id,
+                                                                                 model_id=int(emb_model_id))
                     await embeddings.aembed_query("test")
                 except Exception as e:
                     logger.error(f"向量检索模型初始化失败: {str(e)}")
@@ -501,7 +505,8 @@ class SOPManageService:
             retrievers = []
             if vector_search and es_search:
                 emb_model_id = workbench_conf.embedding_model.id
-                embeddings = decide_embeddings(emb_model_id)
+                embeddings = await LLMService.get_bisheng_linsight_embedding(invoke_user_id=invoke_user_id,
+                                                                             model_id=int(emb_model_id))
 
                 vector_client: Milvus = decide_vectorstores(
                     SOPManageService.collection_name, "Milvus", embeddings
@@ -531,7 +536,8 @@ class SOPManageService:
             elif vector_search and not es_search:
                 # 仅使用向量检索
                 emb_model_id = workbench_conf.embedding_model.id
-                embeddings = decide_embeddings(emb_model_id)
+                embeddings = await LLMService.get_bisheng_linsight_embedding(invoke_user_id=invoke_user_id,
+                                                                             model_id=int(emb_model_id))
 
                 vector_client: Milvus = decide_vectorstores(
                     SOPManageService.collection_name, "Milvus", embeddings

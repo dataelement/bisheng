@@ -8,10 +8,10 @@ from pydantic import Field
 from typing_extensions import Self
 
 from bisheng.core.ai import OllamaEmbeddings, OpenAIEmbeddings, AzureOpenAIEmbeddings, DashScopeEmbeddings
+from bisheng.llm.domain.const import LLMServerType, LLMModelType
 from .base import BishengBase
+from ..models import LLMModel, LLMServer
 from ..utils import wrapper_bisheng_model_limit_check
-from ...const import LLMServerType
-from ...models.llm_server import LLMModel, LLMServer, LLMModelType
 
 
 def _get_user_kwargs(model_config: dict) -> dict:
@@ -89,7 +89,6 @@ _node_type: Dict = {
 class BishengEmbedding(BishengBase, Embeddings):
     """ Use the embedding model that has been launched in model management """
 
-    model: str = Field(default='', description='后端服务保存的model名称')
     embedding_ctx_length: int = Field(default=8192, description='embedding模型上下文长度')
     max_retries: int = Field(default=6, description='embedding模型调用失败重试次数')
     request_timeout: int = Field(default=200, description='embedding模型调用超时时间')
@@ -126,7 +125,7 @@ class BishengEmbedding(BishengBase, Embeddings):
             f'init_bisheng_embedding: server_id: {server_info.id}, model_id: {model_info.id}')
         self.model_info: LLMModel = model_info
         self.server_info: LLMServer = server_info
-        self.model = model_info.model_name
+        self.model_name = model_info.model_name
 
         class_object = self._get_embedding_class(server_info.type)
         params = self._get_embedding_params(server_info, **kwargs)

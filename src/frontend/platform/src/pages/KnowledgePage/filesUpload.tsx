@@ -5,7 +5,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { retryKnowledgeFileApi, subUploadLibFile } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ChevronLeft } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import DialogWithRepeatFiles from "./components/DuplicateFileDialog";
@@ -46,7 +46,7 @@ export default function FilesUpload() {
   const _tempConfigRef = useRef({}); // Temporary storage of API config
   const submittingRef = useRef(false); // Prevent duplicate submission
   const repeatCallBackRef = useRef(() => setCurrentStep(4)); // Jump to step after duplicate file handling (4: data processing)
-
+  const isNextBtnClickRef = useRef(false); // Determine whether the next button is clicked
   // Key addition: Receive Step2's state update, save to parent component
   const handleStep2StateChange = (state: Step2PersistState) => {
     setStep2PersistState(state);
@@ -54,6 +54,8 @@ export default function FilesUpload() {
 
   // Step 1: File upload completed, jump to step 2
   const handleStep1Next = async (files) => {
+    isNextBtnClickRef.current = true;
+
     setResultFiles(files);
 
     const _repeatFiles = files.filter(e => e.repeat);
@@ -183,6 +185,8 @@ export default function FilesUpload() {
 
   // API: Save directly with default config in step 1 (normal mode exclusive)
   const handleSaveByDefaultConfig = async (_config) => {
+    isNextBtnClickRef.current = false;
+
     await captureAndAlertRequestErrorHoc(subUploadLibFile(_config).then(res => {
       const _repeatFiles = res.filter(e => e.status === 3);
       if (_repeatFiles.length) {
@@ -197,7 +201,7 @@ export default function FilesUpload() {
 
   // API: Retry duplicate files (overwrite upload)
   const handleRetry = (objs) => {
-    if (currentStep === 1 && !repeatCallBackRef.current) {
+    if (currentStep === 1 && isNextBtnClickRef.current) {
       setRepeatFiles([]);
       return setCurrentStep(2);
     }
@@ -216,7 +220,9 @@ export default function FilesUpload() {
       setRetryLoad(false);
       message({ variant: 'success', description: t('addSuccess') });
       repeatCallBackRef.current();
-    }));
+    }), () => {
+      setRetryLoad(false);
+    });
   };
 
   const handleUnRetry = () => {

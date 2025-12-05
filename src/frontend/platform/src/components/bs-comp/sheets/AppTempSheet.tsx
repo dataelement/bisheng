@@ -32,7 +32,7 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
             }
         }
         return descs[type]
-    }, [type])
+    }, [type, t])
 
     const [keyword, setKeyword] = useState(' ')
     const allDataRef = useRef([])

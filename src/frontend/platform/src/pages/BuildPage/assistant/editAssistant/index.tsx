@@ -22,7 +22,7 @@ export default function editAssistant() {
     const { id: assisId } = useParams()
     const navigate = useNavigate()
     const { state } = useLocation();
-    const loca = state?.flow; // 获取传递的 flow 数据
+    const loca = state?.flow; // Get the passed flow data
 
     // assistant data
     const { assistantState, changed, loadAssistantState, changeStatus, saveAfter, destroy } = useAssistantStore()
@@ -44,7 +44,7 @@ export default function editAssistant() {
         flowInit()
     }, [])
 
-    // 展示的引导词独立存储
+    // Store displayed guide words independently
     const [guideQuestion, setGuideQuestion] = useState([])
     const [openChat, setOpenChat] = useState(true)
     const handleStartChat = async (save) => {
@@ -60,7 +60,7 @@ export default function editAssistant() {
     }
 
     const { message, toast } = useToast()
-    // 保存助手详细信息
+    // Save assistant details
     const handleSave = async (showMessage = false) => {
         if (!handleCheck()) return
         await captureAndAlertRequestErrorHoc(saveAssistanttApi({
@@ -80,7 +80,7 @@ export default function editAssistant() {
         saveAfter()
     }
 
-    // 上线助手
+    // Publish assistant online
     const handleOnline = async (online) => {
         if (!handleCheck()) return
         if (online) {
@@ -104,7 +104,7 @@ export default function editAssistant() {
         }
     }
 
-    // 校验助手数据
+    // Validate assistant data
     const handleCheck = () => {
         const errors = []
         if (
@@ -116,7 +116,7 @@ export default function editAssistant() {
             errors.push(t('skills.chatHistoryMaxToken'));
         }
         if (!assistantState.model_name) {
-            errors.push('模型不能为空')
+            errors.push(t('build.modelRequired'))
         }
         if (assistantState.guide_question.some(que => que.length > 50)) {
             errors.push(t('skills.guideQuestions50'))
@@ -136,13 +136,13 @@ export default function editAssistant() {
         return true
     }
 
-    // 销毁
+    // Cleanup
     useEffect(() => {
         return destroy
     }, [])
 
     const [showApiPage, setShowApiPage] = useState(false)
-    // 离开保存
+    // Save on leave
     const blocker = useBeforeUnload(changed, checking)
     const handleSaveAndClose = async () => {
         await handleSave(true)
@@ -164,7 +164,7 @@ export default function editAssistant() {
                 </div>
                 <div className="w-[40%] h-full bg-[#fff] dark:bg-background-main relative">
                     {openChat && <TestChat guideQuestion={guideQuestion} assisId={assisId} onClear={() => handleStartChat(false)}></TestChat>}
-                    {/* 变更触发保存的蒙版按钮 */}
+                    {/* Mask button triggered by changes to save */}
                     {changed && <div className="absolute w-full bottom-0 h-60" onClick={() => handleStartChat(true)}></div>}
                 </div>
             </div>
@@ -176,16 +176,16 @@ export default function editAssistant() {
             <DialogContent className="sm:max-w-[425px]" close={false}>
                 <DialogHeader>
                     <DialogTitle>{t('prompt')}</DialogTitle>
-                    <DialogDescription>{assistantState.status === OnlineState.OnLine ? '助手已上线,不可进行更改' : '您有未保存的更改,确定要离开吗?'}</DialogDescription>
+                    <DialogDescription>{assistantState.status === OnlineState.OnLine ? t('build.assistantOnlineNoEdit') : t('build.unsavedChangesLeave')}</DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
                     {
                         assistantState.status !== OnlineState.OnLine && <Button className="leave h-8" onClick={handleSaveAndClose}>
-                            离开并保存
+                            {t('build.leaveAndSave')}
                         </Button>
                     }
                     <Button className="h-8" variant="destructive" onClick={() => blocker.proceed?.()}>
-                        不保存,直接退出
+                        {t('build.leaveWithoutSave')}
                     </Button>
                     <Button className="h-8" variant="outline" onClick={() => {
                         blocker.reset?.()
@@ -199,13 +199,13 @@ export default function editAssistant() {
 };
 
 
-// 离开页面保存提示
+// Save prompt when leaving page
 const useBeforeUnload = (changed, checking) => {
     const { t } = useTranslation()
 
-    // 离开提示保存
+    // Prompt to save when leaving
     useEffect(() => {
-        if (checking) return // 检查是否有权限中不提示
+        if (checking) return // Don't prompt when checking permissions
         const fun = (e) => {
             var confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
             (e || window.event).returnValue = confirmationMessage; // Compatible with different browsers

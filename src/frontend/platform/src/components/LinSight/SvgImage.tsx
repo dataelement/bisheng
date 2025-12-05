@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { FileIcon } from '../bs-icons/file';
 
-
 interface SvgImageProps {
   fileUrl: string;
   alt: string;
@@ -14,37 +13,37 @@ export const SvgImage = ({ fileUrl, alt, className = "" }: SvgImageProps) => {
   const [error, setError] = useState(false);
   const fullUrl = `${__APP_ENV__.BASE_URL}${fileUrl}`;
 
-  // 核心：给SVG添加 width:100% 和 height:auto 样式，保持比例自适应
+  // Core: Add width: 100% and height: auto styles to the SVG to maintain responsive aspect ratio
   const addSvgResponsiveStyles = (svgText: string) => {
-    const svgRegex = /<svg([^>]*?)>/i; // 匹配SVG根节点
+    const svgRegex = /<svg([^>]*?)>/i; // Match the root SVG element
     return svgText.replace(
       svgRegex,
       (match, attributes) => {
-        // 目标样式：宽度100%，高度自适应
+        // Target style: width 100%, height auto
         const targetStyles = 'width: 100%; height: auto;';
-        
+
         if (attributes.includes('style=')) {
-          // 已有style属性，合并样式（去重）
+          // If there's an existing style attribute, merge the styles (avoiding duplicates)
           return `<svg${attributes.replace(
             /style=(["'])(.*?)\1/,
             (styleMatch, quote, styles) => {
-              // 过滤掉已有的width和height样式
+              // Remove existing width and height styles
               const filteredStyles = styles
                 .split(';')
-                .filter(style => 
-                  !style.trim().startsWith('width:') && 
+                .filter(style =>
+                  !style.trim().startsWith('width:') &&
                   !style.trim().startsWith('height:')
                 )
                 .join(';');
-              // 拼接新样式
-              const newStyles = filteredStyles 
-                ? `${filteredStyles}; ${targetStyles}` 
+              // Append the new styles
+              const newStyles = filteredStyles
+                ? `${filteredStyles}; ${targetStyles}`
                 : targetStyles;
               return `style=${quote}${newStyles}${quote}`;
             }
           )}>`;
         } else {
-          // 无style属性，直接添加
+          // If no style attribute, directly add the styles
           return `<svg${attributes} style="${targetStyles}">`;
         }
       }
@@ -58,7 +57,7 @@ export const SvgImage = ({ fileUrl, alt, className = "" }: SvgImageProps) => {
       try {
         setLoading(true);
         setError(false);
-        
+
         const response = await fetch(fullUrl, {
           signal: abortController.signal,
           headers: { 'Accept': 'image/svg+xml, text/plain' }
@@ -67,13 +66,13 @@ export const SvgImage = ({ fileUrl, alt, className = "" }: SvgImageProps) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
         const text = await response.text();
-        // 处理SVG文本，添加响应式样式
+        // Process SVG text, adding responsive styles
         const processedSvg = addSvgResponsiveStyles(text);
         setSvgContent(processedSvg);
       } catch (err) {
         if (!abortController.signal.aborted) {
           setError(true);
-          console.error('SVG加载失败:', err);
+          console.error('SVG load failed:', err);
         }
       } finally {
         if (!abortController.signal.aborted) setLoading(false);
@@ -101,7 +100,7 @@ export const SvgImage = ({ fileUrl, alt, className = "" }: SvgImageProps) => {
   }
 
   return (
-    <div 
+    <div
       className={className}
       dangerouslySetInnerHTML={{ __html: svgContent }}
     />

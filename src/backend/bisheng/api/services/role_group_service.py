@@ -8,21 +8,21 @@ from loguru import logger
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import resp_200
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.user import UserGroupNotDeleteError
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao, FlowType
-from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.group import Group, GroupCreate, GroupDao, GroupRead, DefaultGroup
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.database.models.role import RoleDao
-from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
-from bisheng.database.models.user_role import UserRoleDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+from bisheng.user.domain.models.user import User, UserDao
+from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import get_request_ip
 
 

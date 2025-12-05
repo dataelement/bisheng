@@ -19,7 +19,7 @@ const enum Status {
 // 日志组件
 export default function RunLog({ node, children }) {
     const [state, setState] = useState<Status>(Status.normal)
-    const setRunCache = useFlowStore(state => state.setRunCache) // 缓存TODO
+    // const setRunCache = useFlowStore(state => state.setRunCache) // 缓存TODO
     const [data, setData] = useState<any>([])
     const { t } = useTranslation('flow')
     // 订阅日志事件
@@ -180,12 +180,12 @@ const Log = ({ type, name, data }) => {
                         <Select value={currentIndex + ""} onValueChange={(val => setCurrentIndex(Number(val)))}>
                             <SelectTrigger className="w-[180px]">
                                 {/* <SelectValue /> */}
-                                <span>第 {currentIndex + 1} 轮运行结果</span>
+                                <span>{t('roundRunResult', { index: currentIndex + 1 })}</span>
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectGroup>
                                     {
-                                        data.map((_, index) => <SelectItem key={index} value={index + ""}>第 {index + 1} 轮运行结果</SelectItem>)
+                                        data.map((_, index) => <SelectItem key={index} value={index + ""}>{t('roundRunResult', { index: index + 1 })}</SelectItem>)
                                     }
                                 </SelectGroup>
                             </SelectContent>
@@ -205,16 +205,27 @@ const Log = ({ type, name, data }) => {
 // 下载文件
 export const ResultFile = ({ title, name, fileUrl }: { title: string, name: string, fileUrl: string }) => {
     const { flow } = useFlowStore();
+    const { t } = useTranslation('flow');
 
     const handleDownload = (e) => {
-        downloadFile(fileUrl, `${flow.name}_${name}_检索结果`)
+        downloadFile(fileUrl, `${flow.name}_${name}_${t('searchResult')}`)
     }
 
-    return <div className="mb-2 rounded-md border bg-search-input text-sm shadow-sm">
-        <div className="border-b px-2 flex justify-between items-center">
-            <p>{title}</p>
+    return (
+        <div className="mb-2 rounded-md border bg-search-input text-sm shadow-sm">
+            <div className="border-b px-2 flex justify-between items-center">
+                <p>{title}</p>
+            </div>
+
+            <textarea
+                defaultValue={t('resultTooLongDownloadToView')}
+                disabled
+                className="w-full h-12 p-2 block text-muted-foreground dark:bg-black"
+            />
+
+            <Button onClick={handleDownload} className="h-6 mt-2">
+                {t('downloadFullContent')}
+            </Button>
         </div>
-        <textarea defaultValue={'检索结果过长,请下载后查看'} disabled className="w-full h-12 p-2 block text-muted-foreground dark:bg-black " />
-        <Button onClick={handleDownload} className="h-6 mt-2">下载完整内容</Button>
-    </div>
-}
+    );
+};

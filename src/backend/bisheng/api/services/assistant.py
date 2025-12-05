@@ -9,30 +9,34 @@ from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
-from bisheng.api.services.tool import ToolServices
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
                                     StreamData, UnifiedResponseModel, resp_200, resp_500)
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
                                               AssistantNotEditError, AssistantNotExistsError, ToolTypeRepeatError,
                                               ToolTypeIsPresetError)
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
+from bisheng.common.schemas.telemetry.event_data_schema import NewApplicationEventData
+from bisheng.common.services import telemetry_service
 from bisheng.core.cache import InMemoryCache
-from bisheng.database.constants import ToolPresetType
+from bisheng.core.logger import trace_id_var
 from bisheng.database.models.assistant import (Assistant, AssistantDao, AssistantLinkDao,
                                                AssistantStatus)
 from bisheng.database.models.flow import Flow, FlowDao, FlowType
-from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsTypeRead, GptsTools
 from bisheng.database.models.group_resource import GroupResourceDao, GroupResource, ResourceTypeEnum
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
-from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.database.models.user_role import UserRoleDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.llm.domain.services import LLMService
 from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.tool.domain.const import ToolPresetType
+from bisheng.tool.domain.models.gpts_tools import GptsToolsDao, GptsToolsTypeRead, GptsTools
+from bisheng.tool.domain.services.tool import ToolServices
+from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import get_request_ip
 
 
@@ -144,6 +148,11 @@ class AssistantService(BaseService, AssistantUtils):
                                            flow_list=flow_list,
                                            knowledge_list=knowledge_list))
 
+    @classmethod
+    async def get_one_assistant(cls, assistant_id: str) -> Optional[Assistant]:
+        assistant = await AssistantDao.aget_one_assistant(assistant_id)
+        return assistant
+
     # 创建助手
     @classmethod
     async def create_assistant(cls, request: Request, login_user: UserPayload, assistant: Assistant) \
@@ -164,8 +173,19 @@ class AssistantService(BaseService, AssistantUtils):
                     break
 
         # 自动生成描述
-        assistant, _, _ = await cls.get_auto_info(assistant)
+        assistant, _, _ = await cls.get_auto_info(assistant, login_user)
         assistant = AssistantDao.create_assistant(assistant)
+
+        # 记录Telemetry日志
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.NEW_APPLICATION,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=NewApplicationEventData(
+                                              app_id=assistant.id,
+                                              app_name=assistant.name,
+                                              app_type=ApplicationTypeEnum.ASSISTANT
+                                          )
+                                          )
 
         cls.create_assistant_hook(request, assistant, login_user)
         return resp_200(data=AssistantInfo(**assistant.dict(),
@@ -209,6 +229,9 @@ class AssistantService(BaseService, AssistantUtils):
             return UnAuthorizedError.return_resp()
 
         AssistantDao.delete_assistant(assistant)
+        telemetry_service.log_event_sync(user_id=login_user.user_id,
+                                         event_type=BaseTelemetryTypeEnum.DELETE_APPLICATION,
+                                         trace_id=trace_id_var.get())
         cls.delete_assistant_hook(request, login_user, assistant)
         return resp_200()
 
@@ -228,13 +251,13 @@ class AssistantService(BaseService, AssistantUtils):
         return True
 
     @classmethod
-    async def auto_update_stream(cls, assistant_id: str, prompt: str):
+    async def auto_update_stream(cls, assistant_id: str, prompt: str, login_user: UserPayload):
         """ 重新生成助手的提示词和工具选择, 只调用模型能力不修改数据库数据 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         assistant.prompt = prompt
 
         # 初始化llm
-        auto_agent = AssistantAgent(assistant, '')
+        auto_agent = AssistantAgent(assistant, '', login_user.user_id)
         await auto_agent.init_auto_update_llm()
 
         # 流式生成提示词
@@ -292,6 +315,8 @@ class AssistantService(BaseService, AssistantUtils):
         assistant.update_time = datetime.now()
         assistant.max_token = req.max_token
         AssistantDao.update_assistant(assistant)
+        telemetry_service.log_event_sync(user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
+                                         trace_id=trace_id_var.get())
 
         # 更新助手关联信息
         if req.tool_list is not None:
@@ -339,7 +364,7 @@ class AssistantService(BaseService, AssistantUtils):
 
         # 尝试初始化agent，初始化成功则上线、否则不上线
         if status == AssistantStatus.ONLINE.value:
-            tmp_agent = AssistantAgent(assistant, '')
+            tmp_agent = AssistantAgent(assistant, '', login_user.user_id)
             try:
                 await tmp_agent.init_assistant()
             except Exception as e:
@@ -347,6 +372,8 @@ class AssistantService(BaseService, AssistantUtils):
                 return AssistantInitError.return_resp('助手编译报错：' + str(e))
         assistant.status = status
         AssistantDao.update_assistant(assistant)
+        telemetry_service.log_event_sync(user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
+                                         trace_id=trace_id_var.get())
         cls.update_assistant_hook(request, login_user, assistant)
         return resp_200()
 
@@ -363,6 +390,9 @@ class AssistantService(BaseService, AssistantUtils):
 
         assistant.prompt = prompt
         AssistantDao.update_assistant(assistant)
+        telemetry_service.log_event_sync(user_id=user_payload.user_id,
+                                         event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
+                                         trace_id=trace_id_var.get())
         return resp_200()
 
     @classmethod
@@ -587,13 +617,13 @@ class AssistantService(BaseService, AssistantUtils):
         return False
 
     @classmethod
-    async def get_auto_info(cls, assistant: Assistant) -> (Assistant, List[int], List[int]):
+    async def get_auto_info(cls, assistant: Assistant, login_user: UserPayload) -> (Assistant, List[int], List[int]):
         """
         自动生成助手的prompt，自动选择工具和技能
         return：助手信息，工具ID列表，技能ID列表
         """
         # 初始化agent
-        auto_agent = AssistantAgent(assistant, '')
+        auto_agent = AssistantAgent(assistant, '', login_user.user_id)
         await auto_agent.init_auto_update_llm()
 
         # 自动生成描述

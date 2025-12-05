@@ -1,5 +1,6 @@
 import copy
 import json
+import time
 from typing import Annotated, List, Optional, Union
 from uuid import UUID
 
@@ -7,19 +8,26 @@ import yaml
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, UploadFile
 from loguru import logger
 
-from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.v1.schemas import (ProcessResponse, UploadFileResponse,
                                     resp_200)
 from bisheng.chat.utils import judge_source, process_source_document
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, ApplicationAliveEventData, \
+    ApplicationProcessEventData
+from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.cache.utils import save_uploaded_file, upload_file_to_minio
+from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.interface.types import get_all_types_dict
+from bisheng.open_endpoints.domain.utils import get_default_operator_async
 from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.services.deps import get_session_service, get_task_service
 from bisheng.services.task.service import TaskService
@@ -50,8 +58,7 @@ def get_env():
     """获取环境变量参数"""
     uns_support = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'html', 'pdf', 'csv']
 
-    etl4lm_settings = bisheng_settings.get_knowledge().get("etl4lm", {})
-    etl_for_lm_url = etl4lm_settings.get("url", None)
+    etl_for_lm_url = bisheng_settings.get_knowledge().etl4lm.url
     if etl_for_lm_url:
         uns_support.extend(['png', 'jpg', 'jpeg', 'bmp'])
 
@@ -76,14 +83,14 @@ def get_env():
 
 
 @router.get('/config')
-def get_config(admin_user: UserPayload = Depends(get_admin_user)):
+def get_config(admin_user: UserPayload = Depends(UserPayload.get_admin_user)):
     db_config = ConfigDao.get_config(ConfigKeyEnum.INIT_DB)
     config_str = db_config.value if db_config else ''
     return resp_200(config_str)
 
 
 @router.post('/config/save')
-def save_config(data: dict, admin_user: UserPayload = Depends(get_admin_user)):
+def save_config(data: dict, admin_user: UserPayload = Depends(UserPayload.get_admin_user)):
     if not data.get('data', '').strip():
         raise HTTPException(status_code=500, detail='配置不能为空')
     try:
@@ -117,7 +124,7 @@ async def get_web_config():
 
 @router.post('/web/config')
 async def update_web_config(request: Request,
-                            admin_user: UserPayload = Depends(get_admin_user),
+                            admin_user: UserPayload = Depends(UserPayload.get_admin_user),
                             value: str = Body(embed=True)):
     """ 更新一些前端所需要的配置项，内容由前端决定 """
     logger.info(
@@ -169,13 +176,16 @@ async def process_flow(
     logger.info(
         f'act=api_call sessionid={session_id} flow_id={flow_id} inputs={inputs} tweaks={tweaks}')
 
+    login_user = await get_default_operator_async()
+    flow = await FlowDao.aget_flow_by_id(flow_id)
+    if flow is None or flow.data is None:
+        raise NotFoundError()
+    start_time = time.time()
+    if session_id is None:
+        # Generate a session ID
+        session_id = get_session_service().generate_key(session_id=session_id,
+                                                        data_graph=flow.data)
     try:
-        flow = FlowDao.get_flow_by_id(flow_id)
-        if flow is None:
-            raise ValueError(f'Flow {flow_id} not found')
-        if flow.data is None:
-            raise ValueError(f'Flow {flow_id} has no data')
-
         graph_data = flow.data
         if tweaks:
             try:
@@ -200,10 +210,7 @@ async def process_flow(
         else:
             logger.warning('This is an experimental feature and may not work as expected.'
                            'Please report any issues to our GitHub repository.')
-            if session_id is None:
-                # Generate a session ID
-                session_id = get_session_service().generate_key(session_id=session_id,
-                                                                data_graph=graph_data)
+
             task_id, task = await task_service.launch_task(
                 process_graph_cached_task if task_service.use_celery else process_graph_cached,
                 graph_data,
@@ -228,14 +235,14 @@ async def process_flow(
         source, result = await judge_source(answer, source_documents, session_id, extra)
 
         try:
-            question = ChatMessage(user_id=1,
+            question = ChatMessage(user_id=login_user.user_id,
                                    is_bot=False,
                                    type='end',
                                    chat_id=session_id,
                                    category='question',
                                    flow_id=flow_id,
                                    message=json.dumps(inputs))
-            message = ChatMessage(user_id=1,
+            message = ChatMessage(user_id=login_user.user_id,
                                   is_bot=True,
                                   chat_id=session_id,
                                   flow_id=flow_id,
@@ -252,8 +259,21 @@ async def process_flow(
                         flow_id=flow_id,
                         flow_name=flow.name,
                         flow_type=FlowType.FLOW.value,
-                        user_id=1,
+                        user_id=login_user.user_id,
                     ))
+
+                # 记录Telemetry日志
+                await telemetry_service.log_event(user_id=login_user.user_id,
+                                                  event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
+                                                  trace_id=trace_id_var.get(),
+                                                  event_data=NewMessageSessionEventData(
+                                                      session_id=session_id,
+                                                      app_id=flow_id,
+                                                      source=source,  # type: ignore
+                                                      app_name=flow.name,
+                                                      app_type=ApplicationTypeEnum.SKILL
+                                                  )
+                                                  )
             except Exception as e:
                 logger.warning(f'insert repeat session error: {e}')
 
@@ -287,6 +307,30 @@ async def process_flow(
         # Log stack trace
         logger.exception(e)
         raise HTTPException(status_code=500, detail=str(e)) from e
+    finally:
+        end_time = time.time()
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=ApplicationAliveEventData(
+                                              app_id=flow_id,
+                                              app_name=flow.name,
+                                              app_type=ApplicationTypeEnum.SKILL,
+                                              chat_id=session_id,
+                                              start_time=int(start_time),
+                                              end_time=int(end_time)))
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=ApplicationProcessEventData(
+                                              app_id=flow_id,
+                                              app_name=flow.name,
+                                              app_type=ApplicationTypeEnum.SKILL,
+                                              chat_id=session_id,
+                                              start_time=int(start_time),
+                                              end_time=int(end_time),
+                                              process_time=int((end_time - start_time) * 1000)
+                                          ))
 
 
 async def _upload_file(file: UploadFile, object_name_prefix: str, file_supports: List[str] = None,
@@ -315,7 +359,7 @@ async def _upload_file(file: UploadFile, object_name_prefix: str, file_supports:
 
 @router.post('/upload/icon')
 async def upload_icon(request: Request,
-                      login_user: UserPayload = Depends(get_login_user),
+                      login_user: UserPayload = Depends(UserPayload.get_login_user),
                       file: UploadFile = None):
     bucket = bisheng_settings.object_storage.minio.public_bucket
     resp = await _upload_file(file,
@@ -327,7 +371,7 @@ async def upload_icon(request: Request,
 
 @router.post('/upload/workflow/{workflow_id}')
 async def upload_icon_workflow(request: Request,
-                               login_user: UserPayload = Depends(get_login_user),
+                               login_user: UserPayload = Depends(UserPayload.get_login_user),
                                file: UploadFile = None,
                                workflow_id: str = Path(..., description='workflow id')):
     bucket = bisheng_settings.object_storage.minio.public_bucket

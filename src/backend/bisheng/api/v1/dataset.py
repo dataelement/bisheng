@@ -1,11 +1,12 @@
 from typing import List
 
+from fastapi import APIRouter, Depends, Request
+
 from bisheng.api.services.dataset_service import DatasetService
-from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schema.dataset_param import CreateDatasetParam
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.database.models.dataset import DatasetRead
-from fastapi import APIRouter, Depends, Request
 
 # build router
 router = APIRouter(prefix='/dataset', tags=['FineTune'])
@@ -28,7 +29,7 @@ def create_dataset(
         *,
         request: Request,
         data: CreateDatasetParam,
-        login_user: UserPayload = Depends(get_login_user),
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> UnifiedResponseModel:
     """
     创建数据集
@@ -42,7 +43,7 @@ def delete_dataset(
         *,
         request: Request,
         dataset_id: int,
-        login_user: UserPayload = Depends(get_login_user),
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> UnifiedResponseModel:
     """
     创建数据集

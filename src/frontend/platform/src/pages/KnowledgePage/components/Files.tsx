@@ -43,16 +43,15 @@ export default function Files({ onPreview }) {
     const [metadataOpen, setMetadataOpen] = useState(false);
     const navigate = useNavigate()
 
-    // 存储完整文件对象（保留所有原始参数）
+    // Store complete file objects (preserving all original parameters)
     const [selectedFileObjs, setSelectedFileObjs] = useState<Array<Record<string, any>>>([]);
     const [isAllSelected, setIsAllSelected] = useState(false);
 
-    // 其他原有状态
     const [selectedFilters, setSelectedFilters] = useState<number[]>([]);
     const [tempFilters, setTempFilters] = useState<number[]>([]);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [metadataFields, setMetadataFields] = useState<Array<{ field_name: string; field_type: string }>>([]);
-    // 解析中轮巡
+    // Polling during parsing
     const timerRef = useRef(null)
     useEffect(() => {
         if (datalist.some(el => el.status === 1)) {
@@ -102,33 +101,33 @@ export default function Files({ onPreview }) {
         })
     }
 
-    // 重试解析（保留原始文件参数结构）
+    // Retry parsing (preserving original file parameter structure)
     const handleRetry = (files) => {
         captureAndAlertRequestErrorHoc(retryKnowledgeFileApi({ file_objs: files }).then(res => {
             reload()
         }))
     }
 
-    // 全选/取消全选（存储完整文件对象）
+    // Select all/Deselect all (storing complete file objects)
     const toggleSelectAll = (checked: boolean) => {
         if (checked) {
-            // 全选当前页并去重
+            // Select all current page and deduplicate
             const newFiles = datalist
                 .filter(file => !selectedFileObjs.some(item => item.id === file.id))
-                .map(file => ({ ...file })); // 深拷贝保留所有参数
+                .map(file => ({ ...file })); // Deep copy to preserve all parameters
             setSelectedFileObjs([...selectedFileObjs, ...newFiles]);
         } else {
-            // 取消全选当前页
+            // Deselect all current page
             const currentPageIds = new Set(datalist.map(file => file.id));
             setSelectedFileObjs(prev => prev.filter(file => !currentPageIds.has(file.id)));
         }
         setIsAllSelected(checked);
     };
 
-    // 单个文件选中/取消选中
+    // Single file selection/deselection
     const toggleSelectFile = (file: Record<string, any>, checked: boolean) => {
         if (checked) {
-            // 避免重复添加
+            // Avoid duplicate additions
             if (!selectedFileObjs.some(item => item.id === file.id)) {
                 setSelectedFileObjs([...selectedFileObjs, { ...file }]);
             }
@@ -138,22 +137,23 @@ export default function Files({ onPreview }) {
         }
     };
 
-    // 检查当前页是否全部选中
+    // Check if current page is fully selected
     const isCurrentPageAllSelected = useMemo(() => {
         if (datalist.length === 0) return false;
         const selectedIds = new Set(selectedFileObjs.map(file => file.id));
         return datalist.every(file => selectedIds.has(file.id));
     }, [datalist, selectedFileObjs]);
 
-    // 批量删除
+    // Batch delete
     const handleBatchDelete = () => {
         bsConfirm({
             title: t('prompt'),
-            desc: t('确认删除选中文件', { count: selectedFileObjs.length }),
+            desc: t('confirmDeleteSelectedFiles', { count: selectedFileObjs.length }),
             onOk(next) {
                 captureAndAlertRequestErrorHoc(Promise.all(
                     selectedFileObjs.map(file => deleteFile(file.id))
                 ).then(() => {
+                    setPage(1);
                     reload();
                     setSelectedFileObjs([]);
                     setIsAllSelected(false);
@@ -163,26 +163,26 @@ export default function Files({ onPreview }) {
         })
     }
 
-    // 批量重试（核心修复：传递完整文件对象）
+    // Batch retry
     const handleBatchRetry = () => {
-        // 筛选失败文件，保留完整参数
+        // Filter failed files, preserving complete parameters
         const failedFiles = selectedFileObjs.filter(file => file.status === 3);
 
         if (failedFiles.length > 0) {
-            handleRetry(failedFiles); // 直接传递完整文件对象数组
+            handleRetry(failedFiles); // Directly pass complete file object array
             setSelectedFileObjs([]);
             setIsAllSelected(false);
         }
     }
 
-    // 策略解析（原有逻辑不变）
+    // Strategy parsing
     const dataSouce = useMemo(() => {
         return datalist.map(el => {
             if (el.file_name.includes('xlsx', 'xls', 'csv') && el.parse_type !== "local" && el.parse_type !== "uns") {
                 const excel_rule = JSON.parse(el.split_rule).excel_rule
                 return {
                     ...el,
-                    strategy: ['', `每 ${excel_rule?.slice_length} 行作为1一个分段`]
+                    strategy: ['', t('everyRowsAsOneSegment', { count: excel_rule?.slice_length })]
                 }
             }
             if (!el.split_rule) return {
@@ -197,17 +197,17 @@ export default function Files({ onPreview }) {
                 strategy: [data.length > 2 ? data.slice(0, 2).join(',') : '', data.join(',')]
             }
         })
-    }, [datalist])
+    }, [datalist, t])
 
     const splitRuleDesc = (el) => {
         if (!el.split_rule) return el.strategy[1].replace(/\n/g, '\\n')
         const suffix = el.file_name.split('.').pop().toUpperCase()
         const excel_rule = JSON.parse(el.split_rule).excel_rule
         if (!excel_rule) return el.strategy[1].replace(/\n/g, '\\n')
-        return ['XLSX', 'XLS', 'CSV'].includes(suffix) ? `每 ${excel_rule.slice_length} 行作为一个分段` : el.strategy[1].replace(/\n/g, '\\n')
+        return ['XLSX', 'XLS', 'CSV'].includes(suffix) ? t('everyRowsAsOneSegment', { count: excel_rule.slice_length }) : el.strategy[1].replace(/\n/g, '\\n')
     }
 
-    // 检查是否有选中的解析失败文件
+    // Check if there are selected parsing failed files
     const hasSelectedFailedFiles = useMemo(() => {
         return selectedFileObjs.some(file => file.status === 3);
     }, [selectedFileObjs]);
@@ -218,45 +218,47 @@ export default function Files({ onPreview }) {
         }
     }, [isFilterOpen, selectedFilters]);
 
-    // 页面数据变化时更新全选状态
+    // Update select all status when page data changes
     useEffect(() => {
         setIsAllSelected(datalist.length > 0 && datalist.every(file =>
             selectedFileObjs.some(item => item.id === file.id)
         ));
     }, [datalist, selectedFileObjs]);
 
-    // 处理下拉菜单关闭事件
+    // Handle dropdown menu close event
     const handleOpenChange = (open: boolean) => {
         if (!open && isFilterOpen) {
             applyFilters();
         }
         setIsFilterOpen(open);
     };
- useEffect(() => {
-        // 弹窗打开且有知识库ID时，加载元数据
-        if (metadataOpen && id) { // 注意：这里的依赖是 metadataOpen，而不是 open
+
+    useEffect(() => {
+        // Load metadata when dialog opens and knowledge base ID exists
+        if (metadataOpen && id) { // Note: dependency is metadataOpen, not open
             const fetchMetadata = async () => {
                 try {
-                    // 调用接口获取知识库详情
-                      const knowledgeDetails = await getKnowledgeDetailApi([id]);
-                    const knowledgeDetail = knowledgeDetails[0]; // 获取第一个知识库的详情
-                 if (knowledgeDetail && knowledgeDetail.metadata_fields) {
+                    // Call API to get knowledge base details
+                    const knowledgeDetails = await getKnowledgeDetailApi([id]);
+                    const knowledgeDetail = knowledgeDetails[0]; // Get first knowledge base details
+                    if (knowledgeDetail && knowledgeDetail.metadata_fields) {
                         setMetadataFields(knowledgeDetail.metadata_fields);
                     } else {
-                        setMetadataFields([]); // 如果没有元数据，设为空数组
+                        setMetadataFields([]); // Set to empty array if no metadata
                     }
 
                 } catch (err: any) {
-                    console.error("元数据加载失败：", err);
-                    // 可以在这里添加用户提示
+                    console.error("Metadata loading failed:", err);
+                    // Can add user prompt here
                 }
             };
             fetchMetadata();
-        }else if (!metadataOpen) {
-            // 当弹窗关闭时，清空元数据状态
+        } else if (!metadataOpen) {
+            // Clear metadata state when dialog closes
             setMetadataFields([]);
         }
     }, [metadataOpen, id]);
+
     return (
         <div className="relative">
             
@@ -266,12 +268,12 @@ export default function Files({ onPreview }) {
                 </div>
             )}
 
-            {/* 顶部操作栏 */}
+            {/* Top action bar */}
             {selectedFileObjs.length > 0 && (
                 <div className="absolute top-[-62px] left-0 right-0 flex justify-center items-center p-2 border-b z-10">
                     <div className="flex items-center">
                         <div className="flex gap-2">
-                            <Tip content={!isEditable && '暂无操作权限'} side='bottom'>
+                            <Tip content={!isEditable && 'No operation permission'} side='bottom'>
                                 <Button
                                     variant="outline"
                                     onClick={handleBatchDelete}
@@ -283,7 +285,7 @@ export default function Files({ onPreview }) {
                                 </Button>
                             </Tip>
                             {hasSelectedFailedFiles && (
-                                <Tip content={!isEditable && '暂无操作权限'} side='bottom'>
+                                <Tip content={!isEditable && 'No operation permission'} side='bottom'>
                                     <Button
                                         variant="outline"
                                         onClick={handleBatchRetry}
@@ -291,7 +293,7 @@ export default function Files({ onPreview }) {
                                         className="flex items-center gap-1 disabled:pointer-events-auto"
                                     >
                                         <RotateCw size={16} />
-                                        {t('重试')}
+                                        {t('retry')}
                                     </Button>
                                 </Tip>
                             )}
@@ -312,7 +314,7 @@ export default function Files({ onPreview }) {
                     className="px-4 whitespace-nowrap"
                 >
                     <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-1"/>
-                    {t('元数据')}
+                    {t('metaData')}
                 </Button>
                 {isEditable && (
                     <Link to={`/filelib/upload/${id}`}>
@@ -332,7 +334,7 @@ export default function Files({ onPreview }) {
                                 />
                             </TableHead>
                             <TableHead className="min-w-[250px]">{t('fileName')}</TableHead>
-                            <TableHead>切分策略</TableHead>
+                            <TableHead>{t('segmentationStrategy')}</TableHead>
                             <TableHead className="min-w-[100px]">{t('updateTime')}</TableHead>
                             <TableHead className="flex items-center gap-4 min-w-[130px]">
                                 {t('status')}
@@ -358,39 +360,39 @@ export default function Files({ onPreview }) {
                                                 {[
                                                     {
                                                         value: 2,
-                                                        label: '已完成',
+                                                        label: 'Completed',
                                                         color: 'text-green-500',
                                                         icon: (
                                                             <div className="flex items-center gap-2 mt-2">
                                                                 <span className="size-[6px] rounded-full bg-green-500"></span>
                                                                 <span className="font-[500] text-[14px] text-green-500 leading-[100%]">
-                                                                    已完成
+                                                                    {t("completed")}
                                                                 </span>
                                                             </div>
                                                         )
                                                     },
                                                     {
                                                         value: 1,
-                                                        label: '解析中',
+                                                        label: 'Parsing',
                                                         color: 'text-[#4D9BF0]',
                                                         icon: (
                                                             <div className="flex items-center gap-2 mt-2">
                                                                 <span className="size-[6px] rounded-full bg-[#4D9BF0]"></span>
                                                                 <span className="font-[500] text-[14px] text-[#4D9BF0] leading-[100%]">
-                                                                    解析中
+                                                                    {t("parsing")}
                                                                 </span>
                                                             </div>
                                                         )
                                                     },
                                                     {
                                                         value: 3,
-                                                        label: '解析失败',
+                                                        label: 'Parse Failed',
                                                         color: 'text-red-500',
                                                         icon: (
                                                             <div className="flex items-center gap-2 mt-2">
                                                                 <span className="size-[6px] rounded-full bg-red-500"></span>
                                                                 <span className="font-[500] text-[14px] text-red-500 leading-[100%]">
-                                                                    解析失败
+                                                                    {t("parseFailed")}
                                                                 </span>
                                                             </div>
                                                         )
@@ -431,7 +433,7 @@ export default function Files({ onPreview }) {
                                                     }}
                                                     disabled={tempFilters.length === 0}
                                                 >
-                                                    重置
+                                                   {t("reset")}
                                                 </Button>
                                                 <Button
                                                     size="sm"
@@ -440,7 +442,7 @@ export default function Files({ onPreview }) {
                                                         applyFilters()
                                                     }}
                                                 >
-                                                    确认
+                                                    {t("confirm")}
                                                 </Button>
                                             </div>
                                         </DropdownMenuContent>
@@ -502,7 +504,7 @@ export default function Files({ onPreview }) {
                                                     <TooltipTrigger className="flex items-center gap-2">
                                                         <span className="size-[6px] rounded-full bg-red-500"></span>
                                                         <span className="font-[500] text-[14px] text-red-500 leading-[100%] text-center">
-                                                            解析失败
+                                                            {t("parseFailed")}
                                                         </span>
                                                     </TooltipTrigger>
 
@@ -519,7 +521,7 @@ export default function Files({ onPreview }) {
                                                     <TooltipTrigger className="flex items-center gap-2">
                                                         <span className="size-[6px] rounded-full bg-green-500"></span>
                                                         <span className="font-[500] text-[14px] text-green-500 leading-[100%] text-center">
-                                                            已完成
+                                                            {t("completed")}
                                                         </span>
                                                     </TooltipTrigger>
                                                 </Tooltip>
@@ -528,7 +530,7 @@ export default function Files({ onPreview }) {
                                                     <TooltipTrigger className="flex items-center gap-2">
                                                         <span className="size-[6px] rounded-full bg-[#4D9BF0]"></span>
                                                         <span className="font-[500] text-[14px] text-[#4D9BF0] leading-[100%] text-center">
-                                                            解析中
+                                                            {t("parsing")}
                                                         </span>
                                                     </TooltipTrigger>
                                                 </Tooltip>
@@ -539,24 +541,24 @@ export default function Files({ onPreview }) {
                                 <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-1">
                                         {el.status === 3 && (
-                                            <Tip content={!isEditable && '暂无操作权限'} side='top'>
+                                            <Tip content={!isEditable && 'No operation permission'} side='top'>
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
                                                     disabled={!isEditable}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        handleRetry([el]); // 单个重试传递完整对象
+                                                        handleRetry([el]); // Single retry passes complete object
                                                     }}
                                                     className="disabled:pointer-events-auto"
-                                                    title={t('重试')}
+                                                    title={t('retry')}
                                                 >
                                                     <RotateCw size={16} />
                                                 </Button>
                                             </Tip>
                                         )}
                                         <Tip
-                                            content={!isEditable && '暂无操作权限'}
+                                            content={!isEditable && 'No operation permission'}
                                             side='top'
                                             styleClasses="-translate-x-6"
                                         >

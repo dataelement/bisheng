@@ -11,10 +11,10 @@ import { userContext } from "@/contexts/userContext";
 import { createTool, deleteTool, getMcpServeByConfig, testMcpApi, updateTool } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { isValidJSON } from "@/util/utils";
-import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-// 测试对话框组件
+// test chat
 const TestDialog = forwardRef((props, ref) => {
     const [testShow, setTestShow] = useState(false);
     const [toolData, setToolData] = useState(null);
@@ -38,7 +38,7 @@ const TestDialog = forwardRef((props, ref) => {
     }));
 
     const handleTest = async () => {
-        // 校验必填参数
+        // validate params
         // const requiredParams = Object.entries(toolData.inputSchema.properties)
         //     .filter(([_, schema]) => schema.required)
         //     .map(([name]) => name);
@@ -98,7 +98,7 @@ const TestDialog = forwardRef((props, ref) => {
                                         </TableCell>
                                         <TableCell>
                                             <Input
-                                                placeholder={`输入${schema.type || 'string'}类型值`}
+                                                placeholder={t('test.inputTypeValue', { type: schema.type || 'string' })}
                                                 onChange={(e) => setParams(prev => ({
                                                     ...prev,
                                                     [name]: e.target.value
@@ -123,7 +123,7 @@ const TestDialog = forwardRef((props, ref) => {
     );
 });
 
-// 主组件  TODO(重构,状态混乱)
+// Main component  TODO(refactor, state confusion)
 const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref) => {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
@@ -140,11 +140,11 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
     const testToolDialogRef = useRef(null);
     const { user } = useContext(userContext);
     const [isSelf, setIsSelf] = useState(false);
-    // 解析标记
+    // Parse flag
     const textareaRef = useRef(null);
-    const [isLoading, setIsLoading] = useState(false); // 加载状态
-    const latestFormData = useRef(initialFormState); // 存储最新表单数据
-    const parseBeforeSaveRef = useRef(false); // 保存前需要解析
+    const [isLoading, setIsLoading] = useState(false); // Loading state
+    const latestFormData = useRef(initialFormState); // Store latest form data
+    const parseBeforeSaveRef = useRef(false); // Need to parse before saving
     const [isWrite, setIsWrite] = useState(false)
     useEffect(() => {
         latestFormData.current = formData;
@@ -152,14 +152,14 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
 
     const { t } = useTranslation();
 
-    // 示例配置
-    const exampleConfigs = {
+    // Example configurations
+    const exampleConfigs = useMemo(() => ({
         gaode1: JSON.stringify({
             "mcpServers": {
                 "amap-sse": {
                     "type": "sse",
-                    "name": "高德地图",
-                    "description": "提供全场景覆盖的地图服务，包括地理编码、逆地理编码、IP 定位、天气查询、骑行路径规划、步行路径规划、驾车路径规划、公交路径规划、距离测量、关键词搜索、周边搜索、详情搜索等。",
+                    "name": t('tools.gaodeMap'),
+                    "description": t('tools.gaodeMapDesc'),
                     "url": "https://mcp.amap.com/sse?key=yourapikey"
                 }
             }
@@ -168,15 +168,15 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
             "mcpServers": {
                 "amap-streamable": {
                     "type": "streamable",
-                    "name": "高德地图",
-                    "description": "提供全场景覆盖的地图服务，包括地理编码、逆地理编码、IP 定位、天气查询、骑行路径规划、步行路径规划、驾车路径规划、公交路径规划、距离测量、关键词搜索、周边搜索、详情搜索等。",
+                    "name": t('tools.gaodeMap'),
+                    "description": t('tools.gaodeMapDesc'),
                     "url": "https://mcp.amap.com/mcp?key=yourapikey"
                 }
             }
         }, null, 2)
-    };
+    }), [t]);
 
-    // 暴露方法给父组件
+    // Expose methods to parent component
     useImperativeHandle(ref, () => ({
         open: (serverData = null) => {
             if (serverData) {
@@ -202,7 +202,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
     }));
 
 
-    // 重置表单
+    // Reset form
     const resetFormState = () => {
         setFormData(initialFormState);
         latestFormData.current = initialFormState;
@@ -233,7 +233,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                 const parsedApis = tools.children.map(item => JSON.parse(item.extra));
                 setAvailableTools(parsedApis);
 
-                // 更新表单数据和ref
+                // Update form data and ref
                 const newFormData = {
                     ...latestFormData.current,
                     children: tools.children
@@ -252,7 +252,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
         const name = latestFormData.current.name.trim();
         const schema = latestFormData.current.openapiSchema.trim();
 
-        // 名称校验
+        // Name validation
         if (!name) {
             errors.push(t('tools.nameRequired'));
         } else if (
@@ -264,7 +264,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
             errors.push(t('tools.nameExists'));
         }
 
-        // Schema校验
+        // Schema validation
         if (!schema) {
             errors.push(t('tools.configRequired'));
         } else if (!isValidJSON(schema)) {
@@ -274,7 +274,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
         return errors;
     };
 
-    // 表单提交
+    // Form submission
     const handleSubmit = async () => {
         if (parseBeforeSaveRef.current) {
             setIsLoading(true);
@@ -285,7 +285,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
             }, 0);
         }
 
-        // 使用latestFormData.current获取最新数据
+        // Use latestFormData.current to get latest data
         const validationErrors = validateForm();
         if (validationErrors.length > 0) {
             return message({
@@ -316,7 +316,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
         }
     };
 
-    // 删除服务器（保持不变）
+    // Delete server (keep unchanged)
     const handleServerDelete = () => {
         bsConfirm({
             title: t('prompt'),
@@ -350,7 +350,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                     </SheetHeader>
 
                     <div className="mt-4 space-y-6 px-6 overflow-y-auto h-[calc(100vh-200px)]">
-                        {/* 名称输入 */}
+                        {/* Name input */}
                         <div>
                             <label className="">{t('tools.name')}</label>
                             <Input
@@ -364,7 +364,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                             />
                         </div>
 
-                        {/* 配置输入 */}
+                        {/* Configuration input */}
                         <div>
                             <div className="flex justify-between items-center mb-2">
                                 <label className="">{t('tools.mcpServerConfig')}</label>
@@ -374,8 +374,8 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectGroup>
-                                            <SelectItem value="gaode1">高德地图（SSE 协议）</SelectItem>
-                                            <SelectItem value="gaode2">高德地图（streamable 协议）</SelectItem>
+                                            <SelectItem value="gaode1">{t('tools.gaodeMapSSE')}</SelectItem>
+                                            <SelectItem value="gaode2">{t('tools.gaodeMapStreamable')}</SelectItem>
                                         </SelectGroup>
                                     </SelectContent>
                                 </Select>
@@ -396,7 +396,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                             />
                         </div>
 
-                        {/* 工具列表 */}
+                        {/* Tool list */}
                         <div>
                             <div className="flex justify-between items-center mb-2">
                                 <label>{t('tools.availableTools')}</label>
@@ -434,7 +434,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                         </div>
                     </div>
 
-                    {/* 底部操作按钮 */}
+                    {/* footer buttons */}
                     <SheetFooter className="absolute bottom-0 right-0 w-full px-6 py-4">
                         {isEditMode && (user.role === 'admin' || isSelf || isWrite) && (
                             <Button

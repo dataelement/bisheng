@@ -9,14 +9,14 @@ from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeFileNotExistError, KnowledgeMetadataFieldNotExistError, \
     KnowledgeMetadataFieldExistError, KnowledgeMetadataValueTypeConvertError
 from bisheng.database.models.role_access import AccessType
-from bisheng.database.models.user import UserDao
 from bisheng.knowledge.domain import utils
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.schemas.knowledge_file_schema import KnowledgeFileInfoRes
-from bisheng.knowledge.domain.schemas.knowledge_schema import ModifyKnowledgeFileMetaDataReq, MetadataField
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
+from bisheng.knowledge.domain.schemas.knowledge_file_schema import KnowledgeFileInfoRes
+from bisheng.knowledge.domain.schemas.knowledge_schema import ModifyKnowledgeFileMetaDataReq, MetadataField
 from bisheng.open_endpoints.domain.schemas.knowledge import DeleteUserMetadataReq
+from bisheng.user.domain.models.user import UserDao
 
 
 class KnowledgeFileService:
@@ -63,9 +63,10 @@ class KnowledgeFileService:
         return knowledge_file_info_res
 
     @staticmethod
-    async def modify_milvus_file_user_metadata(knowledge_model, knowledge_file_id, user_metadata: dict):
+    async def modify_milvus_file_user_metadata(invoke_user_id: int, knowledge_model, knowledge_file_id,
+                                               user_metadata: dict):
         """修改 Milvus 中文件的用户元数据"""
-        vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(knowledge=knowledge_model,
+        vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(invoke_user_id, knowledge=knowledge_model,
                                                                              metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
 
         # 先查出所有数据
@@ -157,6 +158,7 @@ class KnowledgeFileService:
 
         # 修改 Milvus, Elasticsearch 中的对应元数据
         await self.modify_milvus_file_user_metadata(
+            login_user.user_id,
             knowledge_model=knowledge_model,
             knowledge_file_id=knowledge_file_model.id,
             user_metadata=user_metadata
@@ -249,6 +251,7 @@ class KnowledgeFileService:
 
             # 修改 Milvus, Elasticsearch 中的对应元数据
             await self.modify_milvus_file_user_metadata(
+                login_user.user_id,
                 knowledge_model=knowledge_model,
                 knowledge_file_id=knowledge_file_model.id,
                 user_metadata=user_metadata
@@ -322,7 +325,6 @@ class KnowledgeFileService:
                     field_value = utils.metadata_value_type_convert(
                         value=item.field_value, target_type=field_type)
                     existing_item['field_value'] = field_value
-                    existing_item['updated_at'] = item.updated_at
                     current_user_metadata[item.field_name] = existing_item
                 except Exception as e:
                     raise KnowledgeMetadataValueTypeConvertError(
@@ -340,6 +342,7 @@ class KnowledgeFileService:
             user_metadata = {key: value.get('field_value') for key, value in knowledge_file_model.user_metadata.items()}
             # 修改 Milvus, Elasticsearch 中的对应元数据
             await self.modify_milvus_file_user_metadata(
+                login_user.user_id,
                 knowledge_model=knowledge_model,
                 knowledge_file_id=knowledge_file_model.id,
                 user_metadata=user_metadata
@@ -418,6 +421,7 @@ class KnowledgeFileService:
 
             # 修改 Milvus, Elasticsearch 中的对应元数据
             await self.modify_milvus_file_user_metadata(
+                login_user.user_id,
                 knowledge_model=knowledge_model,
                 knowledge_file_id=knowledge_file_model.id,
                 user_metadata=user_metadata

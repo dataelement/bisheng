@@ -1,17 +1,18 @@
 import io
-import re
 import os
+import re
 import tempfile
-import requests
-from urllib.parse import urlparse, unquote
-from uuid import uuid4
-from loguru import logger
-from typing import Dict, Tuple, Any, List, Optional
-from enum import Enum
 from dataclasses import dataclass
+from enum import Enum
+from typing import Dict, Tuple, Any, List, Optional
+from urllib.parse import urlparse
+from uuid import uuid4
+
 import pandas as pd
-from openpyxl import load_workbook
+import requests
 from charset_normalizer import detect
+from loguru import logger
+from openpyxl import load_workbook
 
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.utils.docx_temp import DocxTemplateRender
@@ -80,7 +81,7 @@ class ResourcePlaceholderManager:
         self.placeholder_map: Dict[str, ResourceData] = {}  # placeholder -> resource映射
 
     def create_placeholder(
-        self, resource_type: ResourceType, position: int, original_content: str, pattern_name: str
+            self, resource_type: ResourceType, position: int, original_content: str, pattern_name: str
     ) -> str:
         """创建新的占位符"""
         resource_id = self.counter
@@ -180,11 +181,11 @@ class OverlapResolver:
         # 3. 同类型资源，先匹配的优先
 
         priority_map = {
-            "markdown_table": 1,     # 表格优先级最高，包含其他资源
-            "markdown_image": 2,     # 图片次之
+            "markdown_table": 1,  # 表格优先级最高，包含其他资源
+            "markdown_image": 2,  # 图片次之
             "minio_image": 3,
             "http_image": 4,
-            "minio_excel_csv": 5,    # Excel/CSV文件
+            "minio_excel_csv": 5,  # Excel/CSV文件
             "http_excel_csv": 6,
             "local_excel_csv": 7,
             "local_image": 8,
@@ -322,7 +323,7 @@ class ContentParser:
             content = str(content)
 
         self.logger.info(f"开始解析变量 '{var_name}', 内容长度: {len(content)}")
-        
+
         # 添加详细的内容预览日志
         if content:
             content_preview = content.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
@@ -338,7 +339,7 @@ class ContentParser:
 
         self.logger.info(f"变量 '{var_name}' 中找到 {len(matches)} 个资源匹配项")
         for i, match in enumerate(matches):
-            self.logger.debug(f"匹配项 {i+1}: {match['pattern_name']} at {match['start']}-{match['end']}")
+            self.logger.debug(f"匹配项 {i + 1}: {match['pattern_name']} at {match['start']}-{match['end']}")
 
         # 2. 创建资源对象
         resources = []
@@ -383,7 +384,8 @@ class ContentParser:
         # 6. 合并所有资源（主要资源 + 表格内图片资源）
         all_resources = resolved_resources + table_image_resources
 
-        self.logger.info(f"变量 '{var_name}' 解析完成，生成 {len(all_resources)} 个资源（主要 {len(resolved_resources)} 个，表格内图片 {len(table_image_resources)} 个）")
+        self.logger.info(
+            f"变量 '{var_name}' 解析完成，生成 {len(all_resources)} 个资源（主要 {len(resolved_resources)} 个，表格内图片 {len(table_image_resources)} 个）")
 
         return processed_content, all_resources
 
@@ -470,40 +472,40 @@ class ContentParser:
     def _handle_minio_excel_csv(self, resource: ResourceData, match: Dict):
         """处理MinIO Excel/CSV文件"""
         file_path = match["full_match"]
-        
+
         resource.table_source = self._determine_table_source_by_extension(file_path)
         resource.original_path = file_path
         resource.file_name = os.path.basename(file_path)
-        
+
         self.logger.debug(f"MinIO Excel/CSV文件: path='{file_path}', type='{resource.table_source.value}'")
 
     def _handle_http_excel_csv(self, resource: ResourceData, match: Dict):
         """处理HTTP Excel/CSV文件"""
         file_url = match["full_match"]
-        
+
         resource.table_source = self._determine_table_source_by_extension(file_url)
         resource.original_path = file_url
         resource.file_name = os.path.basename(urlparse(file_url).path) or "spreadsheet_file"
-        
+
         self.logger.debug(f"HTTP Excel/CSV文件: url='{file_url}', type='{resource.table_source.value}'")
 
     def _handle_local_excel_csv(self, resource: ResourceData, match: Dict):
         """处理本地Excel/CSV文件"""
         file_path = match["full_match"]
-        
+
         # 清理路径中的多余字符
         file_path = file_path.strip("[]'\"")
-        
+
         resource.table_source = self._determine_table_source_by_extension(file_path)
         resource.original_path = file_path
         resource.file_name = os.path.basename(file_path)
-        
+
         self.logger.debug(f"本地Excel/CSV文件: path='{file_path}', type='{resource.table_source.value}'")
 
     def _determine_table_source_by_extension(self, file_path: str) -> TableSource:
         """根据文件扩展名确定表格源类型"""
         file_path_lower = file_path.lower()
-        
+
         if file_path_lower.endswith('.csv'):
             return TableSource.CSV_CONTENT
         elif file_path_lower.endswith(('.xlsx', '.xls')):
@@ -517,10 +519,10 @@ class ContentParser:
         try:
             # 先解析表格结构
             table_data, alignments = self._parse_markdown_table_from_content(table_content)
-            
+
             # 处理表格内的图片链接
             self._process_images_in_table(table_data)
-            
+
             return table_data, alignments
         except Exception as e:
             self.logger.error(f"解析表格数据失败: {str(e)}")
@@ -564,7 +566,7 @@ class ContentParser:
                     # 跳过完全空的行，但保留只有竖线的空表格行
                     if not line:
                         continue
-                        
+
                     # 检查是否是分隔符行
                     if self._is_separator_line(line):
                         table_alignments = self._parse_alignments(line)
@@ -616,7 +618,7 @@ class ContentParser:
             return False
 
         cells = [cell.strip() for cell in content.split("|")]
-        
+
         # 必须至少有一个单元格包含分隔符字符（-或:）
         has_separator_chars = False
         for cell in cells:
@@ -629,7 +631,7 @@ class ContentParser:
             clean_cell = cell.replace("-", "").replace(":", "").strip()
             if clean_cell:
                 return False
-        
+
         # 只有包含分隔符字符的行才能被认为是分隔符行
         return has_separator_chars
 
@@ -704,29 +706,29 @@ class ContentParser:
         """处理表格内的图片链接，创建图片资源"""
         if not table_data:
             return
-            
+
         for row_idx, row in enumerate(table_data):
             for col_idx, cell in enumerate(row):
                 if not cell:
                     continue
-                    
+
                 # 在单元格内容中查找并处理图片链接
                 updated_cell = self._process_cell_images(cell)
                 table_data[row_idx][col_idx] = updated_cell
-                
+
     def _process_cell_images(self, cell_content: str) -> str:
         """处理单元格内的图片，使用现有的模式匹配逻辑"""
         if not cell_content:
             return cell_content
-            
+
         # 复用现有的模式匹配逻辑查找所有图片
         matches = self.pattern_matcher.find_all_matches(cell_content)
-        
+
         # 只处理图片类型的匹配
         image_matches = [m for m in matches if m["resource_type"] == ResourceType.IMAGE]
-        
+
         updated_content = cell_content
-        
+
         # 从后往前处理，避免位置偏移
         for match in reversed(image_matches):
             # 创建图片资源
@@ -736,23 +738,24 @@ class ContentParser:
                 original_content=match["full_match"],
                 pattern_name=match["pattern_name"],
             )
-            
+
             # 获取资源对象并调用对应的处理方法
             resource = self.placeholder_manager.get_resource_by_placeholder(placeholder)
             handler = getattr(self, match["handler_method"])
             handler(resource, match)
-            
+
             # 将表格内的图片资源添加到临时列表（避免被重叠解决器跳过）
             self._table_image_resources.append(resource)
-            
+
             self.logger.info(f"表格内图片: {match['pattern_name']} {match['full_match']} -> {placeholder}")
-            
+
             # 替换为占位符
             start_pos = match["start"]
             end_pos = match["end"]
             updated_content = updated_content[:start_pos] + placeholder + updated_content[end_pos:]
-            
+
         return updated_content
+
 
 class ResourceDownloadManager:
     """资源下载管理器"""
@@ -872,12 +875,12 @@ class ResourceDownloadManager:
             # /bisheng/object/name -> bucket="bisheng", object_name="object/name"
             object_name = file_path[9:]  # 移除 '/bisheng/'
             return "bisheng", object_name if object_name else None
-        
+
         elif file_path.startswith("/tmp-dir/"):
             # /tmp-dir/object/name -> bucket="tmp-dir", object_name="object/name"  
             object_name = file_path[9:]  # 移除 '/tmp-dir/'
             return "tmp-dir", object_name if object_name else None
-        
+
         elif file_path.startswith("/tmp/"):
             # /tmp/xxx -> 返回多个可能的bucket选项，调用方需要都尝试
             # 这里先返回主bucket映射，调用方应该实现多bucket尝试逻辑
@@ -973,25 +976,25 @@ class ResourceDownloadManager:
     def _download_and_parse_table_file(self, resource: ResourceData):
         """下载并解析Excel/CSV文件"""
         file_path = resource.original_path
-        
+
         # 1. 先尝试下载文件
         local_file_path = self._download_table_file(file_path)
-        
+
         if not local_file_path:
             raise Exception(f"无法下载表格文件: {file_path}")
-        
+
         # 2. 根据文件类型解析
         try:
             if resource.table_source == TableSource.CSV_CONTENT:
                 resource.table_data, resource.alignments = self._parse_csv_file(local_file_path)
             elif resource.table_source == TableSource.EXCEL_CONTENT:
                 resource.table_data, resource.alignments = self._parse_excel_file(local_file_path)
-            
+
             # 设置下载路径
             resource.local_path = local_file_path
             resource.download_success = True
             self.logger.info(f"表格文件解析成功: {file_path} -> {len(resource.table_data)}行")
-            
+
         except Exception as e:
             self.logger.error(f"表格文件解析失败: {file_path}, 错误: {str(e)}")
             # 创建错误表格
@@ -999,14 +1002,14 @@ class ResourceDownloadManager:
             resource.alignments = ["left", "left"]
             resource.local_path = local_file_path if local_file_path else file_path  # 确保有路径
             resource.download_success = False
-            
+
     def _download_table_file(self, file_path: str) -> Optional[str]:
         """下载表格文件到本地临时文件"""
         # 1. 优先尝试本地文件
         if os.path.exists(file_path):
             self.logger.info(f"本地表格文件存在: {file_path}")
             return file_path
-        
+
         # 2. 尝试HTTP下载
         if self._is_valid_url(file_path):
             try:
@@ -1017,33 +1020,33 @@ class ResourceDownloadManager:
                     return temp_file
             except Exception as e:
                 self.logger.warning(f"HTTP表格文件下载失败: {file_path}, 错误: {str(e)}")
-        
+
         # 3. 尝试从MinIO下载
         bucket_name, object_name = self._parse_path_for_minio(file_path)
         if bucket_name and object_name:
             try:
                 if self.minio_client.object_exists_sync(bucket_name, object_name):
                     file_content = self.minio_client.get_object_sync(bucket_name, object_name)
-                    
+
                     # 生成临时文件
                     file_ext = os.path.splitext(object_name)[1] or ".dat"
                     filename = f"{uuid4().hex}{file_ext}"
                     temp_dir = tempfile.gettempdir()
                     temp_file = os.path.join(temp_dir, filename)
-                    
+
                     with open(temp_file, "wb") as f:
                         f.write(file_content)
-                    
+
                     self.temp_files.append(temp_file)
                     self.logger.info(f"MinIO表格文件下载成功: {bucket_name}/{object_name} -> {temp_file}")
                     return temp_file
             except Exception as e:
                 self.logger.warning(f"MinIO表格文件下载失败: {file_path}, 错误: {str(e)}")
-        
+
         # 4. 都没有下载成功
         self.logger.warning(f"表格文件下载失败: {file_path}")
         return None
-    
+
     def _parse_csv_file(self, file_path: str) -> Tuple[List[List[str]], List[str]]:
         """解析CSV文件"""
         try:
@@ -1052,66 +1055,66 @@ class ResourceDownloadManager:
                 raw_data = f.read()
                 encoding_info = detect(raw_data)
                 encoding = encoding_info['encoding'] or 'utf-8'
-            
+
             # 使用pandas读取CSV，更好地处理各种格式
             df = pd.read_csv(file_path, encoding=encoding)
-            
+
             # 转换为表格数据格式
             table_data = []
-            
+
             # 添加表头
             headers = [str(col) for col in df.columns]
             table_data.append(headers)
-            
+
             # 添加数据行
             for _, row in df.iterrows():
                 row_data = [str(cell) if pd.notna(cell) else "" for cell in row]
                 table_data.append(row_data)
-            
+
             # 生成对齐信息（默认左对齐）
             alignments = ["left"] * len(headers)
-            
+
             self.logger.info(f"CSV文件解析成功: {len(table_data)}行 x {len(headers)}列")
             return table_data, alignments
-            
+
         except Exception as e:
             self.logger.error(f"CSV文件解析失败: {file_path}, 错误: {str(e)}")
             raise
-    
+
     def _parse_excel_file(self, file_path: str) -> Tuple[List[List[str]], List[str]]:
         """解析Excel文件"""
         try:
             # 使用openpyxl读取Excel文件
             workbook = load_workbook(file_path, data_only=True)  # data_only=True获取计算后的值
-            
+
             # 使用第一个工作表
             worksheet = workbook.active
-            
+
             table_data = []
             max_col = 0
-            
+
             # 读取所有行
             for row in worksheet.iter_rows(values_only=True):
                 # 跳过完全空白的行
                 if all(cell is None or str(cell).strip() == "" for cell in row):
                     continue
-                    
+
                 row_data = [str(cell) if cell is not None else "" for cell in row]
                 table_data.append(row_data)
                 max_col = max(max_col, len(row_data))
-            
+
             # 确保所有行的列数一致
             for row in table_data:
                 while len(row) < max_col:
                     row.append("")
-            
+
             # 生成对齐信息（默认左对齐）
             alignments = ["left"] * max_col
-            
+
             self.logger.info(f"Excel文件解析成功: {len(table_data)}行 x {max_col}列")
-            
+
             return table_data, alignments
-            
+
         except Exception as e:
             self.logger.error(f"Excel文件解析失败: {file_path}, 错误: {str(e)}")
             raise
@@ -1127,7 +1130,7 @@ class ResourceDownloadManager:
             col_count = len(resource.table_data[0])
             for i, row in enumerate(resource.table_data):
                 if len(row) != col_count:
-                    self.logger.warning(f"表格第 {i+1} 行列数不一致，将补齐空值")
+                    self.logger.warning(f"表格第 {i + 1} 行列数不一致，将补齐空值")
                     while len(row) < col_count:
                         row.append("")
 
@@ -1143,30 +1146,24 @@ class ResourceDownloadManager:
             # 设置请求头，模拟浏览器访问
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+                              "(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
             }
 
             response = requests.get(url, headers=headers, timeout=30, verify=False)
             response.raise_for_status()
 
             # 获取文件名
-            content_disposition = response.headers.get("Content-Disposition", "")
-            filename = ""
-            if content_disposition:
-                filename = unquote(content_disposition).split("filename=")[-1].strip("\"'")
-            if not filename:
-                filename = unquote(urlparse(url).path.split("/")[-1])
-            if not filename:
-                # 根据Content-Type推断扩展名
-                content_type = response.headers.get("Content-Type", "").lower()
-                if "image/png" in content_type:
-                    filename = f"{uuid4().hex}.png"
-                elif "image/jpeg" in content_type or "image/jpg" in content_type:
-                    filename = f"{uuid4().hex}.jpg"
-                elif "image/bmp" in content_type:
-                    filename = f"{uuid4().hex}.bmp"
-                else:
-                    filename = f"{uuid4().hex}.dat"
+            # 根据Content-Type推断扩展名
+            content_type = response.headers.get("Content-Type", "").lower()
+            if "image/png" in content_type:
+                filename = f"{uuid4().hex}.png"
+            elif "image/jpeg" in content_type or "image/jpg" in content_type:
+                filename = f"{uuid4().hex}.jpg"
+            elif "image/bmp" in content_type:
+                filename = f"{uuid4().hex}.bmp"
+            else:
+                file_ext = url.split('.')[-1].lower()[-5:]
+                filename = f"{uuid4().hex}.{file_ext}"
 
             # 创建临时文件
             temp_dir = tempfile.gettempdir()
@@ -1207,7 +1204,7 @@ class ResourceDownloadManager:
             elif minio_path.startswith("/tmp/"):
                 # 格式: /tmp/object/name -> 智能bucket选择
                 object_name = minio_path[5:]  # 移除 '/tmp/'
-                
+
                 # 先尝试主bucket
                 bucket_name = self.minio_client.bucket
                 if self.minio_client.object_exists_sync(bucket_name, object_name):
@@ -1346,7 +1343,7 @@ class SmartDocumentRenderer:
                         "type": "markdown_table",  # 修复：使用正确的类型标识符
                     }
                     resource_map["csv_files"].append(table_info)
-                
+
                 elif resource.table_source == TableSource.CSV_CONTENT:
                     # CSV文件
                     table_info = {
@@ -1371,7 +1368,7 @@ class SmartDocumentRenderer:
                         # 添加docx_temp.py期望的字段
                         "local_path": getattr(resource, 'local_path', resource.original_path),  # 使用下载的本地路径或原始路径
                     }
-                    
+
                     resource_map["excel_files"].append(table_info)
 
         # 记录资源统计
@@ -1422,7 +1419,7 @@ class ReportNode(BaseNode):
                 logger.info(f"[变量解析] 变量名: '{var_name}'")
                 logger.info(f"[变量解析] 变量类型: {type(var_value).__name__}")
                 logger.info(f"[变量解析] 变量值长度: {len(str(var_value)) if var_value is not None else 0}")
-                
+
                 # 打印变量值内容（截取前500字符避免日志过长）
                 if var_value is not None:
                     var_value_str = str(var_value)
@@ -1432,17 +1429,18 @@ class ReportNode(BaseNode):
                         logger.info(f"[变量解析] 变量值内容: {var_value_str}")
                 else:
                     logger.info(f"[变量解析] 变量值内容: None")
-                
+
                 processed_content, resources = content_parser.parse_variable_content(var_name, var_value)
                 processed_variables[var_name] = processed_content
                 all_resources.extend(resources)
-                
+
                 # 添加解析结果日志
                 logger.info(f"[变量解析] 解析后内容长度: {len(processed_content) if processed_content else 0}")
                 logger.info(f"[变量解析] 识别资源数量: {len(resources)}")
                 if resources:
                     for i, resource in enumerate(resources):
-                        logger.info(f"[变量解析] 资源{i+1}: {resource.resource_type.value}, 占位符: {resource.placeholder}")
+                        logger.info(
+                            f"[变量解析] 资源{i + 1}: {resource.resource_type.value}, 占位符: {resource.placeholder}")
                 logger.info(f"[变量解析] --- 变量 '{var_name}' 解析完成 ---")
 
             # 5. 下载所有资源
@@ -1494,7 +1492,7 @@ class ReportNode(BaseNode):
         # 添加详细的变量信息日志
         logger.info(f"[工作流变量] 总数: {len(all_variables)}")
         logger.info(f"[工作流变量] 所有变量名: {list(all_variables.keys())}")
-        
+
         # 显示每个变量的基本信息
         for var_name, var_value in all_variables.items():
             var_type = type(var_value).__name__

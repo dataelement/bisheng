@@ -1,4 +1,3 @@
-import json
 import time
 from typing import Optional, Union
 
@@ -8,14 +7,17 @@ from loguru import logger
 from sqlmodel import select
 
 from bisheng.api.services.flow import FlowService
-from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import FlowVersionCreate, resp_200
 from bisheng.chat.types import WorkType
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.flow import WorkflowNameExistsError, WorkFlowOnlineEditError, AppWriteAuthError
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
+from bisheng.common.services import telemetry_service
 from bisheng.core.database import get_sync_db_session
+from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, FlowType, FlowUpdate, \
@@ -26,7 +28,6 @@ from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import generate_uuid
 from bisheng_langchain.utils.requests import Requests
-from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(prefix='/workflow', tags=['Workflow'])
 
@@ -34,7 +35,7 @@ router = APIRouter(prefix='/workflow', tags=['Workflow'])
 @router.get("/write/auth")
 async def check_app_write_auth(
         request: Request,
-        login_user: UserPayload = Depends(get_login_user),
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
         flow_id: str = Query(..., description="应用ID"),
         flow_type: int = Query(..., description="应用类型")
 ):
@@ -58,7 +59,7 @@ async def check_app_write_auth(
 @router.get("/report/file")
 async def get_report_file(
         request: Request,
-        login_user: UserPayload = Depends(get_login_user),
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
         version_key: str = Query("", description="minio的object_name")):
     """ 获取report节点的模板文件 """
     if not version_key:
@@ -81,7 +82,7 @@ async def get_report_file(
 @router.post('/report/copy', status_code=200)
 async def copy_report_file(
         request: Request,
-        login_user: UserPayload = Depends(get_login_user),
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
         version_key: str = Body(..., embed=True, description="minio的object_name")):
     """ 复制report节点的模板文件 """
     version_key = version_key.split('_', 1)[0]
@@ -122,11 +123,12 @@ async def upload_report_file(
 
 
 @router.post('/run_once', status_code=200)
-async def run_once(request: Request, login_user: UserPayload = Depends(get_login_user),
-                   node_input: Optional[dict] = None,  # 节点的入参
-                   node_data: dict = None):
+def run_once(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
+             node_input: Optional[dict] = None,  # 节点的入参
+             node_data: dict = None,
+             workflow_id: str = Body(..., description='工作流ID')):
     """ 单节点运行 """
-    result = WorkFlowService.run_once(login_user, node_input, node_data)
+    result = WorkFlowService.run_once(login_user, node_input, node_data, workflow_id)
 
     return resp_200(data=result)
 
@@ -136,12 +138,8 @@ async def workflow_ws(*,
                       workflow_id: str,
                       websocket: WebSocket,
                       chat_id: Optional[str] = None,
-                      Authorize: AuthJWT = Depends()):
+                      login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws)):
     try:
-        Authorize.jwt_required(auth_from='websocket', websocket=websocket)
-        payload = Authorize.get_jwt_subject()
-        payload = json.loads(payload)
-        login_user = UserPayload(**payload)
         await chat_manager.dispatch_client(websocket, workflow_id, chat_id, login_user, WorkType.WORKFLOW, websocket)
     except WebSocketException as exc:
         logger.error(f'Websocket exception: {str(exc)}')
@@ -149,7 +147,7 @@ async def workflow_ws(*,
 
 
 @router.post('/create', status_code=201)
-def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload = Depends(get_login_user)):
+def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Create a new flow."""
     # 判断用户是否重复技能名
     with get_sync_db_session() as session:
@@ -173,21 +171,18 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
 
 
 @router.get('/versions', status_code=200)
-def get_versions(*, flow_id: str, Authorize: AuthJWT = Depends()):
+def get_versions(*, flow_id: str, login_user: UserPayload = Depends(UserPayload.get_admin_user)):
     """
     获取技能对应的版本列表
     """
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**payload)
-    return FlowService.get_version_list_by_flow(user, flow_id)
+    return FlowService.get_version_list_by_flow(login_user, flow_id)
 
 
 @router.post('/versions', status_code=200)
 async def create_versions(*,
                           flow_id: str,
                           flow_version: FlowVersionCreate,
-                          login_user: UserPayload = Depends(get_login_user)):
+                          login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     创建新的技能版本
     """
@@ -200,7 +195,7 @@ async def update_versions(*,
                           request: Request,
                           version_id: int,
                           flow_version: FlowVersionCreate,
-                          login_user: UserPayload = Depends(get_login_user)):
+                          login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     更新版本
     """
@@ -208,25 +203,19 @@ async def update_versions(*,
 
 
 @router.delete('/versions/{version_id}', status_code=200)
-def delete_versions(*, version_id: int, Authorize: AuthJWT = Depends()):
+def delete_versions(*, version_id: int, login_user: UserPayload = Depends(UserPayload.get_admin_user)):
     """
     删除版本
     """
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**payload)
-    return FlowService.delete_version(user, version_id)
+    return FlowService.delete_version(login_user, version_id)
 
 
 @router.get('/versions/{version_id}', status_code=200)
-def get_version_info(*, version_id: int, Authorize: AuthJWT = Depends()):
+def get_version_info(*, version_id: int, login_user: UserPayload = Depends(UserPayload.get_admin_user)):
     """
     获取版本信息
     """
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**payload)
-    return FlowService.get_version_info(user, version_id)
+    return FlowService.get_version_info(login_user, version_id)
 
 
 @router.post('/change_version', status_code=200)
@@ -234,7 +223,7 @@ def change_version(*,
                    request: Request,
                    flow_id: str = Query(default=None, description='技能唯一ID'),
                    version_id: int = Query(default=None, description='需要设置的当前版本ID'),
-                   login_user: UserPayload = Depends(get_login_user)):
+                   login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     修改当前版本
     """
@@ -242,7 +231,7 @@ def change_version(*,
 
 
 @router.get('/get_one_flow/{flow_id}')
-async def read_flow(*, flow_id: str, login_user: UserPayload = Depends(get_login_user),
+async def read_flow(*, flow_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user),
                     share_link: Union['ShareLink', None] = Depends(header_share_token_parser)):
     """Read a flow."""
     return await FlowService.get_one_flow(login_user, flow_id, share_link)
@@ -253,7 +242,7 @@ async def update_flow(*,
                       request: Request,
                       flow_id: str,
                       flow: FlowUpdate,
-                      login_user: UserPayload = Depends(get_login_user)):
+                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """online offline"""
     db_flow = await FlowDao.aget_flow_by_id(flow_id)
     if not db_flow:
@@ -275,12 +264,17 @@ async def update_flow(*,
             continue
         setattr(db_flow, key, value)
     db_flow = await FlowDao.aupdate_flow(db_flow)
+    await telemetry_service.log_event(
+        user_id=login_user.user_id,
+        event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
+        trace_id=trace_id_var.get()
+    )
     await FlowService.update_flow_hook(request, login_user, db_flow)
     return resp_200(db_flow)
 
 
 @router.patch('/status')
-async def update_flow_status(request: Request, login_user: UserPayload = Depends(get_login_user),
+async def update_flow_status(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
                              flow_id: str = Body(..., description='技能ID'),
                              version_id: int = Body(..., description='版本ID'),
                              status: int = Body(..., description='状态')):
@@ -290,7 +284,7 @@ async def update_flow_status(request: Request, login_user: UserPayload = Depends
 
 @router.get('/list', status_code=200)
 def read_flows(*,
-               login_user: UserPayload = Depends(get_login_user),
+               login_user: UserPayload = Depends(UserPayload.get_login_user),
                name: str = Query(default=None, description='根据name查找数据库，包含描述的模糊搜索'),
                tag_id: int = Query(default=None, description='标签ID'),
                flow_type: int = Query(default=None, description='类型 1 flow 5 assitant 10 workflow '),
