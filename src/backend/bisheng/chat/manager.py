@@ -273,7 +273,7 @@ class ChatManager:
             else:
                 app_info = await WorkFlowService.get_one_workflow_simple_info(client_id)
                 app_type = ApplicationTypeEnum.WORKFLOW
-            app_name = app_info.app_name if app_info else 'unknown'
+            app_name = app_info.name if app_info else 'unknown'
             await telemetry_service.log_event(user_id=login_user.user_id,
                                               event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
                                               trace_id=trace_id_var.get(),
