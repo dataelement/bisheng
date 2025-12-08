@@ -7,6 +7,13 @@
     "chinesePeriodRule": "。✂️",
     "englishPeriodRule": "\\.✂️"
   },
+   "chunk": "Chunk",
+  "characters": "characters",
+  "chunkContentCannotBeEmpty": "Chunk content cannot be empty",
+  "clickLocateOriginalFile": "Click to locate the original file",
+  "clickShowMarkdownEdit": "Click to display the original Markdown text and edit it",
+  "clickDeleteChunk": "Click to delete the chunk",
+  "noAnalysisResult": "No analysis results",
    "filePathEmpty": "File path is empty",
   "fileLoadFailed": "File loading failed",
   "fileContentEmpty": "File content is empty",

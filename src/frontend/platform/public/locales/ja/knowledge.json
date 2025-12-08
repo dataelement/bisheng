@@ -7,6 +7,12 @@
     "chinesePeriodRule": "中国語句点後分割",
     "englishPeriodRule": "英語ピリオド後分割"
   },
+   "chunk": "チャンク",
+  "chunkContentCannotBeEmpty": "チャンクの内容は空にできません",
+  "clickLocateOriginalFile": "クリックして原ファイルに定位してください",
+  "clickShowMarkdownEdit": "クリックしてMarkdown原文を表示し、編集してください",
+  "clickDeleteChunk": "クリックしてチャンクを削除してください",
+  "noAnalysisResult": "解析結果はありません",
   "filePathEmpty": "ファイルパスが空です",
   "fileLoadFailed": "ファイル読み込み失敗",
   "fileContentEmpty": "ファイル内容が空です",
