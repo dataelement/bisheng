@@ -52,10 +52,9 @@ class KnowledgeFileBase(SQLModelSerializable):
                                   index=False,
                                   description='1: 解析中；2: 解析成功；3: 解析失败')
     object_name: Optional[str] = Field(default=None, index=False, description='文件在minio存储的对象名称')
-    # extra_meta: Optional[str] = Field(default=None, index=False)
     user_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, sa_column=Column(JSON, nullable=True),
                                                     description='用户自定义的元数据')
-    remark: Optional[str] = Field(default='', sa_column=Column(String(length=512)))
+    remark: Optional[str] = Field(default='', sa_column=Column(String(length=4096)))
     updater_id: Optional[int] = Field(default=None, index=True, description='最后更新用户ID')
     updater_name: Optional[str] = Field(default=None, index=True)
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -73,7 +72,7 @@ class QAKnowledgeBase(SQLModelSerializable):
     status: Optional[int] = Field(default=1, index=False,
                                   description='1: 开启；0: 关闭，用户手动关闭；2: 处理中；3：插入失败')
     extra_meta: Optional[str] = Field(default=None, index=False)
-    remark: Optional[str] = Field(default=None, sa_column=Column(String(length=512)))
+    remark: Optional[str] = Field(default='', sa_column=Column(String(length=4096)))
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

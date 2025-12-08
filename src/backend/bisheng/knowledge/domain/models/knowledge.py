@@ -475,3 +475,10 @@ class KnowledgeDao(KnowledgeBase):
         statement = statement.order_by(col(Knowledge.id).asc())
         with get_sync_db_session() as session:
             return session.exec(statement).all()
+
+    @classmethod
+    def get_first_knowledge(cls) -> Optional[Knowledge]:
+        """ 获取第一个知识库 """
+        statement = select(Knowledge).order_by(col(Knowledge.id).asc()).limit(1)
+        with get_sync_db_session() as session:
+            return session.exec(statement).first()

@@ -32,7 +32,7 @@ def get_yesterday_date_range(mid_table: BaseMidTable, start_date: str = None, en
 
     lastest_time = mid_table.get_latest_record_time_sync()
     if lastest_time:
-        start_date = datetime.fromtimestamp(lastest_time)
+        start_date = datetime.fromtimestamp(lastest_time) + timedelta(seconds=1)
     if end_date < start_date:
         logger.error(f"end_date {end_date} is before start_date {start_date}")
         return None, None
