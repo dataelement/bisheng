@@ -10,7 +10,7 @@ from bisheng.common.errcode.knowledge import KnowledgeNotExistError, KnowledgeMe
     KnowledgeMetadataFieldExistError, KnowledgeMetadataFieldNotExistError, KnowledgeMetadataFieldImmutableError
 from bisheng.database.models.role_access import AccessType
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
 from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
@@ -386,3 +386,7 @@ class KnowledgeService:
         """获取某个时间范围内创建的所有知识库"""
 
         return KnowledgeDao.get_knowledge_by_time_range(start_data, end_data, page, page_size)
+
+    @classmethod
+    def get_first_knowledge(cls) -> Knowledge | None:
+        return KnowledgeDao.get_first_knowledge()

@@ -444,3 +444,7 @@ class WorkFlowService(BaseService):
         根据时间范围获取所有应用
         """
         return FlowDao.get_all_app_by_time_range_sync(start_time, end_time, page, page_size)
+
+    @classmethod
+    def get_first_app(cls) -> Dict | None:
+        return FlowDao.get_first_app()

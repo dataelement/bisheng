@@ -272,3 +272,9 @@ class UserDao(UserBase):
         )
         with get_sync_db_session() as session:
             return session.exec(statement).all()
+
+    @classmethod
+    def get_first_user(cls) -> User | None:
+        statement = select(User).order_by(col(User.user_id).asc()).limit(1)
+        with get_sync_db_session() as session:
+            return session.exec(statement).first()

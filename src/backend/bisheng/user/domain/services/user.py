@@ -146,3 +146,8 @@ class UserService:
         """ 获取用户信息，包含用户组和角色信息 """
         return UserDao.get_user_with_group_role(page=page, page_size=page_size, user_ids=user_ids,
                                                 start_time=start_time, end_time=end_time)
+
+    @classmethod
+    def get_first_user(cls) -> User | None:
+        """ 获取第一个用户 """
+        return UserDao.get_first_user()
