@@ -215,11 +215,11 @@ class Etl4lmLoader(BasePDFLoader):
             )
         except requests.Timeout as e:
             logger.error(f"Request to etl4lm API timed out: {e}")
-            raise Exception("etl4lm服务繁忙，请升级etl4lm服务的算力")
+            raise Exception("etl4lm server timeout")
         except Exception as e:
             if str(e).find("Timeout") != -1:
                 logger.error(f"Request to etl4lm API timed out: {e}")
-                raise Exception("etl4lm服务繁忙，请升级etl4lm服务的算力")
+                raise Exception("etl4lm server timeout")
             raise e
         if resp.status_code != 200:
             raise Exception(
