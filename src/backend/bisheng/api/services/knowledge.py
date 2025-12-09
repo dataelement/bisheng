@@ -226,7 +226,7 @@ class KnowledgeService(KnowledgeUtils):
                                          event_data=NewKnowledgeBaseEventData(
                                              kb_id=knowledge.id,
                                              kb_name=knowledge.name,
-                                             kb_type=KnowledgeTypeEnum(knowledge.type)
+                                             kb_type=knowledge.type
                                          ))
 
         return True
