@@ -31,7 +31,7 @@ from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, 
 from bisheng.common.errcode.knowledge import (
     KnowledgeChunkError,
     KnowledgeExistError,
-    KnowledgeNoEmbeddingError,
+    KnowledgeNoEmbeddingError, KnowledgeNotQAError,
 )
 from bisheng.common.schemas.telemetry.event_data_schema import NewKnowledgeBaseEventData
 from bisheng.common.services import telemetry_service
@@ -678,10 +678,7 @@ class KnowledgeService(KnowledgeUtils):
                                               dest_bucket=minio_client.bucket)
                 file.object_name = new_object_name
 
-            if input_file["remark"] and "对应已存在文件" in input_file["remark"]:
-                file.file_name = input_file["remark"].split(" 对应已存在文件 ")[0]
-                file.remark = ""
-
+            file.remark = ""
             file.split_rule = input_file["split_rule"]
             file.status = KnowledgeFileStatus.PROCESSING.value  # 解析中
             file.updater_id = login_user.user_id
@@ -755,7 +752,9 @@ class KnowledgeService(KnowledgeUtils):
             file_type = file_name.rsplit(".", 1)[-1]
             obj_name = f"tmp/{db_file.id}.{file_type}"
             db_file.object_name = obj_name
-            db_file.remark = f"{original_file_name} 对应已存在文件 {old_name}"
+            db_file.remark = json.dumps({
+                "new_name": original_file_name,
+                "old_name": old_name}, ensure_ascii=False)
             # 上传到minio，不修改数据库，由前端决定是否覆盖，覆盖的话调用重试接口
             with open(filepath, "rb") as file:
                 minio_client.put_object_tmp_sync(db_file.object_name, file.read())
@@ -1222,6 +1221,7 @@ class KnowledgeService(KnowledgeUtils):
             background_tasks: BackgroundTasks,
             login_user: UserPayload,
             knowledge: Knowledge,
+            knowledge_name: str = None,
     ) -> Any:
         from bisheng.worker.knowledge import file_worker
 
@@ -1233,7 +1233,8 @@ class KnowledgeService(KnowledgeUtils):
         knowldge_dict["user_id"] = login_user.user_id
         knowldge_dict["index_name"] = generate_knowledge_index_name()
         knowldge_dict["collection_name"] = knowldge_dict["index_name"]
-        knowldge_dict["name"] = f"{knowledge.name} 副本"[:30]
+        knowldge_dict["name"] = f"{knowledge.name} Copy"[:200] if not knowledge_name else knowledge_name[:200]
+
         knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
         knowledge_new = Knowledge(**knowldge_dict)
         target_knowlege = await KnowledgeDao.async_insert_one(knowledge_new)
@@ -1253,6 +1254,7 @@ class KnowledgeService(KnowledgeUtils):
             request,
             login_user: UserPayload,
             qa_knowledge: Knowledge,
+            knowledge_name: str = None,
     ) -> Any:
         await KnowledgeDao.async_update_state(qa_knowledge.id, KnowledgeState.COPYING,
                                               update_time=qa_knowledge.update_time)
@@ -1263,7 +1265,7 @@ class KnowledgeService(KnowledgeUtils):
         qa_knowldge_dict["user_id"] = login_user.user_id
         qa_knowldge_dict["index_name"] = generate_knowledge_index_name()
         qa_knowldge_dict["collection_name"] = qa_knowldge_dict["index_name"]
-        qa_knowldge_dict["name"] = f"{qa_knowledge.name} 副本"[:30]
+        qa_knowldge_dict["name"] = f"{qa_knowledge.name} Copy"[:200] if not knowledge_name else knowledge_name[:200]
         qa_knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
         qa_knowledge_new = Knowledge(**qa_knowldge_dict)
         target_qa_knowlege = await KnowledgeDao.async_insert_one(qa_knowledge_new)
@@ -1283,12 +1285,12 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge = KnowledgeDao.query_by_id(qa_knowledge_id)
         # 查询当前知识库，是否有写入权限
         if not db_knowledge:
-            raise ServerError.http_exception(msg="当前知识库不可用，返回上级目录")
+            raise NotFoundError()
         if not login_user.access_check(
                 db_knowledge.user_id, str(qa_knowledge_id), AccessType.KNOWLEDGE
         ):
             raise UnAuthorizedError.http_exception()
 
-        if db_knowledge.type == KnowledgeTypeEnum.NORMAL.value:
-            raise ServerError.http_exception(msg="知识库为普通知识库")
+        if db_knowledge.type != KnowledgeTypeEnum.QA.value:
+            raise KnowledgeNotQAError()
         return db_knowledge

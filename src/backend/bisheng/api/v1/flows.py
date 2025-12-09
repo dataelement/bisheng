@@ -3,19 +3,18 @@ from typing import Any, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from loguru import logger
-from sqlmodel import select
 from starlette.responses import StreamingResponse
 
 from bisheng.api.services.flow import FlowService
 from bisheng.api.utils import build_flow_no_yield, remove_api_keys
-from bisheng.api.v1.schemas import (FlowCompareReq, FlowListRead, FlowVersionCreate, StreamData, resp_200)
+from bisheng.api.v1.schemas import (FlowCompareReq, FlowVersionCreate, StreamData, resp_200)
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.flow import FlowOnlineEditError, FlowNameExistsError
 from bisheng.common.errcode.http_error import UnAuthorizedError, ServerError, NotFoundError
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
-from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import (Flow, FlowCreate, FlowDao, FlowRead, FlowType, FlowUpdate)
 from bisheng.database.models.flow_version import FlowVersionDao
@@ -31,11 +30,9 @@ router = APIRouter(prefix='/flows', tags=['Flows'], dependencies=[Depends(UserPa
 def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Create a new flow."""
     # 判断用户是否重复技能名
-    with get_sync_db_session() as session:
-        if session.exec(
-                select(Flow).where(Flow.name == flow.name,
-                                   Flow.user_id == login_user.user_id)).first():
-            raise FlowNameExistsError.http_exception()
+    exist_flow = FlowDao.get_flow_by_name(login_user.user_id, flow.name)
+    if exist_flow:
+        raise FlowNameExistsError()
     flow.user_id = login_user.user_id
     db_flow = Flow.model_validate(flow)
     # 创建新的技能
@@ -193,14 +190,7 @@ def delete_flow(*,
         trace_id=trace_id_var.get()
     )
     FlowService.delete_flow_hook(request, login_user, db_flow)
-    return resp_200(message='删除成功')
-
-
-@router.get('/download/')
-async def download_file():
-    """Download all flows as a file."""
-    flows = read_flows()
-    return resp_200(FlowListRead(flows=flows))
+    return resp_200()
 
 
 @router.post('/compare')

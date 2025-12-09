@@ -14,6 +14,8 @@ from bisheng.chat.utils import judge_source, process_source_document
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.errcode.server import SystemConfigEmptyError, SystemConfigInvalidError, UploadFileEmptyError, \
+    UploadFileExtError
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, ApplicationAliveEventData, \
     ApplicationProcessEventData
@@ -92,7 +94,7 @@ def get_config(admin_user: UserPayload = Depends(UserPayload.get_admin_user)):
 @router.post('/config/save')
 def save_config(data: dict, admin_user: UserPayload = Depends(UserPayload.get_admin_user)):
     if not data.get('data', '').strip():
-        raise HTTPException(status_code=500, detail='配置不能为空')
+        raise SystemConfigEmptyError()
     try:
         # 校验是否符合yaml格式
         config = yaml.safe_load(data.get('data'))
@@ -108,9 +110,9 @@ def save_config(data: dict, admin_user: UserPayload = Depends(UserPayload.get_ad
         ConfigDao.insert_config(db_config)
         get_redis_client_sync().delete('config:initdb_config')
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f'格式不正确, {str(e)}')
+        raise SystemConfigInvalidError()
 
-    return resp_200('保存成功')
+    return resp_200()
 
 
 @router.get('/web/config')
@@ -337,24 +339,20 @@ async def _upload_file(file: UploadFile, object_name_prefix: str, file_supports:
                        bucket_name: str = None) \
         -> UploadFileResponse:
     if file.size == 0:
-        raise HTTPException(status_code=500, detail='上传文件不能为空')
+        raise UploadFileEmptyError()
     file_ext = file.filename.split('.')[-1].lower()
     if file_supports and file_ext not in file_supports:
-        raise HTTPException(status_code=500, detail='仅支持 JPEG 和 PNG 格式的图片')
-    try:
-        object_name = f'{object_name_prefix}/{generate_uuid()}.png'
-        file_path = await upload_file_to_minio(file, object_name=object_name, bucket_name=bucket_name)
-        if not isinstance(file_path, str):
-            file_path = str(file_path)
+        raise UploadFileExtError()
+    object_name = f'{object_name_prefix}/{generate_uuid()}.png'
+    file_path = await upload_file_to_minio(file, object_name=object_name, bucket_name=bucket_name)
+    if not isinstance(file_path, str):
+        file_path = str(file_path)
 
-        minio_client = get_minio_storage_sync()
-        return UploadFileResponse(
-            file_path=minio_client.clear_minio_share_host(file_path),  # minio可访问的链接
-            relative_path=object_name,  # minio中的object_name
-        )
-    except Exception as exc:
-        logger.exception(f'Error saving file: {str(exc)}')
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    minio_client = get_minio_storage_sync()
+    return UploadFileResponse(
+        file_path=minio_client.clear_minio_share_host(file_path),  # minio可访问的链接
+        relative_path=object_name,  # minio中的object_name
+    )
 
 
 @router.post('/upload/icon')

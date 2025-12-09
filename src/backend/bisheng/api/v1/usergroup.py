@@ -1,12 +1,13 @@
 # build router
 from typing import Annotated, List, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, Query, Request
 
 from bisheng.api.services.role_group_service import RoleGroupService
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.errcode.user import UserGroupEmptyError
 from bisheng.database.models.group import Group, GroupCreate
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role import RoleDao
@@ -31,7 +32,7 @@ async def get_all_group(login_user: UserPayload = Depends(UserPayload.get_login_
                 groups.append(one.group_id)
         # 不是任何用户组的管理员无查看权限
         if not groups:
-            raise HTTPException(status_code=500, detail='无查看权限')
+            raise UnAuthorizedError()
 
     groups_res = RoleGroupService().get_group_list(groups)
     return resp_200({'records': groups_res})
@@ -49,25 +50,21 @@ async def create_group(request: Request, group: GroupCreate,
 @router.put('/create')
 async def update_group(request: Request,
                        group: Group,
-                       login_user: UserPayload = Depends(UserPayload.get_login_user)):
+                       login_user: UserPayload = Depends(UserPayload.get_admin_user)):
     """
     编辑用户组
     """
-    if not login_user.is_admin():
-        return UnAuthorizedError.return_resp()
     return resp_200(RoleGroupService().update_group(request, login_user, group))
 
 
 @router.delete('/create', status_code=200)
 async def delete_group(request: Request,
                        group_id: int,
-                       login_user: UserPayload = Depends(UserPayload.get_login_user)):
+                       login_user: UserPayload = Depends(UserPayload.get_admin_user)):
     """
     删除用户组
     """
 
-    if not login_user.is_admin():
-        return UnAuthorizedError.return_resp()
     return RoleGroupService().delete_group(request, login_user, group_id)
 
 
@@ -81,7 +78,7 @@ async def set_user_group(request: Request,
     用户组管理就只替换他拥有权限的用户组。超级管理员全量替换
     """
     if not group_id:
-        raise HTTPException(status_code=500, detail='用户组不能为空')
+        raise UserGroupEmptyError()
     return resp_200(RoleGroupService().replace_user_groups(request, login_user, user_id, group_id))
 
 

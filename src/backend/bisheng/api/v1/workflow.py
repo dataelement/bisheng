@@ -171,7 +171,7 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
 
 
 @router.get('/versions', status_code=200)
-def get_versions(*, flow_id: str, login_user: UserPayload = Depends(UserPayload.get_admin_user)):
+def get_versions(*, flow_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     获取技能对应的版本列表
     """
@@ -252,8 +252,6 @@ async def update_flow(*,
         return UnAuthorizedError.return_resp()
 
     flow_data = flow.model_dump(exclude_unset=True)
-
-    # TODO:  验证工作流是否可以使用
 
     if db_flow.status == FlowStatus.ONLINE.value and (
             'status' not in flow_data or flow_data['status'] != FlowStatus.OFFLINE.value):

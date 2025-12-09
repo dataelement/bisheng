@@ -137,3 +137,23 @@ class TtsModelOfflineError(BaseErrorCode):
 class InitTtsError(BaseErrorCode):
     Code: int = 10025
     Msg: str = '初始化tts失败，请检查配置或联系管理员。错误信息：{exception}'
+
+
+class SystemConfigEmptyError(BaseErrorCode):
+    Code: int = 10030
+    Msg: str = '系统配置不能为空'
+
+
+class SystemConfigInvalidError(BaseErrorCode):
+    Code: int = 10031
+    Msg: str = '系统配置格式不正确，请检查配置内容：{exception}'
+
+
+class UploadFileEmptyError(BaseErrorCode):
+    Code: int = 10040
+    Msg: str = '上传文件不能为空'
+
+
+class UploadFileExtError(BaseErrorCode):
+    Code: int = 10041
+    Msg: str = '上传文件格式不支持，请上传正确格式的文件'

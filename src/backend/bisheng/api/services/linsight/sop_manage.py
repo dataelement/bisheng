@@ -20,10 +20,10 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.linsight import (
     LinsightAddSopError, LinsightUpdateSopError, LinsightDeleteSopError,
-    LinsightVectorModelError, LinsightDocSearchError, LinsightDocNotFoundError, SopFileError
+    LinsightVectorModelError, LinsightDocSearchError, LinsightDocNotFoundError, SopContentOverLimitError
 )
 from bisheng.common.errcode.server import (
-    NoEmbeddingModelError, EmbeddingModelNotExistError, EmbeddingModelTypeError
+    NoEmbeddingModelError, EmbeddingModelNotExistError, EmbeddingModelTypeError, UploadFileEmptyError
 )
 from bisheng.common.services.config_service import settings
 from bisheng.core.prompts.manager import get_prompt_manager
@@ -47,7 +47,7 @@ class SOPManageService:
     @staticmethod
     async def generate_sop_summary(invoke_user_id: int, sop_content: str, llm: BaseChatModel = None) -> Dict[str, str]:
         """生成SOP摘要"""
-        default_summary = {"sop_title": "SOP名称", "sop_description": "SOP描述"}
+        default_summary = {"sop_title": "SOP Title", "sop_description": "SOP Description"}
 
         try:
             if llm is None:
@@ -165,7 +165,7 @@ class SOPManageService:
                 name_set.add(one.name)
         sop_records = new_records
         if not sop_records and oversize_records:
-            raise ValueError(f"{'、'.join(oversize_records)}内容超长")
+            raise SopContentOverLimitError(data={"sop_name": "、".join(oversize_records)})
         if name_set:
             sop_list = await LinsightSOPDao.get_sops_by_names(list(name_set))
             for one in sop_list:
@@ -225,7 +225,7 @@ class SOPManageService:
                     linsight_version_id=one.linsight_version_id,
                 ), one.user_id)
         if oversize_records:
-            raise ValueError(f"{'、'.join(oversize_records)}内容超长")
+            raise SopContentOverLimitError(data={"sop_name": "、".join(oversize_records)})
         return None
 
     @classmethod
@@ -235,7 +235,7 @@ class SOPManageService:
         :param file: 文件路径
         """
         if not file.size:
-            raise NotFoundError.http_exception(msg="未找到上传的指导手册文件")
+            raise UploadFileEmptyError()
         error_rows = []
         success_rows = []
         wb = None
@@ -250,19 +250,20 @@ class SOPManageService:
                 content = sheet.cell(row=i, column=3).value
                 error_msg = []
                 if not name:
-                    error_msg.append("缺少名称")
+                    error_msg.append("name_empty")
                 if not content:
-                    error_msg.append("缺少详细内容")
+                    error_msg.append("description_empty")
                 if len(str(name)) >= 500:
-                    error_msg.append("名称长度超过500字符")
+                    error_msg.append("name_over_size")
                 if len(str(content)) >= 50000:
-                    error_msg.append("详细内容长度超过50000字符")
+                    error_msg.append("content_over_size")
                 if description and len(str(description)) >= 1000:
-                    error_msg.append("描述长度超过1000字符")
-
+                    error_msg.append("")
                 if error_msg:
-                    error_msg = "、".join(error_msg)
-                    error_rows.append(f"• 第{i}行: {error_msg}")
+                    error_rows.append({
+                        "index": i,
+                        "error_msg": error_msg
+                    })
                 else:
                     success_rows.append({
                         "name": str(name),
@@ -277,7 +278,7 @@ class SOPManageService:
     @classmethod
     async def upload_sop_file(cls, login_user: UserPayload, file: UploadFile, ignore_error: bool, override: bool,
                               save_new: bool) \
-            -> list[str] | None:
+            -> (list[Dict], List[Dict]):
         """
         上传SOP文件
         :param login_user: 登录用户信息
@@ -285,17 +286,16 @@ class SOPManageService:
         :param ignore_error: 是否忽略错误
         :param override: 是否覆盖已有的SOP
         :param save_new: 是否保存新的SOP
-        :return: 上传结果
+        :return: 上传结果, success_rows, error_rows
         """
         success_rows, error_rows = await cls.parse_sop_file(file)
-        error_msg = "\n".join(error_rows)
         if (error_rows or len(success_rows) == 0) and not ignore_error:
-            raise SopFileError.http_exception(
-                msg=f"共计划导入{len(success_rows) + len(error_rows)}条指导手册，格式正确{len(success_rows)}条，错误{len(error_rows)}条：\n {error_msg}")
+            return success_rows, error_rows
         if not success_rows:
-            return None
+            return [], []
         records = [LinsightSOPRecord(**one, user_id=login_user.user_id) for one in success_rows]
-        return await cls._sync_sop_record(records, override=override, save_new=save_new)
+        await cls._sync_sop_record(records, override=override, save_new=save_new)
+        return [], []
 
     @classmethod
     async def get_sop_list(cls, keywords: str = None, sort: Literal["asc", "desc"] = "desc", showcase: bool = False,
