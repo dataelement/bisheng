@@ -62,6 +62,11 @@ class KnowledgeCPError(BaseErrorCode):
     Msg: str = '当前有文件正在解析，不可复制'
 
 
+class KnowledgeCPEmptyError(BaseErrorCode):
+    Code: int = 10941
+    Msg: str = '知识库内容为空，无法复制'
+
+
 # 不支持多个知识库的文件同时删除
 class KnowledgeFileDeleteError(BaseErrorCode):
     Code: int = 10950
@@ -76,6 +81,11 @@ class KnowledgeRebuildingError(BaseErrorCode):
 class KnowledgePreviewError(BaseErrorCode):
     Code: int = 10952
     Msg: str = '文档解析失败'  # 预览文件解析失败
+
+
+class KnowledgeFileFailedError(BaseErrorCode):
+    Code: int = 10953
+    Msg: str = '文件解析失败: {exception}'
 
 
 # 不是QA知识库

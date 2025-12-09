@@ -31,7 +31,7 @@ from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, 
 from bisheng.common.errcode.knowledge import (
     KnowledgeChunkError,
     KnowledgeExistError,
-    KnowledgeNoEmbeddingError, KnowledgeNotQAError,
+    KnowledgeNoEmbeddingError, KnowledgeNotQAError, KnowledgeFileFailedError,
 )
 from bisheng.common.schemas.telemetry.event_data_schema import NewKnowledgeBaseEventData
 from bisheng.common.services import telemetry_service
@@ -871,7 +871,8 @@ class KnowledgeService(KnowledgeUtils):
             finally_res[index].title = file_title_map.get(str(one.id), "")
         if timeout_files:
             KnowledgeFileDao.update_file_status(timeout_files, KnowledgeFileStatus.FAILED,
-                                                'Parsing time exceeds 24 hours')
+                                                KnowledgeFileFailedError(
+                                                    data={"exception": 'Parsing time exceeds 24 hours'}).to_json_str())
 
         return (
             finally_res,
