@@ -84,6 +84,15 @@ class RoleAccessDao(RoleAccessBase):
                                              RoleAccess.type.in_([x.value for x in access_type]))).all()
 
     @classmethod
+    async def aget_role_access_batch(cls, role_ids: List[int], access_type: List[AccessType]) -> List[RoleAccess]:
+        statement = select(RoleAccess).where(col(RoleAccess.role_id).in_(role_ids))
+        if access_type:
+            statement = statement.where(col(RoleAccess.type).in_([x.value for x in access_type]))
+
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
     def judge_role_access(cls, role_ids: List[int], third_id: str, access_type: AccessType) -> Optional[RoleAccess]:
         with get_sync_db_session() as session:
             return session.exec(select(RoleAccess).filter(

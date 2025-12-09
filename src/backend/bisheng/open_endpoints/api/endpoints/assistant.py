@@ -17,6 +17,7 @@ from bisheng.api.v1.schemas import (OpenAIChatCompletionReq,
                                     OpenAIChatCompletionResp, OpenAIChoice)
 from bisheng.chat.types import WorkType
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
+from bisheng.common.schemas.api import resp_200, PageData
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData, ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -50,12 +51,12 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
     except Exception as e:
         return ORJSONResponse(status_code=500, content=str(e), media_type='application/json')
     # 查找助手信息
-    res = await AssistantService.get_assistant_info(assistant_id, login_user)
-    if res.status_code != 200:
+    try:
+        assistant_info = await AssistantService.get_assistant_info(assistant_id, login_user)
+    except Exception as e:
         return ORJSONResponse(status_code=500,
-                              content=res.status_message,
+                              content=str(e),
                               media_type='application/json')
-    assistant_info = res.data
 
     start_time = time.time()
     try:
@@ -265,7 +266,8 @@ async def get_assistant_info(request: Request, assistant_id: UUID):
     if not settings.get_from_db("default_operator").get("enable_guest_access"):
         raise HTTPException(status_code=403, detail="无权限访问")
     login_user = get_default_operator()
-    return await AssistantService.get_assistant_info(assistant_id, login_user)
+    res = await AssistantService.get_assistant_info(assistant_id, login_user)
+    return resp_200(data=res)
 
 
 @router.get('/list', status_code=200)
@@ -284,7 +286,8 @@ def get_assistant_list(request: Request,
     if not settings.get_from_db("default_operator").get("enable_guest_access"):
         raise HTTPException(status_code=403, detail="无权限访问")
     login_user = get_default_operator()
-    return AssistantService.get_assistant(login_user, name, status, tag_id, page, limit)
+    data, total = AssistantService.get_assistant(login_user, name, status, tag_id, page, limit)
+    return resp_200(PageData(data=data, total=total))
 
 
 @router.websocket('/chat/{assistant_id}')

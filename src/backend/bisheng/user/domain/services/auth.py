@@ -239,9 +239,12 @@ class LoginUser(BaseModel):
 
     def get_user_access_resource_ids(self, access_types: List[AccessType]) -> List[str]:
         """ 查询用户有对应权限的资源ID列表 """
-        user_role = UserRoleDao.get_user_roles(self.user_id)
-        role_ids = [role.role_id for role in user_role]
-        role_access = RoleAccessDao.get_role_access_batch(role_ids, access_types)
+        role_access = RoleAccessDao.get_role_access_batch(self.user_role, access_types)
+        return list(set([one.third_id for one in role_access]))
+
+    async def aget_user_access_resource_ids(self, access_types: List[AccessType]) -> List[str]:
+        """ 异步查询用户有对应权限的资源ID列表 """
+        role_access = await RoleAccessDao.aget_role_access_batch(self.user_role, access_types)
         return list(set([one.third_id for one in role_access]))
 
     # some methods related to AuthJwt
