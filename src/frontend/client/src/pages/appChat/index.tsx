@@ -121,7 +121,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
                 ...prev,
                 [cid]: {
                     running: false,
-                    inputDisabled: error || numericType === FLOW_TYPES.WORK_FLOW,
+                    inputDisabled: error.code || numericType === FLOW_TYPES.WORK_FLOW,
                     error,
                     inputForm: numericType !== FLOW_TYPES.WORK_FLOW || null,
                     showUpload: numericType === FLOW_TYPES.WORK_FLOW,

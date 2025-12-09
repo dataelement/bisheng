@@ -8,8 +8,8 @@ import { createWorkflowApi, getWorkflowNodeTemplate } from "@/controllers/API/wo
 import { useKnowledgeDetails } from "@/controllers/hooks/knowledge";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useNavigate, useParams } from "react-router-dom";
 
 export default function FileUploadStep4({ data, kId }) {
     const { t } = useTranslation('knowledge');
@@ -23,6 +23,7 @@ export default function FileUploadStep4({ data, kId }) {
     const processingRef = useRef(new Set()); // Track processing file IDs
     const isPollingRef = useRef(false); // Prevent polling concurrency
     const hasInitialized = useRef(false);
+    const [premainingFileIds, setPremainingFileIds] = useState([]); // Track remaining file IDs
 
     // Initialize file status (executed only once)
     useEffect(() => {
@@ -47,8 +48,12 @@ export default function FileUploadStep4({ data, kId }) {
             setFinish(false);
             hasInitialized.current = true;
         }
-    }, [data]);
+        setPremainingFileIds(data.reduce((res, item) => {
+            res[item.id] = true;
+            return res;
+        }, {}))
 
+    }, [data]);
 
     // Poll file status (complete fix version)
     useEffect(() => {
@@ -126,13 +131,13 @@ export default function FileUploadStep4({ data, kId }) {
             if (timerRef.current) clearInterval(timerRef.current);
         };
     }, [kid, kId, t]); // Add t to dependencies
-    
+
     useEffect(() => {
         return () => {
             hasInitialized.current = false;
         };
     }, []);
-    
+
     // Check if all files are completed
     useEffect(() => {
         // Mark as complete when processing set is empty
@@ -174,7 +179,7 @@ export default function FileUploadStep4({ data, kId }) {
                 <h1 className="text-3xl text-primary mt-2">{finish ? t('documentDataParsingCompleted') : t('documentDataBeingPrepared')}</h1>
                 <p className="text-base text-gray-500 mt-2">{t('youCanReturn')}</p>
                 <div className="overflow-y-auto mt-4 space-y-2 pb-10 max-h-[calc(100vh-400px)]">
-                    {files.map(item => <ProgressItem analysis key={item.id} item={item} />)}
+                    {files.map(item => premainingFileIds[item.id] ? <ProgressItem analysis key={item.id} item={item} /> : null)}
                 </div>
                 <div className="flex justify-end gap-4">
                     <Button onClick={() => navigate(-1)}>

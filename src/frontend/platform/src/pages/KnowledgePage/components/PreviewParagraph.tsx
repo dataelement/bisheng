@@ -21,7 +21,7 @@ export const MarkdownView = ({ noHead = false, data }) => {
 
     return <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary transition-shadow w-full">
         {!noHead && <p className="text-sm text-gray-500 flex gap-2 mb-1">
-            <span>{t('chunk')}{data.chunkIndex + 1}</span> 
+            <span>{t('chunk')}{data.chunkIndex + 1}</span>
             <span>-</span>
             <span>{data.text.length} {t('characters')}</span>
         </p>}
@@ -153,7 +153,7 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
 
 const EditMarkdown = ({ data, active, oneLeft, fileSuffix, onClick, onDel, onChange, onPositionClick }) => {
     const { t } = useTranslation('knowledge');
-    
+
     const [edit, setEdit] = useState(false); // 编辑原始格式
     const { appConfig } = useContext(locationContext)
 
@@ -174,7 +174,9 @@ const EditMarkdown = ({ data, active, oneLeft, fileSuffix, onClick, onDel, onCha
 
     const { toast } = useToast()
     const handleBlur = (newValue, restore) => {
-        if (!value.trim() || newValue.trim() === '') {
+        const _value = value.trim()
+        const _newValue = newValue.trim()
+        if (!_value || _newValue === '') {
             setValue(data.text)
             restore?.()
             return toast({
@@ -184,7 +186,7 @@ const EditMarkdown = ({ data, active, oneLeft, fileSuffix, onClick, onDel, onCha
             })
         }
 
-        if (data.text === newValue) return // 无需保存
+        if (_value === _newValue) return // 无需保存
         onChange(data.chunkIndex, newValue)
     }
 
@@ -246,7 +248,7 @@ const EditMarkdown = ({ data, active, oneLeft, fileSuffix, onClick, onDel, onCha
 // 分段结果列表
 export default function PreviewParagraph({ fileId, page = 1, previewCount, edit, fileSuffix, loading, chunks, className, onDel, onChange }) {
     const { t } = useTranslation('knowledge');
-    
+
     const containerRef = useRef(null);
     const [visibleItems, setVisibleItems] = useState(10); // 初始加载数量
     const loadingRef = useRef(false);

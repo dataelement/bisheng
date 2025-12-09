@@ -17,7 +17,7 @@
             "desc": "Search the internet with configurable engines such as Bing, Bochacha, Jina Deep Search, SerpApi, and Tavily"
         },
         "Dalle3绘画": {
-            "name": "DALL·E 3 Image Generation",
+            "name": "Dall-E 3 Image Generation",
             "desc": "OpenAI text-to-image model"
         },
         "Firecrawl": {
@@ -159,7 +159,7 @@
             }
         },
         "dalle_image_generator": {
-            "name": "DALL·E 3 Image Generator",
+            "name": "Dall-E 3 Image Generator",
             "desc": "Generate image based on text description",
             "params": {
                 "query": "Description of the image"

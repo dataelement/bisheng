@@ -77,7 +77,7 @@ export default function ToolItem({
                                                 api.api_params.map(param => (
                                                     <div key={param.name}>
                                                         <p className="flex gap-2 items-center mt-4 mb-2">
-                                                            <span className="text-base">{type ? param.name : t(`tools.${api.tool_key}.name`)}</span>
+                                                            <span className="text-base">{param.name}</span>
                                                             <span>{param.schema?.type}</span>
                                                             {param.required && <span className="text-red-500">{t('report.requiredLabel', { ns: 'bs' })}</span>}
                                                         </p>
