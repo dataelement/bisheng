@@ -3,7 +3,6 @@ from typing import Literal
 from pydantic import BaseModel
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, StatusEnum, ApplicationTypeEnum
-from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 
 
 class BaseEventData(BaseModel):
@@ -75,7 +74,7 @@ class NewKnowledgeBaseEventData(BaseEventData):
 
     kb_id: int
     kb_name: str
-    kb_type: KnowledgeTypeEnum
+    kb_type: int
 
 
 class FileParseEventData(BaseEventData):
