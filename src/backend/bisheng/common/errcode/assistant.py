@@ -46,6 +46,11 @@ class AssistantModelNotConfigError(BaseErrorCode):
     Msg: str = '未配置助手推理模型'
 
 
+class AssistantAutoLLMError(BaseErrorCode):
+    Code: int = 10424
+    Msg: str = '未配置助手画像自动优化模型'
+
+
 # 其它错误
 class AssistantOtherError(BaseErrorCode):
     Code: int = 10499

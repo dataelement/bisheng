@@ -17,7 +17,8 @@ from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import InputRequest
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
-from bisheng.common.errcode.assistant import AssistantModelEmptyError, AssistantModelNotConfigError
+from bisheng.common.errcode.assistant import AssistantModelEmptyError, AssistantModelNotConfigError, \
+    AssistantAutoLLMError
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
 from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.llm.domain.services import LLMService
@@ -108,7 +109,7 @@ class AssistantAgent(AssistantUtils):
         """ 初始化自动优化prompt等信息的llm实例 """
         assistant_llm = await LLMService.get_assistant_llm()
         if not assistant_llm.auto_llm:
-            raise Exception('未配置助手画像自动优化模型')
+            raise AssistantAutoLLMError()
 
         self.llm = await LLMService.get_bisheng_llm(model_id=assistant_llm.auto_llm.model_id,
                                                     temperature=self.assistant.temperature,
