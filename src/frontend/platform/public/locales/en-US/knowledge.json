@@ -7,6 +7,9 @@
     "chinesePeriodRule": "。✂️",
     "englishPeriodRule": "\\.✂️"
   },
+    "ocrForce": "Force OCR",
+    "enableRec": "Enable formula recognition",
+    "retainImagesTooltip": "When parsing, the image content in the document will be retained to support the reply with both text and images during the question-and-answer process.",
    "chunk": "Chunk",
   "characters": "characters",
   "chunkContentCannotBeEmpty": "Chunk content cannot be empty",

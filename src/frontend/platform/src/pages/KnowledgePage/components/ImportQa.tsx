@@ -119,12 +119,11 @@ function QaTable({ dataList }) {
     );
 }
 
-const excelPreCheck = async (file) => {
-    const { t } = useTranslation('knowledge');
+const excelPreCheck = async (file, t) => {
     return new Promise((resolve) => {
         const ext = file.name.split('.').pop().toLowerCase();
         if (!['xlsx', 'xls'].includes(ext)) {
-            return { valid: false, message: t('excelFileTypeError') };
+            return resolve({ valid: false, message: t('excelFileTypeError') });
         }
 
         const reader = new FileReader();
@@ -274,7 +273,7 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
                             accept={['xls', 'xlsx']}
                             className={`${error.fileUrl ? 'border-red-400' : ''}`}
                             onSuccess={handleFileUploadSuccess}
-                            preCheck={excelPreCheck}
+                            preCheck={(file) => excelPreCheck(file, t)}
                         />
                         <p className="text-sm text-green-500 mt-2">{form.fileName}</p>
                     </div>
