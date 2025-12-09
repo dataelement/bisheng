@@ -97,7 +97,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
         }
 
         if (!name) {
-            toast({ variant: 'error', description: t('lib.enterLibraryName') });
+            toast({ variant: 'error', description: t('lib.enterLibraryName', { ns: 'bs' }) });
             return;
         }
         if (name.length > 200) {

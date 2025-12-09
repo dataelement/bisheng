@@ -15,7 +15,7 @@ from bisheng.user.domain.models.user import UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
 
 
-class KnowledgeTypeEnum(Enum):
+class KnowledgeTypeEnum(int, Enum):
     QA = 1  # QA知识库
     NORMAL = 0  # 文档知识库
     PRIVATE = 2  # 工作台的个人知识库

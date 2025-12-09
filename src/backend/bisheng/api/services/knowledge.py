@@ -181,14 +181,6 @@ class KnowledgeService(KnowledgeUtils):
         # 插入到数据库
         db_knowledge.user_id = login_user.user_id
         db_knowledge = KnowledgeDao.insert_one(db_knowledge)
-        telemetry_service.log_event_sync(user_id=login_user.user_id,
-                                         event_type=BaseTelemetryTypeEnum.NEW_KNOWLEDGE_BASE,
-                                         trace_id=trace_id_var.get(),
-                                         event_data=NewKnowledgeBaseEventData(
-                                             kb_id=db_knowledge.id,
-                                             kb_name=db_knowledge.name,
-                                             kb_type=db_knowledge.model_type
-                                         ))
 
         try:
             vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id,
@@ -234,7 +226,7 @@ class KnowledgeService(KnowledgeUtils):
                                          event_data=NewKnowledgeBaseEventData(
                                              kb_id=knowledge.id,
                                              kb_name=knowledge.name,
-                                             kb_type=knowledge.model_type
+                                             kb_type=KnowledgeTypeEnum(knowledge.type)
                                          ))
 
         return True

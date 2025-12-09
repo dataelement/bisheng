@@ -35,7 +35,11 @@ from bisheng.api.services.patch_130 import (
 from bisheng.api.v1.schemas import ExcelRule
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
-from bisheng.common.errcode.knowledge import KnowledgeSimilarError, KnowledgeFileDeleteError
+from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.http_error import ServerError
+from bisheng.common.errcode.knowledge import KnowledgeSimilarError, KnowledgeFileDeleteError, KnowledgeFileEmptyError, \
+    KnowledgeFileChunkMaxError, KnowledgeLLMError, KnowledgeFileDamagedError, KnowledgeFileNotSupportedError, \
+    KnowledgeEtl4lmTimeoutError
 from bisheng.common.schemas.telemetry.event_data_schema import FileParseEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -287,7 +291,7 @@ def process_file_task(
         for file in db_files:
             if new_files_map[file.id].status == KnowledgeFileStatus.PROCESSING.value:
                 file.status = KnowledgeFileStatus.FAILED.value
-                file.remark = str(e)[:500]
+                file.remark = ServerError(exception=e).to_json_str()
                 KnowledgeFileDao.update(file)
         logger.info("update files failed status over")
         raise e
@@ -496,13 +500,21 @@ def addEmbedding(
             )
             db_file.status = KnowledgeFileStatus.FAILED.value
             db_file.remark = str(e)[:500]
+            if str(e).find("etl4lm server timeout") != -1:
+                db_file.remark = KnowledgeEtl4lmTimeoutError(exception=e).to_json_str()
+            else:
+                db_file.remark = ServerError(exception=e).to_json_str()
             status = 'parse_failed'
+        except BaseErrorCode as e:
+            db_file.status = KnowledgeFileStatus.FAILED.value
+            db_file.remark = e.to_json_str()
+            status = 'failed'
         except Exception as e:
             logger.exception(
                 f"process_file_fail file_id={db_file.id} file_name={db_file.file_name}"
             )
             db_file.status = KnowledgeFileStatus.FAILED.value
-            db_file.remark = str(e)[:500]
+            db_file.remark = ServerError(exception=e).to_json_str()
             status = 'failed'
         finally:
             logger.info(
@@ -553,11 +565,6 @@ def add_file_embedding(
     file_url = minio_client.get_share_link(db_file.object_name)
     filepath, _ = file_download(file_url)
 
-    if not vector_client:
-        raise ValueError("vector db not found, please check your milvus config")
-    if not es_client:
-        raise ValueError("es not found, please check your es config")
-
     # Convert split_rule string to dict if needed
     excel_rule = ExcelRule()
     if db_file.split_rule and isinstance(db_file.split_rule, str):
@@ -584,10 +591,13 @@ def add_file_embedding(
     except EtlException as e:
         db_file.parse_type = ParseType.ETL4LM.value
         raise FileParseException(str(e)) from e
+    except BaseErrorCode as e:
+        raise e
     except Exception as e:
         raise FileParseException(str(e)) from e
+
     if len(texts) == 0:
-        raise ValueError("文件解析为空")
+        raise KnowledgeFileEmptyError()
     # 缓存中有数据则用缓存中的数据去入库，因为是用户在界面编辑过的
     if preview_cache_key:
         all_chunk_info = KnowledgeUtils.get_preview_cache(preview_cache_key)
@@ -601,9 +611,7 @@ def add_file_embedding(
                 metadatas.append(Metadata(**val["metadata"]))
     for index, one in enumerate(texts):
         if len(one) > 10000:
-            raise ValueError(
-                "分段结果超长，请尝试在自定义策略中使用更多切分符（例如 \\n、。、\\.）进行切分"
-            )
+            raise KnowledgeFileChunkMaxError()
         # 入库时 拼接文件名和文档摘要
         texts[index] = KnowledgeUtils.aggregate_chunk_metadata(one, metadatas[index].model_dump())
 
@@ -794,9 +802,7 @@ def read_chunk_text(
             knowledge_llm = LLMService.get_knowledge_llm()
         except Exception as e:
             logger.exception("knowledge_llm_error:")
-            raise Exception(
-                f"文档知识库总结模型已失效，请前往模型管理-系统模型设置中进行配置。{str(e)}"
-            )
+            raise KnowledgeLLMError()
 
     text_splitter = ElemCharacterTextSplitter(
         separators=separator,
@@ -884,7 +890,7 @@ def read_chunk_text(
             if file_extension_name in ["pdf"]:
                 # 判断文件是否损坏
                 if is_pdf_damaged(input_file):
-                    raise Exception('The file is damaged.')
+                    raise KnowledgeFileDamagedError()
             etl4lm_settings = settings.get_knowledge().etl4lm
             parse_type = ParseType.ETL4LM.value
             try:
@@ -926,7 +932,7 @@ def read_chunk_text(
                 documents = loader.load()
             else:
                 if file_extension_name not in filetype_load_map:
-                    raise Exception("类型不支持")
+                    raise KnowledgeFileNotSupportedError()
                 loader = filetype_load_map[file_extension_name](file_path=input_file)
                 documents = loader.load()
 

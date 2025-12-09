@@ -123,7 +123,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
 
         // 3. Original validation logic (only for user-entered descriptions, default description already ensures ≤ 200)
         if (!name) {
-            handleError(t('lib.enterLibraryName'));
+            handleError(t('lib.enterLibraryName', { ns: 'bs' }));
             return;
         }
         if (name.length > 200) {
