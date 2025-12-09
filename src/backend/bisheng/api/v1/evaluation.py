@@ -3,11 +3,11 @@ from typing import Optional
 
 from datasets import Dataset
 from fastapi import APIRouter, Depends, Query, UploadFile, Form, BackgroundTasks
-from loguru import logger
 
 from bisheng.api.services.evaluation import EvaluationService, add_evaluation_task
-from bisheng.api.v1.schemas import resp_200, resp_500
+from bisheng.api.v1.schemas import resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.server import UploadFileExtError
 from bisheng.core.cache.utils import convert_encoding_cchardet
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
@@ -49,11 +49,8 @@ def create_evaluation(*,
             "ground_truths": [[one.get('ground_truth')] for one in csv_data]
         }
         dataset = Dataset.from_dict(data_samples)
-    except ValueError:
-        return resp_500(code=400, message='文件格式不符合要求，请参考模板文件')
     except Exception:
-        logger.exception('evaluation file parse error')
-        return resp_500(code=400, message='文件格式不符合要求，请参考模板文件')
+        raise UploadFileExtError()
     finally:
         file.file.seek(0)
 

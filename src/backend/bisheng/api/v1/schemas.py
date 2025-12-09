@@ -12,7 +12,6 @@ from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeRead
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
-from bisheng.tool.domain.const import AuthMethod, AuthType
 from bisheng.tool.domain.models.gpts_tools import GptsToolsRead
 
 
@@ -82,20 +81,6 @@ def resp_200(data: Union[list, dict, str, Any] = None,
 
 
 def resp_500(code: int = 500,
-             data: Union[list, dict, str, Any] = None,
-             message: str = 'BAD REQUEST') -> UnifiedResponseModel:
-    """错误的逻辑回复"""
-    return UnifiedResponseModel(status_code=code, status_message=message, data=data)
-
-
-def resp_501(code: int = 501,
-             data: Union[list, dict, str, Any] = None,
-             message: str = 'BAD REQUEST') -> UnifiedResponseModel:
-    """错误的逻辑回复"""
-    return UnifiedResponseModel(status_code=code, status_message=message, data=data)
-
-
-def resp_502(code: int = 502,
              data: Union[list, dict, str, Any] = None,
              message: str = 'BAD REQUEST') -> UnifiedResponseModel:
     """错误的逻辑回复"""
@@ -325,19 +310,6 @@ class FlowCompareReq(BaseModel):
 
 class DeleteToolTypeReq(BaseModel):
     tool_type_id: int = Field(description='要删除的工具类别ID')
-
-
-class TestToolReq(BaseModel):
-    server_host: str = Field(default='', description='服务的根地址')
-    openapi_schema: Optional[str] = Field(default='', description='openapi schema')
-    extra: str = Field(default='', description='Api 对象解析后的extra字段')
-    auth_method: int = Field(default=AuthMethod.NO.value, description='认证类型')
-    auth_type: Optional[str] = Field(default=AuthType.BASIC.value, description='Auth Type')
-    api_key: Optional[str] = Field(default='', description='api key')
-    api_location: Optional[str] = Field(default='', description='api location')
-    parameter_name: Optional[str] = Field(default='', description='parameter_name')
-
-    request_params: Dict = Field(default=None, description='用户填写的请求参数')
 
 
 class GroupAndRoles(BaseModel):

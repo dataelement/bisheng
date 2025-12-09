@@ -80,27 +80,15 @@ class MilvusConf(BaseModel):
 
 class ElasticsearchConf(BaseModel):
     """ elasticsearch 配置 """
-    elasticsearch_url: Optional[str] = Field(default='http://127.0.0.1:9200', alias='url',
+    elasticsearch_url: Optional[str] = Field(default=None, alias='url',
                                              description='elasticsearch访问地址')
 
-    ssl_verify: Optional[str | dict] = Field(default='{"basic_auth": ("elastic", "elastic")}', description='额外的参数')
-
-    # 数据看板elasticsearch 连接参数
-    statistics_elasticsearch_url: Optional[str] = Field(None, description='数据看板elasticsearch访问地址')
-    statistics_ssl_verify: Optional[str | dict] = Field(default='{"basic_auth": ("elastic", "elastic")}',
-                                                        description='数据看板elasticsearch 额外的参数')
+    ssl_verify: Optional[str | dict] = Field(default='{}', description='额外的参数')
 
     @model_validator(mode='after')
     def validate(self):
         if isinstance(self.ssl_verify, str):
             self.ssl_verify = ast.literal_eval(self.ssl_verify)
-
-        if isinstance(self.statistics_ssl_verify, str):
-            self.statistics_ssl_verify = ast.literal_eval(self.statistics_ssl_verify)
-
-        if not self.statistics_elasticsearch_url:
-            self.statistics_elasticsearch_url = self.elasticsearch_url
-            self.statistics_ssl_verify = self.ssl_verify
 
         return self
 
@@ -265,6 +253,7 @@ class Settings(BaseModel):
     workflow_conf: WorkflowConf = WorkflowConf()
     celery_task: CeleryConf = CeleryConf()
     cookie_conf: CookieConf = CookieConf()
+    telemetry_elasticsearch: ElasticsearchConf = ElasticsearchConf()
 
     @field_validator('database_url')
     @classmethod
@@ -345,3 +334,8 @@ class Settings(BaseModel):
 
     def get_search_conf(self) -> ElasticsearchConf:
         return self.vector_stores.elasticsearch
+
+    def get_telemetry_conf(self) -> ElasticsearchConf:
+        if not self.telemetry_elasticsearch.elasticsearch_url:
+            return self.vector_stores.elasticsearch
+        return self.telemetry_elasticsearch

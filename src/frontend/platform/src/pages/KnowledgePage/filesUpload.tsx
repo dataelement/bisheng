@@ -226,19 +226,21 @@ export default function FilesUpload() {
   };
 
   const handleUnRetry = () => {
+    const files = resultFiles.filter((item) => {
+      return repeatFiles.every((repeatItem) => {
+        return repeatItem.file_path !== item.file_path;
+      });
+    })
+    setResultFiles(files)
+    
     if (currentStep === 1) {
-      const files = resultFiles.filter((item) => {
-        return repeatFiles.every((repeatItem) => {
-          return repeatItem.file_path !== item.file_path;
-        });
-      })
-      setResultFiles(files)
       if (files.length === 0) {
         return navigate(-1);
       }
       setRepeatFiles([]);
       return setCurrentStep(2);
     }
+
     setRepeatFiles([]);
     repeatCallBackRef.current();
   }

@@ -80,9 +80,9 @@ class ApplicationContextManager:
             from bisheng.core.search.elasticsearch.manager import EsConnManager, statistics_es_name
             self.register_context(EsConnManager(es_hosts=config.get_search_conf().elasticsearch_url,
                                                 **config.get_search_conf().ssl_verify))
-            self.register_context(EsConnManager(es_hosts=config.get_search_conf().statistics_elasticsearch_url,
+            self.register_context(EsConnManager(es_hosts=config.get_telemetry_conf().elasticsearch_url,
                                                 name=statistics_es_name,
-                                                **config.get_search_conf().statistics_ssl_verify))
+                                                **config.get_telemetry_conf().ssl_verify))
 
             from bisheng.core.external.http_client.http_client_manager import HttpClientManager
             self.register_context(HttpClientManager())

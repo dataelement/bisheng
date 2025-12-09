@@ -18,11 +18,11 @@ from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk
                                     UpdateKnowledgeReq, KnowledgeFileReProcess)
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.common.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError, \
     KnowledgePreviewError, KnowledgeNotQAError, KnowledgeNoEmbeddingError, KnowledgeNotExistError
 from bisheng.common.errcode.server import NoLlmModelConfigError
-from bisheng.common.schemas.api import resp_200, resp_500, resp_502, UnifiedResponseModel
+from bisheng.common.schemas.api import resp_200, resp_500, UnifiedResponseModel
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_uploaded_file
@@ -200,7 +200,8 @@ async def copy_knowledge(*,
                          request: Request,
                          background_tasks: BackgroundTasks,
                          login_user: UserPayload = Depends(UserPayload.get_login_user),
-                         knowledge_id: int = Body(..., embed=True)):
+                         knowledge_id: int = Body(..., embed=True),
+                         knowledge_name: str = Body(default=None, embed=True)):
     """ 复制知识库. """
     knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
 
@@ -213,7 +214,7 @@ async def copy_knowledge(*,
     )
     if knowledge.state != KnowledgeState.PUBLISHED.value or knowledge_count > 0:
         return KnowledgeCPError.return_resp()
-    knowledge = await KnowledgeService.copy_knowledge(request, background_tasks, login_user, knowledge)
+    knowledge = await KnowledgeService.copy_knowledge(request, background_tasks, login_user, knowledge, knowledge_name)
     return resp_200(knowledge)
 
 
@@ -221,12 +222,14 @@ async def copy_knowledge(*,
 async def copy_qa_knowledge(*,
                             request: Request,
                             login_user: UserPayload = Depends(UserPayload.get_login_user),
-                            knowledge_id: int = Body(..., embed=True)):
+                            knowledge_id: int = Body(..., embed=True),
+                            knowledge_name: str = Body(default=None, embed=True)):
     """
     复制QA知识库.
     :param request:
     :param login_user:
     :param knowledge_id:
+    :param knowledge_name: new knowledge name
     :return:
     """
 
@@ -242,7 +245,7 @@ async def copy_qa_knowledge(*,
     if qa_knowledge.state != KnowledgeState.PUBLISHED.value or qa_knowledge_count == 0:
         return KnowledgeCPError.return_resp()
 
-    knowledge = await KnowledgeService.copy_qa_knowledge(request, login_user, qa_knowledge)
+    knowledge = await KnowledgeService.copy_qa_knowledge(request, login_user, qa_knowledge, knowledge_name)
 
     return resp_200(knowledge)
 
@@ -451,7 +454,7 @@ async def qa_add(*, QACreate: QAKnowledgeUpsert,
     QACreate.user_id = login_user.user_id
     db_knowledge = KnowledgeDao.query_by_id(QACreate.knowledge_id)
     if db_knowledge.type != KnowledgeTypeEnum.QA.value:
-        raise HTTPException(status_code=404, detail='知识库类型错误')
+        raise NotFoundError()
     if not login_user.access_check(
             db_knowledge.user_id, str(db_knowledge.id), AccessType.KNOWLEDGE_WRITE
     ):
@@ -486,7 +489,7 @@ def qa_status_switch(*,
         return resp_200()
     if new_qa_db.status != status:
         # 说明状态切换失败
-        return resp_500(message=f'状态切换失败: {new_qa_db.remark}')
+        return resp_500(message=new_qa_db.remark)
     return resp_200()
 
 
@@ -529,13 +532,13 @@ def qa_delete(*,
               login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ 删除知识文件信息 """
     knowledge_dbs = QAKnoweldgeDao.select_list(ids)
+    for one in knowledge_dbs:
+        if one.type != KnowledgeTypeEnum.QA.value:
+            raise KnowledgeNotQAError()
     knowledge = KnowledgeDao.query_by_id(knowledge_dbs[0].knowledge_id)
     if not login_user.access_check(knowledge.user_id, str(knowledge.id),
                                    AccessType.KNOWLEDGE_WRITE):
-        raise HTTPException(status_code=404, detail='没有权限执行操作')
-
-    if knowledge.type == KnowledgeTypeEnum.NORMAL.value:
-        return HTTPException(status_code=500, detail='知识库类型错误')
+        raise UnAuthorizedError()
 
     knowledge_imp.delete_vector_data(knowledge, ids)
     QAKnoweldgeDao.delete_batch(ids)
@@ -560,12 +563,12 @@ def qa_auto_question(
 
 @router.get('/qa/export/template', status_code=200)
 async def get_export_url():
-    data = [{"问题": "", "答案": "", "相似问题1": "", "相似问题2": ""}]
+    data = [{"Question": "", "Answer": "", "Similar question 1": "", "Similar question 2": ""}]
     df = pd.DataFrame(data)
     bio = BytesIO()
     with pd.ExcelWriter(bio, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="Sheet1", index=False)
-    file_name = f"QA知识库导入模板.xlsx"
+    file_name = f"qa_export_template.xlsx"
     bio.seek(0)
     file = UploadFile(filename=file_name, file=bio)
     file_path = await save_uploaded_file(file, 'bisheng', file_name)
@@ -600,23 +603,23 @@ async def get_export_url(*,
 
         data = [jsonable_encoder(qa) for qa in qa_list]
         qa_dict_list = []
-        all_title = ["问题", "答案"]
+        all_title = ["Question", "Answer"]
         for qa in data:
             qa_dict_list.append({
-                "问题": qa['questions'][0],
-                "答案": json.loads(qa['answers'])[0]
+                "Question": qa['questions'][0],
+                "Answer": json.loads(qa['answers'])[0]
             })
             for index, question in enumerate(qa['questions']):
                 if index == 0:
                     continue
-                key = f"相似问题{index}"
+                key = f"Similar question {index}"
                 if key not in all_title:
                     all_title.append(key)
                 qa_dict_list[-1][key] = question
         if len(qa_dict_list) != 0:
             df = pd.DataFrame(qa_dict_list)
         else:
-            df = pd.DataFrame([{"问题": "", "答案": "", "相似问题1": "", "相似问题2": ""}])
+            df = pd.DataFrame([{"Question": "", "Answer": "", "Similar question 1": "", "Similar question 2": ""}])
         df = df[all_title]
         bio = BytesIO()
         with pd.ExcelWriter(bio, engine="openpyxl") as writer:
@@ -651,21 +654,21 @@ def post_import_file(*,
                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
     df = pd.read_excel(file_url)
     columns = df.columns.to_list()
-    if '答案' not in columns or '问题' not in columns:
-        raise HTTPException(status_code=500, detail='文件格式错误，没有 ‘问题’ 或 ‘答案’ 列')
+    if 'Question' not in columns or 'Answer' not in columns:
+        raise HTTPException(status_code=500, detail='file must have ‘Question’ Or ‘Answer’ column')
     data = df.T.to_dict().values()
     insert_data = []
     for dd in data:
         d = QAKnowledgeUpsert(
             user_id=login_user.user_id,
             knowledge_id=qa_knowledge_id,
-            answers=[convert_excel_value(dd['答案'])],
-            questions=[convert_excel_value(dd['问题'])],
+            answers=[convert_excel_value(dd['Question'])],
+            questions=[convert_excel_value(dd['Answer'])],
             source=4,
             create_time=datetime.now(),
             update_time=datetime.now())
         for key, value in dd.items():
-            if key.startswith('相似问题') and convert_excel_value(value):
+            if key.startswith('Similar question') and convert_excel_value(value):
                 d.questions.append(convert_excel_value(value))
         insert_data.append(d)
     try:
@@ -694,7 +697,7 @@ def post_import_file(*,
     for file_url in file_list:
         df = pd.read_excel(file_url)
         columns = df.columns.to_list()
-        if '答案' not in columns or '问题' not in columns:
+        if 'Question' not in columns or 'Answer' not in columns:
             insert_result.append(0)
             continue
         data = df.T.to_dict().values()
@@ -703,8 +706,8 @@ def post_import_file(*,
         all_questions = set()
         for index, dd in enumerate(data):
             tmp_questions = set()
-            dd_question = convert_excel_value(dd['问题'])
-            dd_answer = convert_excel_value(dd['答案'])
+            dd_question = convert_excel_value(dd['Question'])
+            dd_answer = convert_excel_value(dd['Answer'])
             QACreate = QAKnowledgeUpsert(
                 user_id=login_user.user_id,
                 knowledge_id=qa_knowledge_id,
@@ -714,7 +717,7 @@ def post_import_file(*,
                 status=QAStatus.PROCESSING.value)
             tmp_questions.add(QACreate.questions[0])
             for key, value in dd.items():
-                if key.startswith('相似问题'):
+                if key.startswith('Similar question'):
                     if tmp_value := convert_excel_value(value):
                         if tmp_value not in tmp_questions:
                             QACreate.questions.append(tmp_value)
@@ -770,17 +773,13 @@ def get_knowledge_status(*, login_user: UserPayload = Depends(UserPayload.get_lo
 
     if private_knowledge.state == KnowledgeState.REBUILDING.value:
         # 返回502状态码和相应提示信息
-        return resp_502(
-            message="个人知识库embedding模型已更换，正在重建知识库，请稍后再试"
-        )
+        raise KnowledgeRebuildingError()
     if private_knowledge.state == KnowledgeState.FAILED.value:
         # 延迟导入以避免循环导入
         from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
         rebuild_knowledge_celery.delay(private_knowledge.id, int(private_knowledge.model), login_user.user_id)
         # 返回502状态码和相应提示信息
-        return resp_502(
-            message="个人知识库embedding模型已更换，正在重建知识库，请稍后再试"
-        )
+        raise KnowledgeRebuildingError()
 
     # 知识库状态正常，返回200
     return resp_200({"status": "success"})
@@ -798,70 +797,61 @@ def update_knowledge_model(*,
     2. 如果不是则返回resp501("不是embedding模型") 如果是则把knowledge表中所有type为2的数据status改成3，model改成传入的model_id
     3. 每一个knowledge_id都发起异步任务进行知识库重建
     """
-    try:
-        # 1. 验证是否为embedding模型
-        model_info = LLMDao.get_model_by_id(req_data.model_id)
-        if not model_info:
-            return NoLlmModelConfigError.return_resp()
+    # 1. 验证是否为embedding模型
+    model_info = LLMDao.get_model_by_id(req_data.model_id)
+    if not model_info:
+        return NoLlmModelConfigError.return_resp()
 
-        # 如果前端没有传model_type，使用数据库中的model_type
-        model_type = req_data.model_type if req_data.model_type else model_info.model_type
+    # 如果前端没有传model_type，使用数据库中的model_type
+    model_type = req_data.model_type if req_data.model_type else model_info.model_type
 
-        if model_type != LLMModelType.EMBEDDING.value:
-            return KnowledgeNoEmbeddingError.return_resp()
+    if model_type != LLMModelType.EMBEDDING.value:
+        return KnowledgeNoEmbeddingError.return_resp()
 
-        # 处理指定的知识库
-        knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
-        if not knowledge:
-            return KnowledgeNotExistError.return_resp()
+    # 处理指定的知识库
+    knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
+    if not knowledge:
+        return KnowledgeNotExistError.return_resp()
 
-        if not login_user.access_check(
-                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
-        ):
-            return UnAuthorizedError.return_resp()
+    if not login_user.access_check(
+            knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
+    ):
+        return UnAuthorizedError.return_resp()
 
-        old_model_id = knowledge.model
+    old_model_id = knowledge.model
 
-        # 更新知识库状态和模型
-        knowledge.model = str(req_data.model_id)
-        knowledge.name = req_data.knowledge_name
-        knowledge.description = req_data.description
+    # 更新知识库状态和模型
+    knowledge.model = str(req_data.model_id)
+    knowledge.name = req_data.knowledge_name
+    knowledge.description = req_data.description
 
-        if int(old_model_id) == int(req_data.model_id):
-            # 如果模型没有变化，不需要重建
-            KnowledgeDao.update_one(knowledge)
-            return resp_200(
-                message="知识库模型未更改，无需重建"
-            )
-        if knowledge.state == KnowledgeState.REBUILDING.value:
-            return KnowledgeRebuildingError.return_resp()
-
-        knowledge.state = KnowledgeState.REBUILDING.value
+    if int(old_model_id) == int(req_data.model_id):
+        # 如果模型没有变化，不需要重建
         KnowledgeDao.update_one(knowledge)
+        return resp_200()
+    if knowledge.state == KnowledgeState.REBUILDING.value:
+        return KnowledgeRebuildingError.return_resp()
 
-        # 发起异步任务
+    knowledge.state = KnowledgeState.REBUILDING.value
+    KnowledgeDao.update_one(knowledge)
 
-        if knowledge.type == KnowledgeTypeEnum.NORMAL.value:
+    # 发起异步任务
 
-            # 延迟导入以避免循环导入
-            from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
-            rebuild_knowledge_celery.delay(knowledge.id, req_data.model_id, login_user.user_id)
+    if knowledge.type == KnowledgeTypeEnum.NORMAL.value:
 
-        elif knowledge.type == KnowledgeTypeEnum.QA.value:
+        # 延迟导入以避免循环导入
+        from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
+        rebuild_knowledge_celery.delay(knowledge.id, req_data.model_id, login_user.user_id)
 
-            # 延迟导入以避免循环导入
-            from bisheng.worker.knowledge.qa import rebuild_qa_knowledge_celery
-            rebuild_qa_knowledge_celery.delay(knowledge.id, req_data.model_id, login_user.user_id)
+    elif knowledge.type == KnowledgeTypeEnum.QA.value:
 
-        logger.info(f"Started rebuild task for knowledge_id={knowledge.id} with model_id={req_data.model_id}")
+        # 延迟导入以避免循环导入
+        from bisheng.worker.knowledge.qa import rebuild_qa_knowledge_celery
+        rebuild_qa_knowledge_celery.delay(knowledge.id, req_data.model_id, login_user.user_id)
 
-        return resp_200(
-            message="已开始重建知识库"
-        )
+    logger.info(f"Started rebuild task for knowledge_id={knowledge.id} with model_id={req_data.model_id}")
 
-    except Exception as e:
-        logger.exception(f"rebuilding knowledge error: {str(e)}")
-        return resp_500(message=f"重建知识库失败: {str(e)}")
+    return resp_200()
 
 
 @router.get("/file/info/{file_id}", description="获取知识库文件信息", response_model=UnifiedResponseModel)

@@ -71,10 +71,9 @@ async def get_statistics_es_connection() -> AsyncElasticsearch:
             from bisheng.common.services.config_service import settings
 
             app_context.register_context(
-                EsConnManager(es_hosts=settings.get_search_conf().statistics_elasticsearch_url,
+                EsConnManager(es_hosts=settings.get_telemetry_conf().elasticsearch_url,
                               name=statistics_es_name,
-                              **settings.get_search_conf().statistics_ssl_verify
-                              ))
+                              **settings.get_telemetry_conf().statistics_ssl_verify))
             return (await app_context.async_get_instance(statistics_es_name)).es_connection
         except Exception as e:
             logger.error(f"Failed to register Statistics EsConnManager: {e}")
@@ -112,10 +111,9 @@ def get_statistics_es_connection_sync() -> Elasticsearch:
             from bisheng.common.services.config_service import settings
 
             app_context.register_context(
-                EsConnManager(es_hosts=settings.get_search_conf().statistics_elasticsearch_url,
+                EsConnManager(es_hosts=settings.get_telemetry_conf().elasticsearch_url,
                               name=statistics_es_name,
-                              **settings.get_search_conf().statistics_ssl_verify
-                              ))
+                              **settings.get_telemetry_conf().ssl_verify))
             return app_context.sync_get_instance(statistics_es_name).sync_es_connection
         except Exception as e:
             logger.error(f"Failed to register Statistics EsConnManager: {e}")

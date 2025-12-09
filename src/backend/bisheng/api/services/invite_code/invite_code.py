@@ -2,6 +2,7 @@ from loguru import logger
 
 from bisheng.api.services.invite_code.code_validator import VoucherGenerator
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.linsight import InviteCodeBindError, InviteCodeInvalidError
 from bisheng.database.models.invite_code import InviteCode, InviteCodeDao
 from bisheng.utils import generate_uuid
 
@@ -93,7 +94,7 @@ class InviteCodeService:
         return nums
 
     @classmethod
-    async def bind_invite_code(cls, login_user: UserPayload, code: str) -> (bool, str):
+    async def bind_invite_code(cls, login_user: UserPayload, code: str) -> bool:
         """
         绑定邀请码
         :param login_user: 操作用户信息
@@ -103,10 +104,12 @@ class InviteCodeService:
         generator = VoucherGenerator()
         flag, _ = generator.validate_voucher(code)
         if not flag:
-            return False, "您输入的邀请码无效"
+            raise InviteCodeInvalidError()
         codes = await InviteCodeDao.get_user_bind_code(login_user.user_id)
         if codes:
-            return False, "已绑定其他邀请码"
+            raise InviteCodeBindError()
 
         flag = await InviteCodeDao.bind_invite_code(login_user.user_id, code)
-        return flag, "邀请码绑定成功" if flag else "您输入的邀请码无效"
+        if not flag:
+            raise InviteCodeInvalidError()
+        return flag

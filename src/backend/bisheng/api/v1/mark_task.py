@@ -73,8 +73,7 @@ async def get_status(task_id: int, chat_id: str,
     else:
         is_self = False
     result = {"status": record.status, "is_self": is_self}
-    if record:
-        return resp_200(result)
+    return resp_200(result)
 
 
 @router.post('/create_task')

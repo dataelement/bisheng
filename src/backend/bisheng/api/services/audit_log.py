@@ -559,11 +559,14 @@ class AuditLogService:
         page = 1
         page_size = 30
         excel_data = [
-            ['会话ID', '应用名称', '会话创建时间', '用户名称', '消息角色', '消息发送时间', '消息文本内容', '点赞',
-             '点踩', '复制']]
+            ['Session ID', 'Application Name', 'Session creation time', 'Username', 'Message Role',
+             'Message sending time',
+             'Message text content',
+             'Like',
+             'Dislike', 'copy']]
         bisheng_pro = settings.get_system_login_method().bisheng_pro
         if bisheng_pro:
-            excel_data[0].append('是否命中内容安全审查')
+            excel_data[0].append('Does it meet the content security review requirements?')
 
         while True:
             result, total = cls.get_session_list(user, flow_ids, user_ids, group_ids, start_date, end_date, feedback,
@@ -576,15 +579,15 @@ class AuditLogService:
                 for message in chat.messages:
                     message_data = [chat.chat_id, chat.flow_name, chat.create_time.strftime('%Y/%m/%d %H:%M:%S'),
                                     chat.user_name,
-                                    '用户' if message.category == 'question' else 'AI',
+                                    'User' if message.category == 'question' else 'AI',
                                     message.create_time.strftime('%Y/%m/%d %H:%M:%S'),
                                     message.message,
-                                    '是' if message.liked == LikedType.LIKED.value else '否',
-                                    '是' if message.liked == LikedType.DISLIKED.value else '否',
-                                    '是' if message.copied else '否']
+                                    'Yes' if message.liked == LikedType.LIKED.value else 'No',
+                                    'Yes' if message.liked == LikedType.DISLIKED.value else 'No',
+                                    'Yes' if message.copied else 'No']
                     if bisheng_pro:
                         message_data.append(
-                            '是' if message.sensitive_status == SensitiveStatus.VIOLATIONS.value else '否')
+                            'Yes' if message.sensitive_status == SensitiveStatus.VIOLATIONS.value else 'No')
                     excel_data.append(message_data)
 
         minio_client = get_minio_storage_sync()

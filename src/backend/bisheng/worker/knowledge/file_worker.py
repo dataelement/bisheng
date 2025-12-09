@@ -7,6 +7,7 @@ from pymilvus import Collection, MilvusException
 from bisheng.api.services.knowledge_imp import decide_vectorstores, process_file_task, delete_knowledge_file_vectors, \
     KnowledgeUtils, delete_vector_files
 from bisheng.api.v1.schemas import FileProcessBase
+from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.interface.embeddings.custom import FakeEmbedding
@@ -205,12 +206,12 @@ def copy_vector(
     # 当前es 不包含vector
     fields = [s.name for s in source_milvus.col.schema.fields if s.name != "pk"]
     source_data = source_milvus.col.query(
-        expr=f"file_id=={source_file_id} && knowledge_id=='{source_konwledge.id}'",
+        expr=f"document_id=={source_file_id} && knowledge_id=={source_konwledge.id}",
         output_fields=fields,
     )
     for data in source_data:
         data["knowledge_id"] = str(target_knowledge.id)
-        data["file_id"] = target_file_id
+        data["document_id"] = target_file_id
     milvus_db: Milvus = decide_vectorstores(
         target_knowledge.collection_name, "Milvus", embedding
     )
@@ -346,7 +347,8 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
         )
     except Exception as e:
         logger.exception("retry_knowledge_file_celery delete vectors error: {}", str(e))
-        KnowledgeFileDao.update_file_status([file_id], KnowledgeFileStatus.FAILED, str(e)[:500])
+        KnowledgeFileDao.update_file_status([file_id], KnowledgeFileStatus.FAILED,
+                                            KnowledgeFileFailedError(exception=e).to_json_str())
         return
     try:
         _parse_knowledge_file(file_id, preview_cache_key, callback_url)

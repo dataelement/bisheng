@@ -214,8 +214,7 @@ def copy(conversationId: str = Body(..., description='会话id', embed=True), ):
                                          source="platform",
                                          app_name=conversation.flow_name,
                                          app_type=app_type
-                                     )
-                                     )
+                                     ))
     msg_list = ChatMessageDao.get_messages_by_chat_id(conversationId)
     if msg_list:
         for msg in msg_list:
@@ -233,7 +232,7 @@ def del_chat_id(*,
     session_chat = MessageSessionDao.get_one(chat_id)
 
     if not session_chat or session_chat.is_delete:
-        return resp_200(message='删除成功')
+        return resp_200()
     # 处理临时数据
     col_name = f'tmp_{session_chat.flow_id}_{chat_id}'
     logger.info('tmp_delete_milvus col={}', col_name)
@@ -261,7 +260,7 @@ def del_chat_id(*,
                                      event_data=DeleteMessageSessionEventData(session_id=chat_id)
                                      )
 
-    return resp_200(message='删除成功')
+    return resp_200()
 
 
 @router.post('/chat/message', status_code=200)
@@ -363,7 +362,7 @@ def add_chat_messages(*,
                                                  app_type=app_type
                                              ))
 
-    return resp_200(data=message_dbs, message='添加成功')
+    return resp_200(data=message_dbs)
 
 
 @router.put('/chat/message/{message_id}', status_code=200)
@@ -392,14 +391,14 @@ def update_chat_message(*,
 
     MessageSessionDao.update_sensitive_status(chat_message.chat_id, SensitiveStatus.VIOLATIONS)
 
-    return resp_200(message='更新成功')
+    return resp_200()
 
 
 @router.delete('/chat/message/{message_id}', status_code=200)
 def del_message_id(*, message_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     ChatMessageDao.delete_by_message_id(login_user.user_id, message_id)
 
-    return resp_200(message='删除成功')
+    return resp_200()
 
 
 @router.post('/liked', status_code=200)
@@ -410,7 +409,7 @@ def like_response(*, data: ChatInput):
         raise NotFoundError.http_exception()
 
     if message.liked == data.liked:
-        return resp_200(message='操作成功')
+        return resp_200()
 
     like_count = 0
     dislike_count = 0
@@ -436,7 +435,7 @@ def like_response(*, data: ChatInput):
     MessageSessionDao.add_like_count(message.chat_id, like_count)
     MessageSessionDao.add_dislike_count(message.chat_id, dislike_count)
 
-    return resp_200(message='操作成功')
+    return resp_200()
 
 
 @router.post('/chat/copied', status_code=200)
@@ -448,13 +447,13 @@ def copied_message(message_id: int = Body(embed=True)):
     if message.copied != 1:
         ChatMessageDao.update_message_copied(message_id, 1)
         MessageSessionDao.add_copied_count(message.chat_id, 1)
-    return resp_200(message='操作成功')
+    return resp_200()
 
 
 @router.post('/chat/comment', status_code=200)
 def comment_resp(*, data: ChatInput):
     comment_answer(data.message_id, data.comment)
-    return resp_200(message='操作成功')
+    return resp_200()
 
 
 @router.get('/chat/list')
@@ -580,7 +579,7 @@ async def init_build(*,
         graph_data = FlowVersionDao.get_version_by_id(version_id).data
     try:
         if flow_id is None:
-            raise ValueError('No ID provided')
+            raise NotFoundError()
         # Check if already building
         if await flow_data_store.ahget(flow_data_key, 'status') == BuildStatus.IN_PROGRESS.value:
             return resp_200(InitResponse(flowId=flow_id))

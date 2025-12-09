@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import List, Literal, Optional, Union
 from urllib import parse
 
-from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks, Request, HTTPException, Form
+from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks, Request, Form
 from loguru import logger
 from pydantic import BaseModel, ValidationError
 from sse_starlette import EventSourceResponse
@@ -22,7 +22,7 @@ from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
     SubmitFileSchema, LinsightToolSchema, ToolChildrenSchema
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
@@ -820,16 +820,10 @@ async def sync_sop_record(
     """
     同步SOP记录到SOP库
     """
-    try:
-        repeat_name = await SOPManageService.sync_sop_record(record_ids, override, save_new)
-        return resp_200(data={
-            "repeat_name": repeat_name,
-        }, message="success")
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        logger.exception("sync_sop_record error")
-        return resp_500(code=500, message=f"指导手册 导入失败：{str(e)[:100]}")  # 限制错误信息长度，避免过长
+    repeat_name = await SOPManageService.sync_sop_record(record_ids, override, save_new)
+    return resp_200(data={
+        "repeat_name": repeat_name,
+    }, message="success")
 
 
 @router.post("/sop/upload", summary="批量导入SOP入库", response_model=UnifiedResponseModel)
@@ -843,18 +837,13 @@ async def upload_sop_file(
     批量导入SOP入库
     """
 
-    try:
-        # 调用实现类处理文件上传
-        repeat_name = await SOPManageService.upload_sop_file(login_user, file, ignore_error, override, save_new)
+    success_rows, error_rows = await SOPManageService.upload_sop_file(login_user, file, ignore_error, override,
+                                                                      save_new)
 
-        return resp_200(data={
-            "repeat_name": repeat_name,
-        }, message="指导手册文件上传成功")
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        logger.exception("SOP文件上传失败")
-        return resp_500(code=500, message=f"指导手册 导入失败：{str(e)[:100]}")  # 限制错误信息长度，避免过长
+    return resp_200(data={
+        "success_rows": success_rows,
+        "error_rows": error_rows
+    })
 
 
 @router.delete("/sop/remove", summary="删除灵思SOP", response_model=UnifiedResponseModel)

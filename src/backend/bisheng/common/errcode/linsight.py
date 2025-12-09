@@ -105,3 +105,18 @@ class LinsightUpdateSopError(BaseErrorCode):
 class LinsightDeleteSopError(BaseErrorCode):
     Code: int = 11170
     Msg: str = '删除指导手册失败，向量存储删除数据失败'
+
+
+class SopContentOverLimitError(BaseErrorCode):
+    Code: int = 11171
+    Msg: str = '{sop_name}内容超长'
+
+
+class InviteCodeInvalidError(BaseErrorCode):
+    Code: int = 11180
+    Msg: str = '您输入的邀请码无效'
+
+
+class InviteCodeBindError(BaseErrorCode):
+    Code: int = 11190
+    Msg: str = '已绑定其他邀请码'

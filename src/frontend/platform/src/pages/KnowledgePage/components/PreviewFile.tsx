@@ -54,7 +54,6 @@ export default function PreviewFile({
   } else {
     fileParseType = targetFile.fileType;
   }
-  console.log(targetFile,resultFiles,step,3);
   
   const fileName = targetFile.name || file.fileName || file.name;
   const suffix = useMemo(() => {

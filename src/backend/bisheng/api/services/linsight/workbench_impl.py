@@ -164,7 +164,7 @@ class LinsightWorkbenchImpl:
             message_session = MessageSession(
                 chat_id=chat_id,
                 flow_id=linsight_session_version.id,
-                flow_name='新对话',
+                flow_name='New Chat',
                 flow_type=FlowType.LINSIGHT.value,
                 user_id=login_user.user_id
             )
@@ -209,7 +209,7 @@ class LinsightWorkbenchImpl:
 
         for file in files:
             if file.parsing_status != "completed":
-                raise cls.LinsightError(f"文件 {file.file_name} 解析状态不正确: {file.parsing_status}")
+                raise cls.LinsightError(f"file {file.file_name} status is error: {file.parsing_status}")
             file_ids.append(file.file_id)
 
         redis_keys = [f"{cls.FILE_INFO_REDIS_KEY_PREFIX}{file_id}" for file_id in file_ids]
@@ -284,7 +284,7 @@ class LinsightWorkbenchImpl:
         except Exception as e:
             logger.error(f"生成任务标题失败: {str(e)}")
             return {
-                "task_title": "新对话",
+                "task_title": "New Chat",
                 "chat_id": chat_id,
                 "error_message": str(e)
             }

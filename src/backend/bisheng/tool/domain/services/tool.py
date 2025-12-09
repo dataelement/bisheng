@@ -11,10 +11,13 @@ from pydantic import BaseModel, ConfigDict
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.utils import get_url_content
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.assistant import ToolTypeNotExistsError, ToolTypeRepeatError
-from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
-from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
+from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
+from bisheng.common.errcode.tool import ToolTypeNotExistsError, ToolTypeRepeatError, ToolTypeNameError, \
+    ToolTypeIsPresetError, ToolSchemaDownloadError, ToolSchemaEmptyError, ToolSchemaParseError, ToolSchemaServerError, \
+    ToolMcpSchemaError
+from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum, GroupResource
 from bisheng.database.models.role_access import AccessType
+from bisheng.database.models.user_group import UserGroupDao
 from bisheng.mcp_manage.manager import ClientManager
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.langchain.linsight_knowledge import SearchKnowledgeBase
@@ -30,6 +33,125 @@ class ToolServices(BaseModel):
 
     request: Optional[Request] = None
     login_user: Optional[UserPayload] = None
+
+    async def get_tool_list(self, is_preset: Optional[int] = None) -> List[GptsToolsTypeRead]:
+        """ 获取用户可见的工具列表 """
+        # 获取用户可见的工具类别
+        tool_type_ids_extra = []
+        if is_preset != ToolPresetType.PRESET.value:
+            # 获取自定义工具列表时，需要包含用户可用的工具列表
+            access_resources = await self.login_user.aget_user_access_resource_ids([AccessType.GPTS_TOOL_READ])
+            if access_resources:
+                tool_type_ids_extra = [int(access) for access in access_resources]
+        if is_preset is None:
+            # 获取用户可见的所有工具列表
+            all_tool_type = await GptsToolsDao.aget_user_tool_type(self.login_user.user_id, tool_type_ids_extra)
+        elif is_preset == ToolPresetType.PRESET.value:
+            # 获取预置工具列表
+            all_tool_type = await GptsToolsDao.aget_preset_tool_type()
+        else:
+            # 获取用户可见的自定义工具列表
+            all_tool_type = await GptsToolsDao.aget_user_tool_type(self.login_user.user_id, tool_type_ids_extra, False,
+                                                                   ToolPresetType(is_preset))
+        tool_type_id = [one.id for one in all_tool_type]
+        res: List[GptsToolsTypeRead] = []
+        tool_type_children = {}
+        for one in all_tool_type:
+            tool_type_id.append(one.id)
+            tool_type_children[one.id] = []
+            res.append(GptsToolsTypeRead.model_validate(one))
+
+        # 获取对应类别下的工具列表
+        tool_list = await GptsToolsDao.aget_list_by_type(tool_type_id)
+        for one in tool_list:
+            tool_type_children[one.type].append(one)
+
+        # check write permission
+        write_tool_type = None
+        for one in res:
+            if self.login_user.is_admin() or one.user_id == self.login_user.user_id:
+                one.write = True
+            else:
+                if write_tool_type is None:
+                    write_resources = await self.login_user.aget_user_access_resource_ids([AccessType.GPTS_TOOL_WRITE])
+                    write_tool_type = {int(x): True for x in write_resources}
+                one.write = write_tool_type.get(one.id, False)
+            one.children = tool_type_children.get(one.id, [])
+
+            # no write auth, clear sensitive info
+            if not one.write:
+                one.api_key = ""
+                one.extra = None
+                # preset tool extra contains sensitive information
+                if one.is_preset == ToolPresetType.PRESET.value:
+                    for child in one.children:
+                        child.extra = None
+        return res
+
+    async def add_tools(self, req: GptsToolsTypeRead) -> GptsToolsTypeRead:
+        """ 添加自定义工具 """
+        # 尝试解析下openapi schema看下是否可以正常解析, 不能的话保存不允许保存
+        if req.is_preset == ToolPresetType.API.value:
+            await self.parse_openapi_schema('', req.openapi_schema)
+        elif req.is_preset == ToolPresetType.MCP.value:
+            await self.parse_mcp_schema(req.openapi_schema)
+
+        req.id = None
+        if req.name.__len__() > 1000 or req.name.__len__() == 0:
+            raise ToolTypeNameError()
+        # 判断类别是否已存在
+        tool_type = await GptsToolsDao.get_one_tool_type_by_name(self.login_user.user_id, req.name)
+        if tool_type:
+            raise ToolTypeRepeatError()
+        req.user_id = self.login_user.user_id
+
+        for one in req.children:
+            one.id = None
+            one.user_id = self.login_user.user_id
+            one.is_delete = 0
+            one.is_preset = req.is_preset
+
+        tool_extra = {"api_location": req.api_location, "parameter_name": req.parameter_name}
+        req.extra = json.dumps(tool_extra, ensure_ascii=False)
+        # 添加工具类别和对应的 工具列表
+        res = await GptsToolsDao.insert_tool_type(req)
+
+        self.add_gpts_tools_hook(self.request, self.login_user, res)
+        return res
+
+    @classmethod
+    def add_gpts_tools_hook(cls, request: Request, user: UserPayload, gpts_tool_type: GptsToolsTypeRead) -> bool:
+        """ 添加自定义工具后的hook函数 """
+        # 查询下用户所在的用户组
+        user_group = UserGroupDao.get_user_group(user.user_id)
+        group_ids = []
+        if user_group:
+            # 批量将自定义工具插入到关联表里
+            batch_resource = []
+            for one in user_group:
+                group_ids.append(one.group_id)
+                batch_resource.append(GroupResource(
+                    group_id=one.group_id,
+                    third_id=gpts_tool_type.id,
+                    type=ResourceTypeEnum.GPTS_TOOL.value))
+            GroupResourceDao.insert_group_batch(batch_resource)
+        AuditLogService.create_tool(user, get_request_ip(request), group_ids, gpts_tool_type)
+        return True
+
+    async def update_tool_config(self, tool_type_id: int, extra: dict) -> GptsToolsType:
+        # 获取工具类别
+        tool_type = await GptsToolsDao.aget_one_tool_type(tool_type_id)
+        if not tool_type:
+            raise NotFoundError()
+
+        if not await self.login_user.async_access_check(tool_type.user_id, str(tool_type.id),
+                                                        AccessType.GPTS_TOOL_WRITE):
+            raise UnAuthorizedError()
+
+        # 更新工具类别下所有工具的配置
+        tool_type.extra = json.dumps(extra, ensure_ascii=False)
+        await GptsToolsDao.update_tools_extra(tool_type_id, tool_type.extra)
+        return tool_type
 
     async def get_manage_tools(self, is_preset: Optional[ToolPresetType] = None) -> List[GptsToolsTypeRead]:
         """ 获取有管理权限的工具列表 """
@@ -77,15 +199,16 @@ class ToolServices(BaseModel):
                 one["api_location"] = extra.get("api_location")
         return res
 
-    async def parse_openapi_schema(self, download_url: str, file_content: str) -> GptsToolsTypeRead:
+    @staticmethod
+    async def parse_openapi_schema(download_url: str, file_content: str) -> GptsToolsTypeRead:
         if download_url:
             try:
                 file_content = await get_url_content(download_url)
             except Exception as e:
                 logger.exception(f'file {download_url} download error')
-                raise ServerError.http_exception(msg='url文件下载失败：' + str(e))
+                raise ToolSchemaDownloadError(exception=e)
         if not file_content:
-            raise ServerError.http_exception(msg='schema内容不能为空')
+            raise ToolSchemaEmptyError()
         # 根据文件内容是否以`{`开头判断用什么解析方式
         try:
             if file_content.startswith('{'):
@@ -94,14 +217,14 @@ class ToolServices(BaseModel):
                 res = yaml.safe_load(file_content)
         except Exception as e:
             logger.exception(f'openapi schema parse error {e}')
-            raise ServerError.http_exception(msg=f'openapi schema解析报错，请检查内容是否符合json或者yaml格式: {str(e)}')
+            raise ToolSchemaParseError(exception=e)
 
         #  解析openapi schema转为助手工具的格式
         try:
             schema = OpenApiSchema(res)
             schema.parse_server()
             if not schema.default_server.startswith(('http', 'https')):
-                raise ServerError.http_exception(msg=f'server中的url必须以http或者https开头: {schema.default_server}')
+                raise ToolSchemaServerError(data={"url": schema.default_server})
             tool_type = GptsToolsTypeRead(name=schema.title,
                                           description=schema.description,
                                           is_preset=ToolPresetType.API.value,
@@ -128,15 +251,16 @@ class ToolServices(BaseModel):
             return tool_type
         except Exception as e:
             logger.exception(f'openapi schema parse error {e}')
-            raise ServerError.http_exception(msg='openapi schema解析失败：' + str(e))
+            raise ToolSchemaParseError(exception=e)
 
-    async def parse_mcp_schema(self, file_content: str) -> GptsToolsTypeRead:
+    @staticmethod
+    async def parse_mcp_schema(file_content: str) -> GptsToolsTypeRead:
         try:
             result = json.loads(file_content)
             mcp_servers = result['mcpServers']
         except Exception as e:
             logger.exception(f'mcp tool schema parse error {e}')
-            raise ServerError.http_exception(msg=f'mcp工具配置解析失败，请检查内容是否符合mcp配置格式: {str(e)}')
+            raise ToolMcpSchemaError(exception=e)
         tool_type = None
         for key, value in mcp_servers.items():
             # 解析mcp服务配置
@@ -162,7 +286,7 @@ class ToolServices(BaseModel):
                 ))
             break
         if tool_type is None:
-            raise ServerError.http_exception(msg='mcp服务配置解析失败，请检查配置里是否配置了mcpServers')
+            raise ToolMcpSchemaError()
         return tool_type
 
     @classmethod
@@ -183,7 +307,7 @@ class ToolServices(BaseModel):
             children_map[one.name] = one
 
         # 获取此类别下旧的API列表
-        old_tool_list = GptsToolsDao.get_list_by_type([exist_tool_type.id])
+        old_tool_list = await GptsToolsDao.aget_list_by_type([exist_tool_type.id])
         # 需要被删除的工具列表
         delete_tool_id_list = []
         # 需要被更新的工具列表
@@ -209,69 +333,94 @@ class ToolServices(BaseModel):
             one.is_delete = 0
             add_children.append(one)
 
-        GptsToolsDao.update_tool_type(exist_tool_type, delete_tool_id_list,
-                                      add_children, update_tool_list)
+        await GptsToolsDao.update_tool_type(exist_tool_type, delete_tool_id_list,
+                                            add_children, update_tool_list)
 
-        children = GptsToolsDao.get_list_by_type([exist_tool_type.id])
+        children = await GptsToolsDao.aget_list_by_type([exist_tool_type.id])
         return GptsToolsTypeRead(**exist_tool_type.model_dump(), children=children)
 
-    @classmethod
-    async def update_gpts_tools(cls, request: Request, user: UserPayload, req: GptsToolsTypeRead) -> GptsToolsTypeRead:
+    async def update_tools(self, req: GptsToolsTypeRead) -> GptsToolsTypeRead:
         """
         更新工具类别，包括更新工具类别的名称和删除、新增工具类别的API
         """
         # 尝试解析下openapi schema看下是否可以正常解析, 不能的话保存不允许保存
-        tool_service = ToolServices()
         if req.is_preset == ToolPresetType.API.value:
-            await tool_service.parse_openapi_schema('', req.openapi_schema)
+            await self.parse_openapi_schema('', req.openapi_schema)
         elif req.is_preset == ToolPresetType.MCP.value:
-            await tool_service.parse_mcp_schema(req.openapi_schema)
+            await self.parse_mcp_schema(req.openapi_schema)
 
-        exist_tool_type = GptsToolsDao.get_one_tool_type(req.id)
+        exist_tool_type = await GptsToolsDao.aget_one_tool_type(req.id)
         if not exist_tool_type:
-            raise ToolTypeNotExistsError.http_exception()
+            raise ToolTypeNotExistsError()
         if req.name.__len__() > 1000 or req.name.__len__() == 0:
-            raise ServerError.http_exception(msg="名字不符合规范：至少1个字符，不能超过1000个字符")
+            raise ToolTypeNameError()
 
         #  判断工具类别名称是否重复
-        tool_type = GptsToolsDao.get_one_tool_type_by_name(user.user_id, req.name)
+        tool_type = await GptsToolsDao.get_one_tool_type_by_name(self.login_user.user_id, req.name)
         if tool_type and tool_type.id != exist_tool_type.id:
-            raise ToolTypeRepeatError.http_exception()
+            raise ToolTypeRepeatError()
         # 判断是否有更新权限
-        if not user.access_check(exist_tool_type.user_id, str(exist_tool_type.id), AccessType.GPTS_TOOL_WRITE):
-            raise UnAuthorizedError.http_exception()
+        if not await self.login_user.async_access_check(exist_tool_type.user_id, str(exist_tool_type.id),
+                                                        AccessType.GPTS_TOOL_WRITE):
+            raise UnAuthorizedError()
 
-        res = await cls._update_gpts_tools(exist_tool_type, req)
-        await cls.update_gpts_tool_hook(request, user, exist_tool_type)
+        res = await self._update_gpts_tools(exist_tool_type, req)
+        await self.update_tool_hook(self.request, self.login_user, exist_tool_type)
         return res
 
     @classmethod
-    async def update_gpts_tool_hook(cls, request: Request, user: UserPayload, exist_tool_type):
+    async def update_tool_hook(cls, request: Request, user: UserPayload, exist_tool_type):
         groups = await GroupResourceDao.aget_resource_group(ResourceTypeEnum.GPTS_TOOL, exist_tool_type.id)
         group_ids = [int(one.group_id) for one in groups]
         await asyncio.to_thread(AuditLogService.update_tool, user, get_request_ip(request), group_ids, exist_tool_type)
 
-    async def refresh_all_mcp(self) -> str:
+    async def delete_tools(self, tool_type_id: int) -> bool:
+        """ 删除工具类别 """
+        exist_tool_type = await GptsToolsDao.aget_one_tool_type(tool_type_id)
+        if not exist_tool_type:
+            return True
+        if exist_tool_type.is_preset == ToolPresetType.PRESET.value:
+            raise ToolTypeIsPresetError()
+        # 判断是否有更新权限
+        if not await self.login_user.async_access_check(exist_tool_type.user_id, str(exist_tool_type.id),
+                                                        AccessType.GPTS_TOOL_WRITE):
+            raise UnAuthorizedError()
+
+        await GptsToolsDao.delete_tool_type(tool_type_id)
+        await asyncio.to_thread(self.delete_tool_hook, self.request, self.login_user, exist_tool_type)
+        return True
+
+    @classmethod
+    def delete_tool_hook(cls, request, user: UserPayload, gpts_tool_type) -> bool:
+        """ 删除自定义工具后的hook函数 """
+        logger.info(f"delete_gpts_tool_hook id: {gpts_tool_type.id}, user: {user.user_id}")
+        GroupResourceDao.delete_group_resource_by_third_id(gpts_tool_type.id, ResourceTypeEnum.GPTS_TOOL)
+        groups = GroupResourceDao.get_resource_group(ResourceTypeEnum.GPTS_TOOL, gpts_tool_type.id)
+        group_ids = [int(one.group_id) for one in groups]
+        AuditLogService.delete_tool(user, get_request_ip(request), group_ids, gpts_tool_type)
+        return True
+
+    async def refresh_all_mcp(self) -> list[str]:
         """ return mcp server error msg """
         # get user all mcp tool
-        tool_types = GptsToolsDao.get_user_tool_type(self.login_user.user_id, is_preset=ToolPresetType.MCP)
+        tool_types = await GptsToolsDao.aget_user_tool_type(self.login_user.user_id, is_preset=ToolPresetType.MCP)
         if not tool_types:
-            return ''
+            return []
 
-        tools = GptsToolsDao.get_list_by_type(tool_type_ids=[one.id for one in tool_types])
+        tools = await GptsToolsDao.aget_list_by_type(tool_type_ids=[one.id for one in tool_types])
         tools_map = {}
         for one in tools:
             if one.type not in tools_map:
                 tools_map[one.type] = []
             tools_map[one.type].append(one)
-        error_msg = ''
+        error_name = []
         for one in tool_types:
             try:
                 await self.refresh_mcp_tools(one, tools_map.get(one.id, []))
             except Exception as e:
-                logger.exception(f'{one.name}刷新工具失败:')
-                error_msg += f'{one.name}工具获取失败，请重试\n'
-        return error_msg
+                logger.exception(f'{one.name} tool refresh failed')
+                error_name.append(one.name)
+        return error_name
 
     async def refresh_mcp_tools(self, tool_type: GptsToolsType, old_tools: list[GptsTools]):
         """ refresh mcp tools """

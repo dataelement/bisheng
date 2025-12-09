@@ -36,10 +36,9 @@ from bisheng.api.v1.schemas import ExcelRule
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.errcode.knowledge import KnowledgeSimilarError, KnowledgeFileDeleteError, KnowledgeFileEmptyError, \
     KnowledgeFileChunkMaxError, KnowledgeLLMError, KnowledgeFileDamagedError, KnowledgeFileNotSupportedError, \
-    KnowledgeEtl4lmTimeoutError
+    KnowledgeEtl4lmTimeoutError, KnowledgeFileFailedError
 from bisheng.common.schemas.telemetry.event_data_schema import FileParseEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -291,7 +290,7 @@ def process_file_task(
         for file in db_files:
             if new_files_map[file.id].status == KnowledgeFileStatus.PROCESSING.value:
                 file.status = KnowledgeFileStatus.FAILED.value
-                file.remark = ServerError(exception=e).to_json_str()
+                file.remark = KnowledgeFileFailedError(exception=e).to_json_str()
                 KnowledgeFileDao.update(file)
         logger.info("update files failed status over")
         raise e
@@ -499,11 +498,10 @@ def addEmbedding(
                 f"process_file_fail file_id={db_file.id} file_name={db_file.file_name}"
             )
             db_file.status = KnowledgeFileStatus.FAILED.value
-            db_file.remark = str(e)[:500]
             if str(e).find("etl4lm server timeout") != -1:
                 db_file.remark = KnowledgeEtl4lmTimeoutError(exception=e).to_json_str()
             else:
-                db_file.remark = ServerError(exception=e).to_json_str()
+                db_file.remark = KnowledgeFileFailedError(exception=e).to_json_str()
             status = 'parse_failed'
         except BaseErrorCode as e:
             db_file.status = KnowledgeFileStatus.FAILED.value
@@ -514,7 +512,7 @@ def addEmbedding(
                 f"process_file_fail file_id={db_file.id} file_name={db_file.file_name}"
             )
             db_file.status = KnowledgeFileStatus.FAILED.value
-            db_file.remark = ServerError(exception=e).to_json_str()
+            db_file.remark = KnowledgeFileFailedError(exception=e).to_json_str()
             status = 'failed'
         finally:
             logger.info(

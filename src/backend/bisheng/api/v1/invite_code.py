@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Body, Request
 from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
-from bisheng.api.v1.schemas import resp_200, resp_500
+from bisheng.api.v1.schemas import resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.utils import get_request_ip
 
@@ -33,12 +33,9 @@ async def bind_invite_code(request: Request, login_user: UserPayload = Depends(U
     """
     绑定邀请码
     """
-    result, error = await InviteCodeService.bind_invite_code(login_user, code)
-    logger.debug(f"bind_invite_code user_id:{login_user.user_id}, code:{code}, flag:{result}, error:{error}")
-    if result:
-        return resp_200(message=error)
-    else:
-        return resp_500(message=error)
+    result = await InviteCodeService.bind_invite_code(login_user, code)
+    logger.debug(f"bind_invite_code user_id:{login_user.user_id}, code:{code}, flag:{result}")
+    return resp_200()
 
 
 @router.get('/code')
