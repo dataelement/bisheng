@@ -158,7 +158,7 @@ export default function SystemLog() {
                             <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.object_name || t('log.none')}</div></TableCell>
                             <TableCell>{log.ip_address}</TableCell>
                             <TableCell className="max-w-[250px]">
-                                <div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`) || t('log.none')}11</div>
+                                <div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`) || t('log.none')}</div>
                             </TableCell>
                         </TableRow>
                     ))}

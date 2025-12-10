@@ -10,6 +10,8 @@
   "chooseTemplateOrCreateBlank": "您可以选择一个模板开始，或者自定义创建一个空白应用",
   "workflow": "工作流",
   "assistant": "助手",
+  "short": "MM 月 dd 日 HH:mm",
+  "leaveIdea": "留下您的想法~",
   "skill": "技能",
   "search": "搜索",
   "confirmDeleteTemplate": "是否确认删除该{{type}}模板？",

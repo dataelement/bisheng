@@ -223,7 +223,14 @@ export default function Users(params) {
                             <TableCell className="break-all">{(el.groups || []).map(el => el.name).join(',')}</TableCell>
                             <TableCell className="break-all">{(el.roles || []).map(el => el.name).join(',')}</TableCell>
                             <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-                            <TableCell className="text-right">{operations(el)}</TableCell>
+                            <TableCell 
+                                className="text-right" 
+                                style={{ 
+                                    whiteSpace: 'nowrap',
+                                }}
+                                >
+                                {operations(el)}
+                            </TableCell>
                         </TableRow>
                     ))}
                 </TableBody>
