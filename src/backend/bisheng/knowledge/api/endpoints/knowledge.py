@@ -20,7 +20,7 @@ from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.common.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError, \
-    KnowledgePreviewError, KnowledgeNotQAError, KnowledgeNoEmbeddingError, KnowledgeNotExistError
+    KnowledgePreviewError, KnowledgeNotQAError, KnowledgeNoEmbeddingError, KnowledgeNotExistError, KnowledgeCPEmptyError
 from bisheng.common.errcode.server import NoLlmModelConfigError
 from bisheng.common.schemas.api import resp_200, resp_500, UnifiedResponseModel
 from bisheng.common.services import telemetry_service
@@ -242,8 +242,10 @@ async def copy_qa_knowledge(*,
 
     qa_knowledge_count = await QAKnoweldgeDao.async_count_by_id(qa_id=qa_knowledge.id)
 
-    if qa_knowledge.state != KnowledgeState.PUBLISHED.value or qa_knowledge_count == 0:
+    if qa_knowledge.state != KnowledgeState.PUBLISHED.value:
         return KnowledgeCPError.return_resp()
+    if qa_knowledge_count == 0:
+        return KnowledgeCPEmptyError.return_resp()
 
     knowledge = await KnowledgeService.copy_qa_knowledge(request, login_user, qa_knowledge, knowledge_name)
 
