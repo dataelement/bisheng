@@ -1,9 +1,9 @@
-import asyncio
 from typing import Tuple, Union
 
+from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
-from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler, StreamingLLMCallbackHandler
+from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.processing.process import fix_memory_inputs, format_actions
 
 
@@ -24,22 +24,8 @@ async def get_result_and_steps(langchain_object, inputs: Union[dict, str], **kwa
         except Exception as exc:
             logger.error(exc)
 
-        asyc = True
-        try:
-            async_callbacks = [AsyncStreamingLLMCallbackHandler(**kwargs)]
-            output = await langchain_object.ainvoke(inputs, callbacks=async_callbacks)
-        except Exception as exc:
-            # make the error message more informative
-            logger.exception(exc)
-            asyc = False
-            # step = ChatResponse(intermediate_steps='分析中', type='stream',)
-            # await kwargs['websocket'].send_json(step.dict())
-            sync_callbacks = [StreamingLLMCallbackHandler(**kwargs)]
-            output = langchain_object(inputs, callbacks=sync_callbacks)
-        finally:
-            if not asyc:
-                # 协程切换一下，将同步的过程打印
-                await asyncio.sleep(1)
+        async_callbacks = [AsyncStreamingLLMCallbackHandler(**kwargs)]
+        output = await langchain_object.ainvoke(inputs, config=RunnableConfig(callbacks=async_callbacks))
 
         intermediate_steps = (output.get('intermediate_steps', [])
                               if isinstance(output, dict) else [])

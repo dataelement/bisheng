@@ -60,7 +60,7 @@ class EmbeddingFrontendNode(FrontendNode):
                 field.display_name = 'Model Name'
                 field.field_type = 'bisheng_embedding'
                 field.advanced = False
-            elif field.name in ['model', 'llm_node_type']:
+            elif field.name in ['model', 'llm_node_type', "app_type", "app_id", "app_name", "user_id"]:
                 field.show = False
 
         # Format Jina fields
