@@ -258,7 +258,7 @@ class SOPManageService:
                 if len(str(content)) >= 50000:
                     error_msg.append("content_over_size")
                 if description and len(str(description)) >= 1000:
-                    error_msg.append("")
+                    error_msg.append("description_over_size")
                 if error_msg:
                     error_rows.append({
                         "index": i,
