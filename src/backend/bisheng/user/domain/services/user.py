@@ -130,7 +130,7 @@ class UserService:
                                 auth_jwt.cookie_conf.jwt_token_expire_time + 3600)
 
         # 记录审计日志
-        login_user = await LoginUser.init_login_user(db_user.user_id, db_user.password)
+        login_user = await LoginUser.init_login_user(db_user.user_id, db_user.user_name)
         AuditLogService.user_login(login_user, get_request_ip(request))
 
         # 记录Telemetry日志

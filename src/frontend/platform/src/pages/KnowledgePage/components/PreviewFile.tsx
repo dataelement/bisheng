@@ -327,7 +327,7 @@ export default function PreviewFile({
 
 
 
-  return <div className={cn('relative', step === 3 ? "w-full" : "w-1/2", step === 2 ? "-mt-9 w-full max-w-[50%]" : "")} onClick={e => {
+  return <div className={cn('relative', step === 3 ? "w-full max-w-[50%]" : "w-1/2", step === 2 ? "-mt-9 w-full max-w-[50%]" : "")} onClick={e => {
     e.stopPropagation()
   }}>
     <div className={`${edit ? 'absolute -top-8 right-0 z-10' : 'relative'} flex justify-center items-center mb-2 text-sm h-10`}>
