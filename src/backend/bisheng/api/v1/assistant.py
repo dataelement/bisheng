@@ -72,7 +72,8 @@ async def update_assistant(*,
                            req: AssistantUpdateReq,
                            login_user: UserPayload = Depends(UserPayload.get_login_user)):
     # get login user
-    return await AssistantService.update_assistant(request, login_user, req)
+    assistant_model = await AssistantService.update_assistant(request, login_user, req)
+    return resp_200(data=assistant_model)
 
 
 @router.post('/status')
