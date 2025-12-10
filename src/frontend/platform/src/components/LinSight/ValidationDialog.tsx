@@ -3,7 +3,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/b
 
 interface ValidationDialogProps {
     open: boolean;
-    statusMessage: string;
+    statusMessage: {
+        errorTitle: string;
+        errorMsgs: string[];
+    };
     t: (key: string, params?: any) => string;
     onConfirm: () => void;
     onOpenChange: (open: boolean) => void;
@@ -12,7 +15,7 @@ interface ValidationDialogProps {
 export default function ValidationDialog({ open, statusMessage, t, onConfirm, onOpenChange }: ValidationDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[500px] max-h-[80vh]" close={false as any}>
+            <DialogContent className="sm:max-w-[500px] max-h-[80vh]" close={false}>
                 <div className="absolute left-0 top-0 h-full w-1.5 bg-blue-500"></div>
                 <div
                     className="pl-4 overflow-y-auto"
@@ -32,20 +35,12 @@ export default function ValidationDialog({ open, statusMessage, t, onConfirm, on
                     </DialogHeader>
 
                     <div className="py-4">
-                        {statusMessage && (
-                            <div className="space-y-2">
-                                <p className="font-medium">
-                                    {statusMessage.split("：")[0]}：
-                                </p>
-                                {statusMessage.includes("：") && (
-                                    <div className="text-sm text-gray-600">
-                                        {statusMessage.split("：")[1].split("\n").map((line, index) => (
-                                            <p key={index}>{line.trim()}</p>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                        <p className="font-medium">{statusMessage.errorTitle}：</p>
+                        <div className="text-sm text-gray-600">
+                            {
+                                statusMessage.errorMsgs.map((line, index) => <p key={index}>{line.trim()}</p>)
+                            }
+                        </div>
                     </div>
 
                     <div className="flex justify-end">

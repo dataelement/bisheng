@@ -891,6 +891,13 @@
     "deleteFailed": "削除に失敗しました",
     "fetchToolsFailed": "{{type}} リストの取得に失敗しました",
     "statusMessage": "合計 0 件の SOP をインポート予定。形式が正しいもの 0 件、誤り 0 件。",
+    "manualImportSummary": "合計で{{row}}件のガイドマニュアルをインポート予定です。{{successRow}}件はフォーマットが正しく、{{errorRow}}件はエラーがあります。",
+    "manualImportRow": "第{{row}}行",
+    "name_empty": "名前がありません",
+    "description_empty": "詳細内容がありません",
+    "name_over_size": "名前の長さが500文字を超えています",
+    "content_over_size": "詳細内容が50000文字を超えています",
+    "description_over_size": "説明の長さが1000文字を超えています",
     "inputPlaceholder": "タスク目標を入力して、BISHENG リンシに任せてください",
     "inputPlaceholderDescription": "リンシは複雑なタスクを得意とするエージェントアシスタントです。タスク目標のほか、どのように実現してほしいかを日常的な言葉で説明すると、より期待に近い結果が得られます。"
   },

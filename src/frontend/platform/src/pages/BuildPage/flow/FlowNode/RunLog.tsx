@@ -31,53 +31,68 @@ export default function RunLog({ node, children }) {
                  * key: {type, value}  
                  * "current_time": {type: "param", value: "2023-11-20 16:00:00"}
                  */
-                const newData = data.reduce((res, item) => {
+                return data.map(item => {
+                    let label = ''
                     if (['file', 'variable'].includes(item.type)) {
                         const key = item.key.split('.')
-                        res.set(key[key.length - 1], { type: item.type, label: '', value: item.value });
+                        label = t(`node.${node.type}.${key[key.length - 1]}.label`)
                     } else {
-                        res.set(item.key, { type: item.type, label: '', value: item.value });
+                        label = t(`node.${node.type}.${item.key}.label`)
                     }
-                    return res;
-                }, new Map()); // 使用 Map 保持插入顺序
+                    return {
+                        label,
+                        type: item.type,
+                        value: item.value
+                    }
+                })
 
-                let hasKeys = [];
-                const isFormInputNode = node.type === 'input' && node.tab.value === 'form_input'
-                // 根据node params替换newData的key值 替换为name
-                node.group_params.forEach(group => {
-                    group.params.forEach(param => {
-                        // 尝试去value中匹配 (input-form; preset-quesitons)
-                        if (Array.isArray(param.value) && param.value.some(el => newData.has(el.key))) {
-                            param.value.forEach(value => {
-                                if (!newData.has(value.key)) return;
-                                newData.get(value.key)['label'] = value.label || value.key;
-                                hasKeys.push(value.key);
-                            });
-                        } else if (newData.has(param.key)) {
-                            if (param.hidden) return newData.delete(param.key);
-                            newData.get(param.key)['label'] = param.label || param.key;
-                            hasKeys.push(param.key);
-                        } else if (param.key === 'tool_list') {
-                            // tool
-                            param.value.some(p => {
-                                if (newData.has(p.tool_key)) {
-                                    newData.get(p.tool_key)['label'] = p.label;
-                                    hasKeys.push(p.tool_key);
-                                }
-                            });
-                        } else if (isFormInputNode && param.key === 'form_input') {
-                            param.value.forEach(value => {
-                                value.file_type === 'file' && newData.delete(value.image_file);
-                            })
-                        }
-                    });
-                });
+                // const newData = data.reduce((res, item) => {
+                //     if (['file', 'variable'].includes(item.type)) {
+                //         const key = item.key.split('.')
+                //         res.set(key[key.length - 1], { type: item.type, label: '', value: item.value });
+                //     } else {
+                //         res.set(item.key, { type: item.type, label: '', value: item.value });
+                //     }
+                //     return res;
+                // }, new Map()); // 使用 Map 保持插入顺序
 
-                return Array.from(newData.entries()).map(([key, value]) => ({
-                    label: ['file', 'variable'].includes(value.type) && !key.startsWith('output_') ? key : value.label || key,
-                    type: value.type,
-                    value: value.value,
-                }))
+                // let hasKeys = [];
+                // const isFormInputNode = node.type === 'input' && node.tab.value === 'form_input'
+                // // 根据node params替换newData的key值 替换为name
+                // node.group_params.forEach(group => {
+                //     group.params.forEach(param => {
+                //         // 尝试去value中匹配 (input-form; preset-quesitons)
+                //         if (Array.isArray(param.value) && param.value.some(el => newData.has(el.key))) {
+                //             param.value.forEach(value => {
+                //                 if (!newData.has(value.key)) return;
+                //                 newData.get(value.key)['label'] = value.label || value.key;
+                //                 hasKeys.push(value.key);
+                //             });
+                //         } else if (newData.has(param.key)) {
+                //             if (param.hidden) return newData.delete(param.key);
+                //             newData.get(param.key)['label'] = param.label || param.key;
+                //             hasKeys.push(param.key);
+                //         } else if (param.key === 'tool_list') {
+                //             // tool
+                //             param.value.some(p => {
+                //                 if (newData.has(p.tool_key)) {
+                //                     newData.get(p.tool_key)['label'] = p.label;
+                //                     hasKeys.push(p.tool_key);
+                //                 }
+                //             });
+                //         } else if (isFormInputNode && param.key === 'form_input') {
+                //             param.value.forEach(value => {
+                //                 value.file_type === 'file' && newData.delete(value.image_file);
+                //             })
+                //         }
+                //     });
+                // });
+
+                // return Array.from(newData.entries()).map(([key, value]) => ({
+                //     label: ['file', 'variable'].includes(value.type) && !key.startsWith('output_') ? key : value.label || key,
+                //     type: value.type,
+                //     value: value.value,
+                // }))
             }
         }
 

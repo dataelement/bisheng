@@ -107,7 +107,7 @@
   "duplicateOptionError": "オプション内容が重複しています",
   "lengthOptionError": "オプション内容は50文字を超えてはいけません",
   "addOption": "オプションを追加",
-  "inputOptionPlaceholder": "オプション表示テキストを入力してください",
+  "inputOptionPlaceholder": "選択肢名を入力してください",
   "confirm": "確認",
   "recent": "最近",
   "chatRecords": "チャット記録:",
@@ -236,6 +236,7 @@
   "noMetadataFields": "メタデータフィールドはありません",
   "referenceFormatTip": "変数を参照する場合は、形式を「YYYY-MM-DD HH:mm:ss」に変更してください。例：「2025-01-10 21:08:20」は2025年1月10日21時08分20秒を示します",
   "+ Add Condition": "+ 条件を追加",
+  "playbackUnavailable": "再生機能は利用できません。管理者に連絡してください。",
   "node": {
     "start": {
       "name": "開始",

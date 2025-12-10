@@ -362,5 +362,6 @@
     "successfullyDisabled": "Successfully disabled {count} items",
     "selectAll": "Select All",
     "import": "Import",
-    "export": "Export"
+    "export": "Export",
+    "fileExists": "{{name1}} already exists as {{name2}}"
 }

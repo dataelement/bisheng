@@ -13,20 +13,19 @@ interface FileTypeSelectProps {
     i18nPrefix: string;
 }
 
-const options = [
-    {
-        label: '文档（pdf、txt、md、html、xls、xlsx、doc、docx、ppt、pptx）',
-        value: 'file'
-    },
-    {
-        label: '图片（png、jpg、jpeg、bmp）',
-        value: 'image'
-    }
-];
-
 export default function FileTypeSelect({ data, onChange, i18nPrefix }: FileTypeSelectProps) {
     const [type, setType] = useState(data.value)
     const { t } = useTranslation('flow')
+    const [options] = useState([
+        {
+            label: t('document') + '（pdf、txt、md、html、xls、xlsx、doc、docx、ppt、pptx）',
+            value: 'file'
+        },
+        {
+            label: t('image') + '（png、jpg、jpeg、bmp）',
+            value: 'image'
+        }
+    ]);
 
     const handleSelect = (clickedValue: 'file' | 'image') => {
         let newValue: 'all' | 'file' | 'image' = type;
@@ -59,7 +58,7 @@ export default function FileTypeSelect({ data, onChange, i18nPrefix }: FileTypeS
 
     return (
         <div className='node-item flex gap-4 items-center mb-4'>
-            <Label className="bisheng-label whitespace-nowrap">
+            <Label className="bisheng-label min-w-28">
                 {t(`${i18nPrefix}label`)}
             </Label>
             <Select >

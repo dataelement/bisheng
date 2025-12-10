@@ -385,5 +385,6 @@
     "successfullyDisabled": "{{count}} 個の項目を無効化しました",
     "selectAll": "全選択",
     "import": "インポート",
-    "export": "エクスポート"
+    "export": "エクスポート",
+    "fileExists": "{{name1}} はすでに {{name2}}として存在しています"
 }

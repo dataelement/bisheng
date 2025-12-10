@@ -28,7 +28,7 @@ customAxios.interceptors.response.use(function (response) {
     if (response.data.status_code === 11010) {
         return response.data;
     }
-    const i18Msg = i18next.t(`errors.${response.data.status_code}`)
+    const i18Msg = i18next.t(`errors.${response.data.status_code}`, response.data.data)
     const errorMessage = i18Msg === `errors.${response.data.status_code}` ? response.data.status_message : i18Msg
 
     // 无权访问

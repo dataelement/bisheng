@@ -894,6 +894,13 @@
     "deleteFailed": "删除失败",
     "fetchToolsFailed": "获取 {{type}} 列表失败",
     "statusMessage": "共计划导入0条SOP，格式正确0条，错误0条",
+    "manualImportSummary": "共计划导入{{row}}条指导手册，格式正确{{successRow}}条，格式错误{{errorRow}}条",
+    "manualImportRow": "第{{row}}行",
+    "name_empty": "缺少名称",
+    "description_empty": "缺少详细内容",
+    "name_over_size": "名称长度超过500字符",
+    "content_over_size": "详细内容长度超过50000字符",
+    "description_over_size": "描述长度超过1000字符",
     "inputPlaceholder": "请输入你的任务目标，然后交给 BISHENG 灵思",
     "inputPlaceholderDescription": "灵思是一位擅长完成复杂任务的Agent助理，除了描述任务目标外，您还可以用通俗的语言描述希望如何实现，这将有助于得到符合您预期的结果~"
   },

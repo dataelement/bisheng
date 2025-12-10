@@ -22,6 +22,18 @@ const getNormalStepLabels = (t) => [
   t('dataProcessing')
 ];
 
+const repeatFileI18nRmark = (files, t) => files.map(file => {
+  try {
+    const { new_name, old_name } = JSON.parse(file.remark);
+    return {
+      ...file,
+      remark: t('fileExists', { name1: new_name, name2: old_name })
+    }
+  } catch (e) {
+    return file;
+  }
+});
+
 export default function FilesUpload() {
   const { t } = useTranslation('knowledge');
   const navigate = useNavigate();
@@ -63,7 +75,7 @@ export default function FilesUpload() {
       setRepeatFiles(_repeatFiles.map(file => ({
         ...file,
         file_name: file.fileName,
-        remark: `${file.fileName} 对应已存在文件 ${file.fileName}`
+        remark: t('fileExists', { name1: file.fileName, name2: file.fileName })
       })));
     } else {
       setCurrentStep(2);
@@ -161,7 +173,7 @@ export default function FilesUpload() {
         const newRepeatFiles = repeatFilesRes.filter(file =>
           // Same timestamp, no overwrite
           !resultFiles.some(item => item.fileName === file.file_name && item.time && item.time === file.update_time))
-        setRepeatFiles(newRepeatFiles);
+        setRepeatFiles(repeatFileI18nRmark(newRepeatFiles, t));
         if (!newRepeatFiles.length) {
           handleRetry(repeatFilesRes)
         }
@@ -190,7 +202,7 @@ export default function FilesUpload() {
     await captureAndAlertRequestErrorHoc(subUploadLibFile(_config).then(res => {
       const _repeatFiles = res.filter(e => e.status === 3);
       if (_repeatFiles.length) {
-        setRepeatFiles(_repeatFiles);
+        setRepeatFiles(repeatFileI18nRmark(_repeatFiles, t));
         repeatCallBackRef.current = () => navigate(-1);
       } else {
         message({ variant: 'success', description: t('addSuccess') });
@@ -232,7 +244,7 @@ export default function FilesUpload() {
       });
     })
     setResultFiles(files)
-    
+
     if (currentStep === 1) {
       if (files.length === 0) {
         return navigate(-1);
