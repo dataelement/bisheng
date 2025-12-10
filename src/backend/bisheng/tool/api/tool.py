@@ -66,7 +66,7 @@ async def update_tool_config(*,
     return resp_200(data=data)
 
 
-@router.post('/tool_schema')
+@router.post('/schema')
 async def get_tool_schema(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
                           download_url: Optional[str] = Body(default=None,
                                                              description='下载url不为空的话优先用下载url'),
@@ -77,7 +77,7 @@ async def get_tool_schema(request: Request, login_user: UserPayload = Depends(Us
     return resp_200(data=tool_type)
 
 
-@router.post('/mcp/tool_schema')
+@router.post('/mcp/schema')
 async def get_mcp_tool_schema(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
                               file_content: Optional[str] = Body(default=None, embed=True,
                                                                  description='mcp服务配置内容')):
