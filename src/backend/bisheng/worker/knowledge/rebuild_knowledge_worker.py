@@ -6,6 +6,7 @@ from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import (
     decide_vectorstores
 )
+from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
 from bisheng.core.logger import trace_id_var
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeState
@@ -71,7 +72,7 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: int, invoke_user_i
             file = next((f for f in files if f.id == file_id), None)
             if file:
                 file.status = KnowledgeFileStatus.FAILED.value
-                file.remark = "重建失败"
+                file.remark = KnowledgeFileFailedError(data={"exception": "rebuild error"}).to_json_str()
                 KnowledgeFileDao.update(file)
 
         # 5. 更新knowledge状态

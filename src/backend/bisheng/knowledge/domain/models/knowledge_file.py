@@ -540,11 +540,13 @@ class QAKnoweldgeDao(QAKnowledgeBase):
 
     @classmethod
     def batch_update_status_by_ids(cls, qa_ids: List[int],
-                                   status: QAStatus) -> None:
+                                   status: QAStatus,
+                                   remark: str = "") -> None:
         """
         根据QA知识点ID批量更新状态
         :param qa_ids: QA知识点ID列表
         :param status: 状态
+        :param remark: 备注
         :return:
         """
 
@@ -552,19 +554,19 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             update(QAKnowledge).where(col(QAKnowledge.id).in_(qa_ids))
         )
 
-        statement = statement.values(status=status.value)
+        statement = statement.values(status=status.value).values(remark=remark)
         with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
 
     # 根据knowledge_id更新status
     @classmethod
-    def update_status_by_knowledge_id(cls, knowledge_id: int, status: QAStatus
-                                      ) -> None:
+    def update_status_by_knowledge_id(cls, knowledge_id: int, status: QAStatus, remark: str = "") -> None:
         """
         根据knowledge_id更新status
         :param knowledge_id: 知识库ID
         :param status: 状态
+        :param remark: 备注
         :return:
         """
 
@@ -572,7 +574,7 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             update(QAKnowledge).where(col(QAKnowledge.knowledge_id) == knowledge_id)
         )
 
-        statement = statement.values(status=status.value)
+        statement = statement.values(status=status.value).values(remark=remark)
         with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()

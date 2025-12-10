@@ -5,6 +5,7 @@ from pymilvus import Collection
 
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import QA_save_knowledge, decide_vectorstores
+from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
 from bisheng.core.logger import trace_id_var
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState
@@ -134,12 +135,13 @@ def copy_qa_knowledge_celery(source_knowledge_id: int, target_knowledge_id: int,
 
                 QAKnoweldgeDao.batch_update_status_by_ids(
                     qa_ids=[new_qa.id for new_qa in result],
-                    status=QAStatus.FAILED
+                    status=QAStatus.FAILED,
+                    remark=KnowledgeFileFailedError(exception=e).to_json_str()
                 )
 
         # 全部复制完成 更新状态
 
-        target_knowledge.state = 1
+        target_knowledge.state = KnowledgeState.PUBLISHED.value
         KnowledgeDao.update_state(knowledge_id=source_knowledge.id, state=KnowledgeState.PUBLISHED,
                                   update_time=source_knowledge.update_time)
         KnowledgeDao.update_one(target_knowledge)
@@ -253,7 +255,8 @@ def rebuild_qa_knowledge_celery(knowledge_id: int, embedding_model_id: int, invo
 
                 QAKnoweldgeDao.batch_update_status_by_ids(
                     qa_ids=file_ids,
-                    status=QAStatus.FAILED
+                    status=QAStatus.FAILED,
+                    remark=KnowledgeFileFailedError(exception=e).to_json_str()
                 )
 
                 knowledge_info.state = KnowledgeState.FAILED.value
@@ -265,7 +268,8 @@ def rebuild_qa_knowledge_celery(knowledge_id: int, embedding_model_id: int, invo
         KnowledgeService.delete_knowledge_file_in_vector(knowledge=knowledge_info, del_es=False)
 
         knowledge_info.state = KnowledgeState.FAILED.value
-        QAKnoweldgeDao.update_status_by_knowledge_id(knowledge_id=knowledge_id, status=QAStatus.FAILED)
+        QAKnoweldgeDao.update_status_by_knowledge_id(knowledge_id=knowledge_id, status=QAStatus.FAILED,
+                                                     remark=KnowledgeFileFailedError(exception=e).to_json_str())
 
     finally:
 
