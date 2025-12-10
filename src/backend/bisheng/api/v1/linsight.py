@@ -837,12 +837,13 @@ async def upload_sop_file(
     批量导入SOP入库
     """
 
-    success_rows, error_rows = await SOPManageService.upload_sop_file(login_user, file, ignore_error, override,
-                                                                      save_new)
+    success_rows, error_rows, repeat_rows = await SOPManageService.upload_sop_file(login_user, file, ignore_error,
+                                                                                   override, save_new)
 
     return resp_200(data={
         "success_rows": success_rows,
-        "error_rows": error_rows
+        "error_rows": error_rows,
+        "repeat_rows": repeat_rows,
     })
 
 
