@@ -12,6 +12,7 @@
   "hour": "時",
   "minute": "分",
   "second": "秒",
+  "unavailable": "音声再生機能は利用できません。管理者に連絡してください。",
   "placeholder": "日付を選択",
    "chunk": "チャンク",
    "source_unknown": "不明",

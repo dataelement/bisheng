@@ -649,7 +649,7 @@ class LLMService:
                                                app_id=ApplicationTypeEnum.ASR.value,
                                                app_name=ApplicationTypeEnum.ASR.value,
                                                app_type=ApplicationTypeEnum.ASR,
-                                               user_id=login_user.id)
+                                               user_id=login_user.user_id)
         return await asr_client.ainvoke(file.file)
 
     @classmethod
@@ -680,7 +680,7 @@ class LLMService:
                                                app_id=ApplicationTypeEnum.TTS.value,
                                                app_name=ApplicationTypeEnum.TTS.value,
                                                app_type=ApplicationTypeEnum.TTS,
-                                               user_id=login_user.id)
+                                               user_id=login_user.user_id)
         audio_bytes = await tts_client.ainvoke(text)
         # upload to minio
         object_name = f"tts/{generate_uuid()}.mp3"

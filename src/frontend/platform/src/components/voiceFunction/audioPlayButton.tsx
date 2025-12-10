@@ -4,7 +4,7 @@ import { useAudioPlayerStore } from './audioPlayerStore';
 import { Loader, Volume2 } from 'lucide-react';
 import { textToSpeech } from '@/controllers/API/workbench';
 import { message, toast } from '../bs-ui/toast/use-toast';
-import i18next from 'i18next';
+import { useTranslation } from 'react-i18next';
 
 interface AudioPlayButtonProps {
   messageId: string;
@@ -15,6 +15,7 @@ interface AudioPlayButtonProps {
 export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps) => {
   const [error, setError] = useState('');
   const [version] = useState(window.chat_version || 'v1');
+  const { t } = useTranslation('knowledge')
   const {
     currentPlayingId,
     soundInstance,
@@ -97,9 +98,9 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
     } catch (err) {
       console.error('播放请求异常详情:', err);
       toast({
-        title: i18next.t('prompt'),
+        title: t('prompt'),
         variant: 'error',
-        description: '播放功能不可用，请联系管理员'
+        description: t('unavailable')
       });
       setLoading(false);
       setCurrentPlayingId(null);

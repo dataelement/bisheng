@@ -1,7 +1,10 @@
 import functools
 import json
+from inspect import signature
 from typing import Any, Annotated, Optional, Dict, List
 
+from langchain_core.callbacks import CallbackManagerForToolRun
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, ArgsSchema
 from pydantic import Field, SkipValidation
 
@@ -248,12 +251,29 @@ class ToolExecutor(BaseTool):
         return KnowledgeRagTool.init_knowledge_rag_tool(**kwargs)
 
     @wrapper_tool_sync
-    def _run(self, *args, **kwargs) -> Any:
+    def _run(self,
+             *args: Any,
+             config: RunnableConfig,
+             run_manager: Optional[CallbackManagerForToolRun] = None,
+             **kwargs) -> Any:
+
+        if signature(self.tool_instance._run).parameters.get("config"):
+            kwargs["config"] = config
+        if signature(self.tool_instance._run).parameters.get("run_manager"):
+            kwargs["run_manager"] = run_manager
         return self.tool_instance._run(*args, **kwargs)
 
     @wrapper_tool
-    async def _arun(self, *args, **kwargs) -> Any:
-        return self.tool_instance._arun(*args, **kwargs)
+    async def _arun(self,
+                    *args: Any,
+                    config: RunnableConfig,
+                    run_manager: Optional[CallbackManagerForToolRun] = None,
+                    **kwargs) -> Any:
+        if signature(self.tool_instance._run).parameters.get("config"):
+            kwargs["config"] = config
+        if signature(self.tool_instance._run).parameters.get("run_manager"):
+            kwargs["run_manager"] = run_manager
+        return await self.tool_instance._arun(*args, **kwargs)
 
     def get_invoke_log_data(self, status: StatusEnum):
         # 记录Telemetry日志

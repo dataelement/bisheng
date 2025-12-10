@@ -17,7 +17,7 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
 import { locationContext } from "@/contexts/locationContext";
 import i18next from "i18next";
-import { ChevronDown, Lock, MoonStar, Sun } from "lucide-react";
+import { Check, ChevronDown, Lock, MoonStar, Sun } from "lucide-react";
 import { Suspense, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -107,6 +107,7 @@ export default function MainLayout() {
                             {Object.entries(options).map(([key, value]) => (
                                 <SelectHoverItem key={key} onClick={() => changLanguage(key)}>
                                     <span>{value}</span>
+                                    {language === key && <Check className="w-4 h-4 absolute top-1/2 right-0 transform -translate-y-1/2"/>}
                                 </SelectHoverItem>
                             ))}
                         </SelectHover>

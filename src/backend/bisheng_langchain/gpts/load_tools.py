@@ -258,3 +258,12 @@ def get_tool_table():
         df.loc[i, 'function_args'] = f"{tool_func.args_schema.schema()['properties']}"
 
     return df
+
+
+if __name__ == '__main__':
+    tool = load_tools({
+        "sina_realtime_info": {
+
+        }
+    })[0]
+    tool.invoke(input={"stock_symbol": "600519", "stock_exchange": "sh", "prefix": "s_"})

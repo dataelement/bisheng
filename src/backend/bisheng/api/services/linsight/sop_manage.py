@@ -258,7 +258,7 @@ class SOPManageService:
                 if len(str(content)) >= 50000:
                     error_msg.append("content_over_size")
                 if description and len(str(description)) >= 1000:
-                    error_msg.append("")
+                    error_msg.append("description_over_size")
                 if error_msg:
                     error_rows.append({
                         "index": i,
@@ -278,7 +278,7 @@ class SOPManageService:
     @classmethod
     async def upload_sop_file(cls, login_user: UserPayload, file: UploadFile, ignore_error: bool, override: bool,
                               save_new: bool) \
-            -> (list[Dict], List[Dict]):
+            -> (List[Dict], List[Dict], List[str]):
         """
         上传SOP文件
         :param login_user: 登录用户信息
@@ -286,16 +286,16 @@ class SOPManageService:
         :param ignore_error: 是否忽略错误
         :param override: 是否覆盖已有的SOP
         :param save_new: 是否保存新的SOP
-        :return: 上传结果, success_rows, error_rows
+        :return: 上传结果, success_rows, error_rows, repeat_names
         """
         success_rows, error_rows = await cls.parse_sop_file(file)
         if (error_rows or len(success_rows) == 0) and not ignore_error:
             return success_rows, error_rows
         if not success_rows:
-            return [], []
+            return [], [], []
         records = [LinsightSOPRecord(**one, user_id=login_user.user_id) for one in success_rows]
-        await cls._sync_sop_record(records, override=override, save_new=save_new)
-        return [], []
+        repeat_name_list = await cls._sync_sop_record(records, override=override, save_new=save_new)
+        return [], [], repeat_name_list
 
     @classmethod
     async def get_sop_list(cls, keywords: str = None, sort: Literal["asc", "desc"] = "desc", showcase: bool = False,

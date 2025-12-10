@@ -12,11 +12,14 @@ from bisheng.api.utils import get_L2_param_from_flow
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq, resp_500, \
     StreamData
 from bisheng.chat.utils import process_node_data
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.flow import NotFoundVersionError, CurVersionDelError, VersionNameExistsError, \
     NotFoundFlowError, \
     FlowOnlineEditError, WorkFlowOnlineEditError
 from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.services import telemetry_service
+from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao, FlowStatus, Flow, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead, FlowVersion
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum, GroupResource
@@ -60,6 +63,11 @@ class FlowService(BaseService):
         """
         根据版本ID删除版本
         """
+        telemetry_service.log_event_sync(
+            user_id=user.user_id,
+            event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
+            trace_id=trace_id_var.get()
+        )
         version_info = FlowVersionDao.get_version_by_id(version_id)
         if not version_info:
             return NotFoundVersionError.return_resp()
@@ -103,6 +111,11 @@ class FlowService(BaseService):
         """
         修改当前版本
         """
+        await telemetry_service.log_event(
+            user_id=login_user.user_id,
+            event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
+            trace_id=trace_id_var.get()
+        )
         flow_info = await cls.judge_flow_write_permission(login_user, flow_id)
 
         # 技能上线状态不允许 切换版本
@@ -128,6 +141,11 @@ class FlowService(BaseService):
         """
         创建新版本
         """
+        await telemetry_service.log_event(
+            user_id=user.user_id,
+            event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
+            trace_id=trace_id_var.get()
+        )
         flow_info = await cls.judge_flow_write_permission(user, flow_id)
 
         exist_version = FlowVersionDao.get_version_by_name(flow_id, flow_version.name)
@@ -160,6 +178,11 @@ class FlowService(BaseService):
         """
         更新版本信息
         """
+        await telemetry_service.log_event(
+            user_id=user.user_id,
+            event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
+            trace_id=trace_id_var.get()
+        )
         # 包含已删除的版本，若版本已删除，则重新恢复此版本
         version_info = await FlowVersionDao.aget_version_by_id(version_id, include_delete=True)
         if not version_info:
