@@ -7,6 +7,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { speechToText } from '@/controllers/API/workbench';
 import VoiceRecordingIcon from '../bs-ui/voice';
 import { useAudioPlayerStore, useAudioStore } from './audioPlayerStore';
+import { useTranslation } from 'react-i18next';
 
 // --- 核心音频处理逻辑 ---
 const encodeWAV = (audioBuffer) => {
@@ -97,6 +98,7 @@ const convertBlobToWav = async (blob) => {
 const SpeechToTextComponent = ({ disabled, onChange }) => {
   const [version] = useState(window.chat_version || 'v1');
   const { toast } = useToast();
+  const { t } = useTranslation('knowledge')
   const [isRecording, _setIsRecording] = useState(false);
   const isRecordingRef = useRef(false);
   const setIsRecording = (val) => {
@@ -270,7 +272,8 @@ const SpeechToTextComponent = ({ disabled, onChange }) => {
       toast({
         title: i18next.t('prompt'),
         variant: 'error',
-        description: '语音识别不可用，请联系管理员'
+        // description: '语音识别不可用，请联系管理员'
+        description: t('unavailable')
       });
     } finally {
       setIsProcessing(false);
