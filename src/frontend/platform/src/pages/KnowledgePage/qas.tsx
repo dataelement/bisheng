@@ -231,6 +231,14 @@ export default function QasPage() {
     const [hasPermission, setHasPermission] = useState(false)
     const { toast } = useToast();
 
+      const sourceTypeKeys = [
+        'source_unknown',      // 0: 未知
+        'source_manual',       // 1: 手动创建
+        'source_annotation_import', // 2: 标注导入
+        'source_api_import',   // 3: api导入
+        'source_batch_import'  // 4: 批量导入
+    ];
+
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, refreshData } = useTable({}, (param) =>
         getQaList(id, param).then(res => {
             setHasPermission(res.writeable)
@@ -545,7 +553,8 @@ export default function QasPage() {
                                         className="cursor-pointer"
                                         onClick={() => hasPermission && editRef.current.edit(el)}
                                     >
-                                        {['未知', '手动创建', '标注导入', 'api导入', '批量导入'][el.source]}
+                                        {/* {['未知', '手动创建', '标注导入', 'api导入', '批量导入'][el.source]} */}
+                                        {t(sourceTypeKeys[el.source] || sourceTypeKeys[0])}
                                     </TableCell>
                                     <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                                     <TableCell>{el.user_name}</TableCell>

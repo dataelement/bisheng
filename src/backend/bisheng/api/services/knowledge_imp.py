@@ -1331,7 +1331,7 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
     except Exception as e:
         logger.error(e)
         setattr(QA, "status", QAStatus.FAILED.value)
-        setattr(QA, "remark", str(e)[:500])
+        setattr(QA, "remark", KnowledgeFileFailedError(exception=e).to_json_str())
         KnowledgeFileDao.update(QA)
 
     return QA

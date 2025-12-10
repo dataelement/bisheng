@@ -6,6 +6,7 @@ import { useMemo, useEffect, useState, useCallback, useRef } from "react"
 import { Button } from "../button"
 import { Calendar } from "../calendar"
 import { cname } from "../utils"
+import { useTranslation } from "react-i18next"
 
 const parseDate = (value: string | Date | number | undefined): Date | null => {
   if (!value) return null
@@ -193,7 +194,7 @@ const TimePicker = ({
 }) => {
   const [open, setOpen] = useState(false)
   const [tempTime, setTempTime] = useState(value)
-
+  const { t } = useTranslation('knowledge');
   // 当弹窗打开时，同步外部时间到临时状态
   useEffect(() => {
     if (open) {
@@ -263,14 +264,14 @@ const TimePicker = ({
               onClick={handleNow}
               className="flex-1"
             >
-              此刻
+              {t('now')}
             </Button>
             <Button
               size="sm"
               onClick={handleConfirm}
               className="flex-1"
             >
-              确定
+              {t('confirm1')}
             </Button>
           </div>
         </div>
@@ -296,7 +297,7 @@ export function DatePicker({
   dateFormat = showTime ? 'yyyy-MM-dd HH:mm:ss' : 'yyyy-MM-dd',
   disabled = false
 }: DatePickerProps) {
-  
+  const { t } = useTranslation('knowledge');
   console.log('DatePicker value:', value)
   
   const initialDate = useMemo(() => parseDate(value), [value])
@@ -405,14 +406,14 @@ export function DatePicker({
                     size="sm"
                     onClick={handleNow}
                   >
-                    此刻
+                    {t('now')}
                   </Button>
                   <Button
                     size="sm"
                     onClick={handleConfirm}
                     disabled={!date}
                   >
-                    确定
+                    {t('confirm1')}
                   </Button>
                 </div>
               </div>
@@ -426,7 +427,7 @@ export function DatePicker({
                 onClick={handleConfirm}
                 disabled={!date}
               >
-                确认
+                {t('confirm')}
               </Button>
             </div>
           )}

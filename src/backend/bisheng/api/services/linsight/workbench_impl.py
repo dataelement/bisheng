@@ -148,22 +148,10 @@ class LinsightWorkbenchImpl:
             # 处理文件（如果存在）
             processed_files = await cls._process_submitted_files(submit_obj.files, chat_id)
 
-            # 创建灵思会话版本
-            linsight_session_version = LinsightSessionVersion(
-                session_id=chat_id,
-                user_id=login_user.user_id,
-                question=submit_obj.question,
-                tools=submit_obj.tools,
-                org_knowledge_enabled=submit_obj.org_knowledge_enabled,
-                personal_knowledge_enabled=submit_obj.personal_knowledge_enabled,
-                files=processed_files
-            )
-            linsight_session_version = await LinsightSessionVersionDao.insert_one(linsight_session_version)
-
             # 创建消息会话
             message_session = MessageSession(
                 chat_id=chat_id,
-                flow_id=linsight_session_version.id,
+                flow_id=ApplicationTypeEnum.LINSIGHT.value,
                 flow_name='New Chat',
                 flow_type=FlowType.LINSIGHT.value,
                 user_id=login_user.user_id
@@ -183,6 +171,18 @@ class LinsightWorkbenchImpl:
                                                   app_type=ApplicationTypeEnum.LINSIGHT
                                               )
                                               )
+
+            # 创建灵思会话版本
+            linsight_session_version = LinsightSessionVersion(
+                session_id=chat_id,
+                user_id=login_user.user_id,
+                question=submit_obj.question,
+                tools=submit_obj.tools,
+                org_knowledge_enabled=submit_obj.org_knowledge_enabled,
+                personal_knowledge_enabled=submit_obj.personal_knowledge_enabled,
+                files=processed_files
+            )
+            linsight_session_version = await LinsightSessionVersionDao.insert_one(linsight_session_version)
 
             return message_session, linsight_session_version
 
@@ -406,7 +406,8 @@ class LinsightWorkbenchImpl:
 
             content = ""
             async for res in cls._generate_sop_content(
-                    agent, session_version, feedback_content, history_summary, knowledge_list, example_sop=example_sop
+                    agent, session_version, feedback_content, history_summary, knowledge_list, example_sop=example_sop,
+                    login_user=login_user
             ):
                 if isinstance(res, cls.SearchSOPError):
                     yield res.error_class.to_sse_event(event="search_sop_error")
@@ -543,7 +544,9 @@ class LinsightWorkbenchImpl:
                                     feedback_content: Optional[str],
                                     history_summary: List[str],
                                     knowledge_list: List[KnowledgeRead] = None,
-                                    example_sop: str = None) -> AsyncGenerator:
+                                    example_sop: str = None,
+                                    login_user: Optional[UserPayload] = None
+                                    ) -> AsyncGenerator:
         """生成SOP内容"""
         file_list = await cls.prepare_file_list(session_version)
         knowledge_list = await cls.prepare_knowledge_list(knowledge_list)
@@ -553,6 +556,7 @@ class LinsightWorkbenchImpl:
         elif feedback_content is None:
             # 检索SOP模板
             sop_template, search_sop_error = await SOPManageService.search_sop(
+                invoke_user_id=login_user.user_id,
                 query=session_version.question, k=3
             )
 
