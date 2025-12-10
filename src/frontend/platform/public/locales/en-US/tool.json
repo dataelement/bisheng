@@ -351,6 +351,7 @@
     "addMcpServer": "Add MCP Server",
     "refresh": "Refresh",
     "refreshSuccess": "Refresh Successful",
+    "toolFetchFailed": "Failed to fetch tool",
     "executionModeLabel": "Code execution mode",
     "executionLocalLabel": "Run locally",
     "executionE2bLabel": "Run in E2B sandbox",

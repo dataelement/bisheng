@@ -5,7 +5,8 @@ import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { userContext } from "@/contexts/userContext";
-import { getAssistantMcpApi, getAssistantToolsWithManageApi, refreshAssistantMcpApi } from "@/controllers/API/assistant";
+import { refreshMcpApi } from "@/controllers/API/assistant";
+import { getToolsApi } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { CpuIcon, Star, User } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -42,13 +43,13 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     const [loading, setLoading] = useState(false)
 
     const loadData = async (_type = "custom") => {
-        await getAssistantToolsWithManageApi(_type).then((res) => {
+        await getToolsApi(_type).then((res) => {
             setAllData(res);
         });
         setLoading(false)
     };
     const loadMcpData = async () => {
-        await getAssistantMcpApi().then((res) => {
+        await getToolsApi('mcp').then((res) => {
             setAllData(res);
         });
         setLoading(false)
@@ -204,15 +205,23 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     );
 }
 
-export const useMcpRefrensh = (t) => {
+export const useMcpRefrensh = () => {
     const [loading, setLoading] = useState(false);
-    const { message } = useToast()
+    const { message, toast } = useToast()
+    const { t } = useTranslation('tool')
 
     return {
         loading,
         async refresh() {
             setLoading(true);
-            const res = await captureAndAlertRequestErrorHoc(refreshAssistantMcpApi())
+            const res = await captureAndAlertRequestErrorHoc(refreshMcpApi())
+            if (res.length) {
+                setLoading(false);
+                return toast({
+                    variant: "error",
+                    description: res.map(e => `${e} ${t("toolFetchFailed")}`)
+                })
+            }
             message({
                 variant: "success",
                 description: t("refreshSuccess")

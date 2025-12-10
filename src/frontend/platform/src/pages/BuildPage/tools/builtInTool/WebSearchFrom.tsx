@@ -3,7 +3,7 @@ import { Button } from '@/components/bs-ui/button';
 import { DialogClose, DialogFooter } from "@/components/bs-ui/dialog";
 import { Label } from '@/components/bs-ui/label';
 import { toast } from '@/components/bs-ui/toast/use-toast';
-import { getAssistantToolsApi, updateAssistantToolApi } from "@/controllers/API/assistant";
+import { getToolsApi, updateToolApi } from '@/controllers/API/tools';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from "react-i18next";
 import { InputField, SelectField } from "./InputField";
@@ -60,7 +60,7 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
     useEffect(() => {
         const initFromApi = async () => {
             try {
-                const res = await getAssistantToolsApi('default');
+                const res = await getToolsApi('default');
                 const webSearchTool = res.find((item: any) => item.name === '联网搜索');
                 if (webSearchTool) {
                     toolIdRef.current = webSearchTool.id;
@@ -190,7 +190,7 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
         try {
             if (isApi) {
                 if (toolIdRef.current) {
-                    await updateAssistantToolApi(toolIdRef.current, newConfig);
+                    await updateToolApi(toolIdRef.current, newConfig);
                 }
                 toast({
                     title: t('skills.saveSuccessful'),

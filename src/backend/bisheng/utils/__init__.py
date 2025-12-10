@@ -54,7 +54,12 @@ def calc_data_sha256(data: str | bytes | BinaryIO | None) -> str | None:
             hasher.update(chunk)
         data.seek(pos)
     else:
-        raise TypeError(
-            "data must be str, bytes, or BinaryIO type",
-        )
+        data.seek(0)
+        chunk_size = 8192
+        while True:
+            chunk = data.read(chunk_size)
+            if not chunk:
+                break
+            hasher.update(chunk)
+        data.seek(0)
     return hasher.hexdigest()

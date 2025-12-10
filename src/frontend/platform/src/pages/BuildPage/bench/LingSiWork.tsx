@@ -16,8 +16,8 @@ import { message, toast, useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { getWorkstationConfigApi, setWorkstationConfigApi } from "@/controllers/API";
-import { getAssistantToolsApi } from "@/controllers/API/assistant";
 import { sopApi } from "@/controllers/API/linsight";
+import { getToolsApi } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useAssistantStore } from "@/store/assistantStore";
 import { useDebounce } from "@/util/hook";
@@ -181,11 +181,11 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         try {
             let res;
             if (type === 'builtin') {
-                res = await getAssistantToolsApi('default');
+                res = await getToolsApi('default');
             } else if (type === 'api') {
-                res = await getAssistantToolsApi('custom');
+                res = await getToolsApi('custom');
             } else {
-                res = await getAssistantToolsApi('mcp');
+                res = await getToolsApi('mcp');
             }
             setToolsData(prev => ({ ...prev, [type]: res || [] }));
         } catch (error) {

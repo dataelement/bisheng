@@ -71,8 +71,7 @@ async def upload_knowledge_file(*, request: Request, login_user: UserPayload = D
         file_path = str(file_path)
 
     # calc file md5 and check
-    file_bytes = await file.read()
-    file_md5 = await asyncio.to_thread(calc_data_sha256, file_bytes)
+    file_md5 = await asyncio.to_thread(calc_data_sha256, file.file)
 
     repeat_file = await KnowledgeFileDao.get_repeat_file(
         knowledge_id=knowledge_id, file_name=file_name, md5_=file_md5

@@ -40,9 +40,21 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
 
         setChatId(cid!) // 切换会话
 
-        if (currentData) return; // 有缓存不重复加载
-
         const numericType = Number(type);
+
+        if (currentData) { // 有缓存不重复加载
+            numericType === FLOW_TYPES.SKILL && setRunningState((prev) => {
+                // 技能重置输入框状态
+                return {
+                    ...prev,
+                    [cid]: {
+                        ...(prev?.[cid] || {}),
+                        inputDisabled: false,
+                    },
+                };
+            })
+            return
+        };
 
         switch (numericType) {
             case FLOW_TYPES.SKILL:

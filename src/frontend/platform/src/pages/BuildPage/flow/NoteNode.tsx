@@ -3,10 +3,12 @@ import { NodeToolbar, useViewport } from '@xyflow/react';
 import { useEffect, useRef, useState } from 'react';
 import NodeToolbarComponent from './FlowNode/NodeToolbarComponent';
 import { useHoverToolbar } from './FlowNode';
+import { useTranslation } from 'react-i18next';
 
 function NoteNode({ data: node, selected, width, height }: { data: any; selected: boolean, width: number, height: number }) {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const { zoom } = useViewport();
+        const { t } = useTranslation('flow')
 
     const [value, setValue] = useState(node.value);
     const [dimensions, setDimensions] = useState({ width, height });
@@ -89,7 +91,7 @@ function NoteNode({ data: node, selected, width, height }: { data: any; selected
             <textarea
                 ref={textareaRef}
                 className="nodrag nowheel w-full resize-none bg-transparent border-none  outline-none text-sm text-[#111] placeholder-gray-400 nodrag"
-                placeholder="留下您的想法～"
+                placeholder={t('leaveIdea')}
                 value={value}
                 maxLength={5000}
                 onInput={() => {

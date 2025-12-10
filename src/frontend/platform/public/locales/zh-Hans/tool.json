@@ -351,6 +351,7 @@
     "addMcpServer": "添加 MCP 服务器",
     "refresh": "刷新",
     "refreshSuccess": "刷新成功",
+    "toolFetchFailed": "工具获取失败",
     "executionModeLabel": "代码执行方式",
     "executionLocalLabel": "本机运行",
     "executionE2bLabel": "E2B沙箱运行",

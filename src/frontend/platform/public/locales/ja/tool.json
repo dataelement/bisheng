@@ -351,6 +351,7 @@
     "addMcpServer": "MCPサーバーを追加",
     "refresh": "更新",
     "refreshSuccess": "更新に成功しました",
+    "toolFetchFailed": "ツールの取得に失敗しました",
     "executionModeLabel": "コード実行方式",
     "executionLocalLabel": "ローカル実行",
     "executionE2bLabel": "E2Bサンドボックス実行",

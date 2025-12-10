@@ -3,7 +3,7 @@ import { Accordion } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/bs-ui/sheet";
-import { getAssistantToolsApi } from "@/controllers/API/assistant";
+import { getToolsApi } from "@/controllers/API/tools";
 import { useMcpRefrensh } from "@/pages/BuildPage/tools";
 import ToolItem from "@/pages/BuildPage/tools/ToolItem";
 import { CpuIcon, Star, User } from "lucide-react";
@@ -19,7 +19,7 @@ export default function ToolsSheet({ select, onSelect, children }) {
 
 
     const loadMData = () => {
-        getAssistantToolsApi(type).then(res => {
+        getToolsApi(type).then(res => {
             setAllData(res)
             setKeyword('')
         })
