@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { updateAssistantToolApi } from "@/controllers/API/assistant";
+import { updateToolApi } from "@/controllers/API/tools";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import BingToolForm from "./builtInTool/BingSearch";
@@ -58,7 +58,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
 
 
     const handleSubmit = async (formdata) => {
-        await updateAssistantToolApi(idRef.current, formdata)
+        await updateToolApi(idRef.current, formdata)
         setConfig(formdata)
         setOpen(false)
         onChange()

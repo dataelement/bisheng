@@ -14,10 +14,11 @@ import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import Tip from "@/components/bs-ui/tooltip/tip";
 import { truncateString } from "@/util/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
 import { ClipboardPenLine, Filter, RotateCw, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../../components/bs-ui/input";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
@@ -25,8 +26,69 @@ import { deleteFile, getKnowledgeDetailApi, readFileByLibDatabase, retryKnowledg
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import useKnowledgeStore from "../useKnowledgeStore";
-import Tip from "@/components/bs-ui/tooltip/tip";
 import { MetadataManagementDialog } from "./MetadataManagementDialog";
+
+interface StatusIndicatorProps {
+    status: number;
+    remark?: string;
+}
+// 1. 定义状态配置映射表
+const STATUS_CONFIG: Record<number, { labelKey: string; colorClass: string; bgClass: string }> = {
+    1: { labelKey: "parsing", colorClass: "text-[#4D9BF0]", bgClass: "bg-[#4D9BF0]" },
+    2: { labelKey: "completed", colorClass: "text-green-500", bgClass: "bg-green-500" },
+    3: { labelKey: "parseFailed", colorClass: "text-red-500", bgClass: "bg-red-500" },
+    4: { labelKey: "parsing", colorClass: "text-[#4D9BF0]", bgClass: "bg-[#4D9BF0]" },
+};
+
+export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark }) => {
+    const { t } = useTranslation()
+    const config = STATUS_CONFIG[status];
+    const reason = useMemo(() => {
+        if (remark?.indexOf('{') === 0) {
+            try {
+                const obj = JSON.parse(remark)
+                return t(`errors.${obj.status_code}`, obj.data)
+            } catch (error) {
+                return remark
+            }
+        }
+        return remark
+    }, [remark])
+
+    // 如果状态不在定义中，返回 null 或默认 UI
+    if (!config) return null;
+
+    // 2. 抽取公共的基础 UI (圆点 + 文字)
+    const BadgeContent = (
+        <div className="flex items-center gap-2 cursor-default">
+            <span className={`size-[6px] rounded-full ${config.bgClass}`}></span>
+            <span className={`font-[500] text-[14px] leading-[100%] text-center ${config.colorClass}`}>
+                {t(config.labelKey, { ns: 'knowledge' })}
+            </span>
+        </div>
+    );
+
+    // 3. 特殊逻辑：只有失败状态 (3) 且有 remark 时才显示 Tooltip
+    if (status === 3 && remark) {
+        return (
+            <TooltipProvider delayDuration={100}>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        {BadgeContent}
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="whitespace-pre-line">
+                        <div className="max-w-96 text-left break-all whitespace-normal">
+                            {reason}
+                        </div>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        );
+    }
+
+    // 其他状态直接渲染内容
+    return BadgeContent;
+};
 
 export default function Files({ onPreview }) {
     const { t } = useTranslation('knowledge')
@@ -261,7 +323,7 @@ export default function Files({ onPreview }) {
 
     return (
         <div className="relative">
-            
+
             {loading && (
                 <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                     <LoadingIcon />
@@ -313,7 +375,7 @@ export default function Files({ onPreview }) {
                     onClick={() => setMetadataOpen(true)}
                     className="px-4 whitespace-nowrap"
                 >
-                    <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-1"/>
+                    <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-1" />
                     {t('metaData')}
                 </Button>
                 {isEditable && (
@@ -433,7 +495,7 @@ export default function Files({ onPreview }) {
                                                     }}
                                                     disabled={tempFilters.length === 0}
                                                 >
-                                                   {t("reset")}
+                                                    {t("reset")}
                                                 </Button>
                                                 <Button
                                                     size="sm"
@@ -496,47 +558,7 @@ export default function Files({ onPreview }) {
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
 
                                 <TableCell>
-                                    {el.status === 3 ? (
-
-                                        <div className="flex items-center">
-                                            <TooltipProvider delayDuration={100}>
-                                                <Tooltip>
-                                                    <TooltipTrigger className="flex items-center gap-2">
-                                                        <span className="size-[6px] rounded-full bg-red-500"></span>
-                                                        <span className="font-[500] text-[14px] text-red-500 leading-[100%] text-center">
-                                                            {t("parseFailed")}
-                                                        </span>
-                                                    </TooltipTrigger>
-
-                                                    <TooltipContent side="top" className="whitespace-pre-line">
-                                                        <div className="max-w-96 text-left break-all whitespace-normal">{el.remark}</div>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                        </div>
-                                    ) : (
-                                        <div className="flex items-center gap-2">
-                                            {el.status === 2 ? (
-                                                <Tooltip>
-                                                    <TooltipTrigger className="flex items-center gap-2">
-                                                        <span className="size-[6px] rounded-full bg-green-500"></span>
-                                                        <span className="font-[500] text-[14px] text-green-500 leading-[100%] text-center">
-                                                            {t("completed")}
-                                                        </span>
-                                                    </TooltipTrigger>
-                                                </Tooltip>
-                                            ) : el.status === 1 || el.status === 4 ? (
-                                                <Tooltip>
-                                                    <TooltipTrigger className="flex items-center gap-2">
-                                                        <span className="size-[6px] rounded-full bg-[#4D9BF0]"></span>
-                                                        <span className="font-[500] text-[14px] text-[#4D9BF0] leading-[100%] text-center">
-                                                            {t("parsing")}
-                                                        </span>
-                                                    </TooltipTrigger>
-                                                </Tooltip>
-                                            ) : null}
-                                        </div>
-                                    )}
+                                    <StatusIndicator status={el.status} remark={el.remark} />
                                 </TableCell>
                                 <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-1">
@@ -595,14 +617,14 @@ export default function Files({ onPreview }) {
                 </div>
             </div>
             <MetadataManagementDialog
-                open={metadataOpen} 
+                open={metadataOpen}
                 onOpenChange={() => setMetadataOpen(false)}
-                onSave={() => {}}
+                onSave={() => { }}
                 hasManagePermission={isEditable}
                 id={id}
                 initialMetadata={metadataFields}
             />
         </div>
-        
+
     )
 }

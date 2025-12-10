@@ -2,7 +2,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Button } from "@/components/bs-ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
-import { getAssistantToolsApi } from "@/controllers/API/assistant";
+import { getToolsApi } from "@/controllers/API/tools";
 import { getWorkflowNodeTemplate } from "@/controllers/API/workflow";
 import { getToolTree } from "@/util/flowUtils";
 import { cloneDeep } from "lodash-es";
@@ -119,7 +119,7 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
     // tool
     const { data: toolTempData } = useQuery({
         queryKey: "QueryToolsKey",
-        queryFn: () => getAssistantToolsApi('all'),
+        queryFn: () => getToolsApi('all'),
         cacheTime: 0
     });
 

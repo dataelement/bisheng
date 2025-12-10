@@ -78,45 +78,9 @@ export const getChatOnlineApi = async (page, keyword, tag_id) => {
 //     return await axios.get(`/api/v1/chat/online?${tagStr}`)
 // };
 
-
-// 获取工具集合
-// 之前的is_preset字段改为了枚举
-// 0：自定义api工具
-// 1：预置工具
-// 2：mcp工具
-export const getAssistantToolsApi = async (type: 'all' | 'default' | 'custom' | 'mcp'): Promise<any> => {
-    const queryStr = {
-        all: '',
-        default: '?is_preset=1',
-        custom: '?is_preset=0',
-        mcp: '?is_preset=2'
-    }
-    return await axios.get(`/api/v1/assistant/tool_list${queryStr[type]}`)
-};
-//有管理权限
-export const getAssistantToolsWithManageApi = async (type: 'all' | 'default' | 'custom' | 'mcp'): Promise<any> => {
-    const queryStr = {
-        all: '',
-        default: '?is_preset=1',
-        custom: '?is_preset=0',
-        mcp: '?is_preset=2'
-    }
-    return await axios.get(`/api/v1/assistant/tool_list${queryStr[type]}`)
-};
-
-// 获取mcp服务集合
-export const getAssistantMcpApi = async (): Promise<any> => {
-    return getAssistantToolsApi('mcp')
-}
-
 // 刷新mcp服务
-export const refreshAssistantMcpApi = async (): Promise<any> => {
-    return await axios.post(`/api/v1/assistant/mcp/refresh`)
-}
-
-// 修改内置工具配置
-export const updateAssistantToolApi = async (tool_id, extra) => {
-    return await axios.post(`/api/v1/assistant/tool/config`, { tool_id, extra })
+export const refreshMcpApi = async (): Promise<any> => {
+    return await axios.post(`/api/v1/tool/mcp/refresh`)
 }
 
 // 获取自动优化任务taskid

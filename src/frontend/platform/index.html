@@ -26,6 +26,13 @@
                 document.documentElement.style.setProperty(key, hslStr);
             });
         })
+        // 兼容历史
+        const ln = localStorage.getItem('i18nextLng')
+        if (ln === 'zh') {
+            localStorage.setItem('i18nextLng', 'zh-Hans')
+        } else if (ln === 'en') {
+            localStorage.setItem('i18nextLng', 'en-US')
+        }
     </script>
 </head>
 
