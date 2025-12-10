@@ -496,7 +496,7 @@ def qa_status_switch(*,
 
 
 @router.get('/qa/detail', status_code=200)
-def qa_list(*, id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+def qa_detail(*, id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ 增加知识库信息. """
     qa_knowledge = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
     qa_knowledge.answers = json.loads(qa_knowledge.answers)[0]
@@ -511,18 +511,18 @@ def qa_append(
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """ 增加知识库信息. """
-    QA_list = QAKnoweldgeDao.select_list(ids)
-    knowledge = KnowledgeDao.query_by_id(QA_list[0].knowledge_id)
+    qa_list = QAKnoweldgeDao.select_list(ids)
+    knowledge = KnowledgeDao.query_by_id(qa_list[0].knowledge_id)
     # check knowledge access
     if not login_user.access_check(
             knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
     ):
         raise UnAuthorizedError.http_exception()
 
-    for q in QA_list:
+    for q in qa_list:
         if question in q.questions:
             raise KnowledgeQAError.http_exception()
-    for qa in QA_list:
+    for qa in qa_list:
         qa.questions.append(question)
         knowledge_imp.add_qa(knowledge, qa)
     return resp_200()
@@ -533,14 +533,14 @@ def qa_delete(*,
               ids: list[int] = Body(embed=True),
               login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ 删除知识文件信息 """
-    knowledge_dbs = QAKnoweldgeDao.select_list(ids)
-    for one in knowledge_dbs:
-        if one.type != KnowledgeTypeEnum.QA.value:
-            raise KnowledgeNotQAError()
-    knowledge = KnowledgeDao.query_by_id(knowledge_dbs[0].knowledge_id)
+    qa_list = QAKnoweldgeDao.select_list(ids)
+
+    knowledge = KnowledgeDao.query_by_id(qa_list[0].knowledge_id)
     if not login_user.access_check(knowledge.user_id, str(knowledge.id),
                                    AccessType.KNOWLEDGE_WRITE):
         raise UnAuthorizedError()
+    if knowledge.type != KnowledgeTypeEnum.QA.value:
+        raise KnowledgeNotQAError()
 
     knowledge_imp.delete_vector_data(knowledge, ids)
     QAKnoweldgeDao.delete_batch(ids)
