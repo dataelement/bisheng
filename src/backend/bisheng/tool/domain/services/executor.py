@@ -3,7 +3,7 @@ import json
 from inspect import signature
 from typing import Any, Annotated, Optional, Dict, List
 
-from langchain_core.callbacks import CallbackManagerForToolRun
+from langchain_core.callbacks import CallbackManagerForToolRun, Callbacks
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, ArgsSchema
 from pydantic import Field, SkipValidation
@@ -115,6 +115,8 @@ class ToolExecutor(BaseTool):
                                                          tool_type.auth_method,
                                                          tool_type.auth_type,
                                                          tool_type.api_key)
+        if "llm" in kwargs:
+            kwargs.pop("llm")
         params.update(kwargs)
         return params
 
@@ -129,9 +131,12 @@ class ToolExecutor(BaseTool):
         return tool_langchain[0]
 
     @classmethod
-    def _init_api_tool(cls, tool: GptsTools, tool_type: GptsToolsType, **kwargs) -> BaseTool:
+    def _init_api_tool(cls, tool: GptsTools, tool_type: GptsToolsType, callbacks: Callbacks = None,
+                       **kwargs) -> BaseTool:
         tool_params = cls.parse_api_tool_params(tool, tool_type, **kwargs)
-        return OpenApiTools.get_api_tool(tool.tool_key, **tool_params)
+        tool = OpenApiTools.get_api_tool(tool.tool_key, **tool_params)
+        tool.callbacks = callbacks
+        return tool
 
     @classmethod
     def _init_mcp_tool(cls, tool: GptsTools, tool_type: GptsToolsType, **kwargs) -> BaseTool:
@@ -274,6 +279,9 @@ class ToolExecutor(BaseTool):
         if signature(self.tool_instance._run).parameters.get("run_manager"):
             kwargs["run_manager"] = run_manager
         return await self.tool_instance._arun(*args, **kwargs)
+
+    def __getattr__(self, item):
+        return getattr(self.tool_instance, item)
 
     def get_invoke_log_data(self, status: StatusEnum):
         # 记录Telemetry日志

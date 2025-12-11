@@ -288,7 +288,7 @@ async def webSearch(query: str, user_id: int):
                                                          user_id=user_id)
     if not web_search_tool:
         raise WebSearchToolNotFoundError(exception=Exception("No web_search tool found in gpts tools"))
-    search_list = await web_search_tool[0].ainvoke(input={"query": query})
+    search_list = await web_search_tool.ainvoke(input={"query": query})
     search_list = json.loads(search_list)
     search_res = ""
     for index, one in enumerate(search_list):

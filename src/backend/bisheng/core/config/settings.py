@@ -231,6 +231,8 @@ class Settings(BaseModel):
     autogen_roles: dict = {}
     dev: bool = False
     environment: Union[dict, str] = 'dev'
+    # ↑↑↑ before config for langchain flow, will be deprecated
+    debug: bool = False
     database_url: Optional[str] = None
     redis_url: Optional[Union[str, Dict]] = None
     celery_redis_url: Optional[Union[str, Dict]] = None
