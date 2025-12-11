@@ -157,8 +157,8 @@ export async function readFileLibDatabase({ page = 1, pageSize = 20, name = '', 
 /**
  * 复制知识库
  */
-export async function copyLibDatabase(knowledge_id) {
-  await axios.post(`/api/v1/knowledge/copy`, { knowledge_id });
+export async function copyLibDatabase(knowledge_id, newName) {
+  await axios.post(`/api/v1/knowledge/copy`, { knowledge_id, knowledge_name: newName });
 }
 /**
  * 复制qa知识库
