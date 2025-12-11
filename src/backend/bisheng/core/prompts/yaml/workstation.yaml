@@ -2,7 +2,7 @@ version: v1
 description: 工作台个人知识库
 prompts:
   personal_knowledge:
-    description: "个人知识库提示吃"
+    description: "个人知识库提示词"
     type: prompt
     prompt: |
       ${retrieved_file_content}
