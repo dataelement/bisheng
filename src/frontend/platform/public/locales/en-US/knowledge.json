@@ -2,8 +2,8 @@
    "predefinedRules": {
     "singleNewlineRule": "\\n✂️",
     "doubleNewlineRule": "\\n\\n✂️",
-    "chapterRule": "✂️Chapter.{1,3}",
-    "articleRule": "✂️Article.{1,3}",
+    "chapterRule": "Chapter\\s+.{1,10}",
+    "articleRule": "Section\\s+.{1,10}",
     "chinesePeriodRule": "。✂️",
     "englishPeriodRule": "\\.✂️"
   },
@@ -22,7 +22,7 @@
   "chunkContentCannotBeEmpty": "Chunk content cannot be empty",
   "clickLocateOriginalFile": "Click to locate the original file",
   "clickShowMarkdownEdit": "Click to display the original Markdown text and edit it",
-  "clickDeleteChunk": "Click to delete the chunk",
+  "clickDeleteChunk": "delete chunk",
   "noAnalysisResult": "No analysis results",
    "filePathEmpty": "File path is empty",
   "fileLoadFailed": "File loading failed",
@@ -238,7 +238,7 @@
     "override": "Override",
     "fileUploadResult": "Out of the {{total}} files uploaded, {{failed}} failed to upload.",
     "modifySelection": "Adjust the selected text range to modify the content",
-    "cancel": "Got it",
+    "cancel": "Cancel",
     "dontRemind": "Don't remind again",
     "confirmDeleteSelectedQaData": "Confirm deleting the selected QA data!",
     "selectedItems": "Selected",

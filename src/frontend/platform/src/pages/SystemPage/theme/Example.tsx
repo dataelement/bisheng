@@ -88,7 +88,7 @@ export default function Example(params) {
                 className="w-[60%]"
             />
         </div>
-        <Label>Switch</Label>
+        <Label>Switch{t('example.Switch')}</Label>
         <div className="flex flex-col gap-2 mb-6">
             <Switch id="airplane-mode" className="w-11" />
         </div>

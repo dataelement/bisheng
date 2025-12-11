@@ -2,8 +2,7 @@ import { DelIcon } from '@/components/bs-icons';
 import { Button } from '@/components/bs-ui/button';
 import { Input } from '@/components/bs-ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/bs-ui/radio';
-import { generateUUID } from '@/components/bs-ui/utils';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
 
@@ -18,47 +17,50 @@ const getStrategyId = (regexStr, position) => {
   return `strategy-${Math.abs(hash)}`;
 };
 
-// Predefined rules mapping table
-const PREDEFINED_RULES_CONFIG = {
-  '\\n': {
-    key: 'singleNewlineRule',
-    defaultPosition: 'after'
-  },
-  '\\n\\n': {
-    key: 'doubleNewlineRule', 
-    defaultPosition: 'after'
-  },
-  '第.{1,3}章': {
-    key: 'chapterRule',
-    defaultPosition: 'before'
-  },
-  '第.{1,3}条': {
-    key: 'articleRule',
-    defaultPosition: 'before'
-  },
-  '。': {
-    key: 'chinesePeriodRule',
-    defaultPosition: 'after'
-  },
-  '\\.': {
-    key: 'englishPeriodRule',
-    defaultPosition: 'after'
-  }
-};
-
 const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) => {
   const { t } = useTranslation('knowledge');
   const [customRegex, setCustomRegex] = useState('');
   const [position, setPosition] = useState('after');
+
+  const PREDEFINED_RULES_CONFIG = useMemo(() => {
+    return {
+      '\\n': {
+        key: 'singleNewlineRule',
+        defaultPosition: 'after'
+      },
+      '\\n\\n': {
+        key: 'doubleNewlineRule', 
+        defaultPosition: 'after'
+      },
+
+      [t('predefinedRules.chapterRule')]: {
+        key: 'chapterRule',
+        defaultPosition: 'before'
+      },
+
+      [t('predefinedRules.articleRule')]: {
+        key: 'articleRule',
+        defaultPosition: 'before'
+      },
+
+      '。': {
+        key: 'chinesePeriodRule',
+        defaultPosition: 'after'
+      },
+      '\\.': {
+        key: 'englishPeriodRule',
+        defaultPosition: 'after'
+      }
+    };
+  }, [t]);
 
   const getPredefinedRuleDisplay = (ruleKey) => {
     return t(`predefinedRules.${ruleKey}`, { defaultValue: ruleKey });
   };
 
   const getRuleDescription = (ruleKey, ruleParams = {}) => {
-    return t(`splitRules.${ruleKey}`, ruleParams);
+    return t(`${ruleKey}`, ruleParams);
   };
-
 
   useEffect(() => {
     const needsMigration = strategies.some(strategy => 
@@ -95,7 +97,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
 
       setStrategies(migratedStrategies);
     }
-  }, [strategies, setStrategies]);
+  }, [strategies, setStrategies, PREDEFINED_RULES_CONFIG]);
 
   const handleDragEnd = (result) => {
     if (!result.destination) return;

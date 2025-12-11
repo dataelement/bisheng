@@ -140,8 +140,8 @@ const excelPreCheck = async (file, t) => {
                     return;
                 }
 
-                const headers = jsonData[0].map(header => header?.toString().toLowerCase().trim());
-                const requiredColumns = [t('question'), t('answer')];
+                const headers = jsonData[0]?.map(header => header?.toString().toLowerCase().trim());
+                const requiredColumns = ['question', 'answer'];
                 const missingColumns = requiredColumns.filter(
                     col => !headers.includes(col.toLowerCase())
                 );
