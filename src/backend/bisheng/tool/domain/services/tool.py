@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.utils import get_url_content
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.common.errcode.tool import ToolTypeNotExistsError, ToolTypeRepeatError, ToolTypeNameError, \
     ToolTypeIsPresetError, ToolSchemaDownloadError, ToolSchemaEmptyError, ToolSchemaParseError, ToolSchemaServerError, \
@@ -249,6 +250,8 @@ class ToolServices(BaseModel):
                         extra=json.dumps(one, ensure_ascii=False),
                     ))
             return tool_type
+        except BaseErrorCode as e:
+            raise e
         except Exception as e:
             logger.exception(f'openapi schema parse error {e}')
             raise ToolSchemaParseError(exception=e)
