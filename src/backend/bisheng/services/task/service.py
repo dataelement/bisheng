@@ -1,18 +1,15 @@
 from typing import Any, Callable, Coroutine, Union
 
+from loguru import logger
+
 from bisheng.services.base import Service
 from bisheng.services.task.backends.anyio import AnyIOBackend
 from bisheng.services.task.backends.base import TaskBackend
-from bisheng.services.task.utils import get_celery_worker_status
-from loguru import logger
 
 
 def check_celery_availability():
     try:
-        from bisheng.worker import celery_app
-
-        status = get_celery_worker_status(celery_app)
-        logger.debug(f'Celery status: {status}')
+        raise Exception("celery disabled")
     except Exception as exc:
         logger.debug(f'Celery not available: {exc}')
         status = {'availability': None}
@@ -49,10 +46,10 @@ class TaskService(Service):
 
     # In your TaskService class
     async def launch_and_await_task(
-        self,
-        task_func: Callable[..., Any],
-        *args: Any,
-        **kwargs: Any,
+            self,
+            task_func: Callable[..., Any],
+            *args: Any,
+            **kwargs: Any,
     ) -> Any:
         if not self.use_celery:
             return None, await task_func(*args, **kwargs)

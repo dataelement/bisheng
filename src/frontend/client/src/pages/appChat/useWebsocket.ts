@@ -5,7 +5,6 @@ import { NotificationSeverity } from "~/common"
 import { useLocalize, useToast } from "~/hooks"
 import { SkillMethod } from "./appUtils/skillMethod"
 import { submitDataState } from "./store/atoms"
-import { getErrorI18nKey } from "./store/constants"
 
 export const AppLostMessage = '11111'
 const wsMap = new Map<string, WebSocket>()
@@ -137,12 +136,13 @@ export const useWebSocket = (helpers) => {
                 code = data.message.status_code
                 message = data.message.status_message
             }
-            helpers.handleMsgError({ code, data: data.message?.data })
             if (![10421, 13002].includes(code)) {
                 showToast({
-                    message: code === 500 ? message : localize(getErrorI18nKey(String(code)), data.message?.data),
+                    message: code === 500 ? message : localize(`api_errors.${String(code)}`, data.message?.data),
                     severity: NotificationSeverity.ERROR,
                 })
+            } else {
+                helpers.handleMsgError({ code, data: data.message?.data })
             }
             return helpers.message.closeAllMsg(helpers.chatId)
         } else if (data.category === 'node_run') {

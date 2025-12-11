@@ -1,10 +1,10 @@
-import { useSetRecoilState } from 'recoil';
-import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { QueryKeys, EModelEndpoint, LocalStorageKeys, Constants } from '~/data-provider/data-provider/src';
+import { useNavigate } from 'react-router-dom';
+import { useSetRecoilState } from 'recoil';
 import type { TConversation, TEndpointsConfig, TModelsConfig } from '~/data-provider/data-provider/src';
-import { buildDefaultConvo, getDefaultEndpoint, getEndpointField, logger } from '~/utils';
+import { Constants, EModelEndpoint, LocalStorageKeys, QueryKeys } from '~/data-provider/data-provider/src';
 import store from '~/store';
+import { buildDefaultConvo, getDefaultEndpoint, getEndpointField, logger } from '~/utils';
 
 const useNavigateToConvo = (index = 0) => {
   const navigate = useNavigate();
@@ -59,7 +59,14 @@ const useNavigateToConvo = (index = 0) => {
     }
     clearAllConversations(true);
     setConversation(convo);
-    navigate(`/c/${convo.conversationId ?? Constants.NEW_CONVO}`);
+    if (conversation.flowType === 20) {
+      // 灵思
+      navigate(`/linsight/${conversation.conversationId}`);
+    } else if ([1, 5, 10].includes(conversation.flowType)) {
+      navigate(`/chat/${conversation.conversationId}/${conversation.flowId}/${conversation.flowType}`);
+    } else {
+      navigate(`/c/${convo.conversationId ?? Constants.NEW_CONVO}`);
+    }
   };
 
   const navigateWithLastTools = (

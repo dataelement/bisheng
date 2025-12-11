@@ -65,12 +65,12 @@ class BishengASR(BishengBase):
 
     @classmethod
     async def get_bisheng_asr(cls, **kwargs) -> Self:
-        model_id = kwargs.get('model_id')
+        model_id = kwargs.pop('model_id', 0)
         if not model_id:
             raise NoAsrModelConfigError()
         model_info, server_info = await cls.get_model_server_info(model_id)
         # ignore_online参数用于跳过模型在线状态检查
-        ignore_online = kwargs.get('ignore_online', False)
+        ignore_online = kwargs.pop('ignore_online', False)
 
         if not model_info:
             raise AsrModelConfigDeletedError()
@@ -84,7 +84,7 @@ class BishengASR(BishengBase):
         # 初始化asr客户端
         asr_client = await cls.init_asr_client(model_info=model_info, server_info=server_info)
 
-        return cls(model_id=model_id, asr=asr_client, model_info=model_info, server_info=server_info)
+        return cls(model_id=model_id, asr=asr_client, model_info=model_info, server_info=server_info, **kwargs)
 
     @classmethod
     async def init_asr_client(cls, model_info: LLMModel, server_info: LLMServer) -> BaseASRClient:

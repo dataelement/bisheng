@@ -1,24 +1,22 @@
 import { useEffect, useState } from 'react';
-import { v4 } from 'uuid';
-import { SSE } from 'sse.js';
 import { useSetRecoilState } from 'recoil';
+import { SSE } from 'sse.js';
+import { v4 } from 'uuid';
+import type { TResData } from '~/common';
+import { useGenTitleMutation, useGetStartupConfig, useGetUserBalance } from '~/data-provider';
+import type { EventSubmission, TMessage, TPayload, TSubmission } from '~/data-provider/data-provider/src';
 import {
-  request,
   /* @ts-ignore */
   createPayload,
   isAgentsEndpoint,
-  removeNullishValues,
   isAssistantsEndpoint,
+  removeNullishValues
 } from '~/data-provider/data-provider/src';
-import type { EventSubmission, TMessage, TPayload, TSubmission } from '~/data-provider/data-provider/src';
-import type { EventHandlerParams } from './useEventHandlers';
-import type { TResData } from '~/common';
-import { useGenTitleMutation, useGetStartupConfig, useGetUserBalance } from '~/data-provider';
 import { useAuthContext } from '~/hooks/AuthContext';
-import useEventHandlers from './useEventHandlers';
 import store from '~/store';
 import useLocalize from '../useLocalize';
-import { getErrorI18nKey } from '~/pages/appChat/store/constants';
+import type { EventHandlerParams } from './useEventHandlers';
+import useEventHandlers from './useEventHandlers';
 
 type ChatHelpers = Pick<
   EventHandlerParams,
@@ -228,7 +226,7 @@ export default function useSSE(
 
       // localize
       const _data = {
-        text: localize(getErrorI18nKey(data?.status_code), data?.data),
+        text: localize(`api_errors.${data?.status_code}`, data?.data),
       }
       errorHandler({ data: _data, submission: { ...submission, userMessage } as EventSubmission });
     });

@@ -187,7 +187,7 @@ const useErrorPrompt = () => {
 
   useEffect(() => {
     if (error) {
-      showToast({ message: localize(getErrorI18nKey(error)), status: 'error' });
+      showToast({ message: localize(`api_errors.${error}`), status: 'error' });
     }
   }, [])
 }
