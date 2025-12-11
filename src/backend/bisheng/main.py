@@ -1,6 +1,5 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -98,6 +97,10 @@ def create_app():
 
     app.include_router(router)
     app.include_router(router_rpc)
+    if settings.debug:
+        import tracemalloc
+        tracemalloc.start()
+
     return app
 
 
@@ -121,20 +124,6 @@ def setup_static_files(app: FastAPI, static_files_dir: Path):
         if not path.exists():
             raise RuntimeError(f'File at path {path} does not exist.')
         return FileResponse(path)
-
-
-# app = create_app()
-# setup_static_files(app, static_files_dir)
-def setup_app(static_files_dir: Optional[Path] = None) -> FastAPI:
-    """Setup the FastAPI app."""
-    # get the directory of the current file
-    if not static_files_dir:
-        frontend_path = Path(__file__).parent
-        static_files_dir = frontend_path / 'frontend'
-
-    app = create_app()
-    setup_static_files(app, static_files_dir)
-    return app
 
 
 def setup_promethues(app: FastAPI):

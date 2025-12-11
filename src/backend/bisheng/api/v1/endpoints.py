@@ -46,6 +46,21 @@ except ImportError:
 # build router
 router = APIRouter(tags=['Base'])
 
+if bisheng_settings.debug:
+    import tracemalloc
+    import os
+    import threading
+
+
+    @router.get("/tracemalloc")
+    def tracemalloc_point():
+        snapshot = tracemalloc.take_snapshot()
+        process_id = os.getpid()
+        thread_id = threading.get_ident()
+        snapshot.dump(f"/app/data/snapshot_{process_id}_{thread_id}_{time.time()}.prof")
+
+        return resp_200()
+
 
 @router.get('/all')
 def get_all():
