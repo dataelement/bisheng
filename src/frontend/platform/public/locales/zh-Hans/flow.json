@@ -236,6 +236,7 @@
   "noMetadataFields": "暂无元数据字段",
   "referenceFormatTip": "引用变量请调整格式为\"YYYY-MM-DD HH:mm:ss\"，如\"2025-01-10 21:08:20\"表示2025年1月10日21时08分20秒",
   "+ Add Condition": "+ 添加条件",
+  "playbackUnavailable": "播放功能不可用，请联系管理员",
   "node": {
     "start": {
       "name": "开始",

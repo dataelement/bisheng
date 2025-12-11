@@ -137,53 +137,6 @@ class ConfigService(Settings):
                 new_content += f'{one}:\n{old_db_keys[one]}\n\n'
         return new_content
 
-    def update_from_yaml(self, file_path: str, dev: bool = False):
-        """
-        更新配置项从指定的YAML文件
-        :param file_path:
-        :param dev:
-        :return:
-        """
-        new_settings = self.load_settings_from_yaml(file_path)
-        self.chains = new_settings.chains or {}
-        self.agents = new_settings.agents or {}
-        self.prompts = new_settings.prompts or {}
-        self.llms = new_settings.llms or {}
-        self.tools = new_settings.tools or {}
-        self.memories = new_settings.memories or {}
-        self.wrappers = new_settings.wrappers or {}
-        self.toolkits = new_settings.toolkits or {}
-        self.textsplitters = new_settings.textsplitters or {}
-        self.utilities = new_settings.utilities or {}
-        self.embeddings = new_settings.embeddings or {}
-        self.knowledges = new_settings.knowledges or {}
-        self.vectorstores = new_settings.vectorstores or {}
-        self.documentloaders = new_settings.documentloaders or {}
-        self.retrievers = new_settings.retrievers or {}
-        self.output_parsers = new_settings.output_parsers or {}
-        self.input_output = new_settings.input_output or {}
-        self.autogen_roles = new_settings.autogen_roles or {}
-
-        self.admin = new_settings.admin or {}
-        self.bisheng_rt = new_settings.bisheng_rt or {}
-        self.default_llm = new_settings.default_llm or {}
-        self.gpts = new_settings.gpts or {}
-        self.openai_conf = new_settings.openai_conf
-        self.minio_conf = new_settings.openai_conf
-        self.vector_stores = new_settings.vector_stores or {}
-        self.object_storage = new_settings.object_storage or {}
-        self.dev = dev
-
-    def update_settings(self, **kwargs):
-        """
-        动态更新配置项
-        :param kwargs:
-        :return:
-        """
-        for key, value in kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-
     @staticmethod
     def get_all_config():
 

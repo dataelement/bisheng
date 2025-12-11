@@ -80,8 +80,8 @@ export const getMcpServeByConfig = async (data: { file_content: string }): Promi
         getMcpServeByConfigController.abort();
     }
     getMcpServeByConfigController = new AbortController();
-    const promise = await axios.post(`/api/v1/tool/mcp/tool_schema`, data, {
-        signal: getMcpServeByConfigController.signal, // 绑定取消信号
+    const promise = await axios.post(`/api/v1/tool/mcp/schema`, data, {
+        signal: getMcpServeByConfigController.signal, // cancel abort
     });
     getMcpServeByConfigController = null;
     return promise;

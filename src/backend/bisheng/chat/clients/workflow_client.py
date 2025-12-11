@@ -116,7 +116,7 @@ class WorkflowClient(BaseClient):
             if self.latest_history.category in [WorkflowEventType.UserInput.value,
                                                 WorkflowEventType.OutputWithInput.value,
                                                 WorkflowEventType.OutputWithChoose.value]:
-                send_message = self.latest_history.to_dict()
+                send_message = self.latest_history.model_dump()
                 send_message['message'] = json.loads(send_message['message'])
                 send_message['message_id'] = send_message.pop('id')
                 await self.send_json(send_message)

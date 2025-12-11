@@ -385,5 +385,6 @@
     "successfullyDisabled": "成功禁用 {count} 个项目",
     "selectAll": "全选",
     "import": "导入",
-    "export": "导出"
+    "export": "导出",
+    "fileExists": "{{name1}} 对应已存在文件 {{name2}}"
 }

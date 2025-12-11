@@ -113,7 +113,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const [isImporting, setIsImporting] = useState(false);
     const [validationDialog, setValidationDialog] = useState({
         open: false,
-        status_message: t('bench.statusMessage')
+        errorTitle: t('bench.statusMessage'),
+        errorMsgs: []
     });
     const [importFilesData, setImportFilesData] = useState<File[]>([]);
     const [duplicateNames, setDuplicateNames] = useState<string[]>([]);
@@ -783,18 +784,17 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             formData.append('file', importFiles[0]);
 
             setImportFilesData([importFiles[0]]); // Only save one file
-            const res = await sopApi.UploadSopRecord(formData);
-            console.log('API Response:', res); // For debugging
-            if (res.status_code === 11010) {
+            const result = await sopApi.UploadSopRecord(formData);
+            console.log('API Response:', result); // For debugging
+            const { error_rows, success_rows, repeat_rows } = result
+            if (error_rows.length) {
                 setValidationDialog({
                     open: true,
-                    status_message: res.status_message
+                    errorTitle: t('bench.manualImportSummary', { row: error_rows.length + success_rows.length, successRow: success_rows.length, errorRow: error_rows.length }),
+                    errorMsgs: error_rows.map(row => `${t('bench.manualImportRow', { row: row.index })}：${t('bench.' + row.error_msg)}`)
                 });
-            }
-            if (res.status_code !== 11010) {
-
-
-                if (res?.repeat_name) {
+            } else {
+                if (repeat_rows) {
                     const formData = new FormData();
 
                     formData.append('file', importFiles[0]);
@@ -804,9 +804,9 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     formData.append('save_new', 'false');
                     const res = await sopApi.UploadSopRecord(formData);
 
-                    console.log(res, res?.repeat_name);
+                    console.log(res, repeat_rows);
                     setImportDialogOpen(true)
-                    setDuplicateNames(res?.repeat_name);
+                    setDuplicateNames(repeat_rows);
                     setDuplicateDialogOpen(true);
                     setImportFormData(formData);
                 } else {
@@ -1003,7 +1003,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             />
             <ValidationDialog
                 open={validationDialog.open}
-                statusMessage={validationDialog.status_message}
+                statusMessage={validationDialog}
                 t={t}
                 onConfirm={handleValidationDialogConfirm}
                 onOpenChange={(open) => setValidationDialog(prev => ({ ...prev, open }))}

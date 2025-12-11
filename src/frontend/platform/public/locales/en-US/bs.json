@@ -900,6 +900,13 @@
     "deleteFailed": "Delete failed",
     "fetchToolsFailed": "Failed to fetch {{type}} list",
     "statusMessage": "Planned to import 0 SOPs, 0 correct, 0 errors",
+    "manualImportSummary": "A total of {{row}} manuals are planned for import. {{successRow}} are correctly formatted, {{errorRow}} have errors.",
+    "manualImportRow": "Row {{row}}",
+    "name_empty": "Name is missing",
+    "description_empty": "Description is missing",
+    "name_over_size": "Name exceeds 500 characters",
+    "content_over_size": "Content exceeds 50000 characters",
+    "description_over_size": "Description exceeds 1000 characters",
     "inputPlaceholder": "Enter your task goal and let BISHENG Lingsi handle it",
     "inputPlaceholderDescription": "Lingsi is an Agent assistant skilled at completing complex tasks. Besides describing your task goal, you can also explain in simple terms how you want it to be achieved. This will help get the results you expect~"
   },
