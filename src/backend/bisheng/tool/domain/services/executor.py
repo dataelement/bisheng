@@ -280,6 +280,9 @@ class ToolExecutor(BaseTool):
             kwargs["run_manager"] = run_manager
         return await self.tool_instance._arun(*args, **kwargs)
 
+    def __getattr__(self, item):
+        return getattr(self.tool_instance, item)
+
     def get_invoke_log_data(self, status: StatusEnum):
         # 记录Telemetry日志
         return {
