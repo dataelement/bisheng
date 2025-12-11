@@ -268,7 +268,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
     const handleWsMessage = (data) => {
         if (data.category === 'error') {
             const { status_code, status_message, data: params } = data.message
-            if(status_code === 500) {
+            if (status_code === 500) {
                 setInputLock({ locked: true, reason: data.message.message })
             } else {
                 setInputLock({ locked: true, reason: t(`errors.${status_code}`, params) })
@@ -332,7 +332,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
 
         if (data.type === 'close' && data.category === 'processing') {
             insetSeparator(t('chat.chatEndMessage'))
-            setInputLock((prev) => ({ ...prev, locked: true }))
+            setInputLock((prev) => (prev.reason ? prev : { locked: false, reason: '' }))
             // 重启会话按钮,接收close确认后端处理结束后重启会话
             if (restartCallBackRef.current[data.chat_id]) {
                 restartCallBackRef.current[data.chat_id]()

@@ -1065,6 +1065,9 @@
   .bisheng-richtext.placeholder{
     @apply text-gray-400
   }
+  .textarea-badge {
+    user-select: text;
+  }
   /* .textarea-badge::before{
     content: '(x)';
   } */

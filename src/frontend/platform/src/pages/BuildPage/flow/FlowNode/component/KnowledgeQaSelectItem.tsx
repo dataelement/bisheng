@@ -49,7 +49,7 @@ export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValida
         data.required && onValidate(() => {
             if (!data.value.length) {
                 setError(true)
-                return data.label + ' ' + t('required')
+                return t(`${i18nPrefix}label`) + ' ' + t('required')
             }
             if (data.value.some(item => /input_[a-zA-Z0-9]+\.file/.test(item.key))) {
                 return 'input_file'

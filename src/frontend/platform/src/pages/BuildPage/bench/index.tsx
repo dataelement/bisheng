@@ -472,8 +472,9 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
             prompt: t('chatConfig.webSearchPrompt'),
         },
         knowledgeBase: {
-            enabled: true, prompt: `{retrieved_file_content}
-{question}` },
+            enabled: true,
+            prompt: t('chatConfig.internationalization')
+        },
         fileUpload: {
             enabled: true,
             prompt: `{file_content}

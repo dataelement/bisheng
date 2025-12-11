@@ -25,7 +25,7 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange, onValida
         data.required && onValidate(() => {
             if (!data.value?.msg?.trim() && data.value?.files.length === 0) {
                 setError(true)
-                return data.label + ' ' + t('required')
+                return t(`${i18nPrefix}label`) + ' ' + t('required')
             }
             setError(false)
             return false

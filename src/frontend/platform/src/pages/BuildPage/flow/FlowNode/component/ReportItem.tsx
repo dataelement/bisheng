@@ -27,7 +27,7 @@ export default function ReportItem({ nodeId, data, onChange, onValidate, i18nPre
         data.required && onValidate(() => {
             if (!data.value.file_name) {
                 setError(true);
-                return t('cannotBeEmpty', { label: data.label });
+                return t('cannotBeEmpty', { label: t(`${i18nPrefix}label`) });
             }
             setError(false);
             return false;
