@@ -82,7 +82,7 @@ class FileParseEventData(BaseEventData):
 
     _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.FILE_PARSE
 
-    parse_type: Literal['etl4lm', 'un_etl4lm']
+    parse_type: str
     status: Literal['success', 'failed', 'parse_failed']
     app_type: ApplicationTypeEnum
 

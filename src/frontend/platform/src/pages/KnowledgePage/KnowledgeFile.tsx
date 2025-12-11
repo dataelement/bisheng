@@ -441,7 +441,7 @@ export default function KnowledgeFile() {
         doing[elem.id] = true;
 
         try {
-            await captureAndAlertRequestErrorHoc(copyLibDatabase(elem.id));
+            await captureAndAlertRequestErrorHoc(copyLibDatabase(elem.id, newName));
             reload();
         } catch (error) {
             message({

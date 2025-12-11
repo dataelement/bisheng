@@ -218,14 +218,21 @@ export default function FilesUpload() {
       return setCurrentStep(2);
     }
     setRetryLoad(true);
+    let uniqueObjs = Array.from(new Map(objs.map(item => [item.id, item])).values());
+
     const params = {
       knowledge_id: Number(_tempConfigRef.current.knowledge_id),
       separator: _tempConfigRef.current.separator,
       separator_rule: _tempConfigRef.current.separator_rule,
       chunk_size: _tempConfigRef.current.chunk_size,
       chunk_overlap: _tempConfigRef.current.chunk_overlap,
-      file_objs: objs
+      file_objs: uniqueObjs,
     };
+
+    // When multiple identical files are uploaded, the files are deduplicated.
+    if (uniqueObjs.length !== objs.length) {
+      setResultFiles(Array.from(new Map(resultFiles.map(item => [item.fileId, item])).values()));
+    }
 
     captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(params).then(res => {
       setRepeatFiles([]);

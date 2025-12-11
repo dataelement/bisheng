@@ -222,7 +222,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         }
 
         // 敏感词特殊处理
-        if (wsdata.type === 'end_cover' && currentMessage.category === 'tool') {
+        if (wsdata.type === 'end_cover' && wsdata.category === 'tool') {
             messages.forEach((msg) => {
                 msg.end = true // 闭合所有会话
             })
