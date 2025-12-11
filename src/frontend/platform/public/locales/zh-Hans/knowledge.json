@@ -2,8 +2,8 @@
   "predefinedRules": {
     "singleNewlineRule": "\\n✂️",
     "doubleNewlineRule": "\\n\\n✂️",
-    "chapterRule": "✂️第.{1,3}章",
-    "articleRule": "✂️第.{1,3}条",
+    "chapterRule": "第.{1,3}章",
+    "articleRule": "第.{1,3}条",
     "chinesePeriodRule": "。✂️",
     "englishPeriodRule": "\\.✂️"
   },
@@ -216,7 +216,7 @@
     "splitMethod": "切分规则",
     "splitMethodHint": "可选择下方筛选项，或通过正则表达式自定义切分规则，例如在\"第.{1,3}条\" 前进行切分时，会在“第1条”、“第ab条”“第三条”等文本之前进行切分。",
     "splitLength": "预期切分长度",
-    "split": "切分长度",
+    "split": "切分",
     "every": "每",
     "row": "行",
     "bonly": "第",

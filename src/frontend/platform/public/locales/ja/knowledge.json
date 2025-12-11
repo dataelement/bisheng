@@ -2,8 +2,8 @@
   "predefinedRules": {
     "singleNewlineRule": "単一改行後分割",
     "doubleNewlineRule": "二重改行後分割", 
-    "chapterRule": "第.{1,3}章前分割",
-    "articleRule": "第.{1,3}条前分割",
+    "chapterRule": "第.{1,3}章",
+    "articleRule": "第.{1,3}節",
     "chinesePeriodRule": "中国語句点後分割",
     "englishPeriodRule": "英語ピリオド後分割"
   },
@@ -23,7 +23,7 @@
   "chunkContentCannotBeEmpty": "チャンクの内容は空にできません",
   "clickLocateOriginalFile": "クリックして原ファイルに定位してください",
   "clickShowMarkdownEdit": "クリックしてMarkdown原文を表示し、編集してください",
-  "clickDeleteChunk": "クリックしてチャンクを削除してください",
+  "clickDeleteChunk": "削除区分",
   "noAnalysisResult": "解析結果はありません",
   "filePathEmpty": "ファイルパスが空です",
   "fileLoadFailed": "ファイル読み込み失敗",
@@ -264,7 +264,7 @@
     "override": "上書き",
     "fileUploadResult": "合計 {{total}} 件中、{{failed}} 件のアップロードに失敗しました",
     "modifySelection": "元ファイルの選択範囲を調整して分割内容を変更できます",
-    "cancel": "了解",
+    "cancel": "キャンセル",
     "dontRemind": "今後は表示しない",
     "confirmDeleteSelectedQaData": "選択したQAデータを削除しますか！",
     "selectedItems": "選択済み",
