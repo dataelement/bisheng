@@ -65,19 +65,10 @@ export default function Conversation({
     }
 
     /* Note: Latest Message should not be reset if existing convo */
-    if (conversation.flowType === 20) {
-      // 灵思
-      navigate(`/linsight/${conversationId}`);
-    } else if ([1, 5, 10].includes(conversation.flowType)) {
-      console.log('conversation :>> ', conversation);
-      navigate(`/chat/${conversationId}/${conversation.flowId}/${conversation.flowType}`);
-    } else {
-      // 会话
-      navigateWithLastTools(
-        conversation,
-        !(conversationId ?? '') || conversationId === Constants.NEW_CONVO,
-      );
-    }
+    navigateWithLastTools(
+      conversation,
+      !(conversationId ?? '') || conversationId === Constants.NEW_CONVO,
+    );
   };
 
   const renameHandler = useCallback(() => {

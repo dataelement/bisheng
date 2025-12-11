@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import axios, { AxiosError, AxiosRequestConfig } from 'axios';
-import { getErrorI18nKey } from '~/pages/appChat/store/constants';
 import i18next from "i18next";
 
 // 报错的时候是否弹窗
@@ -106,7 +105,7 @@ customAxios.interceptors.response.use(
 
     if (response.config.showError && response.data && response.data.status_code !== 200) {
       console.log('业务错误:>> ', response.config.url, response.data);
-      window.showToast?.({ message: i18next.t(getErrorI18nKey(response.data.status_code), response.data.data), status: 'error' });
+      window.showToast?.({ message: i18next.t(`api_errors.${response.data.status_code}`, response.data.data), status: 'error' });
     }
     return response;
   },
