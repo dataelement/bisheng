@@ -776,7 +776,7 @@ async def update_sop(
     更新灵思SOP
     :return:
     """
-
+    sop_obj.user_id = login_user.user_id
     return await SOPManageService.update_sop(sop_obj, update_version_id=False)
 
 
