@@ -230,7 +230,7 @@
     "splitMethodHint": "You can select the filter option below, or customize the splitting rule using regular expressions. For example, splitting before '第.{1,3}条' will split the text before '第1条', '第ab条', '第三条', etc.",
     "splitLength": "Split Length",
     "splitSizePlaceholder": "Enter split length",
-    "chunkOverlap": "Chunk Overlap Length",
+    "chunkOverlap": "Overlap Length",
     "chunkOverlapPlaceholder": "Enter chunk overlap length",
     "submit": "Submit",
     "previewResults": "Preview Split Results",
