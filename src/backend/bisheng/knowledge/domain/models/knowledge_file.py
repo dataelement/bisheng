@@ -443,6 +443,13 @@ class QAKnoweldgeDao(QAKnowledgeBase):
                 select(QAKnowledge).where(QAKnowledge.knowledge_id.in_(knowledge_ids))).all()
 
     @classmethod
+    async def aget_qa_knowledge_by_knowledge_ids(cls, knowledge_ids: List[int]) -> List[QAKnowledge]:
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(QAKnowledge).where(col(QAKnowledge.knowledge_id).in_(knowledge_ids)))
+            return result.all()
+
+    @classmethod
     def get_qa_knowledge_by_primary_id(cls, qa_id: int) -> QAKnowledge:
         with get_sync_db_session() as session:
             return session.exec(select(QAKnowledge).where(QAKnowledge.id == qa_id)).first()
