@@ -93,7 +93,7 @@ const AddSimilarQuestions = forwardRef(({ onMarked }, ref) => {
                 </DialogHeader>
                 <div className="flex flex-col gap-4 py-2">
                     <div className="flex items-center gap-4">
-                        <Label htmlFor="knowledgeLib" className="bisheng-label w-40">{t('log.qaKnowledgeLib')}</Label>
+                        <Label htmlFor="knowledgeLib" className="bisheng-label w-40 whitespace-nowrap">{t('log.qaKnowledgeLib')}</Label>
                         <KnowledgeSelect
                             type="qa"
                             value={knowledgeLib}

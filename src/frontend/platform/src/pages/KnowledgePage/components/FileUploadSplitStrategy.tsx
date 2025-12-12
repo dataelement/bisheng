@@ -154,7 +154,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
   return (
     <div className='flex gap-6'>
       {/* Left drag area */}
-      <div className='flex-1'>
+      <div className='flex-1 max-w-[50%]'>
         <div className='py-2 px-0 pr-1 overflow-y-auto max-h-[11.5rem] select-none'>
           <DragDropContext onDragEnd={handleDragEnd}>
             <Droppable droppableId="strategies">
