@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, text
+from sqlalchemy import Column, DateTime, text,Integer
 from sqlmodel import Field, select
 
 from bisheng.core.database import get_sync_db_session
@@ -20,7 +20,8 @@ class ServerBase(SQLModelSerializable):
 
 
 class Server(ServerBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 # 封装业务操作

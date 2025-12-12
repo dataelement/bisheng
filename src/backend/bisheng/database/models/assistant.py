@@ -3,6 +3,7 @@ from enum import Enum
 from typing import List, Optional, Tuple
 
 from sqlalchemy import JSON, Column, DateTime, Text, and_, func, or_, text
+from sqlalchemy import Integer,String
 from sqlmodel import Field, select
 
 from bisheng.core.database import get_sync_db_session, get_async_db_session
@@ -17,7 +18,8 @@ class AssistantStatus(Enum):
 
 
 class AssistantBase(SQLModelSerializable):
-    id: Optional[str] = Field(default_factory=generate_uuid, nullable=False, primary_key=True, description='唯一ID')
+    # id: Optional[str] = Field(default_factory=generate_uuid, nullable=False, primary_key=True, description='唯一ID')
+    id: Optional[str] = Field(default_factory=generate_uuid, description='唯一ID' , sa_column=Column(String, primary_key=True,))
     name: str = Field(default='', description='助手名称')
     logo: str = Field(default='', description='logo图片地址')
     desc: str = Field(default='', sa_column=Column(Text), description='助手描述')
@@ -37,11 +39,12 @@ class AssistantBase(SQLModelSerializable):
                                             sa_column=Column(DateTime,
                                                              nullable=False,
                                                              server_default=text(
-                                                                 'CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+                                                                 'CURRENT_TIMESTAMP')))
 
 
 class AssistantLinkBase(SQLModelSerializable):
-    id: Optional[int] = Field(default=None, nullable=False, primary_key=True, description='唯一ID')
+    # id: Optional[int] = Field(default=None, nullable=False, primary_key=True, description='唯一ID')
+    id: Optional[int] = Field(default=None, description='唯一ID' , sa_column=Column(Integer, primary_key=True, autoincrement=True))
     assistant_id: Optional[str] = Field(default=0, index=True, description='助手ID')
     tool_id: Optional[int] = Field(default=0, index=True, description='工具ID')
     flow_id: Optional[str] = Field(default='', index=True, description='技能ID')
@@ -49,11 +52,12 @@ class AssistantLinkBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class Assistant(AssistantBase, table=True):
-    id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
+    # id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
+    id: str = Field(default_factory=generate_uuid, sa_column=Column(String, primary_key=True))
 
 
 class AssistantLink(AssistantLinkBase, table=True):
@@ -97,7 +101,7 @@ class AssistantDao(AssistantBase):
     async def aget_one_assistant(cls, assistant_id: str) -> Assistant:
         statement = select(Assistant).where(Assistant.id == assistant_id)
         async with get_async_db_session() as session:
-            return (await session.exec(statement)).first()
+            return (await session.execute(statement)).scalars().first()
 
     @classmethod
     def get_assistants_by_ids(cls, assistant_ids: List[str]) -> List[Assistant]:
@@ -276,8 +280,8 @@ class AssistantLinkDao(AssistantLink):
     async def get_assistant_link(cls, assistant_id: str) -> List[AssistantLink]:
         async with get_async_db_session() as session:
             statement = select(AssistantLink).where(AssistantLink.assistant_id == assistant_id)
-            result = await session.exec(statement)
-            return result.all()
+            result = await session.execute(statement)
+            return result.scalars().all()
 
     @classmethod
     def update_assistant_tool(cls, assistant_id: str, tool_list: List[int]):

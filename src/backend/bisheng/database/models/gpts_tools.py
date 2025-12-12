@@ -4,14 +4,33 @@ from enum import Enum
 from typing import Dict, List, Optional
 
 from pydantic import model_validator
-from sqlalchemy import JSON, Column, DateTime, String, text, func
+from sqlalchemy import JSON, Column, DateTime, String, text, func,Integer
 from sqlmodel import Field, or_, select, Text, update, col
 
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.utils import md5_hash, generate_uuid
-
+# 自定义 JSON 类型：自动处理字符串与字典的转换
+from sqlalchemy.types import TypeDecorator, JSON
+import json
+class DMJSON(TypeDecorator):
+    impl = JSON  # 底层依赖达梦的 JSON 类型
+    def process_bind_param(self, value, dialect):
+        # 写入数据库：字典转 JSON 字符串
+        if value is None:
+            return None
+        return json.dumps(value)
+    def process_result_value(self, value, dialect):
+        # 读取数据库：JSON 字符串转字典
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+        return value
 
 class AuthMethod(Enum):
     NO = 0
@@ -32,7 +51,7 @@ class GptsToolsBase(SQLModelSerializable):
     type: int = Field(default=0, description='所属类别的ID')
     is_preset: int = Field(default=ToolPresetType.API.value, description="工具的类别，历史原因字段就不改名了")
     is_delete: int = Field(default=0, description='1 表示逻辑删除')
-    api_params: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='用来存储api参数等信息')
+    api_params: Optional[List[Dict]] = Field(default=None, sa_column=Column(DMJSON), description='用来存储api参数等信息')
     user_id: Optional[int] = Field(default=None, index=True, description='创建用户ID， null表示系统创建')
     create_time: Optional[datetime] = Field(default=None,
                                             sa_column=Column(DateTime, nullable=False,
@@ -45,7 +64,8 @@ class GptsToolsBase(SQLModelSerializable):
 
 
 class GptsToolsTypeBase(SQLModelSerializable):
-    id: Optional[int] = Field(default=None, index=True, primary_key=True)
+    # id: Optional[int] = Field(default=None, index=True, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
     name: str = Field(default='', sa_column=Column(String(length=1024)), description="工具类别名字")
     logo: Optional[str] = Field(default='', description="工具类别的logo文件地址")
     extra: Optional[str] = Field(default='{}', sa_column=Column(Text),
@@ -74,7 +94,8 @@ class GptsTools(GptsToolsBase, table=True):
     extra: Optional[str | dict] = Field(default=None, sa_column=Column(Text, index=False),
                                         description='用来存储额外信息，比如参数需求等，包含 &initdb_conf_key 字段'
                                                     '表示配置信息从系统配置里获取,多层级用.隔开')
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class GptsToolsType(GptsToolsTypeBase, table=True):
@@ -193,8 +214,8 @@ class GptsToolsDao(GptsToolsBase):
             GptsTools.type.in_(tool_type_ids)).where(
             GptsTools.is_delete == 0).order_by(GptsTools.create_time.desc())
         async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            return result.all()
+            result = await session.execute(statement)
+            return result.scalars().all()
 
     @classmethod
     def get_all_tool_type(cls, tool_type_ids: List[int]) -> List[GptsToolsType]:
@@ -228,8 +249,8 @@ class GptsToolsDao(GptsToolsBase):
                                                 GptsToolsType.is_delete == 0)
         statement = statement.order_by(GptsToolsType.update_time.desc())
         async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            return result.all()
+            result = await session.execute(statement)
+            return result.scalars().all()
 
     @classmethod
     def _get_user_tool_type_statement(cls, user_id: int, extra_tool_type_ids: List[int] = None,
@@ -275,8 +296,8 @@ class GptsToolsDao(GptsToolsBase):
         """
         statement = cls._get_user_tool_type_statement(user_id, extra_tool_type_ids, include_preset, is_preset)
         async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            return result.all()
+            result = await session.execute(statement)
+            return result.scalars().all()
 
     @classmethod
     def filter_tool_types_by_ids(cls, tool_type_ids: List[int], keyword: Optional[str] = None, page: int = 0,
@@ -433,5 +454,5 @@ class GptsToolsDao(GptsToolsBase):
     async def aget_tool_by_tool_key(cls, tool_key: str) -> GptsTools:
         statement = select(GptsTools).where(GptsTools.tool_key == tool_key)
         async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            return result.first()
+            result = await session.execute(statement)
+            return result.scalars().first()

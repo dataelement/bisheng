@@ -12,7 +12,26 @@ from bisheng.database.models.base import SQLModelSerializable
 
 logger = logging.getLogger(__name__)
 
-
+# 自定义 JSON 类型：自动处理字符串与字典的转换
+from sqlalchemy.types import TypeDecorator, JSON
+import json
+class DMJSON(TypeDecorator):
+    impl = JSON  # 底层依赖达梦的 JSON 类型
+    def process_bind_param(self, value, dialect):
+        # 写入数据库：字典转 JSON 字符串
+        if value is None:
+            return None
+        return json.dumps(value)
+    def process_result_value(self, value, dialect):
+        # 读取数据库：JSON 字符串转字典
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+        return value
 class SessionVersionStatusEnum(str, Enum):
     """
     灵思会话版本状态枚举
@@ -42,14 +61,14 @@ class LinsightSessionVersionBase(SQLModelSerializable):
     user_id: int = Field(..., description='用户ID', foreign_key="user.user_id", nullable=False)
     question: str = Field(..., description='用户问题', sa_type=Text, nullable=False)
     title: Optional[str] = Field(None, description='会话标题', sa_type=Text, nullable=True)
-    tools: Optional[List[Dict]] = Field(None, description='可用的工具列表', sa_type=JSON, nullable=True)
+    tools: Optional[List[Dict]] = Field(None, description='可用的工具列表', sa_type=DMJSON, nullable=True)
     # 个人知识库
     personal_knowledge_enabled: bool = Field(False, description='是否启用个人知识库', sa_type=Boolean)
     # 组织知识库
     org_knowledge_enabled: bool = Field(False, description='是否启用组织知识库', sa_type=Boolean)
-    files: Optional[List[Dict]] = Field(None, description='上传的文件列表', sa_type=JSON, nullable=True)
+    files: Optional[List[Dict]] = Field(None, description='上传的文件列表', sa_type=DMJSON, nullable=True)
     sop: Optional[str] = Field(None, description='SOP内容', sa_type=Text, nullable=True)
-    output_result: Optional[Dict] = Field(None, description='输出结果', sa_type=JSON, nullable=True)
+    output_result: Optional[Dict] = Field(None, description='输出结果', sa_type=DMJSON, nullable=True)
     status: SessionVersionStatusEnum = Field(default=SessionVersionStatusEnum.NOT_STARTED, description='会话版本状态',
                                              sa_column=Column(SQLEnum(SessionVersionStatusEnum), nullable=False))
     score: Optional[int] = Field(None, description='会话评分', ge=1, le=5, nullable=True)
@@ -73,7 +92,7 @@ class LinsightSessionVersion(LinsightSessionVersionBase, table=True):
     create_time: datetime = Field(default_factory=datetime.now, description='创建时间',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP')))
 
     __tablename__ = "linsight_session_version"
 
@@ -107,8 +126,8 @@ class LinsightSessionVersionDao(object):
         async with get_async_db_session() as session:
             statement = select(LinsightSessionVersion).where(
                 LinsightSessionVersion.id == str(linsight_session_version_id))  # 显式转 str
-            result = await session.exec(statement)
-            return result.first()
+            result = await session.execute(statement)
+            return result.scalars().first()
 
     @staticmethod
     async def get_session_versions_by_session_id(session_id: str) -> List[LinsightSessionVersion]:
@@ -122,7 +141,7 @@ class LinsightSessionVersionDao(object):
                 LinsightSessionVersion.session_id == str(session_id)).order_by(
                 col(LinsightSessionVersion.version).desc())
 
-            return (await session.exec(statement)).all()
+            return (await session.execute(statement)).scalars().all()
 
     @staticmethod
     async def modify_sop_content(linsight_session_version_id: str, sop_content: str):
@@ -140,7 +159,7 @@ class LinsightSessionVersionDao(object):
                 .values(sop=sop_content)
             )
 
-            result = await session.exec(stmt)
+            result = await session.execute(stmt)
             if result.rowcount == 0:
                 logger.warning(f"No session version found with ID: {linsight_session_version_id}")
 
@@ -157,8 +176,8 @@ class LinsightSessionVersionDao(object):
             statement = select(LinsightSessionVersion).where(
                 func.json_search(LinsightSessionVersion.files, 'all', file_id)
             )
-            result = await session.exec(statement)
-            return result.first()
+            result = await session.execute(statement)
+            return result.scalars().first()
 
     # 根据任务状态获取灵思会话版本列表
     @staticmethod
@@ -172,8 +191,8 @@ class LinsightSessionVersionDao(object):
             statement = select(LinsightSessionVersion).where(
                 LinsightSessionVersion.status == status
             )
-            result = await session.exec(statement)
-            return result.all()
+            result = await session.execute(statement)
+            return result.scalars().all()
 
     # 批量更新灵思会话版本状态
     @staticmethod
@@ -190,5 +209,5 @@ class LinsightSessionVersionDao(object):
                 .where(col(LinsightSessionVersion.id).in_(session_version_ids))
                 .values(status=status, **kwargs)  # 支持额外的字段更新
             )
-            await session.exec(stmt)
+            await session.execute(stmt)
             await session.commit()

@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
 
-from sqlalchemy import Column, DateTime, text, delete
+from sqlalchemy import Column, DateTime, text, delete,Integer
 from sqlmodel import Field, select
 
 from bisheng.core.database import get_sync_db_session, get_async_db_session
@@ -28,7 +28,8 @@ class GroupResourceBase(SQLModelSerializable):
 
 
 class GroupResource(GroupResourceBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class GroupResourceRead(GroupResourceBase):
@@ -115,8 +116,8 @@ class GroupResourceDao(GroupResourceBase):
         async with get_async_db_session() as session:
             statement = select(GroupResource).where(GroupResource.third_id == third_id,
                                                     GroupResource.type == resource_type.value)
-            result = await session.exec(statement)
-            return result.all()
+            result = await session.execute(statement)
+            return result.scalars().all()
 
     @classmethod
     def get_resources_group(cls, resource_type: ResourceTypeEnum | None, third_ids: List[str]) -> list[GroupResource]:

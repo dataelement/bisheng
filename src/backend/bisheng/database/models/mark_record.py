@@ -3,7 +3,7 @@ from enum import Enum
 from typing import List, Optional
 
 # if TYPE_CHECKING:
-from sqlalchemy import Column, DateTime, delete, text
+from sqlalchemy import Column, DateTime, delete, text,Integer
 from sqlmodel import Field, select
 
 from bisheng.core.database import get_sync_db_session
@@ -31,7 +31,8 @@ class MarkRecordBase(SQLModelSerializable):
 
 
 class MarkRecord(MarkRecordBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class MarkRecordDao(MarkRecordBase):

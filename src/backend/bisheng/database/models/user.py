@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from pydantic import field_validator
-from sqlalchemy import Column, DateTime, func, text
+from sqlalchemy import Column, DateTime, func, text,Integer
 from sqlmodel import Field, select
 
 from bisheng.core.database import get_sync_db_session, get_async_db_session
@@ -34,7 +34,8 @@ class UserBase(SQLModelSerializable):
 
 
 class User(UserBase, table=True):
-    user_id: Optional[int] = Field(default=None, primary_key=True)
+    # user_id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
     password: str = Field(index=False)
     password_update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')), description='密码最近的修改时间')
@@ -83,8 +84,8 @@ class UserDao(UserBase):
     async def aget_user(cls, user_id: int) -> User | None:
         async with get_async_db_session() as session:
             statement = select(User).where(User.user_id == user_id)
-            result = await session.exec(statement)
-            return result.first()
+            result = await session.execute(statement)
+            return result.scalars().first()
 
     @classmethod
     def get_user_by_ids(cls, user_ids: List[int]) -> List[User] | None:
@@ -96,8 +97,8 @@ class UserDao(UserBase):
     async def aget_user_by_ids(cls, user_ids: List[int]) -> List[User] | None:
         async with get_async_db_session() as session:
             statement = select(User).where(User.user_id.in_(user_ids))
-            result = await session.exec(statement)
-            return result.all()
+            result = await session.execute(statement)
+            return result.scalars().all()
 
     @classmethod
     def get_user_by_username(cls, username: str) -> User | None:
@@ -152,8 +153,8 @@ class UserDao(UserBase):
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(User.user_id.desc())
         async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            return result.all()
+            result = await session.execute(statement)
+            return result.scalars().all()
 
     @classmethod
     def get_unique_user_by_name(cls, user_name: str) -> User | None:

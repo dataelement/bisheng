@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import Column, DateTime, delete, text, update
-from sqlmodel import Field, select
+from sqlmodel import Field, select,Integer
 
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.base import SQLModelSerializable
@@ -10,11 +10,12 @@ from bisheng.database.models.base import SQLModelSerializable
 
 # 可用于训练的model列表
 class SftModelBase(SQLModelSerializable):
-    id: int = Field(default=None, nullable=False, primary_key=True, description='唯一ID')
+    # id: int = Field(default=None, nullable=False, primary_key=True, description='唯一ID')
+    id: Optional[int] = Field(default=None, description='唯一ID' , sa_column=Column(Integer, primary_key=True, autoincrement=True))
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class SftModel(SftModelBase, table=True):

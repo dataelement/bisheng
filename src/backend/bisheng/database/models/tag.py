@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional, List, Dict
 
 from sqlalchemy import Column, DateTime, UniqueConstraint
-from sqlmodel import Field, select, delete, and_, func, text
+from sqlmodel import Field, select, delete, and_, func, text,Integer
 
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.base import SQLModelSerializable
@@ -23,7 +23,8 @@ class TagBase(SQLModelSerializable):
 
 
 class Tag(TagBase, table=True):
-    id: Optional[int] = Field(default=None, index=True, primary_key=True, description="标签唯一ID")
+    # id: Optional[int] = Field(default=None, index=True, primary_key=True, description="标签唯一ID")
+    id: Optional[int] = Field(default=None, description="标签唯一ID", sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class TagLinkBase(SQLModelSerializable):
@@ -44,6 +45,7 @@ class TagLinkBase(SQLModelSerializable):
 class TagLink(TagLinkBase, table=True):
     __table_args__ = (UniqueConstraint('resource_id', 'resource_type', 'tag_id', name='resource_tag_uniq'),)
     id: Optional[int] = Field(default=None, index=True, primary_key=True, description="标签关联唯一ID")
+    
 
 
 class TagDao(Tag):

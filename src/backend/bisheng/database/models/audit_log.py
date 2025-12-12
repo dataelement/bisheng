@@ -7,7 +7,7 @@ from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, JSO
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.utils import generate_uuid
-
+from sqlalchemy import String
 
 # 系统模块枚举
 class SystemId(Enum):
@@ -87,7 +87,8 @@ class AuditLogBase(SQLModelSerializable):
 
 class AuditLog(AuditLogBase, table=True):
     # id = 2 表示默认用户组
-    id: str = Field(default_factory=generate_uuid, primary_key=True, index=True, description="主键，uuid格式")
+    # id: str = Field(default_factory=generate_uuid, primary_key=True, index=True, description="主键，uuid格式")
+    id: str = Field(default_factory=generate_uuid, description="主键，uuid格式" , sa_column=Column(String, primary_key=True))
 
 
 class AuditLogDao(AuditLogBase):

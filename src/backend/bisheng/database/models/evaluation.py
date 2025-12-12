@@ -2,12 +2,31 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Dict
 
-from sqlalchemy import Column, DateTime, Text, text, func, and_, JSON
+from sqlalchemy import Column, DateTime, Text, text, func, and_, JSON,Integer
 from sqlmodel import Field, select
 
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.base import SQLModelSerializable
-
+# 自定义 JSON 类型：自动处理字符串与字典的转换
+from sqlalchemy.types import TypeDecorator, JSON
+import json
+class DMJSON(TypeDecorator):
+    impl = JSON  # 底层依赖达梦的 JSON 类型
+    def process_bind_param(self, value, dialect):
+        # 写入数据库：字典转 JSON 字符串
+        if value is None:
+            return None
+        return json.dumps(value)
+    def process_result_value(self, value, dialect):
+        # 读取数据库：JSON 字符串转字典
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+        return value
 
 class ExecType(Enum):
     FLOW = 'flow'
@@ -31,7 +50,7 @@ class EvaluationBase(SQLModelSerializable):
     status: int = Field(index=True, default=1, description='任务执行状态。1:执行中 2: 执行失败 3:执行成功')
     prompt: str = Field(default='', sa_column=Column(Text), description='评测指令文本')
     result_file_path: str = Field(default='', description='评测结果的 minio 地址')
-    result_score: Optional[Dict | str] = Field(default=None, sa_column=Column(JSON), description='最终评测分数')
+    result_score: Optional[Dict | str] = Field(default=None, sa_column=Column(DMJSON), description='最终评测分数')
     description: str = Field(default='', sa_column=Column(Text), description='错误描述信息')
     is_delete: int = Field(default=0, description='是否删除')
     create_time: Optional[datetime] = Field(default=None,
@@ -45,7 +64,8 @@ class EvaluationBase(SQLModelSerializable):
 
 
 class Evaluation(EvaluationBase, table=True):
-    id: int = Field(default=None, primary_key=True, unique=True)
+    # id: int = Field(default=None, primary_key=True, unique=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class EvaluationRead(EvaluationBase):

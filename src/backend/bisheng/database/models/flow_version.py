@@ -5,16 +5,36 @@ from typing import Dict, List, Optional
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import func, String
+from sqlalchemy import func, String,Integer
 from sqlmodel import JSON, Field, select, update, text, Column, DateTime
 
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.flow import Flow
 
-
+# 自定义 JSON 类型：自动处理字符串与字典的转换
+from sqlalchemy.types import TypeDecorator, JSON
+import json
+class DMJSON(TypeDecorator):
+    impl = JSON  # 底层依赖达梦的 JSON 类型
+    def process_bind_param(self, value, dialect):
+        # 写入数据库：字典转 JSON 字符串
+        if value is None:
+            return None
+        return json.dumps(value)
+    def process_result_value(self, value, dialect):
+        # 读取数据库：JSON 字符串转字典
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+        return value
 class FlowVersionBase(SQLModelSerializable):
-    id: Optional[int] = Field(default=None, primary_key=True, unique=True)
+    # id: Optional[int] = Field(default=None, primary_key=True, unique=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
     flow_id: str = Field(index=True, max_length=32, description="所属的技能ID")
     name: str = Field(index=True, description="版本的名字")
     data: Optional[Dict] = Field(default=None, description="版本的数据")
@@ -27,7 +47,7 @@ class FlowVersionBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
     @field_validator('data')
     @classmethod
@@ -47,7 +67,7 @@ class FlowVersionBase(SQLModelSerializable):
 
 
 class FlowVersion(FlowVersionBase, table=True):
-    data: Optional[Dict] = Field(default=None, sa_column=Column(JSON), description="版本的数据")
+    data: Optional[Dict] = Field(default=None, sa_column=Column(DMJSON), description="版本的数据")
 
 
 class FlowVersionRead(FlowVersionBase):
@@ -96,7 +116,7 @@ class FlowVersionDao(FlowVersionBase):
             if version.is_current == 1:
                 # 更新技能表里的data数据
                 update_flow = update(Flow).where(Flow.id == version.flow_id).values(data=version.data)
-                await session.exec(update_flow)
+                await session.execute(update_flow)
                 await session.commit()
             await session.refresh(version)
             return version
@@ -132,8 +152,8 @@ class FlowVersionDao(FlowVersionBase):
             statement = select(FlowVersion).where(FlowVersion.id == version_id)
             if not include_delete:
                 statement = statement.where(FlowVersion.is_delete == 0)
-            result = await session.exec(statement)
-            return result.first()
+            result = await session.execute(statement)
+            return result.scalars().first()
 
     @classmethod
     def get_version_by_flow(cls, flow_id: str) -> Optional[FlowVersion]:
@@ -214,14 +234,14 @@ class FlowVersionDao(FlowVersionBase):
                 FlowVersion.id == new_version_info.id,
                 FlowVersion.is_delete == 0,
             ).values(is_current=1)
-            update_ret = await session.exec(set_statement)
+            update_ret = await session.execute(set_statement)
             if update_ret.rowcount == 0:
                 # 未更新成功则不取消之前设置的当前版本
                 return False
 
             # 更新技能表里的data数据
             update_flow = update(Flow).where(Flow.id == flow_id).values(data=new_version_info.data)
-            await session.exec(update_flow)
+            await session.execute(update_flow)
             await session.commit()
 
             # 把其他版本修改为非当前版本
@@ -230,7 +250,7 @@ class FlowVersionDao(FlowVersionBase):
                 FlowVersion.id != new_version_info.id,
                 FlowVersion.is_current == 1).values(
                 is_current=0)
-            await session.exec(statement)
+            await session.execute(statement)
             await session.commit()
 
             return True

@@ -5,7 +5,7 @@ from typing import List, Optional
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import JSON, Column, DateTime, String, or_, text, Text
+from sqlalchemy import JSON, Column, DateTime, String, or_, text, Text,Integer
 from sqlmodel import Field, delete, func, select, update, col
 
 from bisheng.core.database import get_async_db_session, get_sync_db_session
@@ -98,11 +98,13 @@ class QAKnowledgeBase(SQLModelSerializable):
 
 
 class KnowledgeFile(KnowledgeFileBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class QAKnowledge(QAKnowledgeBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
     questions: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
     answers: Optional[str] = Field(default=None, sa_column=Column(Text))
 
@@ -412,8 +414,8 @@ class QAKnoweldgeDao(QAKnowledgeBase):
     @classmethod
     async def query_by_condition(cls, sql):
         async with get_async_db_session() as session:
-            result = await session.exec(sql)
-            return result.all()
+            result = await session.execute(sql)
+            return result.scalars().all()
 
     @classmethod
     def query_by_condition_v1(cls, source: List[int], create_start: str, create_end: str):

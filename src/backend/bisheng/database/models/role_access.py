@@ -8,7 +8,7 @@ from sqlmodel import Field, select, delete, col
 
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.base import SQLModelSerializable
-
+from sqlmodel import Integer
 
 class RoleAccessBase(SQLModelSerializable):
     role_id: int = Field(index=True)
@@ -22,7 +22,8 @@ class RoleAccessBase(SQLModelSerializable):
 
 
 class RoleAccess(RoleAccessBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class RoleAccessRead(RoleAccessBase):
@@ -74,7 +75,7 @@ class RoleAccessDao(RoleAccessBase):
             statement = statement.where(RoleAccess.type == access_type.value)
 
         async with get_async_db_session() as session:
-            return (await session.exec(statement)).all()
+            return (await session.execute(statement)).scalars().all()
 
     @classmethod
     def get_role_access_batch(cls, role_ids: List[int], access_type: List[AccessType]) -> List[RoleAccess]:
@@ -102,7 +103,7 @@ class RoleAccessDao(RoleAccessBase):
             col(RoleAccess.third_id) == third_id
         )
         async with get_async_db_session() as session:
-            return (await session.exec(statement)).first()
+            return (await session.execute(statement)).scalars().first()
 
     @classmethod
     def find_role_access(cls, role_ids: List[int], third_ids: List[str], access_type: AccessType) -> List[RoleAccess]:
@@ -124,7 +125,7 @@ class RoleAccessDao(RoleAccessBase):
             # 先把旧的权限全部清空
             statement = delete(RoleAccess).where(col(RoleAccess.role_id) == str(role_id),
                                                  col(RoleAccess.type) == access_type.value)
-            await session.exec(statement)
+            await session.execute(statement)
             # 添加新的权限
             for access_id in access_ids:
                 role_access = RoleAccess(role_id=role_id, third_id=str(access_id), type=access_type.value)

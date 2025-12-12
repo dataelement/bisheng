@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, List
 
-from sqlalchemy import Column, DateTime, String, UniqueConstraint, delete, text
+from sqlalchemy import Column, DateTime, String, UniqueConstraint, delete, text,Integer
 from sqlmodel import Field, select
 
 from bisheng.core.database import get_sync_db_session
@@ -25,7 +25,8 @@ class ModelDeployBase(SQLModelSerializable):
 
 class ModelDeploy(ModelDeployBase, table=True):
     __table_args__ = (UniqueConstraint('model', 'server', name='model_server_uniq'),)
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class ModelDeployDao(ModelDeployBase):

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from pydantic import BaseModel
-from sqlalchemy import Column, DateTime, text, delete
+from sqlalchemy import Column, DateTime, text, delete,Integer
 from sqlmodel import Field, select
 
 from bisheng.core.database import get_sync_db_session, get_async_db_session
@@ -21,7 +21,8 @@ class UserRoleBase(SQLModelSerializable):
 
 
 class UserRole(UserRoleBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class UserRoleRead(UserRoleBase):
@@ -43,8 +44,8 @@ class UserRoleDao(UserRoleBase):
     @classmethod
     async def aget_user_roles(cls, user_id: int) -> List[UserRole]:
         async with get_async_db_session() as session:
-            result = await session.exec(select(UserRole).where(UserRole.user_id == user_id))
-            return result.all()
+            result = await session.execute(select(UserRole).where(UserRole.user_id == user_id))
+            return result.scalars().all()
 
     @classmethod
     def get_roles_user(cls, role_ids: List[int], page: int = 0, limit: int = 0) -> List[UserRole]:

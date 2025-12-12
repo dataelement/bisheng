@@ -3,7 +3,7 @@ from typing import Dict, List, Optional
 
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import Column, DateTime, delete, text, update
+from sqlalchemy import Column, DateTime, delete, text, update,Integer
 from sqlmodel import Field, select
 
 # 默认用户组的ID
@@ -26,7 +26,8 @@ class GroupBase(SQLModelSerializable):
 
 class Group(GroupBase, table=True):
     # id = 2 表示默认用户组
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class GroupRead(GroupBase):

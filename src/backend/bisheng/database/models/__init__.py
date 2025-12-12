@@ -1,2 +1,4 @@
 from bisheng.database.models.linsight_execute_task import LinsightExecuteTask
 from bisheng.database.models.linsight_session_version import LinsightSessionVersion
+from bisheng.database.models.zhongyuan_group import ZhongYuanGroup
+from bisheng.database.models.zhongyuan_role import ZhongYuanRole

@@ -6,7 +6,8 @@ from sqlmodel import Field, Column, DateTime, text, select, func, update
 
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.base import SQLModelSerializable
-
+from sqlalchemy import String
+from bisheng.utils import generate_uuid
 
 class SensitiveStatus(Enum):
     PASS = 1  # 通过
@@ -15,7 +16,8 @@ class SensitiveStatus(Enum):
 
 class MessageSessionBase(SQLModelSerializable):
     """ 会话表 """
-    chat_id: str = Field(default=None, primary_key=True, description='会话唯一ID')
+    # chat_id: str = Field(default=None, primary_key=True, description='会话唯一ID')
+    chat_id: str = Field(default_factory=generate_uuid, description='会话唯一ID', sa_column=Column(String, primary_key=True))
     flow_id: str = Field(index=True, description='应用唯一ID')
     flow_type: int = Field(description='应用类型。技能、助手、工作流')
     flow_name: str = Field(index=True, description='应用名称')
@@ -73,7 +75,7 @@ class MessageSessionDao(MessageSessionBase):
     async def async_get_one(cls, chat_id: str) -> MessageSession | None:
         statement = select(MessageSession).where(MessageSession.chat_id == chat_id)
         async with get_async_db_session() as session:
-            return (await session.exec(statement)).first()
+            return (await session.execute(statement)).scalars().first()
 
     @classmethod
     def generate_filter_session_statement(cls,

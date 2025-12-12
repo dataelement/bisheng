@@ -12,7 +12,7 @@ from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileD
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
-
+from sqlalchemy import Integer
 
 class KnowledgeTypeEnum(Enum):
     QA = 1  # QA知识库
@@ -29,7 +29,8 @@ class KnowledgeState(Enum):
 
 
 class KnowledgeBase(SQLModelSerializable):
-    user_id: Optional[int] = Field(default=None, index=True)
+    # user_id: Optional[int] = Field(default=None, index=True)
+    user_id: Optional[int] = Field(default=None, index=True,nullable=True)
     name: str = Field(index=True, min_length=1, max_length=200, description='知识库名, 最少一个字符，最多30个字符')
     type: int = Field(index=False, default=0, description='0 为普通知识库，1 为QA知识库')
     description: Optional[str] = Field(default=None, index=True)
@@ -52,7 +53,8 @@ class KnowledgeBase(SQLModelSerializable):
 
 
 class Knowledge(KnowledgeBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class KnowledgeRead(KnowledgeBase):
@@ -111,7 +113,7 @@ class KnowledgeDao(KnowledgeBase):
             statement = update(Knowledge).where(col(Knowledge.id) == knowledge_id)
             statement = statement.values(state=state.value,
                                          update_time=update_time or datetime.now())
-            await session.exec(statement)
+            await session.execute(statement)
             await session.commit()
 
     @classmethod
@@ -226,7 +228,7 @@ class KnowledgeDao(KnowledgeBase):
 
         statement = statement.order_by(Knowledge.update_time.desc())
         async with get_async_db_session() as session:
-            return (await session.exec(statement)).all()
+            return (await session.execute(statement)).scalars().all()
 
     @classmethod
     def count_user_knowledge(cls,
@@ -389,7 +391,7 @@ class KnowledgeDao(KnowledgeBase):
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(Knowledge.update_time.desc())
         async with get_async_db_session() as session:
-            return (await session.exec(statement)).all()
+            return (await session.execute(statement)).scalars().all()
 
     @classmethod
     def count_all_knowledge(cls,

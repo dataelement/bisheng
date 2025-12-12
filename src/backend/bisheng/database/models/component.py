@@ -6,7 +6,7 @@ from sqlmodel import JSON, Column, DateTime, Field, select, text
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.utils import generate_uuid
-
+from sqlalchemy import String
 
 class ComponentBase(SQLModelSerializable):
     name: str = Field(max_length=50, index=True, description='保存的组件名称')
@@ -18,11 +18,12 @@ class ComponentBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class Component(ComponentBase, table=True):
-    id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
+    # id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
+    id: str = Field(default_factory=generate_uuid, sa_column=Column(String, primary_key=True))
     data: Optional[Any] = Field(default=None, sa_column=Column(JSON))
 
 

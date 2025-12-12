@@ -5,7 +5,7 @@ from sqlmodel import Field, Column, text, DateTime, select, update
 
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.base import SQLModelSerializable
-
+from sqlalchemy import Integer
 
 class InviteCodeBase(SQLModelSerializable):
     """
@@ -26,8 +26,8 @@ class InviteCodeBase(SQLModelSerializable):
 
 
 class InviteCode(InviteCodeBase, table=True):
-    id: Optional[int] = Field(default=None, index=True, primary_key=True, description='唯一ID')
-
+    # id: Optional[int] = Field(default=None, index=True, primary_key=True, description='唯一ID')
+    id: Optional[int] = Field(default=None, description='唯一ID', sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 class InviteCodeDao(InviteCodeBase):
     """
@@ -49,7 +49,7 @@ class InviteCodeDao(InviteCodeBase):
         statement = select(InviteCode).where(InviteCode.bind_user == bind_user).where(
             InviteCode.used < InviteCode.limit).order_by(InviteCode.id.asc())
         async with get_async_db_session() as session:
-            result = await session.exec(statement)
+            result = await session.execute(statement)
             return result.all()
 
     @classmethod
@@ -59,8 +59,8 @@ class InviteCodeDao(InviteCodeBase):
         """
         statement = select(InviteCode).where(InviteCode.bind_user == bind_user).order_by(InviteCode.id.desc())
         async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            return result.all()
+            result = await session.execute(statement)
+            return result.scalars().all()
 
     @classmethod
     async def bind_invite_code(cls, user_id: int, code: str) -> bool:
@@ -71,7 +71,7 @@ class InviteCodeDao(InviteCodeBase):
             bind_user=user_id
         )
         async with get_async_db_session() as session:
-            result = await session.exec(statement)
+            result = await session.execute(statement)
             await session.commit()
             if result.rowcount > 0:
                 return True
@@ -83,7 +83,7 @@ class InviteCodeDao(InviteCodeBase):
             used=InviteCode.used + 1
         ).where(InviteCode.used < InviteCode.limit)
         async with get_async_db_session() as session:
-            result = await session.exec(statement)
+            result = await session.execute(statement)
             await session.commit()
             if result.rowcount > 0:
                 return True
@@ -98,7 +98,7 @@ class InviteCodeDao(InviteCodeBase):
             used=InviteCode.used - 1
         ).where(InviteCode.used > 0)
         async with get_async_db_session() as session:
-            result = await session.exec(statement)
+            result = await session.execute(statement)
             await session.commit()
             if result.rowcount > 0:
                 return True

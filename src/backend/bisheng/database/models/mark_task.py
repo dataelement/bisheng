@@ -3,7 +3,7 @@ from enum import Enum
 from typing import List, Optional
 
 # if TYPE_CHECKING:
-from sqlalchemy import Column, DateTime, and_, delete, func, or_, text
+from sqlalchemy import Column, DateTime, and_, delete, func, or_, text,Integer
 from sqlmodel import Field, select, update
 
 from bisheng.core.database import get_sync_db_session
@@ -30,7 +30,8 @@ class MarkTaskBase(SQLModelSerializable):
 
 
 class MarkTask(MarkTaskBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class MarkTaskRead(MarkTaskBase):

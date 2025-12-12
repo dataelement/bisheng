@@ -3,13 +3,12 @@ from enum import Enum
 from typing import Dict, List, Optional, Tuple
 
 from loguru import logger
-from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import (JSON, Column, DateTime, Field, String, Text, case, delete, func, not_, or_,
                       select, text, update, col)
 
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.base import SQLModelSerializable
-
+from sqlmodel import Integer
 
 class LikedType(Enum):
     UNRATED = 0  # 未评价
@@ -23,7 +22,7 @@ class MessageBase(SQLModelSerializable):
     mark_status: Optional[int] = Field(index=False, default=1, description='标记状态')
     mark_user: Optional[int] = Field(default=None, index=False, description='标记用户')
     mark_user_name: Optional[str] = Field(default=None, index=False, description='标记用户')
-    message: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT), description='聊天消息')
+    message: Optional[str] = Field(default=None, sa_column=Column(Text), description='聊天消息')
     extra: Optional[str] = Field(default=None, sa_column=Column(Text), description='连接信息等')
     type: str = Field(index=False, description='消息类型')
     category: str = Field(index=False, max_length=32, description='消息类别， question等')
@@ -46,10 +45,30 @@ class MessageBase(SQLModelSerializable):
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP'),
         onupdate=text('CURRENT_TIMESTAMP')))
 
-
+# 自定义 JSON 类型：自动处理字符串与字典的转换
+from sqlalchemy.types import TypeDecorator, JSON
+import json
+class DMJSON(TypeDecorator):
+    impl = JSON  # 底层依赖达梦的 JSON 类型
+    def process_bind_param(self, value, dialect):
+        # 写入数据库：字典转 JSON 字符串
+        if value is None:
+            return None
+        return json.dumps(value)
+    def process_result_value(self, value, dialect):
+        # 读取数据库：JSON 字符串转字典
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+        return value
 class ChatMessage(MessageBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    receiver: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
+    receiver: Optional[Dict] = Field(default=None, sa_column=Column(DMJSON))
 
     # 关键：设置表级别字符集为 utf8mb4
     __table_args__ = {
@@ -159,7 +178,7 @@ class ChatMessageDao(MessageBase):
         statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id).order_by(
             ChatMessage.id.desc()).limit(1)
         async with get_async_db_session() as session:
-            res = await session.exec(statement)
+            res = await session.execute(statement)
             res = res.all()
             if res:
                 return res[0]
@@ -211,8 +230,8 @@ class ChatMessageDao(MessageBase):
             if category_list:
                 statement = statement.where(ChatMessage.category.in_(category_list))
             statement = statement.limit(limit).order_by(ChatMessage.create_time.asc())
-            result = await session.exec(statement)
-            return result.all()
+            result = await session.execute(statement)
+            return result.scalars().all()
 
     @classmethod
     def get_last_msg_by_flow_id(cls, flow_id: List[str], chat_id: List[str]):
@@ -307,8 +326,8 @@ class ChatMessageDao(MessageBase):
     @classmethod
     async def aget_message_by_id(cls, message_id: int) -> Optional[ChatMessage]:
         async with get_async_db_session() as session:
-            result = await session.exec(select(ChatMessage).where(ChatMessage.id == message_id))
-            return result.first()
+            result = await session.execute(select(ChatMessage).where(ChatMessage.id == message_id))
+            return result.scalars().first()
 
     @classmethod
     def update_message(cls, message_id: int, user_id: int, message: str):
@@ -365,5 +384,5 @@ class ChatMessageDao(MessageBase):
             statement = statement.where(ChatMessage.id < message_id)
         statement = statement.order_by(col(ChatMessage.id).desc()).limit(page_size)
         async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            return result.all()
+            result = await session.execute(statement)
+            return result.scalars().all()

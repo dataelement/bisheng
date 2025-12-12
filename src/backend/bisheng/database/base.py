@@ -12,7 +12,7 @@ def get_count(session: Session, q: Select) -> int:
     :return:
     """
     count_q = q.with_only_columns(func.count()).order_by(None).select_from(q.get_final_froms()[0])
-    iterator = session.exec(count_q)
+    iterator = session.execute(count_q)
     for count in iterator:
         return count
     return 0
@@ -26,7 +26,7 @@ async def async_get_count(session: AsyncSession, q: Select) -> int:
     :return:
     """
     count_q = q.with_only_columns(func.count()).order_by(None).select_from(q.get_final_froms()[0])
-    iterator = await session.exec(count_q)
+    iterator = await session.execute(count_q)
     for count in iterator:
         return count
     return 0

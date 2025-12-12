@@ -3,14 +3,13 @@ from typing import Optional, Dict, Any, List, Literal
 
 from loguru import logger
 from sqlalchemy import update
-from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import Field, select, delete, col, or_, func, Column, Text, DateTime, text, CHAR
 
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema
 from bisheng.core.database import get_async_db_session
 from bisheng.database.base import async_get_count
 from bisheng.database.models.base import SQLModelSerializable
-
+from sqlalchemy import Text,Integer
 
 class LinsightSOPBase(SQLModelSerializable):
     """
@@ -20,7 +19,7 @@ class LinsightSOPBase(SQLModelSerializable):
     description: Optional[str] = Field(default=None, description='SOP描述', sa_column=Column(Text))
     user_id: int = Field(..., description='用户ID', foreign_key="user.user_id", nullable=False)
     content: str = Field(..., description='SOP内容',
-                         sa_column=Column(LONGTEXT, nullable=False, comment="SOP内容"))
+                         sa_column=Column(Text, nullable=False, comment="SOP内容"))
 
     rating: Optional[int] = Field(default=0, ge=0, le=5, description='SOP评分，范围0-5')
     showcase: Optional[bool] = Field(default=False, index=True, description='是否作为精选案例在首页展示')
@@ -33,7 +32,7 @@ class LinsightSOPBase(SQLModelSerializable):
     create_time: datetime = Field(default_factory=datetime.now, description='创建时间',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class LinsightSOP(LinsightSOPBase, table=True):
@@ -41,7 +40,9 @@ class LinsightSOP(LinsightSOPBase, table=True):
     Inspiration SOP模型
     """
     __tablename__ = "linsight_sop"
-    id: Optional[int] = Field(default=None, primary_key=True, description='SOP唯一ID')
+    # id: Optional[int] = Field(default=None, primary_key=True, description='SOP唯一ID')
+    id: Optional[int] = Field(default=None, description='SOP唯一ID', sa_column=Column(Integer, primary_key=True, autoincrement=True))
+    
 
 
 class LinsightSOPRecord(SQLModelSerializable, table=True):
@@ -49,12 +50,13 @@ class LinsightSOPRecord(SQLModelSerializable, table=True):
     灵思SOP运行记录表，记录灵思执行过程中产生的sop
     """
     __tablename__ = "linsight_sop_record"
-    id: Optional[int] = Field(default=None, primary_key=True, description='SOP记录唯一ID')
+    # id: Optional[int] = Field(default=None, primary_key=True, description='SOP记录唯一ID')
+    id: Optional[int] = Field(default=None, description='SOP记录唯一ID', sa_column=Column(Integer, primary_key=True, autoincrement=True))
     name: str = Field(..., description='SOP名称', sa_column=Column(Text, nullable=False))
     description: Optional[str] = Field(default=None, description='SOP描述', sa_column=Column(Text))
     user_id: int = Field(..., description='用户ID', foreign_key="user.user_id", nullable=False)
     content: str = Field(..., description='SOP内容',
-                         sa_column=Column(LONGTEXT, nullable=False, comment="SOP内容"))
+                         sa_column=Column(Text, nullable=False, comment="SOP内容"))
 
     rating: Optional[int] = Field(default=0, ge=0, le=5, description='SOP评分，范围0-5')
     execute_feedback: Optional[str] = Field(None, description='执行结果反馈信息', sa_type=Text, nullable=True)
@@ -62,7 +64,7 @@ class LinsightSOPRecord(SQLModelSerializable, table=True):
     create_time: datetime = Field(default_factory=datetime.now, description='创建时间',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class LinsightSOPDao(LinsightSOPBase):
@@ -83,7 +85,7 @@ class LinsightSOPDao(LinsightSOPBase):
         async with get_async_db_session() as session:
             # 使用Update语句更新SOP
             statement = select(LinsightSOP).where(LinsightSOP.id == sop_obj.id)
-            result = await session.exec(statement)
+            result = await session.execute(statement)
             sop = result.first()
             if not sop:
                 raise ValueError("SOP not found")
@@ -127,7 +129,7 @@ class LinsightSOPDao(LinsightSOPBase):
         async with get_async_db_session() as session:
             total_count = await async_get_count(session, statement)
             statement = statement.offset((page - 1) * page_size).limit(page_size)
-            result = (await session.exec(statement)).all()
+            result = (await session.execute(statement)).scalars().all()
 
         return {
             "total": total_count,
@@ -143,8 +145,8 @@ class LinsightSOPDao(LinsightSOPBase):
         """
         async with get_async_db_session() as session:
             statement = select(LinsightSOP).where(col(LinsightSOP.id).in_(sop_ids))
-            result = await session.exec(statement)
-            sop_list = result.all()
+            result = await session.execute(statement)
+            sop_list = result.scalars().all()
             return sop_list
 
     @classmethod
@@ -154,8 +156,8 @@ class LinsightSOPDao(LinsightSOPBase):
         """
         statement = select(LinsightSOP).where(col(LinsightSOP.name).in_(names))
         async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            sop_list = result.all()
+            result = await session.execute(statement)
+            sop_list = result.scalars().all()
             return sop_list
 
     @classmethod
@@ -165,7 +167,7 @@ class LinsightSOPDao(LinsightSOPBase):
         """
         async with get_async_db_session() as session:
             delete_statement = delete(LinsightSOP).where(col(LinsightSOP.id).in_(sop_ids))
-            result = await session.exec(delete_statement)
+            result = await session.execute(delete_statement)
             await session.commit()
             logger.info(f"Deleted {result.rowcount} SOP(s) with IDs: {sop_ids}")
             return True
@@ -177,8 +179,8 @@ class LinsightSOPDao(LinsightSOPBase):
         """
         async with get_async_db_session() as session:
             statement = select(LinsightSOP).where(LinsightSOP.linsight_session_id == session_id)
-            result = await session.exec(statement)
-            sop = result.first()
+            result = await session.execute(statement)
+            sop = result.scalars().first()
             return sop if sop else None
 
     @classmethod
@@ -188,8 +190,8 @@ class LinsightSOPDao(LinsightSOPBase):
         """
         async with get_async_db_session() as session:
             statement = select(LinsightSOP).where(col(LinsightSOP.vector_store_id).in_(vector_store_ids))
-            result = await session.exec(statement)
-            sop_list = result.all()
+            result = await session.execute(statement)
+            sop_list = result.scalars().all()
             return sop_list
 
     @classmethod
@@ -199,8 +201,8 @@ class LinsightSOPDao(LinsightSOPBase):
         """
         async with get_async_db_session() as session:
             statement = select(LinsightSOP)
-            result = await session.exec(statement)
-            sop_list = result.all()
+            result = await session.execute(statement)
+            sop_list = result.scalars().all()
             return sop_list
 
     @classmethod
@@ -269,8 +271,8 @@ class LinsightSOPDao(LinsightSOPBase):
         statement = select(LinsightSOPRecord).where(col(LinsightSOPRecord.id).in_(ids))
 
         async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            sop_record_list = result.all()
+            result = await session.execute(statement)
+            sop_record_list = result.scalars().all()
             return sop_record_list
 
     @classmethod
@@ -281,7 +283,7 @@ class LinsightSOPDao(LinsightSOPBase):
         statement = update(LinsightSOPRecord).where(
             col(LinsightSOPRecord.linsight_version_id) == linsight_version_id).values(rating=rating)
         async with get_async_db_session() as session:
-            await session.exec(statement)
+            await session.execute(statement)
             await session.commit()
             return True
 
@@ -293,7 +295,7 @@ class LinsightSOPDao(LinsightSOPBase):
         statement = update(LinsightSOPRecord).where(
             col(LinsightSOPRecord.linsight_version_id) == linsight_version_id).values(execute_feedback=execute_feedback)
         async with get_async_db_session() as session:
-            await session.exec(statement)
+            await session.execute(statement)
             await session.commit()
             return True
 
@@ -305,6 +307,6 @@ class LinsightSOPDao(LinsightSOPBase):
         statement = update(LinsightSOP).where(
             col(LinsightSOP.id) == sop_id).values(showcase=showcase)
         async with get_async_db_session() as session:
-            await session.exec(statement)
+            await session.execute(statement)
             await session.commit()
             return True

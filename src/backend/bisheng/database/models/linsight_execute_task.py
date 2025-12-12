@@ -8,7 +8,26 @@ from sqlmodel import Field, select, col
 from bisheng.core.database import get_async_db_session
 from bisheng.database.base import uuid_hex
 from bisheng.database.models.base import SQLModelSerializable
-
+# 自定义 JSON 类型：自动处理字符串与字典的转换
+from sqlalchemy.types import TypeDecorator, JSON
+import json
+class DMJSON(TypeDecorator):
+    impl = JSON  # 底层依赖达梦的 JSON 类型
+    def process_bind_param(self, value, dialect):
+        # 写入数据库：字典转 JSON 字符串
+        if value is None:
+            return None
+        return json.dumps(value)
+    def process_result_value(self, value, dialect):
+        # 读取数据库：JSON 字符串转字典
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+        return value
 
 class ExecuteTaskTypeEnum(str, Enum):
     """
@@ -59,14 +78,14 @@ class LinsightExecuteTaskBase(SQLModelSerializable):
                                                          nullable=True))
     task_type: ExecuteTaskTypeEnum = Field(..., description='任务类型',
                                            sa_column=Column(SQLEnum(ExecuteTaskTypeEnum), nullable=False))
-    task_data: Optional[dict] = Field(None, description='任务数据', sa_type=JSON, nullable=True)
+    task_data: Optional[dict] = Field(None, description='任务数据', sa_type=DMJSON, nullable=True)
 
     # input_prompt: Optional[str] = Field(None, description='输入提示', sa_type=Text, nullable=True)
     # user_input: Optional[str] = Field(None, description='用户输入', sa_type=Text, nullable=True)
-    history: Optional[List[Dict]] = Field(None, description='执行步骤记录', sa_type=JSON, nullable=True)
+    history: Optional[List[Dict]] = Field(None, description='执行步骤记录', sa_type=DMJSON, nullable=True)
     status: ExecuteTaskStatusEnum = Field(ExecuteTaskStatusEnum.NOT_STARTED, description="任务状态",
                                           sa_column=Column(SQLEnum(ExecuteTaskStatusEnum), nullable=False))
-    result: Optional[Dict] = Field(None, description='任务结果', sa_type=JSON, nullable=True)
+    result: Optional[Dict] = Field(None, description='任务结果', sa_type=DMJSON, nullable=True)
 
 
 class LinsightExecuteTask(LinsightExecuteTaskBase, table=True):
@@ -79,7 +98,7 @@ class LinsightExecuteTask(LinsightExecuteTaskBase, table=True):
     create_time: datetime = Field(default_factory=datetime.now, description='创建时间',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP')))
 
     __tablename__ = "linsight_execute_task"
 
@@ -98,8 +117,8 @@ class LinsightExecuteTaskDao(object):
         """
         async with get_async_db_session() as session:
             statement = select(LinsightExecuteTask).where(LinsightExecuteTask.id == str(task_id))
-            task = await session.exec(statement)
-            return task.first()
+            task = await session.execute(statement)
+            return task.scalars().first()
 
     @classmethod
     async def get_by_session_version_id(cls, session_version_id: str, is_parent_task: bool = False) -> List[
@@ -117,8 +136,8 @@ class LinsightExecuteTaskDao(object):
             if is_parent_task:
                 statement = statement.where(col(LinsightExecuteTask.parent_task_id).is_(None))
 
-            tasks = await session.exec(statement)
-            return tasks.all()
+            tasks = await session.execute(statement)
+            return tasks.scalars().all()
 
     @classmethod
     async def batch_create_tasks(cls, tasks: List[LinsightExecuteTask]) -> List[LinsightExecuteTask]:
@@ -142,8 +161,8 @@ class LinsightExecuteTaskDao(object):
         """
         async with get_async_db_session() as session:
             statement = select(LinsightExecuteTask).where(LinsightExecuteTask.id == task_id)
-            task = await session.exec(statement)
-            task = task.first()
+            task = await session.execute(statement)
+            task = task.scalars().first()
 
             if not task:
                 return None
@@ -180,5 +199,5 @@ class LinsightExecuteTaskDao(object):
 
             statement = statement.values(status=status)
 
-            await session.exec(statement)
+            await session.execute(statement)
             await session.commit()

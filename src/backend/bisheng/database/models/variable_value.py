@@ -3,7 +3,7 @@ from typing import Optional, List
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import Column, DateTime, text
+from sqlalchemy import Column, DateTime, text,Integer
 from sqlmodel import Field, select
 
 from bisheng.core.database import get_sync_db_session
@@ -51,7 +51,8 @@ class VariableBase(SQLModelSerializable):
 
 class Variable(VariableBase, table=True):
     __tablename__ = 't_variable_value'
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class VariableCreate(VariableBase):

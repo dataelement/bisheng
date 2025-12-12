@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional, Tuple
 
-from sqlalchemy import func
+from sqlalchemy import func,String
 from sqlmodel import Column, DateTime, Field, select, text
 
 from bisheng.core.database import get_sync_db_session
@@ -11,7 +11,8 @@ from bisheng.utils import generate_uuid
 
 # Finetune任务的预置训练集
 class PresetTrainBase(SQLModelSerializable):
-    id: str = Field(default=None, primary_key=True, description='预置训练文件唯一ID')
+    # id: str = Field(default=None, primary_key=True, description='预置训练文件唯一ID')
+    id: str = Field(default_factory=generate_uuid, description='预置训练文件唯一ID', sa_column=Column(String, primary_key=True))
     url: str = Field(default='', description='minIo上的文件链接')
     name: str = Field(default='', index=True, description='上传的文件名字')
     user_id: str = Field(default='', index=True, description='创建人ID')
@@ -20,11 +21,12 @@ class PresetTrainBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class PresetTrain(PresetTrainBase, table=True):
-    id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
+    # id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
+    id: str = Field(default_factory=generate_uuid, sa_column=Column(String, primary_key=True))
 
 
 class PresetTrainDao(PresetTrainBase):

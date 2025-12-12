@@ -1,6 +1,6 @@
 from typing import Optional
 from datetime import datetime
-from sqlmodel import Field, Column, DateTime, select
+from sqlmodel import Field, Column, DateTime, select,Integer
 from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import text, and_, delete
 from sqlalchemy.exc import IntegrityError
@@ -21,7 +21,8 @@ class UserLinkBase(SQLModelSerializable):
 
 class UserLink(UserLinkBase, table=True):
     __tablename__ = 'user_link'
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class UserLinkDao(UserLinkBase):

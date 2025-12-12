@@ -30,9 +30,10 @@ async def init_default_data():
     if await redis_client.asetNx('init_default_data', '1'):
         try:
             db_manager = await get_database_connection()
+            # await db_manager.delete_db_and_tables()
             await db_manager.create_db_and_tables()
             async with get_async_db_session() as session:
-                db_role = await session.exec(select(Role).limit(1))
+                db_role = await session.execute(select(Role).limit(1))
                 db_role = db_role.all()
                 if not db_role:
                     # 初始化系统配置, 管理员拥有所有权限
@@ -50,7 +51,7 @@ async def init_default_data():
                     ])
                     await session.commit()
                 # 添加默认用户组
-                group = await session.exec(select(Group).limit(1))
+                group = await session.execute(select(Group).limit(1))
                 group = group.all()
                 if not group:
                     group = Group(id=DefaultGroup, group_name='默认用户组', create_user=1, update_user=1)
@@ -58,7 +59,7 @@ async def init_default_data():
                     await session.commit()
                     await session.refresh(group)
 
-                user = await session.exec(select(User).limit(1))
+                user = await session.execute(select(User).limit(1))
                 user = user.all()
                 if not user and settings.admin:
                     md5 = hashlib.md5()
@@ -73,7 +74,7 @@ async def init_default_data():
                     await session.refresh(user)
                     await UserRoleDao.set_admin_user(user.user_id)
 
-                component_db = await session.exec(select(Component).limit(1))
+                component_db = await session.execute(select(Component).limit(1))
                 component_db = component_db.all()
                 if not component_db:
                     db_components = []
@@ -86,7 +87,7 @@ async def init_default_data():
                     await session.commit()
 
                 # 初始化预置技能模板
-                templates = await session.exec(select(Template).limit(1))
+                templates = await session.execute(select(Template).limit(1))
                 templates = templates.all()
                 if not templates:
                     json_items = json.loads(read_from_conf('../database/data/template.json'))
@@ -95,7 +96,7 @@ async def init_default_data():
                     await session.commit()
 
                 # 初始化预置工具列表
-                preset_tools = await session.exec(select(GptsTools).limit(1))
+                preset_tools = await session.execute(select(GptsTools).limit(1))
                 preset_tools = preset_tools.all()
                 if not preset_tools:
                     preset_tools = []
@@ -106,7 +107,7 @@ async def init_default_data():
                     session.add_all(preset_tools)
                     await session.commit()
                 # 初始化预置工具类别
-                preset_tools_type = await session.exec(select(GptsToolsType).limit(1))
+                preset_tools_type = await session.execute(select(GptsToolsType).limit(1))
                 preset_tools_type = preset_tools_type.all()
                 if not preset_tools_type:
                     preset_tools_type = []
@@ -118,18 +119,18 @@ async def init_default_data():
                     await session.commit()
                     # 设置预置工具所属的类别, 需要和预置数据一致，所以id是固定的
                     for i in range(1, 7):
-                        await session.exec(update(GptsTools).where(GptsTools.id == i).values(type=i))
+                        await session.execute(update(GptsTools).where(GptsTools.id == i).values(type=i))
                     # 属于天眼查类别下的工具
                     tyc_types: List[int] = list(range(7, 18))
-                    await session.exec(
+                    await session.execute(
                         update(GptsTools).where(GptsTools.id.in_(tyc_types)).values(type=7))
                     # 属于金融类别下的工具
                     jr_types: List[int] = list(range(18, 28))
-                    await session.exec(
+                    await session.execute(
                         update(GptsTools).where(GptsTools.id.in_(jr_types)).values(type=8))
                     await session.commit()
                 # 初始化配置可用于微调的基准模型
-                preset_models = await session.exec(select(SftModel).limit(1))
+                preset_models = await session.execute(select(SftModel).limit(1))
                 preset_models = preset_models.all()
                 if not preset_models:
                     preset_models = []
@@ -141,7 +142,7 @@ async def init_default_data():
                     await session.commit()
 
                 # 初始化补充默认的技能版本表
-                flow_version = await session.exec(select(FlowVersion).limit(1))
+                flow_version = await session.execute(select(FlowVersion).limit(1))
                 flow_version = flow_version.all()
                 if not flow_version:
                     sql_query = text(

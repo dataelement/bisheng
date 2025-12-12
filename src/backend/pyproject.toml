@@ -1,81 +1,102 @@
-[project]
+[tool.poetry]
 name = "backend"
 version = "2.2.0"
 description = "BISHENG backend service"
 readme = "README.md"
 license = "Apache 2.0"
-requires-python = ">=3.10"
-dependencies = [
-    "aiofiles>=25.1.0",
-    "aiomysql>=0.3.2",
-    "appdirs>=1.4.4",
-    "asyncpg>=0.30.0",
-    "bisheng_pyautogen==0.3.2",
-    "bisheng-ragas>=1.0.3",
-    "bs4>=0.0.2",
-    "captcha>=0.7.1",
-    "cchardet>=2.1.7",
-    "celery>=5.5.3",
-    "chardet>=5.2.0",
-    "chromadb>=1.3.4",
-    "cryptography>=46.0.3",
-    "dashscope>=1.24.9",
-    "datasets>=4.3.0",
-    "e2b-code-interpreter==1.5.2",
-    "emoji>=2.15.0",
-    "fastapi>=0.120.4",
-    "ibm-db>=3.2.7",
-    "ibm-db-sa>=0.4.2",
-    "jieba>=0.42.1",
-    "langchain>=0.3.23,<0.4.0",
-    "langchain-anthropic>=0.3.10,<0.4.0",
-    "langchain-community>=0.3.21,<0.4.0",
-    "langchain-deepseek>=0.1.3,<0.2.0",
-    "langchain-elasticsearch>=0.4.0,<0.5.0",
-    "langchain-experimental>=0.3.4",
-    "langchain-google-genai>=2.1.0,<2.2.0",
-    "langchain-milvus==0.2.1",
-    "langchain-ollama>=0.3.0,<0.4.0",
-    "langchain-openai>=0.3.16,<0.4.0",
-    "langgraph>=0.3.27,<0.4.0",
-    "llama-index>=0.12.52",
-    "loguru>=0.7.3",
-    "markdown>=3.9",
-    "markdownify>=1.2.0",
-    "matplotlib>=3.10.7",
-    "mcp>=1.20.0",
-    "minio>=7.2.18",
-    "miniopy-async>=1.23.4",
-    "openai>=1.68.2,<2.0.0",
-    "opencv-python>=4.12.0.88",
-    "opengauss-sqlalchemy>=2.4.0",
-    "openpyxl>=3.1.5",
-    "oracledb>=3.4.0",
-    "pandas>=2.3.3",
-    "pillow>=12.0.0",
-    "playwright>=1.55.0",
-    "psycopg2-binary>=2.9.11",
-    "pyjwt>=2.10.1",
-    "pymongo>=4.15.3",
-    "pymupdf>=1.26.5",
-    "pymysql>=1.1.2",
-    "pypandoc>=1.15",
-    "python-docx>=1.2.0",
-    "python-pptx>=1.0.2",
-    "qdrant-client>=1.15.1",
-    "rapidfuzz>=3.14.3",
-    "redis>=7.0.1",
-    "scipy>=1.15.3",
-    "shapely>=2.1.2",
-    "sqlmodel>=0.0.27",
-    "supabase>=2.23.3",
-    "sympy>=1.14.0",
-    "transformers>=4.57.1",
-    "uvicorn>=0.38.0",
-    "weaviate-client>=4.17.0",
-    "websockets>=15.0.1",
-    "xlrd>=2.0.2",
-    "zhipuai>=1.0.7",
-    "tabulate==0.9.0",
-    "httpx==0.27.1",
+packages = [
+    { include = "bisheng" }
 ]
+[tool.poetry.dependencies]
+
+python = ">=3.10,<4.0"
+
+# 异步 IO / 网络 / 数据库驱动
+aiofiles = ">=25.1.0"
+aiomysql = ">=0.3.2"
+asyncpg = ">=0.30.0"
+"cchardet" = ">=2.1.7"
+chardet = ">=5.2.0"
+httpx = "==0.27.1"
+redis = ">=7.0.1"
+websockets = ">=15.0.1"
+
+# 数据库驱动/SQLAlchemy方言
+ibm-db = ">=3.2.7"
+"ibm-db-sa" = ">=0.4.2"
+"opengauss-sqlalchemy" = ">=2.4.0"
+oracledb = ">=3.4.0"
+"psycopg2-binary" = ">=2.9.11"
+pymongo = ">=4.15.3"
+pymysql = ">=1.1.2"
+sqlmodel = ">=0.0.27"
+
+# 核心 LLM/LangChain/RAG 框架
+langchain = ">=0.3.23,<0.4.0"
+"langchain-anthropic" = ">=0.3.10,<0.4.0"
+"langchain-community" = ">=0.3.21,<0.4.0"
+"langchain-deepseek" = ">=0.1.3,<0.2.0"
+"langchain-elasticsearch" = ">=0.4.0,<0.5.0"
+"langchain-experimental" = ">=0.3.4"
+"langchain-google-genai" = ">=2.1.0,<2.2.0"
+"langchain-milvus" = "==0.2.1"
+"langchain-ollama" = ">=0.3.0,<0.4.0"
+"langchain-openai" = ">=0.3.16,<0.4.0"
+langgraph = ">=0.3.27,<0.4.0"
+"llama-index" = ">=0.12.52"
+openai = ">=1.68.2,<2.0.0"
+transformers = ">=4.57.1"
+zhipuai = ">=1.0.7"
+dashscope = ">=1.24.9"
+
+# RAG/向量数据库
+chromadb = ">=1.3.4"
+"qdrant-client" = ">=1.15.1"
+weaviate-client = ">=4.17.0"
+supabase = ">=2.23.3"
+"bisheng-ragas" = ">=1.0.3"
+
+# 工具/服务
+celery = ">=5.5.3"
+"e2b-code-interpreter" = "==1.5.2"
+"bisheng_pyautogen" = "==0.3.2"
+mcp = ">=1.20.0" # 通常是消息队列/控制平面相关
+
+# FastAPI/Web 服务
+fastapi = ">=0.120.4"
+uvicorn = ">=0.38.0"
+
+# 数据处理/文件操作
+datasets = ">=4.3.0"
+pandas = ">=2.3.3"
+"openpyxl" = ">=3.1.5"
+xlrd = ">=2.0.2"
+appdirs = ">=1.4.4"
+loguru = ">=0.7.3"
+minio = ">=7.2.18"
+"miniopy-async" = ">=1.23.4"
+
+# 文档/文本解析
+bs4 = ">=0.0.2"
+jieba = ">=0.42.1"
+markdown = ">=3.9"
+markdownify = ">=1.2.0"
+pypandoc = ">=1.15"
+"python-docx" = ">=1.2.0"
+"python-pptx" = ">=1.0.2"
+pymupdf = ">=1.26.5"
+"tabulate" = "==0.9.0"
+
+# 图像/数学/安全/其他
+captcha = ">=0.7.1"
+cryptography = ">=46.0.3"
+emoji = ">=2.15.0"
+matplotlib = ">=3.10.7"
+"opencv-python-headless" = ">=4.12.0.88"
+pillow = ">=12.0.0"
+playwright = ">=1.55.0"
+pyjwt = ">=2.10.1"
+rapidfuzz = ">=3.14.3"
+scipy = ">=1.15.3"
+shapely = ">=2.1.2"
+sympy = ">=1.14.0"

@@ -49,8 +49,8 @@ class BaseRepositoryImpl(BaseRepository[T, ID]):
         for field, value in filters.items():
             if hasattr(self.model_class, field):
                 query = query.where(getattr(self.model_class, field) == value)
-        result = await self.session.exec(query)
-        return result.first()
+        result = await self.session.execute(query)
+        return result.scalars().first()
 
     def find_one_sync(self, **filters) -> Optional[T]:
         """同步查找单个实体"""
@@ -60,8 +60,8 @@ class BaseRepositoryImpl(BaseRepository[T, ID]):
         for field, value in filters.items():
             if hasattr(self.model_class, field):
                 query = query.where(getattr(self.model_class, field) == value)
-        result = self.session.exec(query)
-        return result.first()
+        result = self.session.execute(query)
+        return result.scalars().first()
 
     async def find_all(self, **filters) -> Sequence[Row[Any] | RowMapping | Any]:
         """查找所有实体"""
@@ -71,8 +71,8 @@ class BaseRepositoryImpl(BaseRepository[T, ID]):
         for field, value in filters.items():
             if hasattr(self.model_class, field):
                 query = query.where(getattr(self.model_class, field) == value)
-        result = await self.session.exec(query)
-        return result.all()
+        result = await self.session.execute(query)
+        return result.scalars().all()
 
     def find_all_sync(self, **filters) -> Sequence[Row[Any] | RowMapping | Any]:
         """同步查找所有实体"""
@@ -82,8 +82,8 @@ class BaseRepositoryImpl(BaseRepository[T, ID]):
         for field, value in filters.items():
             if hasattr(self.model_class, field):
                 query = query.where(getattr(self.model_class, field) == value)
-        result = self.session.exec(query)
-        return result.all()
+        result = self.session.execute(query)
+        return result.scalars().all()
 
     async def update(self, entity: T) -> T:
         """更新实体"""
@@ -138,8 +138,8 @@ class BaseRepositoryImpl(BaseRepository[T, ID]):
 
         count_q = query.with_only_columns(func.count()).order_by(None).select_from(query.get_final_froms()[0])
 
-        result = await self.session.exec(count_q)
-
+        result = await self.session.execute(count_q)
+        result = result.scalars()
         for count in result:
             return count
         return 0
@@ -155,8 +155,8 @@ class BaseRepositoryImpl(BaseRepository[T, ID]):
 
         count_q = query.with_only_columns(func.count()).order_by(None).select_from(query.get_final_froms()[0])
 
-        result = self.session.exec(count_q)
-
+        result = self.session.execute(count_q)
+        result = result.scalars()
         for count in result:
             return count
         return 0

@@ -3,13 +3,12 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import field_validator, BaseModel
-from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import JSON, Column, DateTime, Field, func, select, text, update
 
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.utils import generate_uuid
-
+from sqlalchemy import Text,String,Integer
 
 class TrainMethod(Enum):
     FULL = 'full'
@@ -28,10 +27,30 @@ class FinetuneStatus(Enum):
     SUCCESS = 4
     # 发布完成
     PUBLISHED = 5
-
+# 自定义 JSON 类型：自动处理字符串与字典的转换
+from sqlalchemy.types import TypeDecorator, JSON
+import json
+class DMJSON(TypeDecorator):
+    impl = JSON  # 底层依赖达梦的 JSON 类型
+    def process_bind_param(self, value, dialect):
+        # 写入数据库：字典转 JSON 字符串
+        if value is None:
+            return None
+        return json.dumps(value)
+    def process_result_value(self, value, dialect):
+        # 读取数据库：JSON 字符串转字典
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+        return value
 
 class FinetuneBase(SQLModelSerializable):
-    id: str = Field(default=None, nullable=False, primary_key=True, description='唯一ID')
+    # id: str = Field(default=None, nullable=False, primary_key=True, description='唯一ID')
+    id: str = Field(default_factory=generate_uuid, sa_column=Column(String, primary_key=True))
     server: int = Field(default=0, index=True, description='关联的RT服务ID')
     server_name: str = Field(default='', index=True, description='RT服务名称')
     rt_endpoint: str = Field(default='', description='RT服务地址')
@@ -42,19 +61,19 @@ class FinetuneBase(SQLModelSerializable):
     model_id: int = Field(default=0, index=True, description='已发布的训练模型ID')
     model_name: str = Field(index=True, max_length=50, description='训练模型的名称')
     method: str = Field(default=TrainMethod.FULL.value, nullable=False, max_length=20, description='训练方法')
-    extra_params: Dict = Field(sa_column=Column(JSON), description='训练任务所需的额外参数')
-    train_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='个人训练数据集信息')
-    preset_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='预置训练数据集信息')
+    extra_params: Dict = Field(sa_column=Column(DMJSON), description='训练任务所需的额外参数')
+    train_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(DMJSON), description='个人训练数据集信息')
+    preset_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(DMJSON), description='预置训练数据集信息')
     status: int = Field(default=FinetuneStatus.TRAINING.value, index=True, description='训练任务的状态')
-    reason: Optional[str] = Field(default='', sa_column=Column(LONGTEXT), description='任务失败原因')
+    reason: Optional[str] = Field(default='', sa_column=Column(Text), description='任务失败原因')
     log_path: Optional[str] = Field(default='', max_length=512, description='训练日志在minio上的路径')
-    report: Optional[Dict] = Field(default=None, sa_column=Column(JSON), description='训练任务的评估报告数据')
+    report: Optional[Dict] = Field(default=None, sa_column=Column(DMJSON), description='训练任务的评估报告数据')
     user_id: int = Field(default=None, index=True, description='创建人ID')
     user_name: str = Field(default=None, description='创建人姓名')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
     # 检查训练集数据格式
     @classmethod
@@ -87,7 +106,8 @@ class FinetuneBase(SQLModelSerializable):
 
 
 class Finetune(FinetuneBase, table=True):
-    id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
+    # id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
+    id: str = Field(default_factory=generate_uuid , sa_column=Column(String, primary_key=True))
 
 
 class FinetuneList(BaseModel):
