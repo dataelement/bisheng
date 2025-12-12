@@ -179,7 +179,7 @@ class AssistantAgent(AssistantUtils):
                     logger.info('act=init_flow_tool build_end')
                     flow_tool = Tool(name=tool_name,
                                      func=built_object,
-                                     coroutine=built_object.acall,
+                                     coroutine=built_object.ainvoke,
                                      description=tool_description,
                                      args_schema=InputRequest,
                                      callbacks=callbacks)
