@@ -1,11 +1,29 @@
 {
-   "predefinedRules": {
-    "singleNewlineRule": "\\n✂️",
-    "doubleNewlineRule": "\\n\\n✂️",
-    "chapterRule": "Chapter\\s+.{1,10}",
-    "articleRule": "Section\\s+.{1,10}",
-    "chinesePeriodRule": "。✂️",
-    "englishPeriodRule": "\\.✂️"
+    "predefinedRules": {
+        "singleNewlineRule": {
+            "label": "\\n",
+            "desc": "Split after single newline, for separating normal line breaks"
+        },
+        "doubleNewlineRule": {
+            "label": "\\n\\n",
+            "desc": "Split after double newline, for separating paragraphs"
+        }, 
+        "chapterRule": {
+            "label":"Chapter\\s+.{1,10}",
+            "desc":"Split before 'Chapter X', for splitting chapters"
+        },
+        "articleRule": {
+            "label":"Section\\s+.{1,10}",
+            "desc":"Split before 'Article X', for splitting articles"
+        },
+        "chinesePeriodRule": {
+            "label":"。",
+            "desc":"Split after Chinese period, for Chinese sentence segmentation"
+        },
+        "englishPeriodRule": {
+            "label":"\\.",
+            "desc":"Split after English period, for English sentence segmentation"
+        }
   },
   "unavailable": "Audio playback is unavailable. Please contact the administrator.",
   "confirm1": "Confirm",
@@ -112,7 +130,7 @@
     "copySuffix": "'s copy",
     "createMetadata": "Create Metadata",
     "builtInMetadata": "Built-in Metadata",
-    "customRule": "Custom rule: {{regex}}",
+    "customRule": "Custom rule",
     "singleNewlineRule": "Split after single newline, used to separate ordinary line breaks",
     "doubleNewlineRule": "Split after double newline, used to separate paragraphs",
     "chapterRule": "Split before 'Chapter X', used to split chapters, etc.",

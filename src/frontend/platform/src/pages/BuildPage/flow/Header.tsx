@@ -772,15 +772,21 @@ const useBeforeUnload = (flow, nodes, preFlow, onPreFlowChange) => {
         onPreFlowChange();
         isReturningRef.current = true;
     };
+        console.log( window.history.state.usr.from,999)
 
     // 当节点更新且为返回操作时，执行导航
     useEffect(() => {
         if (!isReturningRef.current) return;
 
         isReturningRef.current = false;
-        window.history.length > 1
+        if( window.history.state.usr.from === '/build/apps'){
+            navigate('/build/apps');
+        } else {
+              window.history.length > 1
             ? window.history.back()
             : navigate('/build/apps');
+        }
+      
     }, [nodes]);
 
     return {

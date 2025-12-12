@@ -1,11 +1,29 @@
 {
-  "predefinedRules": {
-    "singleNewlineRule": "\\n✂️",
-    "doubleNewlineRule": "\\n\\n✂️",
-    "chapterRule": "第.{1,3}章",
-    "articleRule": "第.{1,3}条",
-    "chinesePeriodRule": "。✂️",
-    "englishPeriodRule": "\\.✂️"
+    "predefinedRules": {
+        "singleNewlineRule": {
+            "label": "\\n",
+            "desc": "单换行后切分，用于分隔普通换行"
+        },
+        "doubleNewlineRule": {
+            "label": "\\n\\n",
+            "desc": "双换行后切分,用于分隔段落"
+        }, 
+        "chapterRule": {
+            "label":"第.{1,3}章",
+            "desc":"\"第X章\"前切分，切分章节等"
+        },
+        "articleRule": {
+            "label":"第.{1,3}条",
+            "desc":"\"第X条\"前切分，切分条目等"
+        },
+        "chinesePeriodRule": {
+            "label":"。",
+            "desc":"中文句号后切分，中文断句"
+        },
+        "englishPeriodRule": {
+            "label":"\\.",
+            "desc":"英文句号后切分，英文断句"
+        }
   },
   "confirm1": "确定",
   "unavailable": "播放功能不可用，请联系管理员",
@@ -130,7 +148,7 @@
     "defStrategy": "默认策略",
     "cusStrategy": "自定义策略",
     "repreviewSegmentation": "重新预览分段",
-    "customRule": "自定义规则: {{regex}}",
+    "customRule": "自定义规则",
     "singleNewlineRule": "单换行后切分，用于分隔普通换行",
     "doubleNewlineRule": "双换行后切分，用于分隔段落",
     "chapterRule": "\"第X章\"前切分，切分章节等",

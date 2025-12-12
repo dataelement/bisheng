@@ -2,102 +2,24 @@ import { DelIcon } from '@/components/bs-icons';
 import { Button } from '@/components/bs-ui/button';
 import { Input } from '@/components/bs-ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/bs-ui/radio';
-import { useState, useEffect, useMemo } from 'react';
+import { generateUUID } from '@/components/bs-ui/utils';
+import i18next, { use } from 'i18next';
+import { useMemo, useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
-
-// Generate stable strategy ID
-const getStrategyId = (regexStr, position) => {
-  let hash = 0;
-  const str = `${regexStr}-${position}`;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash) + str.charCodeAt(i);
-    hash = hash & hash;
-  }
-  return `strategy-${Math.abs(hash)}`;
-};
+export const ruleI18nMap = {
+  '\\n': 'singleNewlineRule',
+  '\\n\\n': 'doubleNewlineRule',
+  '第.{1,3}章': 'chapterRule',
+  '第.{1,3}条': 'articleRule',
+  '。': 'chinesePeriodRule',
+  '\\.': 'englishPeriodRule',
+}
 
 const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) => {
   const { t } = useTranslation('knowledge');
   const [customRegex, setCustomRegex] = useState('');
   const [position, setPosition] = useState('after');
-
-  const PREDEFINED_RULES_CONFIG = useMemo(() => {
-    return {
-      '\\n': {
-        key: 'singleNewlineRule',
-        defaultPosition: 'after'
-      },
-      '\\n\\n': {
-        key: 'doubleNewlineRule', 
-        defaultPosition: 'after'
-      },
-
-      [t('predefinedRules.chapterRule')]: {
-        key: 'chapterRule',
-        defaultPosition: 'before'
-      },
-
-      [t('predefinedRules.articleRule')]: {
-        key: 'articleRule',
-        defaultPosition: 'before'
-      },
-
-      '。': {
-        key: 'chinesePeriodRule',
-        defaultPosition: 'after'
-      },
-      '\\.': {
-        key: 'englishPeriodRule',
-        defaultPosition: 'after'
-      }
-    };
-  }, [t]);
-
-  const getPredefinedRuleDisplay = (ruleKey) => {
-    return t(`predefinedRules.${ruleKey}`, { defaultValue: ruleKey });
-  };
-
-  const getRuleDescription = (ruleKey, ruleParams = {}) => {
-    return t(`${ruleKey}`, ruleParams);
-  };
-
-  useEffect(() => {
-    const needsMigration = strategies.some(strategy => 
-      strategy.rule && !strategy.ruleKey
-    );
-
-    if (needsMigration) {
-      const migratedStrategies = strategies.map(strategy => {
-        if (strategy.ruleKey) return strategy;
-
-        const regex = strategy.regex;
-        const predefinedRule = Object.entries(PREDEFINED_RULES_CONFIG).find(([pattern, rule]) => 
-          pattern === regex
-        );
-
-        if (predefinedRule) {
-          return {
-            ...strategy,
-            ruleKey: predefinedRule[1].key,
-            rule: undefined
-          };
-        } else if (strategy.rule && strategy.rule.startsWith('自定义规则: ')) {
-          const customRegex = strategy.rule.replace('自定义规则: ', '');
-          return {
-            ...strategy,
-            ruleKey: 'customRule',
-            ruleParams: { regex: customRegex },
-            rule: undefined
-          };
-        } else {
-          return strategy;
-        }
-      });
-
-      setStrategies(migratedStrategies);
-    }
-  }, [strategies, setStrategies, PREDEFINED_RULES_CONFIG]);
 
   const handleDragEnd = (result) => {
     if (!result.destination) return;
@@ -112,26 +34,23 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
   const handleAddCustomStrategy = () => {
     if (customRegex.trim()) {
       const newStrategy = {
-        id: getStrategyId(customRegex.trim(), position),
+        id: generateUUID(6),
         regex: customRegex.trim(),
         position,
-        ruleKey: 'customRule',
-        ruleParams: { regex: customRegex.trim() }
+        rule: t('customRule'),
       };
       setStrategies([...strategies, newStrategy]);
       setCustomRegex('');
     }
   };
-
-  const handleRegexClick = (regex) => {
-    const predefinedRule = PREDEFINED_RULES_CONFIG[regex];
-    if (!predefinedRule) return;
-
+  
+  const handleRegexClick = (regex, mode) => {
+    // 根据regex获取对应的规则key
     const newStrategy = {
-      id: getStrategyId(regex, predefinedRule.defaultPosition),
-      regex: regex,
-      position: predefinedRule.defaultPosition,
-      ruleKey: predefinedRule.key
+      id: generateUUID(6),
+      regex:t(`predefinedRules.${ruleI18nMap[regex]}.label`),
+      position: mode,
+      rule: t(`predefinedRules.${ruleI18nMap[regex]}.desc`),
     };
     setStrategies([...strategies, newStrategy]);
   };
@@ -140,21 +59,20 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
     setStrategies(strategies.filter(item => item.id !== id));
   };
 
-  const getStrategyDescription = (strategy) => {
-    return getRuleDescription(strategy.ruleKey, strategy.ruleParams || { regex: strategy.regex });
-  };
+const [predefinedRules] = useState([
+    { regexKey:  '\\n', mode: 'after' },
+    { regexKey:'\\n\\n', mode: 'after' },
+    { regexKey:  '第.{1,3}章', mode: 'before' },
+    { regexKey: '第.{1,3}条', mode: 'before' },
+    { regexKey: '。', mode: 'after' },
+    { regexKey: '\\.', mode: 'after' }
 
-  const getButtonDisplay = (regex) => {
-    const ruleConfig = PREDEFINED_RULES_CONFIG[regex];
-    if (!ruleConfig) return regex;
-    
-    return getPredefinedRuleDisplay(ruleConfig.key);
-  };
+  ]);
 
   return (
     <div className='flex gap-6'>
-      {/* Left drag area */}
-      <div className='flex-1 max-w-[50%]'>
+      {/* 左侧拖拽区域 */}
+      <div className='flex-1'>
         <div className='py-2 px-0 pr-1 overflow-y-auto max-h-[11.5rem] select-none'>
           <DragDropContext onDragEnd={handleDragEnd}>
             <Droppable droppableId="strategies">
@@ -173,14 +91,15 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                             {strategy.position === 'before' ? (
                               <>
                                 <span>✂️{strategy.regex}</span>
-                                <span className='ml-3 text-xs text-gray-500'>{getStrategyDescription(strategy)}</span>
+                                <span className='ml-3 text-xs text-gray-500'>{strategy.rule}</span>
                               </>
                             ) : (
                               <>
                                 <span>{strategy.regex}✂️</span>
-                                <span className='ml-3 text-xs text-gray-500'>{getStrategyDescription(strategy)}</span>
+                                <span className='ml-3 text-xs text-gray-500'>{strategy.rule}</span>
                               </>
                             )}
+                            {/* 右侧渐变遮罩 */}
                             <div className="absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-accent to-transparent pointer-events-none"></div>
                             <DelIcon
                               onClick={() => handleDelete(strategy.id)}
@@ -192,6 +111,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                     </Draggable>
                   ))}
 
+                  {/* 添加占位符直到5个 */}
                   {strategies.length < 5 && (
                     Array(5 - strategies.length).fill(null).map((_, index) => (
                       <div
@@ -212,20 +132,23 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
         </div>
         <p className='text-xs text-gray-500 pt-1'>{t('splitPriorityInfo')}</p>
       </div>
-      
       <div className="relative flex-1 flex flex-col gap-4">
         <h3 className="text-sm text-left font-medium text-gray-700">{t('universalRules')}:</h3>
         <div className="flex flex-wrap gap-2">
-          {Object.keys(PREDEFINED_RULES_CONFIG).map((regex) => (
-            <Button 
-              key={regex}
-              className="px-2 h-6" 
-              variant='secondary' 
-              onClick={() => handleRegexClick(regex)}
-            >
-              {getButtonDisplay(regex)}
-            </Button>
-          ))}
+            {predefinedRules.map((rule, index) => {
+            const regexDisplay = t("predefinedRules."+ ruleI18nMap[rule.regexKey]+'.label');
+            
+            return (
+              <Button
+                key={index}
+                className="px-2 h-6"
+                variant="secondary"
+                onClick={() => handleRegexClick(rule.regexKey, rule.mode)}
+              >
+                {rule.mode === 'before' ? `✂️${regexDisplay}` : `${regexDisplay}✂️`}
+              </Button>
+            );
+          })}
         </div>
         
         <h3 className="text-sm text-left font-medium text-gray-700"> {t('addCustomRule')}:</h3>
