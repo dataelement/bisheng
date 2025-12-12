@@ -14,7 +14,7 @@
   "search": "検索",
   "confirmDeleteTemplate": "この{{type}}テンプレートを削除しますか？",
   "delete": "削除",
-  "short": "MM dd, HH:mm",
+  "short": "MM-dd, HH:mm",
   "leaveIdea": "ご意見をお聞かせください ~",
   "returnToAppList": "アプリ一覧に戻る",
   "templateName": "テンプレート名",

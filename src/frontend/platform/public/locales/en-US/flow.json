@@ -14,7 +14,7 @@
   "search": "Search",
   "confirmDeleteTemplate": "Are you sure you want to delete the {{type}} template?",
   "delete": "Delete",
-  "short": "MM dd, HH:mm",
+  "short": "MM-dd, HH:mm",
   "leaveIdea": "Share your thoughts ~",
   "returnToAppList": "Return to App List",
   "templateName": "Template Name",
