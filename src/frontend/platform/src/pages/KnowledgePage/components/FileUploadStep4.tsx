@@ -170,12 +170,9 @@ export default function FileUploadStep4({ data, kId }) {
             t('retrieveDocumentKnowledge'),
             "",
             flow))
-        navigate('/flow/' + res.id, {
-            state: {
-                shouldAddBuildAppsHistory: true,
-                from: '/build/apps'
-            }
-        });
+        history.pushState(null, null, __APP_ENV__.BASE_URL + '/build/apps');
+
+        navigate('/flow/' + res.id);
     }
 
     return <div className={`max-w-[1400px] mx-auto px-20 pt-4 relative`}>

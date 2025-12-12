@@ -8,7 +8,7 @@ import json from "../package.json";
 // Obtain user language preferences, supporting full language codes (e.g., zh-Hans, en-US) 
 const getBrowserLanguage = () => {
     const savedLanguage = localStorage.getItem('i18nextLng');
-    if (savedLanguage) return savedLanguage;
+    if (savedLanguage) return savedLanguage === 'zh' ? 'zh-Hans' : savedLanguage;
 
     const browserLang = navigator.language || navigator.userLanguage || 'en-US';
     // Map browser language codes to the languages we support 

@@ -1,8 +1,8 @@
 import { AppNumType, AppType } from "@/types/app";
+import originAxios from "axios";
 import { AppConfig } from "../../types/api/app";
 import { FlowType } from "../../types/flow";
 import axios from "../request";
-import originAxios from "axios";
 import {
   APIClassType,
   BuildStatusTypeAPI,
@@ -163,8 +163,8 @@ export async function copyLibDatabase(knowledge_id, newName) {
 /**
  * 复制qa知识库
  */
-export async function copyQaDatabase(knowledge_id) {
-  await axios.post(`/api/v1/knowledge/qa/copy`, { knowledge_id });
+export async function copyQaDatabase(knowledge_id, knowledge_name) {
+  await axios.post(`/api/v1/knowledge/qa/copy`, { knowledge_id, knowledge_name });
 }
 /**
  * 获取知识库下文件列表

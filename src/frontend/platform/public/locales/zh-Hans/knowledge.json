@@ -123,7 +123,7 @@
     "noAvailableModels": "暂无可用模型",
     "embeddingModelChangeWarning": "修改 embedding 模型可能会消耗大量模型资源且耗时较久，请谨慎进行",
     "finishCreate": "完成创建",
-    "copySuffix": "的副本",
+    "copySuffix": " 副本",
     "noOperationPermission": "暂无操作权限",
     "fileManagement": "文件管理",
     "chunkManagement": "分段管理",

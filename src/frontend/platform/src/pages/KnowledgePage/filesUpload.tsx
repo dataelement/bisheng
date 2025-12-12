@@ -211,6 +211,24 @@ export default function FilesUpload() {
     }));
   };
 
+  function dedupeWithRemovedPaths(objs) {
+    const seenMap = new Map()
+    const removedPaths = {}
+
+    for (const item of objs) {
+      if (seenMap.has(item.id)) {
+        removedPaths[item.file_path] = true
+      } else {
+        seenMap.set(item.id, item)
+      }
+    }
+
+    return {
+      uniqueObjs: Array.from(seenMap.values()),
+      removedPaths,
+    }
+  }
+
   // API: Retry duplicate files (overwrite upload)
   const handleRetry = (objs) => {
     if (currentStep === 1 && isNextBtnClickRef.current) {
@@ -218,7 +236,16 @@ export default function FilesUpload() {
       return setCurrentStep(2);
     }
     setRetryLoad(true);
-    let uniqueObjs = Array.from(new Map(objs.map(item => [item.id, item])).values());
+    const { uniqueObjs, removedPaths } = dedupeWithRemovedPaths(objs)
+    const newResultFiles = resultFiles.filter(file => !removedPaths[file.file_path])
+    const newUniqueObjs = uniqueObjs.map(item => {
+      const file = newResultFiles.find(f => item.id === f.fileId)
+      return {
+        ...item,
+        file_path: file?.file_path,
+        file_name: file?.fileName,
+      }
+    })
 
     const params = {
       knowledge_id: Number(_tempConfigRef.current.knowledge_id),
@@ -226,12 +253,12 @@ export default function FilesUpload() {
       separator_rule: _tempConfigRef.current.separator_rule,
       chunk_size: _tempConfigRef.current.chunk_size,
       chunk_overlap: _tempConfigRef.current.chunk_overlap,
-      file_objs: uniqueObjs,
+      file_objs: newUniqueObjs,
     };
 
     // When multiple identical files are uploaded, the files are deduplicated.
     if (uniqueObjs.length !== objs.length) {
-      setResultFiles(Array.from(new Map(resultFiles.map(item => [item.fileId, item])).values()));
+      setResultFiles(newResultFiles);
     }
 
     captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(params).then(res => {

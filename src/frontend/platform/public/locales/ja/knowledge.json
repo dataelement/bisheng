@@ -128,7 +128,7 @@
     "noAvailableModels": "利用可能なモデルはありません",
     "embeddingModelChangeWarning": "embeddingモデルを変更すると大量のリソースを消費し、時間がかかる可能性があります。ご注意ください",
     "finishCreate": "作成完了",
-    "copySuffix": "のコピー",
+    "copySuffix": " コピー",
     "noOperationPermission": "操作権限がありません",
     "fileManagement": "ファイル管理",
     "chunkManagement": "セグメント管理",

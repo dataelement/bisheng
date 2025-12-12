@@ -127,7 +127,7 @@
     "noAvailableModels": "No available models",
     "embeddingModelChangeWarning": "Modifying the embedding model may consume a lot of model resources and take a long time. Please proceed with caution.",
     "finishCreate": "Finish Creation",
-    "copySuffix": "'s copy",
+    "copySuffix": " Copy",
     "createMetadata": "Create Metadata",
     "builtInMetadata": "Built-in Metadata",
     "customRule": "Custom rule",
