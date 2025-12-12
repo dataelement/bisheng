@@ -128,7 +128,7 @@ async def upload_preset_file(*,
         # 将qa数据按照finetune格式，进行文件存储
         qa_knowledge_db = await KnowledgeDao.aget_list_by_ids(qa_list)
         qa_knowledge_db_ids = [qa_knowledge.id for qa_knowledge in qa_knowledge_db]
-        qa_db_list = await QAKnoweldgeDao.get_qa_knowledge_by_knowledge_ids(qa_knowledge_db_ids)
+        qa_db_list = await QAKnoweldgeDao.aget_qa_knowledge_by_knowledge_ids(qa_knowledge_db_ids)
         qa_list = []
         for qa in qa_db_list:
             qa_list.extend([{

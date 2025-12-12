@@ -173,6 +173,6 @@ def stop_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int):
     if status != WorkflowStatus.FAILED.value:
         status = WorkflowStatus.FAILED.value
         reason = 'workflow stop by user'
-    redis_callback.set_workflow_status(status, reason)
+        redis_callback.set_workflow_status(status, reason)
     _clear_workflow_obj(unique_id)
     logger.info(f'workflow stop by user {user_id}')

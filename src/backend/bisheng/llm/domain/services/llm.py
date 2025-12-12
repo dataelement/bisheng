@@ -411,15 +411,15 @@ class LLMService:
         return EvaluationLLMConfig(**ret)
 
     @classmethod
-    def get_evaluation_llm_object(cls, invoke_user_id: int) -> BaseChatModel:
-        evaluation_llm = cls.sync_get_evaluation_llm()
+    async def get_evaluation_llm_object(cls, invoke_user_id: int) -> BaseChatModel:
+        evaluation_llm = await cls.get_evaluation_llm()
         if not evaluation_llm.model_id:
             raise Exception('未配置评测模型')
-        return cls.get_bisheng_llm_sync(model_id=evaluation_llm.model_id,
-                                        app_id=ApplicationTypeEnum.EVALUATION.value,
-                                        app_name=ApplicationTypeEnum.EVALUATION.value,
-                                        app_type=ApplicationTypeEnum.EVALUATION,
-                                        user_id=invoke_user_id)
+        return await cls.get_bisheng_llm(model_id=evaluation_llm.model_id,
+                                         app_id=ApplicationTypeEnum.EVALUATION.value,
+                                         app_name=ApplicationTypeEnum.EVALUATION.value,
+                                         app_type=ApplicationTypeEnum.EVALUATION,
+                                         user_id=invoke_user_id)
 
     @classmethod
     async def get_bisheng_llm(cls, **kwargs) -> BaseChatModel:

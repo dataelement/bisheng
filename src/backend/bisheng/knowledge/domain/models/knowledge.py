@@ -173,6 +173,12 @@ class KnowledgeDao(KnowledgeBase):
             return session.exec(select(Knowledge).where(Knowledge.id.in_(ids))).all()
 
     @classmethod
+    async def aget_list_by_ids(cls, ids: List[int]) -> List[Knowledge]:
+        async with get_async_db_session() as session:
+            result = await session.exec(select(Knowledge).where(col(Knowledge.id).in_(ids)))
+            return result.all()
+
+    @classmethod
     def _user_knowledge_filters(
             cls,
             statement: Any,
