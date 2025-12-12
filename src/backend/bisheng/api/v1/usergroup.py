@@ -116,7 +116,7 @@ async def set_group_admin(
 
 @router.post('/set_update_user', status_code=200)
 async def set_update_user(group_id: Annotated[int, Body(embed=True)],
-                          login_user: UserPayload = Depends(UserPayload.get_admin_user)):
+                          login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     更新用户组的最近修改人
     """
