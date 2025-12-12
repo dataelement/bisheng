@@ -677,7 +677,7 @@ class KnowledgeService(KnowledgeUtils):
                                               source_bucket=minio_client.tmp_bucket,
                                               dest_bucket=minio_client.bucket)
                 file.object_name = new_object_name
-
+            file.file_name = input_file.get("file_name", None) or file.file_name
             file.remark = ""
             file.split_rule = input_file["split_rule"]
             file.status = KnowledgeFileStatus.PROCESSING.value  # 解析中
