@@ -26,16 +26,26 @@ export default function RunLog({ node, children }) {
     useEffect(() => {
         const buildData = (data) => {
             if (data) {
-                /**
-                 * newData
-                 * key: {type, value}  
-                 * "current_time": {type: "param", value: "2023-11-20 16:00:00"}
-                 */
+
+                const toolMap = {}
+                node.group_params.forEach(group => {
+                    group.params.forEach(param => {
+                        if (param.key === 'tool_list') {
+                            // tool
+                            param.value.forEach(el => {
+                                toolMap[el.tool_key] = el.label
+                            })
+                        }
+                    });
+                });
+
                 return data.map(item => {
                     let label = ''
                     if (['file', 'variable'].includes(item.type)) {
                         const key = item.key.split('.')
                         label = t(`node.${node.type}.${key[key.length - 1]}.label`)
+                    } else if (item.type === 'tool') {
+                        label = toolMap[item.key]
                     } else if (item.key === 'output_msg') {
                         label = item.key
                     } else {

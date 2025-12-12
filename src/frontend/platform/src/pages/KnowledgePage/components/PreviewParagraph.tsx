@@ -14,6 +14,7 @@ import 'vditor/dist/index.css';
 import useKnowledgeStore from "../useKnowledgeStore";
 // 新增：引入国际化hooks
 import { useTranslation } from "react-i18next";
+import { useMiniDebounce } from "@/util/hook";
 
 export const MarkdownView = ({ noHead = false, data }) => {
     // 新增：使用knowledge命名空间的国际化
@@ -187,8 +188,10 @@ const EditMarkdown = ({ data, active, oneLeft, fileSuffix, onClick, onDel, onCha
         }
 
         if (_value === _newValue) return // 无需保存
+        // chunk diff
         onChange(data.chunkIndex, newValue)
     }
+    const handleBlurDebounced = useMiniDebounce(handleBlur, 300)
 
     return <div
         className={cn("group p-4 py-3 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary transition-shadow w-full",
@@ -239,9 +242,9 @@ const EditMarkdown = ({ data, active, oneLeft, fileSuffix, onClick, onDel, onCha
         </div>
 
         {/* 所见即所得Markdown编辑器 */}
-        <VditorEditor ref={vditorRef} hidden={edit} defalutValue={value} onChange={setDebounceValue} onBlur={handleBlur} />
+        <VditorEditor ref={vditorRef} hidden={edit} defalutValue={value} onChange={setDebounceValue} onBlur={handleBlurDebounced} />
         {/* 普通Markdown编辑器 */}
-        <AceEditorCom hidden={!edit} markdown={value} onChange={setDebounceValue} onBlur={handleBlur} />
+        <AceEditorCom hidden={!edit} markdown={value} onChange={setDebounceValue} onBlur={handleBlurDebounced} />
     </div>
 }
 

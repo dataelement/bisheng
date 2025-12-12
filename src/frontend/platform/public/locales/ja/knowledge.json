@@ -1,11 +1,29 @@
 {
   "predefinedRules": {
-    "singleNewlineRule": "単一改行後分割✂️",
-    "doubleNewlineRule": "二重改行後分割✂️", 
-    "chapterRule": "第.{1,3}章",
-    "articleRule": "第.{1,3}節",
-    "chinesePeriodRule": "中国語句点後分割✂️",
-    "englishPeriodRule": "英語ピリオド後分割✂️"
+    "singleNewlineRule": {
+        "label": "単一行間後分割",
+        "desc": "単一改行で分割（通常換行）"
+    },
+    "doubleNewlineRule": {
+        "label": "二重改行後分割",
+        "desc": "二重改行で分割（段落区切り）"
+    }, 
+    "chapterRule": {
+        "label":"第.{1,3}章",
+        "desc":"「第X章」の前で分割（章区切り）"
+    },
+    "articleRule": {
+        "label":"第.{1,3}節",
+        "desc":"「第X条」の前で分割（条文区切り）"
+    },
+    "chinesePeriodRule": {
+        "label":"中国語句点後分割",
+        "desc":"中国語の句点後で分割"
+    },
+    "englishPeriodRule": {
+        "label":"英語ピリオド後分割",
+        "desc":"英語のピリオド後で分割"
+    }
   },
   "confirm1": "確定",
   "now": "今",
@@ -16,10 +34,10 @@
   "placeholder": "日付を選択",
    "chunk": "チャンク",
    "source_unknown": "不明",
-"source_manual": "手動作成",
-"source_annotation_import": "アノテーションインポート",
-"source_api_import": "APIインポート",
-"source_batch_import": "一括インポート",
+    "source_manual": "手動作成",
+    "source_annotation_import": "アノテーションインポート",
+    "source_api_import": "APIインポート",
+    "source_batch_import": "一括インポート",
   "chunkContentCannotBeEmpty": "チャンクの内容は空にできません",
   "clickLocateOriginalFile": "クリックして原ファイルに定位してください",
   "clickShowMarkdownEdit": "クリックしてMarkdown原文を表示し、編集してください",
@@ -110,7 +128,7 @@
     "noAvailableModels": "利用可能なモデルはありません",
     "embeddingModelChangeWarning": "embeddingモデルを変更すると大量のリソースを消費し、時間がかかる可能性があります。ご注意ください",
     "finishCreate": "作成完了",
-    "copySuffix": "のコピー",
+    "copySuffix": " コピー",
     "noOperationPermission": "操作権限がありません",
     "fileManagement": "ファイル管理",
     "chunkManagement": "セグメント管理",
@@ -135,7 +153,7 @@
     "defStrategy": "デフォルトルール",
     "cusStrategy": "カスタムルール",
     "repreviewSegmentation": "セグメント再プレビュー",
-    "customRule": "カスタムルール: {{regex}}",
+    "customRule": "カスタムルール",
     "singleNewlineRule": "単一改行で分割（通常の改行区切り用）",
     "doubleNewlineRule": "二重改行で分割（段落区切り用）",
     "chapterRule": "「第X章」の前で分割（章区切り）",
@@ -343,6 +361,7 @@
         "englishPeriod": "英語のピリオド後で分割",
         "customRule": "カスタムルール"
     },
+
     "fileNotSupported": "ファイルはプレビューに対応していません",
     "fileExpired": "ファイルの有効期限が切れています。新しいファイルをアップロードしてテストしてください",
     "dataConversionError": "データ変換エラー",

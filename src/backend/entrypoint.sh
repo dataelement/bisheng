@@ -24,20 +24,20 @@ elif [ $start_mode = "worker" ]; then
         exit 1
     fi
 
-    # 默认其他任务的执行worker，目前是定时统计埋点数据
-    nohup celery -A bisheng.worker.main worker -l info -c 100 -P threads -Q celery -n celery@%h &
-    if [ $? -ne 0 ]; then
-        echo "Failed to start celery worker."
-        exit 1
-    fi
+#    # 默认其他任务的执行worker，目前是定时统计埋点数据
+#    nohup celery -A bisheng.worker.main worker -l info -c 100 -P threads -Q celery -n celery@%h &
+#    if [ $? -ne 0 ]; then
+#        echo "Failed to start celery worker."
+#        exit 1
+#    fi
 
-    nohup python bisheng/linsight/worker.py --worker_num 4 --max_concurrency 5 &
+    python bisheng/linsight/worker.py --worker_num 4 --max_concurrency 5
     if [ $? -ne 0 ]; then
         echo "Failed to start linsight worker."
         exit 1
     fi
     echo "All workers started successfully."
-    celery -A bisheng.worker.main beat -l info
+#    celery -A bisheng.worker.main beat -l info
 
 else
     echo "Invalid start mode. Use 'api' or 'worker'."

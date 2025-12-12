@@ -107,7 +107,7 @@ export default function MainLayout() {
                             {Object.entries(options).map(([key, value]) => (
                                 <SelectHoverItem key={key} onClick={() => changLanguage(key)}>
                                     <span>{value}</span>
-                                    {language === key && <Check className="w-4 h-4 absolute top-1/2 right-0 transform -translate-y-1/2"/>}
+                                    {language === key && <Check className="w-4 h-4 absolute top-1/2 right-0 transform -translate-y-1/2" />}
                                 </SelectHoverItem>
                             ))}
                         </SelectHover>
@@ -257,7 +257,7 @@ const useLanguage = (user: User) => {
     useEffect(() => {
         const lang = user.user_id ? localStorage.getItem('i18nextLng') : null
         if (lang) {
-            setLanguage(lang)
+            setLanguage(lang === 'zh' ? 'zh-Hans' : lang)
         }
     }, [user])
 

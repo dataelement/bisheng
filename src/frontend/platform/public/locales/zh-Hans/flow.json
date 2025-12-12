@@ -224,7 +224,7 @@
   "selectOperator": "条件 {index}: 请选择操作符",
   "enterValue": "条件 {index}: 请输入数值",
   "defaultNodeName": "元数据过滤",
-  "nodeError2": "节点错误：\"{fieldName}\"已失效。",
+  "nodeError2": "节点错误：\"{{fieldName}}\"已失效。",
   "metadataFieldValidationError": "验证元数据字段时发生错误",
   "noInputNeeded": "无需输入",
   "selectOption": "请选择",

@@ -1,11 +1,29 @@
 {
-   "predefinedRules": {
-    "singleNewlineRule": "\\n✂️",
-    "doubleNewlineRule": "\\n\\n✂️",
-    "chapterRule": "Chapter\\s+.{1,10}",
-    "articleRule": "Section\\s+.{1,10}",
-    "chinesePeriodRule": "。✂️",
-    "englishPeriodRule": "\\.✂️"
+    "predefinedRules": {
+        "singleNewlineRule": {
+            "label": "\\n",
+            "desc": "Split after single newline, for separating normal line breaks"
+        },
+        "doubleNewlineRule": {
+            "label": "\\n\\n",
+            "desc": "Split after double newline, for separating paragraphs"
+        }, 
+        "chapterRule": {
+            "label":"Chapter\\s+.{1,10}",
+            "desc":"Split before 'Chapter X', for splitting chapters"
+        },
+        "articleRule": {
+            "label":"Section\\s+.{1,10}",
+            "desc":"Split before 'Article X', for splitting articles"
+        },
+        "chinesePeriodRule": {
+            "label":"。",
+            "desc":"Split after Chinese period, for Chinese sentence segmentation"
+        },
+        "englishPeriodRule": {
+            "label":"\\.",
+            "desc":"Split after English period, for English sentence segmentation"
+        }
   },
   "unavailable": "Audio playback is unavailable. Please contact the administrator.",
   "confirm1": "Confirm",
@@ -109,10 +127,10 @@
     "noAvailableModels": "No available models",
     "embeddingModelChangeWarning": "Modifying the embedding model may consume a lot of model resources and take a long time. Please proceed with caution.",
     "finishCreate": "Finish Creation",
-    "copySuffix": "'s copy",
+    "copySuffix": " Copy",
     "createMetadata": "Create Metadata",
     "builtInMetadata": "Built-in Metadata",
-    "customRule": "Custom rule: {{regex}}",
+    "customRule": "Custom rule",
     "singleNewlineRule": "Split after single newline, used to separate ordinary line breaks",
     "doubleNewlineRule": "Split after double newline, used to separate paragraphs",
     "chapterRule": "Split before 'Chapter X', used to split chapters, etc.",
@@ -212,7 +230,7 @@
     "splitMethodHint": "You can select the filter option below, or customize the splitting rule using regular expressions. For example, splitting before '第.{1,3}条' will split the text before '第1条', '第ab条', '第三条', etc.",
     "splitLength": "Split Length",
     "splitSizePlaceholder": "Enter split length",
-    "chunkOverlap": "Chunk Overlap Length",
+    "chunkOverlap": "Overlap Length",
     "chunkOverlapPlaceholder": "Enter chunk overlap length",
     "submit": "Submit",
     "previewResults": "Preview Split Results",

@@ -835,30 +835,30 @@ const ExcelPreview = ({ filePath }) => {
   };
 
   // ---------------------- Render Sheet Tabs ----------------------
-  const renderSheetTabs = () => {
-    if (sheets.length <= 0) return null;
+const renderSheetTabs = () => {
+  if (sheets.length <= 0) return null;
 
-    return (
-      <div className="border-t border-gray-300 bg-gray-100 px-2 py-1 flex items-center overflow-x-auto">
-        <div className="flex space-x-1">
-          {sheets.map((sheet) => (
-            <button
-              key={sheet}
-              className={`px-3 py-1.5 text-sm font-medium rounded-t-md border border-b-0 transition-colors duration-150 whitespace-nowrap ${
-                activeSheet === sheet
-                  ? "bg-white text-blue-600 border-gray-300 border-b-white -mb-px relative z-10"
-                  : "bg-gray-200 text-gray-700 border-transparent hover:bg-gray-300"
-              }`}
-              onClick={() => setActiveSheet(sheet)}
-              title={sheet}
-            >
-              {sheet.length > 15 ? `${sheet.substring(0, 12)}...` : sheet}
-            </button>
-          ))}
-        </div>
+  return (
+    <div className="border-t border-gray-300 bg-gray-100 px-2 py-2 flex items-start">
+      <div className="flex space-x-1 flex-wrap gap-1.5"> 
+        {sheets.map((sheet) => (
+          <button
+            key={sheet}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors duration-150 whitespace-nowrap ${
+              activeSheet === sheet
+                ? "bg-white text-blue-600 border border-gray-300 shadow-sm" 
+                : "bg-gray-200 text-gray-700 border border-transparent hover:bg-gray-300"
+            }`}
+            onClick={() => setActiveSheet(sheet)}
+            title={sheet}
+          >
+            {sheet.length > 15 ? `${sheet.substring(0, 12)}...` : sheet}
+          </button>
+        ))}
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   // ---------------------- Loading/Error States ----------------------
   if (loading) {

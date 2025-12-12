@@ -158,28 +158,28 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[625px]">
                 <DialogHeader>
-                    <DialogTitle>{mode === 'create' ? t('lib.createLibrary',{ ns: 'bs' }) : t('knowledgeSettings',{ ns: 'bs' })}</DialogTitle>
+                    <DialogTitle>{mode === 'create' ? t('lib.createLibrary', { ns: 'bs' }) : t('knowledgeSettings', { ns: 'bs' })}</DialogTitle>
                 </DialogHeader>
                 <div className="flex flex-col gap-4 py-2">
                     {mode === 'edit' && currentLib && (
                         <div className="space-y-4">
                             <div className="flex items-center gap-48">
-                                <label className="bisheng-label text-sm text-gray-500">{t('lib.knowledgeBaseId',{ ns: 'bs' })}</label>
+                                <label className="bisheng-label text-sm text-gray-500">{t('lib.knowledgeBaseId', { ns: 'bs' })}</label>
                                 <div className="text-sm">{currentLib.id}</div>
                             </div>
                             <div className="flex items-center gap-48">
-                                <label className="bisheng-label text-sm text-gray-500">{t('createTime',{ ns: 'bs' })}</label>
+                                <label className="bisheng-label text-sm text-gray-500">{t('createTime', { ns: 'bs' })}</label>
                                 <div className="text-sm">{currentLib.create_time.replace('T', ' ')}</div>
                             </div>
                         </div>
                     )}
                     <div className="">
-                        <label htmlFor="name" className="bisheng-label">{t('lib.libraryName',{ ns: 'bs' })}</label>
+                        <label htmlFor="name" className="bisheng-label">{t('lib.libraryName', { ns: 'bs' })}</label>
                         <span className="text-red-500">*</span>
                         <Input
                             name="name"
                             ref={nameRef}
-                            placeholder={t('lib.enterLibraryName',{ ns: 'bs' })}
+                            placeholder={t('lib.enterLibraryName', { ns: 'bs' })}
                             className="col-span-3"
                         />
                     </div>
@@ -300,7 +300,7 @@ export default function KnowledgeQa(params) {
     const handleDelete = (id) => {
         bsConfirm({
             title: t('prompt'),
-            desc: t('lib.confirmDeleteLibrary',{ ns: 'bs' }),
+            desc: t('lib.confirmDeleteLibrary', { ns: 'bs' }),
             onOk(next) {
                 captureAndAlertRequestErrorHoc(deleteFileLib(id).then(reload));
                 next();
@@ -342,7 +342,7 @@ export default function KnowledgeQa(params) {
     const { t } = useTranslation('knowledge');
 
     const handleCopy = async (elem) => {
-        const newName = t('copyOf', { name: elem.name });
+        const newName = `${elem.name}${t('copySuffix')}`;
         if (newName.length > 200) {
             toast({ variant: 'error', description: t('copyNameExceedsLimit') });
             setSelectOpenId(null);
@@ -353,7 +353,7 @@ export default function KnowledgeQa(params) {
         doing[elem.id] = true;
 
         try {
-            await captureAndAlertRequestErrorHoc(copyQaDatabase(elem.id));
+            await captureAndAlertRequestErrorHoc(copyQaDatabase(elem.id, newName));
             reload();
         } catch (error) {
             toast({ variant: 'error', description: t('copyFailed') });
@@ -479,7 +479,7 @@ export default function KnowledgeQa(params) {
                                                     >
                                                         <div className="flex gap-2 items-center">
                                                             <Copy className="w-4 h-4" />
-                                                            {t('lib.copy',{ ns: 'bs' })}
+                                                            {t('lib.copy', { ns: 'bs' })}
                                                         </div>
                                                     </SelectItem>
                                                 </Tip>

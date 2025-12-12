@@ -53,10 +53,7 @@ const enum DisplayModeType {
     Mixed = 'mixed'
 }
 
-const initialStrategies = [
-    { id: '1', regex: '\\n\\n', position: 'after', rule: '双换行后切分,用于分隔段落' },
-    { id: '2', regex: '\\n', position: 'after', rule: '单换行后切分，用于分隔普通换行' }
-];
+
 
 const FileUploadStep2 = forwardRef(({
     step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode, kId,
@@ -75,7 +72,12 @@ const FileUploadStep2 = forwardRef(({
     const splitRule = resultFiles[0]?.split_rule;
     const isEtl4lm = resultFiles[0]?.isEtl4lm === 'etl4lm';
     const displayStep = isAdjustMode ? step + 1 : step;
-
+    const initialStrategies = useMemo(()=>{
+  return [
+        { id: '1', regex: '\\n\\n', position: 'after', rule: t('predefinedRules.singleNewlineRule.desc') },
+        { id: '2', regex: '\\n', position: 'after', rule: t('predefinedRules.doubleNewlineRule.desc') }
+    ]
+},[t]);
     const displayMode: DisplayModeType | null = useMemo(() => {
         if (!resultFiles || resultFiles.length === 0) return null;
         const hasTableFiles = resultFiles.some(file => file.fileType === 'table');
