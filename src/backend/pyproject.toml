@@ -54,7 +54,7 @@ dependencies = [
     "oracledb>=3.4.0",
     "pandas>=2.3.3",
     "pillow>=12.0.0",
-    "playwright>=1.55.0",
+    "playwright==1.57.0",
     "psycopg2-binary>=2.9.11",
     "pyjwt>=2.10.1",
     "pymongo>=4.15.3",
