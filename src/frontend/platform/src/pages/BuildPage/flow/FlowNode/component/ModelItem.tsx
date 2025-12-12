@@ -57,7 +57,7 @@ export default function ModelItem({ agent = false, data, onChange, onValidate, i
         onValidate(() => {
             if (!data.value) {
                 setError(true)
-                return data.label + ' ' + t('required')
+                return t(`${i18nPrefix}label`) + ' ' + t('required')
             }
             setError(false)
             return false

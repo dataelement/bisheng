@@ -1,11 +1,11 @@
 {
   "predefinedRules": {
-    "singleNewlineRule": "単一改行後分割",
-    "doubleNewlineRule": "二重改行後分割", 
+    "singleNewlineRule": "単一改行後分割✂️",
+    "doubleNewlineRule": "二重改行後分割✂️", 
     "chapterRule": "第.{1,3}章",
     "articleRule": "第.{1,3}節",
-    "chinesePeriodRule": "中国語句点後分割",
-    "englishPeriodRule": "英語ピリオド後分割"
+    "chinesePeriodRule": "中国語句点後分割✂️",
+    "englishPeriodRule": "英語ピリオド後分割✂️"
   },
   "confirm1": "確定",
   "now": "今",
@@ -383,6 +383,8 @@
     "notEnabled": "有効化されていません。再試行してください",
     "successfullyEnabled": "{{count}} 個の項目を有効化しました",
     "successfullyDisabled": "{{count}} 個の項目を無効化しました",
+    "theSelectedItemsAlreadyDisabled": "選択された項目はすでに無効です",
+    "theSelectedItemsAlreadyEnabled": "選択された項目はすでに有効です",
     "selectAll": "全選択",
     "import": "インポート",
     "export": "エクスポート",

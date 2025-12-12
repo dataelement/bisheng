@@ -9,7 +9,7 @@ export default function VarTextareaItem({ node, nodeId, data, onChange, onValida
         data.required && onValidate(() => {
             if (!data.value.trim()) {
                 setError(true)
-                return data.label + ' ' + t('required')
+                return t(`${i18nPrefix}label`) + ' ' + t('required')
             }
             setError(false)
             return false

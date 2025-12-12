@@ -36,6 +36,8 @@ export default function RunLog({ node, children }) {
                     if (['file', 'variable'].includes(item.type)) {
                         const key = item.key.split('.')
                         label = t(`node.${node.type}.${key[key.length - 1]}.label`)
+                    } else if (item.key === 'output_msg') {
+                        label = item.key
                     } else {
                         label = t(`node.${node.type}.${item.key}.label`)
                     }

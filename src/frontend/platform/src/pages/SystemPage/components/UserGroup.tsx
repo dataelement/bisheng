@@ -87,7 +87,7 @@ export default function UserGroups() {
                         <TableHead>{t('system.admins')}</TableHead>
                         {appConfig.isPro && <TableHead className="w-[150px]">{t('system.flowControl')}</TableHead>}
                         <TableHead className="w-[160px]">{t('system.changeTime')}</TableHead>
-                        <TableHead className="text-right w-[130px]">{t('operations')}</TableHead>
+                        <TableHead className="text-right w-[130px]" >{t('operations')}</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -97,7 +97,9 @@ export default function UserGroups() {
                             <TableCell className="break-all">{(ug.admin_user || ug.group_admins).map(el => el.user_name).join(',')}</TableCell>
                             {appConfig.isPro && <TableCell>{ug.group_limit ? t('system.limit') : t('system.unlimited')}</TableCell>}
                             <TableCell>{ug.update_time.replace('T', ' ')}</TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="text-right"   style={{ 
+                                    whiteSpace: 'nowrap',
+                                }}>
                                 <Button variant="link" onClick={() => setUserGroup({
                                     ...ug,
                                     group_admins: ug.group_admins.slice(defaultAdminsRef.current.length)

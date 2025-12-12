@@ -108,7 +108,7 @@ export default function VarInput({
                 const _error = validate ? isVarInFlow(nodeId, flow.nodes, part, paramItem.varZh?.[part]) : ''
                 error = _error || error;
                 const msgZh = paramItem.varZh?.[part] || part;
-                return `<span class=${_error ? 'textarea-error' : 'textarea-badge'} contentEditable="false">${msgZh}</span>`;
+                return `&nbsp;<span class=${_error ? 'textarea-error' : 'textarea-badge'} contentEditable="false">${msgZh}</span>`;
             })
             .replace(/\n/g, '<br>');
         return [html, error];

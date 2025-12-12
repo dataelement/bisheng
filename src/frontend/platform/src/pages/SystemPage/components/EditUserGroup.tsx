@@ -83,7 +83,7 @@ function FlowRadio({ limit, onChange }) {
                         }
                     }}
                 />
-                <Label className="whitespace-nowrap">{t('system.perMinute')}</Label>
+                <Label className="min-w-[100px]">{t('system.perMinute')}</Label>
             </div>}
         </RadioGroup>
     </div>

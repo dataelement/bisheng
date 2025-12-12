@@ -59,7 +59,7 @@ export default function VarSelectItem({ nodeId, data: paramItem, onChange, onOut
         paramItem.required && onValidate(() => {
             if (!paramItem.value.length) {
                 setError(true)
-                return paramItem.label + ' ' + t('required')
+                return t(`${i18nPrefix}label`) + ' ' + t('required')
             }
             setError(false)
             return false
@@ -160,7 +160,7 @@ export function VarSelectSingleItem({ nodeId, data: paramItem, onChange, onValid
         paramItem.required && onValidate(() => {
             if (!paramItem.value) {
                 setError(true)
-                return paramItem.label + t('required')
+                return t(`${i18nPrefix}label`) + t('required')
             }
             setError(false)
             return false

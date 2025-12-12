@@ -203,7 +203,7 @@ async def update_versions(*,
 
 
 @router.delete('/versions/{version_id}', status_code=200)
-def delete_versions(*, version_id: int, login_user: UserPayload = Depends(UserPayload.get_admin_user)):
+def delete_versions(*, version_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     删除版本
     """
@@ -211,7 +211,7 @@ def delete_versions(*, version_id: int, login_user: UserPayload = Depends(UserPa
 
 
 @router.get('/versions/{version_id}', status_code=200)
-def get_version_info(*, version_id: int, login_user: UserPayload = Depends(UserPayload.get_admin_user)):
+def get_version_info(*, version_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     获取版本信息
     """
