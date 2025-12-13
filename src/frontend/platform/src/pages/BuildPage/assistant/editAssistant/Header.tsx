@@ -15,7 +15,7 @@ export default function Header({ loca, onSave, onLine, onTabChange }) {
 
     const { assistantState, dispatchAssistant } = useAssistantStore()
     console.log('assistantState :>> ', assistantState);
-    {/* 编辑助手 */ }
+    {/* Edit assistant */ }
     const [editShow, setEditShow] = useState(false);
 
     const needSaveRef = useRef(false)

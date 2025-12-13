@@ -41,7 +41,7 @@ const Row = React.memo(({ drawfont, index, style, size, labels, pdf, onLoad, onS
         canvas.height = Math.floor(viewport.height);
         canvas.style.width = size + "px";
         canvas.style.height = Math.floor(viewport.height * scale) + "px";
-        wrapRef.current.append(canvas)
+        wrapRef.current?.append(canvas)
         const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale,
             0, 0
         ] : null;
@@ -258,7 +258,9 @@ export default function FileView({
                     const [width, height] = [entry.contentRect.width, entry.contentRect.height];
                     setBoxSize({ width, height });
                     const warpDom = document.getElementById('warp-pdf');
-                    warpDom.style.setProperty("--scale-factor", width / fileWidthRef.current + '');
+                    if (warpDom) {
+                        warpDom.style.setProperty("--scale-factor", width / fileWidthRef.current + '');
+                    }
                 }
             }
         }, 300);

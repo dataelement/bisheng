@@ -4,7 +4,7 @@ from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSessionDao
-from bisheng.database.models.user import UserDao
+from bisheng.user.domain.models.user import UserDao
 
 
 class ChatSessionService:

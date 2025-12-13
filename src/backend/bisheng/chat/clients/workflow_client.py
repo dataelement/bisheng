@@ -6,10 +6,10 @@ from fastapi import Request, WebSocket
 from loguru import logger
 
 from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.chat.clients.base import BaseClient
 from bisheng.chat.types import WorkType
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.chat import WorkflowOfflineError
 from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.message import ChatMessageDao, ChatMessage
@@ -92,7 +92,7 @@ class WorkflowClient(BaseClient):
         if workflow_db.status != FlowStatus.ONLINE.value and self.chat_id:
             self.workflow.set_workflow_stop()
             try:
-                await WorkflowOfflineError().websocket_close_message(websocket=self.websocket)
+                await WorkflowOfflineError().websocket_close_message(websocket=self.websocket, close_ws=False)
                 await self.send_response('processing', 'close', '')
             except:
                 logger.warning('websocket is closed')
@@ -116,7 +116,7 @@ class WorkflowClient(BaseClient):
             if self.latest_history.category in [WorkflowEventType.UserInput.value,
                                                 WorkflowEventType.OutputWithInput.value,
                                                 WorkflowEventType.OutputWithChoose.value]:
-                send_message = self.latest_history.to_dict()
+                send_message = self.latest_history.model_dump()
                 send_message['message'] = json.loads(send_message['message'])
                 send_message['message_id'] = send_message.pop('id')
                 await self.send_json(send_message)

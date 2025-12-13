@@ -22,6 +22,18 @@ const getNormalStepLabels = (t) => [
   t('dataProcessing')
 ];
 
+const repeatFileI18nRmark = (files, t) => files.map(file => {
+  try {
+    const { new_name, old_name } = JSON.parse(file.remark);
+    return {
+      ...file,
+      remark: t('fileExists', { name1: new_name, name2: old_name })
+    }
+  } catch (e) {
+    return file;
+  }
+});
+
 export default function FilesUpload() {
   const { t } = useTranslation('knowledge');
   const navigate = useNavigate();
@@ -63,7 +75,7 @@ export default function FilesUpload() {
       setRepeatFiles(_repeatFiles.map(file => ({
         ...file,
         file_name: file.fileName,
-        remark: `${file.fileName} 对应已存在文件 ${file.fileName}`
+        remark: t('fileExists', { name1: file.fileName, name2: file.fileName })
       })));
     } else {
       setCurrentStep(2);
@@ -94,9 +106,10 @@ export default function FilesUpload() {
         }
         break;
       case 3: // Step 3 → Step 4 (compare → process)
-        setCurrentStep(4);
         if (segmentRules) {
           handleSave(segmentRules); // Save config
+        } else {
+          setCurrentStep(4);
         }
         break;
       default:
@@ -126,7 +139,7 @@ export default function FilesUpload() {
 
   // API: Save segmentation strategy config (normal mode exclusive)
   const handleSave = (_config) => {
-    if (submittingRef.current) return;
+    if (submittingRef.current) return setCurrentStep(4);
     submittingRef.current = true;
     setIsSubmitting(true);
 
@@ -161,20 +174,21 @@ export default function FilesUpload() {
         const newRepeatFiles = repeatFilesRes.filter(file =>
           // Same timestamp, no overwrite
           !resultFiles.some(item => item.fileName === file.file_name && item.time && item.time === file.update_time))
-        setRepeatFiles(newRepeatFiles);
+        setRepeatFiles(repeatFileI18nRmark(newRepeatFiles, t));
         if (!newRepeatFiles.length) {
           handleRetry(repeatFilesRes)
         }
       } else {
         message({ variant: 'success', description: t('addSuccess') });
-        setCurrentStep(4);
       }
 
       // Update file ID
       setResultFiles(files => files.map((file, index) => ({
         ...file,
-        fileId: res[index]?.id
+        fileId: res[index]?.id,
+        resultId: res[index]?.id
       })));
+      setCurrentStep(4)
     }).finally(() => {
       submittingRef.current = false;
       setIsSubmitting(false);
@@ -190,7 +204,7 @@ export default function FilesUpload() {
     await captureAndAlertRequestErrorHoc(subUploadLibFile(_config).then(res => {
       const _repeatFiles = res.filter(e => e.status === 3);
       if (_repeatFiles.length) {
-        setRepeatFiles(_repeatFiles);
+        setRepeatFiles(repeatFileI18nRmark(_repeatFiles, t));
         repeatCallBackRef.current = () => navigate(-1);
       } else {
         message({ variant: 'success', description: t('addSuccess') });
@@ -199,6 +213,24 @@ export default function FilesUpload() {
     }));
   };
 
+  function dedupeWithRemovedPaths(objs) {
+    const seenMap = new Map()
+    const removedPaths = {}
+
+    for (const item of objs) {
+      if (seenMap.has(item.id)) {
+        removedPaths[item.file_path] = true
+      } else {
+        seenMap.set(item.id, item)
+      }
+    }
+
+    return {
+      uniqueObjs: Array.from(seenMap.values()),
+      removedPaths,
+    }
+  }
+
   // API: Retry duplicate files (overwrite upload)
   const handleRetry = (objs) => {
     if (currentStep === 1 && isNextBtnClickRef.current) {
@@ -206,14 +238,30 @@ export default function FilesUpload() {
       return setCurrentStep(2);
     }
     setRetryLoad(true);
+    const { uniqueObjs, removedPaths } = dedupeWithRemovedPaths(objs)
+    const newResultFiles = resultFiles.filter(file => !removedPaths[file.file_path])
+    const newUniqueObjs = uniqueObjs.map(item => {
+      const file = newResultFiles.find(f => item.id === f.fileId)
+      return {
+        ...item,
+        file_path: file?.file_path,
+        file_name: file?.fileName,
+      }
+    })
+
     const params = {
       knowledge_id: Number(_tempConfigRef.current.knowledge_id),
       separator: _tempConfigRef.current.separator,
       separator_rule: _tempConfigRef.current.separator_rule,
       chunk_size: _tempConfigRef.current.chunk_size,
       chunk_overlap: _tempConfigRef.current.chunk_overlap,
-      file_objs: objs
+      file_objs: newUniqueObjs,
     };
+
+    // When multiple identical files are uploaded, the files are deduplicated.
+    if (uniqueObjs.length !== objs.length) {
+      setResultFiles(newResultFiles);
+    }
 
     captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(params).then(res => {
       setRepeatFiles([]);
@@ -226,21 +274,24 @@ export default function FilesUpload() {
   };
 
   const handleUnRetry = () => {
+    const files = resultFiles.filter((item) => {
+      return repeatFiles.every((repeatItem) => {
+        return repeatItem.file_path !== item.file_path;
+      });
+    })
+    setResultFiles(files)
+
     if (currentStep === 1) {
-      const files = resultFiles.filter((item) => {
-        return repeatFiles.every((repeatItem) => {
-          return repeatItem.file_path !== item.file_path;
-        });
-      })
-      setResultFiles(files)
       if (files.length === 0) {
         return navigate(-1);
       }
       setRepeatFiles([]);
       return setCurrentStep(2);
     }
-    setRepeatFiles([]);
-    repeatCallBackRef.current();
+    setTimeout(() => {
+      setRepeatFiles([]);
+      repeatCallBackRef.current();
+    }, 100);
   }
   return (
     <div className="relative h-full flex flex-col">
@@ -306,7 +357,6 @@ export default function FilesUpload() {
                   handlePreviewResult={handlePreviewResult}
                   onPrev={handleBack}
                   onNext={() => {
-                    setCurrentStep(4);
                     handleSave(segmentRules);
                   }}
                   onDeleteFile={(filePath) => {
@@ -347,7 +397,7 @@ export default function FilesUpload() {
 
             {/* Step 4: Data processing */}
             {currentStep === 4 && (
-              <FileUploadStep4 data={resultFiles} />
+              <FileUploadStep4 data={resultFiles} hasRepeat={repeatFiles.length > 0}/>
             )}
           </div>
         </div>

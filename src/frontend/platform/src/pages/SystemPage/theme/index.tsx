@@ -6,7 +6,9 @@ import Example from "./Example";
 import HSLitem from "./HSLitem";
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
 import { Label } from "@/components/bs-ui/label";
+import { useTranslation } from "react-i18next";
 
+// Default theme configuration
 const defaultTheme = {
     '--background': { h: 0, s: 0, l: 1 },
     '--foreground': { h: 222.2, s: 0.474, l: 0.112 },
@@ -29,36 +31,37 @@ const defaultTheme = {
     '--black-button': { h: 0, s: 0, l: 0.07 },
 };
 
+// Theme key mappings for internationalization
 const themeKeys = {
-    "--primary": "主题色",
-    "--primary-foreground": "主题前景色",
-    "--background": "背景色",
-    "--foreground": "前景色",
-    "--muted": "柔和背景色",
-    "--muted-foreground": "柔和前景色",
-    "--card": "卡片背景色",
-    "--card-foreground": "卡片前景色",
-    "--popover": "弹出框背景色",
-    "--popover-foreground": "弹出框前景色",
-    "--border": "边框色",
-    "--input": "输入框边框色",
-    "--secondary": "次要按钮背景色",
-    "--secondary-foreground": "次要按钮前景色",
-    "--accent": "强调色",
-    "--accent-foreground": "强调前景色",
-    "--destructive": "警告按钮背景色",
-    "--destructive-foreground": "警告按钮前景色",
-    "--ring": "聚焦边框色",
-    "--radius": "圆角半径",
-    "--warning": "警告色",
-    "--warning-foreground": "警告前景色",
-    '--black-button': '黑按钮',
+    "--primary": "theme.primary",
+    "--primary-foreground": "theme.primaryForeground",
+    "--background": "theme.background",
+    "--foreground": "theme.foreground",
+    "--muted": "theme.muted",
+    "--muted-foreground": "theme.mutedForeground",
+    "--card": "theme.card",
+    "--card-foreground": "theme.cardForeground",
+    "--popover": "theme.popover",
+    "--popover-foreground": "theme.popoverForeground",
+    "--border": "theme.border",
+    "--input": "theme.input",
+    "--secondary": "theme.secondary",
+    "--secondary-foreground": "theme.secondaryForeground",
+    "--accent": "theme.accent",
+    "--accent-foreground": "theme.accentForeground",
+    "--destructive": "theme.destructive",
+    "--destructive-foreground": "theme.destructiveForeground",
+    "--ring": "theme.ring",
+    "--radius": "theme.radius",
+    "--warning": "theme.warning",
+    "--warning-foreground": "theme.warningForeground",
+    '--black-button': 'theme.blackButton',
 };
 
 export default function Theme() {
     const [theme, setTheme] = useState(Object.keys(window.ThemeStyle.comp).length ? window.ThemeStyle.comp : { ...defaultTheme });
     const [bg, setBg] = useState(window.ThemeStyle.bg || 'logo')
-
+    const { t } = useTranslation()
     const applyTheme = (theme) => {
         Object.keys(theme).forEach(key => {
             document.documentElement.style.setProperty(key, handleHSLtoStr(theme[key]));
@@ -80,7 +83,7 @@ export default function Theme() {
         };
         setTheme(newTheme);
         document.documentElement.style.setProperty(name, handleHSLtoStr(hsl));
-        // save
+        // Save the updated theme
         window.ThemeStyle = { comp: newTheme, bg }
         saveThemeApi(JSON.stringify({ comp: newTheme }))
     };
@@ -89,18 +92,18 @@ export default function Theme() {
     return <div className="flex justify-center border-t bg-accent">
         <div className="w-96 py-4 pr-8 border-r ">
             <p className="flex justify-between items-center mb-4">
-                <span className="text-lg">颜色配置</span>
-                <Button className="right" variant="link" onClick={e => applyTheme({ ...defaultTheme })}><RefreshCw className="mr-1 size-4" />还原</Button>
+                <span className="text-lg">{t('theme.colorConfig')}</span>
+                <Button className="right" variant="link" onClick={e => applyTheme({ ...defaultTheme })}><RefreshCw className="mr-1 size-4" />{t('theme.restoreDefault')}</Button>
             </p>
             <div className="grid grid-cols-2 gap-2 gap-x-8 my-8">
                 {
                     Object.keys(theme).map(key => {
-                        return <HSLitem key={key} label={themeKeys[key]} name={key} value={theme[key]} onChange={handleHSLChange} />
+                        return <HSLitem key={key} label={t(themeKeys[key])} name={key} value={theme[key]} onChange={handleHSLChange} />
                     })
                 }
             </div>
             <p className="flex justify-between items-center mb-4">
-                <span className="text-lg">工作流背景配置</span>
+                <span className="text-lg">{t('theme.workflowBackgroundConfig')}</span>
             </p>
             <RadioGroup value={bg} onValueChange={(val) => {
                 window.ThemeStyle.bg = val
@@ -110,20 +113,20 @@ export default function Theme() {
                 className="flex space-x-2 h-[20px] mt-4 mb-6">
                 <div>
                     <Label className="flex justify-center">
-                        <RadioGroupItem className="mr-2" value="logo" />BISHENG logo
+                        <RadioGroupItem className="mr-2" value="logo" />{t('theme.bishengLogo')}
                     </Label>
                 </div>
                 <div>
                     <Label className="flex justify-center">
-                        <RadioGroupItem className="mr-2" value="gradient" />主题色渐变效果
+                        <RadioGroupItem className="mr-2" value="gradient" />{t('theme.themeColorGradientEffect')}
                     </Label>
                 </div>
             </RadioGroup>
         </div>
         <div className="px-4 py-4 bg-card">
-            <p className="text-xl mb-4">组件预览</p>
+            <p className="text-xl mb-4">{t('theme.componentPreview')}</p>
             <div>
-                {/* 组件列表 */}
+                {/* Component list */}
                 <Example />
             </div>
         </div>

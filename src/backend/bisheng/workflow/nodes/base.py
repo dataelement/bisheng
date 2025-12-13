@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 
 from langchain_core.messages import HumanMessage
 
-from bisheng.database.models.user import UserDao
+from bisheng.user.domain.models.user import UserDao
 from bisheng.utils.exceptions import IgnoreException
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeEndData, NodeStartData
@@ -18,7 +18,7 @@ from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 
 class BaseNode(ABC):
 
-    def __init__(self, node_data: BaseNodeData, workflow_id: str, user_id: str,
+    def __init__(self, node_data: BaseNodeData, workflow_id: str, user_id: int,
                  graph_state: GraphState, target_edges: List[EdgeBase], max_steps: int,
                  callback: BaseCallback, **kwargs: Any):
         self.id = node_data.id
@@ -32,6 +32,7 @@ class BaseNode(ABC):
 
         # 全局状态管理
         self.workflow_id = workflow_id
+        self.workflow_name = kwargs.get('workflow_name')
         self.graph_state = graph_state
 
         # 节点全部的数据

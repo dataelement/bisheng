@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState } from 'react';
 import ToolSelector from './ToolSelector';
 
 export default function ToolSelectorContainer({
@@ -9,7 +9,7 @@ export default function ToolSelectorContainer({
   isToolSelected,
   handleDragEnd,
   toggleGroup,
-  activeToolTab, 
+  activeToolTab,
   setActiveToolTab,
   showToolSelector,
   setShowToolSelector,
@@ -34,7 +34,7 @@ export default function ToolSelectorContainer({
       .filter(Boolean);
   }, [initialToolsData, toolSearchTerm, activeToolTab]);
 
-  // 扩展项逻辑
+  // Expansion Item Logic 
   const expandedItems = useMemo(() => {
     const searchExpanded = toolSearchTerm
       ? filteredTools.filter(tool => tool._forceExpanded).map(tool => tool.id)
@@ -58,8 +58,8 @@ export default function ToolSelectorContainer({
       expandedItems={expandedItems}
       setManuallyExpandedItems={setManuallyExpandedItems}
       toggleGroup={toggleGroup}
-        showToolSelector={showToolSelector} 
-    setShowToolSelector={setShowToolSelector}
+      showToolSelector={showToolSelector}
+      setShowToolSelector={setShowToolSelector}
     />
   );
 }

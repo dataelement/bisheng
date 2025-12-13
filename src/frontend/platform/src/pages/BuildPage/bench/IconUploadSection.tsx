@@ -29,18 +29,18 @@ export const IconUploadSection = ({
         if (!file) return onUpload('');
 
         new Compressor(file, {
-            quality: 0.6, // 压缩质量（0-1）
+            quality: 0.6, // Compression quality (0-1)
             maxWidth: 300,
             maxHeight: 300,
             success(result) {
-                // 压缩后的文件（result 是 Blob 类型）
+                // Compressed file (result is a Blob type)
                 const compressedFile = new File([result], file.name, { type: result.type });
                 uploadFileWithProgress(compressedFile, (progress) => { }, 'icon', '').then(res => {
                     onUpload(res.file_path, res.relative_path)
                 });
             },
             error(err) {
-                console.error("压缩失败:", err);
+                console.error("Compression failed:", err);
                 toast({
                     title: t('chat.uploadFailedCheckFormat'),
                     description: err.message,

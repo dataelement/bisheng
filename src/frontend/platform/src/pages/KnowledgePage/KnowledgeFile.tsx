@@ -123,7 +123,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
 
         // 3. Original validation logic (only for user-entered descriptions, default description already ensures ≤ 200)
         if (!name) {
-            handleError(t('lib.enterLibraryName'));
+            handleError(t('lib.enterLibraryName', { ns: 'bs' }));
             return;
         }
         if (name.length > 200) {
@@ -138,11 +138,10 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
         const nameUnchanged = isEditMode && name === currentLib.name;
 
         if (!nameUnchanged && datalist.find(data => data.name === name && (!currentLib || data.id !== currentLib.id))) {
-            handleError(t('lib.nameExists',{ns:'bs'}));
+            handleError(t('lib.nameExists', { ns: 'bs' }));
             return;
         }
 
-        // 仅校验用户手动输入的描述（默认描述已控制长度，可跳过）
         if (descRef.current.value && desc.length > 200) {
             handleError(t('lib.descriptionLimit'));
             return;
@@ -161,7 +160,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                     ? `/filelib/upload/${res.id}`
                     : `/filelib/${res.id}`
                 );
-                onOpenChange(false); // 修复：用onOpenChange关闭弹窗
+                onOpenChange(false);
             })).finally(() => {
                 setIsSubmitting(false)
             })
@@ -176,13 +175,13 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
             await captureAndAlertRequestErrorHoc(updateKnowledge(data).then(res => {
                 toast({
                     variant: "success",
-                    description: '更新成功'
+                    description: t('updateSuccess')
                 })
-                onOpenChange(false); // 修复：用onOpenChange关闭弹窗（替代原setOpen）
+                onOpenChange(false);
                 onLoadEnd()
             }).catch(error => {
-                toast({ variant: "error", description: error || '更新失败，请重试' });
-                onOpenChange(false); // 错误时也关闭弹窗，避免状态卡住
+                toast({ variant: "error", description: error || t('updateFailed') });
+                onOpenChange(false);
             })).finally(() => {
                 setIsSubmitting(false)
             })
@@ -199,17 +198,17 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
     return <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[625px]">
             <DialogHeader>
-                <DialogTitle>{mode === 'create' ? t('lib.createLibrary',{ ns: 'bs' }) : '知识库设置'}</DialogTitle>
+                <DialogTitle>{mode === 'create' ? t('lib.createLibrary', { ns: 'bs' }) : t('knowledgeBaseSettings')}</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-4 py-2">
                 {mode === 'edit' && currentLib && (
                     <div className="space-y-4">
                         <div className="flex items-center gap-48">
-                            <label className="bisheng-label text-sm text-gray-500">{t('lib.knowledgeBaseId',{ns:'bs'})}</label>
+                            <label className="bisheng-label text-sm text-gray-500">{t('lib.knowledgeBaseId', { ns: 'bs' })}</label>
                             <div className="text-sm">{currentLib.id}</div>
                         </div>
                         <div className="flex items-center gap-48">
-                            <label className="bisheng-label text-sm text-gray-500">{t('createTime',{ ns: 'bs' })}</label>
+                            <label className="bisheng-label text-sm text-gray-500">{t('createTime', { ns: 'bs' })}</label>
                             <div className="text-sm">
                                 {currentLib.create_time.replace('T', ' ')}
                             </div>
@@ -217,33 +216,33 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                     </div>
                 )}
                 <div className="">
-                    <label htmlFor="name" className="bisheng-label">{t('lib.libraryName',{ ns: 'bs' })}</label>
+                    <label htmlFor="name" className="bisheng-label">{t('lib.libraryName', { ns: 'bs' })}</label>
                     <span className="text-red-500">*</span>
                     <Input
                         name="name"
                         ref={nameRef}
                         defaultValue={mode === 'edit' && currentLib ? currentLib.name : ''}
-                        placeholder={t('lib.enterLibraryName',{ ns: 'bs' })}
+                        placeholder={t('lib.enterLibraryName', { ns: 'bs' })}
                         className={`col-span-3 ${error.name && 'border-red-400'}`}
                     />
                 </div>
                 <div className="">
-                    <label htmlFor="desc" className="bisheng-label">知识库描述</label>
+                    <label htmlFor="desc" className="bisheng-label">{t('lib.desc', { ns: 'bs' })}</label>
                     <Textarea
                         id="desc"
                         ref={descRef}
                         defaultValue={mode === 'edit' && currentLib ? currentLib.description : ''}
-                        placeholder="请输入知识库描述"
+                        placeholder={t('enterKnowledgeBaseDescription')}
                         rows={8}
                         className={`col-span-3 ${error.desc && 'border-red-400'}`}
                     />
                 </div>
                 <div className="">
-                    <label htmlFor="model" className="bisheng-label">知识库embedding模型选择</label>
+                    <label htmlFor="model" className="bisheng-label">{t('lib.embeddingModelSelection', { ns: 'bs' })}</label>
                     {isLoading ? (
                         <div className="flex items-center gap-2 p-3 border rounded-md bg-gray-50">
                             <LoadIcon className="w-4 h-4 animate-spin" />
-                            <span className="text-sm text-gray-600">正在加载模型列表...</span>
+                            <span className="text-sm text-gray-600">{t('loadingModelList')}</span>
                         </div>
                     ) : embeddings.length > 0 ? (
                         <ModelSelect
@@ -259,13 +258,13 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                         />
                     ) : (
                         <div className="p-3 border rounded-md bg-gray-50 text-sm text-gray-600">
-                            暂无可用模型
+                            {t('noAvailableModels')}
                         </div>
                     )}
                     {mode === 'edit' && isModelChanged && (
                         <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
                             <CircleAlert className="w-4 h-4" color="#ef4444" />
-                            修改 embedding 模型可能会消耗大量模型资源且耗时较久，请谨慎进行
+                            {t('embeddingModelChangeWarning')}
                         </p>
                     )}
                 </div>
@@ -283,7 +282,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                             disabled={isSubmitting}
                         >
                             {isSubmitting && <LoadIcon className="mr-1" />}
-                            完成创建
+                            {t('finishCreate')}
                         </Button>
                         <Button
                             type="submit"
@@ -292,7 +291,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                             disabled={isSubmitting}
                         >
                             {isSubmitting && <LoadIcon className="mr-1" />}
-                            {t('createImport',{ ns: 'bs' })}
+                            {t('createImport', { ns: 'bs' })}
                         </Button>
                     </>
                 ) : (
@@ -311,7 +310,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
     </Dialog>
 }
 
-const doing = {} // 记录copy中的知识库
+const doing = {} // Record knowledge bases being copied
 export default function KnowledgeFile() {
     const [open, setOpen] = useState(false);
     const { user } = useContext(userContext);
@@ -320,15 +319,15 @@ export default function KnowledgeFile() {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [currentSettingLib, setCurrentSettingLib] = useState(null);
     const [copyLoadingId, setCopyLoadingId] = useState<string | null>(null);
-    // 新增：控制Select下拉状态，避免偶发不弹出
+    // New: Control Select dropdown state to avoid occasional popup issues
     const [selectOpenId, setSelectOpenId] = useState<string | null>(null);
-    const [modalKey, setModalKey] = useState(0); // 新增：用于强制重新渲染弹窗
+    const [modalKey, setModalKey] = useState(0); // New: Used to force re-render of modal
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({ cancelLoadingWhenReload: true }, (param) =>
         readFileLibDatabase({ ...param, name: param.keyword })
     )
 
-    // 复制中开启轮询
+    // Enable polling during copying
     useEffect(() => {
         const todos = datalist.reduce((prev, curr) => {
             if (curr.state === KnowledgeBaseStatus.Copying) {
@@ -343,7 +342,7 @@ export default function KnowledgeFile() {
                 if (lib && lib.state !== KnowledgeBaseStatus.Copying) {
                     message({
                         variant: 'success',
-                        description: `${todo.name} 复制完成`
+                        description: t('copyCompleted', { name: todo.name })
                     })
                     delete doing[todo.id]
                 }
@@ -365,7 +364,7 @@ export default function KnowledgeFile() {
     const handleDelete = (id) => {
         bsConfirm({
             title: t('prompt'),
-            desc: t('lib.confirmDeleteLibrary',{ ns: 'bs' }),
+            desc: t('lib.confirmDeleteLibrary', { ns: 'bs' }),
             onOk(next) {
                 captureAndAlertRequestErrorHoc(deleteFileLib(id).then(res => {
                     reload();
@@ -376,17 +375,17 @@ export default function KnowledgeFile() {
     }
 
     const handleOpenSettings = (lib) => {
-        console.log("=== handleOpenSettings 开始执行 ===");
-        console.log("当前点击的lib ID:", lib.id);
-        // 1. 深拷贝：彻底断开与原 lib 的引用关联（解决嵌套属性引用不变问题）
+        console.log("=== handleOpenSettings execution started ===");
+        console.log("Clicked lib ID:", lib.id);
+        // 1. Deep copy: Completely break reference association with original lib (solving nested property reference issues)
         const newCurrentLib = JSON.parse(JSON.stringify(lib));
-        // 2. 注入唯一标识：即使数据完全相同，也让 currentSettingLib 引用绝对唯一
-        newCurrentLib.__updateKey = Date.now(); // 每次点击生成不同的时间戳
+        // 2. Inject unique identifier: Ensure currentSettingLib reference is absolutely unique even if data is identical
+        newCurrentLib.__updateKey = Date.now(); // Generate different timestamp for each click
 
-        setCurrentSettingLib(newCurrentLib); // 此时传递的是完全新的对象引用
+        setCurrentSettingLib(newCurrentLib); // Now passing a completely new object reference
         setSettingsOpen(true);
-        setModalKey(prev => prev + 1); // 保留 modalKey 确保弹窗重新挂载
-        console.log("handleOpenSettings called with lib:", newCurrentLib); // 验证打印
+        setModalKey(prev => prev + 1); // Keep modalKey to ensure modal re-mounts
+        console.log("handleOpenSettings called with lib:", newCurrentLib); // Verify print
     };
 
     const handleSettingsClose = (isOpen) => {
@@ -399,7 +398,7 @@ export default function KnowledgeFile() {
         }
     };
 
-    // 进详情页前缓存 page, 临时方案
+    // Cache page before entering detail page, temporary solution
     const handleCachePage = () => {
         window.LibPage = { page, type: 'file' }
     }
@@ -419,21 +418,21 @@ export default function KnowledgeFile() {
         i18n.loadNamespaces('knowledge');
     }, [i18n]);
 
-    // copy
+    // Copy knowledge base
     const handleCopy = async (elem) => {
-        const newName = `${elem.name}的副本`;
+        const newName = `${elem.name}${t('copySuffix')}`;
         if (newName.length > 200) {
             toast({
-                title: '操作失败',
+                title: t('operationFailed'),
                 variant: 'error',
-                description: '复制后的知识库名称超过字数限制'
+                description: t('copyNameExceedsLimit')
             });
 
-            // 重置所有相关状态
+            // Reset all related states
             setSelectOpenId(null);
             setCopyLoadingId(null);
 
-            // 强制重新渲染 Select 组件
+            // Force re-render of Select component
             setModalKey(prev => prev + 1);
             return;
         }
@@ -442,17 +441,17 @@ export default function KnowledgeFile() {
         doing[elem.id] = true;
 
         try {
-            await captureAndAlertRequestErrorHoc(copyLibDatabase(elem.id));
+            await captureAndAlertRequestErrorHoc(copyLibDatabase(elem.id, newName));
             reload();
         } catch (error) {
             message({
                 variant: 'error',
-                description: '复制失败'
+                description: t('copyFailed')
             });
         } finally {
             setCopyLoadingId(null);
             setSelectOpenId(null);
-            // 确保 Select 组件重置
+            // Ensure Select component resets
             setModalKey(prev => prev + 1);
         }
     }
@@ -499,22 +498,20 @@ export default function KnowledgeFile() {
                                 >
                                     <div className="flex items-center gap-2">
                                         <div className="flex items-center justify-center size-12 text-white rounded-[4px]  w-[40px] h-[40px]">
-                                            {/* <BookCopy  className="size-5"/> */}
                                             <BookIcon className="text-primary size-10" />
                                         </div>
                                         <div>
                                             <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">
                                                 {el.name}
                                             </div>
-                                            <QuestionTooltip
-                                                content={el.description || ''}
-                                                error={false}
-                                                className="w-full text-start"
+                                            <Tip
+                                                side="top"
+                                                content={el.description?.length > 30 ? el.description : ''}
                                             >
                                                 <div className="truncate max-w-[500px] text-[12px] text-[#5A5A5A] pt-1">
                                                     {el.description || ''}
                                                 </div>
-                                            </QuestionTooltip>
+                                            </Tip>
                                         </div>
                                     </div>
                                 </TableCell>
@@ -541,7 +538,7 @@ export default function KnowledgeFile() {
                                                 if (copyLoadingId !== el.id) {
                                                     setSelectOpenId(isOpen ? el.id : null);
                                                 } else if (!isOpen) {
-                                                    // 如果是复制中状态且要关闭，允许关闭
+                                                    // If in copying state and about to close, allow closing
                                                     setSelectOpenId(null);
                                                 }
                                             }}
@@ -574,7 +571,7 @@ export default function KnowledgeFile() {
                                                     <>
                                                         <LoaderCircle className="animate-spin" />
                                                         <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white text-gray-800 text-xs px-2 py-1 rounded whitespace-nowrap border border-gray-300 shadow-sm">
-                                                            复制中
+                                                            {t('copying')}
                                                         </div>
                                                     </>
                                                 ) : (
@@ -587,7 +584,7 @@ export default function KnowledgeFile() {
                                                 }}
                                                 className="z-50 overflow-visible"
                                             >
-                                                <Tip content={!el.copiable && '暂无操作权限'} side='top'>
+                                                <Tip content={!el.copiable && t('noOperationPermission')} side='top'>
                                                     <SelectItem
                                                         showIcon={false}
                                                         value="copy"
@@ -596,11 +593,11 @@ export default function KnowledgeFile() {
                                                     >
                                                         <div className="flex gap-2 items-center" >
                                                             <Copy className="w-4 h-4" />
-                                                            {t('lib.copy',{ ns: 'bs' })}
+                                                            {t('lib.copy', { ns: 'bs' })}
                                                         </div>
                                                     </SelectItem>
                                                 </Tip>
-                                                <Tip content={!el.copiable && '暂无操作权限'} side='top'>
+                                                <Tip content={!el.copiable && t('noOperationPermission')} side='top'>
                                                     <SelectItem
                                                         value="set"
                                                         disabled={!el.copiable}
@@ -609,11 +606,11 @@ export default function KnowledgeFile() {
                                                     >
                                                         <div className="flex gap-2 items-center">
                                                             <Settings className="w-4 h-4" />
-                                                            {t('设置')}
+                                                            {t('settings')}
                                                         </div>
                                                     </SelectItem>
                                                 </Tip>
-                                                <Tip content={!el.copiable && '暂无操作权限'} side='top'>
+                                                <Tip content={!el.copiable && t('noOperationPermission')} side='top'>
                                                     <SelectItem
                                                         value="delete"
                                                         showIcon={false}
@@ -647,7 +644,7 @@ export default function KnowledgeFile() {
                 </div>
             </div>
 
-            {/* 创建弹窗 */}
+            {/* Create modal */}
             <CreateModal
                 datalist={datalist}
                 open={open}
@@ -656,7 +653,7 @@ export default function KnowledgeFile() {
                 mode="create"
             />
 
-            {/* 编辑（设置）弹窗 - 使用 key 强制重新渲染 */}
+            {/* Edit (Settings) modal - using key to force re-render */}
             {settingsOpen && (
                 <CreateModal
                     key={`settings-modal-${modalKey}`}

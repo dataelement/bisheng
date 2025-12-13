@@ -19,65 +19,92 @@ const enum Status {
 // 日志组件
 export default function RunLog({ node, children }) {
     const [state, setState] = useState<Status>(Status.normal)
-    const setRunCache = useFlowStore(state => state.setRunCache) // 缓存TODO
+    // const setRunCache = useFlowStore(state => state.setRunCache) // 缓存TODO
     const [data, setData] = useState<any>([])
     const { t } = useTranslation('flow')
     // 订阅日志事件
     useEffect(() => {
         const buildData = (data) => {
             if (data) {
-                /**
-                 * newData
-                 * key: {type, value}  
-                 * "current_time": {type: "param", value: "2023-11-20 16:00:00"}
-                 */
-                const newData = data.reduce((res, item) => {
-                    if (['file', 'variable'].includes(item.type)) {
-                        const key = item.key.split('.')
-                        res.set(key[key.length - 1], { type: item.type, label: '', value: item.value });
-                    } else {
-                        res.set(item.key, { type: item.type, label: '', value: item.value });
-                    }
-                    return res;
-                }, new Map()); // 使用 Map 保持插入顺序
 
-                let hasKeys = [];
-                const isFormInputNode = node.type === 'input' && node.tab.value === 'form_input'
-                // 根据node params替换newData的key值 替换为name
+                const toolMap = {}
                 node.group_params.forEach(group => {
                     group.params.forEach(param => {
-                        // 尝试去value中匹配 (input-form; preset-quesitons)
-                        if (Array.isArray(param.value) && param.value.some(el => newData.has(el.key))) {
-                            param.value.forEach(value => {
-                                if (!newData.has(value.key)) return;
-                                newData.get(value.key)['label'] = value.label || value.key;
-                                hasKeys.push(value.key);
-                            });
-                        } else if (newData.has(param.key)) {
-                            if (param.hidden) return newData.delete(param.key);
-                            newData.get(param.key)['label'] = param.label || param.key;
-                            hasKeys.push(param.key);
-                        } else if (param.key === 'tool_list') {
+                        if (param.key === 'tool_list') {
                             // tool
-                            param.value.some(p => {
-                                if (newData.has(p.tool_key)) {
-                                    newData.get(p.tool_key)['label'] = p.label;
-                                    hasKeys.push(p.tool_key);
-                                }
-                            });
-                        } else if (isFormInputNode && param.key === 'form_input') {
-                            param.value.forEach(value => {
-                                value.file_type === 'file' && newData.delete(value.image_file);
+                            param.value.forEach(el => {
+                                toolMap[el.tool_key] = el.label
                             })
                         }
                     });
                 });
 
-                return Array.from(newData.entries()).map(([key, value]) => ({
-                    label: ['file', 'variable'].includes(value.type) && !key.startsWith('output_') ? key : value.label || key,
-                    type: value.type,
-                    value: value.value,
-                }))
+                return data.map(item => {
+                    let label = ''
+                    if (['file', 'variable'].includes(item.type)) {
+                        const key = item.key.split('.')
+                        label = t(`node.${node.type}.${key[key.length - 1]}.label`)
+                    } else if (item.type === 'tool') {
+                        label = toolMap[item.key]
+                    } else if (item.key === 'output_msg') {
+                        label = item.key
+                    } else {
+                        label = t(`node.${node.type}.${item.key}.label`)
+                    }
+                    return {
+                        label,
+                        type: item.type,
+                        value: item.value
+                    }
+                })
+
+                // const newData = data.reduce((res, item) => {
+                //     if (['file', 'variable'].includes(item.type)) {
+                //         const key = item.key.split('.')
+                //         res.set(key[key.length - 1], { type: item.type, label: '', value: item.value });
+                //     } else {
+                //         res.set(item.key, { type: item.type, label: '', value: item.value });
+                //     }
+                //     return res;
+                // }, new Map()); // 使用 Map 保持插入顺序
+
+                // let hasKeys = [];
+                // const isFormInputNode = node.type === 'input' && node.tab.value === 'form_input'
+                // // 根据node params替换newData的key值 替换为name
+                // node.group_params.forEach(group => {
+                //     group.params.forEach(param => {
+                //         // 尝试去value中匹配 (input-form; preset-quesitons)
+                //         if (Array.isArray(param.value) && param.value.some(el => newData.has(el.key))) {
+                //             param.value.forEach(value => {
+                //                 if (!newData.has(value.key)) return;
+                //                 newData.get(value.key)['label'] = value.label || value.key;
+                //                 hasKeys.push(value.key);
+                //             });
+                //         } else if (newData.has(param.key)) {
+                //             if (param.hidden) return newData.delete(param.key);
+                //             newData.get(param.key)['label'] = param.label || param.key;
+                //             hasKeys.push(param.key);
+                //         } else if (param.key === 'tool_list') {
+                //             // tool
+                //             param.value.some(p => {
+                //                 if (newData.has(p.tool_key)) {
+                //                     newData.get(p.tool_key)['label'] = p.label;
+                //                     hasKeys.push(p.tool_key);
+                //                 }
+                //             });
+                //         } else if (isFormInputNode && param.key === 'form_input') {
+                //             param.value.forEach(value => {
+                //                 value.file_type === 'file' && newData.delete(value.image_file);
+                //             })
+                //         }
+                //     });
+                // });
+
+                // return Array.from(newData.entries()).map(([key, value]) => ({
+                //     label: ['file', 'variable'].includes(value.type) && !key.startsWith('output_') ? key : value.label || key,
+                //     type: value.type,
+                //     value: value.value,
+                // }))
             }
         }
 
@@ -180,12 +207,12 @@ const Log = ({ type, name, data }) => {
                         <Select value={currentIndex + ""} onValueChange={(val => setCurrentIndex(Number(val)))}>
                             <SelectTrigger className="w-[180px]">
                                 {/* <SelectValue /> */}
-                                <span>第 {currentIndex + 1} 轮运行结果</span>
+                                <span>{t('roundRunResult', { index: currentIndex + 1 })}</span>
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectGroup>
                                     {
-                                        data.map((_, index) => <SelectItem key={index} value={index + ""}>第 {index + 1} 轮运行结果</SelectItem>)
+                                        data.map((_, index) => <SelectItem key={index} value={index + ""}>{t('roundRunResult', { index: index + 1 })}</SelectItem>)
                                     }
                                 </SelectGroup>
                             </SelectContent>
@@ -205,16 +232,27 @@ const Log = ({ type, name, data }) => {
 // 下载文件
 export const ResultFile = ({ title, name, fileUrl }: { title: string, name: string, fileUrl: string }) => {
     const { flow } = useFlowStore();
+    const { t } = useTranslation('flow');
 
     const handleDownload = (e) => {
-        downloadFile(fileUrl, `${flow.name}_${name}_检索结果`)
+        downloadFile(fileUrl, `${flow.name}_${name}_${t('searchResult')}`)
     }
 
-    return <div className="mb-2 rounded-md border bg-search-input text-sm shadow-sm">
-        <div className="border-b px-2 flex justify-between items-center">
-            <p>{title}</p>
+    return (
+        <div className="mb-2 rounded-md border bg-search-input text-sm shadow-sm">
+            <div className="border-b px-2 flex justify-between items-center">
+                <p>{title}</p>
+            </div>
+
+            <textarea
+                defaultValue={t('resultTooLongDownloadToView')}
+                disabled
+                className="w-full h-12 p-2 block text-muted-foreground dark:bg-black"
+            />
+
+            <Button onClick={handleDownload} className="h-6 mt-2">
+                {t('downloadFullContent')}
+            </Button>
         </div>
-        <textarea defaultValue={'检索结果过长,请下载后查看'} disabled className="w-full h-12 p-2 block text-muted-foreground dark:bg-black " />
-        <Button onClick={handleDownload} className="h-6 mt-2">下载完整内容</Button>
-    </div>
-}
+    );
+};

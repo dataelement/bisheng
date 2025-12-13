@@ -14,10 +14,11 @@ import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import Tip from "@/components/bs-ui/tooltip/tip";
 import { truncateString } from "@/util/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
 import { ClipboardPenLine, Filter, RotateCw, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../../components/bs-ui/input";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
@@ -25,8 +26,69 @@ import { deleteFile, getKnowledgeDetailApi, readFileByLibDatabase, retryKnowledg
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import useKnowledgeStore from "../useKnowledgeStore";
-import Tip from "@/components/bs-ui/tooltip/tip";
 import { MetadataManagementDialog } from "./MetadataManagementDialog";
+
+interface StatusIndicatorProps {
+    status: number;
+    remark?: string;
+}
+// 1. 定义状态配置映射表
+const STATUS_CONFIG: Record<number, { labelKey: string; colorClass: string; bgClass: string }> = {
+    1: { labelKey: "parsing", colorClass: "text-[#4D9BF0]", bgClass: "bg-[#4D9BF0]" },
+    2: { labelKey: "completed", colorClass: "text-green-500", bgClass: "bg-green-500" },
+    3: { labelKey: "parseFailed", colorClass: "text-red-500", bgClass: "bg-red-500" },
+    4: { labelKey: "parsing", colorClass: "text-[#4D9BF0]", bgClass: "bg-[#4D9BF0]" },
+};
+
+export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark }) => {
+    const { t } = useTranslation()
+    const config = STATUS_CONFIG[status];
+    const reason = useMemo(() => {
+        if (remark?.indexOf('{') === 0) {
+            try {
+                const obj = JSON.parse(remark)
+                return t(`errors.${obj.status_code}`, obj.data)
+            } catch (error) {
+                return remark
+            }
+        }
+        return remark
+    }, [remark])
+
+    // 如果状态不在定义中，返回 null 或默认 UI
+    if (!config) return null;
+
+    // 2. 抽取公共的基础 UI (圆点 + 文字)
+    const BadgeContent = (
+        <div className="flex items-center gap-2 cursor-default">
+            <span className={`size-[6px] rounded-full ${config.bgClass}`}></span>
+            <span className={`font-[500] text-[14px] leading-[100%] text-center ${config.colorClass}`}>
+                {t(config.labelKey, { ns: 'knowledge' })}
+            </span>
+        </div>
+    );
+
+    // 3. 特殊逻辑：只有失败状态 (3) 且有 remark 时才显示 Tooltip
+    if (status === 3 && remark) {
+        return (
+            <TooltipProvider delayDuration={100}>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        {BadgeContent}
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="whitespace-pre-line">
+                        <div className="max-w-96 text-left break-all whitespace-normal">
+                            {reason}
+                        </div>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        );
+    }
+
+    // 其他状态直接渲染内容
+    return BadgeContent;
+};
 
 export default function Files({ onPreview }) {
     const { t } = useTranslation('knowledge')
@@ -43,16 +105,15 @@ export default function Files({ onPreview }) {
     const [metadataOpen, setMetadataOpen] = useState(false);
     const navigate = useNavigate()
 
-    // 存储完整文件对象（保留所有原始参数）
+    // Store complete file objects (preserving all original parameters)
     const [selectedFileObjs, setSelectedFileObjs] = useState<Array<Record<string, any>>>([]);
     const [isAllSelected, setIsAllSelected] = useState(false);
 
-    // 其他原有状态
     const [selectedFilters, setSelectedFilters] = useState<number[]>([]);
     const [tempFilters, setTempFilters] = useState<number[]>([]);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [metadataFields, setMetadataFields] = useState<Array<{ field_name: string; field_type: string }>>([]);
-    // 解析中轮巡
+    // Polling during parsing
     const timerRef = useRef(null)
     useEffect(() => {
         if (datalist.some(el => el.status === 1)) {
@@ -102,33 +163,33 @@ export default function Files({ onPreview }) {
         })
     }
 
-    // 重试解析（保留原始文件参数结构）
+    // Retry parsing (preserving original file parameter structure)
     const handleRetry = (files) => {
         captureAndAlertRequestErrorHoc(retryKnowledgeFileApi({ file_objs: files }).then(res => {
             reload()
         }))
     }
 
-    // 全选/取消全选（存储完整文件对象）
+    // Select all/Deselect all (storing complete file objects)
     const toggleSelectAll = (checked: boolean) => {
         if (checked) {
-            // 全选当前页并去重
+            // Select all current page and deduplicate
             const newFiles = datalist
                 .filter(file => !selectedFileObjs.some(item => item.id === file.id))
-                .map(file => ({ ...file })); // 深拷贝保留所有参数
+                .map(file => ({ ...file })); // Deep copy to preserve all parameters
             setSelectedFileObjs([...selectedFileObjs, ...newFiles]);
         } else {
-            // 取消全选当前页
+            // Deselect all current page
             const currentPageIds = new Set(datalist.map(file => file.id));
             setSelectedFileObjs(prev => prev.filter(file => !currentPageIds.has(file.id)));
         }
         setIsAllSelected(checked);
     };
 
-    // 单个文件选中/取消选中
+    // Single file selection/deselection
     const toggleSelectFile = (file: Record<string, any>, checked: boolean) => {
         if (checked) {
-            // 避免重复添加
+            // Avoid duplicate additions
             if (!selectedFileObjs.some(item => item.id === file.id)) {
                 setSelectedFileObjs([...selectedFileObjs, { ...file }]);
             }
@@ -138,22 +199,23 @@ export default function Files({ onPreview }) {
         }
     };
 
-    // 检查当前页是否全部选中
+    // Check if current page is fully selected
     const isCurrentPageAllSelected = useMemo(() => {
         if (datalist.length === 0) return false;
         const selectedIds = new Set(selectedFileObjs.map(file => file.id));
         return datalist.every(file => selectedIds.has(file.id));
     }, [datalist, selectedFileObjs]);
 
-    // 批量删除
+    // Batch delete
     const handleBatchDelete = () => {
         bsConfirm({
             title: t('prompt'),
-            desc: t('确认删除选中文件', { count: selectedFileObjs.length }),
+            desc: t('confirmDeleteSelectedFiles', { count: selectedFileObjs.length }),
             onOk(next) {
                 captureAndAlertRequestErrorHoc(Promise.all(
                     selectedFileObjs.map(file => deleteFile(file.id))
                 ).then(() => {
+                    setPage(1);
                     reload();
                     setSelectedFileObjs([]);
                     setIsAllSelected(false);
@@ -163,26 +225,26 @@ export default function Files({ onPreview }) {
         })
     }
 
-    // 批量重试（核心修复：传递完整文件对象）
+    // Batch retry
     const handleBatchRetry = () => {
-        // 筛选失败文件，保留完整参数
+        // Filter failed files, preserving complete parameters
         const failedFiles = selectedFileObjs.filter(file => file.status === 3);
 
         if (failedFiles.length > 0) {
-            handleRetry(failedFiles); // 直接传递完整文件对象数组
+            handleRetry(failedFiles); // Directly pass complete file object array
             setSelectedFileObjs([]);
             setIsAllSelected(false);
         }
     }
 
-    // 策略解析（原有逻辑不变）
+    // Strategy parsing
     const dataSouce = useMemo(() => {
         return datalist.map(el => {
             if (el.file_name.includes('xlsx', 'xls', 'csv') && el.parse_type !== "local" && el.parse_type !== "uns") {
                 const excel_rule = JSON.parse(el.split_rule).excel_rule
                 return {
                     ...el,
-                    strategy: ['', `每 ${excel_rule?.slice_length} 行作为1一个分段`]
+                    strategy: ['', t('everyRowsAsOneSegment', { count: excel_rule?.slice_length })]
                 }
             }
             if (!el.split_rule) return {
@@ -197,17 +259,17 @@ export default function Files({ onPreview }) {
                 strategy: [data.length > 2 ? data.slice(0, 2).join(',') : '', data.join(',')]
             }
         })
-    }, [datalist])
+    }, [datalist, t])
 
     const splitRuleDesc = (el) => {
         if (!el.split_rule) return el.strategy[1].replace(/\n/g, '\\n')
         const suffix = el.file_name.split('.').pop().toUpperCase()
         const excel_rule = JSON.parse(el.split_rule).excel_rule
         if (!excel_rule) return el.strategy[1].replace(/\n/g, '\\n')
-        return ['XLSX', 'XLS', 'CSV'].includes(suffix) ? `每 ${excel_rule.slice_length} 行作为一个分段` : el.strategy[1].replace(/\n/g, '\\n')
+        return ['XLSX', 'XLS', 'CSV'].includes(suffix) ? t('everyRowsAsOneSegment', { count: excel_rule.slice_length }) : el.strategy[1].replace(/\n/g, '\\n')
     }
 
-    // 检查是否有选中的解析失败文件
+    // Check if there are selected parsing failed files
     const hasSelectedFailedFiles = useMemo(() => {
         return selectedFileObjs.some(file => file.status === 3);
     }, [selectedFileObjs]);
@@ -218,60 +280,62 @@ export default function Files({ onPreview }) {
         }
     }, [isFilterOpen, selectedFilters]);
 
-    // 页面数据变化时更新全选状态
+    // Update select all status when page data changes
     useEffect(() => {
         setIsAllSelected(datalist.length > 0 && datalist.every(file =>
             selectedFileObjs.some(item => item.id === file.id)
         ));
     }, [datalist, selectedFileObjs]);
 
-    // 处理下拉菜单关闭事件
+    // Handle dropdown menu close event
     const handleOpenChange = (open: boolean) => {
         if (!open && isFilterOpen) {
             applyFilters();
         }
         setIsFilterOpen(open);
     };
- useEffect(() => {
-        // 弹窗打开且有知识库ID时，加载元数据
-        if (metadataOpen && id) { // 注意：这里的依赖是 metadataOpen，而不是 open
+
+    useEffect(() => {
+        // Load metadata when dialog opens and knowledge base ID exists
+        if (metadataOpen && id) { // Note: dependency is metadataOpen, not open
             const fetchMetadata = async () => {
                 try {
-                    // 调用接口获取知识库详情
-                      const knowledgeDetails = await getKnowledgeDetailApi([id]);
-                    const knowledgeDetail = knowledgeDetails[0]; // 获取第一个知识库的详情
-                 if (knowledgeDetail && knowledgeDetail.metadata_fields) {
+                    // Call API to get knowledge base details
+                    const knowledgeDetails = await getKnowledgeDetailApi([id]);
+                    const knowledgeDetail = knowledgeDetails[0]; // Get first knowledge base details
+                    if (knowledgeDetail && knowledgeDetail.metadata_fields) {
                         setMetadataFields(knowledgeDetail.metadata_fields);
                     } else {
-                        setMetadataFields([]); // 如果没有元数据，设为空数组
+                        setMetadataFields([]); // Set to empty array if no metadata
                     }
 
                 } catch (err: any) {
-                    console.error("元数据加载失败：", err);
-                    // 可以在这里添加用户提示
+                    console.error("Metadata loading failed:", err);
+                    // Can add user prompt here
                 }
             };
             fetchMetadata();
-        }else if (!metadataOpen) {
-            // 当弹窗关闭时，清空元数据状态
+        } else if (!metadataOpen) {
+            // Clear metadata state when dialog closes
             setMetadataFields([]);
         }
     }, [metadataOpen, id]);
+
     return (
         <div className="relative">
-            
+
             {loading && (
                 <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                     <LoadingIcon />
                 </div>
             )}
 
-            {/* 顶部操作栏 */}
+            {/* Top action bar */}
             {selectedFileObjs.length > 0 && (
                 <div className="absolute top-[-62px] left-0 right-0 flex justify-center items-center p-2 border-b z-10">
                     <div className="flex items-center">
                         <div className="flex gap-2">
-                            <Tip content={!isEditable && '暂无操作权限'} side='bottom'>
+                            <Tip content={!isEditable && 'No operation permission'} side='bottom'>
                                 <Button
                                     variant="outline"
                                     onClick={handleBatchDelete}
@@ -283,7 +347,7 @@ export default function Files({ onPreview }) {
                                 </Button>
                             </Tip>
                             {hasSelectedFailedFiles && (
-                                <Tip content={!isEditable && '暂无操作权限'} side='bottom'>
+                                <Tip content={!isEditable && 'No operation permission'} side='bottom'>
                                     <Button
                                         variant="outline"
                                         onClick={handleBatchRetry}
@@ -291,7 +355,7 @@ export default function Files({ onPreview }) {
                                         className="flex items-center gap-1 disabled:pointer-events-auto"
                                     >
                                         <RotateCw size={16} />
-                                        {t('重试')}
+                                        {t('retry')}
                                     </Button>
                                 </Tip>
                             )}
@@ -311,8 +375,8 @@ export default function Files({ onPreview }) {
                     onClick={() => setMetadataOpen(true)}
                     className="px-4 whitespace-nowrap"
                 >
-                    <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-1"/>
-                    {t('元数据')}
+                    <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-1" />
+                    {t('metaData')}
                 </Button>
                 {isEditable && (
                     <Link to={`/filelib/upload/${id}`}>
@@ -332,7 +396,7 @@ export default function Files({ onPreview }) {
                                 />
                             </TableHead>
                             <TableHead className="min-w-[250px]">{t('fileName')}</TableHead>
-                            <TableHead>切分策略</TableHead>
+                            <TableHead>{t('segmentationStrategy')}</TableHead>
                             <TableHead className="min-w-[100px]">{t('updateTime')}</TableHead>
                             <TableHead className="flex items-center gap-4 min-w-[130px]">
                                 {t('status')}
@@ -358,39 +422,39 @@ export default function Files({ onPreview }) {
                                                 {[
                                                     {
                                                         value: 2,
-                                                        label: '已完成',
+                                                        label: 'Completed',
                                                         color: 'text-green-500',
                                                         icon: (
                                                             <div className="flex items-center gap-2 mt-2">
                                                                 <span className="size-[6px] rounded-full bg-green-500"></span>
                                                                 <span className="font-[500] text-[14px] text-green-500 leading-[100%]">
-                                                                    已完成
+                                                                    {t("completed")}
                                                                 </span>
                                                             </div>
                                                         )
                                                     },
                                                     {
                                                         value: 1,
-                                                        label: '解析中',
+                                                        label: 'Parsing',
                                                         color: 'text-[#4D9BF0]',
                                                         icon: (
                                                             <div className="flex items-center gap-2 mt-2">
                                                                 <span className="size-[6px] rounded-full bg-[#4D9BF0]"></span>
                                                                 <span className="font-[500] text-[14px] text-[#4D9BF0] leading-[100%]">
-                                                                    解析中
+                                                                    {t("parsing")}
                                                                 </span>
                                                             </div>
                                                         )
                                                     },
                                                     {
                                                         value: 3,
-                                                        label: '解析失败',
+                                                        label: 'Parse Failed',
                                                         color: 'text-red-500',
                                                         icon: (
                                                             <div className="flex items-center gap-2 mt-2">
                                                                 <span className="size-[6px] rounded-full bg-red-500"></span>
                                                                 <span className="font-[500] text-[14px] text-red-500 leading-[100%]">
-                                                                    解析失败
+                                                                    {t("parseFailed")}
                                                                 </span>
                                                             </div>
                                                         )
@@ -431,7 +495,7 @@ export default function Files({ onPreview }) {
                                                     }}
                                                     disabled={tempFilters.length === 0}
                                                 >
-                                                    重置
+                                                    {t("reset")}
                                                 </Button>
                                                 <Button
                                                     size="sm"
@@ -440,7 +504,7 @@ export default function Files({ onPreview }) {
                                                         applyFilters()
                                                     }}
                                                 >
-                                                    确认
+                                                    {t("confirm")}
                                                 </Button>
                                             </div>
                                         </DropdownMenuContent>
@@ -494,69 +558,29 @@ export default function Files({ onPreview }) {
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
 
                                 <TableCell>
-                                    {el.status === 3 ? (
-
-                                        <div className="flex items-center">
-                                            <TooltipProvider delayDuration={100}>
-                                                <Tooltip>
-                                                    <TooltipTrigger className="flex items-center gap-2">
-                                                        <span className="size-[6px] rounded-full bg-red-500"></span>
-                                                        <span className="font-[500] text-[14px] text-red-500 leading-[100%] text-center">
-                                                            解析失败
-                                                        </span>
-                                                    </TooltipTrigger>
-
-                                                    <TooltipContent side="top" className="whitespace-pre-line">
-                                                        <div className="max-w-96 text-left break-all whitespace-normal">{el.remark}</div>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                        </div>
-                                    ) : (
-                                        <div className="flex items-center gap-2">
-                                            {el.status === 2 ? (
-                                                <Tooltip>
-                                                    <TooltipTrigger className="flex items-center gap-2">
-                                                        <span className="size-[6px] rounded-full bg-green-500"></span>
-                                                        <span className="font-[500] text-[14px] text-green-500 leading-[100%] text-center">
-                                                            已完成
-                                                        </span>
-                                                    </TooltipTrigger>
-                                                </Tooltip>
-                                            ) : el.status === 1 || el.status === 4 ? (
-                                                <Tooltip>
-                                                    <TooltipTrigger className="flex items-center gap-2">
-                                                        <span className="size-[6px] rounded-full bg-[#4D9BF0]"></span>
-                                                        <span className="font-[500] text-[14px] text-[#4D9BF0] leading-[100%] text-center">
-                                                            解析中
-                                                        </span>
-                                                    </TooltipTrigger>
-                                                </Tooltip>
-                                            ) : null}
-                                        </div>
-                                    )}
+                                    <StatusIndicator status={el.status} remark={el.remark} />
                                 </TableCell>
                                 <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-1">
                                         {el.status === 3 && (
-                                            <Tip content={!isEditable && '暂无操作权限'} side='top'>
+                                            <Tip content={!isEditable && 'No operation permission'} side='top'>
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
                                                     disabled={!isEditable}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        handleRetry([el]); // 单个重试传递完整对象
+                                                        handleRetry([el]); // Single retry passes complete object
                                                     }}
                                                     className="disabled:pointer-events-auto"
-                                                    title={t('重试')}
+                                                    title={t('retry')}
                                                 >
                                                     <RotateCw size={16} />
                                                 </Button>
                                             </Tip>
                                         )}
                                         <Tip
-                                            content={!isEditable && '暂无操作权限'}
+                                            content={!isEditable && 'No operation permission'}
                                             side='top'
                                             styleClasses="-translate-x-6"
                                         >
@@ -593,14 +617,14 @@ export default function Files({ onPreview }) {
                 </div>
             </div>
             <MetadataManagementDialog
-                open={metadataOpen} 
+                open={metadataOpen}
                 onOpenChange={() => setMetadataOpen(false)}
-                onSave={() => {}}
+                onSave={() => { }}
                 hasManagePermission={isEditable}
                 id={id}
                 initialMetadata={metadataFields}
             />
         </div>
-        
+
     )
 }

@@ -53,33 +53,31 @@ const enum DisplayModeType {
     Mixed = 'mixed'
 }
 
-const initialStrategies = [
-    { id: '1', regex: '\\n\\n', position: 'after', rule: '双换行后切分,用于分隔段落' },
-    { id: '2', regex: '\\n', position: 'after', rule: '单换行后切分，用于分隔普通换行' }
-];
+
 
 const FileUploadStep2 = forwardRef(({
     step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode, kId,
-    persistState, // 新增：父组件传递的状态
-    onPersistStateChange // 新增：状态更新回调
+    persistState, 
+    onPersistStateChange
 }: IProps, ref) => {
-    // 原有临时状态不变
     const [previewLoading, setPreviewLoading] = useState(false);
     const [previewFailed, setPreviewFailed] = useState(false);
     const [showPreview, setShowPreview] = useState(false);
     const [previewCount, setPreviewCount] = useState(0);
     const [applyRule, setApplyRule] = useState<any>({});
     const applyRuleRef = useRef(applyRule);
-
-    // 原有外部依赖不变
     const { id: kid } = useParams();
     const { t } = useTranslation('knowledge');
     const setSelectedChunkIndex = useKnowledgeStore((state) => state.setSelectedChunkIndex);
     const splitRule = resultFiles[0]?.split_rule;
     const isEtl4lm = resultFiles[0]?.isEtl4lm === 'etl4lm';
     const displayStep = isAdjustMode ? step + 1 : step;
-
-    // 原有显示模式计算不变
+    const initialStrategies = useMemo(()=>{
+  return [
+        { id: '1', regex: '\\n\\n', position: 'after', rule: t('predefinedRules.singleNewlineRule.desc') },
+        { id: '2', regex: '\\n', position: 'after', rule: t('predefinedRules.doubleNewlineRule.desc') }
+    ]
+},[t]);
     const displayMode: DisplayModeType | null = useMemo(() => {
         if (!resultFiles || resultFiles.length === 0) return null;
         const hasTableFiles = resultFiles.some(file => file.fileType === 'table');
@@ -138,14 +136,14 @@ const FileUploadStep2 = forwardRef(({
         if (applyEachCell
             ? rules.fileList.some(file => file.excelRule.append_header && Number(file.excelRule.header_start_row) > Number(file.excelRule.header_end_row))
             : cellGeneralConfig.append_header && Number(cellGeneralConfig.header_start_row) > Number(cellGeneralConfig.header_end_row)) {
-            toast({ variant: 'warning', description: '最小行不能大于最大行' });
+            toast({ variant: 'warning', description: t('minRowGreaterThanMaxRow') });
             return true;
         }
 
         const chunkSizeNum = Number((rules as any)?.chunkSize ?? (rules as any)?.chunk_size ?? 0);
         const chunkOverlapNum = Number((rules as any)?.chunkOverlap ?? (rules as any)?.chunk_overlap ?? 0);
         if (!Number.isNaN(chunkSizeNum) && !Number.isNaN(chunkOverlapNum) && chunkOverlapNum > chunkSizeNum) {
-            toast({ variant: 'warning', description: '重叠区长度不能大于预期切分长度' });
+            toast({ variant: 'warning', description: t('overlapGreaterThanChunkSize') });
             return true;
         }
 
@@ -158,17 +156,17 @@ const FileUploadStep2 = forwardRef(({
         if (vildateCell()) return;
         const hasEmptyCustomRule = (strategies || []).some(s => String(s?.regex ?? '') === '');
         if (hasEmptyCustomRule) {
-            toast({ variant: 'warning', description: '自定义规则不能为空' });
+            toast({ variant: 'warning', description: t('customRuleNotEmpty') });
             return;
         }
         if (!rules.separator || rules.separator.length === 0) {
-            toast({ variant: 'warning', description: '请至少添加一个分割规则' });
+            toast({ variant: 'warning', description: t('addAtLeastOneSplitRule') });
             return;
         }
 
         const nextStep = step + 1;
         if (step === 2 || displayStep === 2) {
-            const config = { applyEachCell, cellGeneralConfig, rules };
+            const config = { applyEachCell, cellGeneralConfig, rules,resultFiles };
             setApplyRule(config);
             setSelectedChunkIndex(-1);
             return onNext(nextStep, config);
@@ -202,11 +200,11 @@ const FileUploadStep2 = forwardRef(({
         if (vildateCell()) return;
         const hasEmptyCustomRule = (strategies || []).some(s => String(s?.regex ?? '') === '');
         if (hasEmptyCustomRule) {
-            toast({ variant: 'warning', description: '自定义规则不能为空' });
+            toast({ variant: 'warning', description: t('customRuleNotEmpty') });
             return;
         }
         if (!rules.separator || rules.separator.length === 0) {
-            toast({ variant: 'warning', description: '请至少添加一个分割规则' });
+            toast({ variant: 'warning', description: t('addAtLeastOneSplitRule') });
             return;
         }
 
@@ -219,8 +217,6 @@ const FileUploadStep2 = forwardRef(({
             rules: { ...rules, knowledgeId: kId }
         });
     };
-
-    // 原有UI完全不变
     return (
         <div className="w-full">
             <div className={cn("flex flex-row justify-center gap-4", showPreview ? "px-4" : "")}>
@@ -236,8 +232,8 @@ const FileUploadStep2 = forwardRef(({
                             <div className="">
                                 {displayMode === DisplayModeType.Mixed ? (
                                     <TabsList className="">
-                                        <TabsTrigger id="knowledge_file_tab" value="file" className="roundedrounded-xl">{t('defaultStrategy')}</TabsTrigger>
-                                        <TabsTrigger id="knowledge_table_tab" value="table">{t('customStrategy')}</TabsTrigger>
+                                        <TabsTrigger id="knowledge_file_tab" value="file" className="roundedrounded-xl">{t('defStrategy')}</TabsTrigger>
+                                        <TabsTrigger id="knowledge_table_tab" value="table">{t('cusStrategy')}</TabsTrigger>
                                     </TabsList>
                                 ) : <div className="h-1"></div>}
                             </div>
@@ -269,7 +265,7 @@ const FileUploadStep2 = forwardRef(({
                                     disabled={strategies.length === 0}
                                 >
                                     <SearchCheck size={16} />
-                                    {showPreview ? '重新预览分段' : t('previewResults')}
+                                    {showPreview ? t('repreviewSegmentation') : t('previewResults')}
                                 </Button>
                             </div>
                         </Tabs>
@@ -285,6 +281,7 @@ const FileUploadStep2 = forwardRef(({
                             showPreview={showPreview}
                             step={step}
                             previewCount={previewCount}
+                            resultFiles={resultFiles}
                             kId={kId}
                             rules={applyRule.rules}
                             applyEachCell={applyRule.applyEachCell}
@@ -329,16 +326,16 @@ FileUploadStep2.displayName = 'FileUploadStep2';
 
 export default FileUploadStep2;
 
-// 规则处理钩子：仅新增3个参数接收父组件状态，其余逻辑不变
 const useFileProcessingRules = (
     initialStrategies,
     resultFiles,
     kid,
     splitRule,
-    parentRules, // 新增：父组件传递的rules
-    parentApplyEachCell, // 新增：父组件传递的applyEachCell
-    parentCellGeneralConfig // 新增：父组件传递的cellGeneralConfig
+    parentRules,
+    parentApplyEachCell,
+    parentCellGeneralConfig
 ) => {
+    const { t } = useTranslation('knowledge');
     const parsedSplitRule = useMemo(() => {
         if (!splitRule) return {} as any;
         if (typeof splitRule === 'string') {
@@ -353,7 +350,6 @@ const useFileProcessingRules = (
         return splitRule || {};
     }, [splitRule]);
 
-    // 初始化时优先使用父组件传递的状态
     const [rules, setRules] = useState(() => {
         if (parentRules) return { ...parentRules, knowledgeId: kid };
         return {
@@ -389,16 +385,16 @@ const useFileProcessingRules = (
 
     const getStrategyRuleDescription = (regex) => {
         const ruleMap = {
-            '\\n\\n': '双换行后切分,用于分隔段落',
-            '\\n': '单换行后切分，用于分隔普通换行',
-            '\n\n': '双换行后切分,用于分隔段落',
-            '\n': '单换行后切分，用于分隔普通换行',
-            '第.{1,3}章': '"第X章"前切分，切分章节等',
-            '第.{1,3}条': '"第X条"前切分，切分条目等',
-            '。': '中文句号后切分，中文断句',
-            '\\.': '英文句号后切分，英文断句'
+            '\\n\\n': t('doubleNewlineRule'),
+            '\\n': t('singleNewlineRule'),
+            '\n\n': t('doubleNewlineRule'),
+            '\n': t('singleNewlineRule'),
+            '第.{1,3}章': t('chapterRule'),
+            '第.{1,3}条': t('articleRule'),
+            '。': t('chinesePeriodRule'),
+            '\\.': t('englishPeriodRule')
         };
-        return ruleMap[regex] || `自定义规则: ${regex}`;
+        return ruleMap[regex] || t('customRule', { regex });
     };
 
     const [strategies, setStrategies] = useState(() => {
@@ -417,7 +413,6 @@ const useFileProcessingRules = (
     useEffect(() => {
         const cleaned = (strategies || []).filter(s => String(s?.regex ?? '') !== '');
         const [separator, separatorRule] = cleaned.reduce(([_separator, _separatorRule], strategy) => {
-            // 统一显示：确保换行以可见转义“\\n”存在，避免 UI 为空
             const regex = String(strategy.regex).replace(/\n/g, '\\n');
             const position = strategy.position || 'after';
             return [[..._separator, regex], [..._separatorRule, position]];

@@ -2,13 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { Button, SendIcon, Textarea } from "~/components";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
+import { useRecordingAudioLoading } from "~/components/Voice/textToSpeechStore";
 import { useGetWorkbenchModelsQuery } from "~/data-provider";
 import { useLocalize } from "~/hooks";
 import InputFiles from "./components/InputFiles";
 import { bishengConfState, currentRunningState } from "./store/atoms";
-import { getErrorI18nKey } from "./store/constants";
 import { useAreaText } from "./useAreaText";
-import { useRecordingAudioLoading } from "~/components/Voice/textToSpeechStore";
 
 export default function ChatInput({ readOnly, v }) {
     const [bishengConfig] = useRecoilState(bishengConfState)
@@ -21,7 +20,7 @@ export default function ChatInput({ readOnly, v }) {
 
     const placholder = useMemo(() => {
         return inputDisabled ?
-            (inputMsg ? localize(getErrorI18nKey(inputMsg)) : ' ')
+            (inputMsg.code ? localize(`api_errors.${inputMsg.code}`, inputMsg.data) : ' ')
             : localize('com_ui_please_enter_question')
     }, [inputDisabled, inputMsg, localize])
 
@@ -75,7 +74,7 @@ export default function ChatInput({ readOnly, v }) {
             */}
             <div className="absolute w-full flex justify-center left-0 -top-14">
                 {/* {!showStop && chatState?.flow?.flow_type === 10 && !inputMsg  & 运行结束展示 */}
-                {showReRun && !inputMsg && !showStop && <Button
+                {showReRun && !inputMsg.code && !showStop && <Button
                     className="rounded-full bg-primary/10 bg-blue-50 text-primary"
                     variant="ghost"
                     disabled={readOnly}

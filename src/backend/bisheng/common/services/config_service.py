@@ -7,8 +7,8 @@ from loguru import logger
 from bisheng.common.models.config import ConfigKeyEnum, Config
 from bisheng.common.repositories.implementations.config_repository_impl import ConfigRepositoryImpl
 from bisheng.core.cache.redis_manager import get_redis_client_sync
-from bisheng.core.config.settings import Settings, MinioConf, VectorStores, PasswordConf, SystemLoginMethod, \
-    WorkflowConf, LinsightConf
+from bisheng.core.config.settings import Settings, PasswordConf, SystemLoginMethod, \
+    WorkflowConf, LinsightConf, KnowledgeConf
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 
 config_file = os.getenv('config', 'config.yaml')
@@ -91,7 +91,7 @@ class ConfigService(Settings):
         for key in settings_dict:
             if key not in Settings.model_fields.keys():
                 raise KeyError(f'Key {key} not found in settings')
-            logger.debug(f'Loading {len(settings_dict[key])} {key} from {file_path}')
+            logger.debug(f'Loading {key} from {file_path}')
 
         return ConfigService(**settings_dict)
 
@@ -137,53 +137,6 @@ class ConfigService(Settings):
                 new_content += f'{one}:\n{old_db_keys[one]}\n\n'
         return new_content
 
-    def update_from_yaml(self, file_path: str, dev: bool = False):
-        """
-        更新配置项从指定的YAML文件
-        :param file_path:
-        :param dev:
-        :return:
-        """
-        new_settings = self.load_settings_from_yaml(file_path)
-        self.chains = new_settings.chains or {}
-        self.agents = new_settings.agents or {}
-        self.prompts = new_settings.prompts or {}
-        self.llms = new_settings.llms or {}
-        self.tools = new_settings.tools or {}
-        self.memories = new_settings.memories or {}
-        self.wrappers = new_settings.wrappers or {}
-        self.toolkits = new_settings.toolkits or {}
-        self.textsplitters = new_settings.textsplitters or {}
-        self.utilities = new_settings.utilities or {}
-        self.embeddings = new_settings.embeddings or {}
-        self.knowledges = new_settings.knowledges or {}
-        self.vectorstores = new_settings.vectorstores or {}
-        self.documentloaders = new_settings.documentloaders or {}
-        self.retrievers = new_settings.retrievers or {}
-        self.output_parsers = new_settings.output_parsers or {}
-        self.input_output = new_settings.input_output or {}
-        self.autogen_roles = new_settings.autogen_roles or {}
-
-        self.admin = new_settings.admin or {}
-        self.bisheng_rt = new_settings.bisheng_rt or {}
-        self.default_llm = new_settings.default_llm or {}
-        self.gpts = new_settings.gpts or {}
-        self.openai_conf = new_settings.openai_conf
-        self.minio_conf = new_settings.openai_conf
-        self.vector_stores = new_settings.vector_stores or {}
-        self.object_storage = new_settings.object_storage or {}
-        self.dev = dev
-
-    def update_settings(self, **kwargs):
-        """
-        动态更新配置项
-        :param kwargs:
-        :return:
-        """
-        for key, value in kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-
     @staticmethod
     def get_all_config():
 
@@ -219,32 +172,26 @@ class ConfigService(Settings):
                 else:
                     raise Exception('initdb_config not found, please check your system config')
 
-    def get_knowledge(self):
+    def get_knowledge(self) -> KnowledgeConf:
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
         all_config = self.get_all_config()
         ret = all_config.get('knowledges', {})
-        return ret
+        return KnowledgeConf(**ret)
 
-    async def async_get_knowledge(self):
+    async def async_get_knowledge(self) -> KnowledgeConf:
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
         all_config = await self.aget_all_config()
         ret = all_config.get('knowledges', {})
-        return ret
-
-    def get_minio_conf(self) -> MinioConf:
-        return self.object_storage.minio
-
-    def get_vectors_conf(self) -> VectorStores:
-        return self.vector_stores
+        return KnowledgeConf(**ret)
 
     def get_default_llm(self):
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
         all_config = self.get_all_config()
         return all_config.get('default_llm', {})
 
-    def get_password_conf(self) -> PasswordConf:
+    async def get_password_conf(self) -> PasswordConf:
         # 获取密码相关的配置项
-        all_config = self.get_all_config()
+        all_config = await self.aget_all_config()
         return PasswordConf(**all_config.get('password_conf', {}))
 
     def get_system_login_method(self) -> SystemLoginMethod:

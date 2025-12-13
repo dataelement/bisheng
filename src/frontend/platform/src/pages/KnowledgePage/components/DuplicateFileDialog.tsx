@@ -6,7 +6,7 @@ const DialogWithRepeatFiles = ({
 }) => {
     return (
         <Dialog open={!!repeatFiles.length} onOpenChange={b => !b && setRepeatFiles([])}>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-[425px]" close={false}>
                 <DialogHeader>
                     <DialogTitle>{t('modalTitle')}</DialogTitle>
                     <DialogDescription>{t('modalMessage')}</DialogDescription>

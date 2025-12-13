@@ -5,6 +5,15 @@ import { useTranslation } from "react-i18next";
 import cloneDeep from "lodash-es/cloneDeep";
 import { useReactFlow } from "@xyflow/react";
 
+export function useMiniDebounce(fn, delay = 300) {
+    const timer = useRef(null)
+
+    return useCallback((...args) => {
+        if (timer.current) clearTimeout(timer.current)
+        timer.current = setTimeout(() => fn(...args), delay)
+    }, [fn, delay])
+}
+
 // 防抖
 export function useDebounce(func: any, wait: number, immediate: boolean, callback?: any,): (any?: any) => any {
     let timer = useRef<NodeJS.Timeout | null>();

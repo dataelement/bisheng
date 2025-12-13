@@ -1,24 +1,26 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
- function NumberInput({ value, onChange }) {
+function NumberInput({ value, onChange }) {
   const [inputValue, setInputValue] = useState(value === '' ? '0' : value || '0');
   const [error, setError] = useState('');
+  const { t } = useTranslation('flow')
 
   // 同步外部值变化
   useEffect(() => {
     // 如果外部值为空，则显示0；否则显示实际值
     if (value === '' || value === undefined || value === null) {
       setInputValue('0');
-       onChange('0');
+      onChange('0');
     } else {
       setInputValue(String(value));
     }
   }, [value]);
   useEffect(() => {
-      if (value === '' || value === undefined || value === null) {
-        onChange('0');
-      }
-    }, []);
+    if (value === '' || value === undefined || value === null) {
+      onChange('0');
+    }
+  }, []);
   // 验证数字范围
   const validateNumber = (numValue) => {
     // 空值或0都视为有效
@@ -33,12 +35,12 @@ import { useEffect, useState } from "react";
 
     const number = Number(numValue);
     if (isNaN(number)) {
-      return { isValid: false, error: '请输入有效的数字' };
+      return { isValid: false, error: t('enterValidNumber') };
     }
 
     // 检查32位整数范围 (-2^31 到 2^31-1)
     if (number < -4294967296 || number > 4294967296) {
-      return { isValid: false, error: '数字大小不能超过2的32次方。' };
+      return { isValid: false, error: t('numberExceedsMaxLimit') };
     }
 
     return { isValid: true, value: number };
@@ -48,7 +50,7 @@ import { useEffect, useState } from "react";
   const handleChange = (e) => {
     const newValue = e.target.value;
     setInputValue(newValue);
-    
+
     // 如果清空输入，暂时不更新父组件，等失去焦点时处理
     if (newValue === '') {
       setError('');
@@ -110,9 +112,8 @@ import { useEffect, useState } from "react";
         value={inputValue}
         onChange={handleChange}
         onBlur={handleBlur}
-     className={`w-full px-3 py-1 border rounded-md nodrag h-8 bg-gray-50 mb-2 ${
-          error ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-blue-500'
-        }`}
+        className={`w-full px-3 py-1 border rounded-md nodrag h-8 bg-gray-50 mb-2 ${error ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-blue-500'
+          }`}
         min="-4294967296"
         max="4294967295"
       />

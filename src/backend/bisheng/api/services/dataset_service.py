@@ -1,11 +1,13 @@
 from typing import Dict, List, Optional
 
+from fastapi import HTTPException
+
 from bisheng.api.services.base import BaseService
 from bisheng.api.v1.schema.dataset_param import CreateDatasetParam
+from bisheng.common.errcode.dataset import DatasetNameExistsError
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.dataset import Dataset, DatasetCreate, DatasetDao, DatasetRead
-from bisheng.database.models.user import UserDao
-from fastapi import HTTPException
+from bisheng.user.domain.models.user import UserDao
 
 
 class DatasetService(BaseService):
@@ -45,12 +47,11 @@ class DatasetService(BaseService):
         dataset_insert.user_id = user_id
         isExist = DatasetDao.get_dataset_by_name(data.name)
         if isExist:
-            raise ValueError('数据集名称已存在')
+            raise DatasetNameExistsError()
         dataset = DatasetDao.insert(dataset_insert)
         # 处理文件
         object_name = f'/dataset/{dataset.id}/{dataset.name}'
         if data.file_url:
-
             # MinioClient().upload_minio()
             dataset.object_name = object_name
         if data.qa_list:

@@ -2,7 +2,7 @@ from bisheng.worker.main import bisheng_celery
 
 if __name__ == '__main__':
     bisheng_celery.start(
-        argv=['worker', '-l', 'info', '-c', '20', '-P', 'threads', '-Q', 'knowledge_celery,workflow_celery'])
+        argv=['worker', '-l', 'info', '-c', '20', '-P', 'threads', '-Q', 'knowledge_celery,workflow_celery,celery'])
 
     # bisheng_celery.worker_main(
     #     argv=["worker", "--loglevel=info", "--logfile=./logs/celery.log", '--pool=threads', '--concurrency=4',"-Q=workflow_celery"])

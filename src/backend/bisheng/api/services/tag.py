@@ -1,11 +1,11 @@
 import json
 from typing import List
 
-from fastapi import Request, HTTPException
+from fastapi import Request
 from loguru import logger
 
-from bisheng.api.services.user_service import UserPayload
-from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.common.errcode.tag import TagExistError, TagNotExistError
 from bisheng.common.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.assistant import AssistantDao
@@ -86,9 +86,9 @@ class TagService:
             resource_info = FlowDao.get_flow_by_id(resource_id)
             access_type = AccessType.WORKFLOW_WRITE
         else:
-            raise HTTPException(status_code=404, detail="资源类型不支持")
+            raise NotFoundError()
         if not resource_info:
-            raise HTTPException(status_code=404, detail="资源不存在")
+            raise NotFoundError()
 
         if login_user.access_check(resource_info.user_id, resource_id, access_type):
             return True
@@ -98,7 +98,7 @@ class TagService:
         resource_groups = [int(one.group_id) for one in resource_groups]
         # 判断下操作人是否是用户组的管理员
         if not login_user.check_groups_admin(resource_groups):
-            raise UnAuthorizedError.http_exception()
+            raise UnAuthorizedError()
 
         return True
 

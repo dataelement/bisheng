@@ -76,13 +76,21 @@ class BaseErrorCode(Exception):
             "data": data
         }
 
+    def to_json_str(self, data: any = None) -> str:
+        data = data if data is not None else {"exception": str(self), **self.kwargs}
+        return json.dumps({
+            "status_code": self.code,
+            "status_message": self.message,
+            "data": data
+        }, ensure_ascii=False)
+
     # websocket error message
-    async def websocket_close_message(self, websocket: WebSocket):
+    async def websocket_close_message(self, websocket: WebSocket, close_ws: bool = True):
         reason = {
             "status_code": self.code,
             "status_message": self.message,
             "data": {"exception": str(self), **self.kwargs}
         }
         await websocket.send_json({"category": "error", "type": "end", "message": reason})
-
-        await websocket.close(reason=self.message[:10])
+        if close_ws:
+            await websocket.close(reason=self.message[:10])

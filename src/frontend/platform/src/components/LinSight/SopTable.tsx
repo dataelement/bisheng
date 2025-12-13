@@ -1,18 +1,18 @@
 // components/SopTable.tsx
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu';
+import { Check, Filter, Star } from 'lucide-react';
 import { useState } from 'react';
-import { ChevronUp, ChevronDown, Star, Check, Filter } from 'lucide-react';
-import AutoPagination from '../bs-ui/pagination/autoPagination';
+import { useTranslation } from 'react-i18next';
 import { LoadIcon } from '../bs-icons';
 import { Button } from '../bs-ui/button';
+import AutoPagination from '../bs-ui/pagination/autoPagination';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../bs-ui/tooltip';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu';
 
 const SopTable = ({
     datalist,
     selectedItems,
     handleSelectItem,
     handleSelectAll,
-    handleSort,
     handleEdit,
     handleDelete,
     page,
@@ -26,15 +26,16 @@ const SopTable = ({
     handleKeyDown,
     onShowcaseFilterChange
 }) => {
-    // 是否精选筛选：状态管理（仿照 Files.tsx）
+    // Whether the featured filter is selected: state management (similar to Files.tsx)
     const [featuredSelectedFilters, setFeaturedSelectedFilters] = useState<number[]>([]);
     const [featuredTempFilters, setFeaturedTempFilters] = useState<number[]>([]);
     const [isFeaturedFilterOpen, setIsFeaturedFilterOpen] = useState(false);
+    const { t } = useTranslation()
 
     const applyFeaturedFilters = () => {
         setFeaturedSelectedFilters([...featuredTempFilters]);
         setIsFeaturedFilterOpen(false);
-        // 传递给父组件：仅当选择为单一 1 或 0 时生效；多选或为空表示不过滤
+        // Pass to parent component: Only effective when selecting single 1 or 0; multiple selections or empty means no filter
         if (Array.isArray(featuredTempFilters)) {
             if (featuredTempFilters.length === 1) {
                 const value = featuredTempFilters[0];
@@ -61,6 +62,7 @@ const SopTable = ({
         }
         setIsFeaturedFilterOpen(open);
     };
+
     const ratingDisplay = (rating) => {
         return rating > 0 ? (
             <div className="flex items-center">
@@ -72,7 +74,7 @@ const SopTable = ({
                 ))}
             </div>
         ) : (
-            <span className="text-sm text-gray-400">暂无评分</span>
+            <span className="text-sm text-gray-400">{t('importLinsight.noRatings')}</span>
         );
     };
 
@@ -102,12 +104,12 @@ const SopTable = ({
                                     )}
                             </button>
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名称</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">创建者</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">描述</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('importLinsight.name')}</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('importLinsight.creator')}</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('importLinsight.description')}</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <div className="flex items-center gap-2">
-                                <span>是否精选</span>
+                                <span>{t('importLinsight.featured')}</span>
                                 <div className="relative">
                                     <DropdownMenu open={isFeaturedFilterOpen} onOpenChange={handleFeaturedOpenChange}>
                                         <DropdownMenuTrigger asChild>
@@ -125,8 +127,8 @@ const SopTable = ({
                                         >
                                             <div className="px-2">
                                                 {[
-                                                    { value: 1, label: '精选' },
-                                                    { value: 0, label: '未精选' }
+                                                    { value: 1, label: t('importLinsight.featured') },
+                                                    { value: 0, label: t('importLinsight.notFeatured') }
                                                 ].map(({ value, label }) => (
                                                     <div
                                                         key={value}
@@ -163,7 +165,7 @@ const SopTable = ({
                                                     }}
                                                     disabled={featuredTempFilters.length === 0}
                                                 >
-                                                    重置
+                                                    {t('importLinsight.reset')}
                                                 </Button>
                                                 <Button
                                                     size="sm"
@@ -172,7 +174,7 @@ const SopTable = ({
                                                         applyFeaturedFilters();
                                                     }}
                                                 >
-                                                    确认
+                                                    {t('importLinsight.apply')}
                                                 </Button>
                                             </div>
                                         </DropdownMenuContent>
@@ -180,27 +182,7 @@ const SopTable = ({
                                 </div>
                             </div>
                         </th>
-                        {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            <div className="flex items-center h-full">
-                                <span className="align-middle">星级评分</span>
-                                {loading && <LoadIcon className="animate-spin w-4 h-4 ml-1" />}
-                                <div className="flex flex-col ml-1">
-                                    <button
-                                        onClick={() => handleSort('rating', 'asc')}
-                                        disabled={loading}
-                                    >
-                                        <ChevronUp className={`w-3 h-3 ${loading ? 'text-gray-300' : 'text-gray-400 hover:text-gray-600'}`} />
-                                    </button>
-                                    <button
-                                        onClick={() => handleSort('rating', 'desc')}
-                                        disabled={loading}
-                                    >
-                                        <ChevronDown className={`w-3 h-3 ${loading ? 'text-gray-300' : 'text-gray-400 hover:text-gray-600'}`} />
-                                    </button>
-                                </div>
-                            </div>
-                        </th> */}
-                        <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                        <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('importLinsight.actions')}</th>
                     </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -267,7 +249,7 @@ const SopTable = ({
                                         <Tooltip>
                                             <TooltipTrigger asChild>
                                                 <div className="text-sm font-medium text-gray-500 truncate">
-                                                    {item.showcase ? '精选' : '非精选'}
+                                                    {item.showcase ? t('importLinsight.featured') : t('importLinsight.notFeatured')}
                                                 </div>
                                             </TooltipTrigger>
                                         </Tooltip>
@@ -282,14 +264,14 @@ const SopTable = ({
                                         className="text-blue-600 hover:text-blue-900 mr-3"
                                         onClick={() => handleEdit(item.id)}
                                     >
-                                        编辑
+                                        {t('importLinsight.edit')}
                                     </Button>
                                     <Button
                                         variant="ghost"
                                         onClick={() => handleDelete(item.id)}
                                         className="text-red-600 hover:text-red-900"
                                     >
-                                        删除
+                                        {t('importLinsight.delete')}
                                     </Button>
                                 </td>
                             </tr>
@@ -297,7 +279,7 @@ const SopTable = ({
                     ) : (
                         <tr>
                             <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
-                                未找到相关SOP
+                                {t('importLinsight.noSOPFound')}
                             </td>
                         </tr>
                     )}
@@ -315,7 +297,7 @@ const SopTable = ({
                             total={total}
                             onChange={(newPage) => handlePageChange(newPage)}
                         />
-                        <span className="text-sm text-gray-700 mr-2 whitespace-nowrap">跳至</span>
+                        <span className="text-sm text-gray-700 mr-2 whitespace-nowrap">{t('importLinsight.goTo')}</span>
                         <input
                             type="number"
                             min="1"
@@ -328,7 +310,7 @@ const SopTable = ({
                             disabled={loading}
                         />
                         <span className="text-sm text-gray-700 ml-2 whitespace-nowrap">
-                            页
+                            {t('importLinsight.pages')}
                         </span>
                         {loading && <LoadIcon className="animate-spin w-4 h-4 ml-2" />}
                     </div>

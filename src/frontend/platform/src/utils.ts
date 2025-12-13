@@ -196,7 +196,7 @@ const nodeEnNames: { [char: string]: string } = {
 };
 
 export function getNodeNames() {
-  return i18next.language === 'en' ? nodeEnNames : nodeNames
+  return i18next.language === 'en-US' ? nodeEnNames : nodeNames
 }
 
 export const nodeIconsLucide: {
@@ -1039,7 +1039,7 @@ export function validateNode(
               e.targetHandle.split("|")[2] === n.id
           )
           ? [
-            `${type} ${i18next.language === 'en' ? 'lost' : '缺少参数'} ${template.display_name || toTitleCase(template[t].name)}.`,
+            `${type} ${i18next.language === 'en-US' ? 'lost' : '缺少参数'} ${template.display_name || toTitleCase(template[t].name)}.`,
           ]
           : []
       )

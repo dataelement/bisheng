@@ -13,15 +13,15 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.component import Component
 from bisheng.database.models.flow_version import FlowVersion
-from bisheng.database.models.gpts_tools import GptsTools
-from bisheng.database.models.gpts_tools import GptsToolsType
 from bisheng.database.models.group import Group, DefaultGroup
 from bisheng.database.models.role import Role
 from bisheng.database.models.role_access import RoleAccess, AccessType
 from bisheng.database.models.template import Template
-from bisheng.database.models.user import User
-from bisheng.database.models.user_role import UserRoleDao
 from bisheng.finetune.domain.models.sft_model import SftModel
+from bisheng.tool.domain.models.gpts_tools import GptsTools
+from bisheng.tool.domain.models.gpts_tools import GptsToolsType
+from bisheng.user.domain.models.user import User
+from bisheng.user.domain.models.user_role import UserRoleDao
 
 
 async def init_default_data():
@@ -36,10 +36,10 @@ async def init_default_data():
                 db_role = db_role.all()
                 if not db_role:
                     # 初始化系统配置, 管理员拥有所有权限
-                    db_role = Role(id=AdminRole, role_name='系统管理员', remark='系统所有权限管理员',
+                    db_role = Role(id=AdminRole, role_name='System Admin', remark='System highest privileges',
                                    group_id=DefaultGroup)
                     session.add(db_role)
-                    db_role_normal = Role(id=DefaultRole, role_name='普通用户', remark='默认用户',
+                    db_role_normal = Role(id=DefaultRole, role_name='Regular users', remark='Regular users',
                                           group_id=DefaultGroup)
                     session.add(db_role_normal)
                     # 给普通用户赋予 构建、知识、模型菜单栏的查看权限
@@ -53,7 +53,7 @@ async def init_default_data():
                 group = await session.exec(select(Group).limit(1))
                 group = group.all()
                 if not group:
-                    group = Group(id=DefaultGroup, group_name='默认用户组', create_user=1, update_user=1)
+                    group = Group(id=DefaultGroup, group_name='Default user group', create_user=1, update_user=1)
                     session.add(group)
                     await session.commit()
                     await session.refresh(group)

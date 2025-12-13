@@ -13,6 +13,7 @@ from loguru import logger
 
 from bisheng.api.v1.schemas import ChatMessage
 from bisheng.core.database import get_sync_db_session
+from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.interface.utils import try_setting_streaming_options
 from bisheng.llm.domain.services import LLMService
@@ -156,8 +157,11 @@ def sync_process_source_document(source_document: List[Document], chat_id, messa
     if not source_document or not message_id:
         return
 
+    message_info = ChatMessageDao.get_message_by_id(message_id)
+    if not message_info:
+        return
     # 使用大模型进行关键词抽取，模型配置临时方案
-    llm = LLMService.get_knowledge_source_llm()
+    llm = LLMService.get_knowledge_source_llm(message_info.user_id)
 
     answer_keywords = extract_answer_keys(answer, llm)
 

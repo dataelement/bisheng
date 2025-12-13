@@ -5,8 +5,11 @@ from typing import List, Optional, Tuple
 from sqlalchemy import JSON, Column, DateTime, Text, and_, func, or_, text
 from sqlmodel import Field, select
 
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.common.services import telemetry_service
 from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.logger import trace_id_var
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.utils import generate_uuid
 

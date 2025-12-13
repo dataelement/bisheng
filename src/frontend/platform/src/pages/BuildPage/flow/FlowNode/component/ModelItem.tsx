@@ -2,11 +2,11 @@ import { Label } from "@/components/bs-ui/label";
 import Cascader from "@/components/bs-ui/select/cascader";
 import { getLlmDefaultModel } from "@/controllers/API/finetune";
 import { useModel } from "@/pages/ModelPage/manage";
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-export default function ModelItem({ agent = false, data, onChange, onValidate }) {
-    const { t } = useTranslation();
+export default function ModelItem({ agent = false, data, onChange, onValidate, i18nPrefix }) {
+    const { t } = useTranslation('flow');
 
     const { llmOptions, isLoading } = useModel(agent ? 'assistant' : 'llm');
     const [modelId, setModelId] = useState(null); // set initial state as null
@@ -57,7 +57,7 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
         onValidate(() => {
             if (!data.value) {
                 setError(true)
-                return data.label + ' ' + t('required')
+                return t(`${i18nPrefix}label`) + ' ' + t('required')
             }
             setError(false)
             return false
@@ -70,11 +70,11 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
         <div className='node-item mb-4'>
             <Label className="flex items-center bisheng-label mb-2">
                 {data.required && <span className="text-red-500">*</span>}
-                {data.label}
+                {t(`${i18nPrefix}label`)}
             </Label>
             <Cascader
                 error={error}
-                placeholder={data.placeholder}
+                placeholder={t(`${i18nPrefix}placeholder`)}
                 defaultValue={defaultValue}
                 options={llmOptions}
                 onChange={(val) => onChange(Number(val[1]))}

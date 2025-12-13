@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Slider } from "@/components/bs-ui/slider";
 import { Switch } from "@/components/bs-ui/switch";
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
+import { useTranslation } from "react-i18next"; // Import useTranslation
 
 const invoices = [
     {
@@ -35,49 +36,50 @@ const invoices = [
 ]
 
 export default function Example(params) {
+    const { t } = useTranslation(); // Initialize translation hook
 
     return <div className="h-[calc(100vh-220px)] overflow-y-auto py-10 pl-2 pr-10">
-        <Label className="mt-10">按钮</Label>
+        <Label className="mt-10">{t('example.buttons')}</Label>
         <div className="flex gap-2 mb-6">
-            <Button variant="default">Button</Button>
-            <Button variant="destructive">Button</Button>
-            <Button variant="outline">Button</Button>
-            <Button variant="secondary">Button</Button>
-            <Button variant="ghost">Button</Button>
-            <Button variant="link">Button</Button>
+            <Button variant="default">{t('example.button')}</Button>
+            <Button variant="destructive">{t('example.button')}</Button>
+            <Button variant="outline">{t('example.button')}</Button>
+            <Button variant="secondary">{t('example.button')}</Button>
+            <Button variant="ghost">{t('example.button')}</Button>
+            <Button variant="link">{t('example.button')}</Button>
         </div>
-        <Label>徽章</Label>
+        <Label>{t('example.badges')}</Label>
         <div className="flex gap-2 mb-6">
-            <Badge >Badge</Badge>
-            <Badge variant="secondary">Badge</Badge>
-            <Badge variant="outline">Badge</Badge>
-            <Badge variant="destructive">Badge</Badge>
+            <Badge >{t('example.badge')}</Badge>
+            <Badge variant="secondary">{t('example.badge')}</Badge>
+            <Badge variant="outline">{t('example.badge')}</Badge>
+            <Badge variant="destructive">{t('example.badge')}</Badge>
         </div>
-        <Label>输入框</Label>
+        <Label>{t('example.inputs')}</Label>
         <div className="flex flex-col gap-2 mb-6">
-            <SearchInput placeholder="Search"></SearchInput>
+            <SearchInput placeholder={t('example.search')}></SearchInput>
             <p></p>
-            <Textarea placeholder="content" value={''}></Textarea>
+            <Textarea placeholder={t('example.content')} value={''}></Textarea>
         </div>
-        <Label>下拉框</Label>
+        <Label>{t('example.dropdown')}</Label>
         <div className="flex flex-col gap-2 mb-6">
             <Select>
                 <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Select a fruit" />
+                    <SelectValue placeholder={t('example.selectAFruit')} />
                 </SelectTrigger>
                 <SelectContent>
                     <SelectGroup>
-                        <SelectLabel>Fruits</SelectLabel>
-                        <SelectItem value="apple">Apple</SelectItem>
-                        <SelectItem value="banana">Banana</SelectItem>
-                        <SelectItem value="blueberry">Blueberry</SelectItem>
-                        <SelectItem value="grapes">Grapes</SelectItem>
-                        <SelectItem value="pineapple">Pineapple</SelectItem>
+                        <SelectLabel>{t('example.fruits')}</SelectLabel>
+                        <SelectItem value="apple">{t('example.apple')}</SelectItem>
+                        <SelectItem value="banana">{t('example.banana')}</SelectItem>
+                        <SelectItem value="blueberry">{t('example.blueberry')}</SelectItem>
+                        <SelectItem value="grapes">{t('example.grapes')}</SelectItem>
+                        <SelectItem value="pineapple">{t('example.pineapple')}</SelectItem>
                     </SelectGroup>
                 </SelectContent>
             </Select>
         </div>
-        <Label>滑块</Label>
+        <Label>{t('example.slider')}</Label>
         <div className="flex flex-col gap-2 mb-6">
             <Slider
                 defaultValue={[50]}
@@ -86,34 +88,34 @@ export default function Example(params) {
                 className="w-[60%]"
             />
         </div>
-        <Label>switch</Label>
+        <Label>Switch{t('example.Switch')}</Label>
         <div className="flex flex-col gap-2 mb-6">
             <Switch id="airplane-mode" className="w-11" />
         </div>
-        <Label>单选多选</Label>
+        <Label>{t('example.checkboxRadio')}</Label>
         <div className="flex gap-2 mb-6">
             <Checkbox id="terms" />
             <RadioGroup defaultValue="one" >
                 <div className="flex items-center space-x-2">
                     <RadioGroupItem value="default" id="r1" />
-                    <Label htmlFor="r1">Default</Label>
+                    <Label htmlFor="r1">{t('example.default')}</Label>
                 </div>
                 <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="one" id="r1" />
-                    <Label htmlFor="r1">one</Label>
+                    <RadioGroupItem value="one" id="r2" />
+                    <Label htmlFor="r2">{t('example.one')}</Label>
                 </div>
             </RadioGroup>
         </div>
-        <Label>表格&分页</Label>
+        <Label>{t('example.tablePagination')}</Label>
         <div className="flex flex-col gap-2 mb-6">
             <Table>
-                <TableCaption>A list of your recent invoices.</TableCaption>
+                <TableCaption>{t('example.invoiceListCaption')}</TableCaption>
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="w-[100px]">Invoice</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Method</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead className="w-[100px]">{t('example.invoice')}</TableHead>
+                        <TableHead>{t('example.status')}</TableHead>
+                        <TableHead>{t('example.method')}</TableHead>
+                        <TableHead className="text-right">{t('example.amount')}</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -128,55 +130,54 @@ export default function Example(params) {
                 </TableBody>
                 <TableFooter>
                     <TableRow>
-                        <TableCell colSpan={3}>Total</TableCell>
+                        <TableCell colSpan={3}>{t('example.total')}</TableCell>
                         <TableCell className="text-right">$2,500.00</TableCell>
                     </TableRow>
                 </TableFooter>
             </Table>
             <AutoPagination page={1} pageSize={10} total={100} />
         </div>
-        <Label>日历</Label>
+        <Label>{t('example.calendar')}</Label>
         <div className="flex gap-2 mb-6">
             <Calendar
                 mode="single"
             />
         </div>
-        <Label>卡片</Label>
+        <Label>{t('example.card')}</Label>
         <div className="flex gap-2 mb-6">
             <Card className="w-[350px]">
                 <CardHeader>
-                    <CardTitle>Create project</CardTitle>
-                    <CardDescription>Deploy your new project in one-click.</CardDescription>
+                    <CardTitle>{t('example.createProject')}</CardTitle>
+                    <CardDescription>{t('example.deployProjectDescription')}</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    内容
+                    {t('example.content')}
                 </CardContent>
                 <CardFooter className="flex justify-between">
-                    <Button variant="outline">Cancel</Button>
-                    <Button>Deploy</Button>
+                    <Button variant="outline">{t('example.cancel')}</Button>
+                    <Button>{t('example.deploy')}</Button>
                 </CardFooter>
             </Card>
         </div>
-        <Label>手风琴</Label>
+        <Label>{t('example.accordion')}</Label>
         <div className="flex gap-2 mb-6">
             <Accordion type="single" collapsible className="w-full">
                 <AccordionItem value="item-1">
-                    <AccordionTrigger>Is it accessible?</AccordionTrigger>
+                    <AccordionTrigger>{t('example.isItAccessible')}</AccordionTrigger>
                     <AccordionContent>
-                        Yes. It adheres to the WAI-ARIA design pattern.
+                        {t('example.accordionAnswer1')}
                     </AccordionContent>
                 </AccordionItem>
                 <AccordionItem value="item-2">
-                    <AccordionTrigger>Is it styled?</AccordionTrigger>
+                    <AccordionTrigger>{t('example.isItStyled')}</AccordionTrigger>
                     <AccordionContent>
-                        Yes. It comes with default styles that matches the other
-                        components&apos; aesthetic.
+                        {t('example.accordionAnswer2')}
                     </AccordionContent>
                 </AccordionItem>
                 <AccordionItem value="item-3">
-                    <AccordionTrigger>Is it animated?</AccordionTrigger>
+                    <AccordionTrigger>{t('example.isItAnimated')}</AccordionTrigger>
                     <AccordionContent>
-                        Yes. It's animated by default, but you can disable it if you prefer.
+                        {t('example.accordionAnswer3')}
                     </AccordionContent>
                 </AccordionItem>
             </Accordion>

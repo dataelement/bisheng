@@ -3,16 +3,16 @@ import json
 import os
 from typing import Any, Callable, Dict, Type
 
-from bisheng_langchain.vectorstores import ElasticKeywordsSearch
 from langchain_community.vectorstores import (FAISS, Chroma, Milvus, MongoDBAtlasVectorSearch,
                                               Pinecone, Qdrant, SupabaseVectorStore, Weaviate)
 from loguru import logger
 from sqlmodel import select
 
+from bisheng.common.services.config_service import settings
 from bisheng.core.database import get_sync_db_session
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
-from bisheng.common.services.config_service import settings
-from bisheng.utils.embedding import decide_embeddings
+from bisheng.llm.domain import LLMService
+from bisheng_langchain.vectorstores import ElasticKeywordsSearch
 
 
 def docs_in_params(params: dict) -> bool:
@@ -229,7 +229,7 @@ def initial_milvus(class_object: Type[Milvus], params: dict, search_kwargs: dict
 
         if not knowledge:
             raise ValueError(f'不能找到知识库collection={col} knowledge_id={collection_id}')
-        params['embedding'] = decide_embeddings(knowledge.model)
+        params['embedding'] = LLMService.get_bisheng_knowledge_embedding_sync(0, model_id=int(knowledge.model))
         if knowledge.collection_name.startswith('partition'):
             search_kwargs.update({'partition_key': knowledge.id})
             params['partition_key'] = knowledge.id
@@ -264,7 +264,7 @@ def initial_elastic_vector(class_object: Type[ElasticKeywordsSearch], params: di
         knowledge = KnowledgeDao.query_by_id(collection_id)
         index_name = knowledge.index_name or knowledge.collection_name
         params['index_name'] = index_name
-        params['embedding'] = decide_embeddings(knowledge.model)
+        params['embedding'] = LLMService.get_bisheng_knowledge_embedding_sync(0, model_id=int(knowledge.model))
     if params['documents']:
         return class_object.from_documents(**params)
     else:

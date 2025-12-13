@@ -11,6 +11,7 @@ import { SettingIcon } from "../../bs-icons/setting";
 import { UserIcon } from "../../bs-icons/user";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../bs-ui/card";
 import { Switch } from "../../bs-ui/switch";
+import i18next from "i18next";
 
 interface IProps<T> {
   data: T,
@@ -160,7 +161,7 @@ export default function CardComponent<T>({
           {headSelecter}
           <Switch
             checked={_checked}
-            className="w-12"
+            className={i18next.language === 'ja' ? 'w-20' : 'w-12'}
             // @ts-ignore
             texts={[t('skills.online'), t('skills.offline')]}
             onCheckedChange={(b) => edit && handleCheckedChange(b)}

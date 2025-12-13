@@ -11,20 +11,19 @@ from pydantic import field_validator
 
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.knowledge import KnowledgeService
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.server import EmbeddingModelStatusError
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.core.ai.rerank.rrf_rerank import RRFRerank
 from bisheng.database.constants import MessageCategory
-from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.database.models.user import UserDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.llm.domain.services import LLMService
-from bisheng.utils.embedding import decide_embeddings
+from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+from bisheng.user.domain.models.user import UserDao
 
 
 class WorkStationService(BaseService):
@@ -127,11 +126,11 @@ class WorkStationService(BaseService):
         req_data = KnowledgeFileProcess(knowledge_id=knowledge.id,
                                         file_list=[KnowledgeFileOne(file_path=file_path)])
         try:
-            _ = decide_embeddings(knowledge.model)
+            _ = LLMService.get_bisheng_knowledge_embedding(login_user.user_id, int(knowledge.model))
         except Exception as e:
             raise EmbeddingModelStatusError(exception=e)
         res = KnowledgeService.process_knowledge_file(request,
-                                                      UserPayload(user_id=login_user.user_id),
+                                                      login_user,
                                                       background_tasks, req_data)
         return res
 
@@ -150,7 +149,7 @@ class WorkStationService(BaseService):
             return [], 0
         res, total, _ = KnowledgeService.get_knowledge_files(
             request,
-            UserPayload(user_id=login_user.user_id),
+            login_user,
             knowledge[0].id,
             page=page,
             page_size=size)
@@ -175,7 +174,8 @@ class WorkStationService(BaseService):
             return []
         knowledge = knowledge[0]
         try:
-            embedding = await LLMService.get_bisheng_embedding(model_id=knowledge.model)
+            embedding = await LLMService.get_bisheng_daily_embedding(model_id=int(knowledge.model),
+                                                                     invoke_user_id=login_user.user_id)
         except Exception as e:
             raise EmbeddingModelStatusError(exception=e)
 

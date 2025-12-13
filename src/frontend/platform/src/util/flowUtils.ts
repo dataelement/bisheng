@@ -21,12 +21,24 @@ export function autoNodeName(nodes: Node[], name: string): string {
 }
 
 // 在节点初始化时，将node中的模板变量替换为界面中对应的变量key
-export function initNode(node) {
+export function initNode(node, nds, t) {
     const { id } = node;
+    if (node.type === "tool") {
+        if (node.is_preset) {
+            // 国际化工具节点
+            node.name = t(`tools.${node.tool_key}.name`, { ns: 'tool' })
+            node.description = t(`tools.${node.tool_key}.desc`, { ns: 'tool' })
+            return node;
+        }
+        return node;
+    }
 
     node.group_params.forEach(group => {
         group.params.forEach(param => {
             if (param.type === "var_textarea" && typeof param.value === "string") {
+                if (param.value) {
+                    param.value = t(`node.${node.type}.${param.key}.value`)
+                }
                 // Replace expressions by inserting the node id dynamically
                 param.value = param.value.replace(/{{#([^/]*\/)?(.*?)#}}/g, (match, prefix = '', expression) => {
                     if (param.varZh) {
@@ -42,6 +54,9 @@ export function initNode(node) {
         });
     });
 
+    const newName = autoNodeName(nds, t(`node.${node.type}.name`))
+    node.name = newName
+    node.description = t(`node.${node.type}.description`)
     return node;
 }
 

@@ -1,18 +1,17 @@
 // components/ToolSelectionPanel.tsx
 import { Sheet, SheetContent, SheetTitle } from "@/components/bs-ui/sheet";
-import { Button } from '../bs-ui/button';
-import { useState, useRef, useEffect } from 'react';
-import { LoadIcon } from "../bs-icons/loading";
-import { Input, Textarea } from "../bs-ui/input";
-import SopMarkdown from "./SopMarkdown";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { sopApi } from "@/controllers/API/linsight";
-import { t } from "i18next";
-import { useTranslation } from "react-i18next";
-import { Tabs, TabsList, TabsTrigger } from "../bs-ui/tabs";
-import { Star } from "lucide-react";
 import Tip from "@/components/bs-ui/tooltip/tip";
+import { sopApi } from "@/controllers/API/linsight";
 import { TaskFlowContent } from "@/workspace/SopTasks";
+import { Star } from "lucide-react";
+import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from "react-i18next";
+import { LoadIcon } from "../bs-icons/loading";
+import { Button } from '../bs-ui/button';
+import { Input, Textarea } from "../bs-ui/input";
+import { Tabs, TabsList, TabsTrigger } from "../bs-ui/tabs";
+import SopMarkdown from "./SopMarkdown";
 
 /**
  * SopFormDrawer
@@ -42,15 +41,14 @@ const SopFormDrawer: any = (props) => {
     content: 0
   });
   const nameInputRef = useRef(null);
-  const contentInputRef = useRef(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isFeatured = !!sopForm.showcase;
   const [activeTab, setActiveTab] = useState('manual');
-  // 各字段的最大字数限制
+
   const MAX_LENGTHS = {
-    name: 500,      // 名称不超过500字
-    description: 1000, // 描述不超过1000字
-    content: 50000   // 详细内容不超过100000字
+    name: 500,
+    description: 1000,
+    content: 50000
   };
   const { toast } = useToast()
   const validateForm = () => {
@@ -81,17 +79,15 @@ const SopFormDrawer: any = (props) => {
   };
 
   const handleInputChange = (field, value) => {
-    // 计算实际内容长度（去除Markdown标记字符）
+    //  Calculate the actual content length (excluding Markdown markup characters) 
     const rawContent = field === 'content'
       ? value.replace(/[#*_\-`~\[\]()]/g, '')
       : value;
     const length = rawContent.length;
 
-    // 更新表单值
     setSopForm(prev => ({ ...prev, [field]: value }));
     setCharCount(prev => ({ ...prev, [field]: length }));
 
-    // 检查长度限制并设置错误状态
     if (length > MAX_LENGTHS[field]) {
       setErrors(prev => ({
         ...prev,
@@ -100,7 +96,7 @@ const SopFormDrawer: any = (props) => {
           : t('sopForm.nameMaxLength', { max: MAX_LENGTHS[field] })
       }));
     } else if (errors[field]) {
-      // 清除错误
+
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
   };
@@ -140,9 +136,6 @@ const SopFormDrawer: any = (props) => {
     }
   }, [isDrawerOpen]);
 
-  // 移除 isFeatured 派生状态的同步副作用，统一使用 sopForm.showcase
-
-  // 当弹窗打开时，重置Tab为"指导手册"
   useEffect(() => {
     if (isDrawerOpen) {
       setActiveTab('manual');
@@ -164,9 +157,9 @@ const SopFormDrawer: any = (props) => {
               <div className="flex items-center gap-3 mr-6">
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                   <TabsList>
-                    <TabsTrigger value="manual">指导手册</TabsTrigger>
+                    <TabsTrigger value="manual">{t('sopForm.manual')}</TabsTrigger>
                     {sopShowcase ? (
-                      <Tip content="无运行结果" side="bottom">
+                      <Tip content={t('sopForm.noResult')} side="bottom">
                         <div className="inline-block">
                           <TabsTrigger
                             value="result"
@@ -174,17 +167,17 @@ const SopFormDrawer: any = (props) => {
                             className="opacity-50 cursor-not-allowed pointer-events-none"
                             aria-disabled
                           >
-                            运行结果
+                            {t('sopForm.result')}
                           </TabsTrigger>
                         </div>
                       </Tip>
                     ) : (
-                      <TabsTrigger value="result">运行结果</TabsTrigger>
+                      <TabsTrigger value="result">{t('sopForm.result')}</TabsTrigger>
                     )}
                   </TabsList>
                 </Tabs>
                 {sopShowcase ? (
-                  <Tip content="仅可精选包含运行结果的案例" side="bottom">
+                  <Tip content={t('sopForm.onlyFeaturedWithResult')} side="bottom">
                     <div className="inline-block">
                       <Button
                         type="button"
@@ -200,7 +193,7 @@ const SopFormDrawer: any = (props) => {
                               <Star className="w-3 h-3 text-gray-400" />
                             )}
                           </span>
-                          {isFeatured ? '精选案例' : '设为精选案例'}
+                          {isFeatured ? t('sopForm.featuredCase') : t('sopForm.setAsFeaturedCase')}
                         </span>
                       </Button>
                     </div>
@@ -213,12 +206,11 @@ const SopFormDrawer: any = (props) => {
                       try {
                         const next = !isFeatured;
                         await sopApi.switchShowcase({ sop_id: sopForm.id, showcase: next });
-                        // 同步父级表单，避免状态串扰
+                        //  Synchronize the parent form to avoid state crosstalk 
                         setSopForm((prev) => ({ ...prev, showcase: next }));
-                        // 刷新列表
                         onShowcaseToggled && onShowcaseToggled();
                       } catch (e) {
-                        toast({ variant: 'error', description: 'sop设置精选案例失败' });
+                        toast({ variant: 'error', description: t('sopForm.failToSetFeaturedCase') });
                       }
                     }}
                     className={`${isFeatured ? 'border-yellow-500 bg-yellow-50 text-yellow-700' : ''}`}
@@ -231,7 +223,7 @@ const SopFormDrawer: any = (props) => {
                           <Star className="w-3 h-3 text-gray-400" />
                         )}
                       </span>
-                      {isFeatured ? '精选案例' : '设为精选案例'}
+                      {isFeatured ? t('sopForm.featuredCase') : t('sopForm.setAsFeaturedCase')}
                     </span>
                   </Button>
                 )}

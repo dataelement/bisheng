@@ -1,4 +1,5 @@
 import CardComponent from "@/components/bs-comp/cardComponent";
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import LabelShow from "@/components/bs-comp/cardComponent/LabelShow";
 import AppTempSheet from "@/components/bs-comp/sheets/AppTempSheet";
 import { LoadingIcon } from "@/components/bs-icons/loading";
@@ -24,11 +25,10 @@ import { generateUUID } from "@/utils";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { useQueryLabels } from "./assistant";
 import CreateApp from "./CreateApp";
+import { useCreateTemp, useErrorPrompt, useQueryLabels } from "./hook";
 import CardSelectVersion from "./skills/CardSelectVersion";
 import CreateTemp from "./skills/CreateTemp";
-import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 
 export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
     const [value, setValue] = useState<string>(defaultValue)
@@ -81,7 +81,7 @@ export default function apps() {
 
     const { open: tempOpen, tempType, flowRef, toggleTempModal } = useCreateTemp()
 
-    // 上下线
+    // on/off line
     const handleCheckedChange = (checked, data) => {
         if (data.flow_type === 1) {
             return captureAndAlertRequestErrorHoc(updataOnlineState(data.id, data, checked).then(res => {
@@ -149,7 +149,7 @@ export default function apps() {
     const handleCreateApp = async (type, tempId = 0, item?: any) => {
         if (type === AppType.SKILL) {
             if (!tempId) return navigate('/build/skill')
-            // 选模板(创建技能)
+            // select template
             const [flow] = await readTempsDatabase(type, tempId)
 
             flow.name = `${flow.name}-${generateUUID(5)}`
@@ -249,7 +249,7 @@ export default function apps() {
                                     onDelete={handleDelete}
                                     onSetting={(item) => handleSetting(item)}
                                     headSelecter={(
-                                        // 技能版本
+                                        // skills
                                         item.flow_type !== AppNumType.ASSISTANT ? <CardSelectVersion
                                             showPop={item.status !== 2}
                                             data={item}
@@ -274,51 +274,14 @@ export default function apps() {
                     </div>
             }
         </div>
-        {/* 添加模板 */}
+        {/* add template */}
         <CreateTemp flow={flowRef.current} type={tempType} open={tempOpen} setOpen={() => toggleTempModal()} onCreated={() => { }} ></CreateTemp>
         {/* footer */}
         <div className="flex justify-between absolute bottom-0 left-0 w-full bg-background-main h-16 items-center px-10">
             <p className="text-sm text-muted-foreground break-keep">{t('build.manageYourApplications')}</p>
             <AutoPagination className="m-0 w-auto justify-end" page={page} pageSize={pageSize} total={total} onChange={setPage}></AutoPagination>
         </div>
-        {/* 创建应用弹窗 flow&assistant */}
+        {/* create flow&assistant */}
         <CreateApp ref={createAppModalRef} />
     </div>
 };
-
-// 创建技能模板弹窗状态
-const useCreateTemp = () => {
-    const [open, setOpen] = useState(false)
-    const [tempType, setType] = useState<AppType>(AppType.ALL)
-    const flowRef = useRef(null)
-
-    return {
-        open,
-        tempType,
-        flowRef,
-        toggleTempModal(flow?) {
-            const map = { 10: "flow", 5: "assistant", 1: "skill" }
-            flowRef.current = flow || null
-            flow && setType(map[flow.flow_type])
-            setOpen(!open)
-        }
-    }
-}
-
-const useErrorPrompt = () => {
-    const search = location.search;
-    const params = new URLSearchParams(search);
-    const error = params.get('error');
-    const { toast } = useToast()
-    const { t } = useTranslation()
-
-    useEffect(() => {
-        if (error) {
-            toast({ description: t(`errors.${error}`), variant: 'error' });
-
-            // Clear the 'error' parameter from the URL
-            const newUrl = window.location.origin + window.location.pathname;
-            window.history.replaceState({}, '', newUrl);
-        }
-    }, [])
-}

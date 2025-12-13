@@ -10,3 +10,5 @@ enable_utc = False
 task_routes = settings.celery_task.task_routers
 # redis健康检查间隔，单位秒
 redis_backend_health_check_interval = 5
+
+beat_schedule = settings.celery_task.beat_schedule

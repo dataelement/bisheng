@@ -155,7 +155,7 @@ const Item = ({ nodeId, item, index, del, required, varErrors, onUpdateItem, onD
     );
 };
 
-export default function ConditionItem({ nodeId, node, data: paramItem, onChange, onValidate, onVarEvent }) {
+export default function ConditionItem({ nodeId, node, data: paramItem, onChange, onValidate, onVarEvent, i18nPrefix }) {
     const { t } = useTranslation('flow'); // 获取翻译函数
     const [value, setValue] = useState([]);
     const [required, setRequired] = useState(false);

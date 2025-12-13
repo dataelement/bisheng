@@ -8,11 +8,15 @@ from pydantic import field_validator
 from sqlalchemy import Column, DateTime, String, and_, func, or_, text
 from sqlmodel import JSON, Field, select, update
 
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.common.schemas.telemetry.event_data_schema import NewApplicationEventData
+from bisheng.common.services import telemetry_service
 from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.logger import trace_id_var
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAccessDao
-from bisheng.database.models.user_role import UserRoleDao
+from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid
 
 
@@ -120,6 +124,28 @@ class FlowDao(FlowBase):
             session.add(flow_version)
             session.commit()
             session.refresh(flow_info)
+
+            if flow_type == FlowType.FLOW.value:
+                app_type = ApplicationTypeEnum.SKILL
+            elif flow_type == FlowType.WORKFLOW.value:
+                app_type = ApplicationTypeEnum.WORKFLOW
+            elif flow_type == FlowType.ASSISTANT.value:
+                app_type = ApplicationTypeEnum.ASSISTANT
+            elif flow_type == FlowType.LINSIGHT.value:
+                app_type = ApplicationTypeEnum.LINSIGHT
+            else:
+                app_type = ApplicationTypeEnum.DAILY_CHAT
+
+            # 记录Telemetry日志
+            telemetry_service.log_event_sync(user_id=flow_info.user_id,
+                                             event_type=BaseTelemetryTypeEnum.NEW_APPLICATION,
+                                             trace_id=trace_id_var.get(),
+                                             event_data=NewApplicationEventData(
+                                                 app_id=flow_info.id,
+                                                 app_name=flow_info.name,
+                                                 app_type=app_type.value
+                                             ))
+
             return flow_info
 
     @classmethod
@@ -418,3 +444,111 @@ class FlowDao(FlowBase):
                 'update_time': one[8]
             })
         return data, total
+
+    @classmethod
+    async def get_one_flow_simple(cls, flow_id: str) -> Optional[Flow]:
+        """ get simple info of one flow by id. not contain data field """
+        statement = select(Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id,
+                           Flow.status, Flow.create_time, Flow.update_time).where(Flow.id == flow_id)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            one = result.first()
+            if not one:
+                return None
+            return Flow(**{
+                'id': one[0],
+                'name': one[1],
+                'description': one[2],
+                'flow_type': one[3],
+                'logo': one[4],
+                'user_id': one[5],
+                'status': one[6],
+                'create_time': one[7],
+                'update_time': one[8]
+            })
+
+    @classmethod
+    def get_one_flow_simple_sync(cls, flow_id: str) -> Optional[Flow]:
+        """ get simple info of one flow by id. not contain data field """
+        statement = select(Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id,
+                           Flow.status, Flow.create_time, Flow.update_time).where(Flow.id == flow_id)
+        with get_sync_db_session() as session:
+            result = session.exec(statement)
+            one = result.first()
+            if not one:
+                return None
+            return Flow(**{
+                'id': one[0],
+                'name': one[1],
+                'description': one[2],
+                'flow_type': one[3],
+                'logo': one[4],
+                'user_id': one[5],
+                'status': one[6],
+                'create_time': one[7],
+                'update_time': one[8]
+            })
+
+    @classmethod
+    def get_all_app_by_time_range_sync(cls, start_time: datetime, end_time: datetime, page: int = 0,
+                                       page_size: int = 0):
+        sub_query = select(
+            Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id,
+            Flow.status, Flow.create_time, Flow.update_time).union_all(
+            select(Assistant.id, Assistant.name, Assistant.desc, FlowType.ASSISTANT.value,
+                   Assistant.logo, Assistant.user_id, Assistant.status, Assistant.create_time,
+                   Assistant.update_time).where(Assistant.is_delete == 0)).subquery()
+
+        statement = select(sub_query.c.id, sub_query.c.name, sub_query.c.description,
+                           sub_query.c.flow_type, sub_query.c.logo, sub_query.c.user_id,
+                           sub_query.c.status, sub_query.c.create_time, sub_query.c.update_time)
+        statement = statement.where(and_(sub_query.c.create_time >= start_time,
+                                         sub_query.c.create_time < end_time))
+        if page and page_size:
+            statement = statement.offset((page - 1) * page_size).limit(page_size)
+        with get_sync_db_session() as session:
+            result = session.exec(statement).all()
+            data = []
+            for one in result:
+                data.append({
+                    'id': one[0],
+                    'name': one[1],
+                    'description': one[2],
+                    'flow_type': one[3],
+                    'logo': one[4],
+                    'user_id': one[5],
+                    'status': one[6],
+                    'create_time': one[7],
+                    'update_time': one[8]
+                })
+            return data
+
+    @classmethod
+    def get_first_app(cls):
+        sub_query = select(
+            Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id,
+            Flow.status, Flow.create_time, Flow.update_time).union_all(
+            select(Assistant.id, Assistant.name, Assistant.desc, FlowType.ASSISTANT.value,
+                   Assistant.logo, Assistant.user_id, Assistant.status, Assistant.create_time,
+                   Assistant.update_time).where(Assistant.is_delete == 0)).subquery()
+
+        statement = select(sub_query.c.id, sub_query.c.name, sub_query.c.description,
+                           sub_query.c.flow_type, sub_query.c.logo, sub_query.c.user_id,
+                           sub_query.c.status, sub_query.c.create_time, sub_query.c.update_time)
+        statement = statement.order_by(sub_query.c.create_time.asc()).limit(1)
+        with get_sync_db_session() as session:
+            result = session.exec(statement).all()
+            data = []
+            for one in result:
+                data.append({
+                    'id': one[0],
+                    'name': one[1],
+                    'description': one[2],
+                    'flow_type': one[3],
+                    'logo': one[4],
+                    'user_id': one[5],
+                    'status': one[6],
+                    'create_time': one[7],
+                    'update_time': one[8]
+                })
+            return data[0] if data else None

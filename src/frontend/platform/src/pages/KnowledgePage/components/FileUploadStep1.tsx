@@ -24,7 +24,6 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
             fileType: ['xlsx', 'xls', 'csv'].includes(file.fileName.split('.').pop().toLowerCase()) ? 'table' : 'file',
             fileId: 0
         }))
-        // TODO 提示 failFiles
         failFilesRef.current = failFiles
 
         setFinish(!failFiles.length)
@@ -59,9 +58,7 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
     }
     useEffect(() => {
         if (initialFiles.length > 0) {
-            // 用已有的handleFileChange处理文件（复用原有逻辑，不用重复写）
             handleFileChange(initialFiles, []);
-            // 更新文件计数
             setFileCount(initialFiles.length);
 
         }
@@ -83,7 +80,7 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
             <Button disabled={loading || !finish} onClick={() => {
                 onNext(filesRef.current)
             }} >
-                {fileCount ? <span>共{fileCount}个文件</span> : null} {t('nextStep')}</Button>
+                {fileCount ? <span>{t('totalFiles', { count: fileCount })}</span> : null} {t('nextStep')}</Button>
         </div>
     </div>
 

@@ -6,8 +6,8 @@ from bisheng.common.errcode.server import NoTtsModelConfigError, TtsModelConfigD
     TtsModelTypeError, TtsProviderDeletedError, TtsModelOfflineError
 from bisheng.core.ai import BaseTTSClient, OpenAITTSClient, \
     AliyunTTSClient, AzureOpenAITTSClient
-from bisheng.llm.const import LLMModelType, LLMServerType
-from bisheng.llm.models import LLMServer, LLMModel
+from bisheng.llm.domain.const import LLMModelType, LLMServerType
+from bisheng.llm.domain.models import LLMServer, LLMModel
 from .base import BishengBase
 from ..utils import wrapper_bisheng_model_limit_check_async
 
@@ -70,7 +70,7 @@ class BishengTTS(BishengBase):
 
     @classmethod
     async def get_bisheng_tts(cls, **kwargs) -> Self:
-        model_id = kwargs.get('model_id')
+        model_id = kwargs.pop('model_id', 0)
         if not model_id:
             raise NoTtsModelConfigError()
         model_info, server_info = await cls.get_model_server_info(model_id)
@@ -89,7 +89,7 @@ class BishengTTS(BishengBase):
         # 初始化tts客户端
         tts_client = await cls.init_tts_client(model_info=model_info, server_info=server_info)
 
-        return cls(model_id=model_id, tts=tts_client, model_info=model_info, server_info=server_info)
+        return cls(model_id=model_id, tts=tts_client, model_info=model_info, server_info=server_info, **kwargs)
 
     @classmethod
     async def init_tts_client(cls, model_info: LLMModel, server_info: LLMServer) -> BaseTTSClient:

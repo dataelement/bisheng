@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
-import { useTranslation } from "react-i18next";
+import { LoadingIcon } from '@/components/bs-icons/loading';
 import { Button } from '@/components/bs-ui/button';
 import { DialogClose, DialogFooter } from "@/components/bs-ui/dialog";
 import { Label } from '@/components/bs-ui/label';
 import { toast } from '@/components/bs-ui/toast/use-toast';
-import { getAssistantToolsApi, updateAssistantToolApi } from "@/controllers/API/assistant";
+import { getToolsApi, updateToolApi } from '@/controllers/API/tools';
+import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from "react-i18next";
 import { InputField, SelectField } from "./InputField";
-import { LoadingIcon } from '@/components/bs-icons/loading';
 
 const defaultToolParams = {
     bing: {
@@ -56,11 +56,11 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
     const [selectedTool, setSelectedTool] = useState<string>('bing');
     const [formErrors, setFormErrors] = useState({});
 
-    // 初始化：isApi 为 true 走接口获取；否则使用父级 formData
+    // Initialization: If isApi is true, fetch data via the interface; otherwise, use the parent-level formData.
     useEffect(() => {
         const initFromApi = async () => {
             try {
-                const res = await getAssistantToolsApi('default');
+                const res = await getToolsApi('default');
                 const webSearchTool = res.find((item: any) => item.name === '联网搜索');
                 if (webSearchTool) {
                     toolIdRef.current = webSearchTool.id;
@@ -74,7 +74,7 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
                                 ...defaultToolParams,
                                 ...(extraData.config || {}),
                             });
-                        } catch (e) {}
+                        } catch (e) { }
                     }
                 }
             } catch (error: any) {
@@ -109,28 +109,27 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
 
     const validationRules = {
         bing: {
-            api_key: (value) => !value && 'Bing Subscription Key 不能为空',
-            base_url: (value) => !value && 'Bing Search URL 不能为空'
+            base_url: (value) => !value && 'Bing Search URL ' + t('chatConfig.errors.required')
         },
         bocha: {
-            api_key: (value) => !value && 'API Key 不能为空'
+            api_key: (value) => !value && 'API Key ' + t('chatConfig.errors.required')
         },
         jina: {
-            api_key: (value) => !value && 'API Key 不能为空'
+            api_key: (value) => !value && 'API Key ' + t('chatConfig.errors.required')
         },
         serp: {
-            api_key: (value) => !value && 'API Key 不能为空',
-            engine: (value) => !value && 'engine 不能为空'
+            api_key: (value) => !value && 'API Key ' + t('chatConfig.errors.required'),
+            engine: (value) => !value && 'engine ' + t('chatConfig.errors.required')
         },
         tavily: {
-            api_key: (value) => !value && 'API Key 不能为空'
+            api_key: (value) => !value && 'API Key ' + t('chatConfig.errors.required')
         },
         cloudsway: {
-            api_key: (value) => !value && 'API Key 不能为空',
-            endpoint: (value) => !value && 'endpoint 不能为空'
+            api_key: (value) => !value && 'API Key ' + t('chatConfig.errors.required'),
+            endpoint: (value) => !value && 'endpoint ' + t('chatConfig.errors.required')
         },
         searXNG: {
-            server_url: (value) => !value && '服务器地址不能为空'
+            server_url: (value) => !value && 'The server address cannot be empty'
         }
     };
 
@@ -191,14 +190,14 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
         try {
             if (isApi) {
                 if (toolIdRef.current) {
-                    await updateAssistantToolApi(toolIdRef.current, newConfig);
+                    await updateToolApi(toolIdRef.current, newConfig);
                 }
                 toast({
                     title: t('skills.saveSuccessful'),
                     description: '',
                     variant: 'success',
                 });
-                // 提交成功后关闭弹窗
+                // Close the pop-up window after successful submission.
                 closeRef.current?.click();
             } else {
                 onSubmit?.(newConfig);
@@ -308,8 +307,8 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
                     />
                 );
             case 'cloudsway':
-                    return (
-                        <>
+                return (
+                    <>
                         <InputField
                             required
                             label="API Key"
@@ -329,8 +328,8 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
                             error={(formErrors as any).endpoint}
                             id="cloudsway-endpoint"
                         />
-                        </>
-                    );
+                    </>
+                );
             case 'searXNG':
                 return (
                     <InputField
@@ -359,46 +358,46 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
 
     return (
         <>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            {/* 隐藏关闭按钮，供提交成功后程序化关闭弹窗 */}
-            <DialogClose asChild>
-                <button ref={closeRef} className="hidden" />
-            </DialogClose>
-            <SelectField
-                label={t('chatConfig.webSearch.engine')}
-                value={selectedTool}
-                onChange={handleToolChange}
-                options={[
-                    { value: 'bing', label: t('chatConfig.webSearch.bing') },
-                    { value: 'bocha', label: t('chatConfig.webSearch.bocha') },
-                    { value: 'jina', label: t('chatConfig.webSearch.jina') },
-                    { value: 'serp', label: t('chatConfig.webSearch.serp') },
-                    { value: 'tavily', label: t('chatConfig.webSearch.tavily') },
-                    { value: 'searXNG', label: t('chatConfig.webSearch.searXNG') },
-                    { value: 'cloudsway', label: t('chatConfig.webSearch.cloudsway') },
-                ]}
-                id="search-tool-selector"
-                name="search_tool"
-            />
-
-            <div className="space-y-4">
-                <Label className="bisheng-label">{t('chatConfig.webSearch.config')}</Label>
-                {renderParams()}
-            </div>
-
-            <DialogFooter>
-                <DialogClose>
-                    <Button variant="outline" className="px-11" type="button">
-                        {t('build.cancel')}
-                    </Button>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                {/* Hide the close button for programmatic closing of the pop-up window after successful submission. */}
+                <DialogClose asChild>
+                    <button ref={closeRef} className="hidden" />
                 </DialogClose>
-                <Button className="px-11" type="submit" disabled={isApi && loading}>
-                    {t('build.confirm')}
-                </Button>
-            </DialogFooter>
-        </form>
+                <SelectField
+                    label={t('chatConfig.webSearch.engine')}
+                    value={selectedTool}
+                    onChange={handleToolChange}
+                    options={[
+                        { value: 'bing', label: t('chatConfig.webSearch.bing') },
+                        { value: 'bocha', label: t('chatConfig.webSearch.bocha') },
+                        { value: 'jina', label: t('chatConfig.webSearch.jina') },
+                        { value: 'serp', label: t('chatConfig.webSearch.serp') },
+                        { value: 'tavily', label: t('chatConfig.webSearch.tavily') },
+                        { value: 'searXNG', label: t('chatConfig.webSearch.searXNG') },
+                        { value: 'cloudsway', label: t('chatConfig.webSearch.cloudsway') },
+                    ]}
+                    id="search-tool-selector"
+                    name="search_tool"
+                />
+
+                <div className="space-y-4">
+                    <Label className="bisheng-label">{t('chatConfig.webSearch.config')}</Label>
+                    {renderParams()}
+                </div>
+
+                <DialogFooter>
+                    <DialogClose>
+                        <Button variant="outline" className="px-11" type="button">
+                            {t('build.cancel')}
+                        </Button>
+                    </DialogClose>
+                    <Button className="px-11" type="submit" disabled={isApi && loading}>
+                        {t('build.confirm')}
+                    </Button>
+                </DialogFooter>
+            </form>
         </>
-    
+
     );
 };
 

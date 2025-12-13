@@ -8,6 +8,7 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from loguru import logger
 
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, ServerError
 from bisheng.common.errcode.llm import ServerExistError, ModelNameRepeatError, ServerAddError, ServerAddAllError
@@ -18,14 +19,13 @@ from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge import KnowledgeState
+from bisheng.llm.domain.const import LLMModelType
+from bisheng.llm.domain.models import LLMDao, LLMServer, LLMModel
+from bisheng.llm.domain.schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig, AssistantLLMConfig, \
+    EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq, WorkbenchModelConfig, WSModel
 from bisheng.utils import generate_uuid, md5_hash
-from bisheng.utils.embedding import decide_embeddings
 from ..llm import BishengASR, BishengLLM, BishengTTS, BishengEmbedding
 from ..llm.rerank import BishengRerank
-from ...const import LLMModelType
-from ...models import LLMDao, LLMServer, LLMModel
-from ...schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig, AssistantLLMConfig, \
-    EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq, WorkbenchModelConfig, WSModel
 
 
 class LLMService:
@@ -88,16 +88,22 @@ class LLMService:
         failed_models = []
         failed_msg = ''
         # 尝试实例化对应的模型，有报错的话删除
+        common_params = {
+            'app_id': ApplicationTypeEnum.MODEL_TEST.value,
+            'app_name': ApplicationTypeEnum.MODEL_TEST.value,
+            'app_type': ApplicationTypeEnum.MODEL_TEST,
+            'user_id': login_user.user_id,
+        }
         for one in ret.models:
             try:
                 if one.model_type == LLMModelType.LLM.value:
-                    await cls.get_bisheng_llm(model_id=one.id, ignore_online=True)
+                    await cls.get_bisheng_llm(model_id=one.id, ignore_online=True, **common_params)
                 elif one.model_type == LLMModelType.EMBEDDING.value:
-                    await cls.get_bisheng_embedding(model_id=one.id, ignore_online=True)
+                    await cls.get_bisheng_embedding(model_id=one.id, ignore_online=True, **common_params)
                 elif one.model_type == LLMModelType.ASR.value:
-                    await cls.get_bisheng_asr(model_id=one.id, ignore_online=True)
+                    await cls.get_bisheng_asr(model_id=one.id, ignore_online=True, **common_params)
                 elif one.model_type == LLMModelType.TTS.value:
-                    await cls.get_bisheng_tts(model_id=one.id, ignore_online=True)
+                    await cls.get_bisheng_tts(model_id=one.id, ignore_online=True, **common_params)
 
                 success_msg += f'{one.model_name},'
                 success_models.append(one)
@@ -134,7 +140,7 @@ class LLMService:
         handle_types = []
         for one in server.models:
             # test model status
-            await cls.test_model_status(one)
+            await cls.test_model_status(one, login_user)
             if one.model_type in handle_types:
                 continue
             handle_types.append(one.model_type)
@@ -145,24 +151,30 @@ class LLMService:
         return True
 
     @classmethod
-    async def test_model_status(cls, model: LLMModel | LLMModelInfo):
+    async def test_model_status(cls, model: LLMModel | LLMModelInfo, login_user: UserPayload):
+        common_params = {
+            'app_id': ApplicationTypeEnum.MODEL_TEST.value,
+            'app_name': ApplicationTypeEnum.MODEL_TEST.value,
+            'app_type': ApplicationTypeEnum.MODEL_TEST,
+            'user_id': login_user.user_id,
+        }
         try:
             if model.model_type == LLMModelType.LLM.value:
-                bisheng_model = await cls.get_bisheng_llm(model_id=model.id, ignore_online=True, cache=False)
+                bisheng_model = await cls.get_bisheng_llm(model_id=model.id, ignore_online=True, **common_params)
                 await bisheng_model.ainvoke('hello')
             elif model.model_type == LLMModelType.EMBEDDING.value:
-                bisheng_embed = await cls.get_bisheng_embedding(model_id=model.id, ignore_online=True, cache=False)
+                bisheng_embed = await cls.get_bisheng_embedding(model_id=model.id, ignore_online=True, **common_params)
                 await bisheng_embed.aembed_query('hello')
             elif model.model_type == LLMModelType.TTS.value:
-                bisheng_tts = await cls.get_bisheng_tts(model_id=model.id, ignore_online=True)
+                bisheng_tts = await cls.get_bisheng_tts(model_id=model.id, ignore_online=True, **common_params)
                 await bisheng_tts.ainvoke('hello')
             elif model.model_type == LLMModelType.ASR.value:
                 example_file_path = os.path.join(os.path.dirname(__file__), "./asr_example.wav")
                 with open(example_file_path, 'rb') as f:
-                    bisheng_asr = await cls.get_bisheng_asr(model_id=model.id, ignore_online=True)
+                    bisheng_asr = await cls.get_bisheng_asr(model_id=model.id, ignore_online=True, **common_params)
                     await bisheng_asr.ainvoke(f)
             elif model.model_type == LLMModelType.RERANK.value:
-                bisheng_rerank = await cls.get_bisheng_rerank(model_id=model.id, ignore_online=True)
+                bisheng_rerank = await cls.get_bisheng_rerank(model_id=model.id, ignore_online=True, **common_params)
                 await bisheng_rerank.acompress_documents(documents=[Document(page_content="hello world")],
                                                          query="hello")
         except Exception as e:
@@ -219,12 +231,12 @@ class LLMService:
             workbench_llm = await cls.get_workbench_llm()
             if not workbench_llm.tts_model or not workbench_llm.tts_model.id:
                 workbench_llm.tts_model = WSModel(id=str(model.id), name=model.model_name)
-                await cls.update_workbench_llm(workbench_llm, BackgroundTasks())
+                await cls.update_workbench_llm(0, workbench_llm, BackgroundTasks())
         elif model.model_type == LLMModelType.ASR.value:
             workbench_llm = await cls.get_workbench_llm()
             if not workbench_llm.asr_model or not workbench_llm.asr_model.id:
                 workbench_llm.asr_model = WSModel(id=str(model.id), name=model.model_name)
-                await cls.update_workbench_llm(workbench_llm, BackgroundTasks())
+                await cls.update_workbench_llm(0, workbench_llm, BackgroundTasks())
 
     @classmethod
     async def update_llm_server(cls, request: Request, login_user: UserPayload,
@@ -272,7 +284,7 @@ class LLMService:
             # 新增的模型，或者模型名字或者类型发生了变化
             if (one.id not in old_model_dict or old_model_dict[one.id].model_name != one.model_name
                     or old_model_dict[one.id].model_type != one.model_type):
-                await cls.test_model_status(one)
+                await cls.test_model_status(one, login_user)
         return new_server_info
 
     @classmethod
@@ -304,30 +316,39 @@ class LLMService:
         return KnowledgeLLMConfig(**ret)
 
     @classmethod
-    def get_knowledge_source_llm(cls) -> Optional[BaseChatModel]:
+    def get_knowledge_source_llm(cls, invoke_user_id: int) -> Optional[BaseChatModel]:
         """ 获取知识库溯源的默认模型配置 """
         knowledge_llm = cls.get_knowledge_llm()
         # 没有配置模型，则用jieba
         if not knowledge_llm.source_model_id:
             return None
-        return cls.get_bisheng_llm_sync(model_id=knowledge_llm.source_model_id)
+        return cls.get_bisheng_llm_sync(model_id=knowledge_llm.source_model_id,
+                                        app_id=ApplicationTypeEnum.RAG_TRACEABILITY.value,
+                                        app_name=ApplicationTypeEnum.RAG_TRACEABILITY.value,
+                                        app_type=ApplicationTypeEnum.RAG_TRACEABILITY,
+                                        user_id=invoke_user_id)
 
     @classmethod
-    def get_knowledge_similar_llm(cls) -> Optional[BaseChatModel]:
+    def get_knowledge_similar_llm(cls, invoke_user_id: int) -> Optional[BaseChatModel]:
         """ 获取知识库相似问的默认模型配置 """
         knowledge_llm = cls.get_knowledge_llm()
         # 没有配置模型，则用jieba
         if not knowledge_llm.qa_similar_model_id:
             return None
-        return cls.get_bisheng_llm_sync(model_id=knowledge_llm.qa_similar_model_id)
+        return cls.get_bisheng_llm_sync(model_id=knowledge_llm.qa_similar_model_id,
+                                        app_id=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
+                                        app_name=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
+                                        app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
+                                        user_id=invoke_user_id)
 
     @classmethod
-    def get_knowledge_default_embedding(cls) -> Optional[Embeddings]:
+    def get_knowledge_default_embedding(cls, invoke_user_id: int) -> Optional[Embeddings]:
         """ 获取知识库默认的embedding模型 """
         knowledge_llm = cls.get_knowledge_llm()
         if not knowledge_llm.embedding_model_id:
             return None
-        return cls.get_bisheng_embedding_sync(model_id=knowledge_llm.embedding_model_id)
+        return cls.get_bisheng_knowledge_embedding_sync(model_id=knowledge_llm.embedding_model_id,
+                                                        invoke_user_id=invoke_user_id)
 
     @classmethod
     async def _base_update_llm_config(cls, data: Dict, key: ConfigKeyEnum) -> Dict:
@@ -390,16 +411,33 @@ class LLMService:
         return EvaluationLLMConfig(**ret)
 
     @classmethod
-    def get_evaluation_llm_object(cls) -> BaseChatModel:
-        evaluation_llm = cls.sync_get_evaluation_llm()
+    async def get_evaluation_llm_object(cls, invoke_user_id: int) -> BaseChatModel:
+        evaluation_llm = await cls.get_evaluation_llm()
         if not evaluation_llm.model_id:
             raise Exception('未配置评测模型')
-        return cls.get_bisheng_llm_sync(model_id=evaluation_llm.model_id)
+        return await cls.get_bisheng_llm(model_id=evaluation_llm.model_id,
+                                         app_id=ApplicationTypeEnum.EVALUATION.value,
+                                         app_name=ApplicationTypeEnum.EVALUATION.value,
+                                         app_type=ApplicationTypeEnum.EVALUATION,
+                                         user_id=invoke_user_id)
 
     @classmethod
     async def get_bisheng_llm(cls, **kwargs) -> BaseChatModel:
         """ 初始化毕昇llm对话模型 """
         return await BishengLLM.get_bisheng_llm(**kwargs)
+
+    @classmethod
+    def get_bisheng_llm_sync(cls, **kwargs) -> BaseChatModel:
+        """ 初始化毕昇llm对话模型 """
+        return BishengLLM(**kwargs)
+
+    @classmethod
+    async def get_bisheng_linsight_llm(cls, invoke_user_id: int, **kwargs) -> BaseChatModel:
+        return await BishengLLM.get_bisheng_llm(app_id=ApplicationTypeEnum.LINSIGHT.value,
+                                                app_name=ApplicationTypeEnum.LINSIGHT.value,
+                                                app_type=ApplicationTypeEnum.LINSIGHT,
+                                                user_id=invoke_user_id,
+                                                **kwargs)
 
     @classmethod
     async def get_bisheng_rerank(cls, **kwargs) -> BaseDocumentCompressor:
@@ -410,11 +448,6 @@ class LLMService:
         return BishengRerank(**kwargs)
 
     @classmethod
-    def get_bisheng_llm_sync(cls, **kwargs) -> BaseChatModel:
-        """ 初始化毕昇llm对话模型 """
-        return BishengLLM(**kwargs)
-
-    @classmethod
     async def get_bisheng_embedding(cls, **kwargs) -> Embeddings:
         """ 初始化毕昇embedding模型 """
         return await BishengEmbedding.get_bisheng_embedding(**kwargs)
@@ -423,6 +456,42 @@ class LLMService:
     def get_bisheng_embedding_sync(cls, **kwargs) -> Embeddings:
         """ 初始化毕昇embedding模型 """
         return BishengEmbedding(**kwargs)
+
+    @classmethod
+    async def get_bisheng_daily_embedding(cls, invoke_user_id: int, model_id: int) -> Embeddings:
+        """ 获取日常的embedding模型 """
+        return await cls.get_bisheng_embedding(model_id=model_id,
+                                               app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                                               app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+                                               app_type=ApplicationTypeEnum.DAILY_CHAT,
+                                               user_id=invoke_user_id)
+
+    @classmethod
+    async def get_bisheng_linsight_embedding(cls, invoke_user_id: int, model_id: int) -> Embeddings:
+        """ 获取灵思默认的embedding模型 """
+        return await cls.get_bisheng_embedding(model_id=model_id,
+                                               app_id=ApplicationTypeEnum.LINSIGHT.value,
+                                               app_name=ApplicationTypeEnum.LINSIGHT.value,
+                                               app_type=ApplicationTypeEnum.LINSIGHT,
+                                               user_id=invoke_user_id)
+
+    @classmethod
+    async def get_bisheng_knowledge_embedding(cls, invoke_user_id: int, model_id: int) -> Embeddings:
+        """ 获取知识库默认的embedding模型 """
+        return await cls.get_bisheng_embedding(model_id=model_id,
+                                               app_id=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
+                                               app_name=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
+                                               app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
+                                               user_id=invoke_user_id)
+
+    @classmethod
+    def get_bisheng_knowledge_embedding_sync(cls, invoke_user_id: int, model_id: int) -> Embeddings:
+        """ 获取知识库默认的embedding模型 """
+        return cls.get_bisheng_embedding_sync(model_id=model_id,
+                                              app_id=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
+                                              app_name=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
+                                              app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
+                                              user_id=invoke_user_id)
 
     @classmethod
     async def get_bisheng_asr(cls, **kwargs) -> BishengASR:
@@ -491,10 +560,13 @@ class LLMService:
         return ret
 
     @classmethod
-    async def update_workbench_llm(cls, config_obj: WorkbenchModelConfig, background_tasks: BackgroundTasks):
+    async def update_workbench_llm(cls, invoke_user_id: int, config_obj: WorkbenchModelConfig,
+                                   background_tasks: BackgroundTasks):
         """
         更新灵思模型配置
+        :param invoke_user_id:
         :param config_obj:
+        :param background_tasks:
         :return:
         """
         # 延迟导入以避免循环导入
@@ -509,7 +581,11 @@ class LLMService:
             config_old_obj = WorkbenchModelConfig(**json.loads(config.value)) if config else WorkbenchModelConfig()
             if (config_obj.embedding_model.id and config_old_obj.embedding_model is None or
                     config_obj.embedding_model.id != config_old_obj.embedding_model.id):
-                embeddings = decide_embeddings(config_obj.embedding_model.id)
+                embeddings = await cls.get_bisheng_embedding(model_id=config_obj.embedding_model.id,
+                                                             app_id=ApplicationTypeEnum.LINSIGHT.value,
+                                                             app_name=ApplicationTypeEnum.LINSIGHT.value,
+                                                             app_type=ApplicationTypeEnum.LINSIGHT,
+                                                             user_id=invoke_user_id)
                 try:
                     await embeddings.aembed_query("test")
                 except Exception as e:
@@ -533,12 +609,12 @@ class LLMService:
                     updated_count += 1
 
                     # 3. 为每个knowledge发起异步任务
-                    rebuild_knowledge_celery.delay(knowledge.id, str(embeddings.model_id))
+                    rebuild_knowledge_celery.delay(knowledge.id, int(knowledge.model), invoke_user_id)
                     logger.info(
-                        f"Started rebuild task for knowledge_id={knowledge.id} with model_id={embeddings.model_id}")
+                        f"Started rebuild task for knowledge_id={knowledge.id} with model_id={knowledge.model}")
 
                 logger.info(
-                    f"Updated {updated_count} private knowledge bases to use new embedding model {embeddings.model_id}")
+                    f"Updated {updated_count} private knowledge bases to use new embedding model {config_obj.embedding_model.id}")
 
         config.value = json.dumps(config_obj.model_dump(), ensure_ascii=False)
 
@@ -559,28 +635,27 @@ class LLMService:
         return WorkbenchModelConfig(**ret)
 
     @classmethod
-    async def invoke_workbench_asr(cls, file: UploadFile) -> str:
-        """
-        调用工作台的asr模型 将语音转为文字
-        :param file:
-        :return:
-        """
+    async def invoke_workbench_asr(cls, login_user: UserPayload, file: UploadFile) -> str:
+        """ 调用工作台的asr模型 将语音转为文字 """
         if not file:
             raise ServerError.http_exception("no file upload")
         workbench_llm = await cls.get_workbench_llm()
         if not workbench_llm.asr_model or not workbench_llm.asr_model.id:
             raise NoAsrModelConfigError.http_exception()
-        model_info = await cls.get_bisheng_asr(model_id=int(workbench_llm.asr_model.id))
+        model_info = await LLMDao.aget_model_by_id(int(workbench_llm.asr_model.id))
         if not model_info:
             raise AsrModelConfigDeletedError.http_exception()
-        asr_client = await cls.get_bisheng_asr(model_id=int(workbench_llm.asr_model.id))
+        asr_client = await cls.get_bisheng_asr(model_id=int(workbench_llm.asr_model.id),
+                                               app_id=ApplicationTypeEnum.ASR.value,
+                                               app_name=ApplicationTypeEnum.ASR.value,
+                                               app_type=ApplicationTypeEnum.ASR,
+                                               user_id=login_user.user_id)
         return await asr_client.ainvoke(file.file)
 
     @classmethod
-    async def invoke_workbench_tts(cls, text: str) -> str:
+    async def invoke_workbench_tts(cls, login_user: UserPayload, text: str) -> str:
         """
         调用工作台的tts模型 将文字转为语音
-        :param text:
         :return: minio的路径
         """
 
@@ -601,7 +676,11 @@ class LLMService:
         if cache_value:
             return cache_value
 
-        tts_client = await cls.get_bisheng_tts(model_id=int(workbench_llm.tts_model.id))
+        tts_client = await cls.get_bisheng_tts(model_id=int(workbench_llm.tts_model.id),
+                                               app_id=ApplicationTypeEnum.TTS.value,
+                                               app_name=ApplicationTypeEnum.TTS.value,
+                                               app_type=ApplicationTypeEnum.TTS,
+                                               user_id=login_user.user_id)
         audio_bytes = await tts_client.ainvoke(text)
         # upload to minio
         object_name = f"tts/{generate_uuid()}.mp3"

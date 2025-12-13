@@ -7,6 +7,8 @@ from pymilvus import Collection, MilvusException
 from bisheng.api.services.knowledge_imp import decide_vectorstores, process_file_task, delete_knowledge_file_vectors, \
     KnowledgeUtils, delete_vector_files
 from bisheng.api.v1.schemas import FileProcessBase
+from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
+from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, KnowledgeState
@@ -14,8 +16,6 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileStatus,
-    QAKnoweldgeDao,
-    QAKnowledge,
 )
 from bisheng.utils import generate_uuid
 from bisheng.worker.main import bisheng_celery
@@ -66,13 +66,6 @@ def file_copy_celery(param: json) -> str:
                     )
                 except Exception as e:
                     logger.error(f"copy file error: {one.file_name} {e}")
-
-        else:
-            files = QAKnoweldgeDao.get_qa_knowledge_by_knowledge_id(
-                source_knowledge_id, page=page_num, page_size=page_size
-            )
-            for one in files:
-                copy_qa(one, source_knowledge, target_knowledge, login_user_id)
         page_num += 1
         if not files or len(files) < page_size:
             break
@@ -144,7 +137,7 @@ def copy_normal(
 
     except Exception as e:
         logger.exception(f"copy_file_error file_id={knowledge_new.id}")
-        knowledge_new.remark = str(e)[:500]
+        knowledge_new.remark = KnowledgeFileFailedError(exception=e).to_json_str()
         knowledge_new.status = KnowledgeFileStatus.FAILED.value
         KnowledgeFileDao.update(knowledge_new)
         return
@@ -160,35 +153,9 @@ def copy_normal(
     except Exception as e:
         logger.exception(e)
         logger.error("source={} new={} e={}", one.id, knowledge_new.id, e)
-        knowledge_new.remark = str(e)[:500]
+        knowledge_new.remark = KnowledgeFileFailedError(exception=e).to_json_str()
         knowledge_new.status = KnowledgeFileStatus.FAILED.value
         KnowledgeFileDao.update(knowledge_new)
-
-
-def copy_qa(
-        qa: QAKnowledge,
-        source_knowledge: Knowledge,
-        target_knowledge: Knowledge,
-        op_user_id: int,
-):
-    one_dict = qa.model_dump()
-    one_dict.pop("id")
-    one_dict.pop("create_time")
-    one_dict.pop("update_time")
-    one_dict["user_id"] = op_user_id
-    one_dict["knowledge_id"] = target_knowledge.id
-    one_dict["status"] = KnowledgeFileStatus.PROCESSING.value
-
-    qa_knowledge = QAKnowledge(**one_dict)
-    qa_new = QAKnoweldgeDao.insert_qa(qa_knowledge)
-    try:
-        copy_vector(source_knowledge, target_knowledge, qa.id, qa_new.id)
-        qa_new.status = KnowledgeFileStatus.SUCCESS.value
-        QAKnoweldgeDao.update(qa_new)
-    except Exception as e:
-        logger.error(e)
-        qa_new.status = KnowledgeFileStatus.FAILED.value
-        QAKnoweldgeDao.update(qa_new)
 
 
 def copy_vector(
@@ -204,12 +171,12 @@ def copy_vector(
     # 当前es 不包含vector
     fields = [s.name for s in source_milvus.col.schema.fields if s.name != "pk"]
     source_data = source_milvus.col.query(
-        expr=f"file_id=={source_file_id} && knowledge_id=='{source_konwledge.id}'",
+        expr=f"document_id=={source_file_id} && knowledge_id=={source_konwledge.id}",
         output_fields=fields,
     )
     for data in source_data:
-        data["knowledge_id"] = str(target_knowledge.id)
-        data["file_id"] = target_file_id
+        data["knowledge_id"] = target_knowledge.id
+        data["document_id"] = target_file_id
     milvus_db: Milvus = decide_vectorstores(
         target_knowledge.collection_name, "Milvus", embedding
     )
@@ -280,19 +247,20 @@ def insert_es(li: List, target: ElasticKeywordsSearch):
 @bisheng_celery.task(acks_late=True)
 def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
     """ 异步解析一个入库成功的文件 """
-    with logger.contextualize(trace_id=f'parse_file_{file_id}'):
-        logger.info(
-            f"parse_knowledge_file_celery start preview_cache_key={preview_cache_key}, callback_url={callback_url}")
-        try:
-            # 入库成功后，再此判断文件信息是否还存在，不存在则删除
-            _, knowledge = _parse_knowledge_file(file_id, preview_cache_key, callback_url)
-            db_file = KnowledgeFileDao.get_file_by_ids([file_id])
-            if db_file:
-                return
+    trace_id_var.set(f'parse_file_{file_id}')
+    logger.info(
+        f"parse_knowledge_file_celery start preview_cache_key={preview_cache_key}, callback_url={callback_url}")
+    try:
+        # 入库成功后，再此判断文件信息是否还存在，不存在则删除
+        _, knowledge = _parse_knowledge_file(file_id, preview_cache_key, callback_url)
+    except Exception as e:
+        logger.error("parse_knowledge_file_celery error: {}", str(e))
+    finally:
+        logger.debug(f"delete_knowledge_file_celery start file_id={file_id}")
+        db_file = KnowledgeFileDao.get_file_by_ids([file_id])
+        if not db_file:
             # 不存在则可能在解析过程中被删除了，需要删掉向量库的数据
             delete_vector_files([db_file.id], knowledge)
-        except Exception as e:
-            logger.error("parse_knowledge_file_celery error: {}", str(e))
 
 
 def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_url: str = None):
@@ -336,32 +304,33 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
 @bisheng_celery.task(acks_late=True)
 def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
     """ 重试解析一个入库失败或者重名的文件 """
-    with logger.contextualize(trace_id=f'retry_file_{file_id}'):
-        logger.info("retry_knowledge_file_celery start file_id={}", file_id)
-        try:
-            delete_knowledge_file_vectors(
-                file_ids=[file_id], clear_minio=False
-            )
-        except Exception as e:
-            logger.exception("retry_knowledge_file_celery delete vectors error: {}", str(e))
-            KnowledgeFileDao.update_file_status([file_id], KnowledgeFileStatus.FAILED, str(e)[:500])
-            return
-        try:
-            _parse_knowledge_file(file_id, preview_cache_key, callback_url)
-        except Exception as e:
-            logger.error("retry_knowledge_file_celery error: {}", str(e))
+    trace_id_var.set(f'retry_knowledge_file_{file_id}')
+    logger.info("retry_knowledge_file_celery start file_id={}", file_id)
+    try:
+        delete_knowledge_file_vectors(
+            file_ids=[file_id], clear_minio=False
+        )
+    except Exception as e:
+        logger.exception("retry_knowledge_file_celery delete vectors error: {}", str(e))
+        KnowledgeFileDao.update_file_status([file_id], KnowledgeFileStatus.FAILED,
+                                            KnowledgeFileFailedError(exception=e).to_json_str())
+        return
+    try:
+        _parse_knowledge_file(file_id, preview_cache_key, callback_url)
+    except Exception as e:
+        logger.error("retry_knowledge_file_celery error: {}", str(e))
 
 
 @bisheng_celery.task()
 def delete_knowledge_file_celery(file_ids: List[int], knowledge_id: int, clear_minio: bool = True):
     """ 异步删除知识文件及其向量 """
-    with logger.contextualize(trace_id=f'delete_file_{knowledge_id}_{file_ids[0]}'):
-        logger.info("delete_knowledge_file_celery start file_ids={}", file_ids)
-        try:
-            knowledge = KnowledgeDao.query_by_id(knowledge_id)
-            if not knowledge:
-                logger.warning(f"knowledge_id={knowledge_id} is deleted, skip delete file")
-                return
-            delete_vector_files(file_ids, knowledge)
-        except Exception as e:
-            logger.error("delete_knowledge_file_celery error: {}", str(e))
+    trace_id_var.set(f'delete_knowledge_file_{file_ids}')
+    logger.info("delete_knowledge_file_celery start file_ids={}", file_ids)
+    try:
+        knowledge = KnowledgeDao.query_by_id(knowledge_id)
+        if not knowledge:
+            logger.warning(f"knowledge_id={knowledge_id} is deleted, skip delete file")
+            return
+        delete_vector_files(file_ids, knowledge)
+    except Exception as e:
+        logger.error("delete_knowledge_file_celery error: {}", str(e))

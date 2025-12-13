@@ -52,10 +52,9 @@ class KnowledgeFileBase(SQLModelSerializable):
                                   index=False,
                                   description='1: 解析中；2: 解析成功；3: 解析失败')
     object_name: Optional[str] = Field(default=None, index=False, description='文件在minio存储的对象名称')
-    # extra_meta: Optional[str] = Field(default=None, index=False)
     user_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, sa_column=Column(JSON, nullable=True),
                                                     description='用户自定义的元数据')
-    remark: Optional[str] = Field(default='', sa_column=Column(String(length=512)))
+    remark: Optional[str] = Field(default='', sa_column=Column(String(length=4096)))
     updater_id: Optional[int] = Field(default=None, index=True, description='最后更新用户ID')
     updater_name: Optional[str] = Field(default=None, index=True)
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -73,7 +72,7 @@ class QAKnowledgeBase(SQLModelSerializable):
     status: Optional[int] = Field(default=1, index=False,
                                   description='1: 开启；0: 关闭，用户手动关闭；2: 处理中；3：插入失败')
     extra_meta: Optional[str] = Field(default=None, index=False)
-    remark: Optional[str] = Field(default=None, sa_column=Column(String(length=512)))
+    remark: Optional[str] = Field(default='', sa_column=Column(String(length=4096)))
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -444,6 +443,13 @@ class QAKnoweldgeDao(QAKnowledgeBase):
                 select(QAKnowledge).where(QAKnowledge.knowledge_id.in_(knowledge_ids))).all()
 
     @classmethod
+    async def aget_qa_knowledge_by_knowledge_ids(cls, knowledge_ids: List[int]) -> List[QAKnowledge]:
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(QAKnowledge).where(col(QAKnowledge.knowledge_id).in_(knowledge_ids)))
+            return result.all()
+
+    @classmethod
     def get_qa_knowledge_by_primary_id(cls, qa_id: int) -> QAKnowledge:
         with get_sync_db_session() as session:
             return session.exec(select(QAKnowledge).where(QAKnowledge.id == qa_id)).first()
@@ -541,11 +547,13 @@ class QAKnoweldgeDao(QAKnowledgeBase):
 
     @classmethod
     def batch_update_status_by_ids(cls, qa_ids: List[int],
-                                   status: QAStatus) -> None:
+                                   status: QAStatus,
+                                   remark: str = "") -> None:
         """
         根据QA知识点ID批量更新状态
         :param qa_ids: QA知识点ID列表
         :param status: 状态
+        :param remark: 备注
         :return:
         """
 
@@ -553,19 +561,19 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             update(QAKnowledge).where(col(QAKnowledge.id).in_(qa_ids))
         )
 
-        statement = statement.values(status=status.value)
+        statement = statement.values(status=status.value).values(remark=remark)
         with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
 
     # 根据knowledge_id更新status
     @classmethod
-    def update_status_by_knowledge_id(cls, knowledge_id: int, status: QAStatus
-                                      ) -> None:
+    def update_status_by_knowledge_id(cls, knowledge_id: int, status: QAStatus, remark: str = "") -> None:
         """
         根据knowledge_id更新status
         :param knowledge_id: 知识库ID
         :param status: 状态
+        :param remark: 备注
         :return:
         """
 
@@ -573,7 +581,7 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             update(QAKnowledge).where(col(QAKnowledge.knowledge_id) == knowledge_id)
         )
 
-        statement = statement.values(status=status.value)
+        statement = statement.values(status=status.value).values(remark=remark)
         with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()

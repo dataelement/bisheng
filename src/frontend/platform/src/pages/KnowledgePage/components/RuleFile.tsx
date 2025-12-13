@@ -9,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/bs-ui/tool
 import { cn } from "@/utils";
 import { CircleHelp } from "lucide-react";
 
-// 工具函数：将1/0或布尔值转为标准布尔值
+// Utility function: Convert 1/0 or boolean values to standard boolean
 const toBoolean = (value) => {
   if (value === undefined || value === null) return false;
   if (typeof value === "number") return value === 1;
@@ -17,12 +17,12 @@ const toBoolean = (value) => {
   return Boolean(value);
 };
 
-// 工具函数：驼峰转下划线
+// Utility function: Convert camelCase to snake_case
 const camelToSnake = (str) => {
   return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
 };
 
-// 生成稳定的策略ID（基于内容哈希）
+// Generate stable strategy ID (based on content hash)
 const getStrategyId = (regexStr, position) => {
   let hash = 0;
   const str = `${regexStr}-${position}`;
@@ -60,7 +60,7 @@ export default function RuleFile({
   const { appConfig } = useContext(locationContext);
   const { t } = useTranslation('knowledge');
 
-  // 安全解析 originalSplitRule
+  // Safely parse originalSplitRule
   const parsedOriginalSplitRule = useMemo(() => {
     if (!originalSplitRule) return {};
     if (typeof originalSplitRule === 'string') {
@@ -68,14 +68,14 @@ export default function RuleFile({
         const parsed = JSON.parse(originalSplitRule);
         return typeof parsed === 'object' && parsed !== null ? parsed : {};
       } catch (e) {
-        console.error('解析 originalSplitRule 失败:', e);
+        console.error('Failed to parse originalSplitRule:', e);
         return {};
       }
     }
     return typeof originalSplitRule === 'object' ? { ...originalSplitRule } : {};
   }, [originalSplitRule]);
 
-  // 计算当前值
+  // Calculate current values
   const currentRules = useMemo(() => {
     const baseRules = isAdjustMode ? parsedOriginalSplitRule : { ...rules };
     
@@ -88,7 +88,7 @@ export default function RuleFile({
     };
   }, [isAdjustMode, parsedOriginalSplitRule, rules]);
 
-  // 内部状态与外部状态同步
+  // Internal state synchronization with external state
   const [internalValues, setInternalValues] = useState(currentRules);
   const prevRulesRef = useRef(currentRules);
 
@@ -99,12 +99,12 @@ export default function RuleFile({
     }
   }, [currentRules]);
 
-  // 使用 useEffect 监听 originalSplitRule 的变化
+  // Use useEffect to monitor changes in originalSplitRule
   useEffect(() => {
-    console.log('originalSplitRule 已更新:', originalSplitRule);
+    console.log('originalSplitRule updated:', originalSplitRule);
   }, [originalSplitRule]);
 
-  // 策略初始化
+  // Strategy initialization
   const hasInitialized = useRef(false);
   useEffect(() => {
     if (!isAdjustMode || hasInitialized.current) return;
@@ -118,28 +118,28 @@ export default function RuleFile({
 
     if (validSeparatorPairs.length > 0) {
       const regexToRuleMap = {
-        '\\n': '单换行后切分，用于分隔普通换行',
-        '\\n\\n': '双换行后切分,用于分隔段落',
-        '第.{1,3}章': '"第X章"前切分，切分章节等',
-        '第.{1,3}条': '"第X条"前切分，切分条目等',
-        '。': '中文句号后切分，中文断句',
-        '\\.': '英文句号后切分，英文断句'
+        '\\n': t('singleNewlineRule'),
+        '\\n\\n': t('doubleNewlineRule'),
+        '第.{1,3}章': t('chapterRule'),
+        '第.{1,3}条': t('articleRule'),
+        '。': t('chinesePeriodRule'),
+        '\\.': t('englishPeriodRule')
       };
 
       const convertedStrategies = validSeparatorPairs.map((pair) => ({
         id: getStrategyId(pair.regexStr, pair.position),
         regex: pair.regexStr,
         position: pair.position,
-        rule: regexToRuleMap[pair.regexStr] || `自定义规则: ${pair.regexStr}`
+        rule: regexToRuleMap[pair.regexStr] || t('customRule', { regex: pair.regexStr })
       }));
 
       setStrategies(convertedStrategies);
     }
 
     hasInitialized.current = true;
-  }, [isAdjustMode, parsedOriginalSplitRule, setStrategies]);
+  }, [isAdjustMode, parsedOriginalSplitRule, setStrategies, t]);
 
-  // 修复核心：处理输入框和勾选框的值变化
+  // Core fix: Handle input box and checkbox value changes
   const handleSettingChange = useCallback((key, value) => {
     let rawValue;
     if (value?.target?.type === 'checkbox') {
@@ -150,7 +150,7 @@ export default function RuleFile({
       rawValue = value;
     }
 
-    // 更新UI
+    // Update UI
     setInternalValues(prev => ({ ...prev, [key]: rawValue }));
 
      if (isAdjustMode) {
@@ -165,22 +165,22 @@ export default function RuleFile({
       storedValue = rawValue;
     }
 
-    // 直接更新原始分割规则
+    // Directly update original split rule
     setOriginalSplitRule(prev => {
       const current = typeof prev === 'string' 
         ? (() => { try { return JSON.parse(prev); } catch { return {}; } })()
         : (prev || {});
       
       const updated = { ...current, [snakeKey]: storedValue };
-      console.log('更新后的值:', updated);
-      return updated; // 确保返回更新后的对象
+      console.log('Updated value:', updated);
+      return updated; // Ensure updated object is returned
     });
   } else {
     setRules(prev => ({ ...(prev || {}), [key]: rawValue }));
   }
 }, [isAdjustMode, setOriginalSplitRule, setRules]);
 
-  // 策略变化处理
+  // Strategy change handling
   const handleStrategiesChange = useCallback((newStrategies) => {
     setStrategies(newStrategies);
     
@@ -204,7 +204,7 @@ export default function RuleFile({
           <h3 className="font-bold text-gray-800 text-left text-md">{t('splitSettings')}</h3>
 
           <div className="flex gap-4">
-            {/* 核心修改：根据showPreview调整间距 */}
+            {/* Core modification: Adjust spacing based on showPreview */}
             <div className={cn("w-1/2 flex items-center", showPreview ? "gap-0" : "gap-3")}>
               <Label htmlFor="splitLength"className={cn("whitespace-nowrap text-sm min-w-[100px]", showPreview ? "-mr-4" : "")}>
                 {t('splitLength')}
@@ -225,11 +225,11 @@ export default function RuleFile({
                     }
                   }}
                 />
-                <span className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400">字符</span>
+                <span className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400">{t('characters')}</span>
               </div>
             </div>
 
-            {/* 核心修改：根据showPreview调整间距 */}
+            {/* Core modification: Adjust spacing based on showPreview */}
             <div className={cn("w-1/2 flex items-center", showPreview ? "gap-0" : "gap-3")}>
               <Label htmlFor="chunkOverlap" className={cn("whitespace-nowrap text-sm min-w-[100px]", showPreview ? "-mr-5" : "")}>
                 {t('chunkOverlap')}
@@ -250,7 +250,7 @@ export default function RuleFile({
                     }
                   }}
                 />
-                <span className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400">字符</span>
+                <span className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400">{t('characters')}</span>
               </div>
             </div>
           </div>
@@ -268,7 +268,7 @@ export default function RuleFile({
                   <CircleHelp className="w-3.5 h-3.5 text-muted-foreground" />
                 </TooltipTrigger>
                 <TooltipContent>
-                  <div className="max-w-96 text-left break-all whitespace-normal">解析时将保留文档中的图片内容， 以支持问答时图文并茂的回复。</div>
+                  <div className="max-w-96 text-left break-all whitespace-normal">{t('retainImagesTooltip')}</div>
                 </TooltipContent>
               </Tooltip>
             </Label>

@@ -1,5 +1,4 @@
 import { LoadIcon } from "@/components/bs-icons";
-import { useTranslation } from "react-i18next";
 
 export default function MessageNodeRun({ data }) {
     // const { t } = useTranslation('flow')

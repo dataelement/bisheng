@@ -10,7 +10,6 @@ import { useTable } from "@/util/hook";
 import { formatDate } from "@/util/utils";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { transformEvent, transformModule, transformObjectType } from "../utils";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
 const useGroups = () => {
@@ -153,13 +152,13 @@ export default function SystemLog() {
                             <TableCell>{log.id}</TableCell>
                             <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.operator_name}</div></TableCell>
                             <TableCell>{log.create_time.replace('T', ' ')}</TableCell>
-                            <TableCell>{transformModule(log.system_id)}</TableCell>
-                            <TableCell>{transformEvent(log.event_type)}</TableCell>
-                            <TableCell>{transformObjectType(log.object_type)}</TableCell>
-                            <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.object_name || '无'}</div></TableCell>
+                            <TableCell>{t(`log.${log.system_id}`)}</TableCell>
+                            <TableCell>{t(`log.${log.event_type}`)}</TableCell>
+                            <TableCell>{t(`log.${log.object_type}`)}</TableCell>
+                            <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.object_name || t('log.none')}</div></TableCell>
                             <TableCell>{log.ip_address}</TableCell>
                             <TableCell className="max-w-[250px]">
-                                <div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`) || '无'}</div>
+                                <div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`) || t('log.none')}</div>
                             </TableCell>
                         </TableRow>
                     ))}
@@ -172,7 +171,7 @@ export default function SystemLog() {
             </Table>
             {!logs.length && <div className="h-[700px]"></div>}
         </div>
-        {/* 分页 */}
+        {/* Pagination */}
         {/* <Pagination count={10}></Pagination> */}
         <div className="bisheng-table-footer bg-background-login">
             <p className="desc pl-4">{t('log.auditManagement')}</p>

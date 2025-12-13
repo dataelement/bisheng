@@ -1,25 +1,29 @@
+from datetime import datetime
 from typing import Dict, Optional
 
 from fastapi.encoders import jsonable_encoder
 from langchain.memory import ConversationBufferWindowMemory
 
 from bisheng.api.services.base import BaseService
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.workflow import WorkflowEvent, WorkflowEventType, WorkflowInputSchema, WorkflowInputItem, \
     WorkflowOutputSchema
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.chat.utils import SourceType
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.flow import WorkFlowInitError
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
-from bisheng.database.models.flow import FlowDao, FlowStatus, FlowType
+from bisheng.common.services import telemetry_service
+from bisheng.core.logger import trace_id_var
+from bisheng.database.models.flow import FlowDao, FlowStatus, FlowType, Flow
 from bisheng.database.models.flow import UserLinkType
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.tag import TagDao
-from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_link import UserLinkDao
-from bisheng.database.models.user_role import UserRoleDao
+from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.common.node import BaseNodeData, NodeType
@@ -108,7 +112,10 @@ class WorkFlowService(BaseService):
         return data, total
 
     @classmethod
-    def run_once(cls, login_user: UserPayload, node_input: Dict[str, any], node_data: Dict[any, any]):
+    def run_once(cls, login_user: UserPayload, node_input: Dict[str, any], node_data: Dict[any, any], workflow_id: str):
+        workflow_info = FlowDao.get_flow_by_id(workflow_id)
+        if not workflow_info:
+            raise NotFoundError()
 
         node_data = BaseNodeData(**node_data.get('data', {}))
         base_callback = BaseCallback()
@@ -117,7 +124,8 @@ class WorkFlowService(BaseService):
         node = NodeFactory.instance_node(node_type=node_data.type,
                                          node_data=node_data,
                                          user_id=login_user.user_id,
-                                         workflow_id='tmp_workflow_single_node',
+                                         workflow_id=workflow_info.id,
+                                         workflow_name=workflow_info.name,
                                          graph_state=graph_state,
                                          target_edges=None,
                                          max_steps=233,
@@ -180,13 +188,13 @@ class WorkFlowService(BaseService):
         if not await login_user.async_access_check(db_flow.user_id, flow_id, AccessType.WORKFLOW_WRITE):
             raise UnAuthorizedError()
 
-        version_info =await FlowVersionDao.aget_version_by_id(version_id)
+        version_info = await FlowVersionDao.aget_version_by_id(version_id)
         if not version_info or version_info.flow_id != flow_id:
             raise NotFoundError()
         if status == FlowStatus.ONLINE.value:
             # workflow的初始化校验
             try:
-                _ = Workflow(flow_id, login_user.user_id, version_info.data, False,
+                _ = Workflow(flow_id, db_flow.name, login_user.user_id, version_info.data, False,
                              10,
                              10,
                              None)
@@ -196,6 +204,11 @@ class WorkFlowService(BaseService):
             await FlowVersionDao.change_current_version(flow_id, version_info)
         db_flow.status = status
         await FlowDao.aupdate_flow(db_flow)
+        await telemetry_service.log_event(
+            user_id=login_user.user_id,
+            event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
+            trace_id=trace_id_var.get()
+        )
         return
 
     @classmethod
@@ -409,3 +422,29 @@ class WorkFlowService(BaseService):
             one['logo'] = cls.get_logo_share_link(one['logo'])
 
         return data, total
+
+    @classmethod
+    async def get_one_workflow_simple_info(cls, workflow_id: str) -> Flow | None:
+        """
+        获取单个工作流详情
+        """
+        return await FlowDao.get_one_flow_simple(workflow_id)
+
+    @classmethod
+    def get_one_workflow_simple_info_sync(cls, workflow_id: str) -> Optional[Flow]:
+        """
+        获取单个工作流详情（同步版）
+        """
+        return FlowDao.get_one_flow_simple_sync(workflow_id)
+
+    @classmethod
+    def get_all_apps_by_time_range_sync(cls, start_time: datetime, end_time: datetime, page: int = 1,
+                                        page_size: int = 100) -> list[dict]:
+        """
+        根据时间范围获取所有应用
+        """
+        return FlowDao.get_all_app_by_time_range_sync(start_time, end_time, page, page_size)
+
+    @classmethod
+    def get_first_app(cls) -> Dict | None:
+        return FlowDao.get_first_app()

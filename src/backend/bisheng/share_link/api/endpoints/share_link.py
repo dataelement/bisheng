@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from fastapi.params import Body
 
-from bisheng.common.dependencies.user_deps import get_login_user, UserPayload
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200, UnifiedResponseModel
 from bisheng.share_link.api.dependencies import get_share_link_service
 from bisheng.share_link.api.schemas.share_link_schema import GenerateShareLinkRequest
@@ -13,7 +13,7 @@ router = APIRouter()
              response_model=UnifiedResponseModel)
 async def generate_share_link(
         req_param: GenerateShareLinkRequest = Body(..., description="generate share link request"),
-        login_user: UserPayload = Depends(get_login_user),
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
         share_link_service=Depends(get_share_link_service)
 ):
     """

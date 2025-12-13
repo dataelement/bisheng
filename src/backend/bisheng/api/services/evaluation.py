@@ -19,10 +19,10 @@ from loguru import logger
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.flow import FlowService
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import build_flow, build_input_keys_response
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import (UnifiedResponseModel, resp_200)
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.core.cache import InMemoryCache
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
@@ -30,9 +30,9 @@ from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.evaluation import (Evaluation, EvaluationDao, ExecType, EvaluationTaskStatus)
 from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersion
-from bisheng.database.models.user import UserDao
 from bisheng.graph.graph.base import Graph
 from bisheng.llm.domain.services import LLMService
+from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow
@@ -191,7 +191,7 @@ class EvaluationService:
         return f'evaluation_task_progress_{evaluation_id}'
 
     @classmethod
-    async def get_input_keys(cls, flow_id: int, version_id: int):
+    async def get_input_keys(cls, flow_id: str, version_id: int):
         artifacts = {}
         try:
             version_info = FlowVersionDao.get_version_by_id(version_id)
@@ -296,7 +296,7 @@ def execute_workflow_get_answer(workflow_info: FlowVersion, evaluation: Evaluati
         raise Exception(f"workflow status is unknown: {status_info}")
 
 
-def add_evaluation_task(evaluation_id: int):
+async def add_evaluation_task(evaluation_id: int):
     evaluation = EvaluationDao.get_one_evaluation(evaluation_id=evaluation_id)
     if not evaluation:
         return
@@ -313,8 +313,8 @@ def add_evaluation_task(evaluation_id: int):
             flow_version = FlowVersionDao.get_version_by_id(version_id=evaluation.version)
             if not flow_version:
                 raise Exception("Flow version not found")
-            input_keys = asyncio.run(EvaluationService.get_input_keys(flow_id=evaluation.unique_id,
-                                                                      version_id=evaluation.version))
+            input_keys = await EvaluationService.get_input_keys(flow_id=evaluation.unique_id,
+                                                                version_id=evaluation.version)
             first_key = list(input_keys.keys())[0]
 
             logger.info(f'evaluation task run flow input_keys: {input_keys} first_key: {first_key}')
@@ -322,23 +322,23 @@ def add_evaluation_task(evaluation_id: int):
             for index, one in enumerate(csv_data):
                 input_dict = deepcopy(input_keys)
                 input_dict[first_key] = one.get('question')
-                flow_index, flow_result = asyncio.run(FlowService.exec_flow_node(
+                flow_index, flow_result = await FlowService.exec_flow_node(
                     inputs=input_dict,
                     tweaks={},
                     index=0,
-                    versions=[flow_version]))
+                    versions=[flow_version])
                 one["answer"] = flow_result.get(flow_version.id)
                 current_progress += progress_increment
                 redis_client.set(redis_key, round(current_progress))
 
         elif evaluation.exec_type == ExecType.ASSISTANT.value:
-            assistant = AssistantDao.get_one_assistant(evaluation.unique_id)
+            assistant = await AssistantDao.aget_one_assistant(evaluation.unique_id)
             if not assistant:
                 raise Exception("Assistant not found")
-            gpts_agent = AssistantAgent(assistant_info=assistant, chat_id="")
-            asyncio.run(gpts_agent.init_assistant())
+            gpts_agent = AssistantAgent(assistant_info=assistant, chat_id="", invoke_user_id=evaluation.user_id)
+            await gpts_agent.init_assistant()
             for index, one in enumerate(csv_data):
-                messages = asyncio.run(gpts_agent.run(one.get('question')))
+                messages = await gpts_agent.run(one.get('question'))
                 if len(messages):
                     one["answer"] = messages[-1].content
                 current_progress += progress_increment
@@ -348,9 +348,10 @@ def add_evaluation_task(evaluation_id: int):
             if not workflow_info or workflow_info.flow_id != evaluation.unique_id:
                 raise Exception("workflow version info not found")
             for index, one in enumerate(csv_data):
-                one["answer"] = execute_workflow_get_answer(workflow_info, evaluation, one.get('question', ""))
+                one["answer"] = await asyncio.to_thread(execute_workflow_get_answer, workflow_info, evaluation,
+                                                        one.get('question', ""))
 
-        _llm = LLMService.get_evaluation_llm_object()
+        _llm = await LLMService.get_evaluation_llm_object(evaluation.user_id)
         llm = LangchainLLM(_llm)
         data_samples = {
             "question": [one.get('question') for one in csv_data],
@@ -360,7 +361,7 @@ def add_evaluation_task(evaluation_id: int):
 
         dataset = Dataset.from_dict(data_samples)
         answer_correctness_bisheng = AnswerCorrectnessBisheng(llm=llm, human_prompt=evaluation.prompt)
-        score = evaluate(dataset, metrics=[answer_correctness_bisheng])
+        score = await asyncio.to_thread(evaluate, dataset, [answer_correctness_bisheng])
         df = score.to_pandas()
         result = df.to_dict(orient="list")
         logger.debug(f'evaluation id = {evaluation_id} result: {result}')

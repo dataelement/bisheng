@@ -3,7 +3,7 @@ import { Accordion } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/bs-ui/sheet";
-import { getAssistantToolsApi } from "@/controllers/API/assistant";
+import { getToolsApi } from "@/controllers/API/tools";
 import { useMcpRefrensh } from "@/pages/BuildPage/tools";
 import ToolItem from "@/pages/BuildPage/tools/ToolItem";
 import { CpuIcon, Star, User } from "lucide-react";
@@ -19,7 +19,7 @@ export default function ToolsSheet({ select, onSelect, children }) {
 
 
     const loadMData = () => {
-        getAssistantToolsApi(type).then(res => {
+        getToolsApi(type).then(res => {
             setAllData(res)
             setKeyword('')
         })
@@ -84,7 +84,7 @@ export default function ToolsSheet({ select, onSelect, children }) {
                                 className="mt-4  text-[white]"
                                 onClick={() => window.open(__APP_ENV__.BASE_URL + "/build/tools?c=mcp")}
                             >
-                                添加 MCP 服务器
+                                {t("tools.addMcpServer")}
                             </Button>}
                             {type === 'mcp' && <Button
                                 variant="outline"
@@ -96,7 +96,7 @@ export default function ToolsSheet({ select, onSelect, children }) {
                                 }}
                             >
                                 {loading && <LoadIcon className="text-gray-800" />}
-                                刷新
+                                {t("tools.refresh")}
                             </Button>}
                         </div>
                         <Accordion type="single" collapsible className="w-full">
@@ -104,7 +104,7 @@ export default function ToolsSheet({ select, onSelect, children }) {
                                 options.length ? options.map(el => (
                                     <ToolItem
                                         key={el.id}
-                                        type={'add'}
+                                        type={type === 'default' ? '' : type}
                                         select={select}
                                         data={el}
                                         onSelect={onSelect}

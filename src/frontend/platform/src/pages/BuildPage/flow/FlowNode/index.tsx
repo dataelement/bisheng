@@ -15,6 +15,7 @@ import ParameterGroup from './ParameterGroup';
 import RunLog from './RunLog';
 import { RunTest } from './RunTest';
 import { useUpdateVariableState } from './flowNodeStore';
+import { useTranslation } from 'react-i18next';
 
 export const CustomHandle = ({ id = '', node, isLeft = false, className = '' }) => {
     const [openLeft, setOpenLeft] = useState(false);
@@ -107,14 +108,15 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
     const runRef = useRef(null)
     const { message } = useToast()
     const [currentTab, setCurrentTab] = useState<undefined | string>(node.tab && node.tab.value)
+    const { t } = useTranslation('flow')
 
     // 检查知识库检索设置
     const hasKnowledgeSearchEnabled = useMemo(() => {
         const knowledgeGroup = node.group_params.find(group => group.name === '知识库检索设置');
-        
+
         if (knowledgeGroup && knowledgeGroup.params) {
             const thirdItem = knowledgeGroup.params[2]; // 第三项（索引为2）
-            
+
             return thirdItem.value && thirdItem.value?.conditions?.length > 0 && thirdItem.value?.enabled;
         }
         return false;
@@ -126,7 +128,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
     // 动态计算节点宽度类名
     const nodeWidthClass = useMemo(() => {
         const baseClasses = ['condition'];
-        
+
         if (hasKnowledgeSearchEnabled) {
             baseClasses.push('rag');
             baseClasses.push('knowledge_retriever');
@@ -186,7 +188,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
         const knowledgeParam = node.group_params
             .flatMap(group => group.params)
             .find(param => param.type === "knowledge_select_multi");
-        
+
         if (knowledgeParam && knowledgeParam.value && Array.isArray(knowledgeParam.value.value)) {
             const ids = knowledgeParam.value.value.map(kb => String(kb.key));
             return ids;
@@ -218,7 +220,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                 <RunLog node={node}>
                     <div className='bisheng-node-top flex items-center'>
                         <LoadingIcon className='size-5 text-[#B3BBCD]' />
-                        <span className='text-sm text-[#B3BBCD]'>BISHENG</span>
+                        <span className='node-face text-sm text-[#B3BBCD]'>BISHENG</span>
                     </div>
                 </RunLog>
 
@@ -276,7 +278,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                 <div className='-nowheel bg-[#F7F8FB] dark:bg-background pb-5 rounded-b-[20px]'>
                     <div className={expend || ['output', 'condition', 'end'].includes(node.type) ? `` : 'h-0 overflow-hidden'}>
                         {node.tab && <NodeTabs
-                            data={node.tab}
+                            data={node}
                             onChange={(val) => {
                                 setCurrentTab(val)
                                 node.tab.value = val
@@ -327,6 +329,7 @@ export default CustomNode;
 const useEventMaster = (node, setNodeError) => {
     const paramValidateEntities = useRef({})
     const varValidateEntities = useRef({})
+    const { t } = useTranslation('flow')
 
     const validateParams = (noTemporaryFile) => {
         const errors = []
@@ -335,7 +338,7 @@ const useEventMaster = (node, setNodeError) => {
             if (param.tab && node.tab && node.tab.value !== param.tab) return
             const msg = validate()
             if (noTemporaryFile && msg === 'input_file') {
-                errors.push('临时知识库不支持单节点调试')
+                errors.push(t('tmpKnowledgeBaseNotSupportSingleNodeDebug'));
             } else {
                 msg && msg !== 'input_file' && errors.push(msg)
             }

@@ -1,3 +1,4 @@
+import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
 import { Label } from "@/components/bs-ui/label";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
@@ -6,9 +7,8 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import VarInput from "./VarInput";
-import { Badge } from "@/components/bs-ui/badge";
 
-export default function VarTextareaUploadItem({ nodeId, data, onChange, onValidate, onVarEvent }) {
+export default function VarTextareaUploadItem({ nodeId, data, onChange, onValidate, onVarEvent, i18nPrefix }) {
     // console.log('data.value :>> ', data.value);
     const handleInputChange = (msg) => {
         onChange({ msg, files })
@@ -20,12 +20,12 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange, onValida
     const { files, handleFileUpload, handleFileRemove } = useFileUpload(data.value?.files || [], handleFilesChange);
 
     const [error, setError] = useState(false)
-    const { t } = useTranslation()
+    const { t } = useTranslation('flow')
     useEffect(() => {
         data.required && onValidate(() => {
             if (!data.value?.msg?.trim() && data.value?.files.length === 0) {
                 setError(true)
-                return data.label + ' ' + t('required')
+                return t(`${i18nPrefix}label`) + ' ' + t('required')
             }
             setError(false)
             return false
@@ -37,13 +37,14 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange, onValida
         <div className='node-item mb-4 nodrag' data-key={data.key}>
             <div className="flex justify-between items-center">
                 <Label className="flex items-center bisheng-label">
-                    消息内容变量
+                    {t('messageContentVariable')}
                 </Label>
                 <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">{data.key}</Badge>
             </div>
             <VarInput
                 error={error}
-                placeholder={data.placeholder}
+                placeholder={t(`${i18nPrefix}placeholder`)}
+                label={t(`${i18nPrefix}label`)}
                 itemKey={data.key}
                 nodeId={nodeId}
                 paramItem={data}
@@ -55,24 +56,11 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange, onValida
                 {/* Display uploaded images */}
                 <div className="flex flex-wrap gap-4 p-2">
                     {
-                        files.map((file, index) => (
-                            // /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(file.name.toLocaleLowerCase()) ?
-                            //     <div key={index} className="relative border rounded-md size-12 my-2">
-                            //         <img src={file.path} alt="" className="object-cover w-12 h-12 rounded-md" />
-                            //         <Button
-                            //             size="icon"
-                            //             variant="outline"
-                            //             className="p-0 size-5 rounded-full absolute right-[-10px] top-[-10px] bg-background"
-                            //             onClick={() => handleFileRemove(file.path)}
-                            //         >
-                            //             <X size={14} />
-                            //         </Button>
-                            //     </div> :
+                        files.map((file) => (
                             <div className="max-w-56 relative flex rounded-md border px-2 py-1 items-center gap-2 bg-muted">
                                 <File className="min-w-5" />
                                 <div className="max-w-full flex-1 pr-4">
                                     <p className="w-full font-bold truncate">{file.name}</p>
-                                    {/* <span>{file.path.split('.')[1]}</span> */}
                                 </div>
                                 <Button
                                     size="icon"

@@ -7,6 +7,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { speechToText } from '@/controllers/API/workbench';
 import VoiceRecordingIcon from '../bs-ui/voice';
 import { useAudioPlayerStore, useAudioStore } from './audioPlayerStore';
+import { useTranslation } from 'react-i18next';
 
 // --- 核心音频处理逻辑 ---
 const encodeWAV = (audioBuffer) => {
@@ -78,10 +79,10 @@ const convertBlobToWav = async (blob) => {
         const audioBuffer = await audioContext.decodeAudioData(fileReader.result);
         const wavBlob = encodeWAV(audioBuffer);
         resolve(wavBlob);
-        audioContext.close();
+        if (audioContext.state !== 'closed') await audioContext.close();
       } catch (err) {
         reject(new Error("音频解码失败: " + err.message));
-        audioContext.close();
+        if (audioContext.state !== 'closed') await audioContext.close();
       }
     };
 
@@ -97,12 +98,22 @@ const convertBlobToWav = async (blob) => {
 const SpeechToTextComponent = ({ disabled, onChange }) => {
   const [version] = useState(window.chat_version || 'v1');
   const { toast } = useToast();
-  const [isRecording, setIsRecording] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [recordDuration, setRecordDuration] = useState(0); // 录音时长（秒）
+  const { t } = useTranslation('knowledge')
+  const [isRecording, _setIsRecording] = useState(false);
+  const isRecordingRef = useRef(false);
+  const setIsRecording = (val) => {
+    isRecordingRef.current = val;
+    _setIsRecording(val);
+  }
+  const [isProcessing, _setIsProcessing] = useState(false);
+  const isProcessingRef = useRef(false);
+  const setIsProcessing = (val) => {
+    isProcessingRef.current = val;
+    _setIsProcessing(val);
+  }
+  const [_, setRecordDuration] = useState(0); // 录音时长（秒）
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
-  const audioContextRef = useRef(null);
   const timerRef = useRef(null); // 定时器引用
   const maxRecordTime = 600; // 最大录音时长：10分钟 = 600秒
   const { stopAudio, setCurrentPlayingId } = useAudioPlayerStore();
@@ -136,11 +147,6 @@ const SpeechToTextComponent = ({ disabled, onChange }) => {
       });
       stopAudio(); // 停止音频播放
       setCurrentPlayingId(null); // 重置当前播放ID，避免状态残留
-      // 初始化AudioContext（用于优化编码）
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)({
-        sampleRate: 44100
-      });
-      audioContextRef.current = audioContext;
 
       // 初始化MediaRecorder
       const options = { mimeType: 'audio/webm; codecs=opus' };
@@ -173,9 +179,6 @@ const SpeechToTextComponent = ({ disabled, onChange }) => {
           if (mediaRecorderRef.current?.stream) {
             mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
           }
-          if (audioContextRef.current) {
-            await audioContextRef.current.close();
-          }
           // 清除定时器
           if (timerRef.current) {
             clearInterval(timerRef.current);
@@ -207,7 +210,7 @@ const SpeechToTextComponent = ({ disabled, onChange }) => {
           }
           return newDuration;
         });
-      }, 600000);
+      }, 1000);
 
     } catch (err) {
       toast({
@@ -220,8 +223,8 @@ const SpeechToTextComponent = ({ disabled, onChange }) => {
 
   // 停止录音
   const stopRecording = () => {
-    if (isProcessing) return;
-    if (mediaRecorderRef.current && isRecording) {
+    if (isProcessingRef.current) return;
+    if (mediaRecorderRef.current && isRecordingRef.current) {
       setIsProcessing(true);
       mediaRecorderRef.current.stop();
       setIsRecording(false);
@@ -241,9 +244,6 @@ const SpeechToTextComponent = ({ disabled, onChange }) => {
       }
       if (mediaRecorderRef.current?.stream) {
         mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-      }
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
       }
       setIsLoading(false);
     };
@@ -272,7 +272,8 @@ const SpeechToTextComponent = ({ disabled, onChange }) => {
       toast({
         title: i18next.t('prompt'),
         variant: 'error',
-        description: '语音识别不可用，请联系管理员'
+        // description: '语音识别不可用，请联系管理员'
+        description: t('unavailable')
       });
     } finally {
       setIsProcessing(false);

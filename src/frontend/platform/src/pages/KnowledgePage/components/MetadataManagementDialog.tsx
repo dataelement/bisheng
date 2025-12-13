@@ -10,6 +10,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { cname } from "@/components/bs-ui/utils"
 import { addMetadata, updateMetadataFields, deleteMetadataFields } from "@/controllers/API"
 import { QuestionTooltip, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip"
+import { useTranslation } from "react-i18next"
 
 type MetadataType = "String" | "Number" | "Time"
 
@@ -56,28 +57,31 @@ const TypeSelector = memo(({
     newType: MetadataType;
     setNewType: (type: MetadataType) => void;
     isSmallScreen: boolean;
-}) => (
-    <div className="space-y-1.5">
-        <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>类型</label>
-        <div className="flex gap-1">
-            {(["String", "Number", "Time"] as MetadataType[]).map((type) => (
-                <button
-                    key={type}
-                    onClick={() => setNewType(type)}
-                    className={cname(
-                        "flex-1 rounded font-medium transition-colors",
-                        newType === type
-                            ? "bg-blue-600 text-white"
-                            : "bg-gray-200 text-gray-700 hover:bg-gray-300",
-                        isSmallScreen ? "py-1.5 px-2 text-xs" : "py-2 px-4"
-                    )}
-                >
-                    {type}
-                </button>
-            ))}
+}) => {
+    const { t } = useTranslation('knowledge')
+    return (
+        <div className="space-y-1.5">
+            <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>{t('type')}</label>
+            <div className="flex gap-1">
+                {(["String", "Number", "Time"] as MetadataType[]).map((type) => (
+                    <button
+                        key={type}
+                        onClick={() => setNewType(type)}
+                        className={cname(
+                            "flex-1 rounded font-medium transition-colors",
+                            newType === type
+                                ? "bg-blue-600 text-white"
+                                : "bg-gray-200 text-gray-700 hover:bg-gray-300",
+                            isSmallScreen ? "py-1.5 px-2 text-xs" : "py-2 px-4"
+                        )}
+                    >
+                        {type}
+                    </button>
+                ))}
+            </div>
         </div>
-    </div>
-))
+    )
+})
 
 interface MetadataManagementDialogProps {
     open: boolean;
@@ -96,6 +100,7 @@ export function MetadataManagementDialog({
     id,
     initialMetadata,
 }: MetadataManagementDialogProps) {
+    const { t } = useTranslation('knowledge')
     const mainDialogRef = useRef<HTMLDivElement>(null)
     const [sideDialogPosition, setSideDialogPosition] = useState({ top: 0, left: 0 })
     const [metadataList, setMetadataList] = useState<Metadata[]>([])
@@ -114,7 +119,6 @@ export function MetadataManagementDialog({
     const isSideDialogAtRisk = isSmallScreen && sideDialog.open;
     const mainDialogMaxWidth = isSmallScreen ? 600 : 1200;
 
-    // 添加状态控制侧边弹窗显示时机
     const [isSideDialogReady, setIsSideDialogReady] = useState(false);
 
     useEffect(() => {
@@ -183,21 +187,21 @@ export function MetadataManagementDialog({
 
     const validateName = useCallback((name: string): { valid: boolean; error?: string } => {
         const isBuiltInName = BUILT_IN_METADATA.some(meta => meta.name === name);
-        if (isBuiltInName) return { valid: false, error: "该名称为系统内置元数据，不可使用" };
-        if (!name || name.trim().length === 0) return { valid: false, error: "名称不能为空。" };
-        if (name.length > 255) return { valid: false, error: "名称不能超过255个字符。" };
-        if (!/^[a-z][a-z0-9_]*$/.test(name)) return { valid: false, error: "必须以小写字母开头，且只能包含小写字母、数字和下划线。" };
+        if (isBuiltInName) return { valid: false, error: t('builtInNameError') };
+        if (!name || name.trim().length === 0) return { valid: false, error: t('nameRequired') };
+        if (name.length > 255) return { valid: false, error: t('nameTooLong') };
+        if (!/^[a-z][a-z0-9_]*$/.test(name)) return { valid: false, error: t('nameFormatError') };
         const nameExists = metadataList.some((m) => m.name === name && m.id !== selectedMetadata?.id);
-        if (nameExists) return { valid: false, error: "元数据名已存在。" };
+        if (nameExists) return { valid: false, error: t('nameExists') };
         return { valid: true };
-    }, [metadataList, selectedMetadata]);
+    }, [metadataList, selectedMetadata, t]);
 
     const handleCreateClick = useCallback(() => {
         setSideDialog({ type: "create", open: true });
         setNewType("String");
         setNewName("");
         setError("");
-        setIsSideDialogReady(false); // 重置准备状态
+        setIsSideDialogReady(false);
     }, []);
 
     const handleEditClick = useCallback((metadata: Metadata) => {
@@ -205,12 +209,12 @@ export function MetadataManagementDialog({
         setNewName(metadata.name);
         setSideDialog({ type: "rename", open: true });
         setError("");
-        setIsSideDialogReady(false); // 重置准备状态
+        setIsSideDialogReady(false);
     }, []);
 
     const closeSideDialog = useCallback(() => {
         setSideDialog(prev => ({ ...prev, open: false }));
-        setIsSideDialogReady(false); // 重置准备状态
+        setIsSideDialogReady(false);
         setTimeout(() => {
             setSelectedMetadata(null);
             setNewName("");
@@ -219,9 +223,9 @@ export function MetadataManagementDialog({
     }, []);
 
     const handleCreateSave = useCallback(async () => {
-        if (!id) { setError("知识库ID不存在，无法创建"); return; }
+        if (!id) { setError(t('knowledgeIdMissing')); return; }
         const validation = validateName(newName);
-        if (!validation.valid) { setError(validation.error || "输入不符合规范"); return; }
+        if (!validation.valid) { setError(validation.error || t('inputInvalid')); return; }
 
         setIsLoading(true);
         try {
@@ -231,18 +235,17 @@ export function MetadataManagementDialog({
             closeSideDialog();
             if (onSave) onSave(metadataList);
         } catch (err: any) {
-            setError(err.message || "创建元数据失败，请稍后重试");
+            setError(err.message || t('createFailed'));
             console.error("创建失败:", err);
         } finally {
             setIsLoading(false);
         }
-    }, [newName, newType, id, closeSideDialog, validateName, metadataList, onSave]);
+    }, [newName, newType, id, closeSideDialog, validateName, metadataList, onSave, t]);
 
-    // --- 重命名调用 updateMetadataFields ---
     const handleRenameSave = useCallback(async () => {
-        if (!id || !selectedMetadata) { setError("操作失败，缺少必要信息"); return; }
+        if (!id || !selectedMetadata) { setError(t('operationFailed')); return; }
         const validation = validateName(newName);
-        if (!validation.valid) { setError(validation.error || "输入不符合规范"); return; }
+        if (!validation.valid) { setError(validation.error || t('inputInvalid')); return; }
         if (selectedMetadata.name === newName) { closeSideDialog(); return; }
 
         setIsLoading(true);
@@ -252,16 +255,16 @@ export function MetadataManagementDialog({
             closeSideDialog();
             if (onSave) onSave(metadataList);
         } catch (err: any) {
-            setError(err.message || "重命名元数据失败，请稍后重试");
+            setError(err.message || t('renameFailed'));
             console.error("重命名失败:", err);
         } finally {
             setIsLoading(false);
         }
-    }, [newName, selectedMetadata, id, closeSideDialog, validateName, metadataList, onSave]);
+    }, [newName, selectedMetadata, id, closeSideDialog, validateName, metadataList, onSave, t]);
 
     const handleDelete = useCallback(async (metadata: Metadata) => {
         if (!id) {
-            setError("知识库ID不存在，无法删除");
+            setError(t('knowledgeIdMissing'));
             return;
         }
 
@@ -271,19 +274,19 @@ export function MetadataManagementDialog({
             setMetadataList((prev) => prev.filter((m) => m.id !== metadata.id));
             if (onSave) onSave(metadataList);
         } catch (err: any) {
-            setError(err.message || "删除元数据失败，请稍后重试");
+            setError(err.message || t('deleteFailed'));
             console.error("删除失败:", err);
         } finally {
             setIsLoading(false);
         }
-    }, [id, metadataList, onSave]);
+    }, [id, metadataList, onSave, t]);
 
     const sortedMetadata = [...metadataList].sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime());
 
     const BubbleConfirm = ({
         trigger,
         onConfirm,
-        message = "确认删除？"
+        message = t('confirmDelete')
     }) => {
         const [isOpen, setIsOpen] = useState(false);
         const triggerRef = useRef(null);
@@ -304,7 +307,6 @@ export function MetadataManagementDialog({
 
         return (
             <div ref={triggerRef} className="relative inline-block">
-                {/* 触发元素（删除图标按钮） */}
                 <button
                     onClick={() => setIsOpen(!isOpen)}
                     className="p-1.5 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -313,13 +315,12 @@ export function MetadataManagementDialog({
                     {trigger.props.children}
                 </button>
 
-                {/* 气泡确认弹窗 */}
                 {isOpen && (
                     <div className="absolute bottom-full left-1/2 mb-2 w-56 bg-white border rounded-lg shadow-lg p-3 z-50"
                         style={{ transform: 'translateX(-84%)' }}>
                         <div className="flex">
                             <CircleQuestionMark size={14} className="text-red-500" />
-                            <div className="flex -mt-1 ml-1 font-medium text-sm">提示</div>
+                            <div className="flex -mt-1 ml-1 font-medium text-sm">{t('tip')}</div>
                         </div>
                         <div className="flex gap-2 mb-3 mt-2">
                             <p className="text-sm ml-10 text-gray-700 font-medium">{message}</p>
@@ -332,7 +333,7 @@ export function MetadataManagementDialog({
                                 onClick={() => setIsOpen(false)}
                                 className="px-2 py-1 h-7 min-h-7 text-xs"
                             >
-                                取消
+                                {t('cancel')}
                             </Button>
                             <Button
                                 size="sm"
@@ -342,10 +343,9 @@ export function MetadataManagementDialog({
                                 }}
                                 className="px-2 py-1 h-7 min-h-7 text-xs"
                             >
-                                确定
+                                {t('confirm')}
                             </Button>
                         </div>
-                        {/* 气泡尖角 - 指向下方的删除图标 */}
                         <div className="absolute top-full right-7 -mt-2 w-4 h-4 bg-white border-r border-b transform rotate-45"></div>
                     </div>
                 )}
@@ -400,7 +400,7 @@ export function MetadataManagementDialog({
                     }}
                 >
                     <DialogHeader>
-                        <DialogTitle className={isSmallScreen ? "text-base" : ""}>元数据</DialogTitle>
+                        <DialogTitle className={isSmallScreen ? "text-base" : ""}>{t('metaData')}</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-6">
                         <button
@@ -408,7 +408,7 @@ export function MetadataManagementDialog({
                             className={cname("w-full flex items-center justify-center gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors", isSmallScreen ? "py-2" : "py-3")}
                         >
                             <Plus size={isSmallScreen ? 16 : 20} />
-                            <span>新建元数据</span>
+                            <span>{t('createMetadata')}</span>
                         </button>
 
                         <div className="space-y-2">
@@ -442,8 +442,8 @@ export function MetadataManagementDialog({
                                                     </TooltipTrigger>
                                                     <TooltipContent className="max-w-[200px] whitespace-normal"
                                                         style={{
-                                                            whiteSpace: 'normal', // 强制文本正常换行
-                                                            wordBreak: 'break-word' // 在必要时允许单词内换行，防止长单词溢出
+                                                            whiteSpace: 'normal',
+                                                            wordBreak: 'break-word'
                                                         }}
                                                     >
                                                         <p>{metadata.name}</p>
@@ -465,7 +465,7 @@ export function MetadataManagementDialog({
                                                     <Trash2 size={isSmallScreen ? 16 : 18} />
                                                 </button>
                                             }
-                                            message="确认删除该元数据？"
+                                            message={t('confirmDeleteMetadata')}
                                             onConfirm={() => handleDelete(metadata)}
                                         />
                                     </div>
@@ -475,9 +475,9 @@ export function MetadataManagementDialog({
 
                         <div className="space-y-3">
                             <div className="flex items-center gap-2">
-                                <h3 className={cname("font-semibold", isSmallScreen ? "text-sm" : "")}>内置元数据</h3>
+                                <h3 className={cname("font-semibold", isSmallScreen ? "text-sm" : "")}>{t('builtInMetadata')}</h3>
                                 <div className="group relative">
-                                    <QuestionTooltip className="relative top-0.5 ml-1" content="内置元数据是系统预定义的元数据"></QuestionTooltip>
+                                    <QuestionTooltip className="relative top-0.5 ml-1" content={t('builtInMetadataTooltip')}></QuestionTooltip>
                                 </div>
                             </div>
                             <div className="space-y-2">
@@ -502,16 +502,16 @@ export function MetadataManagementDialog({
                     {sideDialog.type === "create" && (
                         <>
                             <DialogHeader>
-                                <DialogTitle className={isSmallScreen ? "text-base" : ""}>新建元数据</DialogTitle>
-                                <DialogDescription className={isSmallScreen ? "text-xs" : ""}>请定义新元数据的类型和名称。</DialogDescription>
+                                <DialogTitle className={isSmallScreen ? "text-base" : ""}>{t('createMetadata')}</DialogTitle>
+                                <DialogDescription className={isSmallScreen ? "text-xs" : ""}>{t('createMetadataDescription')}</DialogDescription>
                             </DialogHeader>
                             <div className="space-y-3">
                                 <TypeSelector newType={newType} setNewType={setNewType} isSmallScreen={isSmallScreen} />
                                 <div className="space-y-1.5">
-                                    <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>名称</label>
+                                    <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>{t('metadatainfor.name')}</label>
                                     <Input
                                         id="create-metadata-name" value={newName} onChange={(e) => { setNewName(e.target.value); if (error) setError(""); }}
-                                        placeholder="请输入" autoComplete="off" autoFocus
+                                        placeholder={t('pleaseEnter')} autoComplete="off" autoFocus
                                         className={cname(error ? "border-red-500 border-2" : "", isSmallScreen ? "text-sm h-8" : "")}
                                     />
                                     {error && (
@@ -521,9 +521,9 @@ export function MetadataManagementDialog({
                                     )}
                                 </div>
                                 <div className={cname("flex justify-end gap-2 pt-2", isSmallScreen ? "" : "pt-4 gap-3")}>
-                                    <Button variant="outline" onClick={closeSideDialog} className={isSmallScreen ? "px-3 py-1 text-xs" : ""}>取消</Button>
+                                    <Button variant="outline" onClick={closeSideDialog} className={isSmallScreen ? "px-3 py-1 text-xs" : ""}>{t('cancel')}</Button>
                                     <Button onClick={handleCreateSave} disabled={isLoading} className={cname("bg-blue-600 hover:bg-blue-700", isSmallScreen ? "px-3 py-1 text-xs" : "")}>
-                                        {isLoading ? "保存中..." : "保存"}
+                                        {isLoading ? t('saving') : t('save')}
                                     </Button>
                                 </div>
                             </div>
@@ -532,15 +532,15 @@ export function MetadataManagementDialog({
                     {sideDialog.type === "rename" && (
                         <>
                             <DialogHeader>
-                                <DialogTitle className={isSmallScreen ? "text-base" : ""}>重命名</DialogTitle>
-                                <DialogDescription className={isSmallScreen ? "text-xs" : ""}>请输入新的名称</DialogDescription>
+                                <DialogTitle className={isSmallScreen ? "text-base" : ""}>{t('rename')}</DialogTitle>
+                                <DialogDescription className={isSmallScreen ? "text-xs" : ""}>{t('renameDescription')}</DialogDescription>
                             </DialogHeader>
                             <div className="space-y-3">
                                 <div className="space-y-1.5">
-                                    <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>名称</label>
+                                    <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>{t('name')}</label>
                                     <Input
                                         id="rename-metadata-name" value={newName} onChange={(e) => { setNewName(e.target.value); if (error) setError(""); }}
-                                        placeholder="请输入" autoComplete="off" autoFocus
+                                        placeholder={t('pleaseEnter')} autoComplete="off" autoFocus
                                         className={cname(error ? "border-red-500 border-2" : "", isSmallScreen ? "text-sm h-8" : "")}
                                     />
                                     {error && (
@@ -550,9 +550,9 @@ export function MetadataManagementDialog({
                                     )}
                                 </div>
                                 <div className={cname("flex justify-end gap-2 pt-2", isSmallScreen ? "" : "pt-4 gap-3")}>
-                                    <Button variant="outline" onClick={closeSideDialog} className={isSmallScreen ? "px-3 py-1 text-xs" : ""}>取消</Button>
+                                    <Button variant="outline" onClick={closeSideDialog} className={isSmallScreen ? "px-3 py-1 text-xs" : ""}>{t('cancel')}</Button>
                                     <Button onClick={handleRenameSave} disabled={isLoading} className={cname("bg-blue-600 hover:bg-blue-700", isSmallScreen ? "px-3 py-1 text-xs" : "")}>
-                                        {isLoading ? "保存中..." : "保存"}
+                                        {isLoading ? t('saving') : t('save')}
                                     </Button>
                                 </div>
                             </div>

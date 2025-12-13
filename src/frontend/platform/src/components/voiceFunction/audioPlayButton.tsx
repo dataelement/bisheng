@@ -1,10 +1,10 @@
 // components/AudioPlayButton.tsx
-import { useState } from 'react';
-import { useAudioPlayerStore } from './audioPlayerStore';
-import { Loader, Volume2 } from 'lucide-react';
 import { textToSpeech } from '@/controllers/API/workbench';
-import { message, toast } from '../bs-ui/toast/use-toast';
-import i18next from 'i18next';
+import { Loader, Volume2 } from 'lucide-react';
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { toast } from '../bs-ui/toast/use-toast';
+import { useAudioPlayerStore } from './audioPlayerStore';
 
 interface AudioPlayButtonProps {
   messageId: string;
@@ -14,6 +14,7 @@ interface AudioPlayButtonProps {
 
 export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps) => {
   const [error, setError] = useState('');
+  const { t } = useTranslation('flow')
   const [version] = useState(window.chat_version || 'v1');
   const {
     currentPlayingId,
@@ -57,7 +58,7 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
       return audioUrl;
     } else {
       // 如果无法解析路径，抛出异常
-      throw new Error(`播放功能不可用，请联系管理员`);
+      throw new Error(t('playbackUnavailable'));
     }
   };
 
@@ -97,9 +98,9 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
     } catch (err) {
       console.error('播放请求异常详情:', err);
       toast({
-        title: i18next.t('prompt'),
+        title: t('prompt'),
         variant: 'error',
-        description: '播放功能不可用，请联系管理员'
+        description: t('playbackUnavailable')
       });
       setLoading(false);
       setCurrentPlayingId(null);

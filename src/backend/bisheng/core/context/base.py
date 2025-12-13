@@ -52,7 +52,7 @@ class BaseContextManager(ABC, Generic[T]):
     _default_timeout: float = 30.0  # 默认超时时间
     _default_retry_count: int = 3  # 默认重试次数
 
-    def __init__(self, name: str = None, timeout: float = None, retry_count: int = None):
+    def __init__(self, name: str = None, timeout: float = None, retry_count: int = None, **kwargs):
         self.name = name or getattr(self.__class__, 'name', self.__class__.__name__.lower())
         self.timeout = timeout or self._default_timeout
         self.retry_count = retry_count or self._default_retry_count

@@ -1,31 +1,11 @@
 import { FlagIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
-import { locationContext } from "@/contexts/locationContext";
 import { ChatMessageType } from "@/types/chat";
 import { formatStrTime } from "@/util/utils";
-import { useContext } from "react";
 import { useTranslation } from "react-i18next";
-import { useMessageStore } from "./messageStore";
 
 export default function MessageUser({ mark = false, useName = '', data, onMarkClick }: { data: ChatMessageType }) {
     const { t } = useTranslation()
-
-    const { appConfig } = useContext(locationContext)
-    const running = useMessageStore(state => state.running)
-
-    const handleSearch = () => {
-        window.open(appConfig.dialogQuickSearch + encodeURIComponent(msg))
-    }
-
-    const handleResend = (send) => {
-        const myEvent = new CustomEvent('userResendMsgEvent', {
-            detail: {
-                send,
-                message: data.message
-            }
-        });
-        document.dispatchEvent(myEvent);
-    }
 
     return <div className="flex justify-end w-full">
         <div className="w-fit group min-h-8 max-w-[90%]">

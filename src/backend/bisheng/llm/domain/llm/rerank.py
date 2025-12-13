@@ -8,9 +8,9 @@ from pydantic import Field
 from typing_extensions import Self
 
 from bisheng.core.ai import XinferenceRerank, CommonRerank, DashScopeRerank
+from bisheng.llm.domain.const import LLMServerType, LLMModelType
 from .llm import BishengBase
 from ..utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_limit_check_async
-from ...const import LLMServerType, LLMModelType
 
 
 def _get_xinference_params(params: dict, server_config: dict, model_config: dict) -> dict:
@@ -49,7 +49,6 @@ _node_type: Dict = {
 
 class BishengRerank(BishengBase, BaseDocumentCompressor):
     """Rerank LLM wrapper class"""
-    model: Optional[str] = Field(None, description="Rerank model name")
     rerank: Optional[BaseDocumentCompressor] = Field(None, description="Rerank client instance")
 
     @classmethod
@@ -83,13 +82,13 @@ class BishengRerank(BishengBase, BaseDocumentCompressor):
         if not node_conf:
             raise Exception(f'不支持rerank的服务提供方：{server_info.type}')
         self.model_info = model_info
-        self.model = model_info.model_name
+        self.model_name = model_info.model_name
         self.server_info = server_info
 
         params_handler = node_conf['params_handler']
         client_class = node_conf['client']
         params = {
-            "model": self.model,
+            "model": self.model_name,
         }
         params = params_handler(params, self.get_server_info_config(), self.get_model_info_config())
         try:

@@ -1,17 +1,15 @@
-import { Label } from "@/components/bs-ui/label";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import VarInput from "./VarInput";
 
-export default function VarTextareaItem({ nodeId, data, onChange, onValidate, onVarEvent }) {
+export default function VarTextareaItem({ node, nodeId, data, onChange, onValidate, onVarEvent, i18nPrefix }) {
     const [error, setError] = useState(false)
-    const { t } = useTranslation()
-
+    const { t } = useTranslation('flow')
     useEffect(() => {
         data.required && onValidate(() => {
             if (!data.value.trim()) {
                 setError(true)
-                return data.label + ' ' + t('required')
+                return t(`${i18nPrefix}label`) + ' ' + t('required')
             }
             setError(false)
             return false
@@ -29,14 +27,15 @@ export default function VarTextareaItem({ nodeId, data, onChange, onValidate, on
                 itemKey={data.key}
                 nodeId={nodeId}
                 paramItem={data}
-                placeholder={data.placeholder}
+                label={node.type === 'tool' ? data.label : t(`${i18nPrefix}label`)}
+                placeholder={data.placeholder && t(`${i18nPrefix}placeholder`)}
                 error={error}
                 value={data.value}
                 onChange={onChange}
                 onVarEvent={onVarEvent}
             >
             </VarInput>
-            <p className="bisheng-label text-xs">{data.desc}</p>
+            <p className="bisheng-label text-xs mt-1">{node.is_preset ? t(`tools.${node.tool_key}.params.${data.label}`, { ns: 'tool' }) : data.desc}</p>
         </div>
     );
 }

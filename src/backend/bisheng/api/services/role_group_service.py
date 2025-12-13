@@ -8,21 +8,22 @@ from loguru import logger
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import resp_200
-from bisheng.common.errcode.user import UserGroupNotDeleteError
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.errcode.user import UserGroupNotDeleteError, AdminUserUpdateForbiddenError
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao, FlowType
-from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.group import Group, GroupCreate, GroupDao, GroupRead, DefaultGroup
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.database.models.role import RoleDao
-from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
-from bisheng.database.models.user_role import UserRoleDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+from bisheng.user.domain.models.user import User, UserDao
+from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import get_request_ip
 
 
@@ -160,7 +161,7 @@ class RoleGroupService():
         # 判断下被操作用户是否是超级管理员
         user_role_list = UserRoleDao.get_user_roles(user_id)
         if any(one.role_id == AdminRole for one in user_role_list):
-            raise HTTPException(status_code=500, detail='系统管理员不允许编辑')
+            raise AdminUserUpdateForbiddenError()
 
         # 获取用户之前的所有分组
         old_group = UserGroupDao.get_user_group(user_id)
@@ -173,7 +174,7 @@ class RoleGroupService():
             old_group = [one for one in old_group if one in admin_group]
             # 说明此用户 不在此用户组管理员所管辖的用户组内
             if not old_group:
-                raise ValueError('没有权限设置用户组')
+                raise UnAuthorizedError()
         need_delete_group = old_group.copy()
         need_add_group = []
         for one in group_ids:

@@ -6,14 +6,16 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional, List, Dict, Callable
 
+from langchain_core.language_models import BaseChatModel
 from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
-from bisheng.api.services.tool import ToolServices
 from bisheng.api.v1.schema.linsight_schema import UserInputEventSchema
+from bisheng.common.services.config_service import settings
 from bisheng.core.cache.utils import create_cache_folder_async, CACHE_DIR
 from bisheng.core.external.http_client.http_client_manager import get_http_client
+from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models import LinsightExecuteTask
 from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao, ExecuteTaskStatusEnum, \
@@ -22,9 +24,8 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
     LinsightSessionVersion
 from bisheng.linsight import utils as linsight_execute_utils
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
-from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.services import LLMService
-from bisheng.common.services.config_service import settings
+from bisheng.tool.domain.services.tool import ToolServices
 from bisheng_langchain.linsight.agent import LinsightAgent
 from bisheng_langchain.linsight.const import TaskStatus, ExecConfig
 from bisheng_langchain.linsight.event import NeedUserInput, GenerateSubTask, ExecStep, TaskStart, TaskEnd, BaseEvent
@@ -59,7 +60,7 @@ class LinsightWorkflowTask:
         self.file_dir: Optional[str] = None
         self.session_version_id: Optional[str] = None
         self.step_event_extra_files: List[Dict] = []  # 用于存储步骤事件额外处理的文件信息
-        self.llm: Optional[BishengLLM] = None  # 用于存储LLM实例
+        self.llm: Optional[BaseChatModel] = None  # 用于存储LLM实例
 
     # ==================== 资源管理 ====================
 
@@ -106,25 +107,23 @@ class LinsightWorkflowTask:
         """异步任务执行入口"""
 
         self.session_version_id = session_version_id
+        trace_id_var.set(self.session_version_id)
+        logger.info(f"开始执行任务: session_version_id={self.session_version_id}")
+        try:
 
-        with logger.contextualize(trace_id=self.session_version_id):
-            logger.info(f"开始执行任务: session_version_id={self.session_version_id}")
+            async with self._managed_execution() as session_model:
+                await self._execute_workflow(session_model)
 
-            try:
-
-                async with self._managed_execution() as session_model:
-                    await self._execute_workflow(session_model)
-
-            except UserTerminationError:
-                logger.info(f"任务被用户主动终止: session_version_id={self.session_version_id}")
-            except TaskAlreadyInProgressError:
-                logger.warning(f"任务已在进行中: session_version_id={self.session_version_id}")
-            except TaskExecutionError as e:
-                logger.error(f"任务执行失败: session_version_id={self.session_version_id}")
-                await self._handle_execution_error(e)
-            except Exception as e:
-                logger.error(f"未知错误: session_version_id={self.session_version_id}, error={e}")
-                await self._handle_execution_error(e)
+        except UserTerminationError:
+            logger.info(f"任务被用户主动终止: session_version_id={self.session_version_id}")
+        except TaskAlreadyInProgressError:
+            logger.warning(f"任务已在进行中: session_version_id={self.session_version_id}")
+        except TaskExecutionError as e:
+            logger.error(f"任务执行失败: session_version_id={self.session_version_id}")
+            await self._handle_execution_error(e)
+        except Exception as e:
+            logger.error(f"未知错误: session_version_id={self.session_version_id}, error={e}")
+            await self._handle_execution_error(e)
 
     async def _execute_workflow(self, session_model: LinsightSessionVersion):
         """执行工作流的核心逻辑"""
@@ -133,7 +132,7 @@ class LinsightWorkflowTask:
         await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
 
         # 初始化执行组件
-        self.llm = await self._get_llm()
+        self.llm = await self._get_llm(invoke_user_id=session_model.user_id)
         tools = await self._generate_tools(session_model)
         try:
             # 生成工具列表
@@ -187,12 +186,14 @@ class LinsightWorkflowTask:
 
     # ==================== 组件初始化 ====================
 
-    async def _get_llm(self) -> BishengLLM:
+    async def _get_llm(self, invoke_user_id: int) -> BaseChatModel:
         """获取LLM实例"""
         try:
             workbench_conf = await LLMService.get_workbench_llm()
             linsight_conf = settings.get_linsight_conf()
-            return BishengLLM(model_id=workbench_conf.task_model.id, temperature=linsight_conf.default_temperature)
+            return await LLMService.get_bisheng_linsight_llm(invoke_user_id=invoke_user_id,
+                                                             model_id=workbench_conf.task_model.id,
+                                                             temperature=linsight_conf.default_temperature)
         except Exception as e:
             raise TaskExecutionError("任务已终止，请联系管理员检查灵思任务执行模型状态")
 

@@ -10,9 +10,9 @@ from sqlmodel.sql.expression import Select, SelectOfScalar, col
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
-from bisheng.database.models.user import UserDao
-from bisheng.database.models.user_role import UserRoleDao
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
+from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.models.user_role import UserRoleDao
 
 
 class KnowledgeTypeEnum(Enum):
@@ -171,6 +171,12 @@ class KnowledgeDao(KnowledgeBase):
     def get_list_by_ids(cls, ids: List[int]) -> List[Knowledge]:
         with get_sync_db_session() as session:
             return session.exec(select(Knowledge).where(Knowledge.id.in_(ids))).all()
+
+    @classmethod
+    async def aget_list_by_ids(cls, ids: List[int]) -> List[Knowledge]:
+        async with get_async_db_session() as session:
+            result = await session.exec(select(Knowledge).where(col(Knowledge.id).in_(ids)))
+            return result.all()
 
     @classmethod
     def _user_knowledge_filters(
@@ -461,3 +467,24 @@ class KnowledgeDao(KnowledgeBase):
             if not only_clear:
                 session.exec(delete(Knowledge).where(Knowledge.id == knowledge_id))
             session.commit()
+
+    @classmethod
+    def get_knowledge_by_time_range(cls, start_time: datetime, end_time: datetime, page: int = 0,
+                                    page_size: int = 0) -> List[Knowledge]:
+        """ 根据创建时间范围获取知识库列表 """
+        statement = select(Knowledge).where(
+            Knowledge.create_time >= start_time,
+            Knowledge.create_time < end_time
+        )
+        if page and page_size:
+            statement = statement.offset((page - 1) * page_size).limit(page_size)
+        statement = statement.order_by(col(Knowledge.id).asc())
+        with get_sync_db_session() as session:
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_first_knowledge(cls) -> Optional[Knowledge]:
+        """ 获取第一个知识库 """
+        statement = select(Knowledge).order_by(col(Knowledge.id).asc()).limit(1)
+        with get_sync_db_session() as session:
+            return session.exec(statement).first()

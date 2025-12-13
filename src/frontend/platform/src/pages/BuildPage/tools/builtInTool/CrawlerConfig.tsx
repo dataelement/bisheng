@@ -13,7 +13,7 @@ const defaultValues = {
 };
 
 const CrawlerConfigForm = ({ formData, onSubmit }) => {
-    const { t } = useTranslation();
+    const { t } = useTranslation('tool');
     const [localFormData, setLocalFormData] = useState(() => ({ ...defaultValues, ...formData }));
     const [errors, setErrors] = useState({});
 
@@ -41,7 +41,7 @@ const CrawlerConfigForm = ({ formData, onSubmit }) => {
     };
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-6"  autoComplete="off">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-6" autoComplete="off">
             {/* API Key */}
             <InputField
                 required
@@ -49,7 +49,7 @@ const CrawlerConfigForm = ({ formData, onSubmit }) => {
                 type="password"
                 id="api_key"
                 name="api_key"
-                placeholder={t('Enter API Key')}
+                placeholder={t('enterApiKey')}
                 value={localFormData.api_key}
                 onChange={handleChange}
                 error={errors.api_key}
@@ -71,18 +71,22 @@ const CrawlerConfigForm = ({ formData, onSubmit }) => {
                 type="number"
                 id="timeout"
                 name="timeout"
-                tooltip="爬虫在中止操作之前等待页面响应的最长持续时间（以毫秒为单位）。"
+                tooltip={t('timeoutTooltip')}
                 value={localFormData.timeout}
                 onChange={handleChange}
             />
-            <p className='border-t dark:border-gray-700 pt-4 text-sm font-bold'>深度爬取详细配置（以下配置修改仅对Crawl有效）</p>
+
+            <p className='border-t dark:border-gray-700 pt-4 text-sm font-bold'>
+                {t('deepCrawlDetailConfigDescription')}
+            </p>
+
             {/* Maxdepth */}
             <InputField
                 label="Maxdepth"
                 type="number"
                 id="maxdepth"
                 name="maxdepth"
-                tooltip="相对于输入的 URL 进行抓取的最大深度。"
+                tooltip={t('maxdepthTooltip')}
                 value={localFormData.maxdepth}
                 onChange={handleChange}
             />
@@ -93,7 +97,7 @@ const CrawlerConfigForm = ({ formData, onSubmit }) => {
                 type="number"
                 id="limit"
                 name="limit"
-                tooltip="要抓取的最大页面数。"
+                tooltip={t('limitTooltip')}
                 value={localFormData.limit}
                 onChange={handleChange}
             />
@@ -102,11 +106,11 @@ const CrawlerConfigForm = ({ formData, onSubmit }) => {
             <DialogFooter>
                 <DialogClose>
                     <Button variant="outline" className="px-11" type="button">
-                        {t('cancel')}
+                        {t('cancel', { ns: 'bs' })}
                     </Button>
                 </DialogClose>
                 <Button className="px-11" type="submit">
-                    {t('save')}
+                    {t('save', { ns: 'bs' })}
                 </Button>
             </DialogFooter>
         </form>

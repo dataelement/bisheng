@@ -3,25 +3,21 @@ import { Button } from '@/components/bs-ui/button';
 import { Input } from '@/components/bs-ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/bs-ui/radio';
 import { generateUUID } from '@/components/bs-ui/utils';
-import i18next from 'i18next';
-import { useState } from 'react';
+import i18next, { use } from 'i18next';
+import { useMemo, useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
-
-// 生成稳定的策略ID（与父组件保持一致）
-const getStrategyId = (regexStr, position) => {
-  // 简单的哈希函数，确保相同内容生成相同ID
-  let hash = 0;
-  const str = `${regexStr}-${position}`;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash) + str.charCodeAt(i);
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return `strategy-${Math.abs(hash)}`;
-};
+export const ruleI18nMap = {
+  '\\n': 'singleNewlineRule',
+  '\\n\\n': 'doubleNewlineRule',
+  '第.{1,3}章': 'chapterRule',
+  '第.{1,3}条': 'articleRule',
+  '。': 'chinesePeriodRule',
+  '\\.': 'englishPeriodRule',
+}
 
 const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) => {
-  const { t } = useTranslation('knowledge')
+  const { t } = useTranslation('knowledge');
   const [customRegex, setCustomRegex] = useState('');
   const [position, setPosition] = useState('after');
 
@@ -38,40 +34,40 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
   const handleAddCustomStrategy = () => {
     if (customRegex.trim()) {
       const newStrategy = {
-        id: getStrategyId(customRegex.trim(), position),
+        id: generateUUID(6),
         regex: customRegex.trim(),
         position,
-        rule: `自定义规则: ${customRegex.trim()}`
+        rule: t('customRule'),
       };
       setStrategies([...strategies, newStrategy]);
       setCustomRegex('');
-      // 检查是否已存在相同策略
-      // const exists = strategies.some(s => s.id === newStrategy.id);
-      // if (!exists) {
-      //   setStrategies([...strategies, newStrategy]);
-      //   setCustomRegex('');
-      // }
     }
   };
-
-  const handleRegexClick = (reg, pos, rule) => {
+  
+  const handleRegexClick = (regex, mode) => {
+    // 根据regex获取对应的规则key
     const newStrategy = {
-      id: getStrategyId(reg, pos),
-      regex: reg,
-      position: pos,
-      rule
+      id: generateUUID(6),
+      regex:t(`predefinedRules.${ruleI18nMap[regex]}.label`),
+      position: mode,
+      rule: t(`predefinedRules.${ruleI18nMap[regex]}.desc`),
     };
     setStrategies([...strategies, newStrategy]);
-    // 检查是否已存在相同策略
-    // const exists = strategies.some(s => s.id === newStrategy.id);
-    // if (!exists) {
-    //   setStrategies([...strategies, newStrategy]);
-    // }
   };
 
   const handleDelete = (id) => {
     setStrategies(strategies.filter(item => item.id !== id));
   };
+
+const [predefinedRules] = useState([
+    { regexKey:  '\\n', mode: 'after' },
+    { regexKey:'\\n\\n', mode: 'after' },
+    { regexKey:  '第.{1,3}章', mode: 'before' },
+    { regexKey: '第.{1,3}条', mode: 'before' },
+    { regexKey: '。', mode: 'after' },
+    { regexKey: '\\.', mode: 'after' }
+
+  ]);
 
   return (
     <div className='flex gap-6'>
@@ -136,41 +132,60 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
         </div>
         <p className='text-xs text-gray-500 pt-1'>{t('splitPriorityInfo')}</p>
       </div>
-      
-      <div className="relative flex-1 flex flex-col gap-4">
+
+      <div className="flex-1 flex flex-col gap-3 px-1"> 
         <h3 className="text-sm text-left font-medium text-gray-700">{t('universalRules')}:</h3>
         <div className="flex flex-wrap gap-2">
-          <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\n', 'after', '单换行后切分，用于分隔普通换行')}>\n✂️</Button>
-          <Button className="px-2 h-6" variant="secondary" onClick={() => handleRegexClick('\\n\\n', 'after', '双换行后切分，用于分隔段落')}>\n\n✂️</Button>
-          {i18next.language === 'zh' && <>
-            <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}章', 'before', '"第X章"前切分，切分章节等')}>{'✂️第.{1,3}章'}</Button>
-            <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}条', 'before', '"第X条"前切分，切分条目等')}>{'✂️第.{1,3}条'}</Button>
-          </>}
-          <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('。', 'after', '中文句号后切分，中文断句')}>。✂️</Button>
-          <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\.', 'after', '英文句号后切分，英文断句')}>\.✂️</Button>
+          {predefinedRules.map((rule, index) => {
+            const regexDisplay = t(`predefinedRules.${ruleI18nMap[rule.regexKey]}.label`);
+            return (
+              <Button
+                key={index}
+                className="px-2 h-6"
+                variant="secondary"
+                onClick={() => handleRegexClick(rule.regexKey, rule.mode)}
+              >
+                {rule.mode === 'before' ? `✂️${regexDisplay}` : `${regexDisplay}✂️`}
+              </Button>
+            );
+          })}
         </div>
         
         <h3 className="text-sm text-left font-medium text-gray-700"> {t('addCustomRule')}:</h3>
         <div className="text-sm flex flex-wrap items-center gap-2">
-          <div className='flex items-center gap-1'>
+          <div className='flex items-center gap-1 w-full'>
             <span>{t('in')}</span>
             <Input
               value={customRegex}
               onChange={(e) => setCustomRegex(e.target.value)}
               placeholder={t('enterRegex')}
-              className='w-full py-0 h-6'
+              className='flex-1 py-0 h-6' 
             />
           </div>
         </div>
-        
-        <RadioGroup value={position} onValueChange={setPosition} className="flex items-center text-sm">
-          <RadioGroupItem value="before" />{t('before')}
-          <RadioGroupItem value="after" />{t('after')}
-          <span>切分</span>
+
+        <RadioGroup 
+          value={position} 
+          onValueChange={setPosition} 
+          className="flex items-center flex-wrap text-sm gap-2" 
+        >
+          <div className="flex items-center gap-1"> 
+            <RadioGroupItem value="before" id={`radio-before-${Date.now()}`} />
+            <label htmlFor={`radio-before-${Date.now()}`} className="cursor-pointer">
+              {t('before')}
+            </label>
+          </div>
+          <div className="flex items-center gap-1">
+            <RadioGroupItem value="after" id={`radio-after-${Date.now()}`} />
+            <label htmlFor={`radio-after-${Date.now()}`} className="cursor-pointer">
+              {t('after')}
+            </label>
+          </div>
+          <span className="ml-1">{t('split')}</span> 
         </RadioGroup>
-        
-        <div className="flex justify-end absolute right-0 bottom-0">
-          <Button onClick={handleAddCustomStrategy} className="h-6">
+
+        <div className="flex justify-end mt-2"> 
+          <Button onClick={handleAddCustomStrategy} className="h-6 px-3"> 
             {t('add')}
           </Button>
         </div>

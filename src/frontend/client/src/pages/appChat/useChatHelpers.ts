@@ -38,11 +38,11 @@ export default function useChatHelpers() {
     }, [chatState, chatId, bishengConfig])
 
     const appLost = useMemo(() => {
-        return runState?.error
+        return runState?.error?.code
     }, [runState])
 
     // handleMsgError close只关闭运行状态不报错
-    const handleMsgError = (errorMsg: string, close: boolean = false) => {
+    const handleMsgError = (errorMsg: { code: string, data: any }, close: boolean = false) => {
         setRunningState((prev) => ({
             ...prev,
             [chatId]: {
@@ -50,7 +50,7 @@ export default function useChatHelpers() {
                 running: false,
                 showStop: false,
                 showUpload: false,
-                inputDisabled: close || !!errorMsg, //chatState?.flow.flow_type !== 1, // 技能不禁止输入
+                inputDisabled: close || !!errorMsg.code, //chatState?.flow.flow_type !== 1, // 技能不禁止输入
                 // showReRun: chatState?.flow.flow_type === 10, // 错误时工作流展示重试按钮
                 error: close ? prev[chatId].error : errorMsg,
             },
@@ -62,7 +62,7 @@ export default function useChatHelpers() {
             ...prev,
             [chatId]: {
                 ...prev[chatId],
-                error: "",
+                error: { code: '', data: null },
             },
         }))
     }
@@ -284,6 +284,13 @@ export default function useChatHelpers() {
                 })
             )
         },
+        closeAllLogMsg: (chatid: string) => {
+            setChats((prev) =>
+                updateChatMessages(prev, chatid, (messages) => {
+                    return messages.filter((msg) => msg.category !== "node_run")
+                })
+            )
+        },
         skillStreamMsg: (chatid: string, data: any) => {
             setChats((prev) =>
                 updateChatMessages(prev, chatid, (messages) => {
@@ -294,16 +301,18 @@ export default function useChatHelpers() {
             )
         },
         skillCloseMsg: () => {
-            setRunningState((prev) => ({
-                ...prev,
-                [chatId]: {
-                    ...prev[chatId],
-                    running: false,
-                    inputDisabled: false,
-                    inputForm: false,
-                    showStop: false
-                },
-            }))
+            setRunningState((prev) => {
+                return {
+                    ...prev,
+                    [chatId]: {
+                        ...prev[chatId],
+                        running: false,
+                        inputDisabled: !!prev[chatId].error?.code,
+                        inputForm: false,
+                        showStop: false
+                    },
+                }
+            })
         },
         endMsg: (chatid: string, data: any) => {
             // 删除所有未结束消息

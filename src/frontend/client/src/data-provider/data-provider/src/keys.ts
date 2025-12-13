@@ -1,5 +1,5 @@
 export enum QueryKeys {
-  messages = 'messages',
+  messages = 'rcmessages',
   sharedMessages = 'sharedMessages',
   sharedLinks = 'sharedLinks',
   allConversations = 'allConversations',

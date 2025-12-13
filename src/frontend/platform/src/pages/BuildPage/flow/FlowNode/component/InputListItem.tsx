@@ -2,12 +2,14 @@ import { InputList } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { generateUUID } from "@/components/bs-ui/utils";
-import { useCallback, useEffect, useMemo } from "react";
-import { useUpdateVariableState } from "../flowNodeStore";
 import { debounce } from "lodash-es";
+import { useCallback, useEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import { useUpdateVariableState } from "../flowNodeStore";
 
-export default function InputListItem({ node, data, preset, onChange }) {
+export default function InputListItem({ node, data, preset, onChange, i18nPrefix }) {
     const [_, setUpdateVariable] = useUpdateVariableState()
+    const { t } = useTranslation('flow')
 
     const value = useMemo(() => {
         const _value = data.value || [];
@@ -50,21 +52,21 @@ export default function InputListItem({ node, data, preset, onChange }) {
         const _val = val.slice(0, val.length - 1)
         onChange(_val)
 
-        setDebouncePresetQuestion(info)
+        info && setDebouncePresetQuestion(info)
     }
 
     return <div className='node-item mb-4'>
         <Label className="flex items-center bisheng-label">
-            {data.label}
-            {data.help && <QuestionTooltip content={data.help} />}
+            {t(`${i18nPrefix}label`)}
+            {data.help && <QuestionTooltip content={t(`${i18nPrefix}help`)} />}
         </Label>
         <div className="nowheel nodrag overflow-y-auto max-h-52 mt-2">
             <InputList
                 dict={preset}
-                rules={[{ maxLength: 50, message: '最大50个字符' }]}
+                rules={[{ maxLength: 50, message: t('max50Characters') }]}
                 value={value}
                 onChange={handleChange}
-                placeholder={data.placeholder || ''}
+                placeholder={t(`${i18nPrefix}placeholder`) || ''}
             ></InputList>
         </div>
     </div>

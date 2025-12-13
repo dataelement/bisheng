@@ -40,6 +40,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const { data: messagesTree = null, isLoading } = useGetMessagesByConvoId(conversationId ?? '', shareToken, {
     select: useCallback(
       (data: TMessage[]) => {
+        // console.log('messagesTree :>> ', data);
         const dataTree = buildTree({ messages: data, fileMap });
         return dataTree?.length === 0 ? null : (dataTree ?? null);
       },

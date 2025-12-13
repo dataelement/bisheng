@@ -37,6 +37,11 @@ class UserNeedGroupAndRoleError(BaseErrorCode):
     Msg: str = '用户组和角色不能为空'
 
 
+class CaptchaError(BaseErrorCode):
+    Code: int = 10607
+    Msg: str = '验证码错误'
+
+
 class UserGroupNotDeleteError(BaseErrorCode):
     Code: int = 10610
     Msg: str = '用户组内还有用户，不能删除'
@@ -45,3 +50,18 @@ class UserGroupNotDeleteError(BaseErrorCode):
 class UserForbiddenError(BaseErrorCode):
     Code: int = 10620
     Msg: str = '该用户被禁用，请联系管理员'
+
+
+class UserPasswordMaxTryError(BaseErrorCode):
+    Code: int = 10621
+    Msg: str = '由于登录失败次数过多，该账号被自动禁用，请联系管理员处理'
+
+
+class UserGroupEmptyError(BaseErrorCode):
+    Code: int = 10630
+    Msg: str = '用户组不能为空'
+
+
+class AdminUserUpdateForbiddenError(BaseErrorCode):
+    Code: int = 10640
+    Msg: str = '不能修改管理员用户信息'

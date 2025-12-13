@@ -149,6 +149,10 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     let errorMsg = ''
                     if (data.category === 'error') {
                         errorMsg = data.message.status_message || 'error'
+                        toast({
+                            variant: 'error',
+                            description: t(`errors.${data.message.status_code}`)
+                        })
                     }
                     // 异常类型处理，提示
                     if (errorMsg) {
@@ -250,7 +254,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
             if (!msgClosedRef.current) msgClosedRef.current = true
         } else if (data.type === "close") {
             setStop({ show: false, disable: false })
-            setInputLock({ locked: false, reason: '' })
+            setInputLock((prev) => (prev.reason ? prev : { locked: false, reason: '' }))
         }
     }
 

@@ -19,9 +19,10 @@ export const valueToOutput = (newValues, varZh) => {
     });
 };
 
-export default function VarSelectItem({ nodeId, data: paramItem, onChange, onOutPutChange, onValidate, onVarEvent }) {
+export default function VarSelectItem({ nodeId, data: paramItem, onChange, onOutPutChange, onValidate, onVarEvent, i18nPrefix }) {
     const [value, setValue] = React.useState(() => paramItem.value || []);
     const [error, setError] = React.useState(false);
+    const { t } = useTranslation('flow')
 
     const updateValue = (newValues) => {
         const outputVar = valueToOutput(newValues, paramItem.varZh || {});
@@ -54,12 +55,11 @@ export default function VarSelectItem({ nodeId, data: paramItem, onChange, onOut
         updateValue(newValues);
     }, [value]);
 
-    const { t } = useTranslation()
     useEffect(() => {
         paramItem.required && onValidate(() => {
             if (!paramItem.value.length) {
                 setError(true)
-                return paramItem.label + ' ' + t('required')
+                return t(`${i18nPrefix}label`) + ' ' + t('required')
             }
             setError(false)
             return false
@@ -111,8 +111,8 @@ export default function VarSelectItem({ nodeId, data: paramItem, onChange, onOut
         <div className="flex justify-between items-center">
             <Label className="flex items-center bisheng-label">
                 {paramItem.required && <span className="text-red-500">*</span>}
-                {paramItem.label}
-                {paramItem.help && <QuestionTooltip content={paramItem.help} />}
+                {t(`${i18nPrefix}label`)}
+                {paramItem.help && <QuestionTooltip content={t(`${i18nPrefix}help`)} />}
             </Label>
             <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">{paramItem.key}</Badge>
         </div>
@@ -126,7 +126,7 @@ export default function VarSelectItem({ nodeId, data: paramItem, onChange, onOut
                         {paramItem.varZh?.[item]}
                         <X className="h-3 w-3 min-w-3" onClick={() => handleDelete(item)}></X>
                     </Badge>
-                    ) : <span className="text-gray-400 mt-0.5">{paramItem.placeholder}</span>}
+                    ) : <span className="text-gray-400 mt-0.5">{t(`${i18nPrefix}placeholder`)}</span>}
                 </div>
                 <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
             </div>
@@ -136,9 +136,9 @@ export default function VarSelectItem({ nodeId, data: paramItem, onChange, onOut
 
 
 // 单选
-export function VarSelectSingleItem({ nodeId, data: paramItem, onChange, onValidate, onVarEvent }) {
+export function VarSelectSingleItem({ nodeId, data: paramItem, onChange, onValidate, onVarEvent, i18nPrefix }) {
     const [value, setValue] = React.useState(paramItem.value)
-    const { t } = useTranslation()
+    const { t } = useTranslation('flow')
 
     const handleChange = (item, v) => {
         // [nodeId.xxx]
@@ -160,7 +160,7 @@ export function VarSelectSingleItem({ nodeId, data: paramItem, onChange, onValid
         paramItem.required && onValidate(() => {
             if (!paramItem.value) {
                 setError(true)
-                return paramItem.label + t('required')
+                return t(`${i18nPrefix}label`) + t('required')
             }
             setError(false)
             return false
@@ -201,15 +201,15 @@ export function VarSelectSingleItem({ nodeId, data: paramItem, onChange, onValid
         <div className="flex justify-between items-center">
             <Label className="flex items-center bisheng-label">
                 {paramItem.required && <span className="text-red-500">*</span>}
-                {paramItem.label}
-                {paramItem.help && <QuestionTooltip content={paramItem.help} />}
+                {t(`${i18nPrefix}label`)}
+                {paramItem.help && <QuestionTooltip content={t(`${i18nPrefix}help`)} />}
             </Label>
             {/* <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">{data.key}</Badge> */}
         </div>
         <SelectVar nodeId={nodeId} itemKey={paramItem.key} onSelect={handleChange}>
             <div className={`${error && 'border-red-500'} no-drag nowheel mt-2 group flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}>
                 <div className="flex flex-wrap truncate">
-                    {value ? paramItem.varZh?.[value] : <span className="text-gray-400">{paramItem.placeholder}</span>}
+                    {value ? paramItem.varZh?.[value] : <span className="text-gray-400">{t(`${i18nPrefix}placeholder`)}</span>}
                 </div>
                 <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
             </div>

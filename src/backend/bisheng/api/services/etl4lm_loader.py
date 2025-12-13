@@ -215,11 +215,11 @@ class Etl4lmLoader(BasePDFLoader):
             )
         except requests.Timeout as e:
             logger.error(f"Request to etl4lm API timed out: {e}")
-            raise Exception("etl4lm服务繁忙，请升级etl4lm服务的算力")
+            raise Exception("etl4lm server timeout")
         except Exception as e:
             if str(e).find("Timeout") != -1:
                 logger.error(f"Request to etl4lm API timed out: {e}")
-                raise Exception("etl4lm服务繁忙，请升级etl4lm服务的算力")
+                raise Exception("etl4lm server timeout")
             raise e
         if resp.status_code != 200:
             raise Exception(
@@ -293,7 +293,7 @@ class Etl4lmLoader(BasePDFLoader):
         except Exception as e:
             if str(e).find("Timeout") != -1:
                 logger.error(f"Request to etl4lm API timed out: {e}")
-                raise Exception("etl4lm服务繁忙，请升级etl4lm服务的算力")
+                raise Exception("etl4lm server timeout")
             raise e
         if (resp.status_code != 200) or (resp.body and resp.body.get("status_code") != 200):
             logger.info(
@@ -333,88 +333,3 @@ class Etl4lmLoader(BasePDFLoader):
         metadata["source"] = self.file_name
         doc = Document(page_content=content, metadata=metadata)
         return [doc]
-
-
-class ElemUnstructuredLoaderV0(BasePDFLoader):
-    """The appropriate parser is automatically selected based on the file format and OCR is supported"""
-
-    def __init__(
-            self,
-            file_name: str,
-            file_path: str,
-            unstructured_api_key: str = None,
-            unstructured_api_url: str = None,
-            start: int = 0,
-            n: int = None,
-            verbose: bool = False,
-            kwargs: dict = {},
-    ) -> None:
-        """Initialize with a file path."""
-        self.unstructured_api_url = unstructured_api_url
-        self.unstructured_api_key = unstructured_api_key
-        self.start = start
-        self.n = n
-        self.headers = {"Content-Type": "application/json"}
-        self.file_name = file_name
-        self.extra_kwargs = kwargs
-        super().__init__(file_path)
-
-    def load(self) -> List[Document]:
-        page_content, metadata = self.get_text_metadata()
-        doc = Document(page_content=page_content, metadata=metadata)
-        return [doc]
-
-    def get_text_metadata(self):
-        b64_data = base64.b64encode(open(self.file_path, "rb").read()).decode()
-        payload = dict(
-            filename=os.path.basename(self.file_name), b64_data=[b64_data], mode="text"
-        )
-        payload.update({"start": self.start, "n": self.n})
-        payload.update(self.extra_kwargs)
-        resp = requests.post(
-            self.unstructured_api_url, headers=self.headers, json=payload
-        )
-        # 说明文件解析成功
-        if resp.status_code == 200 and resp.json().get("status_code") == 200:
-            res = resp.json()
-            return res["text"], {"source": self.file_name}
-        # 说明文件解析失败，pdf文件直接返回报错
-        if self.file_name.endswith(".pdf"):
-            raise Exception(
-                f"file text {os.path.basename(self.file_name)} failed resp={resp.text}"
-            )
-        # 非pdf文件，先将文件转为pdf格式，让后再执行partition模式解析文档
-        # 把文件转为pdf
-        resp = requests.post(
-            self.unstructured_api_url,
-            headers=self.headers,
-            json={
-                "filename": os.path.basename(self.file_name),
-                "b64_data": [b64_data],
-                "mode": "topdf",
-            },
-        )
-        if resp.status_code != 200 or resp.json().get("status_code") != 200:
-            raise Exception(
-                f"file topdf {os.path.basename(self.file_name)} failed resp={resp.text}"
-            )
-        # 解析pdf文件
-        payload["mode"] = "partition"
-        payload["b64_data"] = [resp.json()["b64_pdf"]]
-        payload["filename"] = os.path.basename(self.file_name) + ".pdf"
-        resp = requests.post(
-            self.unstructured_api_url, headers=self.headers, json=payload
-        )
-        if resp.status_code != 200 or resp.json().get("status_code") != 200:
-            raise Exception(
-                f"file partition {os.path.basename(self.file_name)} failed resp={resp.text}"
-            )
-        res = resp.json()
-        partitions = res["partitions"]
-        if not partitions:
-            raise Exception(
-                f"file partition empty {os.path.basename(self.file_name)} resp={resp.text}"
-            )
-        # 拼接结果为文本
-        content, _ = merge_partitions(self.file_path, partitions)
-        return content, {"source": self.file_name}

@@ -1,7 +1,6 @@
 import {
     ApplicationIcon,
     BookOpenIcon,
-    EnIcon,
     EvaluatingIcon,
     GithubIcon,
     KnowledgeIcon,
@@ -18,7 +17,7 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
 import { locationContext } from "@/contexts/locationContext";
 import i18next from "i18next";
-import { ChevronDown, Globe, Lock, MoonStar, Sun } from "lucide-react";
+import { Check, ChevronDown, Lock, MoonStar, Sun } from "lucide-react";
 import { Suspense, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -36,7 +35,7 @@ export default function MainLayout() {
     const { appConfig } = useContext(locationContext)
     // 角色
     const { user, setUser } = useContext(userContext);
-    const { language, options, changLanguage, t } = useLanguage(user)
+    const { language, languageNames, options, changLanguage, t } = useLanguage(user)
 
     const handleLogout = () => {
         bsConfirm({
@@ -98,18 +97,20 @@ export default function MainLayout() {
                             </Tooltip>
                         </TooltipProvider>
                         <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger className="h-8 w-8 bg-header-icon rounded-lg cursor-pointer my-4" onClick={changLanguage}>
-                                    <div className="">
-                                        {language === 'en'
-                                            ? <EnIcon className="side-bar-button-size dark:text-slate-50 mx-auto w-[19px] h-[19px]" />
-                                            : <Globe className="side-bar-button-size dark:text-slate-50 mx-auto w-[17px] h-[17px]" />}
-                                    </div>
-                                </TooltipTrigger>
-                                <TooltipContent><p>{options[language]}</p></TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                        <SelectHover
+                            triagger={
+                                <div className="h-8 px-3 bg-header-icon rounded-lg cursor-pointer my-4 flex items-center justify-center">
+                                    <span className="text-sm leading-8">{languageNames[language]}</span>
+                                    <ChevronDown className="ml-1 w-4 h-4" />
+                                </div>
+                            }>
+                            {Object.entries(options).map(([key, value]) => (
+                                <SelectHoverItem key={key} onClick={() => changLanguage(key)}>
+                                    <span>{value}</span>
+                                    {language === key && <Check className="w-4 h-4 absolute top-1/2 right-0 transform -translate-y-1/2" />}
+                                </SelectHoverItem>
+                            ))}
+                        </SelectHover>
                         <Separator className="mx-[23px] h-6 border-l my-5 border-[#dddddd]" orientation="vertical" />
                     </div>
                     <div className="flex items-center h-7 my-4">
@@ -137,7 +138,7 @@ export default function MainLayout() {
                                 className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}
                             >
                                 <ApplicationIcon className="h-6 w-6 my-[12px]" />
-                                <span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">
+                                <span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px] whitespace-nowrap">
                                     {t('menu.workspace')}
                                 </span>
                             </a>
@@ -184,14 +185,14 @@ export default function MainLayout() {
                         {
                             isAdmin && <>
                                 <NavLink to='/log' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
-                                    <LogIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.log')}</span>
+                                    <LogIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[56px] text-[14px] leading-[48px]">{t('menu.log')}</span>
                                 </NavLink>
                             </>
                         }
                         {
                             isAdmin && <>
                                 <NavLink to='/sys' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
-                                    <SystemIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.system')}</span>
+                                    <SystemIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[56px] text-[14px] leading-[48px]">{t('menu.system')}</span>
                                 </NavLink>
                             </>
                         }
@@ -252,25 +253,27 @@ export default function MainLayout() {
 };
 
 const useLanguage = (user: User) => {
-    const [language, setLanguage] = useState('zh')
+    const [language, setLanguage] = useState('zh-Hans')
     useEffect(() => {
-        const lang = user.user_id ? localStorage.getItem('language-' + user.user_id) : null
+        const lang = user.user_id ? localStorage.getItem('i18nextLng') : null
         if (lang) {
-            setLanguage(lang)
+            setLanguage(lang === 'zh' ? 'zh-Hans' : lang)
         }
     }, [user])
 
     const { t } = useTranslation()
-    const changLanguage = () => {
-        const ln = language === 'zh' ? 'en' : 'zh'
+    const changLanguage = (ln: string) => {
         setLanguage(ln)
-        localStorage.setItem('language-' + user.user_id, ln)
-        localStorage.setItem('language', ln)
+        localStorage.setItem('i18nextLng', ln)
+        // workspace
+        localStorage.removeItem('lang')
+        document.cookie = `lang=${ln}; path=/; expires=${new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString()}`;
         i18next.changeLanguage(ln)
     }
     return {
         language,
-        options: { en: '使用中文', zh: 'English' },
+        languageNames: { "zh-Hans": '中文', "en-US": 'English', ja: '日本語' },
+        options: { "zh-Hans": '中文', "en-US": 'English', ja: '日本語' },
         changLanguage,
         t
     }

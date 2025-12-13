@@ -36,13 +36,25 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
         let flowData: FlowData | null = null
         let messages: ChatMessageType[] = []
         const currentData = chats[cid]
-        let error = ''
+        let error = { code: '', data: null }
 
         setChatId(cid!) // 切换会话
 
-        if (currentData) return; // 有缓存不重复加载
-
         const numericType = Number(type);
+
+        if (currentData) { // 有缓存不重复加载
+            numericType === FLOW_TYPES.SKILL && setRunningState((prev) => {
+                // 技能重置输入框状态
+                return {
+                    ...prev,
+                    [cid]: {
+                        ...(prev?.[cid] || {}),
+                        inputDisabled: false,
+                    },
+                };
+            })
+            return
+        };
 
         switch (numericType) {
             case FLOW_TYPES.SKILL:
@@ -54,7 +66,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
                 ])
 
                 if (flowRes.status_code !== 200) {
-                    error = AppLostMessage
+                    error = { code: AppLostMessage, data: null }
                     const lostFlow = await getDeleteFlowApi(cid)
                     flowRes.data = {
                         id: lostFlow.data.flow_id,
@@ -88,7 +100,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
                 ]);
 
                 if (assistantRes.status_code !== 200) {
-                    error = AppLostMessage;
+                    error = { code: AppLostMessage, data: null };
                     const lostFlow = await getDeleteFlowApi(cid)
                     assistantRes.data = {
                         name: lostFlow.data.flow_name,
@@ -112,7 +124,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
         }));
 
         if (shareToken) {
-            error = ''
+            error = { code: '', data: null }
         }
         // 更新状态
         // !!flow.data?.nodes.find(node => ["VariableNode", "InputFileNode"].includes(node.data.type))
@@ -121,7 +133,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
                 ...prev,
                 [cid]: {
                     running: false,
-                    inputDisabled: error || numericType === FLOW_TYPES.WORK_FLOW,
+                    inputDisabled: error.code || numericType === FLOW_TYPES.WORK_FLOW,
                     error,
                     inputForm: numericType !== FLOW_TYPES.WORK_FLOW || null,
                     showUpload: numericType === FLOW_TYPES.WORK_FLOW,

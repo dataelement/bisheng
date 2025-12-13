@@ -11,13 +11,17 @@ from loguru import logger
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.chat.utils import sync_judge_source, sync_process_source_document
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.errcode.flow import WorkFlowNodeRunMaxTimesError, WorkFlowWaitUserTimeoutError, \
     WorkFlowNodeUpdateError, WorkFlowVersionUpdateError, WorkFlowTaskBusyError, WorkFlowTaskOtherError
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
+from bisheng.common.services import telemetry_service
+from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync
+from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.message import ChatMessageDao, ChatMessage
 from bisheng.database.models.session import MessageSessionDao, MessageSession
-from bisheng.common.services.config_service import settings
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeStartData, NodeEndData, UserInputData, GuideWordData, GuideQuestionData, \
     OutputMsgData, StreamMsgData, StreamMsgOverData, OutputMsgChooseData, OutputMsgInputData
@@ -26,7 +30,7 @@ from bisheng.workflow.common.workflow import WorkflowStatus
 
 class RedisCallback(BaseCallback):
 
-    def __init__(self, unique_id: str, workflow_id: str, chat_id: str, user_id: str):
+    def __init__(self, unique_id: str, workflow_id: str, chat_id: str, user_id: int):
         super(RedisCallback, self).__init__()
         # 异步任务的唯一ID
         self.unique_id = unique_id
@@ -397,6 +401,20 @@ class RedisCallback(BaseCallback):
                     flow_type=FlowType.WORKFLOW.value,
                     user_id=self.user_id,
                 ))
+
+                # 记录Telemetry日志
+                telemetry_service.log_event_sync(user_id=self.user_id,
+                                                 event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
+                                                 trace_id=trace_id_var.get(),
+                                                 event_data=NewMessageSessionEventData(
+                                                     session_id=self.chat_id,
+                                                     app_id=self.workflow_id,
+                                                     source="platform",
+                                                     app_name=db_workflow.name,
+                                                     app_type=ApplicationTypeEnum.WORKFLOW
+                                                 )
+                                                 )
+
             self.create_session = True
 
         return message.id

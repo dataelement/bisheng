@@ -5,9 +5,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 interface Group {
     id: string;
     group_name: string;
+    placeholder?: string;
 }
 
-export default function FilterByUsergroup({ value, onChange }) {
+export default function FilterByUsergroup({ value, placeholder = '', onChange }) {
     const { groups, loading } = useGroups();
 
     return (
@@ -17,7 +18,7 @@ export default function FilterByUsergroup({ value, onChange }) {
                     {value ? (
                         <span>{groups.find(g => g.id === value)?.group_name}</span>
                     ) : (
-                        <SelectValue placeholder="用户组" />
+                        <SelectValue placeholder={placeholder} />
                     )}
                 </SelectTrigger>
                 <SelectContent className="max-w-[200px] break-all">

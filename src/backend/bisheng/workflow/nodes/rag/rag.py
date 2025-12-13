@@ -10,6 +10,7 @@ from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from bisheng.chat.types import IgnoreException
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.llm.domain.services import LLMService
 from bisheng.workflow.callback.event import OutputMsgData, StreamMsgOverData
@@ -33,7 +34,10 @@ class RagNode(RagUtils):
 
         self._llm = LLMService.get_bisheng_llm_sync(model_id=self.node_params['model_id'],
                                                     temperature=self.node_params.get('temperature', 0.3),
-                                                    cache=False)
+                                                    app_id=self.workflow_id,
+                                                    app_name=self.workflow_name,
+                                                    app_type=ApplicationTypeEnum.WORKFLOW,
+                                                    user_id=self.user_id)
         self._minio_client = get_minio_storage_sync()
 
         # 是否输出结果给用户
