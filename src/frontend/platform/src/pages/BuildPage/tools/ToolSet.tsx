@@ -1,20 +1,19 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { updateAssistantToolApi } from "@/controllers/API/assistant";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { updateToolApi } from "@/controllers/API/tools";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import BingToolForm from "./builtInTool/BingSearch";
-import JinaApiKeyForm from "./builtInTool/JinaConfig";
-import TianyanchaToolForm from "./builtInTool/Tianyancha";
-import Dalle3ToolForm from "./builtInTool/Dalle3";
-import FeishuConfigForm from "./builtInTool/FeishuConfig";
-import SiliconFlowApiKeyForm from "./builtInTool/SiliconFlowApiKey";
-import EmailConfigForm from "./builtInTool/EmailConfig";
-import CrawlerConfigForm from "./builtInTool/CrawlerConfig";
-import WebSearchForm from "./builtInTool/WebSearchFrom";
-import { useWebSearchStore } from './webSearchStore'
 import CodeExecutor from "./builtInTool/CodeExecutor";
+import CrawlerConfigForm from "./builtInTool/CrawlerConfig";
+import Dalle3ToolForm from "./builtInTool/Dalle3";
+import EmailConfigForm from "./builtInTool/EmailConfig";
+import FeishuConfigForm from "./builtInTool/FeishuConfig";
+import JinaApiKeyForm from "./builtInTool/JinaConfig";
+import SiliconFlowApiKeyForm from "./builtInTool/SiliconFlowApiKey";
+import TianyanchaToolForm from "./builtInTool/Tianyancha";
+import WebSearchForm from "./builtInTool/WebSearchFrom";
+import { useWebSearchStore } from './webSearchStore';
 const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     const [open, setOpen] = useState(false);
     const { t } = useTranslation();
@@ -34,24 +33,22 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     // });
     const idRef = useRef('');
     const [name, setName] = useState('');
-    const { config: webSearchData, setConfig } = useWebSearchStore()
+    const { setConfig } = useWebSearchStore()
 
     useImperativeHandle(ref, () => ({
 
         edit: (item) => {
-            console.log(item,333);
-            
+
             setName(item.name);
             idRef.current = item.id;
-            console.log(item, webSearchData, 222);
-             let config = {};
+            let config = {};
             try {
                 if (item.extra) {
                     config = JSON.parse(item.extra);
                     console.log('Parsed extra config:', config);
                 }
             } catch (e) {
-                console.error('接口返回失败');
+                console.error('api error');
             }
             setFormData(config);
             setOpen(true);
@@ -61,7 +58,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
 
 
     const handleSubmit = async (formdata) => {
-        await updateAssistantToolApi(idRef.current, formdata)
+        await updateToolApi(idRef.current, formdata)
         setConfig(formdata)
         setOpen(false)
         onChange()

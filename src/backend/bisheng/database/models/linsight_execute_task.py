@@ -1,12 +1,13 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, List, Tuple, Union
+from typing import Optional, Dict, List
 
-from sqlalchemy import Enum as SQLEnum, Column, JSON, Text, DateTime, text, CHAR, ForeignKey, ColumnExpressionArgument, \
-    update
+from sqlalchemy import Enum as SQLEnum, Column, JSON, DateTime, text, CHAR, ForeignKey, update
 from sqlmodel import Field, select, col
-from bisheng.database.base import async_session_getter, uuid_hex
-from bisheng.database.models.base import SQLModelSerializable
+
+from bisheng.core.database import get_async_db_session
+from bisheng.database.base import uuid_hex
+from bisheng.common.models.base import SQLModelSerializable
 
 
 class ExecuteTaskTypeEnum(str, Enum):
@@ -59,8 +60,9 @@ class LinsightExecuteTaskBase(SQLModelSerializable):
     task_type: ExecuteTaskTypeEnum = Field(..., description='任务类型',
                                            sa_column=Column(SQLEnum(ExecuteTaskTypeEnum), nullable=False))
     task_data: Optional[dict] = Field(None, description='任务数据', sa_type=JSON, nullable=True)
-    input_prompt: Optional[str] = Field(None, description='输入提示', sa_type=Text, nullable=True)
-    user_input: Optional[str] = Field(None, description='用户输入', sa_type=Text, nullable=True)
+
+    # input_prompt: Optional[str] = Field(None, description='输入提示', sa_type=Text, nullable=True)
+    # user_input: Optional[str] = Field(None, description='用户输入', sa_type=Text, nullable=True)
     history: Optional[List[Dict]] = Field(None, description='执行步骤记录', sa_type=JSON, nullable=True)
     status: ExecuteTaskStatusEnum = Field(ExecuteTaskStatusEnum.NOT_STARTED, description="任务状态",
                                           sa_column=Column(SQLEnum(ExecuteTaskStatusEnum), nullable=False))
@@ -69,7 +71,7 @@ class LinsightExecuteTaskBase(SQLModelSerializable):
 
 class LinsightExecuteTask(LinsightExecuteTaskBase, table=True):
     """
-    灵思执行任务模型
+    灵思执行任务模型, sop库也会引用这里的数据
     """
     id: str = Field(default_factory=uuid_hex, description='任务ID',
                     sa_column=Column(CHAR(36), unique=True, nullable=False, primary_key=True))
@@ -94,7 +96,7 @@ class LinsightExecuteTaskDao(object):
         :param task_id: 任务ID
         :return: 任务对象
         """
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             statement = select(LinsightExecuteTask).where(LinsightExecuteTask.id == str(task_id))
             task = await session.exec(statement)
             return task.first()
@@ -108,7 +110,7 @@ class LinsightExecuteTaskDao(object):
         :param session_version_id: 会话版本ID
         :return: 任务列表
         """
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             statement = select(LinsightExecuteTask).where(
                 LinsightExecuteTask.session_version_id == str(session_version_id))
 
@@ -125,7 +127,7 @@ class LinsightExecuteTaskDao(object):
         :param tasks: 任务列表
         :return: 创建后的任务列表
         """
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             session.add_all(tasks)
             await session.commit()
             return tasks
@@ -138,7 +140,7 @@ class LinsightExecuteTaskDao(object):
         :param kwargs: 更新字段
         :return: 更新后的任务对象
         """
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             statement = select(LinsightExecuteTask).where(LinsightExecuteTask.id == task_id)
             task = await session.exec(statement)
             task = task.first()
@@ -167,7 +169,7 @@ class LinsightExecuteTaskDao(object):
         :return:
         """
 
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             statement = (
                 update(LinsightExecuteTask)
                 .where(col(LinsightExecuteTask.session_version_id).in_(session_version_ids))  # 显式转 str

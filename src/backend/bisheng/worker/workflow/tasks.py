@@ -1,6 +1,14 @@
+import time
+
 from loguru import logger
 
-from bisheng.settings import settings
+from bisheng.api.services.workflow import WorkFlowService
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
+from bisheng.common.schemas.telemetry.event_data_schema import ApplicationProcessEventData
+from bisheng.common.services import telemetry_service
+from bisheng.common.services.config_service import settings
+from bisheng.core.logger import trace_id_var
+from bisheng.database.models.flow import FlowDao
 from bisheng.utils.exceptions import IgnoreException
 from bisheng.worker.main import bisheng_celery
 from bisheng.worker.workflow.redis_callback import RedisCallback
@@ -39,7 +47,7 @@ def _judge_workflow_status(redis_callback: RedisCallback, workflow: Workflow):
     _clear_workflow_obj(redis_callback.unique_id)
 
 
-def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: str):
+def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int):
     redis_callback = RedisCallback(unique_id, workflow_id, chat_id, user_id)
     try:
         # update workflow status
@@ -51,7 +59,10 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: s
 
         # init workflow
         workflow_conf = settings.get_workflow_conf()
-        workflow = Workflow(workflow_id, user_id, workflow_data, False,
+        workflow_info = FlowDao.get_flow_by_id(workflow_id)
+        workflow_name = workflow_info.name if workflow_info else workflow_id
+        workflow = Workflow(workflow_id, workflow_name,
+                            user_id, workflow_data, False,
                             workflow_conf.max_steps,
                             workflow_conf.timeout,
                             redis_callback)
@@ -69,10 +80,28 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: s
 
 
 @bisheng_celery.task
-def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: str):
+def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int):
     """ 执行workflow """
-    with logger.contextualize(trace_id=unique_id):
+    trace_id_var.set(unique_id)
+    start_time = time.time()
+    try:
         _execute_workflow(unique_id, workflow_id, chat_id, user_id)
+    finally:
+        end_time = time.time()
+        workflow_info = WorkFlowService.get_one_workflow_simple_info_sync(workflow_id)
+        telemetry_service.log_event_sync(user_id=user_id,
+                                         event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
+                                         trace_id=trace_id_var.get(),
+                                         event_data=ApplicationProcessEventData(
+                                             app_id=workflow_id,
+                                             app_name=workflow_info.name if workflow_info else workflow_id,
+                                             app_type=ApplicationTypeEnum.WORKFLOW,
+                                             chat_id=chat_id,
+
+                                             start_time=int(start_time),
+                                             end_time=int(end_time),
+                                             process_time=int((end_time - start_time) * 1000)
+                                         ))
 
 
 def _continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: str):
@@ -103,20 +132,47 @@ def _continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: 
 @bisheng_celery.task
 def continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: str):
     """ 继续执行workflow """
-    with logger.contextualize(trace_id=unique_id):
+    trace_id_var.set(unique_id)
+    start_time = time.time()
+    try:
         _continue_workflow(unique_id, workflow_id, chat_id, user_id)
+    finally:
+        end_time = time.time()
+        workflow_info = WorkFlowService.get_one_workflow_simple_info_sync(workflow_id)
+        telemetry_service.log_event_sync(user_id=user_id,
+                                         event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
+                                         trace_id=trace_id_var.get(),
+                                         event_data=ApplicationProcessEventData(
+                                             app_id=workflow_id,
+                                             app_name=workflow_info.name if workflow_info else workflow_id,
+                                             app_type=ApplicationTypeEnum.WORKFLOW,
+                                             chat_id=chat_id,
+
+                                             start_time=int(start_time),
+                                             end_time=int(end_time),
+                                             process_time=int((end_time - start_time) * 1000)
+                                         ))
 
 
 @bisheng_celery.task
-def stop_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: str):
+def stop_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int):
     """ 停止workflow """
-    with logger.contextualize(trace_id=unique_id):
-        redis_callback = RedisCallback(unique_id, workflow_id, chat_id, user_id)
-        if unique_id not in _global_workflow:
-            logger.warning("stop_workflow called but workflow not found in global cache")
-            return
-        workflow = _global_workflow[unique_id]
-        workflow.stop()
+    trace_id_var.set(unique_id)
+
+    redis_callback = RedisCallback(unique_id, workflow_id, chat_id, user_id)
+    if unique_id not in _global_workflow:
         redis_callback.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow stop by user')
-        _clear_workflow_obj(unique_id)
-        logger.info(f'workflow stop by user {user_id}')
+        logger.warning("stop_workflow called but workflow not found in global cache")
+        return
+    workflow = _global_workflow[unique_id]
+    workflow.stop()
+
+    while workflow.status() == WorkflowStatus.RUNNING.value:
+        time.sleep(0.3)
+    status, reason = workflow.status(), workflow.reason()
+    if status != WorkflowStatus.FAILED.value:
+        status = WorkflowStatus.FAILED.value
+        reason = 'workflow stop by user'
+        redis_callback.set_workflow_status(status, reason)
+    _clear_workflow_obj(unique_id)
+    logger.info(f'workflow stop by user {user_id}')

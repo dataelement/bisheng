@@ -4,13 +4,16 @@ import { SendIcon } from "@/components/bs-icons/send";
 import { Button } from "@/components/bs-ui/button";
 import { Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { useAudioStore } from "@/components/voiceFunction/audioPlayerStore";
+import SpeechToTextComponent from "@/components/voiceFunction/speechToText";
 import { locationContext } from "@/contexts/locationContext";
+import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 import { formatDate } from "@/util/utils";
+import { CirclePause } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
-import { CirclePause } from "lucide-react";
 
 export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend, onClickClear }) {
     const { toast } = useToast()
@@ -20,6 +23,9 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     const [formShow, setFormShow] = useState(false)
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
     const [inputLock, setInputLock] = useState({ locked: false, reason: '' })
+    const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
+
+    const { isLoading: audioOpening } = useAudioStore()
 
     const { messages, hisMessages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, destory, setShowGuideQuestion } = useMessageStore()
     const currentChatIdRef = useRef(null)
@@ -31,34 +37,22 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         disable: false
     })
     const [autogenStop, setAutogenStop] = useState(false)
-    /**
-     * 记录会话切换状态，等待消息加载完成时，控制表单在新会话自动展开
-     */
-    const changeChatedRef = useRef(false)
-    useEffect(() => {
-        // console.log('message msg', messages, form);
 
-        if (changeChatedRef.current) {
-            changeChatedRef.current = false
-            // 新建的 form 技能,弹出窗口并锁定 input
-            if (form && messages.length === 0 && hisMessages.length === 0) {
-                setInputLock({ locked: true, reason: '' })
-                setFormShow(true)
-                setShowWhenLocked(true)
-            }
-        }
-
-    }, [messages, hisMessages])
     useEffect(() => {
         if (!chatId) return
         continueRef.current = false
-        setInputLock({ locked: false, reason: '' })
         // console.log('message chatid', messages, form, chatId);
-        setShowWhenLocked(false)
 
+        if (form && messages.length === 0 && hisMessages.length === 0) {
+            setInputLock({ locked: true, reason: '' })
+            setFormShow(true)
+            setShowWhenLocked(true)
+        } else {
+            setFormShow(false)
+            setShowWhenLocked(false)
+            setInputLock({ locked: false, reason: '' })
+        }
         currentChatIdRef.current = chatId
-        changeChatedRef.current = true
-        setFormShow(false)
         createWebSocket(chatId).then(() => {
             // 切换会话默认发送一条空消息
             const [wsMsg] = onBeforSend('', '')
@@ -151,9 +145,25 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 ws.onmessage = (event) => {
                     // console.log(`WebSocket get: ${Date.now()} 毫秒；与send差值${Date.now() - diffRef.current}毫秒`);
                     const data = JSON.parse(event.data);
-                    const errorMsg = data.category === 'error' ? data.intermediate_steps : ''
+
+                    let errorMsg = ''
+                    if (data.category === 'error') {
+                        errorMsg = data.message.status_message || 'error'
+                        toast({
+                            variant: 'error',
+                            description: t(`errors.${data.message.status_code}`)
+                        })
+                    }
                     // 异常类型处理，提示
-                    if (errorMsg) return setInputLock({ locked: true, reason: errorMsg })
+                    if (errorMsg) {
+                        updateCurrentMessage({
+                            type: 'end_cover',
+                            category: 'tool',
+                            message: "{}"
+                        }, true)
+                        setStop({ show: false, disable: false })
+                        return setInputLock({ locked: true, reason: errorMsg })
+                    }
                     // 拦截会话串台情况
                     if (currentChatIdRef.current && currentChatIdRef.current !== data.chat_id) return
                     handleWsMessage(data)
@@ -169,23 +179,23 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     }
                 }
                 ws.onclose = (event) => {
-                    wsRef.current = null
+                    // wsRef.current = null
                     console.error('链接手动断开 event :>> ', event);
-                    setStop({ show: false, disable: false })
+                    // setStop({ show: false, disable: false })
 
-                    if ([1005, 1008, 1009].includes(event.code)) {
-                        console.warn('即将废弃 :>> ');
-                        setInputLock({ locked: true, reason: event.reason })
-                    } else {
-                        if (event.reason) {
-                            toast({
-                                title: t('prompt'),
-                                variant: 'error',
-                                description: event.reason
-                            });
-                        }
-                        setInputLock({ locked: false, reason: '' })
-                    }
+                    // if ([1005, 1008, 1009].includes(event.code)) {
+                    //     console.warn('即将废弃 :>> ');
+                    //     setInputLock({ locked: true, reason: event.reason })
+                    // } else {
+                    //     if (event.reason) {
+                    //         toast({
+                    //             title: t('prompt'),
+                    //             variant: 'error',
+                    //             description: event.reason
+                    //         });
+                    //     }
+                    //     setInputLock({ locked: false, reason: '' })
+                    // }
                 };
                 ws.onerror = (ev) => {
                     wsRef.current = null
@@ -244,7 +254,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
             if (!msgClosedRef.current) msgClosedRef.current = true
         } else if (data.type === "close") {
             setStop({ show: false, disable: false })
-            setInputLock({ locked: false, reason: '' })
+            setInputLock((prev) => (prev.reason ? prev : { locked: false, reason: '' }))
         }
     }
 
@@ -277,8 +287,25 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         // setInputEmpty(textarea.value.trim() === '')
     }
 
-    return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
+    const handleSpeechRecognition = (text) => {
+        console.log('text', text);
+
+        if (!showWhenLocked && inputLock.locked) return;
+        if (!inputRef.current) return;
+
+        // 将识别结果追加到当前输入框内容后
+        const currentValue = inputRef.current.value;
+        inputRef.current.value = currentValue + text;
+
+        // 触发input事件以更新UI（如自动调整高度）
+        const event = new Event('input', { bubbles: true, cancelable: true });
+        inputRef.current.dispatchEvent(event);
+    };
+
+    return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B] z-10">
         <div className={`relative ${clear && 'pl-9'}`}>
+            {/* 语音转文字 */}
+            {linsightConfig?.asr_model?.id && <SpeechToTextComponent disabled={inputLock.locked} onChange={handleSpeechRecognition} />}
             {/* form */}
             {
                 formShow && <div className="relative">
@@ -317,29 +344,31 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 {stop.show ?
                     <div
                         onClick={() => {
-                            if (stop.disable) return
+                            if (stop.disable || inputLock.locked) return
                             setStop({ show: true, disable: true });
                             sendWsMsg({ "action": "stop" });
                         }}
-                        className={`w-6 h-6 bg-foreground rounded-full flex justify-center items-center cursor-pointer ${stop.disable && 'bg-muted-foreground text-muted-foreground'}`}>
+                        className={`w-6 h-6 bg-foreground rounded-full flex justify-center items-center cursor-pointer ${stop.disable || inputLock.locked && 'bg-muted-foreground text-muted-foreground'}`}>
                         <span className="w-2 h-2.5 border-x-2 border-border"></span>
                     </div>
                     : <div
                         id="bs-send-btn"
                         className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"
                         onClick={() => { !inputLock.locked && handleSendClick() }}>
-                        <SendIcon className={`${inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}`} />
+                        <SendIcon className={`${inputLock.locked || audioOpening ? 'text-muted-foreground' : 'text-foreground'}`} />
                     </div>
                 }
             </div>
             {/* stop autogen等待输入时专用*/}
             <div className="absolute w-full flex justify-center bottom-32">
-                {autogenStop && <Button className="rounded-full" variant="outline" onClick={() => {
-                    if (stop.disable) return
-                    setStop({ show: true, disable: true });
-                    setAutogenStop(false)
-                    sendWsMsg({ "action": "stop" });
-                }}><CirclePause className="mr-2" />Stop</Button>}
+                {autogenStop && <Button
+                    className="rounded-full"
+                    variant="outline" onClick={() => {
+                        if (stop.disable) return
+                        setStop({ show: true, disable: true });
+                        setAutogenStop(false)
+                        sendWsMsg({ "action": "stop" });
+                    }}><CirclePause className="mr-2" />Stop</Button>}
             </div>
             {/* question */}
             <Textarea

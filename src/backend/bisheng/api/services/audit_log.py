@@ -5,27 +5,29 @@ from typing import Any, List, Optional
 
 from loguru import logger
 
-from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import resp_200
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.services.config_service import settings
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.assistant import AssistantDao, Assistant
 from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
 from bisheng.database.models.flow import FlowDao, Flow, FlowType
 from bisheng.database.models.group import Group
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
-from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.database.models.message import ChatMessageDao, LikedType
 from bisheng.database.models.role import Role
 from bisheng.database.models.session import MessageSessionDao, SensitiveStatus
-from bisheng.database.models.user import UserDao, User
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.settings import settings
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, Knowledge
+from bisheng.tool.domain.models.gpts_tools import GptsToolsType
+from bisheng.user.domain.models.user import UserDao, User
 from bisheng.utils import generate_uuid
-from bisheng.utils.minio_client import MinioClient
 
 
+# todo change to async or submit thread pool
 class AuditLogService:
 
     @classmethod
@@ -165,6 +167,31 @@ class AuditLogService:
         AuditLogDao.insert_audit_logs([audit_log])
 
     @classmethod
+    async def _build_log_async(cls, user: UserPayload, ip_address: str, event_type: EventType, object_type: ObjectType,
+                               object_id: str,
+                               object_name: str, resource_type: ResourceTypeEnum):
+        """
+        构建模块的审计日志
+        """
+        # 获取资源属于哪些用户组
+        groups = await GroupResourceDao.aget_resource_group(resource_type, object_id)
+        group_ids = [one.group_id for one in groups]
+
+        # 插入审计日志
+        audit_log = AuditLog(
+            operator_id=user.user_id,
+            operator_name=user.user_name,
+            group_ids=group_ids,
+            system_id=SystemId.BUILD.value,
+            event_type=event_type.value,
+            object_type=object_type.value,
+            object_id=object_id,
+            object_name=object_name,
+            ip_address=ip_address,
+        )
+        await AuditLogDao.ainsert_audit_logs([audit_log])
+
+    @classmethod
     def create_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_type: Optional[int] = None):
         """
         新建技能的审计日志
@@ -180,7 +207,7 @@ class AuditLogService:
                        flow_info.id, flow_info.name, rs_type)
 
     @classmethod
-    def update_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_type: Optional[int] = None):
+    async def update_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_type: Optional[int] = None):
         """
         更新技能的审计日志
         """
@@ -190,9 +217,9 @@ class AuditLogService:
             obj_type = ObjectType.WORK_FLOW
             rs_type = ResourceTypeEnum.WORK_FLOW
         logger.info(f"act=update_build_flow user={user.user_name} ip={ip_address} flow={flow_id}")
-        flow_info = FlowDao.get_flow_by_id(flow_id)
-        cls._build_log(user, ip_address, EventType.UPDATE_BUILD, obj_type,
-                       flow_info.id, flow_info.name, rs_type)
+        flow_info = await FlowDao.aget_flow_by_id(flow_id)
+        await cls._build_log_async(user, ip_address, EventType.UPDATE_BUILD, obj_type, flow_info.id, flow_info.name,
+                                   rs_type)
 
     @classmethod
     def delete_build_flow(cls, user: UserPayload, ip_address: str, flow_info: Flow, flow_type: Optional[int] = None):
@@ -395,6 +422,26 @@ class AuditLogService:
                         ObjectType.ROLE_CONF, str(role.id), role.role_name)
 
     @classmethod
+    def create_tool(cls, user: UserPayload, ip_address: str, group_ids: List[int], tool_type: GptsToolsType):
+        logger.info(f"act=create_tool user={user.user_name} ip={ip_address} tool_type_id={tool_type.id}")
+
+        cls._system_log(user, ip_address, group_ids, EventType.ADD_TOOL, ObjectType.TOOL, str(tool_type.id),
+                        tool_type.name)
+
+    @classmethod
+    def update_tool(cls, user: UserPayload, ip_address: str, group_ids: List[int], tool_type: GptsToolsType):
+        logger.info(f"act=update_tool user={user.user_name} ip={ip_address} tool_type_id={tool_type.id}")
+
+        cls._system_log(user, ip_address, group_ids, EventType.UPDATE_TOOL, ObjectType.TOOL, str(tool_type.id),
+                        tool_type.name)
+
+    @classmethod
+    def delete_tool(cls, user: UserPayload, ip_address: str, group_ids: List[int], tool_type: GptsToolsType):
+        logger.info(f"act=delete_tool user={user.user_name} ip={ip_address} tool_type_id={tool_type.id}")
+        cls._system_log(user, ip_address, group_ids, EventType.DELETE_TOOL, ObjectType.TOOL, str(tool_type.id),
+                        tool_type.name)
+
+    @classmethod
     def user_login(cls, user: UserPayload, ip_address: str):
         logger.info(f"act=user_login user={user.user_name} ip={ip_address} user_id={user.user_id}")
         # 获取用户所属的分组
@@ -459,13 +506,18 @@ class AuditLogService:
         if sensitive_status:
             filter_status = [SensitiveStatus(sensitive_status)]
 
-        res = MessageSessionDao.filter_session(sensitive_status=filter_status, feedback=feedback,
-                                               flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date,
-                                               end_date=end_date, page=page, limit=page_size)
-        total = MessageSessionDao.filter_session_count(sensitive_status=filter_status, feedback=feedback,
-                                                       flow_ids=filter_flow_ids, user_ids=user_ids,
-                                                       start_date=start_date,
-                                                       end_date=end_date)
+        filters = {
+            'sensitive_status': filter_status,
+            'feedback': feedback,
+            'flow_ids': filter_flow_ids,
+            'user_ids': user_ids,
+            'start_date': start_date,
+            'end_date': end_date,
+            'flow_type': [FlowType.FLOW.value, FlowType.WORKFLOW.value,
+                          FlowType.ASSISTANT.value]
+        }
+        res = MessageSessionDao.filter_session(**filters, page=page, limit=page_size)
+        total = MessageSessionDao.filter_session_count(**filters)
 
         res_users = []
         for one in res:
@@ -507,11 +559,14 @@ class AuditLogService:
         page = 1
         page_size = 30
         excel_data = [
-            ['会话ID', '应用名称', '会话创建时间', '用户名称', '消息角色', '消息发送时间', '消息文本内容', '点赞',
-             '点踩', '复制']]
+            ['Session ID', 'Application Name', 'Session creation time', 'Username', 'Message Role',
+             'Message sending time',
+             'Message text content',
+             'Like',
+             'Dislike', 'copy']]
         bisheng_pro = settings.get_system_login_method().bisheng_pro
         if bisheng_pro:
-            excel_data[0].append('是否命中内容安全审查')
+            excel_data[0].append('Does it meet the content security review requirements?')
 
         while True:
             result, total = cls.get_session_list(user, flow_ids, user_ids, group_ids, start_date, end_date, feedback,
@@ -524,26 +579,26 @@ class AuditLogService:
                 for message in chat.messages:
                     message_data = [chat.chat_id, chat.flow_name, chat.create_time.strftime('%Y/%m/%d %H:%M:%S'),
                                     chat.user_name,
-                                    '用户' if message.category == 'question' else 'AI',
+                                    'User' if message.category == 'question' else 'AI',
                                     message.create_time.strftime('%Y/%m/%d %H:%M:%S'),
                                     message.message,
-                                    '是' if message.liked == LikedType.LIKED.value else '否',
-                                    '是' if message.liked == LikedType.DISLIKED.value else '否',
-                                    '是' if message.copied else '否']
+                                    'Yes' if message.liked == LikedType.LIKED.value else 'No',
+                                    'Yes' if message.liked == LikedType.DISLIKED.value else 'No',
+                                    'Yes' if message.copied else 'No']
                     if bisheng_pro:
                         message_data.append(
-                            '是' if message.sensitive_status == SensitiveStatus.VIOLATIONS.value else '否')
+                            'Yes' if message.sensitive_status == SensitiveStatus.VIOLATIONS.value else 'No')
                     excel_data.append(message_data)
 
-        minio_client = MinioClient()
+        minio_client = get_minio_storage_sync()
         tmp_object_name = f'tmp/session/export_{generate_uuid()}.csv'
         with NamedTemporaryFile(mode='w', newline='') as tmp_file:
             csv_writer = csv.writer(tmp_file)
             csv_writer.writerows(excel_data)
             tmp_file.seek(0)
-            minio_client.upload_minio(tmp_object_name, tmp_file.name,
-                                      'application/text',
-                                      minio_client.tmp_bucket)
+            minio_client.put_object_sync(object_name=tmp_object_name, file=tmp_file.name,
+                                         content_type='application/text',
+                                         bucket_name=minio_client.tmp_bucket)
         share_url = minio_client.get_share_link(tmp_object_name, minio_client.tmp_bucket)
         return minio_client.clear_minio_share_host(share_url)
 

@@ -1,0 +1,490 @@
+from datetime import datetime
+from enum import Enum
+from typing import Any, List, Optional, Union, Dict
+
+from pydantic import BaseModel, field_validator
+from sqlalchemy import JSON
+from sqlmodel import Column, DateTime, Field, delete, func, or_, select, text, update
+from sqlmodel.sql.expression import Select, SelectOfScalar, col
+
+from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.database.models.role_access import AccessType, RoleAccessDao
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
+from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.models.user_role import UserRoleDao
+
+
+class KnowledgeTypeEnum(Enum):
+    QA = 1  # QA知识库
+    NORMAL = 0  # 文档知识库
+    PRIVATE = 2  # 工作台的个人知识库
+
+
+class KnowledgeState(Enum):
+    UNPUBLISHED = 0
+    PUBLISHED = 1  # 文档知识库成功的状态
+    COPYING = 2
+    REBUILDING = 3  # 文档知识库重建中的状态
+    FAILED = 4  # 文档知识库重建失败的状态
+
+
+class MetadataFieldType(str, Enum):
+    """ 元数据字段类型"""
+    STRING = "string"
+    NUMBER = "number"
+    TIME = "time"
+
+    # 大小写不敏感的枚举匹配
+    @classmethod
+    def _missing_(cls, value: Any) -> Optional["MetadataFieldType"]:
+        if isinstance(value, str):
+            for member in cls:
+                if member.value.lower() == value.lower():
+                    return member
+        return None
+
+
+class KnowledgeBase(SQLModelSerializable):
+    user_id: Optional[int] = Field(default=None, index=True)
+    name: str = Field(index=True, min_length=1, max_length=200, description='知识库名, 最少一个字符，最多30个字符')
+    type: int = Field(index=False, default=0, description='0 为普通知识库，1 为QA知识库')
+    description: Optional[str] = Field(default=None, index=True)
+    model: Optional[str] = Field(default=None, index=False)
+    collection_name: Optional[str] = Field(default=None, index=False)
+    index_name: Optional[str] = Field(default=None, index=False)
+    state: Optional[int] = Field(index=False, default=KnowledgeState.PUBLISHED.value,
+                                 description='0 为未发布，1 为已发布, 2 为复制中')
+
+    metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON, nullable=True),
+                                                  description="知识库的元数据字段配置")
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+
+    @field_validator('model', mode='before')
+    @classmethod
+    def convert_model(cls, v: Any) -> str:
+        if isinstance(v, int):
+            v = str(v)
+        return v
+
+
+class Knowledge(KnowledgeBase, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+
+class KnowledgeRead(KnowledgeBase):
+    id: int
+    user_name: Optional[str] = None
+    copiable: Optional[bool] = None
+
+
+class KnowledgeUpdate(BaseModel):
+    knowledge_id: int
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class KnowledgeCreate(KnowledgeBase):
+    is_partition: Optional[bool] = None
+
+
+class KnowledgeDao(KnowledgeBase):
+
+    @classmethod
+    def insert_one(cls, data: Knowledge) -> Knowledge:
+        with get_sync_db_session() as session:
+            session.add(data)
+            session.commit()
+            session.refresh(data)
+            return data
+
+    @classmethod
+    async def async_insert_one(cls, data: Knowledge) -> Knowledge:
+        async with get_async_db_session() as session:
+            session.add(data)
+            await session.commit()
+            await session.refresh(data)
+            return data
+
+    @classmethod
+    def update_one(cls, data: Knowledge) -> Knowledge:
+        with get_sync_db_session() as session:
+            session.add(data)
+            session.commit()
+            session.refresh(data)
+            return data
+
+    @classmethod
+    async def aupdate_one(cls, data: Knowledge) -> Knowledge:
+        async with get_async_db_session() as session:
+            session.add(data)
+            await session.commit()
+            await session.refresh(data)
+            return data
+
+    @classmethod
+    async def async_update_state(cls, knowledge_id: int, state: KnowledgeState, update_time: Optional[datetime] = None):
+        async with get_async_db_session() as session:
+            statement = update(Knowledge).where(col(Knowledge.id) == knowledge_id)
+            statement = statement.values(state=state.value,
+                                         update_time=update_time or datetime.now())
+            await session.exec(statement)
+            await session.commit()
+
+    @classmethod
+    def update_state(cls, knowledge_id: int, state: KnowledgeState, update_time: Optional[datetime] = None):
+        with get_sync_db_session() as session:
+            statement = update(Knowledge).where(col(Knowledge.id) == knowledge_id)
+            statement = statement.values(state=state.value,
+                                         update_time=update_time or datetime.now())
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def update_knowledge_update_time(cls, knowledge: Knowledge):
+        statement = update(Knowledge).where(Knowledge.id == knowledge.id).values(
+            update_time=text('NOW()'))
+        with get_sync_db_session() as session:
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def query_by_id(cls, knowledge_id: int) -> Knowledge:
+        with get_sync_db_session() as session:
+            return session.get(Knowledge, knowledge_id)
+
+    @classmethod
+    async def aquery_by_id(cls, knowledge_id: int) -> Knowledge:
+        async with get_async_db_session() as session:
+            return await session.get(Knowledge, knowledge_id)
+
+    @classmethod
+    async def async_query_by_id(cls, knowledge_id: int) -> Knowledge:
+        async with get_async_db_session() as session:
+            result = await session.execute(select(Knowledge).where(Knowledge.id == knowledge_id))
+            return result.scalars().first()
+
+    @classmethod
+    def get_list_by_ids(cls, ids: List[int]) -> List[Knowledge]:
+        with get_sync_db_session() as session:
+            return session.exec(select(Knowledge).where(Knowledge.id.in_(ids))).all()
+
+    @classmethod
+    async def aget_list_by_ids(cls, ids: List[int]) -> List[Knowledge]:
+        async with get_async_db_session() as session:
+            result = await session.exec(select(Knowledge).where(col(Knowledge.id).in_(ids)))
+            return result.all()
+
+    @classmethod
+    def _user_knowledge_filters(
+            cls,
+            statement: Any,
+            user_id: int,
+            knowledge_id_extra: List[int] = None,
+            knowledge_type: KnowledgeTypeEnum = None,
+            name: str = None,
+            page: int = 0,
+            limit: int = 0,
+            filter_knowledge: List[int] = None) -> Union[Select, SelectOfScalar]:
+        if knowledge_id_extra:
+            statement = statement.where(
+                or_(Knowledge.id.in_(knowledge_id_extra), Knowledge.user_id == user_id))
+        else:
+            statement = statement.where(Knowledge.user_id == user_id)
+        if filter_knowledge:
+            statement = statement.where(Knowledge.id.in_(filter_knowledge))
+        if knowledge_type:
+            statement = statement.where(Knowledge.type == knowledge_type.value)
+        elif knowledge_type is False:
+            # 当显式传入False时，不过滤个人知识库
+            pass
+        else:
+            # 默认情况下过滤掉个人知识库
+            statement = statement.where(Knowledge.type != KnowledgeTypeEnum.PRIVATE.value)
+        if name:
+            # 同时模糊检索知识库内的文件名称来查询对应的知识库
+            file_knowledge_ids = KnowledgeFileDao.get_knowledge_ids_by_name(name)
+            if file_knowledge_ids:
+                statement = statement.where(
+                    or_(Knowledge.name.like(f'%{name}%'), Knowledge.id.in_(file_knowledge_ids)))
+            else:
+                statement = statement.where(Knowledge.name.like(f'%{name}%'))
+        if page and limit:
+            statement = statement.offset((page - 1) * limit).limit(limit)
+        return statement
+
+    @classmethod
+    def get_user_knowledge(cls,
+                           user_id: int,
+                           knowledge_id_extra: List[int] = None,
+                           knowledge_type: KnowledgeTypeEnum = None,
+                           name: str = None,
+                           page: int = 0,
+                           limit: int = 10,
+                           filter_knowledge: List[int] = None) -> List[Knowledge]:
+        statement = select(Knowledge)
+
+        statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
+                                                knowledge_type, name, page, limit,
+                                                filter_knowledge)
+
+        statement = statement.order_by(Knowledge.update_time.desc())
+        with get_sync_db_session() as session:
+            return session.exec(statement).all()
+
+    @classmethod
+    async def aget_user_knowledge(cls,
+                                  user_id: int,
+                                  knowledge_id_extra: List[int] = None,
+                                  knowledge_type: KnowledgeTypeEnum = None,
+                                  name: str = None,
+                                  page: int = 0,
+                                  limit: int = 10,
+                                  filter_knowledge: List[int] = None) -> List[Knowledge]:
+        statement = select(Knowledge)
+
+        statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
+                                                knowledge_type, name, page, limit,
+                                                filter_knowledge)
+
+        statement = statement.order_by(Knowledge.update_time.desc())
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
+    def count_user_knowledge(cls,
+                             user_id: int,
+                             knowledge_id_extra: List[int] = None,
+                             knowledge_type: KnowledgeTypeEnum = None,
+                             name: str = None) -> int:
+        statement = select(func.count(Knowledge.id))
+        statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
+                                                knowledge_type, name)
+        with get_sync_db_session() as session:
+            return session.scalar(statement)
+
+    @classmethod
+    async def acount_user_knowledge(cls,
+                                    user_id: int,
+                                    knowledge_id_extra: List[int] = None,
+                                    knowledge_type: KnowledgeTypeEnum = None,
+                                    name: str = None) -> int:
+        statement = select(func.count(Knowledge.id))
+        statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
+                                                knowledge_type, name)
+        async with get_async_db_session() as session:
+            return await session.scalar(statement)
+
+    @classmethod
+    def count_by_filter(cls, filters: List[Any]) -> int:
+        with get_sync_db_session() as session:
+            return session.scalar(select(Knowledge.id).where(*filters))
+
+    @classmethod
+    def judge_knowledge_permission(cls, user_name: str,
+                                   knowledge_ids: List[int],
+                                   include_private: bool = False) -> List[Knowledge]:
+        """
+        根据用户名和知识库ID列表，获取用户有权限查看的知识库列表
+        :param user_name: 用户名
+        :param knowledge_ids: 知识库ID列表
+        :param include_private: 是否包含个人知识库
+        :return: 返回用户有权限的知识库列表
+        """
+        # 获取用户信息
+        user_info = UserDao.get_user_by_username(user_name)
+        if not user_info:
+            return []
+
+        # 查询用户所属于的角色
+        role_list = UserRoleDao.get_user_roles(user_info.user_id)
+        if not role_list:
+            return []
+
+        role_id_list = []
+        is_admin = False
+        for role in role_list:
+            role_id_list.append(role.role_id)
+            if role.role_id == 1:
+                is_admin = True
+        # admin 用户拥有所有知识库权限
+        if is_admin:
+            return KnowledgeDao.get_list_by_ids(knowledge_ids)
+
+        # 查询角色 有使用权限的知识库列表
+        role_access_list = RoleAccessDao.find_role_access(role_id_list, knowledge_ids,
+                                                          AccessType.KNOWLEDGE)
+
+        # 查询是否包含了用户自己创建的知识库
+        if include_private:
+            # 如果需要包含个人知识库，则不进行类型过滤
+            user_knowledge_list = cls.get_user_knowledge(user_info.user_id,
+                                                         filter_knowledge=knowledge_ids,
+                                                         knowledge_type=False)
+        else:
+            # 默认行为：过滤掉个人知识库
+            user_knowledge_list = cls.get_user_knowledge(user_info.user_id,
+                                                         filter_knowledge=knowledge_ids)
+        if not role_access_list and not user_knowledge_list:
+            return []
+
+        finally_knowledge_list = [access.third_id for access in role_access_list]
+        finally_knowledge_list.extend([str(one.id) for one in user_knowledge_list])
+        statement = select(Knowledge).where(Knowledge.id.in_(finally_knowledge_list))
+
+        with get_sync_db_session() as session:
+            return session.exec(statement).all()
+
+    @classmethod
+    def filter_knowledge_by_ids(cls,
+                                knowledge_ids: List[int],
+                                keyword: str = None,
+                                page: int = 0,
+                                limit: int = 0) -> (List[Knowledge], int):
+        """
+        根据关键字和知识库id过滤出对应的知识库
+
+        """
+        statement = select(Knowledge)
+        count_statement = select(func.count(Knowledge.id))
+        if knowledge_ids:
+            statement = statement.where(Knowledge.id.in_(knowledge_ids))
+            count_statement = count_statement.where(Knowledge.id.in_(knowledge_ids))
+        if keyword:
+            statement = statement.where(
+                or_(Knowledge.name.like('%' + keyword + '%'),
+                    Knowledge.description.like('%' + keyword + '%')))
+            count_statement = count_statement.where(
+                or_(Knowledge.name.like('%' + keyword + '%'),
+                    Knowledge.description.like('%' + keyword + '%')))
+        if page and limit:
+            statement = statement.offset((page - 1) * limit).limit(limit)
+        statement = statement.order_by(Knowledge.update_time.desc())
+        with get_sync_db_session() as session:
+            return session.exec(statement).all(), session.scalar(count_statement)
+
+    @classmethod
+    def generate_all_knowledge_filter(cls,
+                                      statement,
+                                      name: str = None,
+                                      knowledge_type: KnowledgeTypeEnum = None):
+        if knowledge_type:
+            statement = statement.where(Knowledge.type == knowledge_type.value)
+        if name:
+            # 同时模糊检索知识库内的文件名称来查询对应的知识库
+            file_knowledge_ids = KnowledgeFileDao.get_knowledge_ids_by_name(name)
+            if file_knowledge_ids:
+                statement = statement.where(
+                    or_(Knowledge.name.like(f'%{name}%'), Knowledge.id.in_(file_knowledge_ids)))
+            else:
+                statement = statement.where(Knowledge.name.like(f'%{name}%'))
+        return statement
+
+    @classmethod
+    def get_all_knowledge(cls,
+                          name: str = None,
+                          knowledge_type: KnowledgeTypeEnum = None,
+                          page: int = 0,
+                          limit: int = 0) -> List[Knowledge]:
+        statement = select(Knowledge)
+        statement = cls.generate_all_knowledge_filter(statement,
+                                                      name=name,
+                                                      knowledge_type=knowledge_type)
+
+        if page and limit:
+            statement = statement.offset((page - 1) * limit).limit(limit)
+        statement = statement.order_by(Knowledge.update_time.desc())
+        with get_sync_db_session() as session:
+            return session.exec(statement).all()
+
+    @classmethod
+    async def aget_all_knowledge(cls,
+                                 name: str = None,
+                                 knowledge_type: KnowledgeTypeEnum = None,
+                                 page: int = 0,
+                                 limit: int = 0) -> List[Knowledge]:
+        statement = select(Knowledge)
+        statement = cls.generate_all_knowledge_filter(statement,
+                                                      name=name,
+                                                      knowledge_type=knowledge_type)
+
+        if page and limit:
+            statement = statement.offset((page - 1) * limit).limit(limit)
+        statement = statement.order_by(Knowledge.update_time.desc())
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
+    def count_all_knowledge(cls,
+                            name: str = None,
+                            knowledge_type: KnowledgeTypeEnum = None) -> int:
+        statement = select(func.count(Knowledge.id))
+        statement = cls.generate_all_knowledge_filter(statement,
+                                                      name=name,
+                                                      knowledge_type=knowledge_type)
+        with get_sync_db_session() as session:
+            return session.scalar(statement)
+
+    @classmethod
+    async def acount_all_knowledge(cls,
+                                   name: str = None,
+                                   knowledge_type: KnowledgeTypeEnum = None) -> int:
+        statement = select(func.count(Knowledge.id))
+        statement = cls.generate_all_knowledge_filter(statement,
+                                                      name=name,
+                                                      knowledge_type=knowledge_type)
+        async with get_async_db_session() as session:
+            return await session.scalar(statement)
+
+    @classmethod
+    def update_knowledge_list(cls, knowledge_list: List[Knowledge]):
+        with get_sync_db_session() as session:
+            for knowledge in knowledge_list:
+                session.add(knowledge)
+            session.commit()
+
+    @classmethod
+    def get_knowledge_by_name(cls, name: str, user_id: int = 0) -> Knowledge:
+        """ 通过知识库名称获取知识库详情 """
+        statement = select(Knowledge).where(Knowledge.name == name)
+        if user_id:
+            statement = statement.where(Knowledge.user_id == user_id)
+        with get_sync_db_session() as session:
+            return session.exec(statement).first()
+
+    @classmethod
+    def delete_knowledge(cls, knowledge_id: int, only_clear: bool = False):
+        """
+        删除或者清空知识库
+        """
+        # 处理knowledge file
+        with get_sync_db_session() as session:
+            session.exec(delete(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id))
+            # 清空知识库时，不删除知识库记录
+            if not only_clear:
+                session.exec(delete(Knowledge).where(Knowledge.id == knowledge_id))
+            session.commit()
+
+    @classmethod
+    def get_knowledge_by_time_range(cls, start_time: datetime, end_time: datetime, page: int = 0,
+                                    page_size: int = 0) -> List[Knowledge]:
+        """ 根据创建时间范围获取知识库列表 """
+        statement = select(Knowledge).where(
+            Knowledge.create_time >= start_time,
+            Knowledge.create_time < end_time
+        )
+        if page and page_size:
+            statement = statement.offset((page - 1) * page_size).limit(page_size)
+        statement = statement.order_by(col(Knowledge.id).asc())
+        with get_sync_db_session() as session:
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_first_knowledge(cls) -> Optional[Knowledge]:
+        """ 获取第一个知识库 """
+        statement = select(Knowledge).order_by(col(Knowledge.id).asc()).limit(1)
+        with get_sync_db_session() as session:
+            return session.exec(statement).first()

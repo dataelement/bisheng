@@ -1,44 +1,42 @@
 import json
-from typing import Any
+from typing import Any, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi_jwt_auth import AuthJWT
-from sqlmodel import select
+from loguru import logger
 from starlette.responses import StreamingResponse
 
-from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.errcode.flow import FlowOnlineEditError, FlowNameExistsError
 from bisheng.api.services.flow import FlowService
-from bisheng.api.services.user_service import UserPayload, get_login_user
-from bisheng.api.utils import build_flow_no_yield, get_L2_param_from_flow, remove_api_keys
-from bisheng.api.v1.schemas import (FlowCompareReq, FlowListRead, FlowVersionCreate, StreamData,
-                                    UnifiedResponseModel, resp_200)
-from bisheng.database.base import session_getter
-from bisheng.database.models.flow import (Flow, FlowCreate, FlowDao, FlowRead, FlowReadWithStyle, FlowType,
-                                          FlowUpdate)
+from bisheng.api.utils import build_flow_no_yield, remove_api_keys
+from bisheng.api.v1.schemas import (FlowCompareReq, FlowVersionCreate, StreamData, resp_200)
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.flow import FlowOnlineEditError, FlowNameExistsError
+from bisheng.common.errcode.http_error import UnAuthorizedError, ServerError, NotFoundError
+from bisheng.common.services import telemetry_service
+from bisheng.common.services.config_service import settings
+from bisheng.core.database import get_async_db_session
+from bisheng.core.logger import trace_id_var
+from bisheng.database.models.flow import (Flow, FlowCreate, FlowDao, FlowRead, FlowType, FlowUpdate)
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
-from bisheng.settings import settings
-from bisheng.utils.logger import logger
-
+from bisheng.share_link.api.dependencies import header_share_token_parser
+from bisheng.share_link.domain.models.share_link import ShareLink
 
 # build router
-router = APIRouter(prefix='/flows', tags=['Flows'], dependencies=[Depends(get_login_user)])
+router = APIRouter(prefix='/flows', tags=['Flows'], dependencies=[Depends(UserPayload.get_login_user)])
 
 
 @router.post('/', status_code=201)
-def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload = Depends(get_login_user)):
+def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Create a new flow."""
     # 判断用户是否重复技能名
-    with session_getter() as session:
-        if session.exec(
-                select(Flow).where(Flow.name == flow.name,
-                                   Flow.user_id == login_user.user_id)).first():
-            raise FlowNameExistsError.http_exception()
+    exist_flow = FlowDao.get_flow_by_name(login_user.user_id, flow.name)
+    if exist_flow:
+        raise FlowNameExistsError()
     flow.user_id = login_user.user_id
     db_flow = Flow.model_validate(flow)
     # 创建新的技能
-    db_flow = FlowDao.create_flow(db_flow,FlowType.FLOW.value)
+    db_flow = FlowDao.create_flow(db_flow, FlowType.FLOW.value)
 
     current_version = FlowVersionDao.get_version_by_flow(db_flow.id)
     ret = FlowRead.model_validate(db_flow)
@@ -48,74 +46,62 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
 
 
 @router.get('/versions', status_code=200)
-def get_versions(*, flow_id: str, Authorize: AuthJWT = Depends()):
+def get_versions(*, flow_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     获取技能对应的版本列表
     """
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**payload)
-    return FlowService.get_version_list_by_flow(user, flow_id)
+    return FlowService.get_version_list_by_flow(login_user, flow_id)
 
 
 @router.post('/versions', status_code=200)
-def create_versions(*,
-                    flow_id: str,
-                    flow_version: FlowVersionCreate,
-                    Authorize: AuthJWT = Depends()):
+async def create_versions(*,
+                          flow_id: str,
+                          flow_version: FlowVersionCreate,
+                          login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     创建新的技能版本
     """
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**payload)
-    return FlowService.create_new_version(user, flow_id, flow_version)
+    return await FlowService.create_new_version(login_user, flow_id, flow_version)
 
 
 @router.put('/versions/{version_id}', status_code=200)
-def update_versions(*,
-                    request: Request,
-                    version_id: int,
-                    flow_version: FlowVersionCreate,
-                    login_user: UserPayload = Depends(get_login_user)):
+async def update_versions(*,
+                          request: Request,
+                          version_id: int,
+                          flow_version: FlowVersionCreate,
+                          login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     更新版本
     """
-    return FlowService.update_version_info(request, login_user, version_id, flow_version)
+    return await FlowService.update_version_info(request, login_user, version_id, flow_version)
 
 
 @router.delete('/versions/{version_id}', status_code=200)
-def delete_versions(*, version_id: int, Authorize: AuthJWT = Depends()):
+def delete_versions(*, version_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     删除版本
     """
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**payload)
-    return FlowService.delete_version(user, version_id)
+    return FlowService.delete_version(login_user, version_id)
 
 
 @router.get('/versions/{version_id}', status_code=200)
-def get_version_info(*, version_id: int, Authorize: AuthJWT = Depends()):
+def get_version_info(*, version_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     获取版本信息
     """
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**payload)
-    return FlowService.get_version_info(user, version_id)
+    return FlowService.get_version_info(login_user, version_id)
 
 
 @router.post('/change_version', status_code=200)
-def change_version(*,
-                   request: Request,
-                   flow_id: str = Query(default=None, description='技能唯一ID'),
-                   version_id: int = Query(default=None, description='需要设置的当前版本ID'),
-                   login_user: UserPayload = Depends(get_login_user)):
+async def change_version(*,
+                         request: Request,
+                         flow_id: str = Query(default=None, description='技能唯一ID'),
+                         version_id: int = Query(default=None, description='需要设置的当前版本ID'),
+                         login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     修改当前版本
     """
-    return FlowService.change_current_version(request, login_user, flow_id, version_id)
+    return await FlowService.change_current_version(request, login_user, flow_id, version_id)
 
 
 @router.get('/', status_code=200)
@@ -125,22 +111,16 @@ def read_flows(*,
                page_size: int = Query(default=10, description='每页数量'),
                page_num: int = Query(default=1, description='页数'),
                status: int = None,
-               Authorize: AuthJWT = Depends()):
+               login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Read all flows."""
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**payload)
-    try:
-        return FlowService.get_all_flows(user, name, status, tag_id, page_num, page_size)
-    except Exception as e:
-        logger.exception(e)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    return FlowService.get_all_flows(login_user, name, status, tag_id, page_num, page_size)
 
 
 @router.get('/{flow_id}')
-def read_flow(*, flow_id: str, login_user: UserPayload = Depends(get_login_user)):
+async def read_flow(*, flow_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user),
+                    share_link: Union['ShareLink', None] = Depends(header_share_token_parser)):
     """Read a flow."""
-    return FlowService.get_one_flow(login_user, flow_id)
+    return await FlowService.get_one_flow(login_user, flow_id, share_link)
 
 
 @router.patch('/{flow_id}')
@@ -148,13 +128,13 @@ async def update_flow(*,
                       request: Request,
                       flow_id: str,
                       flow: FlowUpdate,
-                      login_user: UserPayload = Depends(get_login_user)):
+                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Update a flow."""
-    db_flow = FlowDao.get_flow_by_id(flow_id)
+    db_flow = await FlowDao.aget_flow_by_id(flow_id)
     if not db_flow:
         raise HTTPException(status_code=404, detail='Flow not found')
 
-    if not login_user.access_check(db_flow.user_id, flow_id, AccessType.FLOW_WRITE):
+    if not await login_user.async_access_check(db_flow.user_id, flow_id, AccessType.FLOW_WRITE):
         return UnAuthorizedError.return_resp()
 
     flow_data = flow.model_dump(exclude_unset=True)
@@ -169,7 +149,7 @@ async def update_flow(*,
                                       flow_id=flow_id)
         except Exception as exc:
             logger.exception(exc)
-            raise HTTPException(status_code=500, detail=f'Flow build error, {str(exc)}')
+            raise ServerError(exception=exc)
 
     if db_flow.status == 2 and ('status' not in flow_data or flow_data['status'] != 1):
         raise FlowOnlineEditError.http_exception()
@@ -180,11 +160,11 @@ async def update_flow(*,
         if key in ['data', 'create_time', 'update_time']:
             continue
         setattr(db_flow, key, value)
-    with session_getter() as session:
+    async with get_async_db_session() as session:
         session.add(db_flow)
-        session.commit()
-        session.refresh(db_flow)
-    FlowService.update_flow_hook(request, login_user, db_flow)
+        await session.commit()
+        await session.refresh(db_flow)
+    await FlowService.update_flow_hook(request, login_user, db_flow)
     return resp_200(db_flow)
 
 
@@ -192,57 +172,52 @@ async def update_flow(*,
 def delete_flow(*,
                 request: Request,
                 flow_id: str,
-                login_user: UserPayload = Depends(get_login_user)):
+                login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Delete a flow."""
 
     db_flow = FlowDao.get_flow_by_id(flow_id)
     if not db_flow:
-        raise HTTPException(status_code=404, detail='Flow not found')
-    if not login_user.access_check(db_flow.user_id, flow_id, AccessType.FLOW_WRITE):
+        raise NotFoundError()
+    access_type = AccessType.FLOW_WRITE
+    if db_flow.flow_type == FlowType.WORKFLOW.value:
+        access_type = AccessType.WORKFLOW_WRITE
+    if not login_user.access_check(db_flow.user_id, flow_id, access_type):
         return UnAuthorizedError.return_resp()
     FlowDao.delete_flow(db_flow)
+    telemetry_service.log_event_sync(
+        user_id=login_user.user_id,
+        event_type=BaseTelemetryTypeEnum.DELETE_APPLICATION,
+        trace_id=trace_id_var.get()
+    )
     FlowService.delete_flow_hook(request, login_user, db_flow)
-    return resp_200(message='删除成功')
-
-
-@router.get('/download/')
-async def download_file():
-    """Download all flows as a file."""
-    flows = read_flows()
-    return resp_200(FlowListRead(flows=flows))
+    return resp_200()
 
 
 @router.post('/compare')
-async def compare_flow_node(*, item: FlowCompareReq, Authorize: AuthJWT = Depends()):
+async def compare_flow_node(*, item: FlowCompareReq, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ 技能多版本对比 """
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**payload)
-    return await FlowService.compare_flow_node(user, item)
+    return await FlowService.compare_flow_node(login_user, item)
 
 
 @router.get('/compare/stream', status_code=200, response_class=StreamingResponse)
 async def compare_flow_node_stream(*,
                                    data: Any = Query(description='对比所需数据的json序列化后的字符串'),
-                                   Authorize: AuthJWT = Depends()):
+                                   login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ 技能多版本对比 """
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**payload)
     item = FlowCompareReq(**json.loads(data))
 
     async def event_stream(req: FlowCompareReq):
         yield str(StreamData(event='message', data={'type': 'start', 'data': 'start'}))
         try:
-            async for one in FlowService.compare_flow_stream(user, req):
+            async for one in FlowService.compare_flow_stream(login_user, req):
                 yield one
             yield str(StreamData(event='message', data={'type': 'end', 'data': ''}))
         except Exception as e:
             logger.exception('compare flow stream error')
-            yield str(StreamData(event='message', data={'type': 'end', 'message': str(e)}))
+            yield ServerError(exception=e).to_sse_event_instance_str()
 
     try:
         return StreamingResponse(event_stream(item), media_type='text/event-stream')
     except Exception as exc:
         logger.error(exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise ServerError()

@@ -23,8 +23,10 @@ export const enum ProgressStatus {
 const KnowledgeUploadComponent = ({
     size = 50,
     progressClassName = '',
+    knowledgeId,
     onFileChange,
-    onSelectFile
+    onSelectFile,
+    initialFiles = []
 }) => {
     const { t } = useTranslation()
     const { message } = useToast()
@@ -73,23 +75,28 @@ const KnowledgeUploadComponent = ({
 
     // beforeupload
     const handleDrop = (acceptedFiles) => {
-        // 校验超大小文件
         const sizeLimit = appConfig.uploadFileMaxSize * 1024 * 1024;
+
         const [bigFiles, files] = acceptedFiles.reduce(
             ([big, small], file) => {
-                if (progressList.some(pros => pros.fileName === file.name)) return [big, small] // 过滤重复文件
+                if (progressList.some(pros => pros.fileName === file.name)) return [big, small];
+                // 大小校验
                 return file.size < sizeLimit
-                    ? [big, [...small, file]]
-                    : [[...big, file.name], small]
+                    ? [big, [...small, file]] // 合法文件
+                    : [[...big, file.name], small]; // 超大小文件
             },
-            [[], []]
+            [[], [], []]
         );
-        bigFiles.length && message({
-            title: t('prompt'),
-            description: bigFiles.map(str => `${t('code.file')}: ${str} ${t('code.sizeExceedsLimit', { size })}`),
-        });
-        if (!files.length) return
-        // 追加上传文件
+
+
+        if (bigFiles.length > 0) {
+            message({
+                title: t('prompt'),
+                description: bigFiles.map(str => `${t('code.file')}: ${str} ${t('code.sizeExceedsLimit', { size: appConfig.uploadFileMaxSize + 'MB' })}`).join('；'),
+                variant: 'error'
+            });
+        }
+        if (!files?.length) return
         setProgressList((list) => {
             return [...list, ...files.map(file => {
                 return {
@@ -113,11 +120,11 @@ const KnowledgeUploadComponent = ({
                 error: !result.file_path
             } : pros
         )))
-        
+
         // 临时去重方式
         successFilesRef.current = successFilesRef.current.filter((pros) => pros.id !== id)
         failFilesRef.current = failFilesRef.current.filter((pros) => pros.id !== id)
-        
+
         result.file_path
             ? successFilesRef.current.push(result)
             : failFilesRef.current.push(result)
@@ -128,6 +135,29 @@ const KnowledgeUploadComponent = ({
         failFilesRef.current = failFilesRef.current.filter((pros) => pros.id !== id)
         setProgressList((list) => list.filter((pros) => pros.id !== id))
     }
+    useEffect(() => {
+        if (initialFiles.length > 0) {
+            // 将初始文件转换为组件需要的Progress格式
+            const initialProgress = initialFiles.map(file => ({
+                id: file.id || generateUUID(6), // 用现有ID或生成新ID
+                fileName: file.fileName,
+                // 模拟已完成状态（无实际File对象，因为是回显）
+                progress: ProgressStatus.End,
+                error: false,
+                // 保留原始文件数据
+                fileData: file
+            }));
+
+            // 添加到进度列表
+            setProgressList(initialProgress);
+            // 更新计数和成功文件列表
+            progressCountRef.current = initialFiles.length;
+            successFilesRef.current = initialFiles;
+            // 通知父组件
+            onSelectFile(initialFiles.length);
+            onFileChange(initialFiles, []);
+        }
+    }, [initialFiles]);
 
     return <div className="">
         <DropZone onDrop={handleDrop} />
@@ -135,7 +165,12 @@ const KnowledgeUploadComponent = ({
             {progressList.map((pros) =>
                 <ProgressItem
                     key={pros.id}
-                    item={pros}
+                    knowledgeId={knowledgeId}
+                    item={{
+                        ...pros,
+                        // 优先使用fileData（回显文件），其次用原始file（新上传文件）
+                        displayFile: pros.fileData || pros.file
+                    }}
                     onResulte={handleUploadResult}
                     onDelete={handleDelete}
                 />

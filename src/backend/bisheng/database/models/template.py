@@ -5,22 +5,22 @@ from pydantic import model_validator
 from sqlalchemy import JSON, Column, DateTime, text, String
 from sqlmodel import Field
 
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
 
 
 class TemplateSkillBase(SQLModelSerializable):
     name: str = Field(index=True)
     description: str = Field(index=False)
     data: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
-    order_num: Optional[int] = Field(default=True)
+    order_num: Optional[int] = Field(default=True, index=True)
     # 1 flow 5 assistant 10 workflow
     flow_type: Optional[int] = Field(default=1)
     flow_id: Optional[str] = Field(default=None, index=False)
+    guide_word: Optional[str] = Field(default=None, sa_column=Column(String(length=1000)))
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
-    guide_word: Optional[str] = Field(default=None, sa_column=Column(String(length=1000)))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class Template(TemplateSkillBase, table=True):

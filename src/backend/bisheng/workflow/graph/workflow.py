@@ -11,7 +11,8 @@ class Workflow:
 
     def __init__(self,
                  workflow_id: str,
-                 user_id: str = None,
+                 workflow_name: str = '',
+                 user_id: int = None,
                  workflow_data: Dict = None,
                  async_mode: bool = False,
                  max_steps: int = 0,
@@ -29,6 +30,7 @@ class Workflow:
         self.graph_engine = GraphEngine(user_id=user_id,
                                         async_mode=async_mode,
                                         workflow_id=workflow_id,
+                                        workflow_name=workflow_name or workflow_id,
                                         workflow_data=workflow_data,
                                         max_steps=max_steps,
                                         callback=callback)

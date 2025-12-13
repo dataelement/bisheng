@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { useRecoilValue } from "recoil";
+import { useLocalize } from "~/hooks";
 import GuideWord from "./components/GuideWord";
 import InputForm from "./components/InputForm";
 import InputFormSkill from "./components/InputFormSkill";
@@ -8,6 +9,7 @@ import MessageBsChoose from "./components/MessageBsChoose";
 import MessageFeedbackForm from "./components/MessageFeedbackForm";
 import MessageFile from "./components/MessageFile";
 import MessageNodeRun from "./components/MessageNodeRun";
+import MessageRemark from "./components/MessageRemark";
 import MessageRunlog from "./components/MessageRunlog";
 import MessageSystem from "./components/MessageSystem";
 import MessageUser from "./components/MessageUser";
@@ -15,10 +17,11 @@ import ResouceModal from "./components/ResouceModal";
 import { currentChatState, currentRunningState } from "./store/atoms";
 import { useMessage } from "./useMessages";
 
-export default function ChatMessages({ useName, logo }) {
-    const { messageScrollRef, chatId, messages } = useMessage()
-    const { inputForm, guideWord } = useRecoilValue(currentRunningState)
+export default function ChatMessages({ useName, readOnly, title, logo, disabledSearch = false }) {
+    const { messageScrollRef, chatId, messages } = useMessage(readOnly)
+    const { inputForm, guideWord, inputDisabled } = useRecoilValue(currentRunningState)
     const chatState = useRecoilValue(currentChatState)
+    const localize = useLocalize()
 
     console.log('messages :>> ', chatState, messages, guideWord);
     // 反馈
@@ -29,12 +32,13 @@ export default function ChatMessages({ useName, logo }) {
     const remark = chatState?.flow?.guide_word
 
 
-    return <div ref={messageScrollRef} className="h-full overflow-y-auto scrollbar-hide pt-12 pb-60 px-4">
-        {/* 开场白 */}
-        {remark && <MessageBs
-            key={9999}
+    return <div id="messageScrollPanne" ref={messageScrollRef} className="h-full overflow-y-auto scrollbar-hide pt-2 pb-96 px-4">
+        {/* 助手开场白 */}
+        {remark && <MessageRemark
+            readOnly={readOnly}
             logo={logo}
-            data={{ message: remark, isSend: false, chatKey: '', end: true, user_name: '', files: [] }}
+            title={title}
+            message={remark}
         />
         }
 
@@ -42,11 +46,12 @@ export default function ChatMessages({ useName, logo }) {
             messages.map((msg, index) => {
                 // 技能特殊消息
                 if (msg.files?.length) {
-                    return <MessageFile key={msg.id} data={msg} logo={logo} />
+                    return <MessageFile key={msg.id} title={title} data={msg} logo={logo} />
                 } else if (['tool', 'flow', 'knowledge'].includes(msg.category)) {
-                    return <MessageRunlog key={msg.id} data={msg} />
+                    return <MessageRunlog key={msg.id || msg.extra} data={msg} />
                 } else if (msg.thought) {
-                    return <MessageSystem key={msg.id} data={msg} />;
+                    return <MessageSystem
+                        logo={logo} title={title} key={msg.id} data={msg} />;
                 }
 
                 // output节点特殊msg
@@ -55,33 +60,61 @@ export default function ChatMessages({ useName, logo }) {
                         return null
                     case 'question':
                         return <MessageUser
+                            readOnly={readOnly}
                             key={msg.id}
-                            useName={useName}
+                            useName={msg.user_name || useName}
                             data={msg}
+                            disabledSearch={disabledSearch}
+                            showButton={!inputDisabled && chatState?.flow.flow_type !== 10}
                         />;
                     case 'guide_word':
+                        return <MessageRemark
+                            key={msg.id}
+                            logo={logo}
+                            title={title}
+                            message={msg.message.guide_word}
+                        />;
                     case 'output_msg':
                     case 'stream_msg':
                     case "answer":
                         return <MessageBs
+                            readOnly={readOnly}
                             key={msg.id}
                             data={msg}
                             logo={logo}
+                            title={title}
                             onUnlike={(messageId) => { thumbRef.current?.openModal(messageId) }}
                             onSource={(data) => { sourceRef.current?.openModal({ ...data, chatId }) }}
                         />;
                     case 'divider':
                         return <div key={msg.id} className={'flex items-center justify-center py-4 text-gray-400 text-sm'}>
-                            ----------- {msg.message} -----------
+                            ----------- {localize(msg.message)} -----------
                         </div>
                     case 'output_with_choose_msg':
-                        return <MessageBsChoose key={msg.id} data={msg} logo={logo} flow={chatState.flow} />;
+                        return <MessageBsChoose
+                            key={msg.id}
+                            data={msg}
+                            logo={logo}
+                            disabled={readOnly}
+                            flow={chatState.flow}
+                        />;
                     case 'output_with_input_msg':
-                        return <MessageBsChoose type='input' key={msg.id} data={msg} logo={logo} flow={chatState.flow} />;
+                        return <MessageBsChoose
+                            type='input'
+                            key={msg.id}
+                            data={msg}
+                            logo={logo}
+                            disabled={readOnly}
+                            flow={chatState.flow}
+                        />;
                     case 'node_run':
                         return <MessageNodeRun key={msg.id} data={msg} />;
                     case 'system':
-                        return <MessageSystem key={msg.id} data={msg} />;
+                        return <MessageSystem
+                            logo={logo}
+                            title={title}
+                            key={msg.id}
+                            data={msg} />;
                     case 'reasoning':
                     case 'reasoning_answer':
                         return <ReasoningLog key={msg.id} loading={false} msg={msg.message} />
@@ -90,8 +123,17 @@ export default function ChatMessages({ useName, logo }) {
                 }
             })
         }
+        {/* 只有引导问题没有开场白 => 上面得要有图标+应用名称 */}
+        {!remark
+            && !messages.some(msg => msg.category === 'guide_word')
+            && !!guideWord?.length
+            && <MessageRemark
+                logo={logo}
+                title={title}
+                message={''}
+            />}
         {/* 引导词 */}
-        {guideWord && <GuideWord data={guideWord} />}
+        {guideWord && !inputDisabled && !inputForm && !readOnly && <GuideWord data={guideWord} />}
         {/* 表单 */}
         {inputForm && (chatState?.flow.flow_type === 10 ?
             <InputForm data={inputForm} flow={chatState.flow} logo={logo} /> :

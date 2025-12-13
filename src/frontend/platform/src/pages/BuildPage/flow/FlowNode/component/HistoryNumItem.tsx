@@ -4,7 +4,7 @@ import { Label } from "@/components/bs-ui/label";
 import { useState } from "react";
 import { useTranslation } from "react-i18next"; // 引入国际化
 
-export default function HistoryNumItem({ data, onChange }) {
+export default function HistoryNumItem({ data, onChange, i18nPrefix }) {
     const { t } = useTranslation('flow'); // 使用国际化
     const [value, setValue] = useState(data.value);
 

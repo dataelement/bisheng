@@ -9,6 +9,7 @@ import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { getAllLabelsApi, updateHomeLabelApi } from '~/api/apps';
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components";
 import { useToastContext } from "~/Providers";
+import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 
 function DragItem({ className = '', data, children, onCancel }) {
@@ -29,6 +30,7 @@ export default function MarkLabel({ open, home, onClose }) {
     const [selected, setSelected] = useState([])
 
     const { showToast } = useToastContext();
+    const localize = useLocalize();
 
     useEffect(() => {
         async function init() {
@@ -57,7 +59,7 @@ export default function MarkLabel({ open, home, onClose }) {
         setLabels(pre => {
             const newData = pre.map(l => l.value === id ? { ...l, selected: !l.selected } : l)
             if (newData.filter(d => d.selected).length > 10) {
-                showToast({ message: '最多选择10个标签', status: 'warning' });
+                showToast({ message: localize('com_label_max_selection'), status: 'warning' });
                 return pre
             }
             const select = newData.find(d => d.value === id && d.selected)
@@ -87,7 +89,7 @@ export default function MarkLabel({ open, home, onClose }) {
             <DialogHeader className='h-20'>
                 <DialogTitle className='flex items-center space-x-2'>
                     <LightbulbIcon />
-                    <span className='text-sm text-gray-500'>操作提示：在左侧选择要展示的标签，在右侧拖拽进行排序</span>
+                    <span className='text-sm text-gray-500'>{localize('com_label_operation_tip')}</span>
                 </DialogTitle>
             </DialogHeader>
             <div className='h-[600px] w-full grid grid-cols-[70%_30%]'>
@@ -105,7 +107,7 @@ export default function MarkLabel({ open, home, onClose }) {
                 </div>
                 <div className='border-l text-gray-500'>
                     <div className='ml-4'>
-                        <span className='text-md font-bold'>已选：{selected.length}/10</span>
+                        <span className='text-md font-bold'>{localize('com_label_selected', { 0: selected.length })}</span>
                         <DragDropContext onDragEnd={handleDragEnd} onDragStart={() => setFlag(true)} onDragUpdate={() => setFlag(true)}>
                             <Droppable droppableId={'list'}>
                                 {(provided) => (
@@ -131,8 +133,8 @@ export default function MarkLabel({ open, home, onClose }) {
                 </div>
             </div>
             <DialogFooter className='absolute bottom-6 right-6'>
-                <Button variant="outline" className="h-10 w-[120px] px-16" onClick={handleCancel}>取消</Button>
-                <Button className="px-16 h-10 w-[120px]" onClick={handleConfirm}>保存</Button>
+                <Button variant="outline" className="h-10 w-[120px] px-16" onClick={handleCancel}>{localize('com_label_cancel')}</Button>
+                <Button className="px-16 h-10 w-[120px]" onClick={handleConfirm}>{localize('com_label_save')}</Button>
             </DialogFooter>
         </DialogContent>
     </Dialog>

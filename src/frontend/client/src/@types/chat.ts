@@ -63,6 +63,7 @@ export interface SubmitData {
   chatId?: string,
   flowId?: string,
   nodeId?: string,
+  msgId?: string,
   data?: any,
   flow?: FlowData,
   files?: any[]
@@ -81,7 +82,7 @@ export interface RunningStatus {
   /** 输入框禁用状态 */
   inputDisabled: boolean;
   /** 失败原因 */
-  error: string;
+  error: { code: string, data: any };
   /** 展示form表单 */
   inputForm: any;
   /** 展示上传按钮 */
@@ -90,6 +91,8 @@ export interface RunningStatus {
   showStop: boolean;
   /** 引导词 */
   guideWord?: string[];
+  /** 重新运行展示 */
+  showReRun?: boolean;
 }
 
 // 毕昇配置

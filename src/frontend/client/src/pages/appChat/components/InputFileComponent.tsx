@@ -6,6 +6,7 @@ import { useRecoilState } from "recoil";
 import { useToastContext } from "~/Providers";
 import { Button } from "~/components";
 import { uploadFile, uploadFileWithProgress } from "~/api/apps";
+import useLocalize from "~/hooks/useLocalize";
 
 export default function InputFileComponent({
     value,
@@ -20,6 +21,7 @@ export default function InputFileComponent({
     multiple = false,
     flow
 }) {
+    const t = useLocalize()
     const [myValue, setMyValue] = useState(value);
     const [loading, setLoading] = useState(false);
     useEffect(() => {
@@ -50,7 +52,7 @@ export default function InputFileComponent({
     const checkFileSize = (file) => {
         const maxSize = (bishengConfig?.uploaded_files_maximum_size || 50) * 1024 * 1024;
         if (file.size > maxSize) {
-            return `文件：${file.name} 超过 ${bishengConfig?.uploaded_files_maximum_size || 50} MB，已移除`
+            return t('com_inputfile_exceed_limit', { 0: file.name, 1: (bishengConfig?.uploaded_files_maximum_size || 50) })
         }
         return ''
     }
@@ -192,7 +194,7 @@ export default function InputFileComponent({
                         setLoading(false); // Hide loading state if an error occurs
                     });
             } else {
-                showToast({ message: '没有选择文件', status: 'error' });
+                showToast({ message: t('com_inputfile_no_file_selected'), status: 'error' });
 
                 setLoading(false); // Hide loading state if no files were selected
             }
@@ -206,7 +208,7 @@ export default function InputFileComponent({
 
     return (
         <div className={disabled ? "input-component-div" : "w-full"}>
-            <div className="input-file-component flex items-center gap-2 border bg-white rounded-md px-2 justify-between">
+            <div className="input-file-component flex items-center gap-2 border bg-search-input rounded-md px-2 justify-between">
                 <span
                     onClick={handleButtonClick}
                     className={
@@ -214,7 +216,7 @@ export default function InputFileComponent({
                             ? "input-edit-node input-dialog text-muted-foreground"
                             : disabled
                                 ? "input-disable input-dialog input-primary"
-                                : "input-dialog input-primary text-muted-foreground"
+                                : "w-full input-dialog input-primary text-muted-foreground cursor-pointer"
                     }
                 >
                     {myValue !== "" ? myValue : placeholder}
@@ -229,7 +231,7 @@ export default function InputFileComponent({
                             }
                         />
                     )}
-                    {!editNode && loading && (<Loader2 className="text-primary duration-300 pointer-events-none" />)}
+                    {!editNode && loading && (<Loader2 className="text-primary animate-spin duration-300 pointer-events-none" />)}
                 </Button>
             </div>
         </div>

@@ -45,7 +45,7 @@ export default function Notification() {
                 <div className="text-high-foreground mt-3 flex h-full w-full flex-col overflow-y-scroll scrollbar-hide">
                     {notifications.length > 0 ? (
                         notifications.map((notification, index) => (
-                            <Alert data-type={notification.type} // 设置数据属性
+                            <Alert data-type={notification.type} // set attr
                                 className="p-4 rounded-md mb-2
                                 border 
                                 data-[type=success]:border-[#10b981] 

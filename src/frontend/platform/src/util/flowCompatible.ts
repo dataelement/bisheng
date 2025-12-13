@@ -1,8 +1,7 @@
 import { generateUUID } from "@/components/bs-ui/utils";
 
-// 历史版本工作流转换脚本(最新v2)
+// 历史版本工作流转换脚本
 export const flowVersionCompatible = (flow) => {
-
     flow.nodes.forEach((node) => {
 
         switch (node.data.type) {
@@ -11,17 +10,113 @@ export const flowVersionCompatible = (flow) => {
             case 'agent': comptibleAgent(node.data); break;
             case 'output': comptibleOutput(node.data); break;
             case 'llm': comptibleLLM(node.data); break;
-
+            case 'rag': comptibleRag(node.data); break;
+            case 'knowledge_retriever': comptibleKnowledgeRetriever(node.data); break;
         }
     })
     return flow
 }
+const comptibleRag = (node) => {
+    if (!node.v) {
+        node.v = 1
+    }
+    if (node.v == 1) {
+        const knowledgeGroup = node.group_params[0];
+        // 先读取旧参数值，再进行移除，避免丢失数据
+        const oldUserAuthParam = knowledgeGroup.params.find(p => p.key === 'user_auth');
+        const oldMaxChunkSizeParam = knowledgeGroup.params.find(p => p.key === 'max_chunk_size');
+
+        // 移除旧的拆散参数
+        knowledgeGroup.params = knowledgeGroup.params.filter(param =>
+            !['user_auth', 'max_chunk_size'].includes(param.key)
+        );
+
+        const knowledgeIndex = knowledgeGroup.params.findIndex(p => p.key === 'knowledge');
+        // 添加元数据过滤参数
+        const metadataFilterParam = {
+            key: "metadata_filter",
+            label: "true",
+            type: "metadata_filter",
+            value: {},
+        };
+        knowledgeGroup.params.splice(knowledgeIndex + 1, 0, metadataFilterParam);
+
+        // 构造高级检索配置参数
+        const advancedParam = {
+            key: "advanced_retrieval_switch",
+            label: "true",
+            type: "search_switch",
+            value: {
+                keyword_weight: 0.5,
+                vector_weight: 0.5,
+                user_auth: false,
+                search_switch: true,
+                rerank_flag: false,
+                rerank_model: "",
+                max_chunk_size: 15000,
+            }
+        };
+        // 从 v1 的 user_auth 与 max_chunk_size 继承值到新参数
+        if (oldUserAuthParam) {
+            advancedParam.value.user_auth = oldUserAuthParam.value;
+        }
+        if (oldMaxChunkSizeParam) {
+            advancedParam.value.max_chunk_size = oldMaxChunkSizeParam.value;
+        }
+        knowledgeGroup.params.splice(knowledgeIndex + 2, 0, advancedParam);
+
+        node.v = 2;
+    }
+    if (node.v == 2) {
+        const knowledgeGroup = node.group_params[0];
+        const metadataFilterExists = knowledgeGroup.params.some(p => p.key === 'metadata_filter');
+        if (!metadataFilterExists) {
+            const knowledgeIndex = knowledgeGroup.params.findIndex(p => p.key === 'knowledge');
+            const metadataFilterParam = {
+                key: "metadata_filter",
+                label: "true",
+                type: "metadata_filter",
+                value: {},
+            };
+            knowledgeGroup.params.splice(knowledgeIndex + 1, 0, metadataFilterParam);
+        }
+        node.v = 3;
+    }
+}
+
+const comptibleKnowledgeRetriever = (node) => {
+    // 初始化版本（无v字段视为v1）
+    if (!node.v) {
+        node.v = 1;
+    }
+
+    // v1 → v2：确保元数据过滤参数存在
+    if (node.v == 1) {
+        const knowledgeGroup = node.group_params[0];
+        // 检查metadata_filter参数是否缺失
+        const metadataFilterExists = knowledgeGroup.params.some(p => p.key === 'metadata_filter');
+
+        if (!metadataFilterExists) {
+            // 找到knowledge参数的位置，在其后插入元数据过滤参数
+            const knowledgeIndex = knowledgeGroup.params.findIndex(p => p.key === 'knowledge');
+            const metadataFilterParam = {
+                key: "metadata_filter",
+                label: "true",
+                type: "metadata_filter",
+                value: {},
+            };
+            knowledgeGroup.params.splice(knowledgeIndex + 1, 0, metadataFilterParam);
+        }
+
+        // 升级版本号为v2
+        node.v = 2;
+    }
+};
 
 
 const comptibleStart = (node) => {
     if (!node.v) {
         node.group_params[1].params[2].global = 'item:input_list'
-
         node.group_params[1].params[2].value = node.group_params[1].params[2].value.map((item) => ({
             key: generateUUID(6),
             value: item
@@ -29,6 +124,16 @@ const comptibleStart = (node) => {
         // TODO 历史使用过的预知问题变量替换
 
         node.v = 1
+    } else if (node.v == 1) {
+        node.group_params[1].params.unshift({
+            "key": "user_info",
+            "global": "key",
+            "label": "true",
+            "type": "var",
+            "value": "",
+        })
+
+        node.v = 2
     }
 }
 
@@ -65,14 +170,14 @@ const comptibleInput = (node) => {
         node.group_params[0].params.push({
             key: "dialog_files_content",
             global: "key",
-            label: "上传文件内容",
+            label: "true",
             type: "var",
             tab: "dialog_input"
         })
 
         node.group_params[0].params.push({
             key: "dialog_files_content_size",
-            label: "文件内容长度上限",
+            label: "true",
             type: "char_number",
             min: 0,
             value: 15000,
@@ -81,7 +186,7 @@ const comptibleInput = (node) => {
 
         node.group_params[0].params.push({
             key: "dialog_file_accept",
-            label: "上传文件类型",
+            label: "true",
             type: "select_fileaccept",
             value: "all",
             tab: "dialog_input"
@@ -90,10 +195,10 @@ const comptibleInput = (node) => {
         node.group_params[0].params.push({
             key: "dialog_image_files",
             global: "key",
-            label: "上传图片文件",
+            label: "true",
             type: "var",
             tab: "dialog_input",
-            help: "提取上传文件中的图片文件，当助手或大模型节点使用多模态大模型时，可传入此图片。"
+            help: "true"
         })
 
         // 兼容文件类型
@@ -123,10 +228,10 @@ const comptibleAgent = (node) => {
     if (node.v == 1) {
         node.group_params[2].params.push({
             key: "image_prompt",
-            label: "视觉",
+            label: "true",
             type: "image_prompt",
             value: "",
-            help: "当使用多模态大模型时，可通过此功能传入图片，结合图像内容进行问答"
+            help: "true"
         })
 
         node.v = 2
@@ -151,15 +256,15 @@ const comptibleLLM = (node) => {
     if (!node.v) {
         node.v = 1
     }
-    
+
     if (node.v == 1) {
 
         node.group_params[2].params.push({
             key: "image_prompt",
-            label: "视觉",
+            label: "true",
             type: "image_prompt",
             value: [],
-            help: "当使用多模态大模型时，可通过此功能传入图片，结合图像内容进行问答"
+            help: "true"
         })
 
         node.v = 2

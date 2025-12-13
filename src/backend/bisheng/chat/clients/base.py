@@ -1,18 +1,17 @@
-import asyncio
 import json
 from abc import abstractmethod, ABC
 from typing import Dict, Callable
-from queue import Queue, Empty
 
-from bisheng.utils import generate_uuid
-from loguru import logger
 from fastapi import WebSocket, Request
+from loguru import logger
 
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.types import WorkType
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.core.logger import trace_id_var
 from bisheng.database.models.message import ChatMessage as ChatMessageModel
 from bisheng.database.models.message import ChatMessageDao
+from bisheng.utils import generate_uuid
 from bisheng.utils.threadpool import thread_pool
 
 
@@ -32,10 +31,6 @@ class BaseClient(ABC):
         # 异步任务列表
         self.task_ids = []
         # ws消息队列, 用于存储发送给客户端的websocket消息
-        self.ws_msg_queue = Queue()
-
-        # 启动消息消费任务, websocket的消息不能再多个协程中发送，否则会出现异常
-        thread_pool.submit(f'websocket_send_json_{self.client_key}', self.consume_message)
 
     async def close(self):
         pass
@@ -45,37 +40,24 @@ class BaseClient(ABC):
 
     async def send_json(self, message: ChatMessage | dict):
         if isinstance(message, dict):
-            self.ws_msg_queue.put(message)
+            await self.websocket.send_json(message)
             return
-        self.ws_msg_queue.put(message.dict())
-
-    async def consume_message(self):
-        while True:
-            data = None
-            try:
-                data = self.ws_msg_queue.get_nowait()
-                await self.websocket.send_json(data)
-            except Empty:
-                pass
-            except Exception as e:
-                logger.error(f"consume_message error {data} error: {str(e)}")
-                break
-            await asyncio.sleep(0.01)
+        await self.websocket.send_json(message.model_dump())
 
     async def handle_message(self, message: Dict[any, any]):
         """ 处理客户端发过来的信息, 提交到线程池内执行 """
-        trace_id = generate_uuid()
+        trace_id = trace_id_var.get()
         logger.info(f'client_id={self.client_key} trace_id={trace_id} message={message}')
-        with logger.contextualize(trace_id=trace_id):
-            if message.get('action') == 'stop':
-                await self._handle_message(message)
-                return
-            thread_pool.submit(trace_id,
-                               self.wrapper_task,
-                               trace_id,
-                               self._handle_message,
-                               message,
-                               trace_id=trace_id)
+
+        if message.get('action') == 'stop':
+            await self._handle_message(message)
+            return
+        thread_pool.submit(trace_id,
+                           self.wrapper_task,
+                           trace_id,
+                           self._handle_message,
+                           message,
+                           trace_id=trace_id)
 
     @abstractmethod
     async def _handle_message(self, message: Dict[any, any]):

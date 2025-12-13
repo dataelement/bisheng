@@ -5,11 +5,12 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from bisheng.api.v1.schemas import resp_500
-from bisheng.database.base import session_getter
-from bisheng.database.models.message import ChatMessage
 from pydantic import BaseModel
 from websockets import connect
+
+from bisheng.common.errcode.http_error import ServerError
+from bisheng.core.database import get_sync_db_session
+from bisheng.database.models.message import ChatMessage
 
 # 维护一个连接池
 connection_pool = defaultdict(asyncio.Queue)
@@ -53,6 +54,8 @@ async def clean_inactive_queues(queue: defaultdict, timeout_threshold: timedelta
 
 # 维护一个连接池
 connection_pool = defaultdict(TimedQueue)
+
+
 # clean_inactive_queues(connection_pool, timedelta(minutes=5))
 
 
@@ -80,7 +83,7 @@ async def release_connection(identifier, websocket):
 
 
 def comment_answer(message_id: int, comment: str):
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         message = session.get(ChatMessage, message_id)
         if message:
             message.remark = comment[:4096]
@@ -105,25 +108,24 @@ class ChoiceStreamResp(BaseModel):
 
 
 async def event_stream(
-    webosocket: connect,
-    message: str,
-    session_id: str,
-    model: str,
-    streaming: bool,
+        webosocket: connect,
+        message: str,
+        session_id: str,
+        model: str,
+        streaming: bool,
 ):
-
     payload = {'inputs': message, 'flow_id': model, 'chat_id': session_id}
     try:
         await webosocket.send(json.dumps(payload, ensure_ascii=False))
     except Exception as e:
-        yield json.dumps(resp_500(message=str(e)).__dict__)
+        yield ServerError(exception=e).to_sse_event_instance_str()
         return
     sync = ''
     while True:
         try:
             msg = await webosocket.recv()
         except Exception as e:
-            yield json.dumps(resp_500(message=str(e)).__dict__)
+            yield ServerError(exception=e).to_sse_event_instance_str()
             break
         if msg is None:
             continue

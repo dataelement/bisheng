@@ -3,10 +3,10 @@ from typing import ClassVar, Dict, List, Optional, Type
 from bisheng.custom.customs import get_custom_nodes
 from bisheng.interface.base import LangChainTypeCreator
 from bisheng.interface.custom_lists import memory_type_to_cls_dict
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.template.frontend_node.base import FrontendNode
 from bisheng.template.frontend_node.memories import MemoryFrontendNode
-from bisheng.utils.logger import logger
+from loguru import logger
 from bisheng.utils.util import build_template_from_class, build_template_from_method
 
 

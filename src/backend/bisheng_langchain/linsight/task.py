@@ -47,7 +47,7 @@ class BaseTask(BaseModel):
     # llm generate task field
     step_id: str = Field(default='', description='Step ID')
     target: str = Field(default='', description='任务目标')
-    display_target: str = Field(default='', validate_default=True, description='任务展示目标，给用户看的')
+    display_target: str = Field(default='', description='任务展示目标，给用户看的')
     sop: str = Field(default='', description='任务SOP，子任务的当前方法')
     node_loop: bool = Field(False, description='是否循环，循环的话需要生成子任务去执行')
     profile: str = Field(default='', description='任务角色')
@@ -166,25 +166,24 @@ class BaseTask(BaseModel):
             kwargs["response_format"] = SplitEvent
         return await self._base_invoke_llm(self.llm, None, messages, **kwargs)
 
-    async def _get_all_files(self, dir_path: str) -> List[str]:
+    async def _get_all_files(self, dir_path: str) -> List[List]:
         """
-        获取指定目录下的所有文件路径
+        获取指定目录下的所有文件路径, 按修改时间倒序
         Get all file paths in the specified directory.
         :param dir_path: The directory path to search for files.
-        :return: A list of file paths.
+        :return: A list of file paths. [[xx/xxx, mtime],[xx/xxx, mtime],...]
         """
         file_paths = []
         if not os.path.exists(dir_path):
             return file_paths
         for entry in os.scandir(dir_path):
             if entry.is_file():
-                file_paths.append(entry.path)
-            elif entry.is_dir():
+                file_paths.append([entry.path, entry.stat().st_mtime])
+            else:
                 # 如果是目录，则递归获取子目录的文件
                 sub_files = await self._get_all_files(entry.path)
                 file_paths.extend(sub_files)
-            else:
-                raise FileNotFoundError
+        file_paths.sort(key=lambda x: x[1], reverse=True)
         return file_paths
 
     async def _get_file_content(self) -> str:
@@ -204,17 +203,25 @@ class BaseTask(BaseModel):
             ignore_files = ";".join(self.file_list)
 
         all_files = await self._get_all_files(self.file_dir)
+        file_num = 0
         for one_file in all_files:
+            if file_num >= self.exec_config.max_file_content_num:
+                break
+            one_file = one_file[0]
             one_file_name = os.path.basename(one_file)
             if one_file_name in ignore_files:
                 continue
             one_file_content = ""
-            async with aiofiles.open(one_file, mode="r", encoding="utf-8") as f:
-                async for line in f:
-                    one_file_content += line
-                    if len(one_file_content) > self.exec_config.file_content_length:
-                        one_file_content = one_file_content[:self.exec_config.file_content_length]
-                        break
+            try:
+                async with aiofiles.open(one_file, mode="r", encoding="utf-8") as f:
+                    async for line in f:
+                        one_file_content += line
+                        if len(one_file_content) > self.exec_config.file_content_length:
+                            one_file_content = one_file_content[:self.exec_config.file_content_length]
+                            break
+                file_num += 1
+            except Exception:
+                pass
             if one_file_content:
                 file_content += f"{one_file_name}文件内容:\n{one_file_content}\n\n"
         return file_content
@@ -496,7 +503,9 @@ class Task(BaseTask):
                     if tool_name == CallUserInputToolName:
                         # 等待用户输入
                         self.status = TaskStatus.INPUT.value
-                        await self.put_event(NeedUserInput(task_id=self.id, call_reason=call_reason))
+                        call_reason = tool_args.get("call_content") or tool_args.get("call_reason")
+                        await self.put_event(
+                            NeedUserInput(task_id=self.id, call_reason=call_reason, params=tool_args.copy()))
                         # 等待用户输入
                         while self.status != TaskStatus.INPUT_OVER.value:
                             await asyncio.sleep(0.5)

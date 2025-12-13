@@ -1,10 +1,11 @@
 import { CircleHelp, Import } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { getSourceChunksApi, splitWordApi } from "~/api/apps";
 import { Dialog, DialogContent } from "~/components";
 import FileViewPanne from "~/components/PreviewFile";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip2";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { downloadFile } from "~/utils";
 
 // 顶部答案区
@@ -24,7 +25,7 @@ const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
                 onInit(data)
             }).catch(e => {
                 // 自动重试
-                e === '后台处理中，稍后再试' && setTimeout(() => {
+                e === 14001 && setTimeout(() => {
                     loadData()
                 }, 1800);
             })
@@ -54,6 +55,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
     { chatId: string, words: string[], data: any, onClose: any, fullScreen: boolean, onAdd: any, children: any, closeDialog: () => void }) => {
     const [editCustomKey, setEditCustomKey] = useState(false)
     const inputRef = useRef(null)
+    const { t } = useTranslation()
 
     // 移动端
     const [collapse, setCollapse] = useState(true)
@@ -116,13 +118,13 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
     return <div className="flex gap-4 relative" style={{ height: fullScreen ? '100vh' : !isMobile ? 'calc(100vh - 10rem)' : 'calc(100vh - 4rem)' }}>
         {
             isMobile && <div className="absolute top-0 left-4 z-50 bg-gray-100 dark:bg-gray-950 py-1 px-2 pb-2 rounded-md">
-                {!collapse && <span onClick={() => { setCollapse(true) }} className="">收起</span>}
-                {collapse && <span onClick={() => { setCollapse(false) }} className="">展开</span>}
+                {!collapse && <span onClick={() => { setCollapse(true) }} className="">{t('com_source_modal_collapse')}</span>}
+                {collapse && <span onClick={() => { setCollapse(false) }} className="">{t('com_source_modal_expand')}</span>}
             </div>
         }
         {
             isMobile && <div className="absolute top-0 right-4 z-10 bg-gray-100 dark:bg-gray-950 py-1 px-2 pb-2 rounded-md">
-                <span onClick={closeDialog} >关闭</span>
+                <span onClick={closeDialog} >{t('com_source_modal_close')}</span>
             </div>
         }
         {/* left */}
@@ -131,14 +133,14 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
                 {/* label */}
                 <div className="mb-4 text-sm font-bold space-x-1 hidden sm:block">
                     <div className="flex">
-                        <span>筛选标签</span>
+                        <span>{t('com_source_modal_filter_labels')}</span>
                         <TooltipProvider delayDuration={100}>
                             <Tooltip>
                                 <TooltipTrigger>
                                     <CircleHelp className="w-4 h-4" />
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                    <p className="w-[170px] break-words">系统自动根据答案生成关键信息标签,也可手动增删标签,系统根据标签计算各个文件及段落相关性。</p>
+                                    <p className="w-[170px] break-words">{t('com_source_modal_filter_labels_tip')}</p>
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
@@ -156,12 +158,12 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
                             onBlur={() => {
                                 handleAddKeyword(inputRef.current.value);
                             }}></input></div> :
-                            <div className="badge badge-info rounded-md px-2 cursor-pointer bg-[rgba(53,126,249,.86)] text-gray-50" onClick={handleOpenInput}><span>+自定义</span></div>
+                            <div className="badge badge-info rounded-md px-2 cursor-pointer bg-[rgba(53,126,249,.86)] text-gray-50" onClick={handleOpenInput}><span>{t('com_source_modal_add_custom')}</span></div>
                     }
                 </div>
                 {/* files */}
                 <div className="mt-4">
-                    <p className="mb-4 text-sm font-bold">来源文档</p>
+                    <p className="mb-4 text-sm font-bold">{t('com_source_modal_source_docs')}</p>
                     {files.map(_file =>
                         _file.right ? <div key={_file.id} onClick={() => setFile(_file)} className={`group rounded-xl bg-[#fff] dark:bg-[#303134] hover-bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
                             <p className="text-sm break-all">{_file.fileName}</p>
@@ -169,7 +171,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
                                 {
                                     _file.parse_type === 'uns' && _file.fileUrl && <Tooltip delayDuration={200}>
                                         <TooltipTrigger >
-                                            <a href="javascript:;" onClick={(event) => { downloadFile(_file.fileUrl, _file.fileName.replace(/\.[\w\d]+$/, '.pdf')); event.stopPropagation() }} >
+                                            <a href="javascript:;" onClick={(event) => { downloadFile(changeMinioUrl(_file.fileUrl), _file.fileName.replace(/\.[\w\d]+$/, '.pdf')); event.stopPropagation() }} >
                                                 <Import color="rgba(53,126,249,1)" size={22} strokeWidth={1.5}></Import>
                                             </a>
                                         </TooltipTrigger>
@@ -179,14 +181,14 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
                                             avoidCollisions={false}
                                             sticky="always"
                                         >
-                                            <div className=" max-w-96 text-left break-all whitespace-normal">下载双层PDF</div>
+                                            <div className=" max-w-96 text-left break-all whitespace-normal">{t('com_source_modal_download_layered_pdf')}</div>
                                         </TooltipContent>
                                     </Tooltip>
                                 }
                                 {
                                     _file.originUrl && <Tooltip delayDuration={200}>
                                         <TooltipTrigger >
-                                            <a href="javascript:;" onClick={(event) => { downloadFile(_file.originUrl, _file.fileName.replace(/\.[\w\d]+$/, '.pdf')); event.stopPropagation() }} >
+                                            <a href="javascript:;" onClick={(event) => { downloadFile(changeMinioUrl(_file.originUrl), _file.fileName); event.stopPropagation() }} >
                                                 <Import color="rgba(53,126,249,1)" size={22} strokeWidth={1.5}></Import>
                                             </a>
                                         </TooltipTrigger>
@@ -196,7 +198,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
                                             avoidCollisions={false}
                                             sticky="always"
                                         >
-                                            <div className=" max-w-96 text-left break-all whitespace-normal">下载原文件</div>
+                                            <div className=" max-w-96 text-left break-all whitespace-normal">{t('com_source_modal_download_original')}</div>
                                         </TooltipContent>
                                     </Tooltip>
                                 }
@@ -204,11 +206,11 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
                             <span className="absolute right-1 bottom-1 text-blue-400 text-sm">{_file.score}</span>
                         </div> :
                             <div key={_file.id} className={`msk group rounded-xl bg-[#fff] hover-bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
-                                <p className="text-sm blur-sm">是真的马赛克.msk</p>
+                                <p className="text-sm blur-sm">{t('com_source_modal_mask_name')}</p>
                                 <span className="absolute right-1 bottom-1 text-blue-400 text-sm">{_file.score}</span>
                             </div>
                     )}
-                    {!files.length && <p className="text-sm text-center mt-10 text-gray-500">无匹配的源文件</p>}
+                    {!files.length && <p className="text-sm text-center mt-10 text-gray-500">{t('com_source_modal_no_files')}</p>}
                 </div>
             </div>
         }
@@ -218,6 +220,8 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
 }
 
 export const ResouceContent = ({ data, setOpen, fullScreen = false }) => {
+
+    const { t } = useTranslation()
 
     const [keywords, setKeywords] = useState([])
     const handleAddWord = (word: string) => {
@@ -260,7 +264,7 @@ export const ResouceContent = ({ data, setOpen, fullScreen = false }) => {
             {
                 (file) => file.fileUrl ? <FileViewPanne file={file} /> :
                     <div className="flex-1 bg-gray-100 dark:bg-[#3C4048] rounded-md text-center">
-                        <p className="text-gray-500 text-md mt-[40%]">文件地址失效!</p>
+                        <p className="text-gray-500 text-md mt-[40%]">{t('com_source_modal_file_url_invalid')}</p>
                     </div>
             }
         </ResultPanne>
@@ -286,5 +290,10 @@ const ResouceModal = forwardRef((props, ref) => {
         </DialogContent>
     </Dialog>
 });
+
+
+export const changeMinioUrl = (url: string) => {
+    return url.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)
+}
 
 export default ResouceModal

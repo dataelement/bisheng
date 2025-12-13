@@ -35,7 +35,7 @@ export default function MyKnowledgeView({ open, onOpenChange }) {
 
     const res = await useGetDownloadUrl(object_name)
 
-    return axios.get(res.data, { responseType: "blob" }).then((res: any) => {
+    return axios.get(__APP_ENV__.BASE_URL + res.data, { responseType: "blob" }).then((res: any) => {
       const blob = new Blob([res.data]);
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
@@ -71,23 +71,17 @@ export default function MyKnowledgeView({ open, onOpenChange }) {
   const { showToast } = useToast()
   const backToast = () => {
     showToast({
-      message: '正在重建知识库，请稍后再试',
+      message: localize('com_tools_knowledge_rebuilding'),
       severity: NotificationSeverity.WARNING,
     })
   }
 
   const [building] = useModelBuilding()
-  useEffect(() => {
-    building && showToast({
-      message: '个人知识库 embedding 模型已更换，正在重建知识库，请稍后再试',
-      severity: NotificationSeverity.WARNING,
-    })
-  }, [])
 
   return (
     <OGDialog open={open} onOpenChange={onOpenChange}>
       <OGDialogContent
-        title={localize('com_nav_my_knowledge_files')}
+        // title={localize('com_nav_my_knowledge_files')}
         className="w-11/12 bg-background text-text-primary shadow-2xl"
       >
         <OGDialogHeader>

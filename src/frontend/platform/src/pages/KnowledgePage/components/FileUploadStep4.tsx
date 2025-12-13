@@ -1,4 +1,3 @@
-
 import CardComponent from "@/components/bs-comp/cardComponent";
 import ProgressItem from "@/components/bs-comp/knowledgeUploadComponent/ProgressItem";
 import { Button } from "@/components/bs-ui/button";
@@ -9,126 +8,193 @@ import { createWorkflowApi, getWorkflowNodeTemplate } from "@/controllers/API/wo
 import { useKnowledgeDetails } from "@/controllers/hooks/knowledge";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
-export default function FileUploadStep4({ data }) {
+export default function FileUploadStep4({ data, kId }) {
+    const { t } = useTranslation('knowledge');
     const [finish, setFinish] = useState(true)
     const navigate = useNavigate()
     const { id: kid } = useParams()
 
     const [files, setFiles] = useState([])
-    const timerRef = useRef(null); // 轮询定时器引用
-    const fileIdsRef = useRef([]); // 文件ID列表引用
-    // 初始化文件状态
+    const timerRef = useRef(null); // Polling timer reference
+    const fileIdsRef = useRef([]); // File ID list reference
+    const processingRef = useRef(new Set()); // Track processing file IDs
+    const isPollingRef = useRef(false); // Prevent polling concurrency
+    const hasInitialized = useRef(false);
+    const [premainingFileIds, setPremainingFileIds] = useState([]); // Track remaining file IDs
+
+    // Initialize file status (executed only once)
     useEffect(() => {
-        const initialFiles = data.map(item => ({
-            id: item.fileId,
-            fileName: item.fileName,
-            error: false,
-            reason: '',
-            progress: 'await' // 初始状态设为解析中
-        }));
-        setFiles(initialFiles);
-        fileIdsRef.current = data.map(item => item.fileId); // 保存文件ID列表
+        if (data.length > 0 && !hasInitialized.current) {
+
+            const initialFiles = data.map(item => ({
+                id: item.id || item.fileId, // Frontend file unique identifier
+                fileName: item.fileName,
+                error: false,
+                reason: '',
+                progress: 'await'
+            }));
+
+            setFiles(initialFiles);
+
+            // Key: fileIdsRef and processingRef both store frontend file IDs (ensure data consistency)
+            const frontEndFileIds = initialFiles.map(file => file.id);
+            fileIdsRef.current = frontEndFileIds;
+            processingRef.current.clear();
+            frontEndFileIds.forEach(id => processingRef.current.add(id)); // Use same batch of IDs
+
+            setFinish(false);
+            hasInitialized.current = true;
+        }
+        setPremainingFileIds(data.reduce((res, item) => {
+            res[item.id] = true;
+            return res;
+        }, {}))
+
     }, [data]);
 
-
-    // 轮询文件状态
+    // Poll file status (complete fix version)
     useEffect(() => {
-        // 如果文件列表为空，直接完成
-        if (fileIdsRef.current.length === 0) {
-            setFinish(true);
-            return;
-        }
-
-        // 轮询函数
+        // 1. Define polling function first (must be defined before calling, fix "undefined when called" issue)
         const pollFilesStatus = async () => {
+            if (isPollingRef.current) return;
+            isPollingRef.current = true;
+
             try {
+                // Fix pending file ID exception (previously was [0], should actually take frontend file ID)
+                const pendingFileIds = Array.from(processingRef.current);
+                console.log("Correct pending file IDs:", pendingFileIds); // Should now be ['fe9d1b', 'd3b66c', ...]
+
+                // Keep API parameters unchanged (backend may filter by knowledge_id, file_ids can pass frontend IDs or leave empty)
                 const res = await readFileByLibDatabase({
-                    id: kid,
+                    id: kid || kId,
                     page: 0,
                     pageSize: 0,
-                    file_ids: fileIdsRef.current
+                    file_ids: pendingFileIds
                 });
 
-                // 更新文件状态
+                // setFiles status update logic in polling function (add logs after cleanup)
                 setFiles(prev => {
-                    const resMap = new Map(res.data.map(item => [item.id, item]));
-                    return prev.map(file => {
-                        if (resMap.has(file.id)) {
-                            const resItem = resMap.get(file.id);
-                            let progress = 'await';
-                            let error = false;
-                            let reason = '';
+                    const updatedFiles = [...prev];
+                    const resMap = new Map(res.data.map(item => [item.file_name.toLowerCase().trim(), item])); // Build Map with file names for faster matching
 
-                            if (resItem.status === 2) {
-                                progress = 'end'; // 成功
-                            } else if (resItem.status === 3) {
-                                progress = 'end'; // 失败
-                                error = true;
-                                reason = resItem.remark;
+                    updatedFiles.forEach((file, index) => {
+                        const resItem = resMap.get(file.fileName.toLowerCase().trim());
+                        if (resItem && resItem.status === 2) {
+                            // Double confirmation: remove current file id from processingRef
+                            if (processingRef.current.has(file.id)) {
+                                processingRef.current.delete(file.id);
+                                console.log(`移除待处理ID: ${file.id}，剩余待处理: ${processingRef.current.size}`);
                             }
-
-                            return { ...file, progress, error, reason };
+                            updatedFiles[index] = { ...file, progress: 'end' };
+                        } else if (resItem && resItem.status === 3) {
+                            if (processingRef.current.has(file.id)) {
+                                processingRef.current.delete(file.id);
+                                console.log(`移除待处理ID: ${file.id}（失败），剩余待处理: ${processingRef.current.size}`);
+                            }
+                            updatedFiles[index] = { ...file, progress: 'end', error: true, reason: resItem.remark || t('parseFailed') };
                         }
-                        return file;
                     });
+
+                    return updatedFiles;
                 });
+
             } catch (e) {
-                console.error("轮询文件状态出错:", e);
+                console.error("轮询出错:", e);
+            } finally {
+                isPollingRef.current = false;
             }
         };
 
-        // 立即执行第一次轮询，然后每5秒轮询一次
-        pollFilesStatus();
-        timerRef.current = setInterval(pollFilesStatus, 3000 + fileIdsRef.current.length * 10);
+        // 3. Handle "no files" case (only then call the already defined pollFilesStatus)
+        if (fileIdsRef.current.length === 0) {
+            const timer = setTimeout(() => {
+                if (fileIdsRef.current.length > 0) {
+                    pollFilesStatus(); // Function is now defined, can be called normally
+                }
+            }, 100);
+            return () => clearTimeout(timer);
+        }
 
-        // 清理定时器
-        return () => clearInterval(timerRef.current);
-    }, [kid]);
+        // 4. When there are files, poll immediately + schedule polling
+        if (fileIdsRef.current.length > 0) {
+            pollFilesStatus(); // Execute first time immediately
+            timerRef.current = setInterval(pollFilesStatus, 5000);
+        } else {
+            setFinish(true);
+        }
 
-    // 检查所有文件是否完成
+        // 5. Clean up timer
+        return () => {
+            if (timerRef.current) clearInterval(timerRef.current);
+        };
+    }, [kid, kId, t]); // Add t to dependencies
+
     useEffect(() => {
-        // 如果所有文件都已完成（成功或失败）
-        if (files.length > 0 && files.every(f => f.progress === 'end')) {
-            clearInterval(timerRef.current);
+        return () => {
+            hasInitialized.current = false;
+        };
+    }, []);
+
+    // Check if all files are completed
+    useEffect(() => {
+        // Mark as complete when processing set is empty
+        if (processingRef.current.size === 0 && fileIdsRef.current.length > 0) {
+            console.log('所有文件处理完成');
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
             setFinish(true);
         } else {
             setFinish(false);
         }
-    }, [files]);
-    console.log('fukes :>> ', data, files);
+    }, [files]); // Depend on file status changes
 
-    const [details] = useKnowledgeDetails([kid])
+    console.log('files :>> ', files);
+
+    let finalId = kid;
+    if (kId) {
+        finalId = kId.replace(/\D/g, '');
+    }
+
+    const [details] = useKnowledgeDetails([finalId])
+
     const handleCreateFlow = async (params) => {
         const model = await getLlmDefaultModel()
-        const flow = await getKnowledgeDefaultFlowTemplate(kid, details[0].name, model.model_id)
+
+        const flow = await getKnowledgeDefaultFlowTemplate(finalId, details[0]?.name || '', model.model_id)
         const res = await captureAndAlertRequestErrorHoc(createWorkflowApi(
-            "文档知识库问答-" + generateUUID(5),
-            "检索文档知识库，根据检索结果进行回答。",
+            t('documentKnowledgeQa') + generateUUID(5),
+            t('retrieveDocumentKnowledge'),
             "",
             flow))
-        if (res) navigate('/flow/' + res.id)
+        history.pushState(null, null, __APP_ENV__.BASE_URL + '/build/apps');
+
+        navigate('/flow/' + res.id);
     }
 
     return <div className={`max-w-[1400px] mx-auto px-20 pt-4 relative`}>
         <div className="flex gap-4">
             <div className="flex-1">
-                <h1 className="text-3xl text-primary mt-2">{finish ? '文档数据解析已完成' : '文档数据正在准备中'}</h1>
-                <p className="text-base text-gray-500 mt-2">您可以返回知识库文件列表查看解析状态</p>
+                <h1 className="text-3xl text-primary mt-2">{finish ? t('documentDataParsingCompleted') : t('documentDataBeingPrepared')}</h1>
+                <p className="text-base text-gray-500 mt-2">{t('youCanReturn')}</p>
                 <div className="overflow-y-auto mt-4 space-y-2 pb-10 max-h-[calc(100vh-400px)]">
-                    {files.map(item => <ProgressItem analysis key={item.id} item={item} />)}
+                    {files.map(item => premainingFileIds[item.id] ? <ProgressItem analysis key={item.id} item={item} /> : null)}
                 </div>
                 <div className="flex justify-end gap-4">
-                    <Button onClick={() => navigate(-1)}>返回知识库</Button>
+                    <Button onClick={() => navigate(-1)}>
+                        {t('returnToKnowledgeBase')}
+                    </Button>
                 </div>
             </div>
             {finish && <div className="w-96 pt-24">
                 <CardComponent
                     data={null}
                     type='assist'
-                    title="构建知识库问答智能体"
-                    description={(<p><p>文档解析完成后。使用预制的知识库问答模版建立智能体，并测试问答效果</p></p>)}
+                    title={t('buildKnowledgeBaseQaAgent')}
+                    description={<p>{t('afterDocumentParsing')}</p>}
                     onClick={handleCreateFlow}
                 ></CardComponent>
             </div>}
@@ -136,8 +202,7 @@ export default function FileUploadStep4({ data }) {
     </div>
 };
 
-
-
+// Keep getKnowledgeDefaultFlowTemplate function unchanged
 const getKnowledgeDefaultFlowTemplate = async (kid, kname, modelId) => {
     const templates = await getWorkflowNodeTemplate()
     let startNode = null
@@ -145,7 +210,7 @@ const getKnowledgeDefaultFlowTemplate = async (kid, kname, modelId) => {
     let ragNode = null
 
     templates.forEach(node => {
-        const nodeCopy = JSON.parse(JSON.stringify(node)); // 深拷贝节点
+        const nodeCopy = JSON.parse(JSON.stringify(node)); // Deep copy node
 
         if (node.type === 'start') {
             nodeCopy.id = `start_${generateUUID(5)}`;

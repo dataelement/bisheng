@@ -17,12 +17,13 @@ class McpTool(BaseModel):
     description: str
     mcp_client: BaseMcpClient
     mcp_tool_name: str
+    arg_schema: dict = {}
 
     def parse_kwargs_schema(self, kwargs: dict) -> None | dict:
         """convert the kwargs field value"""
         if not kwargs:
             return None
-        for k, v in kwargs:
+        for k, v in kwargs.items():
             k_type = self.arg_schema.get("properties", {}).get(k, {}).get("type")
             kwargs[k] = convert_openapi_field_value(v, k_type)
         return kwargs
@@ -45,7 +46,7 @@ class McpTool(BaseModel):
                      mcp_tool_name: str, arg_schema: Any, **kwargs) -> StructuredTool:
         """Get a tool from the class."""
         c = cls(name=name, description=description, mcp_client=mcp_client,
-                mcp_tool_name=mcp_tool_name)
+                mcp_tool_name=mcp_tool_name, arg_schema=arg_schema)
         return StructuredTool(name=c.name,
                               description=c.description,
                               func=c.run,

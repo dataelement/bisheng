@@ -9,25 +9,21 @@ from loguru import logger
 from openai import BaseModel
 from pydantic import field_validator
 
-from bisheng.api.services import knowledge_imp, llm
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.knowledge import KnowledgeService
-from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.server import EmbeddingModelStatusError
+from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
+from bisheng.core.ai.rerank.rrf_rerank import RRFRerank
 from bisheng.database.constants import MessageCategory
-from bisheng.database.models.config import Config, ConfigDao, ConfigKeyEnum
-from bisheng.database.models.gpts_tools import GptsToolsDao
-from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
-from bisheng.database.models.session import MessageSession
-from fastapi import BackgroundTasks, Request
-from langchain_core.messages import AIMessage, HumanMessage
-from loguru import logger
-from openai import BaseModel
-from bisheng.utils.embedding import create_knowledge_keyword_store
-from bisheng.utils.embedding import create_knowledge_vector_store
-from bisheng.api.services.knowledge import mixed_retrieval_recall
-
+from bisheng.database.models.session import MessageSession, MessageSessionDao
+from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
+from bisheng.llm.domain.services import LLMService
+from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+from bisheng.user.domain.models.user import UserDao
 
 
 class WorkStationService(BaseService):
@@ -107,7 +103,7 @@ class WorkStationService(BaseService):
         return cls.parse_config(config)
 
     @classmethod
-    async def uploadPersonalKnowledge(
+    def uploadPersonalKnowledge(
             cls,
             request: Request,
             login_user: UserPayload,
@@ -118,7 +114,7 @@ class WorkStationService(BaseService):
         knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None,
                                                     KnowledgeTypeEnum.PRIVATE)
         if not knowledge:
-            model = llm.LLMService.get_knowledge_llm()
+            model = LLMService.get_knowledge_llm()
             knowledgeCreate = KnowledgeCreate(name='个人知识库',
                                               type=KnowledgeTypeEnum.PRIVATE.value,
                                               user_id=login_user.user_id,
@@ -129,8 +125,12 @@ class WorkStationService(BaseService):
             knowledge = knowledge[0]
         req_data = KnowledgeFileProcess(knowledge_id=knowledge.id,
                                         file_list=[KnowledgeFileOne(file_path=file_path)])
+        try:
+            _ = LLMService.get_bisheng_knowledge_embedding(login_user.user_id, int(knowledge.model))
+        except Exception as e:
+            raise EmbeddingModelStatusError(exception=e)
         res = KnowledgeService.process_knowledge_file(request,
-                                                      UserPayload(user_id=login_user.user_id),
+                                                      login_user,
                                                       background_tasks, req_data)
         return res
 
@@ -149,14 +149,14 @@ class WorkStationService(BaseService):
             return [], 0
         res, total, _ = KnowledgeService.get_knowledge_files(
             request,
-            UserPayload(user_id=login_user.user_id),
+            login_user,
             knowledge[0].id,
             page=page,
             page_size=size)
         return res, total
 
     @classmethod
-    def queryChunksFromDB(cls, question: str, login_user: UserPayload):
+    async def queryChunksFromDB(cls, question: str, login_user: UserPayload):
         """
         从数据库中查询相关知识块
         
@@ -168,49 +168,55 @@ class WorkStationService(BaseService):
             List[str]: 格式化后的知识库内容列表，格式为：
                 "[file name]:文件名\n[file content begin]\n内容\n[file content end]\n"
         """
-        knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None,
-                                                    KnowledgeTypeEnum.PRIVATE)
+        knowledge = await KnowledgeDao.aget_user_knowledge(login_user.user_id, knowledge_type=KnowledgeTypeEnum.PRIVATE)
 
         if not knowledge:
             return []
-        
-        vector_store = create_knowledge_vector_store([str(knowledge[0].id)], login_user.user_name)
-        keyword_store = create_knowledge_keyword_store([str(knowledge[0].id)], login_user.user_name)
+        knowledge = knowledge[0]
+        try:
+            embedding = await LLMService.get_bisheng_daily_embedding(model_id=int(knowledge.model),
+                                                                     invoke_user_id=login_user.user_id)
+        except Exception as e:
+            raise EmbeddingModelStatusError(exception=e)
+
+        vector_store = KnowledgeRag.init_milvus_vectorstore(knowledge.collection_name, embeddings=embedding)
+        keyword_store = KnowledgeRag.init_es_vectorstore(knowledge.index_name)
 
         # 获取配置中的最大token数，如果没有配置则使用默认值
-        config = cls.get_config()
-        max_tokens = config.maxTokens if config else 1500
-        
+        config = await cls.aget_config()
+        max_tokens = config.maxTokens if config else 15000
+
         # 获取知识库溯源模型 ID，如果没有配置则使用知识库的嵌入模型 ID
-        from bisheng.api.services.llm import LLMService
-        knowledge_llm = LLMService.get_knowledge_llm()
-        model_id = knowledge_llm.source_model_id
-        
-        docs = mixed_retrieval_recall(question, vector_store, keyword_store, max_tokens, model_id)
-        logger.info("docs message:{}", docs)
+
+        milvus_retriever = vector_store.as_retriever(search_kwargs={"k": 100})
+        es_retriever = keyword_store.as_retriever(search_kwargs={"k": 100})
+
+        milvus_docs = await milvus_retriever.ainvoke(question)
+        es_docs = await es_retriever.ainvoke(question)
+
+        rrf_rerank = RRFRerank(retrievers=[milvus_retriever, es_retriever])
+
+        finally_docs = await rrf_rerank.acompress_documents(documents=[milvus_docs, es_docs], query=question)
         # 将检索结果格式化为指定的模板格式
         formatted_results = []
-        if docs:
-            for doc in docs:
+        if finally_docs:
+            for doc in finally_docs:
                 # 获取文件名，优先从 metadata 中获取
-                file_name = doc.metadata.get('file_name', 'unknown_file')
-                if not file_name or file_name == 'unknown_file':
-                    # 尝试从其他字段获取文件名
-                    file_name = doc.metadata.get('source', doc.metadata.get('filename', 'unknown_file'))
-                
+                file_name = doc.metadata.get('source') or doc.metadata.get('document_name')
+
                 # 获取文档内容
                 content = doc.page_content.strip()
-                
+
                 # 按照模板格式组织内容
                 formatted_content = f"[file name]:{file_name}\n[file content begin]\n{content}\n[file content end]\n"
                 formatted_results.append(formatted_content)
-        
+
         return formatted_results
 
     @classmethod
-    def get_chat_history(cls, chat_id: str, size: int = 4):
+    async def get_chat_history(cls, chat_id: str, size: int = 4):
         chat_history = []
-        messages = ChatMessageDao.get_messages_by_chat_id(chat_id, ['question', 'answer'], size)
+        messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id, ['question', 'answer'], size)
         for one in messages:
             # bug fix When constructing multi-turn dialogues, the input and response of
             # the user and the assistant were reversed, leading to incorrect question-and-answer sequences.
@@ -231,12 +237,14 @@ class WorkstationMessage(BaseModel):
     isCreatedByUser: bool
     model: Optional[str]
     parentMessageId: Optional[str]
+    user_name: Optional[str]
     sender: str
     text: str
     updateAt: datetime
     files: Optional[list]
     error: Optional[bool] = False
     unfinished: Optional[bool] = False
+    flow_name: Optional[str] = None
 
     @field_validator('messageId', mode='before')
     @classmethod
@@ -253,10 +261,12 @@ class WorkstationMessage(BaseModel):
         return str(value)
 
     @classmethod
-    def from_chat_message(cls, message: ChatMessage):
+    async def from_chat_message(cls, message: ChatMessage):
         files = json.loads(message.files) if message.files else []
+        user_model = await UserDao.aget_user(message.user_id)
+        message_session_model = await MessageSessionDao.async_get_one(chat_id=message.chat_id)
         return cls(
-            messageId=message.id,
+            messageId=str(message.id),
             conversationId=message.chat_id,
             createdAt=message.create_time,
             updateAt=message.update_time,
@@ -265,9 +275,11 @@ class WorkstationMessage(BaseModel):
             parentMessageId=json.loads(message.extra).get('parentMessageId'),
             error=json.loads(message.extra).get('error', False),
             unfinished=json.loads(message.extra).get('unfinished', False),
+            user_name=user_model.user_name,
             sender=message.sender,
             text=message.message,
             files=files,
+            flow_name=message_session_model.flow_name if message_session_model else None,
         )
 
 
@@ -283,7 +295,7 @@ class WorkstationConversation(BaseModel):
     def from_chat_session(cls, session: MessageSession):
         return cls(
             conversationId=session.chat_id,
-            user=session.user_id,
+            user=str(session.user_id),
             createdAt=session.create_time,
             updateAt=session.update_time,
             model=None,

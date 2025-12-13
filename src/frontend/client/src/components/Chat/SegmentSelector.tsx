@@ -1,41 +1,31 @@
-import { useEffect, useState } from 'react';
+import { useLocalize } from '~/hooks';
 
-const SegmentSelector = ({ onChange }) => {
-    const [activeTab, setActiveTab] = useState('base');
-
-    useEffect(() => {
-        onChange(activeTab === 'lingsi')
-    }, [activeTab, onChange])
+const SegmentSelector = ({ lingsi, onChange }) => {
+    const localize = useLocalize();
 
     return (
         <div className="w-full">
             {/* 选项卡容器 */}
             <div className="p-1 rounded-full border flex">
                 <button
-                    className={`flex-1 py-1.5 px-8 rounded-full text-sm break-keep transition-all ${activeTab === 'base'
+                    className={`flex-1 py-1.5 px-8 rounded-full text-sm break-keep transition-all ${!lingsi
                         ? 'bg-blue-50 shadow-sm'
                         : '0'
                         }`}
-                    onClick={() => {
-                        setActiveTab('base');
-                        window.isLinsight = false
-                    }}
+                    onClick={() => onChange(false)}
                 >
-                    日常模式
+                    {localize('com_segment_daily_mode')}
                 </button>
                 <button
-                    className={`flex-1 py-1.5 px-8 rounded-full text-sm break-keep transition-all ${activeTab === 'lingsi'
+                    className={`flex-1 py-1.5 px-8 rounded-full text-sm break-keep transition-all ${lingsi
                         ? 'bg-blue-50 shadow-sm'
                         : ''
                         }`}
-                    onClick={() => {
-                        setActiveTab('lingsi');
-                        window.isLinsight = true
-                    }}
+                    onClick={() => onChange(true)}
                 >
                     <div className='flex items-center justify-center relative'>
-                        {activeTab === 'lingsi' && <img src={__APP_ENV__.BASE_URL + "/assets/lingsi.svg"} className='size-4 block' alt="" />}
-                        <span className={activeTab === 'lingsi' ? 'lingsi-text ml-2' : ''}>灵思Linsight</span>
+                        {lingsi && <img src={__APP_ENV__.BASE_URL + "/assets/lingsi.svg"} className='size-4 block' alt="" />}
+                        <span className={lingsi ? 'lingsi-text ml-2' : ''}>{localize('com_segment_linsight')}</span>
                     </div>
                 </button>
             </div>

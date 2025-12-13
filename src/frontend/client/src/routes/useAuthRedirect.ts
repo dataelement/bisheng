@@ -6,17 +6,18 @@ export default function useAuthRedirect() {
   const { user, isAuthenticated } = useAuthContext();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      if (!isAuthenticated) {
-        navigate(`/${__APP_ENV__.BISHENG_HOST}/login`, { replace: true });
-      }
-    }, 300);
+  // 未登录采用路由跳转，此处禁用
+  // useEffect(() => {
+  //   const timeout = setTimeout(() => {
+  //     if (!isAuthenticated) {
+  //       navigate(`/${__APP_ENV__.BISHENG_HOST}`, { replace: true });
+  //     }
+  //   }, 300);
 
-    return () => {
-      clearTimeout(timeout);
-    };
-  }, [isAuthenticated, navigate]);
+  //   return () => {
+  //     clearTimeout(timeout);
+  //   };
+  // }, [isAuthenticated, navigate]);
 
   return {
     user,

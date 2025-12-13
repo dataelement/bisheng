@@ -31,11 +31,12 @@ export const useAbortRequestWithMessage = (): UseMutationResult<
 
 export const useGetMessagesByConvoId = <TData = s.TMessage[]>(
   id: string,
+  shareToken: string,
   config?: UseQueryOptions<s.TMessage[], unknown, TData>,
 ): QueryObserverResult<TData> => {
   return useQuery<s.TMessage[], unknown, TData>(
     [QueryKeys.messages, id],
-    () => dataService.getMessagesByConvoId(id),
+    () => dataService.getMessagesByConvoId(id, shareToken),
     {
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,

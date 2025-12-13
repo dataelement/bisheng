@@ -6,8 +6,9 @@ from typing import List, Dict, Optional
 from sqlalchemy import Column, Text, JSON, Boolean, Enum as SQLEnum, DateTime, text, ForeignKey, CHAR, func
 from sqlmodel import Field, select, col, update
 
-from bisheng.database.base import async_session_getter, uuid_hex
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.core.database import get_async_db_session
+from bisheng.database.base import uuid_hex
+from bisheng.common.models.base import SQLModelSerializable
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +91,7 @@ class LinsightSessionVersionDao(object):
         :return: 创建的灵思会话版本对象
         """
 
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             session.add(session_version)
             await session.commit()
             await session.refresh(session_version)
@@ -103,7 +104,7 @@ class LinsightSessionVersionDao(object):
         :param linsight_session_version_id: 灵思会话版本ID
         :return: 灵思会话版本对象
         """
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             statement = select(LinsightSessionVersion).where(
                 LinsightSessionVersion.id == str(linsight_session_version_id))  # 显式转 str
             result = await session.exec(statement)
@@ -116,7 +117,7 @@ class LinsightSessionVersionDao(object):
         :param session_id: 会话ID
         :return: 灵思会话版本列表
         """
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             statement = select(LinsightSessionVersion).where(
                 LinsightSessionVersion.session_id == str(session_id)).order_by(
                 col(LinsightSessionVersion.version).desc())
@@ -132,7 +133,7 @@ class LinsightSessionVersionDao(object):
         :return:
         """
 
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             stmt = (
                 update(LinsightSessionVersion)
                 .where(col(LinsightSessionVersion.id) == str(linsight_session_version_id))  # 显式转 str
@@ -152,7 +153,7 @@ class LinsightSessionVersionDao(object):
         :param file_id: 文件ID
         :return: 灵思会话版本对象
         """
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             statement = select(LinsightSessionVersion).where(
                 func.json_search(LinsightSessionVersion.files, 'all', file_id)
             )
@@ -167,7 +168,7 @@ class LinsightSessionVersionDao(object):
         :param status: 会话版本状态
         :return: 灵思会话版本列表
         """
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             statement = select(LinsightSessionVersion).where(
                 LinsightSessionVersion.status == status
             )
@@ -183,7 +184,7 @@ class LinsightSessionVersionDao(object):
         :param session_version_ids: 会话版本ID列表
         :param status: 新的会话版本状态
         """
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             stmt = (
                 update(LinsightSessionVersion)
                 .where(col(LinsightSessionVersion.id).in_(session_version_ids))

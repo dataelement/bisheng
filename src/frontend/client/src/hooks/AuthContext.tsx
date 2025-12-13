@@ -152,7 +152,7 @@ const AuthContextProvider = ({
       setUser(userQuery.data);
     } else if (userQuery.isError) {
       doSetError((userQuery.error as Error).message);
-      navigate(`/${__APP_ENV__.BISHENG_HOST}/login`, { replace: true });
+      // navigate(`/${__APP_ENV__.BISHENG_HOST}`, { replace: true });
     }
     if (error != null && error && isAuthenticated) {
       doSetError(undefined);

@@ -7,25 +7,27 @@ import { cn, copyText, formatStrTime } from "~/utils";
 import ChatFile from "./ChatFile";
 import MessageButtons from "./MessageButtons";
 import MessageSource from "./MessageSource";
+import useLocalize from "~/hooks/useLocalize";
 
 
 export const ReasoningLog = ({ loading, msg = '' }) => {
+    const t = useLocalize()
     const [open, setOpen] = useState(true)
 
     if (!msg) return null
 
-    return <div className="py-1">
+    return <div className="py-1 mb-4">
         <div className="rounded-sm border">
             <div className="flex justify-between items-center px-4 py-2 cursor-pointer" onClick={() => setOpen(!open)}>
                 {loading ? <div className="flex items-center font-bold gap-2 text-sm">
-                    <Loader2 className="text-primary duration-300" />
-                    <span>思考中</span>
+                    <Loader2 className="text-primary duration-300 animate-spin" />
+                    <span>{t('com_bs_reasoning_thinking')}</span>
                 </div>
                     : <div className="flex items-center font-bold gap-2 text-sm">
                         <div className="w-5 h-5 bg-[#05B353] rounded-full p-1" >
                             <CheckIcon size={14} className='text-white' />
                         </div>
-                        <span>已深度思考</span>
+                        <span>{t('com_bs_reasoning_done')}</span>
                     </div>
                 }
                 <ChevronDown className={open && 'rotate-180'} />
@@ -40,11 +42,15 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
 }
 
 
-export default function MessageBs({ logo, data, onUnlike = () => { }, onSource }:
-    { logo: React.ReactNode, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
+export default function MessageBs({ logo, title, data, onUnlike = () => { },readOnly, onSource }:
+    { logo: React.ReactNode, title: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
 
+    const t = useLocalize()
     const [message, reasoningLog] = useMemo(() => {
-        const msg = typeof data.message === 'string' ? data.message : data.message.msg
+        const msg = typeof data.message === 'string' ? data.message : data.message?.msg
+        if (!msg) {
+            return ['', '']
+        }
         const regex = /<think>(.*?)<\/think>/s;
         const match = msg.match(regex);
         if (match) {
@@ -60,36 +66,39 @@ export default function MessageBs({ logo, data, onUnlike = () => { }, onSource }
         copyText(messageRef.current)
     }
 
-    return <div className="flex w-full">
+    return <div className="bisheng-message flex w-full py-2">
         <div className="w-fit group max-w-[90%]">
             <ReasoningLog loading={!data.end && (data.reasoning_log || reasoningLog)} msg={data.reasoning_log || reasoningLog} />
             {!(data.reasoning_log && !message && !data.files.length) && <>
-                <div className="flex justify-between items-center mb-1">
-                    {data.sender ? <p className="text-gray-600 text-xs">{data.sender}</p> : <p />}
-                    <div className={`text-right group-hover:opacity-100 opacity-0`}>
+                <div className="flex gap-2 items-center">
+                    {data.sender ? <p className="text-gray-600 text-xs mb-1 ml-2">{data.sender}</p> : <p />}
+                    {/* <div className={`group-hover:opacity-100 opacity-0`}>
                         <span className="text-slate-400 text-sm">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
-                    </div>
+                    </div> */}
                 </div>
-                <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
-                    <div className="flex gap-2">
+                <div className="min-h-8 px-4 rounded-2xl">
+                    <div className="flex gap-3">
                         {logo}
-                        {message || data.files.length ?
-                            <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
-                                {message && <div className="bs-mkdown text-sm"><Markdown content={message} isLatestMessage={false} webContent={undefined} /></div>}
-                                {data.files.length > 0 && data.files.map(file => <ChatFile key={file.path} fileName={file.name} filePath={file.path} />)}
-                                {/* @user */}
-                                {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}
-                            </div>
-                            : <div>{
-                                !data.end && <LoadingIcon className="size-6 text-primary" />
-                            }</div>
-                        }
+                        <div className="">
+                            <p className="select-none font-semibold text-base mb-1">{title}</p>
+                            {message || data.files.length ?
+                                <div ref={messageRef} className="">
+                                    {message && <div className="bs-mkdown text-base"><Markdown content={message} isLatestMessage={false} webContent={undefined} /></div>}
+                                    {data.files.length > 0 && data.files.map(file => <ChatFile key={file.path} fileName={file.name} filePath={file.path} />)}
+                                    {/* @user */}
+                                    {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}
+                                </div>
+                                : <div>{
+                                    !data.end && <LoadingIcon className="size-6 text-primary" />
+                                }</div>
+                            }
+                        </div>
                     </div>
                 </div>
             </>}
             {/* 附加信息 */}
             {
-                data.end && <div className="flex justify-between mt-2">
+                data.end && <div className="flex justify-between">
                     <MessageSource
                         extra={data.extra || {}}
                         end={data.end}
@@ -100,12 +109,15 @@ export default function MessageBs({ logo, data, onUnlike = () => { }, onSource }
                             message,
                         })}
                     />
-                    <MessageButtons
+                    {!readOnly && <MessageButtons
                         id={data.id}
                         data={data.liked}
+                        text={message}
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
-                    ></MessageButtons>
+                    >
+                        <span className="text-slate-400 text-sm pt-0.5">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
+                    </MessageButtons>}
                 </div>
             }
         </div>

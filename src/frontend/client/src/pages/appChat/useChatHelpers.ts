@@ -8,9 +8,9 @@ import { Chat } from "~/@types/chat"
 import { baseMsgItem } from "~/api/apps"
 import { formatDate, generateUUID } from "~/utils"
 import { FLOW_TYPES } from "."
+import { SkillMethod } from "./appUtils/skillMethod"
 import { bishengConfState, chatIdState, chatsState, currentChatState, currentRunningState, runningState } from "./store/atoms"
 import { emitAreaTextEvent, EVENT_TYPE } from "./useAreaText"
-import { SkillMethod } from "./appUtils/skillMethod"
 
 export default function useChatHelpers() {
     const chatState = useRecoilValue(currentChatState)
@@ -37,8 +37,12 @@ export default function useChatHelpers() {
         return routeConfig[type] || '';
     }, [chatState, chatId, bishengConfig])
 
-    // handleMsgError
-    const handleMsgError = (errorMsg: string) => {
+    const appLost = useMemo(() => {
+        return runState?.error?.code
+    }, [runState])
+
+    // handleMsgError close只关闭运行状态不报错
+    const handleMsgError = (errorMsg: { code: string, data: any }, close: boolean = false) => {
         setRunningState((prev) => ({
             ...prev,
             [chatId]: {
@@ -46,8 +50,19 @@ export default function useChatHelpers() {
                 running: false,
                 showStop: false,
                 showUpload: false,
-                inputDisabled: true,
-                error: errorMsg,
+                inputDisabled: close || !!errorMsg.code, //chatState?.flow.flow_type !== 1, // 技能不禁止输入
+                // showReRun: chatState?.flow.flow_type === 10, // 错误时工作流展示重试按钮
+                error: close ? prev[chatId].error : errorMsg,
+            },
+        }))
+    }
+
+    const clearError = () => {
+        setRunningState((prev) => ({
+            ...prev,
+            [chatId]: {
+                ...prev[chatId],
+                error: { code: '', data: null },
             },
         }))
     }
@@ -64,6 +79,17 @@ export default function useChatHelpers() {
         }))
     }
 
+    // 显示重试按钮
+    const reRunShow = (show: boolean) => {
+        setRunningState((prev) => ({
+            ...prev,
+            [chatId]: {
+                ...prev[chatId],
+                showReRun: show,
+            },
+        }))
+    }
+
     // 唤起输入(表单输入，文本输入)
     const showInputForm = (inputSchema) => {
         const { tab, value } = inputSchema
@@ -74,7 +100,7 @@ export default function useChatHelpers() {
             emitAreaTextEvent({ action: EVENT_TYPE.FILE_ACCEPTS, chatId, fileAccept })
         }
 
-        const runstate = tab === "form_input" ? { inputDisabled: true, inputForm: inputSchema } : { inputDisabled: false }
+        const runstate = tab === "form_input" ? { inputDisabled: true, inputForm: inputSchema } : { showUpload: true, inputDisabled: false }
 
         setRunningState((prev) => ({
             ...prev,
@@ -146,7 +172,7 @@ export default function useChatHelpers() {
                         is_bot,
                         extra,
                         liked,
-                        message,
+                        message: msg,
                         receiver,
                         type,
                         source,
@@ -154,8 +180,10 @@ export default function useChatHelpers() {
                         reasoning_log,
                         thought
                     } = data
+                    // 兼容后端问题
+                    const _files = Array.isArray(files) ? files : []
 
-                    const messageId = message_id || (category === "guide_word" ? generateUUID(4) : "")
+                    const messageId = message_id || (category === "guide_word" ? 'u-' + generateUUID(6) : "")
                     const filteredMessages = deduplicateMessages(messages, message_id)
 
                     return [
@@ -165,20 +193,20 @@ export default function useChatHelpers() {
                             flow_id,
                             chat_id,
                             id: messageId,
-                            files: files.map(el => ({
+                            files: _files.map(el => ({
                                 // 兼容
                                 file_name: el.file_name || el.name,
-                                file_url: el.file_url || el.url
+                                file_url: el.file_url || el.url || el.path
                             })),
                             is_bot,
-                            message,
+                            message: msg,
                             receiver,
                             source,
                             user_id,
                             liked: !!liked,
                             end: type === "over",
                             sender: "",
-                            node_id: message?.node_id || "",
+                            node_id: msg?.node_id || "",
                             create_time: formatDate(new Date(), "yyyy-MM-ddTHH:mm:ss"),
                             extra,
                             reasoning_log,
@@ -244,6 +272,25 @@ export default function useChatHelpers() {
                 }),
             )
         },
+        closeAllMsg: (chatid: string) => {
+            setChats((prev) =>
+                updateChatMessages(prev, chatid, (messages) => {
+                    return messages.reduce((acc, msg) => {
+                        if (msg.message || msg.reasoning_log || msg.files?.length) {
+                            acc.push({ ...msg, end: true })
+                        }
+                        return acc
+                    }, [] as any[])
+                })
+            )
+        },
+        closeAllLogMsg: (chatid: string) => {
+            setChats((prev) =>
+                updateChatMessages(prev, chatid, (messages) => {
+                    return messages.filter((msg) => msg.category !== "node_run")
+                })
+            )
+        },
         skillStreamMsg: (chatid: string, data: any) => {
             setChats((prev) =>
                 updateChatMessages(prev, chatid, (messages) => {
@@ -260,7 +307,7 @@ export default function useChatHelpers() {
                     ...prev[chatId],
                     running: false,
                     inputDisabled: false,
-                    inputForm: true,
+                    inputForm: false,
                     showStop: false
                 },
             }))
@@ -283,7 +330,7 @@ export default function useChatHelpers() {
         insetSeparator: (chatid: string, msg: string) => {
             setChats((prev) =>
                 updateChatMessages(prev, chatid, (messages) => {
-                    if (messages[messages.length - 1]?.category === "separator") return messages
+                    if (messages[messages.length - 1]?.category === "divider") return messages
 
                     return [
                         ...messages,
@@ -305,23 +352,53 @@ export default function useChatHelpers() {
                     {
                         ...baseMsgItem,
                         category: "question",
-                        id: generateUUID(8),
+                        id: 'u-' + generateUUID(8),
                         message: msg,
                         create_time: formatDate(new Date(), "yyyy-MM-ddTHH:mm:ss"),
                     },
                 ]),
             )
+
+            // 滚动到底部
+            const dom = document.getElementById('messageScrollPanne')
+            setTimeout(() => {
+                if (dom) {
+                    dom.scrollTop = dom.scrollHeight
+                }
+            }, 0);
         },
+        closeOutputMsg: (input) => {
+            setChats((prev) =>
+                updateChatMessages(prev, chatId, (messages) => {
+                    const updatedMessages = messages.map(msg => {
+                        if (["output_with_input_msg", "output_with_choose_msg"].includes(msg.category)) {
+                            return {
+                                ...msg,
+                                message: {
+                                    ...msg.message,
+                                    hisValue: input
+                                }
+                            }
+                        }
+                        return msg
+                    })
+                    return updatedMessages
+                }),
+            )
+        }
     }
 
     return {
         wsUrl,
+        appLost,
         chatId,
         running: runState?.running,
         message,
         flow: chatState?.flow,
         stopShow,
+        reRunShow,
         handleMsgError,
+        clearError,
         showInputForm,
         showGuideQuestion
     }

@@ -1,12 +1,16 @@
 
-import { FileIcon, Loader2, PaperclipIcon, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useRef, useState } from "react";
 import { uploadChatFile } from "~/api/apps";
+import { AttachmentIcon } from "~/components/svg";
+import { FileIcon, getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
+import useLocalize from "~/hooks/useLocalize";
 import { useToastContext } from "~/Providers";
-import { generateUUID, getFileExtension } from "~/utils";
+import { cn, generateUUID, getFileExtension } from "~/utils";
 
 // @accepts '.png,.jpg'
-export default function InputFiles({ v, accepts, size, onChange }) {
+export default function InputFiles({ v, showVoice, accepts, disabled = false, size, onChange }) {
+    const t = useLocalize()
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
     const remainingUploadsRef = useRef(0);
@@ -33,7 +37,7 @@ export default function InputFiles({ v, accepts, size, onChange }) {
         // Show invalid file toast
         if (invalidFiles.length > 0) {
             invalidFiles.map(file =>
-                showToast({ message: `文件：${file.file.name}超过${size}M，已移除`, status: 'info' })
+                showToast({ message: t('com_inputfiles_exceed_limit', { 0: file.file.name, 1: size }), status: 'info' })
             )
         }
 
@@ -97,7 +101,7 @@ export default function InputFiles({ v, accepts, size, onChange }) {
                 }
             }).catch((e) => {
                 console.log('e :>> ', e);
-                showToast({ message: `文件上传失败: ${file.name}`, status: 'error' })
+                showToast({ message: t('com_inputfiles_upload_failed', { 0: file.name }), status: 'error' })
                 handleFileRemove(file.name);
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
                 if (remainingUploadsRef.current === 0) {
@@ -145,41 +149,46 @@ export default function InputFiles({ v, accepts, size, onChange }) {
     };
 
     return (
-        <div className="relative z-10">
+        <div className="">
             {/* Displaying files */}
-            {!!files.length && <div className="absolute bottom-2 left-2 flex flex-wrap gap-2  bg-gray-50 p-2 rounded-xl max-h-96 overflow-y-auto">
+            {!!files.length && <div className="flex flex-wrap gap-2 p-2 rounded-xl max-h-96 overflow-y-auto">
                 {files.map((file, index) => (
-                    <div key={index} className="group relative flex items-center space-x-3 bg-gray-100 p-2 rounded-xl cursor-default">
+                    <div key={index} className="group min-w-52 relative flex items-center gap-2 border bg-white p-2 rounded-2xl cursor-default">
                         {/* Remove button */}
                         <span
                             onClick={() => handleFileRemove(file.name)}
-                            className="hidden group-hover:block absolute -right-1 -top-1 bg-gray-50 border-2 border-gray-300 text-gray-600 rounded-full cursor-pointer"
+                            className="opacity-0 group-hover:opacity-100 absolute p-0.5 right-1.5 top-1.5 bg-black text-white rounded-full cursor-pointer transition-opacity"
                         >
                             <X size={14} />
                         </span>
 
                         {/* File Icon */}
-                        <div className="w-8 h-8 bg-gray-200 rounded-md flex items-center justify-center">
-                            {file.isUploading ? <Loader2 className="size-4" /> : <FileIcon className="w-6 h-6 text-gray-600" />}
-                        </div>
+                        <FileIcon loading={file.isUploading} type={getFileTypebyFileName(file.name)} />
 
                         {/* File details */}
                         <div className="flex-1">
-                            <div className="text-sm font-medium text-gray-700 truncate" title={file.name}>
+                            <div className="max-w-48 text-sm font-medium text-gray-700 truncate" title={file.name}>
                                 {file.name}
                             </div>
                             {file.isUploading ? file.progress === 100
-                                ? <div className="text-xs text-gray-500">解析中...</div>
-                                : <div className="text-xs text-gray-500">上传中... {file.progress}%</div>
+                                ? <div className="text-xs text-gray-500">{t('com_inputfiles_parsing')}</div>
+                                : <div className="text-xs text-gray-500">{t('com_inputfiles_uploading')} {file.progress}%</div>
                                 : <div className="text-xs text-gray-500">{getFileExtension(file.name)} {formatFileSize(file.size)}</div>}
                         </div>
                     </div>
                 ))}
             </div>}
 
-            {/* File Upload Button */}
-            <div className="absolute right-12 top-5 cursor-pointer" onClick={() => fileInputRef.current.click()}>
-                <PaperclipIcon size={18} />
+            {/* File Upload Button disabled */}
+            <div
+                className={cn(
+                    'absolute bottom-3 cursor-pointer p-1 hover:bg-gray-200 rounded-full',
+                    showVoice ? 'right-[92px]' : 'right-14',
+                    disabled ? 'pointer-events-none opacity-40' : ''
+                )}
+                onClick={() => !disabled && fileInputRef.current.click()}
+            >
+                <AttachmentIcon />
             </div>
 
             {/* File Input */}

@@ -1,0 +1,14 @@
+services:
+  office:
+    container_name: bisheng-office
+    image: onlyoffice/documentserver:7.1.1
+    ports:
+      - "8701:80"
+    environment:
+      TZ: Asia/Shanghai
+      JWT_ENABLED: "false"
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/office/bisheng:/var/www/onlyoffice/documentserver/sdkjs-plugins/bisheng
+    command: bash -c "supervisorctl restart all"
+    restart: on-failure
+

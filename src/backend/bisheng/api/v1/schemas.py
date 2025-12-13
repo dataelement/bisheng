@@ -1,20 +1,18 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Generic, List, Optional, TypeVar, Union, Literal
+from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 
 from langchain.docstore.document import Document
 from orjson import orjson
 from pydantic import BaseModel, Field, model_validator, field_validator
 
 from bisheng.database.models.assistant import AssistantBase
-from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
-from bisheng.database.models.gpts_tools import AuthMethod, AuthType, GptsToolsRead
-from bisheng.database.models.knowledge import KnowledgeRead
-from bisheng.database.models.llm_server import LLMModelBase, LLMServerBase
 from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
-from bisheng_langchain.linsight.const import TaskMode
+from bisheng.knowledge.domain.models.knowledge import KnowledgeRead
+from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
+from bisheng.tool.domain.models.gpts_tools import GptsToolsRead
 
 
 class CaptchaInput(BaseModel):
@@ -83,18 +81,6 @@ def resp_200(data: Union[list, dict, str, Any] = None,
 
 
 def resp_500(code: int = 500,
-             data: Union[list, dict, str, Any] = None,
-             message: str = 'BAD REQUEST') -> UnifiedResponseModel:
-    """错误的逻辑回复"""
-    return UnifiedResponseModel(status_code=code, status_message=message, data=data)
-
-def resp_501(code: int = 501,
-             data: Union[list, dict, str, Any] = None,
-             message: str = 'BAD REQUEST') -> UnifiedResponseModel:
-    """错误的逻辑回复"""
-    return UnifiedResponseModel(status_code=code, status_message=message, data=data)
-
-def resp_502(code: int = 502,
              data: Union[list, dict, str, Any] = None,
              message: str = 'BAD REQUEST') -> UnifiedResponseModel:
     """错误的逻辑回复"""
@@ -173,7 +159,7 @@ class ChatMessage(BaseModel):
 class ChatResponse(ChatMessage):
     """Chat response schema."""
 
-    intermediate_steps: str = ''
+    intermediate_steps: Optional[str] = ''
     is_bot: bool | int = True
     category: str = 'processing'
 
@@ -229,6 +215,8 @@ class UploadFileResponse(BaseModel):
     flowId: Optional[str] = None
     file_path: str
     relative_path: Optional[str] = None  # minio的相对路径，即object_name
+    repeat: bool = False  # 在知识库里是否重复
+    repeat_update_time: Optional[datetime] = None  # 如果重复，返回重复文件的更新时间
 
 
 class StreamData(BaseModel):
@@ -239,16 +227,6 @@ class StreamData(BaseModel):
         if isinstance(self.data, dict):
             return f'event: {self.event}\ndata: {orjson.dumps(self.data).decode()}\n\n'
         return f'event: {self.event}\ndata: {self.data}\n\n'
-
-
-class FinetuneCreateReq(BaseModel):
-    server: int = Field(description='关联的RT服务ID')
-    base_model: int = Field(description='基础模型ID')
-    model_name: str = Field(max_length=50, description='模型名称')
-    method: TrainMethod = Field(description='训练方法')
-    extra_params: Dict = Field(default_factory=dict, description='训练任务所需额外参数')
-    train_data: Optional[List[Dict]] = Field(default=None, description='个人训练数据')
-    preset_data: Optional[List[Dict]] = Field(default=None, description='预设训练数据')
 
 
 class CreateComponentReq(BaseModel):
@@ -334,19 +312,6 @@ class DeleteToolTypeReq(BaseModel):
     tool_type_id: int = Field(description='要删除的工具类别ID')
 
 
-class TestToolReq(BaseModel):
-    server_host: str = Field(default='', description='服务的根地址')
-    openapi_schema: Optional[str] = Field(default='', description='openapi schema')
-    extra: str = Field(default='', description='Api 对象解析后的extra字段')
-    auth_method: int = Field(default=AuthMethod.NO.value, description='认证类型')
-    auth_type: Optional[str] = Field(default=AuthType.BASIC.value, description='Auth Type')
-    api_key: Optional[str] = Field(default='', description='api key')
-    api_location: Optional[str] = Field(default='', description='api location')
-    parameter_name: Optional[str] = Field(default='', description='parameter_name')
-
-    request_params: Dict = Field(default=None, description='用户填写的请求参数')
-
-
 class GroupAndRoles(BaseModel):
     group_id: int
     role_ids: List[int]
@@ -384,63 +349,6 @@ class OpenAIChatCompletionResp(BaseModel):
     system_fingerprint: Optional[str] = Field(default=None, description='系统指纹')
 
 
-class LLMModelCreateReq(BaseModel):
-    id: Optional[int] = Field(default=None, description='模型唯一ID, 更新时需要传')
-    name: str = Field(..., description='模型展示名称')
-    description: Optional[str] = Field(default='', description='模型描述')
-    model_name: str = Field(..., description='模型名称')
-    model_type: str = Field(..., description='模型类型')
-    online: bool = Field(default=True, description='是否在线')
-    config: Optional[dict] = Field(default=None, description='模型配置')
-
-
-class LLMServerCreateReq(BaseModel):
-    id: Optional[int] = Field(default=None, description='服务提供方ID, 更新时需要传')
-    name: str = Field(..., description='服务提供方名称')
-    description: Optional[str] = Field(default='', description='服务提供方描述')
-    type: str = Field(..., description='服务提供方类型')
-    limit_flag: Optional[bool] = Field(default=False, description='是否开启每日调用次数限制')
-    limit: Optional[int] = Field(default=0, description='每日调用次数限制')
-    config: Optional[dict] = Field(default=None, description='服务提供方配置')
-    models: Optional[List[LLMModelCreateReq]] = Field(default_factory=list, description='服务提供方下的模型列表')
-
-
-class LLMModelInfo(LLMModelBase):
-    id: Optional[int] = None
-
-
-class LLMServerInfo(LLMServerBase):
-    id: Optional[int] = None
-    models: List[LLMModelInfo] = Field(default_factory=list, description='模型列表')
-
-
-class KnowledgeLLMConfig(BaseModel):
-    embedding_model_id: Optional[int] = Field(None, description='知识库默认embedding模型的ID')
-    source_model_id: Optional[int] = Field(None, description='知识库溯源模型的ID')
-    extract_title_model_id: Optional[int] = Field(None, description='文档知识库提取标题模型的ID')
-    qa_similar_model_id: Optional[int] = Field(None, description='QA知识库相似问模型的ID')
-    abstract_prompt: Optional[str] = Field(None, description='摘要提示词')
-
-
-class AssistantLLMItem(BaseModel):
-    model_id: Optional[int] = Field(None, description='模型的ID')
-    agent_executor_type: Optional[str] = Field(default='ReAct',
-                                               description='执行模式。function call 或者 ReAct')
-    knowledge_max_content: Optional[int] = Field(default=15000, description='知识库检索最大字符串数')
-    knowledge_sort_index: Optional[bool] = Field(default=False, description='知识库检索后是否重排')
-    streaming: Optional[bool] = Field(default=True, description='是否开启流式')
-    default: Optional[bool] = Field(default=False, description='是否为默认模型')
-
-
-class AssistantLLMConfig(BaseModel):
-    llm_list: Optional[List[AssistantLLMItem]] = Field(default_factory=list, description='助手可选的LLM列表')
-    auto_llm: Optional[AssistantLLMItem] = Field(None, description='助手画像自动优化模型的配置')
-
-
-class EvaluationLLMConfig(BaseModel):
-    model_id: Optional[int] = Field(None, description='评测功能默认模型的ID')
-
-
 class Icon(BaseModel):
     enabled: bool
     image: Optional[str] = None
@@ -472,18 +380,6 @@ class LinsightConfig(BaseModel):
     tools: Optional[List[Dict]] = Field(None, description='灵思可选工具列表')
 
 
-class WorkbenchModelConfig(BaseModel):
-    """
-    灵思模型配置
-    """
-    # 任务执行模型
-    task_model: Optional[WSModel] = Field(None, description='任务执行模型')
-    # 检索embedding模型
-    embedding_model: Optional[WSModel] = Field(None, description='embedding模型')
-    # 灵思执行模式
-    linsight_executor_mode: Optional[TaskMode] = Field(None, description='灵思执行模式')
-
-
 class WorkstationConfig(BaseModel):
     menuShow: bool = Field(default=True, description='是否显示左侧菜单栏')
     maxTokens: Optional[int] = Field(default=1500, description='最大token数')
@@ -499,10 +395,12 @@ class WorkstationConfig(BaseModel):
     knowledgeBase: Optional[WSPrompt] = None
     fileUpload: Optional[WSPrompt] = None
     systemPrompt: Optional[str] = None
-    applicationCenterWelcomeMessage: Optional[str] = Field(default='', max_length=1000, pattern=r'^[\u4e00-\u9fff\w\s\.,;:!@#$%^&*()\-_=+\[\]{}|\\\'"<>/?`~·！￥（）【】、《》，。；：“”‘’？]+$',
-                                                         description='应用中心欢迎消息')
-    applicationCenterDescription: Optional[str] = Field(default='', max_length=1000, pattern=r'^[\u4e00-\u9fff\w\s\.,;:!@#$%^&*()\-_=+\[\]{}|\\\'"<>/?`~·！￥（）【】、《》，。；：“”‘’？]+$',
-                                                         description='应用中心描述')
+    applicationCenterWelcomeMessage: Optional[str] = Field(default='', max_length=1000,
+                                                           pattern=r'^[\u4e00-\u9fff\w\s\.,;:!@#$%^&*()\-_=+\[\]{}|\\\'"<>/?`~·！￥（）【】、《》，。；：“”‘’？]+$',
+                                                           description='应用中心欢迎消息')
+    applicationCenterDescription: Optional[str] = Field(default='', max_length=1000,
+                                                        pattern=r'^[\u4e00-\u9fff\w\s\.,;:!@#$%^&*()\-_=+\[\]{}|\\\'"<>/?`~·！￥（）【】、《》，。；：“”‘’？]+$',
+                                                        description='应用中心描述')
     linsightConfig: Optional[LinsightConfig] = Field(default=None, description='灵思配置')
 
 
@@ -531,9 +429,9 @@ class FileProcessBase(BaseModel):
     @model_validator(mode='before')
     @classmethod
     def check_separator_rule(cls, values: Any):
-        if values.get('separator', None) is None:
+        if not values.get('separator', None):
             values['separator'] = ['\n\n', '\n']
-        if values.get('separator_rule', None) is None:
+        if not values.get('separator_rule', None):
             values['separator_rule'] = ['after' for _ in values['separator']]
         if values.get('chunk_size', None) is None:
             values['chunk_size'] = 1000
@@ -547,27 +445,19 @@ class FileProcessBase(BaseModel):
             values['enable_formula'] = 1
         if values.get("retain_images") is None:
             values['retain_images'] = 1
-        if values.get("excel_rules") is None:
-            values['excel_rules'] = ExcelRule()
+        if values.get("excel_rule") is None:
+            values['excel_rule'] = ExcelRule()
+        if values.get("knowledge_id") is None:
+            raise ValueError('knowledge_id is required')
 
         return values
-
-
-class FileChunkMetadata(BaseModel):
-    source: str = Field(default='', description='源文件名')
-    title: str = Field(default='', description='源文件内容总结的标题')
-    chunk_index: int = Field(default=0, description='文本块索引')
-    bbox: str = Field(default='', description='文本块bbox信息')
-    page: int = Field(default=0, description='文本块所在页码')
-    extra: str = Field(default='', description='文本块额外信息')
-    file_id: int = Field(default=0, description='文本块所属文件ID')
 
 
 # 文件分块数据格式
 class FileChunk(BaseModel):
     text: str = Field(..., description='文本块内容')
     parse_type: Optional[str] = Field(default=None, description='文本所属的文件解析类型')
-    metadata: FileChunkMetadata = Field(..., description='文本块元数据')
+    metadata: Metadata = Field(..., description='文本块元数据')
 
 
 # 预览文件分块内容请求参数
@@ -595,6 +485,15 @@ class KnowledgeFileProcess(FileProcessBase):
     file_list: List[KnowledgeFileOne] = Field(..., description='文件列表')
     callback_url: Optional[str] = Field(default=None, description='异步任务回调地址')
     extra: Optional[str] = Field(default=None, description='附加信息')
+
+
+# 知识库重新分段调整
+class KnowledgeFileReProcess(FileProcessBase):
+    kb_file_id: int = Field(..., description='知识库文件ID')
+    excel_rule: Optional[ExcelRule] = Field(default=None, description="Excel rules")
+    callback_url: Optional[str] = Field(default=None, description='异步任务回调地址')
+    extra: Optional[Dict] = Field(default=None, description='附加信息')
+
 
 class FrequentlyUsedChat(BaseModel):
     user_link_type: str = Field(..., description='用户相关联的type')

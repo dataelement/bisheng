@@ -1,20 +1,28 @@
-import { RefreshCw } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { Button, SendIcon, Textarea } from "~/components";
+import SpeechToTextComponent from "~/components/Voice/SpeechToText";
+import { useRecordingAudioLoading } from "~/components/Voice/textToSpeechStore";
+import { useGetWorkbenchModelsQuery } from "~/data-provider";
+import { useLocalize } from "~/hooks";
 import InputFiles from "./components/InputFiles";
 import { bishengConfState, currentRunningState } from "./store/atoms";
 import { useAreaText } from "./useAreaText";
 
-export default function ChatInput({ v }) {
+export default function ChatInput({ readOnly, v }) {
     const [bishengConfig] = useRecoilState(bishengConfState)
-    const { inputDisabled, error: inputMsg, showUpload, showStop } = useRecoilValue(currentRunningState)
-    const { accepts, chatState, inputRef, setChatFiles, handleInput, handleRestart, handleSendClick, handleStopClick } = useAreaText()
+    const { inputDisabled, error: inputMsg, showUpload, showStop, showReRun } = useRecoilValue(currentRunningState)
+    const { accepts, inputRef, setChatFiles, handleInput, handleRestart, handleSendClick, handleStopClick } = useAreaText()
+    const [fileUploading, setFileUploading] = useState(false)
+    const [audioOpening] = useRecordingAudioLoading()
+
+    const localize = useLocalize()
 
     const placholder = useMemo(() => {
-        const reason = inputMsg || ' '
-        return inputDisabled ? reason : '请输入问题'
-    }, [inputDisabled])
+        return inputDisabled ?
+            (inputMsg.code ? localize(`api_errors.${inputMsg.code}`, inputMsg.data) : ' ')
+            : localize('com_ui_please_enter_question')
+    }, [inputDisabled, inputMsg, localize])
 
     // auto focus
     useEffect(() => {
@@ -23,50 +31,64 @@ export default function ChatInput({ v }) {
         }, 60)
     }, [inputDisabled])
 
+    const { data: modelData } = useGetWorkbenchModelsQuery()
+    const showVoice = modelData?.asr_model.id
 
-    const fileUploading = false
-
-
-    return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
-        <div className="relative px-4">
-            {/* 引导问题 */}
-
+    return <div className="absolute z-10 bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
+        <div className="relative px-4 rounded-3xl bg-surface-tertiary ">
             {/* 附件 */}
-            {showUpload && !inputDisabled && <InputFiles accepts={accepts} size={bishengConfig?.uploaded_files_maximum_size || 50} v={v} onChange={setChatFiles} />}
+            {showUpload && <InputFiles
+                v={v}
+                showVoice={showVoice}
+                accepts={accepts}
+                disabled={readOnly || audioOpening || inputDisabled}
+                size={bishengConfig?.uploaded_files_maximum_size || 50}
+                onChange={(files => {
+                    setFileUploading(!files)
+                    setChatFiles(files)
+                })} />}
             {/* send */}
-            <div className="flex gap-2 absolute right-7 top-4 z-10">
+            <div className="flex gap-2 absolute right-3 bottom-3 z-10">
+                {showVoice && <SpeechToTextComponent disabled={inputDisabled || readOnly || showStop} onChange={(e) => {
+                    inputRef.current.value += e;
+                }} />}
                 {showStop ?
                     <div
-                        className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"
+                        className="w-8 h-8 bg-primary rounded-full cursor-pointer flex justify-center items-center"
                         onClick={handleStopClick}
                     >
-                        <div className="size-4 bg-gray-900 rounded-sm"></div>
+                        <div className="size-3 bg-white rounded-[2px]"></div>
                     </div> :
                     <button
                         id="bs-send-btn"
-                        className="rounded-full bg-black/80 p-1 text-white outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-20"
-                        disabled={inputDisabled || fileUploading}
+                        className="size-8 flex items-center justify-center rounded-full bg-primary text-white transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-20"
+                        disabled={inputDisabled || fileUploading || readOnly || audioOpening}
                         onClick={() => { !inputDisabled && !fileUploading && handleSendClick() }}>
-                        <SendIcon size={20} />
+                        <SendIcon size={24} />
                     </button>
                 }
             </div>
-            {/* stop & 重置 */}
+            {/* 
+                stop & 重置 
+                is工作流 & 未展示停止按钮 & 没有错误消息
+            */}
             <div className="absolute w-full flex justify-center left-0 -top-14">
-                {!showStop && chatState?.flow?.flow_type === 10 && <Button
-                    className="rounded-full bg-[#fff] dark:bg-[#1B1B1B]"
-                    variant="outline"
+                {/* {!showStop && chatState?.flow?.flow_type === 10 && !inputMsg  & 运行结束展示 */}
+                {showReRun && !inputMsg.code && !showStop && <Button
+                    className="rounded-full bg-primary/10 bg-blue-50 text-primary"
+                    variant="ghost"
+                    disabled={readOnly}
                     onClick={handleRestart}>
-                    <RefreshCw className="mr-1" size={16} />重新运行
+                    <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/chat.png'} alt="" />{localize('com_ui_restart')}
                 </Button>
                 }
             </div>
             <Textarea
                 id="bs-send-input"
                 ref={inputRef}
-                rows={1}
+                rows={2}
                 style={{ height: 56 }}
-                disabled={inputDisabled}
+                disabled={readOnly || inputDisabled}
                 onInput={handleInput}
                 onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
@@ -75,7 +97,7 @@ export default function ChatInput({ v }) {
                     }
                 }}
                 placeholder={placholder}
-                className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#131415]"}
+                className={"resize-none bg-transparent border-none p-4 pr-10 text-md min-h-24 max-h-80 scrollbar-hide"}
             ></Textarea>
         </div>
         <p className="text-center text-sm pt-2 pb-4 text-gray-400">{bishengConfig?.dialog_tips}</p>

@@ -1,11 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { ChatMessageType, FlowData } from "~/@types/chat";
-import { getAssistantDetailApi, getBysConfigApi, getChatHistoryApi, getFlowApi, postBuildInit } from "~/api/apps";
+import { getAssistantDetailApi, getChatHistoryApi, getDeleteFlowApi, getFlowApi, postBuildInit } from "~/api/apps";
 import { useToastContext } from "~/Providers";
 import ChatView from "./ChatView";
-import { bishengConfState, chatIdState, chatsState, currentChatState, runningState, tabsState } from "./store/atoms";
+import { chatIdState, chatsState, currentChatState, runningState, tabsState } from "./store/atoms";
+import { AppLostMessage } from "./useWebsocket";
 
 const API_VERSION = 'v1';
 export const enum FLOW_TYPES {
@@ -14,8 +15,12 @@ export const enum FLOW_TYPES {
     SKILL = 1,
 }
 
-export default function index() {
-    const { conversationId: cid, fid, type } = useParams();
+export default function index({ chatId = '', flowId = '', shareToken = '', flowType = '' }) {
+    const { conversationId: _cid, fid: _fid, type: _type } = useParams();
+    const cid = _cid || chatId;
+    const fid = _fid || flowId;
+    const type = _type || flowType;
+    const [readOnly] = useState(shareToken);
     const [chats, setChats] = useRecoilState(chatsState)
     const [__, setRunningState] = useRecoilState(runningState)
     const [_, setChatId] = useRecoilState(chatIdState)
@@ -24,9 +29,6 @@ export default function index() {
 
     // console.log('[chatState] :>> ', chatState);
     // console.log('[runningState] :>> ', __);
-
-    useConfig()
-
     // 切换会话
     const init = async () => {
         if (!cid) return;
@@ -34,28 +36,48 @@ export default function index() {
         let flowData: FlowData | null = null
         let messages: ChatMessageType[] = []
         const currentData = chats[cid]
-        let error = ''
+        let error = { code: '', data: null }
 
-        // 无缓存，从新加载
-        if (currentData) return;
+        setChatId(cid!) // 切换会话
 
         const numericType = Number(type);
+
+        if (currentData) { // 有缓存不重复加载
+            numericType === FLOW_TYPES.SKILL && setRunningState((prev) => {
+                // 技能重置输入框状态
+                return {
+                    ...prev,
+                    [cid]: {
+                        ...(prev?.[cid] || {}),
+                        inputDisabled: false,
+                    },
+                };
+            })
+            return
+        };
 
         switch (numericType) {
             case FLOW_TYPES.SKILL:
             case FLOW_TYPES.WORK_FLOW:
                 // 获取详情和历史消息
                 const [flowRes, msgRes] = await Promise.all([
-                    getFlowApi(fid!, API_VERSION),
-                    getChatHistoryApi(fid, cid, type)
+                    getFlowApi(fid!, API_VERSION, shareToken),
+                    getChatHistoryApi({ flowId: fid, chatId: cid, flowType: type, shareToken })
                 ])
 
+                if (flowRes.status_code !== 200) {
+                    error = { code: AppLostMessage, data: null }
+                    const lostFlow = await getDeleteFlowApi(cid)
+                    flowRes.data = {
+                        id: lostFlow.data.flow_id,
+                        name: lostFlow.data.flow_name,
+                        logo: lostFlow.data.flow_logo,
+                        flow_type: lostFlow.data.flow_type,
+                    }
+                }
                 messages = msgRes.reverse()
                 flowData = { ...flowRes.data, isNew: !messages.length }
 
-                if (flowRes.status_code !== 200) {
-                    error = flowRes.status_message
-                }
                 // 插入分割线
                 // if (messages.length) {
                 //     messages.push({
@@ -66,21 +88,28 @@ export default function index() {
                 //     })
                 // }
                 if (numericType === FLOW_TYPES.SKILL) {
-                    await build(flowData, cid);
+                    try {
+                        await build(flowData, cid);
+                    } catch (error) { }
                 }
                 break;
             case FLOW_TYPES.ASSISTANT:
                 const [assistantRes, historyRes] = await Promise.all([
-                    getAssistantDetailApi(fid),
-                    getChatHistoryApi(fid, cid, type)
+                    getAssistantDetailApi(fid, shareToken),
+                    getChatHistoryApi({ flowId: fid, chatId: cid, flowType: type, shareToken })
                 ]);
 
+                if (assistantRes.status_code !== 200) {
+                    error = { code: AppLostMessage, data: null };
+                    const lostFlow = await getDeleteFlowApi(cid)
+                    assistantRes.data = {
+                        name: lostFlow.data.flow_name,
+                        logo: lostFlow.data.flow_logo,
+                        flow_type: lostFlow.data.flow_type,
+                    }
+                }
                 messages = historyRes.reverse();
                 flowData = { ...assistantRes.data, flow_type: FLOW_TYPES.ASSISTANT, isNew: !messages.length };
-
-                if (assistantRes.status_code !== 200) {
-                    error = assistantRes.status_message;
-                }
                 break;
             default:
         }
@@ -88,12 +117,15 @@ export default function index() {
         setChats(prevChats => ({
             ...prevChats,
             [cid]: {
-                flow: flowData || { name: 'lost' },
+                flow: flowData,
                 messages,
                 historyEnd: false
             }
         }));
 
+        if (shareToken) {
+            error = { code: '', data: null }
+        }
         // 更新状态
         // !!flow.data?.nodes.find(node => ["VariableNode", "InputFileNode"].includes(node.data.type))
         setRunningState((prev) => {
@@ -101,17 +133,17 @@ export default function index() {
                 ...prev,
                 [cid]: {
                     running: false,
-                    inputDisabled: error || numericType === FLOW_TYPES.WORK_FLOW,
+                    inputDisabled: error.code || numericType === FLOW_TYPES.WORK_FLOW,
                     error,
                     inputForm: numericType !== FLOW_TYPES.WORK_FLOW || null,
                     showUpload: numericType === FLOW_TYPES.WORK_FLOW,
                     showStop: false,
-                    guideWord: flowData?.guide_question
+                    guideWord: flowData?.guide_question,
+                    showReRun: false
                 }
             }
         })
 
-        setChatId(cid!)
     }
 
     useEffect(() => {
@@ -120,21 +152,8 @@ export default function index() {
 
     if (!cid || !chatState?.flow) return null;
 
-    return <ChatView data={chatState.flow} v={API_VERSION} />
+    return <ChatView data={chatState.flow} cid={cid} v={API_VERSION} readOnly={readOnly} />
 };
-
-
-const useConfig = () => {
-    const [_, setConfig] = useRecoilState(bishengConfState)
-
-    useEffect(() => {
-        getBysConfigApi().then(res => {
-            setConfig(res.data)
-        })
-    }, [])
-}
-
-
 
 /**
  * build flow
@@ -189,12 +208,13 @@ const useBuild = () => {
         };
 
         eventSource.onerror = (error: any) => {
+            buildEnd = true
             console.error("EventSource failed:", error);
             eventSource.close();
-            if (error.data) {
-                const parsedData = JSON.parse(error.data);
-                showToast({ message: parsedData.error, status: 'error' });
-            }
+            // if (error.data) {
+            //     const parsedData = JSON.parse(error.data);
+            //     showToast({ message: parsedData.error, status: 'error' });
+            // }
         };
         // Step 3: Wait for the stream to finish
         while (!finished) {

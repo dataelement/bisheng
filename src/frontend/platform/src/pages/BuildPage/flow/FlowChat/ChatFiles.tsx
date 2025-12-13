@@ -5,10 +5,13 @@ import { locationContext } from "@/contexts/locationContext";
 import { uploadChatFile } from "@/controllers/API/flow";
 import { getFileExtension } from "@/util/utils";
 import { FileIcon, PaperclipIcon, X } from "lucide-react";
-import { useContext, useMemo, useRef, useState } from "react";
+import { useContext, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 // @accepts '.png,.jpg'
-export default function ChatFiles({ v, accepts, onChange }) {
+export default function ChatFiles({ v, accepts, disabled, onChange }) {
+
+    const { t } = useTranslation();
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
     const remainingUploadsRef = useRef(0);
@@ -24,9 +27,20 @@ export default function ChatFiles({ v, accepts, onChange }) {
         const validFiles = [];
         const invalidFiles = [];
 
-        fileInputRef.current.value = ''
-        // Validate files based on file extensions
+        fileInputRef.current.value = '';
+        const allowedExtensions = accepts
+            ? new Set(accepts.split(',').map(ext => ext.trim().toLowerCase().replace(/^\./, '')))
+            : new Set();
+
         selectedFiles.forEach((file) => {
+            if (allowedExtensions.size > 0) {
+                const fileExt = getFileExtension(file.name).toLowerCase();
+                if (!allowedExtensions.has(fileExt)) {
+                    invalidFiles.push(t('chat.fileTypeNotAllowed', { name: file.name }));
+                    return;
+                }
+            }
+
             if (file.size <= fileSizeLimit) {
                 validFiles.push({ id: generateUUID(6), file });
             } else {
@@ -38,7 +52,7 @@ export default function ChatFiles({ v, accepts, onChange }) {
         if (invalidFiles.length > 0) {
             toast({
                 variant: 'info',
-                description: invalidFiles.map(file => `文件：${file.file.name}超过${appConfig.uploadFileMaxSize}M，已移除`),
+                description: invalidFiles.map((file) => t('chat.fileExceedRemoved', { name: file.file.name, size: appConfig.uploadFileMaxSize })),
             });
         }
 
@@ -103,7 +117,7 @@ export default function ChatFiles({ v, accepts, onChange }) {
                 // Handle upload failure
                 toast({
                     variant: 'error',
-                    description: `文件上传失败: ${file.name}`,
+                    description: t('chat.fileUploadFailed', { name: file.name }),
                 });
                 handleFileRemove(file.name);
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
@@ -133,7 +147,7 @@ export default function ChatFiles({ v, accepts, onChange }) {
 
         if (remainingUploadsRef.current === 0) {
             // If no files remain, trigger onChange immediately
-            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ id: f.id, name: f.name }));
+            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
             onChange(uploadedFileIds); // Trigger onChange with uploaded file IDs
         }
     };
@@ -176,8 +190,8 @@ export default function ChatFiles({ v, accepts, onChange }) {
                                 {file.name}
                             </div>
                             {file.isUploading ? file.progress === 100
-                                ? <div className="text-xs text-gray-500">解析中...</div>
-                                : <div className="text-xs text-gray-500">上传中... {file.progress}%</div>
+                                ? <div className="text-xs text-gray-500">{t('chat.fileParsingShort')}</div>
+                                : <div className="text-xs text-gray-500">{t('chat.uploadingShort')} {file.progress}%</div>
                                 : <div className="text-xs text-gray-500">{getFileExtension(file.name)} {formatFileSize(file.size)}</div>}
                         </div>
                     </div>
@@ -185,7 +199,10 @@ export default function ChatFiles({ v, accepts, onChange }) {
             </div>}
 
             {/* File Upload Button */}
-            <div className="absolute right-10 top-5 cursor-pointer" onClick={() => fileInputRef.current.click()}>
+            <div
+                className={`absolute right-10 top-5 cursor-pointer ${disabled ? 'text-gray-400 cursor-not-allowed' : ''}`}
+                onClick={() => !disabled && fileInputRef.current.click()}
+            >
                 <PaperclipIcon size={18} />
             </div>
 

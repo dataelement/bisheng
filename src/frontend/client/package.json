@@ -1,6 +1,6 @@
 {
   "name": "bishengchat",
-  "version": "v1.1.0",
+  "version": "2.2.0",
   "description": "",
   "type": "module",
   "scripts": {
@@ -54,9 +54,11 @@
     "cross-env": "^7.0.3",
     "date-fns": "^3.3.1",
     "downloadjs": "^1.4.7",
+    "echarts": "^6.0.0",
     "export-from-json": "^1.7.2",
     "filenamify": "^6.0.0",
     "framer-motion": "11.5.4",
+    "howler": "^2.2.4",
     "html-to-image": "^1.11.11",
     "i18next": "^24.2.2",
     "i18next-browser-languagedetector": "^8.0.3",
@@ -65,7 +67,7 @@
     "js-cookie": "^3.0.5",
     "js-yaml": "^4.1.0",
     "lodash": "^4.17.21",
-    "lucide-react": "^0.394.0",
+    "lucide-react": "^0.544.0",
     "mammoth": "^1.10.0",
     "match-sorter": "^6.3.4",
     "msedge-tts": "^1.3.4",
@@ -106,6 +108,7 @@
     "tailwindcss-radix": "^2.8.0",
     "uuid": "^11.1.0",
     "vditor": "file:local-packages/vditor-3.11.1.tgz",
+    "vite-plugin-compression2": "^2.3.0",
     "vite-plugin-static-copy": "^3.1.1",
     "zod": "^3.22.4"
   },
@@ -140,12 +143,13 @@
     "postcss": "^8.4.31",
     "postcss-loader": "^7.1.0",
     "postcss-preset-env": "^8.2.0",
+    "rollup-plugin-visualizer": "^6.0.5",
     "tailwindcss": "^3.4.1",
     "ts-jest": "^29.2.5",
     "typescript": "^5.3.3",
-    "vite": "^6.1.0",
-    "vite-plugin-compression": "^0.5.1",
+    "vite": "^6.3.6",
+    "vite-plugin-compression2": "^2.2.1",
     "vite-plugin-node-polyfills": "^0.23.0",
-    "vite-plugin-pwa": "^0.21.1"
+    "vite-plugin-pwa": "^0.21.2"
   }
 }

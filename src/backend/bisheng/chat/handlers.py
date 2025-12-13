@@ -4,25 +4,30 @@ import time
 from queue import Queue
 from typing import Dict
 
+from langchain.chains.llm import LLMChain
+from langchain_core.prompts.prompt import PromptTemplate
+from loguru import logger
+from sqlmodel import select
+
 from bisheng.api.utils import build_input_keys_response
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.manager import ChatManager
 from bisheng.chat.utils import judge_source, process_graph, process_source_document
-from bisheng.database.base import session_getter
-from bisheng.database.models.report import Report
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
+from bisheng.common.schemas.telemetry.event_data_schema import ApplicationProcessEventData
+from bisheng.common.services import telemetry_service
+from bisheng.common.services.config_service import settings
+from bisheng.core.database import get_sync_db_session
+from bisheng.core.logger import trace_id_var
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.message import ChatMessage as ChatMessageDB, ChatMessageDao
+from bisheng.database.models.report import Report
 from bisheng.interface.importing.utils import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm
-from bisheng.settings import settings
 from bisheng.utils.docx_temp import test_replace_string
-from bisheng.utils.logger import logger
-from bisheng.utils.minio_client import MinioClient
 from bisheng.utils.threadpool import thread_pool
 from bisheng.utils.util import get_cache_key
 from bisheng_langchain.chains.autogen.auto_gen import AutoGenChain
-from langchain.chains.llm import LLMChain
-from langchain_core.prompts.prompt import PromptTemplate
-from sqlmodel import select
 
 
 class Handler:
@@ -51,9 +56,24 @@ class Handler:
                 # 清空流式输出队列，防止上次的回答污染本次回答
                 while not self.stream_queue.empty():
                     self.stream_queue.get()
+            try:
+                await self.handler_dict[action](session, client_id, chat_id, payload, user_id)
+                logger.info(f'dispatch_task done timecost={time.time() - start_time}')
+            finally:
+                end_time = time.time()
+                await telemetry_service.log_event(user_id=user_id,
+                                                  event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
+                                                  trace_id=trace_id_var.get(),
+                                                  event_data=ApplicationProcessEventData(
+                                                      app_id=ApplicationTypeEnum.SKILL.value,
+                                                      app_name=ApplicationTypeEnum.SKILL.value,
+                                                      app_type=ApplicationTypeEnum.SKILL,
+                                                      chat_id=chat_id,
 
-            await self.handler_dict[action](session, client_id, chat_id, payload, user_id)
-            logger.info(f'dispatch_task done timecost={time.time() - start_time}')
+                                                      start_time=int(start_time),
+                                                      end_time=int(end_time),
+                                                      process_time=int((end_time - start_time) * 1000)
+                                                  ))
         return client_id, chat_id
 
     async def process_stop(self, session: ChatManager, client_id: str, chat_id: str, payload: Dict,
@@ -87,7 +107,8 @@ class Handler:
                                              is_bot=True)
                 if chat_id:
                     db_message = ChatMessageDao.insert_one(chat_message)
-                    await session.send_json(client_id, chat_id, ChatMessage(**db_message.model_dump(), message_id=db_message.id), add=False)
+                    await session.send_json(client_id, chat_id,
+                                            ChatMessage(**db_message.model_dump(), message_id=db_message.id), add=False)
 
             if answer.strip():
                 chat_message = ChatMessageDB(flow_id=client_id, chat_id=chat_id,
@@ -99,7 +120,8 @@ class Handler:
                                              is_bot=True)
                 if chat_id:
                     db_message = ChatMessageDao.insert_one(chat_message)
-                    await session.send_json(client_id, chat_id, ChatMessage(**db_message.model_dump(), message_id=db_message.id), add=False)
+                    await session.send_json(client_id, chat_id,
+                                            ChatMessage(**db_message.model_dump(), message_id=db_message.id), add=False)
             # 普通技能的stop
             res = thread_pool.cancel_task([key])  # 将进行中的任务进行cancel
             if res[0]:
@@ -149,14 +171,14 @@ class Handler:
             await session.send_json(client_id, chat_id, response)
 
         # build report
-        with session_getter() as db_session:
+        with get_sync_db_session() as db_session:
             template = db_session.exec(
                 select(Report).where(Report.flow_id == client_id).order_by(
                     Report.id.desc())).first()
         if not template:
             logger.error('template not support')
             return
-        minio_client = MinioClient()
+        minio_client = await get_minio_storage()
         template_muban = minio_client.get_share_link(template.object_name)
         report_name = langchain_object.report_name
         report_name = report_name if report_name.endswith('.docx') else f'{report_name}.docx'

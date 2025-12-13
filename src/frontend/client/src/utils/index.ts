@@ -184,13 +184,14 @@ export function formatDate(date: Date, format: string): string {
   const addZero = (num) => num < 10 ? `0${num}` : `${num}`
   const replacements = {
     'yyyy': date.getFullYear(),
+    'yy': date.getFullYear() % 2000,
     'MM': addZero(date.getMonth() + 1),
     'dd': addZero(date.getDate()),
     'HH': addZero(date.getHours()),
     'mm': addZero(date.getMinutes()),
     'ss': addZero(date.getSeconds())
   }
-  return format.replace(/yyyy|MM|dd|HH|mm|ss/g, (match) => replacements[match])
+  return format.replace(/yyyy|yy|MM|dd|HH|mm|ss/g, (match) => replacements[match])
 }
 
 // param time: yyyy-mm-ddTxxxx
@@ -267,7 +268,9 @@ export const generateUUID = (length: number) => {
 
 // 取后缀名
 export function getFileExtension(filename) {
+  if (!filename) return '';
   const basename = filename.split(/[\\/]/).pop(); // 去除路径
+  if (!basename) return '';
   const match = basename.match(/\.([^.]+)$/);
   return (match ? match[1] : '').toUpperCase();
 }

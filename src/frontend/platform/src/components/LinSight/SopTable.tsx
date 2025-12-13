@@ -1,9 +1,11 @@
 // components/SopTable.tsx
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu';
+import { Check, Filter, Star } from 'lucide-react';
 import { useState } from 'react';
-import { ChevronUp, ChevronDown, Star, Check } from 'lucide-react';
-import AutoPagination from '../bs-ui/pagination/autoPagination';
+import { useTranslation } from 'react-i18next';
 import { LoadIcon } from '../bs-icons';
 import { Button } from '../bs-ui/button';
+import AutoPagination from '../bs-ui/pagination/autoPagination';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../bs-ui/tooltip';
 
 const SopTable = ({
@@ -11,7 +13,6 @@ const SopTable = ({
     selectedItems,
     handleSelectItem,
     handleSelectAll,
-    handleSort,
     handleEdit,
     handleDelete,
     page,
@@ -22,8 +23,46 @@ const SopTable = ({
     handlePageChange,
     handlePageInputChange,
     handlePageInputConfirm,
-    handleKeyDown
+    handleKeyDown,
+    onShowcaseFilterChange
 }) => {
+    // Whether the featured filter is selected: state management (similar to Files.tsx)
+    const [featuredSelectedFilters, setFeaturedSelectedFilters] = useState<number[]>([]);
+    const [featuredTempFilters, setFeaturedTempFilters] = useState<number[]>([]);
+    const [isFeaturedFilterOpen, setIsFeaturedFilterOpen] = useState(false);
+    const { t } = useTranslation()
+
+    const applyFeaturedFilters = () => {
+        setFeaturedSelectedFilters([...featuredTempFilters]);
+        setIsFeaturedFilterOpen(false);
+        // Pass to parent component: Only effective when selecting single 1 or 0; multiple selections or empty means no filter
+        if (Array.isArray(featuredTempFilters)) {
+            if (featuredTempFilters.length === 1) {
+                const value = featuredTempFilters[0];
+                onShowcaseFilterChange?.(value === 1 ? 1 : 0);
+            } else {
+                onShowcaseFilterChange?.(undefined);
+            }
+        } else {
+            onShowcaseFilterChange?.(undefined);
+        }
+    };
+
+    const resetFeaturedFilters = () => {
+        const empty: number[] = [];
+        setFeaturedTempFilters(empty);
+        setFeaturedSelectedFilters(empty);
+        onShowcaseFilterChange?.(undefined);
+        setIsFeaturedFilterOpen(false);
+    };
+
+    const handleFeaturedOpenChange = (open: boolean) => {
+        if (open) {
+            setFeaturedTempFilters([...featuredSelectedFilters]);
+        }
+        setIsFeaturedFilterOpen(open);
+    };
+
     const ratingDisplay = (rating) => {
         return rating > 0 ? (
             <div className="flex items-center">
@@ -35,7 +74,7 @@ const SopTable = ({
                 ))}
             </div>
         ) : (
-            <span className="text-sm text-gray-400">暂无评分</span>
+            <span className="text-sm text-gray-400">{t('importLinsight.noRatings')}</span>
         );
     };
 
@@ -47,47 +86,103 @@ const SopTable = ({
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <button
                                 type="button"
-                                className={`h-4 w-4 rounded border flex items-center justify-center transition-colors ${datalist.length > 0 && 
-    datalist.every(item => selectedItems.includes(item.id)) 
-                                        ? 'bg-blue-600 border-blue-600'
-                                        : 'bg-white border-gray-300'
+                                className={`h-4 w-4 rounded border flex items-center justify-center transition-colors ${datalist.length > 0 &&
+                                    datalist.every(item => selectedItems.includes(item.id))
+                                    ? 'bg-blue-600 border-blue-600'
+                                    : 'bg-white border-gray-300'
                                     }`}
                                 style={{ color: 'white' }}
                                 onClick={(e) => {
                                     handleSelectAll();
                                 }}
-                                aria-pressed={datalist.length > 0 && 
-    datalist.every(item => selectedItems.includes(item.id)) }
+                                aria-pressed={datalist.length > 0 &&
+                                    datalist.every(item => selectedItems.includes(item.id))}
                             >
-                                {datalist.length > 0 && 
-    datalist.every(item => selectedItems.includes(item.id)) && (
-                                    <Check className="w-3 h-3 text-white" />
-                                )}
+                                {datalist.length > 0 &&
+                                    datalist.every(item => selectedItems.includes(item.id)) && (
+                                        <Check className="w-3 h-3 text-white" />
+                                    )}
                             </button>
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名称</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">描述</th>
-                        {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            <div className="flex items-center h-full">
-                                <span className="align-middle">星级评分</span>
-                                {loading && <LoadIcon className="animate-spin w-4 h-4 ml-1" />}
-                                <div className="flex flex-col ml-1">
-                                    <button
-                                        onClick={() => handleSort('rating', 'asc')}
-                                        disabled={loading}
-                                    >
-                                        <ChevronUp className={`w-3 h-3 ${loading ? 'text-gray-300' : 'text-gray-400 hover:text-gray-600'}`} />
-                                    </button>
-                                    <button
-                                        onClick={() => handleSort('rating', 'desc')}
-                                        disabled={loading}
-                                    >
-                                        <ChevronDown className={`w-3 h-3 ${loading ? 'text-gray-300' : 'text-gray-400 hover:text-gray-600'}`} />
-                                    </button>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('importLinsight.name')}</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('importLinsight.creator')}</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('importLinsight.description')}</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <div className="flex items-center gap-2">
+                                <span>{t('importLinsight.featured')}</span>
+                                <div className="relative">
+                                    <DropdownMenu open={isFeaturedFilterOpen} onOpenChange={handleFeaturedOpenChange}>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button
+                                                variant="ghost"
+                                                className={`flex items-center gap-1 ${featuredSelectedFilters.length > 0 ? 'text-blue-500' : ''}`}
+                                            >
+                                                <Filter size={16} />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent
+                                            className="h-full p-0 shadow-lg rounded-md border"
+                                            style={{ backgroundColor: 'white', opacity: 1 }}
+                                            align="end"
+                                        >
+                                            <div className="px-2">
+                                                {[
+                                                    { value: 1, label: t('importLinsight.featured') },
+                                                    { value: 0, label: t('importLinsight.notFeatured') }
+                                                ].map(({ value, label }) => (
+                                                    <div
+                                                        key={value}
+                                                        className="flex items-center gap-3 px-2 py-3 hover:bg-gray-100 rounded cursor-pointer"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setFeaturedTempFilters(prev =>
+                                                                prev.includes(value)
+                                                                    ? prev.filter(v => v !== value)
+                                                                    : [...prev, value]
+                                                            );
+                                                        }}
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={featuredTempFilters.includes(value)}
+                                                            onChange={() => { }}
+                                                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                        />
+                                                        <div className="flex items-center gap-2">
+                                                            <span>{label}</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="border-t border-gray-200"></div>
+                                            <div className="flex justify-end gap-2 px-3 py-2">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        resetFeaturedFilters();
+                                                    }}
+                                                    disabled={featuredTempFilters.length === 0}
+                                                >
+                                                    {t('importLinsight.reset')}
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        applyFeaturedFilters();
+                                                    }}
+                                                >
+                                                    {t('importLinsight.apply')}
+                                                </Button>
+                                            </div>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
                                 </div>
                             </div>
-                        </th> */}
-                        <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                        </th>
+                        <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">{t('importLinsight.actions')}</th>
                     </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -118,9 +213,20 @@ const SopTable = ({
                                                     {item.name}
                                                 </div>
                                             </TooltipTrigger>
-                                            <TooltipContent className='max-w-[700px] break-words whitespace-normal'>
+                                            <TooltipContent align="start" className='max-w-[700px] break-words whitespace-normal text-left'>
                                                 <p>{item.name}</p>
                                             </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap max-w-[200px]">
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <div className="text-sm font-medium text-gray-900 truncate">
+                                                    {item.user_name}
+                                                </div>
+                                            </TooltipTrigger>
                                         </Tooltip>
                                     </TooltipProvider>
                                 </td>
@@ -132,9 +238,20 @@ const SopTable = ({
                                                     {item.description}
                                                 </div>
                                             </TooltipTrigger>
-                                               <TooltipContent className="max-w-[900px] break-words whitespace-normal">
-                                                    <p className="text-sm">{item.description}</p>
-                                                </TooltipContent>
+                                            <TooltipContent className="max-w-[900px] break-words whitespace-normal">
+                                                <p className="text-sm">{item.description}</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap max-w-[200px]">
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <div className="text-sm font-medium text-gray-500 truncate">
+                                                    {item.showcase ? t('importLinsight.featured') : t('importLinsight.notFeatured')}
+                                                </div>
+                                            </TooltipTrigger>
                                         </Tooltip>
                                     </TooltipProvider>
                                 </td>
@@ -147,22 +264,22 @@ const SopTable = ({
                                         className="text-blue-600 hover:text-blue-900 mr-3"
                                         onClick={() => handleEdit(item.id)}
                                     >
-                                        编辑
+                                        {t('importLinsight.edit')}
                                     </Button>
                                     <Button
                                         variant="ghost"
                                         onClick={() => handleDelete(item.id)}
                                         className="text-red-600 hover:text-red-900"
                                     >
-                                        删除
+                                        {t('importLinsight.delete')}
                                     </Button>
                                 </td>
                             </tr>
                         ))
                     ) : (
                         <tr>
-                            <td colSpan="5" className="px-6 py-4 text-center text-sm text-gray-500">
-                                未找到相关SOP
+                            <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
+                                {t('importLinsight.noSOPFound')}
                             </td>
                         </tr>
                     )}
@@ -180,7 +297,7 @@ const SopTable = ({
                             total={total}
                             onChange={(newPage) => handlePageChange(newPage)}
                         />
-                        <span className="text-sm text-gray-700 mr-2 whitespace-nowrap">跳至</span>
+                        <span className="text-sm text-gray-700 mr-2 whitespace-nowrap">{t('importLinsight.goTo')}</span>
                         <input
                             type="number"
                             min="1"
@@ -193,7 +310,7 @@ const SopTable = ({
                             disabled={loading}
                         />
                         <span className="text-sm text-gray-700 ml-2 whitespace-nowrap">
-                            页
+                            {t('importLinsight.pages')}
                         </span>
                         {loading && <LoadIcon className="animate-spin w-4 h-4 ml-2" />}
                     </div>

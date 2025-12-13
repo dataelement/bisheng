@@ -1,7 +1,10 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useLocalize } from "~/hooks"
 import { AgentCard } from "./AgentCard"
+import { addCommonlyAppState } from ".."
+import { useRecoilState } from "recoil"
 
 interface SearchOverlayProps {
     query: string
@@ -24,10 +27,12 @@ export function SearchOverlay({
     onCardClick,
     onClose
 }: SearchOverlayProps) {
+    const localize = useLocalize()
     const [displayedResults, setDisplayedResults] = useState<any[]>([])
     const [isLoadingMore, setIsLoadingMore] = useState(false)
     const [hasMore, setHasMore] = useState(true)
     const scrollContainerRef = useRef<HTMLDivElement>(null)
+    const [_, addCommonlyApp] = useRecoilState(addCommonlyAppState)
     const itemsPerLoad = 8
 
     // 过滤结果
@@ -107,39 +112,28 @@ export function SearchOverlay({
     }, [filteredResults, hasMore, isLoadingMore, loadMoreItems, itemsPerLoad])
 
     return (
-        <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-50">
+        <div className="absolute inset-0 bg-background backdrop-blur-sm z-50">
             <div ref={scrollContainerRef} className="h-full overflow-auto">
                 <div className="container mx-auto px-6 py-6">
                     {loading && displayedResults.length === 0 ? (
                         <div className="text-center py-12">
                             <div className="inline-flex items-center gap-2 text-muted-foreground">
                                 <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                                搜索中...
+                                {localize('com_search_searching')}
                             </div>
                         </div>
                     ) : displayedResults.length > 0 ? (
                         <>
-                            <div className="mb-6">
-                                <h2 className="text-xl font-medium mb-2 text-left">
-                                    搜索结果 "{query}" ({filteredResults.length} 个结果)
-                                </h2>
-                            </div>
 
                             <div className="grid grid-cols-4 gap-2 mb-8">
                                 {displayedResults.map((agent) => (
                                     <AgentCard
                                         key={agent.id}
                                         onClick={() => onCardClick(agent)}
-                                        agent={{
-                                            id: agent.id.toString(),
-                                            name: agent.name,
-                                            description: agent.description || "暂无描述",
-                                            icon: "🤖",
-                                            category: "search"
-                                        }}
-                                        isFavorite={favorites.includes(agent.id.toString())}
+                                        agent={agent}
+                                        isFavorite={favorites ? favorites.includes(agent.id.toString()) : false}
                                         showRemove={false}
-                                        onAddToFavorites={() => onAddToFavorites(agent.id.toString())}
+                                        onAddToFavorites={() => addCommonlyApp({ type: agent.flow_type, id: agent.id.toString() })}
                                         onRemoveFromFavorites={() => onRemoveFromFavorites(agent.id.toString())}
                                     />
                                 ))}
@@ -149,20 +143,14 @@ export function SearchOverlay({
                                 <div className="text-center py-8">
                                     <div className="inline-flex items-center gap-2 text-muted-foreground">
                                         <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                                        加载更多...
+                                        {localize('com_search_loading_more')}
                                     </div>
-                                </div>
-                            )}
-
-                            {!hasMore && displayedResults.length > 0 && (
-                                <div className="text-center py-8">
-                                    <p className="text-muted-foreground">已显示全部结果</p>
                                 </div>
                             )}
                         </>
                     ) : (
                         <div className="text-center py-12">
-                            <p className="text-muted-foreground">未找到相关智能体</p>
+                            <p className="text-muted-foreground">{localize('com_search_no_results')}</p>
                         </div>
                     )}
                 </div>

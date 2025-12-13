@@ -193,7 +193,7 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
     }, [versionId])
 
     // 生成会话
-    const generateSop = (_versionId, linsightSubmission?: any) => {
+    const generateSop = (_versionId, sameSopId, linsightSubmission?: any) => {
         const payload = {
             linsight_session_version_id: _versionId,
             feedback_content: linsightSubmission?.feedback,
@@ -202,6 +202,10 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
         if (linsightSubmission) {
             payload.previous_session_version_id = linsightSubmission.prevVersionId
             payload.reexecute = true
+        }
+
+        if (sameSopId) {
+            payload.sop_id = sameSopId
         }
 
         const sse = new SSE(`${__APP_ENV__.BASE_URL}/api/v1/linsight/workbench/generate-sop`, {
@@ -361,7 +365,7 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                         });
                     });
                     // 开启生成sop
-                    generateSop(versionId)
+                    generateSop(versionId, linsightSubmission.sameSopId)
                 })
 
                 sse.addEventListener('open', () => {
@@ -385,7 +389,7 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                 })
                 sse.stream();
             } else {
-                generateSop(versionId, linsightSubmission)
+                generateSop(versionId, linsightSubmission.sameSopId, linsightSubmission)
             }
 
             updateLinsight(versionId, {

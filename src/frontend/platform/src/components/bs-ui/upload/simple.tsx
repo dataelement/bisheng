@@ -24,7 +24,7 @@ export default function SimpleUpload({ filekey, uploadUrl, accept, className = '
         });
         if (!files.length) return
 
-        // 执行预校验（如果提供了preCheck函数）
+        // Perform pre-verification (if the preCheck function is provided)
         if (preCheck) {
             try {
                 const checkResult = await preCheck(files[0]);

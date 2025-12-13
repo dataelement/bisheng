@@ -1,5 +1,4 @@
-import { TitleLogo } from "@/components/bs-comp/cardComponent";
-import { AssistantIcon } from "@/components/bs-icons";
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogTrigger } from "@/components/bs-ui/dialog";
 import { useAssistantStore } from "@/store/assistantStore";
@@ -10,15 +9,13 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import EditAssistantDialog from "./EditAssistantDialog";
 
-export default function Header({ loca,onSave, onLine, onTabChange }) {
+export default function Header({ loca, onSave, onLine, onTabChange }) {
     const { t } = useTranslation()
-console.log(loca);
-
     const navigate = useNavigate()
 
     const { assistantState, dispatchAssistant } = useAssistantStore()
     console.log('assistantState :>> ', assistantState);
-    {/* 编辑助手 */ }
+    {/* Edit assistant */ }
     const [editShow, setEditShow] = useState(false);
 
     const needSaveRef = useRef(false)
@@ -38,13 +35,8 @@ console.log(loca);
     return <div className="flex justify-between bg-background-login items-center border-b px-4">
         <div className="flex items-center gap-2 py-4">
             <Button variant="outline" size="icon" onClick={() => navigate(-1)}><ChevronLeft className="h-4 w-4" /></Button>
-            <TitleLogo
-                 url={loca.logo} 
-  id={loca.id}
-  type={loca.flow_type}
-                className="ml-4"
-            ><AssistantIcon /></TitleLogo>
-            <span className="bisheng-title">{assistantState.name}</span>
+            <AppAvator id={assistantState.name} url={assistantState.logo} flowType={5} className="ml-4"></AppAvator>
+            <span id="app-title" className="bisheng-title">{assistantState.name}</span>
             {/* edit dialog */}
             <Dialog open={editShow} onOpenChange={setEditShow}>
                 <DialogTrigger asChild>
@@ -57,7 +49,7 @@ console.log(loca);
                         desc={assistantState.desc}
                         onSave={handleEditSave}
                         loca={loca}
-                        ></EditAssistantDialog>
+                    ></EditAssistantDialog>
                 }
             </Dialog>
         </div>

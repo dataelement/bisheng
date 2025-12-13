@@ -49,25 +49,5 @@ export default function NodeToolbarComponent({ nodeId, type, onRun }) {
                 <Trash2 size={16} />
             </Button>
         </Tip>
-
-        {/* <Select onValueChange={() => { }} value="">
-            <SelectTrigger showIcon={false} className="border-none inline-flex w-9 h-9 p-0 shadow-none">
-                <Button size="icon" variant="ghost"><Ellipsis /></Button>
-            </SelectTrigger>
-            <SelectContent>
-                <SelectItem value={"export"}>
-                    <div className="flex" data-testid="save-button-modal">
-                        <Download className="relative top-0.5 mr-2 h-4 w-4" />
-                        export
-                    </div>
-                </SelectItem>
-                <SelectItem value={"saveCom"}>
-                    <div className="flex" data-testid="save-button-modal">
-                        <SaveAll className="relative top-0.5 mr-2 h-4 w-4" />
-                        Save
-                    </div>
-                </SelectItem>
-            </SelectContent>
-        </Select> */}
     </div>
 };

@@ -1,6 +1,6 @@
 import TipPng from "@/assets/tip.jpg";
-import { TitleLogo } from "@/components/bs-comp/cardComponent";
-import { AssistantIcon, DelIcon, LoadIcon } from "@/components/bs-icons";
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
+import { DelIcon, LoadIcon } from "@/components/bs-icons";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
@@ -22,7 +22,7 @@ import { cloneDeep, isEqual } from "lodash-es";
 import { ChevronLeft, EllipsisVertical, PencilLineIcon, Play, ShieldCheck } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { unstable_useBlocker as useBlocker,  useLocation,  useNavigate } from "react-router-dom";
+import { unstable_useBlocker as useBlocker, useLocation, useNavigate } from "react-router-dom";
 import CreateApp from "../CreateApp";
 import { ChatTest } from "./FlowChat/ChatTest";
 import useFlowStore from "./flowStore";
@@ -36,11 +36,9 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
     // const { uploadFlow } = useFlowStore()
     const { t, i18n } = useTranslation('flow')
     const [modelVersionId, setModelVersionId] = useState(0)
-
-  const { state } = useLocation();
-     console.log("Full state from useLocation():", state);
+    const navigate = useNavigate()
+    const { state } = useLocation();
     const loca = state?.flow; // 获取传递的 flow 数据
-    console.log(loca,1111);
 
     // console.log('flow :>> ', flow);
 
@@ -159,6 +157,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
         link.click();
     }
 
+    const { toast } = useToast()
     const handleImportClick = () => {
         setOpen(false)
         bsConfirm({
@@ -170,11 +169,19 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
         })
 
         const _importFlow = async () => {
-            const flow = await importFlow()
-            const newFlow = flowVersionCompatible(flow)
-            const { nodes, edges, viewport } = newFlow
-            onImportFlow(nodes, edges, viewport)
-            setFitView()
+            try {
+                const flow = await importFlow()
+                const newFlow = flowVersionCompatible(flow)
+                const { nodes, edges, viewport } = newFlow
+                onImportFlow(nodes, edges, viewport)
+                setFitView()
+            } catch (error) {
+                console.error("Import flow error:", error);
+                toast({
+                    variant: 'error',
+                    description: t('invalidFileError')
+                })
+            }
         }
     }
 
@@ -195,7 +202,6 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
         window.flow_version = Number(versionId)
         // 加载选中版本data
         const res = await getVersionDetails(versionId)
-        // console.log('res :>> ', res)
         // 自动触发 page的 clone flow
         forceUpdateFlow({ ...f, ...res.data })
 
@@ -269,15 +275,10 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                     onClick={returnPage}
                 ><ChevronLeft /></Button>
                 <div className="flex items-center ml-5">
-                                 <TitleLogo
-  url={loca?.logo} 
-  id={loca?.id}
-  type={loca?.flow_type}
-  className=""
-><AssistantIcon /></TitleLogo>
+                    <AppAvator id={flow.name} url={flow.logo || loca?.logo} flowType={10} className=""></AppAvator>
                     <div className="pl-3">
                         <h1 className="font-medium text-sm flex gap-2">
-                            <span className="truncate max-w-48 font-bold">{flow.name}</span>
+                            <span id="app-title" className="truncate max-w-48 font-bold">{flow.name}</span>
                             <Button
                                 size="icon"
                                 variant="ghost"

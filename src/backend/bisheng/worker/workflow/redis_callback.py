@@ -5,20 +5,23 @@ import time
 import uuid
 from typing import AsyncIterator, Iterator
 
-from cachetools import TTLCache
 from langchain_core.documents import Document
 from loguru import logger
 
-from bisheng.api.errcode.flow import WorkFlowNodeRunMaxTimesError, WorkFlowWaitUserTimeoutError, \
-    WorkFlowNodeUpdateError, WorkFlowVersionUpdateError, WorkFlowTaskBusyError
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import ChatResponse
-from bisheng.cache.redis import redis_client
 from bisheng.chat.utils import sync_judge_source, sync_process_source_document
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
+from bisheng.common.errcode.flow import WorkFlowNodeRunMaxTimesError, WorkFlowWaitUserTimeoutError, \
+    WorkFlowNodeUpdateError, WorkFlowVersionUpdateError, WorkFlowTaskBusyError, WorkFlowTaskOtherError
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
+from bisheng.common.services import telemetry_service
+from bisheng.common.services.config_service import settings
+from bisheng.core.cache.redis_manager import get_redis_client_sync
+from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.message import ChatMessageDao, ChatMessage
 from bisheng.database.models.session import MessageSessionDao, MessageSession
-from bisheng.settings import settings
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeStartData, NodeEndData, UserInputData, GuideWordData, GuideQuestionData, \
     OutputMsgData, StreamMsgData, StreamMsgOverData, OutputMsgChooseData, OutputMsgInputData
@@ -27,7 +30,7 @@ from bisheng.workflow.common.workflow import WorkflowStatus
 
 class RedisCallback(BaseCallback):
 
-    def __init__(self, unique_id: str, workflow_id: str, chat_id: str, user_id: str):
+    def __init__(self, unique_id: str, workflow_id: str, chat_id: str, user_id: int):
         super(RedisCallback, self).__init__()
         # 异步任务的唯一ID
         self.unique_id = unique_id
@@ -37,10 +40,7 @@ class RedisCallback(BaseCallback):
         self.workflow = None
         self.create_session = False
 
-        # workflow status cache in memory 10 seconds
-        self.workflow_cache: TTLCache = TTLCache(maxsize=1024, ttl=10)
-
-        self.redis_client = redis_client
+        self.redis_client = get_redis_client_sync()
         self.workflow_data_key = f'workflow:{unique_id}:data'
         self.workflow_status_key = f'workflow:{unique_id}:status'
         self.workflow_event_key = f'workflow:{unique_id}:event'
@@ -51,24 +51,36 @@ class RedisCallback(BaseCallback):
     def set_workflow_data(self, data: dict):
         self.redis_client.set(self.workflow_data_key, data, expiration=self.workflow_expire_time)
 
+    async def async_set_workflow_data(self, data: dict):
+        await self.redis_client.aset(self.workflow_data_key, data, expiration=self.workflow_expire_time)
+
     def get_workflow_data(self) -> dict:
         return self.redis_client.get(self.workflow_data_key)
 
-    def set_workflow_status(self, status: int, reason: str = None):
+    def set_workflow_status(self, status: str, reason: str = None):
         self.redis_client.set(self.workflow_status_key,
                               {'status': status, 'reason': reason, 'time': time.time()},
-                              expiration=None)
-        self.workflow_cache.clear()
+                              expiration=3600 * 24 * 7)
         if status in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
             # 消息事件和状态key可能还需要消费
             self.redis_client.delete(self.workflow_data_key)
             self.redis_client.delete(self.workflow_input_key)
 
-    def get_workflow_status(self, user_cache: bool = True) -> dict | None:
-        # if user_cache and self.workflow_cache.get(self.workflow_status_key):
-        #     return self.workflow_cache.get(self.workflow_status_key)
+    async def async_set_workflow_status(self, status: str, reason: str = None):
+        await self.redis_client.aset(self.workflow_status_key,
+                                     {'status': status, 'reason': reason, 'time': time.time()},
+                                     expiration=3600 * 24 * 7)
+        if status in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
+            # 消息事件和状态key可能还需要消费
+            await self.redis_client.adelete(self.workflow_data_key)
+            await self.redis_client.adelete(self.workflow_input_key)
+
+    def get_workflow_status(self) -> dict | None:
         workflow_status = self.redis_client.get(self.workflow_status_key)
-        self.workflow_cache.setdefault(self.workflow_status_key, workflow_status)
+        return workflow_status
+
+    async def async_get_workflow_status(self) -> dict | None:
+        workflow_status = await self.redis_client.aget(self.workflow_status_key)
         return workflow_status
 
     def clear_workflow_status(self):
@@ -76,19 +88,30 @@ class RedisCallback(BaseCallback):
         self.redis_client.delete(self.workflow_stop_key)
         self.redis_client.delete(self.workflow_data_key)
 
+    async def async_clear_workflow_status(self):
+        await self.redis_client.adelete(self.workflow_status_key)
+        await self.redis_client.adelete(self.workflow_stop_key)
+        await self.redis_client.adelete(self.workflow_data_key)
+
     def insert_workflow_response(self, event: dict):
         self.redis_client.rpush(self.workflow_event_key, json.dumps(event), expiration=self.workflow_expire_time)
 
     def get_workflow_response(self) -> ChatResponse | None:
         response = self.redis_client.lpop(self.workflow_event_key)
+        if self.get_workflow_stop():
+            self.redis_client.delete(self.workflow_event_key)
+            return None
         if response:
             response = ChatResponse(**json.loads(response))
-            if ((response.category == WorkflowEventType.NodeRun.value and response.type == 'end'
-                 and response.message and response.message.get('node_id', '').startswith('end_')) or
-                    (response.category in [WorkflowEventType.UserInput.value, WorkflowEventType.OutputWithChoose.value
-                        , WorkflowEventType.OutputWithInput.value])):
-                # 如果是结束节点或者输入事件，清空状态缓存
-                self.workflow_cache.clear()
+        return response
+
+    async def async_get_workflow_response(self) -> ChatResponse | None:
+        response = await self.redis_client.alpop(self.workflow_event_key)
+        if await self.async_get_workflow_stop():
+            await self.redis_client.adelete(self.workflow_event_key)
+            return None
+        if response:
+            response = ChatResponse(**json.loads(response))
         return response
 
     def build_chat_response(self, category, category_type, message, extra=None, files=None):
@@ -106,24 +129,24 @@ class RedisCallback(BaseCallback):
     def parse_workflow_failed(self, status_info: dict) -> ChatResponse | None:
         if status_info['reason'].find('-- has run more than the maximum number of times') != -1:
             return self.build_chat_response(WorkflowEventType.Error.value, 'over',
-                                            {'code': WorkFlowNodeRunMaxTimesError.Code,
-                                             'message': status_info['reason'].split('--')[0]})
+                                            message=WorkFlowNodeRunMaxTimesError(
+                                                exception=status_info['reason'].split('--')[0]).to_dict())
         elif status_info['reason'].find('workflow wait user input timeout') != -1:
             return self.build_chat_response(WorkflowEventType.Error.value, 'over',
-                                            {'code': WorkFlowWaitUserTimeoutError.Code, 'message': ''})
+                                            message=WorkFlowWaitUserTimeoutError().to_dict())
         elif status_info['reason'].find('-- node params is error') != -1:
             return self.build_chat_response(WorkflowEventType.Error.value, 'over',
-                                            {'code': WorkFlowNodeUpdateError.Code,
-                                             'message': status_info['reason'].split('--')[0]})
+                                            message=WorkFlowNodeUpdateError(
+                                                exception=status_info['reason'].split('--')[0]).to_dict())
         elif status_info['reason'].find('-- workflow node is update') != -1:
             return self.build_chat_response(WorkflowEventType.Error.value, 'over',
-                                            {'code': WorkFlowVersionUpdateError.Code,
-                                             'message': status_info['reason'].split('--')[0]})
+                                            message=WorkFlowVersionUpdateError(
+                                                exception=status_info['reason'].split('--')[0]).to_dict())
         elif status_info['reason'].find('stop by user') != -1:
             return None
         else:
             return self.build_chat_response(WorkflowEventType.Error.value, 'over',
-                                            {'code': 500, 'message': status_info['reason']})
+                                            WorkFlowTaskOtherError(exception=status_info['reason']).to_dict())
 
     def sync_get_response_until_break(self) -> Iterator[ChatResponse]:
         while True:
@@ -131,7 +154,8 @@ class RedisCallback(BaseCallback):
             status_info = self.get_workflow_status()
             if not status_info:
                 yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
-                                               {'code': 500, 'message': 'workflow status not found'})
+                                               message=WorkFlowTaskOtherError(
+                                                   exception=Exception("workflow status not found")).to_dict())
                 break
             elif status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
                 while True:
@@ -156,12 +180,13 @@ class RedisCallback(BaseCallback):
                 # 10秒内没有收到状态更新，说明workflow没有启动，可能是celery worker线程数已满
                 self.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow task execute busy')
                 yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
-                                               {'code': WorkFlowTaskBusyError.Code,
-                                                'message': WorkFlowTaskBusyError.Msg})
+                                               message=WorkFlowTaskBusyError().to_dict())
                 break
             elif time.time() - status_info['time'] > 86400:
                 yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
-                                               {'code': 500, 'message': 'workflow status not update over 1 day'})
+                                               WorkFlowTaskOtherError(
+                                                   exception=Exception(
+                                                       "workflow status not update over 1 day")).to_dict())
                 self.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow status not update over 1 day')
                 self.set_workflow_stop()
                 break
@@ -176,14 +201,15 @@ class RedisCallback(BaseCallback):
         """ 不断获取workflow的response，直到遇到运行结束或者待输入 """
         while True:
             # get workflow status
-            status_info = self.get_workflow_status()
+            status_info = await self.async_get_workflow_status()
             if not status_info:
                 yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
-                                               {'code': 500, 'message': 'workflow status not found'})
+                                               message=WorkFlowTaskOtherError(
+                                                   exception=Exception("workflow status not found")).to_dict())
                 break
             elif status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
                 while True:
-                    chat_response = self.get_workflow_response()
+                    chat_response = await self.async_get_workflow_response()
                     if not chat_response:
                         break
                     yield chat_response
@@ -194,7 +220,7 @@ class RedisCallback(BaseCallback):
                 break
             elif status_info['status'] == WorkflowStatus.INPUT.value:
                 while True:
-                    chat_response = self.get_workflow_response()
+                    chat_response = await self.async_get_workflow_response()
                     if not chat_response:
                         break
                     yield chat_response
@@ -202,21 +228,22 @@ class RedisCallback(BaseCallback):
             elif status_info['status'] in [WorkflowStatus.WAITING.value,
                                            WorkflowStatus.INPUT_OVER.value] and time.time() - status_info['time'] > 10:
                 # 10秒内没有收到状态更新，说明workflow没有启动，可能是celery worker线程数已满
-                self.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow task execute busy')
+                await self.async_set_workflow_status(WorkflowStatus.FAILED.value, 'workflow task execute busy')
                 yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
-                                               {'code': WorkFlowTaskBusyError.Code,
-                                                'message': WorkFlowTaskBusyError.Msg})
+                                               message=WorkFlowTaskBusyError().to_dict())
                 break
             elif time.time() - status_info['time'] > 86400:
                 yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
-                                               {'code': 500, 'message': 'workflow status not update over 1 day'})
-                self.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow status not update over 1 day')
-                self.set_workflow_stop()
+                                               message=WorkFlowTaskOtherError(exception=Exception(
+                                                   "workflow status not update over 1 day")).to_dict())
+                await self.async_set_workflow_status(WorkflowStatus.FAILED.value,
+                                                     'workflow status not update over 1 day')
+                await self.async_set_workflow_stop()
                 break
             else:
-                chat_response = self.get_workflow_response()
+                chat_response = await self.async_get_workflow_response()
                 if not chat_response:
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.01)
                     continue
                 yield chat_response
 
@@ -229,7 +256,22 @@ class RedisCallback(BaseCallback):
         self.redis_client.set(self.workflow_input_key, data, expiration=self.workflow_expire_time)
         return
 
-    def update_old_message(self, user_input: dict, message_db: ChatMessage, message_content: str):
+    async def async_set_user_input(self, data: dict, message_id: int = None, message_content: str = None):
+        if self.chat_id and message_id:
+            message_db = await ChatMessageDao.aget_message_by_id(message_id)
+            if message_db:
+                await self.async_update_old_message(data, message_db, message_content)
+        # 通知异步任务用户输入
+        await self.redis_client.aset(self.workflow_input_key, data, expiration=self.workflow_expire_time)
+        return
+
+    @staticmethod
+    def _update_old_message(user_input: dict, message_db: ChatMessage, message_content: str):
+        """
+        if ChatResponse is not None: add new message
+        if ChatMessage is not None: update old message
+        return ChatResponse | None, ChatMessage | None
+        """
         # 更新输出待输入消息里用户的输入和选择
         old_message = json.loads(message_db.message)
         if message_db.category == WorkflowEventType.OutputWithInput.value:
@@ -253,14 +295,28 @@ class RedisCallback(BaseCallback):
                 dialog_files_content = user_input.get('dialog_files_content', [])
                 for one in dialog_files_content:
                     user_input_message += f"\n{os.path.basename(one).split('?')[0]}"
-
-            self.save_chat_message(ChatResponse(
+            return ChatResponse(
                 message=user_input_message,
                 category='question',
-            ))
-            return
+            ), None
         message_db.message = json.dumps(old_message, ensure_ascii=False)
-        ChatMessageDao.update_message_model(message_db)
+        return None, message_db
+
+    def update_old_message(self, user_input: dict, message_db: ChatMessage, message_content: str):
+        chat_response, message = self._update_old_message(user_input, message_db, message_content)
+        if chat_response:
+            self.save_chat_message(chat_response)
+            return
+        if message:
+            ChatMessageDao.update_message_model(message)
+
+    async def async_update_old_message(self, user_input: dict, message_db: ChatMessage, message_content: str):
+        chat_response, message = self._update_old_message(user_input, message_db, message_content)
+        if chat_response:
+            self.save_chat_message(chat_response)
+            return
+        if message:
+            await ChatMessageDao.aupdate_message_model(message)
 
     def get_user_input(self) -> dict | None:
         ret = self.redis_client.get(self.workflow_input_key)
@@ -270,11 +326,21 @@ class RedisCallback(BaseCallback):
 
     def set_workflow_stop(self):
         from bisheng.worker.workflow.tasks import stop_workflow
+        self.redis_client.set(self.workflow_stop_key, 1, expiration=3600 * 24)
+        stop_workflow.delay(self.unique_id, self.workflow_id, self.chat_id, self.user_id)
+
+    async def async_set_workflow_stop(self):
+        from bisheng.worker.workflow.tasks import stop_workflow
+        await self.redis_client.aset(self.workflow_stop_key, 1, expiration=3600 * 24)
         stop_workflow.delay(self.unique_id, self.workflow_id, self.chat_id, self.user_id)
 
     def get_workflow_stop(self) -> bool | None:
         """ 为了可以及时停止workflow，不做内存的缓存 """
         return self.redis_client.get(self.workflow_stop_key) == 1
+
+    async def async_get_workflow_stop(self) -> bool | None:
+        """ 为了可以及时停止workflow，不做内存的缓存 """
+        return await self.redis_client.aget(self.workflow_stop_key) == 1
 
     def send_chat_response(self, chat_response: ChatResponse):
         """ 发送聊天消息 """
@@ -335,6 +401,20 @@ class RedisCallback(BaseCallback):
                     flow_type=FlowType.WORKFLOW.value,
                     user_id=self.user_id,
                 ))
+
+                # 记录Telemetry日志
+                telemetry_service.log_event_sync(user_id=self.user_id,
+                                                 event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
+                                                 trace_id=trace_id_var.get(),
+                                                 event_data=NewMessageSessionEventData(
+                                                     session_id=self.chat_id,
+                                                     app_id=self.workflow_id,
+                                                     source="platform",
+                                                     app_name=db_workflow.name,
+                                                     app_type=ApplicationTypeEnum.WORKFLOW
+                                                 )
+                                                 )
+
             self.create_session = True
 
         return message.id

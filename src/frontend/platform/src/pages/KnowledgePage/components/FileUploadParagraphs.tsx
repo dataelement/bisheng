@@ -32,8 +32,6 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
 
     useImperativeHandle(ref, () => ({
         load(data, files) {
-            console.log(111, data, files);
-
             paramsRef.current = data
             fileCachesRef.current = {}
 
@@ -55,25 +53,43 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
 
 
 
-    // 加载文件分段结果
     const loadchunks = async (fileValue) => {
-        console.log(fileValue, '5555');
-
-        if (!fileValue) return
-        setLoading(true)
-        setFileValue(fileValue)
-        fileValueRef.current = fileValue
-        previewFileSplitApi({ ...paramsRef.current, file_path: fileValue, cache: !!fileCachesRef.current[fileValue] }).then(res => {
-            setLoading(false)
-            setParagraphs(res.chunks)
-            // setFileUrl(fileValue)
-            setFileUrl(res.file_url)
-            setIsUns(res.parse_type === 'uns')
-            setPartitions(res.partitions)
-
-            fileCachesRef.current[fileValue] = true // chace tag
-        })
-    }
+        if (!fileValue) return;
+        setLoading(true);
+        setFileValue(fileValue);
+        fileValueRef.current = fileValue;
+      
+        // 调用 SSE 版本的接口，传入参数和事件回调
+        const cancelFn = previewFileSplitApi(
+          { ...paramsRef.current, file_path: fileValue, cache: !!fileCachesRef.current[fileValue] },
+          (eventType, data) => {
+            switch (eventType) {
+              case 'processing':
+                // 处理中：保持 loading 状态（无需额外操作，已设置 setLoading(true)）
+                break;
+              case 'completed':
+                // 解析完成：处理结果（与原 .then() 逻辑一致）
+                setLoading(false);
+                setParagraphs(data.chunks); // data 对应原 res
+                setFileUrl(data.file_url);
+                setIsUns(data.parse_type === 'uns');
+                setPartitions(data.partitions);
+                fileCachesRef.current[fileValue] = true; // 缓存标记
+                break;
+              case 'error':
+                // 解析错误：关闭 loading 并处理错误
+                setLoading(false);
+                console.error('文件解析失败：', data.code, data.message);
+                // 可添加错误提示：如 message.error(data.message)
+                break;
+              case 'canceled':
+                // 被新请求取消：关闭 loading
+                setLoading(false);
+                break;
+            }
+          }
+        );
+      };
 
     const handleSelectSearch = (e: any) => {
         const value = e.target.value
@@ -91,16 +107,16 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
         // loadchunks(fileValue)
     }
 
-    const handleDeleteChunk = async (data) => {
-        await captureAndAlertRequestErrorHoc(delChunkInPreviewApi({
-            knowledge_id: id,
-            file_path: fileValue,
-            text: data.text,
-            chunk_index: data.metadata.chunk_index
-        }))
-        const res = paragraphs.filter(el => el.metadata.chunk_index !== data.metadata.chunk_index)
-        setParagraphs(res)
-    }
+    // const handleDeleteChunk = async (data) => {
+    //     await captureAndAlertRequestErrorHoc(delChunkInPreviewApi({
+    //         knowledge_id: id,
+    //         file_path: fileValue,
+    //         text: data.text,
+    //         chunk_index: data.metadata.chunk_index
+    //     }))
+    //     const res = paragraphs.filter(el => el.metadata.chunk_index !== data.metadata.chunk_index)
+    //     setParagraphs(res)
+    // }
 
     if (!open) return null
 

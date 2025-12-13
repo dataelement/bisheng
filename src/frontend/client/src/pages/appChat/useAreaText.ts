@@ -14,7 +14,8 @@ export const enum EVENT_TYPE {
     FORM_SUBMIT = 'form_submit',
     MESSAGE_INPUT = 'message_input',
     INPUT_SUBMIT = 'input_submit',
-    STOP = 'stop'
+    STOP = 'stop',
+    RE_ENTER = 're_enter'
 }
 
 export const FileTypes = {
@@ -34,10 +35,12 @@ export const useAreaText = () => {
 
     const [accepts, setAccepts] = useState('')
 
-    const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        const textarea = e.target
-        textarea.style.height = 'auto'
-        textarea.style.height = textarea.scrollHeight + 'px'
+    const handleInput = () => {
+        const textarea = textareaRef.current
+        if (textarea) {
+            textarea.style.height = 'auto'
+            textarea.style.height = textarea.scrollHeight + 'px'
+        }
     }
 
     // 发送输入(引导词)
@@ -63,8 +66,8 @@ export const useAreaText = () => {
         }
         if (textareaRef.current) {
             textareaRef.current.value = ""
+            handleInput() // 重置高度
         }
-        // 高度调整 todo
 
         // running
         setRunningState((prev) => ({
@@ -98,21 +101,13 @@ export const useAreaText = () => {
     // 表单输入
     const handleFormSubmit = ({ message, nodeId, data, skill }: { message: string; nodeId: string; data: any, skill?: boolean }) => {
         if (skill) {
+            const _data = SkillMethod.getSendParam({ tabs, flow: chatState.flow, chatId, message })
+            _data.inputs.data = data;
+
             setSubmitDataState({
                 input: message,
                 action: ActionType.SKILL_FORM_SUBMIT,
-                data: {
-                    chatHistory: [],
-                    chat_id: chatId,
-                    flow_id: chatState.flow.id,
-                    description: chatState.flow.description,
-                    inputs: {
-                        data,
-                        id: '',
-                        query: message,
-                    },
-                    name: chatState.flow.name,
-                }
+                data: _data
             })
         } else {
             setSubmitDataState({
@@ -151,19 +146,21 @@ export const useAreaText = () => {
                 ...prev[chatId],
                 running: true,
                 showStop: true,
+                showUpload: false,
                 inputForm: false,
+                showReRun: false,
             },
         }))
     }
 
     // 切换会话时，自动提交一次
-    useEffect(() => {
-        setSubmitDataState({
-            input: textareaRef.current?.value || "",
-            chatId,
-            flow: chatState.flow,
-        })
-    }, [chatId])
+    // useEffect(() => {
+    //     setSubmitDataState({
+    //         input: textareaRef.current?.value || "",
+    //         chatId,
+    //         flow: chatState.flow,
+    //     })
+    // }, [chatId])
 
 
     // 接收事件的处理
@@ -195,7 +192,14 @@ export const useAreaText = () => {
                     break;
                 case EVENT_TYPE.INPUT_SUBMIT:
                     handleSendClick(event.detail.data)
-
+                    break;
+                case EVENT_TYPE.RE_ENTER:
+                    if (event.detail.autoSend) {
+                        handleSendClick(event.detail.text)
+                    } else if (textareaRef.current) {
+                        textareaRef.current.value = event.detail.text
+                    }
+                    break;
                 // case EVENT_TYPE.RETRY:
                 //     setSubmitDataState({
                 //         input: '',

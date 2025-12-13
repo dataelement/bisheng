@@ -4,8 +4,8 @@ from typing import Any, List, Optional
 from sqlalchemy import Column, DateTime, delete, text
 from sqlmodel import Field, select
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database import get_sync_db_session
 
 
 class DatasetBase(SQLModelSerializable):
@@ -17,7 +17,7 @@ class DatasetBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class Dataset(DatasetBase, table=True):
@@ -45,7 +45,7 @@ class DatasetDao(DatasetBase):
                               keyword: str = None,
                               page: int = 0,
                               limit: int = 0) -> List[Dataset]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             query = select(Dataset)
             if dataset_ids:
                 query = query.where(Dataset.id.in_(dataset_ids))
@@ -59,12 +59,12 @@ class DatasetDao(DatasetBase):
 
     @classmethod
     def get_count_by_filter(cls, filters: List[Any]) -> int:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.scalar(select(Dataset.id).where(*filters))
 
     @classmethod
     def insert(cls, dataset: DatasetCreate):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             db_insert = Dataset.validate(dataset)
             session.add(db_insert)
             session.commit()
@@ -73,12 +73,12 @@ class DatasetDao(DatasetBase):
 
     @classmethod
     def get_dataset_by_name(cls, name: str):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(select(Dataset).where(Dataset.name == name)).all()
 
     @classmethod
     def update(cls, data: Dataset):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(data)
             session.commit()
             session.refresh(data)
@@ -86,6 +86,6 @@ class DatasetDao(DatasetBase):
 
     @classmethod
     def delete(cls, dataset_id: int):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(delete(Dataset).where(Dataset.id == dataset_id))
             session.commit()

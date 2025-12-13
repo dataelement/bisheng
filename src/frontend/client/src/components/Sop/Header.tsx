@@ -1,14 +1,19 @@
 import { FileText, MessageCircleMoreIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '~/components/ui/Select';
 import { useConversationsInfiniteQuery } from '~/data-provider';
+import { useLocalize } from '~/hooks';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
+import { getFileExtension } from '~/utils';
+import ShareChat from '../Share/ShareChat';
 import { Button, Skeleton } from '../ui';
+import FileIcon from '../ui/icon/File';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
 
-export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
+export const Header = ({ isLoading, chatId, isSharePage, setVersionId, versionId, versions }) => {
     const { getLinsight } = useLinsightManager()
+    const localize = useLocalize()
     const linsight = useMemo(() => {
         return getLinsight(versionId)
     }, [getLinsight, versionId])
@@ -29,6 +34,8 @@ export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
             }
 
             <div className="flex items-center gap-3">
+                {!isSharePage && <ShareChat type='linsight_session' chatId={linsight?.session_id} versionId={versionId} />}
+
                 <Popover>
                     <PopoverTrigger asChild>
                         <Button
@@ -37,7 +44,7 @@ export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
                             className="h-7 px-3 rounded-lg shadow-sm focus-visible:outline-0"
                         >
                             <MessageCircleMoreIcon className="size-4" />
-                            <span className="text-xs">任务描述</span>
+                            <span className="text-xs">{localize('com_sop_task_description')}</span>
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent hideWhenDetached className="w-96 border bg-white rounded-xl">
@@ -47,17 +54,47 @@ export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
                                     <span className='relative -top-1 '>...</span>
                                 </div>
                             </div>
-                            任务描述
+                            {localize('com_sop_task_description')}
                         </p>
-                        <p className='text-sm'>{linsight?.question}</p>
+                        <div
+                            className="text-sm overflow-y-auto max-h-[calc(1.25rem*8)]" // 1.25rem 是单行文本高度，8行总高度
+                            style={{
+                                lineHeight: '1.25',
+                                scrollbarWidth: 'thin'
+                            }}
+                        >
+                            <p className="mb-3"
+                                style={{
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 'unset',
+                                    WebkitBoxOrient: 'vertical',
+                                    marginBottom: linsight?.files.length ? '0.75rem' : '0'
+                                }}
+                            >
+                                {linsight?.question || localize('com_sop_no_task_description')}
+                            </p>
+
+                            {linsight?.files.length > 0 && (
+                                <div className="space-y-2">
+                                    {linsight?.files.map(file => (
+                                        <div key={file.file_id} className="flex items-center space-x-3">
+                                            <FileIcon className='size-5 min-w-4' type={getFileExtension(file.file_name)} />
+                                            <span className="text-sm text-gray-900 flex-1 truncate">
+                                                {file.file_name}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </PopoverContent>
                 </Popover>
 
                 {
-                    versions.length > 0 && <Select value={versionId} onValueChange={setVersionId}>
+                    versions.length > 0 && <Select value={versionId} disabled={isSharePage} onValueChange={setVersionId}>
                         <SelectTrigger className="h-7 rounded-lg px-3 border bg-white hover:bg-gray-50 data-[state=open]:border-blue-500">
                             <div className="flex items-center gap-2">
-                                <span className="text-xs font-normal text-gray-600">任务版本 {versions.find(task => task.id === versionId)?.name}</span>
+                                <span className="text-xs font-normal text-gray-600">{localize('com_sop_task_version')} {versions.find(task => task.id === versionId)?.name}</span>
                             </div>
                         </SelectTrigger>
                         <SelectContent className="bg-white rounded-lg p-2 w-52 shadow-md">

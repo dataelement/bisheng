@@ -3,7 +3,7 @@
 import { SettingsIcon } from "lucide-react"
 import { useEffect, useState } from "react"
 import { Button } from "~/components"
-import { useAuthContext } from "~/hooks"
+import { useAuthContext, useLocalize } from "~/hooks"
 import MarkLabel from "./MarkLabel"
 import { getHomeLabelApi } from "~/api/apps"
 
@@ -15,11 +15,12 @@ interface Category {
 
 interface AgentNavigationProps {
     onCategoryChange: (categoryId: string) => void
-        onRefresh: () => void
+    onRefresh: () => void
 }
 
 export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigationProps) {
     const { user } = useAuthContext();
+    const localize = useLocalize();
 
     const [isLabelModalOpen, setIsLabelModalOpen] = useState(false)
     const [activeCategory, setActiveCategory] = useState<string>("favorites")
@@ -44,16 +45,16 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
 
     const handleCloseLabelModal = async (shouldClose) => {
         if (shouldClose) {
-            await fetchCategoryTags()
             setIsLabelModalOpen(false)
-             onRefresh();
         } else {
             setIsLabelModalOpen(shouldClose)
         }
+        await fetchCategoryTags()
+        onRefresh();
     }
 
     return (
-        <nav className="flex items-center gap-2">
+        <nav className="flex items-center gap-2 flex-wrap">
             <Button
                 variant={activeCategory === 'favorites' ? "default" : "outline"}
                 onClick={() => {
@@ -61,7 +62,7 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
                     setActiveCategory('favorites')
                 }}
                 className="text-xs h-8 font-normal"
-            >常用</Button>
+            >{localize('com_app_common')}</Button>
             {categories.map((category) => (
                 <Button
                     key={category.value}
@@ -74,7 +75,16 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
                 >
                     {category.label}
                 </Button>
+
             ))}
+            <Button
+                variant={activeCategory === 'uncategorized' ? "default" : "outline"}
+                onClick={() => {
+                    onCategoryChange('uncategorized')
+                    setActiveCategory('uncategorized')
+                }}
+                className="text-xs h-8 font-normal"
+            >{localize('com_app_uncategorized')}</Button>
             {/* edit label  */}
             {user?.role === 'admin' && (
                 <Button size={'icon'} variant={"outline"} className="h-8" onClick={() => setIsLabelModalOpen(true)}>

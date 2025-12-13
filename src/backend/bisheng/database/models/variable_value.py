@@ -6,8 +6,8 @@ from pydantic import field_validator
 from sqlalchemy import Column, DateTime, text
 from sqlmodel import Field, select
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database import get_sync_db_session
 
 
 class VariableBase(SQLModelSerializable):
@@ -21,7 +21,7 @@ class VariableBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
     @field_validator('variable_name')
     @classmethod
@@ -69,7 +69,7 @@ class VariableDao(Variable):
         """
         创建新变量
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             db_variable = Variable.from_orm(variable)
             session.add(db_variable)
             session.commit()
@@ -78,7 +78,7 @@ class VariableDao(Variable):
 
     @classmethod
     def get_variables(cls, flow_id: str, node_id: str, variable_name: str, version_id: int) -> List[Variable]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             query = select(Variable).where(Variable.flow_id == flow_id)
             if node_id:
                 query = query.where(Variable.node_id == node_id)
@@ -93,7 +93,7 @@ class VariableDao(Variable):
         """
         复制版本的表单数据到 新版本内
         """
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             query = select(Variable).where(Variable.flow_id == flow_id, Variable.version_id == old_version_id)
             old_version = session.exec(query).all()
             for one in old_version:

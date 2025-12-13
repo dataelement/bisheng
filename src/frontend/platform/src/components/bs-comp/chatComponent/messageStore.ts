@@ -62,9 +62,21 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
             // 未考虑的情况暂不处理
             console.error('消息 to JSON error :>> ', e);
         }
+
+        // hack
+        let chatKey = undefined
+        if (typeof message !== 'string') {
+            // 优先 input
+            if ('input' in message) {
+                chatKey = 'input'
+            } else {
+                chatKey = Object.keys(message)[0]
+            }
+        }
+
         return {
             ...other,
-            chatKey: typeof message === 'string' ? undefined : Object.keys(message)[0],
+            chatKey,
             end: true,
             files: files ? JSON.parse(files) : [],
             isSend: !is_bot,
@@ -196,6 +208,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             }
         }
         const currentMessage = messages[currentMessageIndex]
+        if (!currentMessage) return
         // deepseek
         let message = ''
         let reasoning_log = currentMessage.reasoning_log
@@ -209,7 +222,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         }
 
         // 敏感词特殊处理
-        if (wsdata.type === 'end_cover' && currentMessage.category === 'tool') {
+        if (wsdata.type === 'end_cover' && wsdata.category === 'tool') {
             messages.forEach((msg) => {
                 msg.end = true // 闭合所有会话
             })

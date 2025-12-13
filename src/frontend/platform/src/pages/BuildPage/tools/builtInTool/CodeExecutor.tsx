@@ -1,24 +1,24 @@
 import { Button } from '@/components/bs-ui/button';
 import { DialogClose, DialogFooter } from "@/components/bs-ui/dialog";
+import { PassInput } from '@/components/bs-ui/input';
 import { Label } from "@/components/bs-ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
+import { QuestionTooltip } from '@/components/bs-ui/tooltip';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from "react-i18next";
-import {InputField, SelectField} from "./InputField";
-import { PassInput } from '@/components/bs-ui/input';
-import { QuestionTooltip } from '@/components/bs-ui/tooltip';
+import { InputField } from "./InputField";
 
 const Dalle3ToolForm = ({ formData, onSubmit }) => {
-    const { t } = useTranslation();
+    const { t } = useTranslation('tool');
     const domainRef = useRef(null);
     const apiKeyRef = useRef(null);
 
     const [localFormData, setLocalFormData] = useState(() => {
-        // 从表单数据中提取所有配置
+        // Extract all configurations from form data
         const executionMode = formData.type || 'local';
         const serviceProvider = formData.config?.e2b?.type || 'private';
-        
-        // 同时获取两种配置
+
+        // Get both configurations at the same time
         const privateDomain = formData.config?.private?.domain || formData.config?.e2b_private?.domain || '';
         const privateApiKey = formData.config?.private?.api_key || formData.config?.e2b_private?.api_key || '';
         const officialApiKey = formData.config?.official?.api_key || formData.config?.e2b_official?.api_key || '';
@@ -31,9 +31,9 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
             officialApiKey
         };
     });
-    
+
     const [errors, setErrors] = useState({});
-    
+
     useEffect(() => {
         if (domainRef.current) {
             domainRef.current.value = '';
@@ -42,7 +42,7 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
             apiKeyRef.current.value = '';
         }
     }, []);
-    
+
     const handleChange = (e) => {
         const { name, value } = e.target;
         setLocalFormData((prev) => ({ ...prev, [name]: value }));
@@ -61,19 +61,19 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
         let isValid = true;
 
         if (localFormData.executionMode === 'e2b') {
-            // 验证当前选中的服务提供商配置
+            // Validate configuration of the currently selected service provider
             if (localFormData.serviceProvider === 'private') {
                 if (!localFormData.privateDomain) {
-                    formErrors.privateDomain = 'Domain 不能为空';
+                    formErrors.privateDomain = t('domainCannotBeEmpty');
                     isValid = false;
                 }
                 if (!localFormData.privateApiKey) {
-                    formErrors.privateApiKey = 'API Key 不能为空';
+                    formErrors.privateApiKey = t('apiKeyCannotBeEmpty');
                     isValid = false;
                 }
             } else {
                 if (!localFormData.officialApiKey) {
-                    formErrors.officialApiKey = 'API Key 不能为空';
+                    formErrors.officialApiKey = t('apiKeyCannotBeEmpty');
                     isValid = false;
                 }
             }
@@ -85,22 +85,22 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
     const handleSubmit = (e) => {
         e.preventDefault();
         if (validateForm()) {
-            // 构建完整的表单数据，同时保存两种配置
+            // Build complete form data and save both configurations
             const submitData = {
                 type: localFormData.executionMode,
                 config: {
-                  e2b: {
-                    type: localFormData.serviceProvider,
-                    // 根据当前选择的服务商保存对应的配置
-                    ...(localFormData.serviceProvider === 'private' && {
-                        domain: localFormData.privateDomain,
-                        api_key: localFormData.privateApiKey
-                    }),
-                    ...(localFormData.serviceProvider === 'official' && {
-                        api_key: localFormData.officialApiKey
-                    })
-                },
-                    // 同时保存两种配置
+                    e2b: {
+                        type: localFormData.serviceProvider,
+                        // Save configuration according to the selected service provider
+                        ...(localFormData.serviceProvider === 'private' && {
+                            domain: localFormData.privateDomain,
+                            api_key: localFormData.privateApiKey
+                        }),
+                        ...(localFormData.serviceProvider === 'official' && {
+                            api_key: localFormData.officialApiKey
+                        })
+                    },
+                    // Save both configurations
                     private: {
                         domain: localFormData.privateDomain,
                         api_key: localFormData.privateApiKey
@@ -118,44 +118,58 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
     return (
         <>
             <div className="mb-6">
-                <Label className=" mb-3 mt-4 block">代码执行方式</Label>
-                <RadioGroup 
-                    value={localFormData.executionMode} 
-                    className="flex gap-6" 
+                <Label className=" mb-3 mt-4 block">
+                    {t('executionModeLabel')}
+                </Label>
+                <RadioGroup
+                    value={localFormData.executionMode}
+                    className="flex gap-6"
                     onValueChange={handleExecutionModeChange}
                 >
                     <div className="flex items-center space-x-2">
                         <RadioGroupItem value="local" id="execution-local" />
-                        <Label htmlFor="execution-local">本机运行</Label>
+                        <Label htmlFor="execution-local">
+                            {t('executionLocalLabel')}
+                        </Label>
                     </div>
                     <div className="flex items-center space-x-2">
                         <RadioGroupItem value="e2b" id="execution-e2b" />
-                        <Label htmlFor="execution-e2b">E2B沙箱运行</Label>
+                        <Label htmlFor="execution-e2b">
+                            {t('executionE2bLabel')}
+                        </Label>
                     </div>
                 </RadioGroup>
             </div>
-            
-            {/* 只在选择E2B沙箱运行时显示配置 */}
+
+            {/* Show configuration only when E2B sandbox execution is selected */}
             {localFormData.executionMode === 'e2b' && (
                 <div className="space-y-4">
                     <div>
-                        <Label className="mb-3 block">服务提供方</Label>
-                        <RadioGroup 
-                            value={localFormData.serviceProvider} 
-                            className="flex gap-6" 
+                        <Label className="mb-3 block">
+                            {t('serviceProviderLabel')}
+                        </Label>
+                        <RadioGroup
+                            value={localFormData.serviceProvider}
+                            className="flex gap-6"
                             onValueChange={handleServiceProviderChange}
                         >
                             <div className="flex items-center space-x-2">
                                 <RadioGroupItem value="private" id="provider-private" />
-                                <Label htmlFor="provider-private" >自托管 <QuestionTooltip content={'需要提前在您的本地环境部署 E2B ，并将 domain 指向自托管地址，API Key 鉴权由您部署的 E2B 后台处理。'} /></Label>
+                                <Label htmlFor="provider-private">
+                                    {t('providerPrivateLabel')}{' '}
+                                    <QuestionTooltip content={t('providerPrivateTooltip')} />
+                                </Label>
                             </div>
                             <div className="flex items-center space-x-2">
                                 <RadioGroupItem value="official" id="provider-official" />
-                                <Label htmlFor="provider-official">官方云 <QuestionTooltip content={'使用 E2B 官方云服务，需要从 E2B 官方获取 API Key。'} /></Label>
+                                <Label htmlFor="provider-official">
+                                    {t('providerOfficialLabel')}{' '}
+                                    <QuestionTooltip content={t('providerOfficialTooltip')} />
+                                </Label>
                             </div>
                         </RadioGroup>
                     </div>
-                    
+
                     {localFormData.serviceProvider === 'private' && (
                         <InputField
                             required
@@ -168,12 +182,12 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
                             error={errors.privateDomain}
                         />
                     )}
-                    
+
                     <PassInput
                         required
                         id="e2b-apikey-input"
                         label={<Label>API Key</Label>}
-                        placeholder="请输入API Key"
+                        placeholder={t('enterApiKeyPlaceholder')}
                         type='text'
                         name={localFormData.serviceProvider === 'private' ? 'privateApiKey' : 'officialApiKey'}
                         onChange={handleChange}
@@ -186,11 +200,11 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
             <DialogFooter className="mt-6">
                 <DialogClose>
                     <Button variant="outline" className="px-11" type="button">
-                        {t('build.cancel')}
+                        {t('cancel', { ns: 'bs' })}
                     </Button>
                 </DialogClose>
                 <Button className="px-11" onClick={handleSubmit}>
-                    {t('save')}
+                    {t('save', { ns: 'bs' })}
                 </Button>
             </DialogFooter>
         </>

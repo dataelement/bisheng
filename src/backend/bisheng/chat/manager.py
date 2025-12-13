@@ -6,32 +6,40 @@ from collections import defaultdict
 from queue import Queue
 from typing import Any, Dict, List
 
-from bisheng.utils import generate_uuid
-from bisheng_langchain.input_output.output import Report
 from fastapi import Request, WebSocket, WebSocketDisconnect, status
 from loguru import logger
 
+from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.services.user_service import UserPayload
-from bisheng.api.utils import build_flow_no_yield, get_request_ip
+from bisheng.api.services.workflow import WorkFlowService
+from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse, FileResponse
-from bisheng.cache import cache_manager
-from bisheng.cache.flow import InMemoryCache
-from bisheng.cache.manager import Subject
 from bisheng.chat.client import ChatClient
 from bisheng.chat.clients.workflow_client import WorkflowClient
 from bisheng.chat.types import IgnoreException, WorkType
 from bisheng.chat.utils import process_node_data
-from bisheng.database.base import session_getter
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.common.errcode.chat import (DocumentParseError, InputDataParseError,
+                                         LLMExecutionError, SkillDeletedError,
+                                         SkillNotOnlineError)
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, ApplicationAliveEventData
+from bisheng.common.services import telemetry_service
+from bisheng.core.cache.flow import InMemoryCache
+from bisheng.core.cache.manager import Subject, cache_manager
+from bisheng.core.database import get_sync_db_session
+from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import Flow, FlowType, FlowDao
-from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.database.models.user import User, UserDao
 from bisheng.graph.utils import find_next_node
 from bisheng.processing.process import process_tweaks
+from bisheng.user.domain.models.user import User, UserDao
+from bisheng.utils import generate_uuid
+from bisheng.utils import get_request_ip
 from bisheng.utils.threadpool import ThreadPoolManager, thread_pool
 from bisheng.utils.util import get_cache_key
-
+from bisheng_langchain.input_output.output import Report
 
 
 class ChatHistory(Subject):
@@ -60,7 +68,7 @@ class ChatHistory(Subject):
             msg.__dict__.pop('files')
             db_message = ChatMessage(files=files, **msg.__dict__)
             logger.info(f'chat={db_message} time={time.time() - t1}')
-            with session_getter() as seesion:
+            with get_sync_db_session() as seesion:
                 seesion.add(db_message)
                 seesion.commit()
                 seesion.refresh(db_message)
@@ -141,7 +149,7 @@ class ChatManager:
                                reason: str,
                                key_list: List[str] = None):
         """close and clean ws"""
-        if websocket := self.active_connections[get_cache_key(flow_id, chat_id)]:
+        if websocket := self.active_connections.get(get_cache_key(flow_id, chat_id)):
             try:
                 await websocket.close(code=code, reason=reason)
                 self.disconnect(flow_id, chat_id)
@@ -195,13 +203,14 @@ class ChatManager:
 
     async def dispatch_client(
             self,
-            request: Request,  # 原始请求体
+            request: Request | WebSocket,  # 原始请求体
             client_id: str,
             chat_id: str,
             login_user: UserPayload,
             work_type: WorkType,
             websocket: WebSocket,
             graph_data: dict = None):
+        start_time = time.time()
         client_key = generate_uuid()
         if work_type == WorkType.GPTS:
             chat_client = ChatClient(request,
@@ -258,6 +267,24 @@ class ChatManager:
             except Exception as e:
                 logger.exception(e)
             self.clear_client(client_key)
+            if work_type == WorkType.GPTS:
+                app_info = await AssistantService.get_one_assistant(client_id)
+                app_type = ApplicationTypeEnum.ASSISTANT
+            else:
+                app_info = await WorkFlowService.get_one_workflow_simple_info(client_id)
+                app_type = ApplicationTypeEnum.WORKFLOW
+            app_name = app_info.name if app_info else 'unknown'
+            await telemetry_service.log_event(user_id=login_user.user_id,
+                                              event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
+                                              trace_id=trace_id_var.get(),
+                                              event_data=ApplicationAliveEventData(
+                                                  app_id=client_id,
+                                                  app_name=app_name,
+                                                  app_type=app_type,
+                                                  chat_id=chat_id,
+                                                  start_time=int(start_time),
+                                                  end_time=int(time.time()),
+                                              ))
 
     async def handle_websocket(
             self,
@@ -266,11 +293,13 @@ class ChatManager:
             websocket: WebSocket,
             user_id: int,
             gragh_data: dict = None,
+            source: str = "platform"
     ):
+        start_time = time.time()
         # 建立连接，并存储映射，兼容不复用ws 场景
         key_list = set([get_cache_key(flow_id, chat_id)])
         await self.connect(flow_id, chat_id, websocket)
-        # autogen_pool = ThreadPoolManager(max_workers=1, thread_name_prefix='autogen')
+        logger.info("act=ws_connected flow_id={} chat_id={} user_id={}", flow_id, chat_id, user_id)
         context_dict = {
             get_cache_key(flow_id, chat_id): {
                 'status': 'init',
@@ -316,11 +345,11 @@ class ChatManager:
                             }
                         })
                         if message:
-                            logger.info('act=new_chat message={}', message)
-                            erro_resp = ChatResponse(intermediate_steps=message, **base_param)
+                            logger.info('act=new_chat message={}', str(message))
+                            erro_resp = ChatResponse(intermediate_steps=str(message), **base_param)
                             erro_resp.category = 'error'
-                            await self.send_json(flow_id, chat_id, erro_resp, add=False)
-                            continue
+                            await message.websocket_close_message(websocket=websocket)
+                            break
                         logger.info('act=new_chat_init_success key={}', key)
                         key_list.add(key)
                     if not payload.get('inputs'):
@@ -332,7 +361,8 @@ class ChatManager:
                     'user_id': user_id,
                     'payload': payload,
                     'graph_data': gragh_data,
-                    'context_dict': context_dict
+                    'context_dict': context_dict,
+                    'source': source
                 }
                 if payload:
                     await self._process_when_payload(flow_id, chat_id, **process_param)
@@ -352,6 +382,8 @@ class ChatManager:
                         try:
                             future.result()
                             logger.debug('task_complete key={}', future_key)
+                        except asyncio.exceptions.CancelledError:
+                            continue
                         except Exception as e:
                             if isinstance(e, concurrent.futures.CancelledError):
                                 continue
@@ -359,11 +391,12 @@ class ChatManager:
                             erro_resp = ChatResponse(**base_param)
                             context = context_dict.get(future_key)
                             if context.get('status') == 'init':
-                                erro_resp.intermediate_steps = f'LLM 技能执行错误. error={str(e)}'
+                                raise LLMExecutionError(exception=e, error=str(e))
                             elif context.get('has_file'):
-                                erro_resp.intermediate_steps = f'文档解析失败，点击输入框上传按钮重新上传\n\n{str(e)}'
+                                raise DocumentParseError(exception=e, error=str(e))
                             else:
-                                erro_resp.intermediate_steps = f'Input data is parsed fail. error={str(e)}'
+                                raise InputDataParseError(exception=e, error=str(e))
+
                             context['status'] = 'init'
                             await self.send_json(context.get('flow_id'), context.get('chat_id'),
                                                  erro_resp)
@@ -372,6 +405,14 @@ class ChatManager:
                                                  erro_resp)
         except WebSocketDisconnect as e:
             logger.info(f'act=rcv_client_disconnect {str(e)}')
+        except BaseErrorCode as e:
+            # 业务异常
+            logger.error(str(e))
+            erro_resp = ChatResponse(intermediate_steps=str(e), **base_param, message=json.dumps(e.to_dict()))
+            erro_resp.category = 'error'
+            await self.send_json(flow_id, chat_id, erro_resp)
+            erro_resp.type = 'close'
+            await self.send_json(flow_id, chat_id, erro_resp)
         except Exception as e:
             # Handle any exceptions that might occur
             logger.exception(str(e))
@@ -392,6 +433,17 @@ class ChatManager:
             except Exception as e:
                 logger.exception(e)
             self.disconnect(flow_id, chat_id)
+            flow_info = await WorkFlowService.get_one_workflow_simple_info(flow_id)
+            await telemetry_service.log_event(user_id=user_id, event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
+                                              trace_id=trace_id_var.get(),
+                                              event_data=ApplicationAliveEventData(
+                                                  app_id=flow_id,
+                                                  app_name=flow_info.name if flow_info else 'unknown',
+                                                  app_type=ApplicationTypeEnum.SKILL,
+                                                  chat_id=chat_id,
+                                                  start_time=int(start_time),
+                                                  end_time=int(time.time()),
+                                              ))
 
     async def _process_when_payload(self, flow_id: str, chat_id: str,
                                     autogen_pool: ThreadPoolManager, **kwargs):
@@ -404,7 +456,7 @@ class ChatManager:
         payload = kwargs.get('payload')
         key = get_cache_key(flow_id, chat_id)
         context = kwargs.get('context_dict').get(key)
-
+        source = kwargs.get('source', 'platform')
         status_ = context.get('status')
 
         if payload and status_ != 'init':
@@ -423,18 +475,32 @@ class ChatManager:
                 exist_session = MessageSessionDao.get_one(chat_id=chat_id)
                 if not exist_session:  # 说明是新建会话
                     websocket = self.active_connections[key]
-                    login_user = UserPayload(**{
+                    login_user = await UserPayload.init_login_user(**{
                         'user_id': user_id,
                         'user_name': UserDao.get_user(user_id).user_name,
                     })
                     flow_info = FlowDao.get_flow_by_id(flow_id)
-                    MessageSessionDao.insert_one(MessageSession(
+                    message_session = await MessageSessionDao.async_insert_one(MessageSession(
                         chat_id=chat_id,
                         flow_id=flow_id,
                         flow_name=flow_info.name,
                         flow_type=FlowType.FLOW.value,
                         user_id=user_id,
                     ))
+
+                    # 记录Telemetry日志
+                    await telemetry_service.log_event(user_id=login_user.user_id,
+                                                      event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
+                                                      trace_id=trace_id_var.get(),
+                                                      event_data=NewMessageSessionEventData(
+                                                          session_id=message_session.chat_id,
+                                                          app_id=flow_id,
+                                                          source=source,  # type: ignore
+                                                          app_name=flow_info.name,
+                                                          app_type=ApplicationTypeEnum.SKILL
+                                                      )
+                                                      )
+
                     AuditLogService.create_chat_flow(login_user, get_request_ip(websocket),
                                                      flow_id, flow_info)
         start_resp.type = 'start'
@@ -500,13 +566,13 @@ class ChatManager:
 
     def preper_reuse_connection(self, flow_id: str, chat_id: str, websocket: WebSocket):
         # 设置复用的映射关系
-        message = ''
-        with session_getter() as session:
+        message = None
+        with get_sync_db_session() as session:
             gragh_data = session.get(Flow, flow_id)
             if not gragh_data:
-                message = '该技能已被删除'
+                message = SkillDeletedError()
             if gragh_data.status != 2:
-                message = '当前技能未上线，无法直接对话'
+                message = SkillNotOnlineError()
         gragh_data = gragh_data.data
         self.reuse_connect(flow_id, chat_id, websocket)
         return gragh_data, message
@@ -614,7 +680,7 @@ class ChatManager:
     async def init_langchain_object_task(self, flow_id, chat_id, user_id, graph_data):
         key_node = get_cache_key(flow_id, chat_id)
         logger.info(f'init_langchain build_begin key={key_node}')
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             db_user = session.get(User, user_id)  # 用来支持节点判断用户权限
         artifacts = {}
         start_time = time.time()

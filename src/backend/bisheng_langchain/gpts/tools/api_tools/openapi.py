@@ -33,7 +33,8 @@ class OpenApiTools(APIToolBase):
         for k, v in kwargs.items():
             if params_define.get(k):
                 if params_define[k]['in'] == 'query':
-                    params[k] = v
+                    field_type = params_define[k]['schema']['type']
+                    params[k] = convert_openapi_field_value(v, field_type)
                 elif params_define[k]['in'] == 'path':
                     path_params[k] = v
                 else:
@@ -87,7 +88,8 @@ class OpenApiTools(APIToolBase):
                         field_type = list
                     param_object_param[param] = (
                         field_type,
-                        Field(description=one['schema']['properties'][param]['description']))
+                        Field(default_factory=field_type,
+                              description=one['schema']['properties'][param]['description']))
                 param_model = create_model(
                     param,
                     __module__='bisheng_langchain.gpts.tools.api_tools.openapi',
@@ -95,7 +97,7 @@ class OpenApiTools(APIToolBase):
                 field_type = param_model
             else:
                 raise Exception(f'schema type is not support: {field_type}')
-            model_params[one['name']] = (field_type, Field(description=one['description']))
+            model_params[one['name']] = (field_type, Field(default_factory=field_type, description=one['description']))
         return create_model('InputArgs',
                             __module__='bisheng_langchain.gpts.tools.api_tools.openapi',
                             __base__=BaseModel,

@@ -1,7 +1,7 @@
-import { Input, Textarea } from "@/components/bs-ui/input";
+import { Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export const WebSearchConfig = ({
     config,
@@ -20,9 +20,8 @@ export const WebSearchConfig = ({
     onChange: (field: string, value: any) => void;
     errors?: Record<string, any>;
 }) => {
-    
-    console.log(config,88);
-    
+    const { t } = useTranslation();
+
     // Store parameters for all tools separately
     const [toolsParams, setToolsParams] = useState<Record<string, any>>({
         bing: { api_key: '', base_url: '' },
@@ -34,7 +33,6 @@ export const WebSearchConfig = ({
 
     // Initialize toolsParams with existing config
     useEffect(() => {
-        console.log(config,333);
         if (config.tool && config.params) {
             setToolsParams(prev => ({
                 ...prev,
@@ -43,22 +41,12 @@ export const WebSearchConfig = ({
         }
     }, [config]);
 
-    // Handle parameter changes for the current tool
-
-
-
-
-    // Render parameters based on current tool
-
-
     return (
         <>
-      
-
-            <Label className="bisheng-label">联网搜索提示词</Label>
+            <Label className="bisheng-label">{t('bench.webSearchPrompt')}</Label>
             <div className="mt-3">
                 <Textarea
-                    value={config.prompt||config}
+                    value={config.prompt || config}
                     className="min-h-48"
                     onChange={(e) => onChange('prompt', e.target.value)}
                 />

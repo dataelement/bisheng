@@ -4,13 +4,17 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/bs-ui
 import { useToast } from '@/components/bs-ui/toast/use-toast';
 import { sopApi } from "@/controllers/API/linsight";
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
+import { TaskFlowContent } from "@/workspace/SopTasks";
 import { Check, ChevronDown, ChevronUp, Search, Star } from 'lucide-react';
 import * as React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { LoadIcon } from '../bs-icons/loading';
 import AutoPagination from '../bs-ui/pagination/autoPagination';
-import SopMarkdown from './SopMarkdown';
+import { Tabs, TabsList, TabsTrigger } from '../bs-ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../bs-ui/tooltip';
+import Tip from '../bs-ui/tooltip/tip';
+import SopMarkdown from './SopMarkdown';
 
 interface SopRecord {
   id: number;
@@ -25,8 +29,9 @@ interface SopRecord {
   user_name: string;
 }
 
-export default function ImportFromRecordsDialog({ open, tools, onOpenChange, onSuccess, setDuplicateNames, duplicateNames, duplicateDialogOpen, setDuplicateDialogOpen, importFormData }) {
+export default function ImportFromRecordsDialog({ open, tools, onOpenChange, setDuplicateNames, duplicateNames, duplicateDialogOpen, setDuplicateDialogOpen, importFormData }) {
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
   const [records, setRecords] = useState<SopRecord[]>([]);
   const [currentRecord, setCurrentRecord] = useState<SopRecord | null>(null);
@@ -38,47 +43,63 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, onS
     key: 'create_time',
     direction: 'desc' as 'asc' | 'desc'
   });
-
+  const [linsight, setLinsight] = useState({});
+  const [sopShowcase, setSopShowcase] = useState(false);
+  const [activeTab, setActiveTab] = useState('manual');
   const [pageInputValue, setPageInputValue] = useState(page.toString());
   const [selectedRecordIds, setSelectedRecordIds] = useState<number[]>([]);
   const [allRecords, setAllRecords] = useState<SopRecord[]>([]);
   const [selectedRecords, setSelectedRecords] = useState<SopRecord[]>([]);
   const [isSavingAsNew, setIsSavingAsNew] = useState(false);
   const [isOverwriting, setIsOverwriting] = useState(false);
-  // 获取SOP记录
-const fetchRecords = async (isSearch = false) => {
-  setLoading(true);
-  try {
-    const params = {
-      keyword: searchTerm,
-      ...(isSearch ? {} : { page, page_size: pageSize }),
-      sort: sortConfig.direction,
-    };
+  const isMountedRef = useRef(false);
+  // Obtain SOP records 
+  const fetchRecords = async (isSearch = false) => {
+    setLoading(true);
+    try {
+      const params = {
+        keyword: searchTerm,
+        // Fix 1: Always pass pagination parameters, regardless of whether a search is performed or not
+        page,
+        page_size: pageSize,
+        sort: sortConfig.direction,
+      };
 
-    const res = await sopApi.GetSopRecord(params);
+      const res = await sopApi.GetSopRecord(params);
 
-    if (Array.isArray(res)) {
-      setAllRecords(res);  // 存储所有数据
-      setRecords(res);     // 当前页数据
-      setTotal(res.length);
-      // 默认选中第一项
-      if (res.length > 0) {
-        setCurrentRecord(res[0]);
+      if (Array.isArray(res)) {
+        setAllRecords(res);
+        setRecords(res);
+        setTotal(res.length);
+        if (res.length > 0 && !currentRecord) {
+          setCurrentRecord(res[0]);
+        }
+      } else if (res?.list) {
+        setAllRecords(res.list);
+        setRecords(res.list);
+        setTotal(res.total);
+        if (res.list.length > 0 && !currentRecord) {
+          setCurrentRecord(res.list[0]);
+        }
       }
-    } else if (res?.list) {
-      setAllRecords(res.list);  // 存储所有数据
-      setRecords(res.list);     // 当前页数据
-      setTotal(res.total);
-      // 默认选中第一项
-      if (res.list.length > 0) {
-        setCurrentRecord(res.list[0]);
-      }
+    } finally {
+      setLoading(false);
     }
-  } finally {
-    setLoading(false);
-  }
-};
-  // 初始化数据
+  };
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!open) {
+      setIsOverwriting(false);
+      setIsSavingAsNew(false);
+    }
+  }, [open]);
+  // init
   useEffect(() => {
     if (open) {
       fetchRecords();
@@ -93,26 +114,20 @@ const fetchRecords = async (isSearch = false) => {
   useEffect(() => {
     const timer = setTimeout(() => {
       if (open) {
-        if (searchTerm) {
-          // 执行搜索时，重置页码为1并使用全局搜索
-          setPage(1);
-          fetchRecords(true);  // 传入true表示是搜索请求
-        } else {
-          // 没有搜索词时，恢复普通分页模式
-          fetchRecords();
-        }
+        setPage(1);  // Reset to the first page when searching 
+        fetchRecords(!!searchTerm);
       }
     }, 500);
     return () => clearTimeout(timer);
   }, [searchTerm]);
-  // 搜索和分页变化时重新获取数据
+  //  Reload data when search and pagination change 
   useEffect(() => {
-    if (open && !searchTerm) {
-      fetchRecords();
+    if (open) {
+      fetchRecords(!!searchTerm);
     }
   }, [page, pageSize, sortConfig]);
 
-  // 排序处理
+  // sort
   const sortedRecords = useMemo(() => {
     return [...records].sort((a, b) => {
       const aValue = a[sortConfig.key as keyof SopRecord];
@@ -130,7 +145,7 @@ const fetchRecords = async (isSearch = false) => {
     });
   }, [records, sortConfig]);
 
-  // 处理页码输入变化
+  // input change
   const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     if (value === '' || /^\d+$/.test(value)) {
@@ -138,7 +153,7 @@ const fetchRecords = async (isSearch = false) => {
     }
   };
 
-  // 处理页码输入确认
+  // page change
   const handlePageInputConfirm = () => {
     if (pageInputValue === '') {
       setPageInputValue(page.toString());
@@ -155,14 +170,13 @@ const fetchRecords = async (isSearch = false) => {
     }
   };
 
-  // 处理键盘事件
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       handlePageInputConfirm();
     }
   };
 
-  // 处理记录选择和多选
+  // Handle record selection and multi-selection
   const handleSelectRecord = (record: SopRecord) => setCurrentRecord(record);
 
   const handleToggleSelect = (record: SopRecord, e: React.MouseEvent) => {
@@ -172,7 +186,7 @@ const fetchRecords = async (isSearch = false) => {
         ? prev.filter(id => id !== record.id)
         : [...prev, record.id];
 
-      // 同步更新selectedRecords
+      // update selectedRecords
       setSelectedRecords(prevRecords =>
         prev.includes(record.id)
           ? prevRecords.filter(r => r.id !== record.id)
@@ -183,7 +197,7 @@ const fetchRecords = async (isSearch = false) => {
     });
     setCurrentRecord(record);
   };
-  // 全选/取消全选当前页
+  // Select All/Deselect All on Current Page
   const handleToggleSelectAll = () => {
     const currentPageIds = records.map(r => r.id);
     const allSelected = currentPageIds.every(id => selectedRecordIds.includes(id));
@@ -194,7 +208,7 @@ const fetchRecords = async (isSearch = false) => {
         : [...new Set([...prev, ...currentPageIds])]
     );
 
-    // 同步更新selectedRecords
+    // update selectedRecords
     setSelectedRecords(prev => {
       if (allSelected) {
         return prev.filter(r => !currentPageIds.includes(r.id));
@@ -224,10 +238,10 @@ const fetchRecords = async (isSearch = false) => {
         return;
       }
 
-      toast({ variant: 'success', description: '导入成功' });
+      toast({ variant: 'success', description: t('importLinsight.success') });
       onOpenChange(false);
 
-      // 导入成功后清空所有选择状态
+      // clear
       setSelectedRecordIds([]);
       setSelectedRecords([]);
     } finally {
@@ -239,22 +253,45 @@ const fetchRecords = async (isSearch = false) => {
   useEffect(() => {
     markdownRef.current?.setValue(currentRecord?.content || '');
   }, [currentRecord])
+  useEffect(() => {
+    const fetchSopShowcase = async () => {
+      const res = await sopApi.getSopShowcaseDetail({ linsight_version_id: currentRecord?.linsight_version_id });
+      if (res.execute_tasks.length === 0) {
+        setSopShowcase(true);
+        setLinsight({});
+        return;
+      }
+      setLinsight({
+        ...res.version_info,
+        tasks: res.execute_tasks,
+        summary: ''
+      });
+      setSopShowcase(false);
+    }
+    fetchSopShowcase();
+  }, [currentRecord])
 
+  // When switching records, reset the Tab to "guidebook" 
+  useEffect(() => {
+    if (currentRecord) {
+      setActiveTab('manual');
+    }
+  }, [currentRecord]);
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-[87.5vw] min-w-[87.5vw]">
         <div className="flex h-full" onClick={e => e.stopPropagation()}>
-          {/* 左侧记录列表 */}
+          {/* left list */}
           <div className="p-6 w-[50%] min-w-160">
             <SheetHeader>
-              <SheetTitle>从运行记录中导入指导手册</SheetTitle>
+              <SheetTitle>{t('importLinsight.title')}</SheetTitle>
             </SheetHeader>
 
-            <div className="relative mt-6 mb-6 w-[80%]">
+            <div className="relative mt-6 mb-6 w-[100%]">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="搜索指导手册"
+                placeholder={t('importLinsight.searchPlaceholder')}
                 className="w-full pl-10 pr-4 py-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-primary"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -266,11 +303,12 @@ const fetchRecords = async (isSearch = false) => {
                 <div className="flex justify-center items-center h-full bg-gray-50 rounded-lg">
                   <div className="flex flex-col items-center gap-2">
                     <LoadIcon className="animate-spin w-10 h-10 text-primary" />
+                    <span>{t('importLinsight.loading')}</span>
                   </div>
                 </div>
               ) : records.length === 0 ? (
                 <div className="text-center text-muted-foreground py-4">
-                  {searchTerm ? '没有找到匹配的记录' : '暂无运行记录'}
+                  {searchTerm ? t('importLinsight.noMatchingRecords') : t('importLinsight.noRecords')}
                 </div>
               ) : (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
@@ -296,11 +334,11 @@ const fetchRecords = async (isSearch = false) => {
                             </button>
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            名称
+                            {t('importLinsight.columns.name')}
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <div className="flex items-center">
-                              创建时间
+                              {t('importLinsight.columns.createTime')}
                               <div className="flex flex-col ml-1">
                                 <button onClick={() => setSortConfig({
                                   key: 'create_time',
@@ -318,10 +356,10 @@ const fetchRecords = async (isSearch = false) => {
                             </div>
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            创建用户
+                            {t('importLinsight.columns.createUser')}
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            评分
+                            {t('importLinsight.columns.rating')}
                           </th>
                         </tr>
                       </thead>
@@ -377,7 +415,7 @@ const fetchRecords = async (isSearch = false) => {
                     <div className="px-6 py-3 flex items-center justify-between border-t border-gray-200">
                       <div className="flex items-center whitespace-nowrap min-w-16">
                         <span className="text-sm  text-gray-700">
-                          共 {total} 条记录
+                          {t('importLinsight.pagination.totalRecords', { total })}
                         </span>
                       </div>
                       <div className="flex items-center ml-4">
@@ -387,7 +425,9 @@ const fetchRecords = async (isSearch = false) => {
                           total={total}
                           onChange={setPage}
                         />
-                        <span className="text-sm text-gray-700 mr-2 whitespace-nowrap">跳至</span>
+                        <span className="text-sm text-gray-700 mr-2 whitespace-nowrap">
+                          {t('importLinsight.pagination.goToPage')}
+                        </span>
                         <input
                           type="number"
                           min="1"
@@ -400,7 +440,7 @@ const fetchRecords = async (isSearch = false) => {
                           disabled={loading}
                         />
                         <span className="text-sm text-gray-700 ml-2 whitespace-nowrap">
-                          页
+                          {t('importLinsight.pagination.page')}
                         </span>
                         {loading && <LoadIcon className="animate-spin w-4 h-4 ml-2" />}
                       </div>
@@ -411,7 +451,7 @@ const fetchRecords = async (isSearch = false) => {
             </div>
 
             <div className="flex items-center justify-start mt-4">
-              <span>已选择 {selectedRecordIds.length} 项</span>
+              <span>{t('importLinsight.selectedCount', { count: selectedRecordIds.length })}</span>
               <Button
                 onClick={() => {
                   importSops(selectedRecords, false, false);
@@ -419,60 +459,97 @@ const fetchRecords = async (isSearch = false) => {
                 disabled={selectedRecordIds.length === 0 || loading}
                 className="ml-4"
               >
-                {loading ? '导入中...' : `批量导入`}
+                {loading ? t('importLinsight.loading') : t('importLinsight.batchImport')}
               </Button>
             </div>
           </div>
 
-          {/* 右侧预览区域 */}
+          {/* right viewpanne */}
           <div className="flex-1 bg-[#fff] p-6 h-full flex flex-col w-[50%]">
             {currentRecord ? (
-              <>
-                <div className="mb-4">
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
+                <div className="flex items-center justify-between gap-4">
                   <h3 className="text-lg font-semibold truncate">{currentRecord.name}</h3>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <p className="text-muted-foreground truncate max-w-[460px]">
-                        {currentRecord.description}
-                      </p>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-[300px] break-words">{currentRecord.description}</p>
-                    </TooltipContent>
-                  </Tooltip>
+                  <TabsList className='mr-4'>
+                    <TabsTrigger value="manual">{t('importLinsight.guidelineManual')}</TabsTrigger>
+                    {sopShowcase ? <Tip content={t('importLinsight.noRunningResult')} side="bottom">
+                      <span className="inline-block">
+                        <TabsTrigger value="result" disabled={sopShowcase}>{t('importLinsight.runningResult')}</TabsTrigger>
+                      </span>
+                    </Tip> : <TabsTrigger value="result" disabled={sopShowcase}>{t('importLinsight.runningResult')}</TabsTrigger>}
+                  </TabsList>
                 </div>
-                <div className="flex-1 overflow-y-auto bg-gray-50 rounded-md">
-                  <SopMarkdown
-                    ref={markdownRef}
-                    defaultValue={currentRecord?.content}
-                    tools={tools}
-                    height='h-[calc(100vh-170px)]'
-                    className="h-full"
-                    disabled={true}
-                  />
-                </div>
-                <div className="flex justify-start gap-2 pt-4">
-                  <Button
-                    onClick={() => {
-                      if (!currentRecord) return;
-                      setSelectedRecordIds([]);
-                      setSelectedRecords([]);
-                      // 直接尝试导入当前SOP
-                      importSops([currentRecord]).then((hasDuplicate) => {
-                        if (hasDuplicate === false) {
-                          setDuplicateDialogOpen(true);
-                        }
-                      });
-                    }}
-                    disabled={!currentRecord || loading}
-                  >
-                    {loading ? '导入中...' : '导入当前指导手册'}
-                  </Button>
-                </div>
-              </>
+
+                {activeTab === 'manual' && (
+                  <div className="flex-1 flex flex-col">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <p className="text-muted-foreground truncate">
+                          {currentRecord.description}
+                        </p>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-[300px] break-words">{currentRecord.description}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <div className="flex-1 overflow-y-auto bg-gray-50 rounded-md mt-2">
+                      <SopMarkdown
+                        ref={markdownRef}
+                        defaultValue={currentRecord?.content}
+                        tools={tools}
+                        height='h-[calc(100vh-170px)]'
+                        className="h-full"
+                        disabled={true}
+                      />
+                    </div>
+                    <div className="flex justify-start gap-2 pt-4">
+                      <Button
+                        onClick={() => {
+                          if (!currentRecord) return;
+                          setSelectedRecordIds([]);
+                          setSelectedRecords([]);
+                          importSops([currentRecord]).then((hasDuplicate) => {
+                            if (hasDuplicate === false) {
+                              setDuplicateDialogOpen(true);
+                            }
+                          });
+                        }}
+                        disabled={!currentRecord || loading}
+                      >
+                        {loading ? t('importLinsight.loading') : t('importLinsight.importCurrent')}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'result' && (
+                  <div className="flex-1 flex flex-col">
+                    <div className="flex-1 overflow-y-auto bg-gray-50 rounded-md p-4 text-sm text-gray-500">
+                      <TaskFlowContent showFeedBack linsight={linsight} />
+                    </div>
+                    <div className="flex justify-start gap-2 pt-4">
+                      <Button
+                        onClick={() => {
+                          if (!currentRecord) return;
+                          setSelectedRecordIds([]);
+                          setSelectedRecords([]);
+                          importSops([currentRecord]).then((hasDuplicate) => {
+                            if (hasDuplicate === false) {
+                              setDuplicateDialogOpen(true);
+                            }
+                          });
+                        }}
+                        disabled={!currentRecord || loading}
+                      >
+                        {loading ? t('importLinsight.loading') : t('importLinsight.importCurrent')}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </Tabs>
             ) : (
               <div className="flex justify-center items-center h-full text-muted-foreground">
-                请从左侧选择一条记录进行预览
+                {t('importLinsight.preview.noSelection')}
               </div>
             )}
           </div>
@@ -481,9 +558,9 @@ const fetchRecords = async (isSearch = false) => {
       <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>SOP重复提示</DialogTitle>
+            <DialogTitle>{t('importLinsight.duplicateDialog.title')}</DialogTitle>
             <DialogDescription>
-              以下SOP在库中已存在，确认是否在导入时覆盖？
+              {t('importLinsight.duplicateDialog.description')}
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-[300px] overflow-y-auto border rounded-md p-4">
@@ -495,7 +572,7 @@ const fetchRecords = async (isSearch = false) => {
               ))
             ) : (
               <div className="text-center py-2 text-muted-foreground">
-                未获取到重复SOP名称
+                {t('importLinsight.duplicateDialog.noDuplicateNames')}
               </div>
             )}
           </div>
@@ -503,7 +580,7 @@ const fetchRecords = async (isSearch = false) => {
             <Button
               variant="outline"
               onClick={async () => {
-                   setIsSavingAsNew(true);
+                setIsSavingAsNew(true);
                 if (importFormData) {
                   const newFormData = new FormData();
                   for (const [key, value] of importFormData.entries()) {
@@ -514,16 +591,15 @@ const fetchRecords = async (isSearch = false) => {
                   newFormData.append('override', 'false');
                   newFormData.append('save_new', 'true');
 
-
                   try {
-                    setLoading(true); // 添加加载状态
-                    await captureAndAlertRequestErrorHoc(sopApi.UploadSopRecord(newFormData)) // 等待请求完成
-                    toast({ variant: 'success', description: '导入成功' });
+                    setLoading(true);
+                    await captureAndAlertRequestErrorHoc(sopApi.UploadSopRecord(newFormData))
+                    toast({ variant: 'success', description: t('importLinsight.success') });
                     setDuplicateDialogOpen(false);
-                    onOpenChange(false); // 关闭主弹窗
+                    onOpenChange(false);
                   } finally {
                     setLoading(false);
-                      setIsSavingAsNew(false);
+                    setIsSavingAsNew(false);
                   }
                 } else {
                   const recordsToUse = selectedRecords.length > 0
@@ -534,19 +610,18 @@ const fetchRecords = async (isSearch = false) => {
                   importSops(recordsToUse, false, true);
                   setDuplicateDialogOpen(false);
                 }
-
               }}
             >
-              {isSavingAsNew  ? (
+              {isSavingAsNew ? (
                 <div className="flex items-center gap-2">
                   <LoadIcon className="animate-spin w-4 h-4" />
-                  正在另存为新SOP...
+                  {t('importLinsight.duplicateDialog.savingAsNew')}
                 </div>
-              ) : '不覆盖，另存为新SOP'}
+              ) : t('importLinsight.duplicateDialog.saveAsNew')}
             </Button>
             <Button
               onClick={async () => {
-                  setIsOverwriting(true);
+                setIsOverwriting(true);
                 if (importFormData) {
                   const newFormData = new FormData();
                   for (const [key, value] of importFormData.entries()) {
@@ -559,14 +634,19 @@ const fetchRecords = async (isSearch = false) => {
                   try {
                     setLoading(true);
                     await sopApi.UploadSopRecord(newFormData);
-                    toast({ variant: 'success', description: '导入成功' });
+                    toast({ variant: 'success', description: t('importLinsight.success') });
                     setDuplicateDialogOpen(false);
                     onOpenChange(false);
                   } catch (error) {
-                    toast({ variant: 'error', description: '导入失败' });
+                    toast({ variant: 'error', description: t('importLinsight.error') });
+                    if (isMountedRef.current) {
+                      setIsOverwriting(false);
+                    }
                   } finally {
                     setLoading(false);
-                     setIsOverwriting(false);
+                    if (isMountedRef.current) {
+                      setIsOverwriting(false);
+                    }
                   }
                 } else {
                   const recordsToUse = selectedRecordIds.length > 0
@@ -574,18 +654,23 @@ const fetchRecords = async (isSearch = false) => {
                     : currentRecord
                       ? [currentRecord]
                       : [];
-                  importSops(recordsToUse, true, false);
-                  setDuplicateDialogOpen(false);
+                  try {
+                    await importSops(recordsToUse, true, false);
+                    setDuplicateDialogOpen(false);
+                  } finally {
+                    if (isMountedRef.current) {
+                      setIsOverwriting(false);
+                    }
+                  }
                 }
-
               }}
             >
-              {isOverwriting  ? (
+              {isOverwriting ? (
                 <div className="flex items-center gap-2">
                   <LoadIcon className="animate-spin w-4 h-4" />
-                  正在覆盖SOP...
+                  {t('importLinsight.duplicateDialog.overwriting')}
                 </div>
-              ) : '覆盖'}
+              ) : t('importLinsight.duplicateDialog.overwrite')}
             </Button>
           </div>
         </DialogContent>

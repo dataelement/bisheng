@@ -3,8 +3,8 @@ from typing import Any, List, Optional
 
 from sqlmodel import JSON, Column, DateTime, Field, select, text
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.core.database import get_sync_db_session
+from bisheng.common.models.base import SQLModelSerializable
 from bisheng.utils import generate_uuid
 
 
@@ -30,7 +30,7 @@ class ComponentDao(ComponentBase):
 
     @classmethod
     def get_user_components(cls, user_id: int) -> List[Component]:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(Component).where(
                 Component.user_id == user_id
             ).order_by(Component.create_time.desc())
@@ -38,13 +38,13 @@ class ComponentDao(ComponentBase):
 
     @classmethod
     def get_component_by_name(cls, user_id: int, name: str) -> Component | None:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(Component).where(Component.user_id == user_id, Component.name == name)
             return session.exec(statement).first()
 
     @classmethod
     def insert_component(cls, component: Component) -> Component:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(component)
             session.commit()
             session.refresh(component)
@@ -52,7 +52,7 @@ class ComponentDao(ComponentBase):
 
     @classmethod
     def update_component(cls, component: Component) -> Component:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(component)
             session.commit()
             session.refresh(component)
@@ -60,7 +60,7 @@ class ComponentDao(ComponentBase):
 
     @classmethod
     def delete_component(cls, component: Component) -> Component:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.delete(component)
             session.commit()
             return component

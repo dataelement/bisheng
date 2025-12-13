@@ -4,8 +4,7 @@ import { useRecoilState, useResetRecoilState, useSetRecoilState } from 'recoil';
 import { checkFileParseStatus } from '~/api/linsight';
 import type { TMessage } from '~/data-provider/data-provider/src';
 import { QueryKeys } from '~/data-provider/data-provider/src';
-import { useGetMessagesByConvoId } from '~/data-provider/data-provider/src/react-query';
-import { useAuthContext } from '~/hooks/AuthContext';
+import { useLocalize } from '~/hooks';
 import useChatFunctions from '~/hooks/Chat/useChatFunctions';
 import useNewConvo from '~/hooks/useNewConvo';
 import { useToastContext } from '~/Providers';
@@ -21,7 +20,6 @@ export default function useChatHelpers(index = 0, paramId?: string, isLingsight 
   const [filesLoading, setFilesLoading] = useState(false);
 
   const queryClient = useQueryClient();
-  const { isAuthenticated } = useAuthContext();
 
   const { newConversation } = useNewConvo(index);
   const { useCreateConversationAtom } = store;
@@ -29,12 +27,6 @@ export default function useChatHelpers(index = 0, paramId?: string, isLingsight 
   const { conversationId } = conversation ?? {};
 
   const queryParam = paramId === 'new' ? paramId : conversationId ?? paramId ?? '';
-
-  /* Messages: here simply to fetch, don't export and use `getMessages()` instead */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { data: _messages } = useGetMessagesByConvoId(conversationId ?? '', {
-    enabled: isAuthenticated,
-  });
 
   const resetLatestMessage = useResetRecoilState(store.latestMessageFamily(index));
   const [isSubmitting, setIsSubmitting] = useRecoilState(store.isSubmittingFamily(index));
@@ -176,6 +168,8 @@ export default function useChatHelpers(index = 0, paramId?: string, isLingsight 
     setShowAgentSettings,
     files: isLingsight ? linsightFiles : files,
     setFiles: isLingsight ? setLinsightFiles : setFiles,
+    dailyFiles: files,
+    setDailyFiles: setFiles,
     filesLoading,
     setFilesLoading
   };
@@ -188,6 +182,7 @@ const useLinsighFiles = (index) => {
   const filesRef = useRef(new Map()); // 用于跟踪文件状态
 
   const { showToast } = useToastContext();
+  const localize = useLocalize();
 
   const newFiles = useMemo(() => {
     const newFiles = new Map(files);
@@ -239,7 +234,7 @@ const useLinsighFiles = (index) => {
                 });
               } else if (status === 'failed') {
                 updatedFiles.delete(key);
-                showToast({ message: `文件 ${file.filename} 解析失败, 自动移除`, status: 'error' });
+                showToast({ message: localize('com_file_parse_failed_auto_removed', { 0: file.filename }), status: 'error' });
               }
             }
           });

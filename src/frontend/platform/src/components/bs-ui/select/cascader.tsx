@@ -23,7 +23,7 @@ interface Option {
 
 interface IProps {
     error?: boolean,
-    placholder?: string,
+    placeholder?: string,
     defaultValue?: Option[],
     options: Option[],
     close?: boolean,
@@ -111,7 +111,7 @@ const resetCols = (values, options) => {
     return vals
 }
 
-export default function Cascader({ error = false, selectClass = '', close = false, placholder = '', defaultValue = [], options, loadData, onChange }: IProps) {
+export default function Cascader({ error = false, selectClass = '', close = false, placeholder = '', defaultValue = [], options, loadData, onChange }: IProps) {
 
     const [open, setOpen] = useState(false)
     const [values, setValues] = useState<any>(defaultValue)
@@ -122,7 +122,16 @@ export default function Cascader({ error = false, selectClass = '', close = fals
 
     const [cols, setCols] = useState(() => resetCols(defaultValue, options))
 
-    const selectOptionsRef = useRef([...defaultValue])
+    // 当defaultValue变化时，同步更新内部状态
+    useEffect(() => {
+        if (defaultValue && defaultValue.length > 0) {
+            setValues(defaultValue)
+            selectOptionsRef.current = [...defaultValue]
+            setCols(resetCols(defaultValue, options))
+        }
+    }, [defaultValue, options])
+
+    const selectOptionsRef = useRef([])
     const handleHover = (option, isLeaf, colIndex) => {
         setIsHover(true)
         const isAsync = loadData && !(option.children && option.children.length !== 0)
@@ -167,7 +176,7 @@ export default function Cascader({ error = false, selectClass = '', close = fals
 
     return <Select open={open} onOpenChange={setOpen}>
         <SelectTrigger className={`${error && 'border-red-500'} group data-[placeholder]:text-inherit ${selectClass}`}>
-            <Input className="border-none bg-transparent px-0 focus-visible:ring-0" placeholder={placholder} readOnly value={values.map(el => el.label).join('/')} />
+            <Input className="border-none bg-transparent px-0 focus-visible:ring-0" placeholder={placeholder} readOnly value={values.map(el => el.label).join('/')} />
             {close && values.length !== 0 && <X
                 className="hidden group-hover:block bg-border text-[#666] rounded-full p-0.5"
                 width={14}

@@ -6,14 +6,17 @@ import os
 from typing import List
 from uuid import uuid4
 
+import aiofiles
 import cv2
 import fitz
 import requests
 from PIL import Image
+from aiohttp import ClientTimeout
 from langchain_community.docstore.document import Document
 from langchain_community.document_loaders.pdf import BasePDFLoader
 
-from bisheng.utils.minio_client import minio_client
+from bisheng.core.external.http_client.http_client_manager import get_http_client
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +61,7 @@ def crop_image(image_file, item, cropped_imag_base_dir):
 def extract_pdf_images(file_name, page_dict, doc_id, knowledge_id):
     from bisheng.api.services.knowledge_imp import put_images_to_minio
     from bisheng.api.services.knowledge_imp import KnowledgeUtils
-    from bisheng.cache.utils import CACHE_DIR
+    from bisheng.core.cache.utils import CACHE_DIR
 
     result = {}
     base_dir = f"{CACHE_DIR}/{doc_id}"
@@ -71,6 +74,9 @@ def extract_pdf_images(file_name, page_dict, doc_id, knowledge_id):
         os.makedirs(cropped_image_base_dir)
 
     pdf_document = fitz.open(file_name)
+
+    minio_client = get_minio_storage_sync()
+
     for page_number, items in page_dict.items():
         page = pdf_document[page_number]
         pix = page.get_pixmap()
@@ -209,11 +215,11 @@ class Etl4lmLoader(BasePDFLoader):
             )
         except requests.Timeout as e:
             logger.error(f"Request to etl4lm API timed out: {e}")
-            raise Exception("etl4lm服务繁忙，请升级etl4lm服务的算力")
+            raise Exception("etl4lm server timeout")
         except Exception as e:
             if str(e).find("Timeout") != -1:
                 logger.error(f"Request to etl4lm API timed out: {e}")
-                raise Exception("etl4lm服务繁忙，请升级etl4lm服务的算力")
+                raise Exception("etl4lm server timeout")
             raise e
         if resp.status_code != 200:
             raise Exception(
@@ -259,87 +265,71 @@ class Etl4lmLoader(BasePDFLoader):
         doc = Document(page_content=content, metadata=metadata)
         return [doc]
 
-
-class ElemUnstructuredLoaderV0(BasePDFLoader):
-    """The appropriate parser is automatically selected based on the file format and OCR is supported"""
-
-    def __init__(
-            self,
-            file_name: str,
-            file_path: str,
-            unstructured_api_key: str = None,
-            unstructured_api_url: str = None,
-            start: int = 0,
-            n: int = None,
-            verbose: bool = False,
-            kwargs: dict = {},
-    ) -> None:
-        """Initialize with a file path."""
-        self.unstructured_api_url = unstructured_api_url
-        self.unstructured_api_key = unstructured_api_key
-        self.start = start
-        self.n = n
-        self.headers = {"Content-Type": "application/json"}
-        self.file_name = file_name
-        self.extra_kwargs = kwargs
-        super().__init__(file_path)
-
-    def load(self) -> List[Document]:
-        page_content, metadata = self.get_text_metadata()
-        doc = Document(page_content=page_content, metadata=metadata)
-        return [doc]
-
-    def get_text_metadata(self):
-        b64_data = base64.b64encode(open(self.file_path, "rb").read()).decode()
+    async def aload(self) -> List[Document]:
+        """Asynchronously load given path as pages."""
+        async with aiofiles.open(self.file_path, "rb") as f:
+            file_data = await f.read()
+        b64_data = base64.b64encode(file_data).decode()
+        parameters = {"start": self.start, "n": self.n}
+        parameters.update(self.extra_kwargs)
+        # TODO: add filter_page_header_footer into payload when elt4llm is ready.
         payload = dict(
-            filename=os.path.basename(self.file_name), b64_data=[b64_data], mode="text"
+            filename=os.path.basename(self.file_name),
+            b64_data=[b64_data],
+            mode="partition",
+            force_ocr=self.force_ocr,
+            enable_formula=self.enable_formular,
+            ocr_sdk_url=self.ocr_sdk_url,
+            parameters=parameters,
         )
-        payload.update({"start": self.start, "n": self.n})
-        payload.update(self.extra_kwargs)
-        resp = requests.post(
-            self.unstructured_api_url, headers=self.headers, json=payload
-        )
-        # 说明文件解析成功
-        if resp.status_code == 200 and resp.json().get("status_code") == 200:
-            res = resp.json()
-            return res["text"], {"source": self.file_name}
-        # 说明文件解析失败，pdf文件直接返回报错
-        if self.file_name.endswith(".pdf"):
-            raise Exception(
-                f"file text {os.path.basename(self.file_name)} failed resp={resp.text}"
+        try:
+
+            http_client = await get_http_client()
+
+            resp = await http_client.post(
+                url=self.unstructured_api_url, headers=self.headers, body=payload,
+                timeout=ClientTimeout(total=self.timemout)
             )
-        # 非pdf文件，先将文件转为pdf格式，让后再执行partition模式解析文档
-        # 把文件转为pdf
-        resp = requests.post(
-            self.unstructured_api_url,
-            headers=self.headers,
-            json={
-                "filename": os.path.basename(self.file_name),
-                "b64_data": [b64_data],
-                "mode": "topdf",
-            },
-        )
-        if resp.status_code != 200 or resp.json().get("status_code") != 200:
-            raise Exception(
-                f"file topdf {os.path.basename(self.file_name)} failed resp={resp.text}"
+        except Exception as e:
+            if str(e).find("Timeout") != -1:
+                logger.error(f"Request to etl4lm API timed out: {e}")
+                raise Exception("etl4lm server timeout")
+            raise e
+        if (resp.status_code != 200) or (resp.body and resp.body.get("status_code") != 200):
+            logger.info(
+                f"file partition {os.path.basename(self.file_name)} error resp={resp}"
             )
-        # 解析pdf文件
-        payload["mode"] = "partition"
-        payload["b64_data"] = [resp.json()["b64_pdf"]]
-        payload["filename"] = os.path.basename(self.file_name) + ".pdf"
-        resp = requests.post(
-            self.unstructured_api_url, headers=self.headers, json=payload
-        )
-        if resp.status_code != 200 or resp.json().get("status_code") != 200:
             raise Exception(
-                f"file partition {os.path.basename(self.file_name)} failed resp={resp.text}"
+                f"file partition error {os.path.basename(self.file_name)} error resp={resp}"
             )
-        res = resp.json()
-        partitions = res["partitions"]
-        if not partitions:
-            raise Exception(
-                f"file partition empty {os.path.basename(self.file_name)} resp={resp.text}"
+
+        partitions = resp.body.get("partitions")
+        if partitions:
+            logger.info(f"content_from_partitions")
+            self.partitions = partitions
+            content, metadata = merge_partitions(
+                self.file_path, partitions, self.knowledge_id
             )
-        # 拼接结果为文本
-        content, _ = merge_partitions(self.file_path, partitions)
-        return content, {"source": self.file_name}
+        elif resp.body.get("text"):
+            logger.info(f"content_from_text")
+            content = resp.body["text"]
+            metadata = {
+                "bboxes": [],
+                "pages": [],
+                "indexes": [],
+                "types": [],
+            }
+        else:
+            logger.warning(f"content_is_empty resp={resp.body}")
+            content = ""
+            metadata = {}
+
+        logger.info(f'unstruct_return code={resp.body.get("status_code")}')
+
+        if resp.body.get("b64_pdf"):
+            with open(self.file_path, "wb") as f:
+                f.write(base64.b64decode(resp.body["b64_pdf"]))
+
+        metadata["source"] = self.file_name
+        doc = Document(page_content=content, metadata=metadata)
+        return [doc]

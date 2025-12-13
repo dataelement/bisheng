@@ -1,7 +1,6 @@
-import { TitleLogo } from "@/components/bs-comp/cardComponent";
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import ChatComponent from "@/components/bs-comp/chatComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
-import { AssistantIcon } from "@/components/bs-icons";
 import { useAssistantStore } from "@/store/assistantStore";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,14 +13,14 @@ export default function TestChat({ assisId, guideQuestion, onClear }) {
     const { assistantState } = useAssistantStore()
     const { t } = useTranslation()
 
-    // 编辑页生成唯一id
+    // Generate unique ID for edit page
     // const chatIdRef = useRef(generateUUID(32))
     useEffect(() => {
-        // 建立 websocket
+        // Establish websocket
         changeChatId('')
     }, [])
 
-    // send 前获取参数用来做 params to send ws
+    // Get parameters before sending to send via websocket
     const getWsParamData = (action, msg, data) => {
         const inputKey = 'input';
         const msgData = {
@@ -38,18 +37,15 @@ export default function TestChat({ assisId, guideQuestion, onClear }) {
         return [msgData, inputKey]
     }
 
-    return <div className="relative h-full px-4 bs-chat-bg bg-background-login" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
+    return <div className="relative h-full px-4 bs-chat-bg bg-background-login" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/points.png)` }}>
         <div className="absolute flex w-full left-0 top-0 gap-2 px-4 py-2 items-center z-10 bg-background-login shadow-sm">
-            <TitleLogo
-                url={assistantState.logo}
-                id={assistantState.id}
-            ><AssistantIcon /></TitleLogo>
+            <AppAvator id={assistantState.name} url={assistantState.logo} flowType={5} className=""></AppAvator>
             <span className="text-sm ">{t('build.debugPreview')}</span>
         </div>
         <ChatComponent
             debug
             clear
-            logo={assistantState.logo}
+            logo={<AppAvator id={assistantState.name} url={assistantState.logo} flowType={5} className=""></AppAvator>}
             questions={guideQuestion}
             useName=''
             guideWord=''

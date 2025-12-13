@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 
 from bisheng.services.cache.service import BaseCacheService, InMemoryCache, RedisCache
 from bisheng.services.factory import ServiceFactory
-from bisheng.utils.logger import logger
+from loguru import logger
 
 if TYPE_CHECKING:
     from bisheng.services.settings.service import SettingsService

@@ -203,7 +203,6 @@ export const useDiffFlowStore = create<State & Actions>((set, get) => ({
  */
 const runTest = ({ questions, questionIndexs, nodeId, versionIds, inputs, refs }) => {
     // loading
-    // console.log(refs, 222);
     const runIds = []
     questionIndexs.forEach(qIndex => {
         versionIds.forEach(versionId => {

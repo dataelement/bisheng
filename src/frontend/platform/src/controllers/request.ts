@@ -21,21 +21,28 @@ customAxios.interceptors.request.use(function (config) {
 });
 
 customAxios.interceptors.response.use(function (response) {
+    if (response.data instanceof Blob) return response.data;
     if (response.data.status_code === 200) {
         return response.data.data;
     }
-      if (response.data.status_code === 11010) {
+    if (response.data.status_code === 11010) {
         return response.data;
     }
-    const i18Msg = i18next.t(`errors.${response.data.status_code}`)
+    const i18Msg = i18next.t(`errors.${response.data.status_code}`, response.data.data)
     const errorMessage = i18Msg === `errors.${response.data.status_code}` ? response.data.status_message : i18Msg
 
     // 无权访问
-    if (response.data.status_code === 403) {
+    if ([403, 404].includes(response.data.status_code)) {
         // 修改不跳转
+        localStorage.setItem('noAccessUrl', response.request.responseURL)
         if (response.config.method === 'get') {
-            location.href = __APP_ENV__.BASE_URL + '/403'
+            location.href = __APP_ENV__.BASE_URL + '/' + response.data.status_code
         }
+        return Promise.reject(errorMessage);
+    }
+    // 应用无编辑权限
+    if (response.data.status_code === 10599) {
+        location.href = __APP_ENV__.BASE_URL + '/build/apps?error=10599'
         return Promise.reject(errorMessage);
     }
     // 异地登录

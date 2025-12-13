@@ -38,22 +38,9 @@ services:
       retries: 3
     restart: on-failure
 
-  office:
-    container_name: bisheng-office
-    image: onlyoffice/documentserver:7.1.1
-    ports:
-      - "8701:80"
-    environment:
-      TZ: Asia/Shanghai
-      JWT_ENABLED: "false"
-    volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/office/bisheng:/var/www/onlyoffice/documentserver/sdkjs-plugins/bisheng
-    command: bash -c "supervisorctl restart all"
-    restart: on-failure
-
   backend:
     container_name: bisheng-backend
-    image: dataelement/bisheng-backend:v2.0.3
+    image: dataelement/bisheng-backend:v2.2.0
     ports:
       - "7860:7860"
     environment:
@@ -88,12 +75,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      office:
-        condition: service_started
   
   backend_worker:
     container_name: bisheng-backend-worker
-    image: dataelement/bisheng-backend:v2.0.3
+    image: dataelement/bisheng-backend:v2.2.0
     environment:
       TZ: Asia/Shanghai
       BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
@@ -120,12 +105,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      office:
-        condition: service_started
+
 
   frontend:
     container_name: bisheng-frontend
-    image: dataelement/bisheng-frontend:v2.0.3
+    image: dataelement/bisheng-frontend:v2.2.0
     ports:
       - "3001:3001"
     environment:
@@ -139,7 +123,7 @@ services:
 
   elasticsearch:
     container_name: bisheng-es
-    image: docker.io/bitnami/elasticsearch:8.12.0
+    image: docker.io/bitnamilegacy/elasticsearch:8.12.0
     user: root
     ports:
       - "9200:9200"

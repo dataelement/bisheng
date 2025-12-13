@@ -9,10 +9,13 @@ import { THOUGHTS_ICON } from "../../../constants";
 import { ChatMessageType } from "../../../types/chat";
 import { classNames } from "../../../utils";
 import FileCard from "../fileComponent";
+import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
+import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 export default function ChatMessage({
   chat,
   lockChat,
   lastMessage,
+  flowType
 }: {
   chat: ChatMessageType;
   lockChat: boolean;
@@ -20,6 +23,8 @@ export default function ChatMessage({
 }) {
   const convert = new Convert({ newline: true });
   const [hidden, setHidden] = useState(true);
+  const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
+
   const template = chat.template;
   const [promptOpen, setPromptOpen] = useState(false);
   return (
@@ -51,7 +56,7 @@ export default function ChatMessage({
         )}
       </div>
       {!chat.isSend ? (
-        <div className="form-modal-chat-text-position">
+        <div className="form-modal-chat-text-position group">
           <div className="form-modal-chat-text">
             {hidden && chat.thought && chat.thought !== "" && (
               <div
@@ -74,7 +79,7 @@ export default function ChatMessage({
                 <div className="w-full">
                   {useMemo(
                     () => (
-                      <MessageMarkDown message={chat.message.toString()} />
+                      <MessageMarkDown message={chat.message.toString()} flowType={flowType} chat ={chat}/>
                     ),
                     [chat.message, chat.message.toString()]
                   )}

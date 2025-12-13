@@ -2,6 +2,7 @@
 import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { getVariablesApi } from "~/api/apps";
 import { useToastContext } from "~/Providers";
+import { useLocalize } from "~/hooks";
 import InputComponent from "./InputComponent";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/Select";
 import InputFileComponent from "./InputFileComponent";
@@ -18,6 +19,7 @@ const InputFormSkill = forwardRef(({ flow, logo }, ref) => {
     const type = 'chat'
     const vid = 0
     const { showToast } = useToastContext();
+    const localize = useLocalize()
 
     useImperativeHandle(ref, () => ({
         submit: () => {
@@ -28,6 +30,7 @@ const InputFormSkill = forwardRef(({ flow, logo }, ref) => {
     // 从 api中获取
     const [items, setItems] = useState<any[]>([])
     useEffect(() => {
+        if (flow.flow_type === 5) return
         // chat -》L1； diff -> 对比测试
         type === 'chat' ? getVariablesApi({ flow_id: flow.flow_id || flow.id }).then(
             res => setItems(res)
@@ -47,10 +50,10 @@ const InputFormSkill = forwardRef(({ flow, logo }, ref) => {
         // 校验
         const errors = items.reduce((res, el) => {
             if (el.required && !el.value) {
-                res.push(`${el.name} 是必填项`)
+                res.push(localize('com_ui_required_field', { field: el.name }))
             }
             if (el.type === 'text' && el.value.length > Number(el.maxLength)) {
-                res.push(`${el.name} 长度不能超过 ${el.maxLength}`)
+                res.push(localize('com_ui_field_length_exceeded', { field: el.name, max: el.maxLength }))
             }
             return res
         }, [])
@@ -84,7 +87,7 @@ const InputFormSkill = forwardRef(({ flow, logo }, ref) => {
 
     return <MessageWarper flow={flow} logo={logo}>
         <div className="">
-            <div className="max-h-[520px] overflow-y-auto space-y-2">
+            <div className="max-h-[520px] overflow-y-auto space-y-2 px-1">
                 {items.map((item, i) => <div key={item.id} className="w-full text-sm">
                     {item.name}
                     <span className="text-red-500">{item.required ? " *" : ""}</span>
@@ -112,7 +115,7 @@ const InputFormSkill = forwardRef(({ flow, logo }, ref) => {
                                     <InputFileComponent
                                         isSSO
                                         disabled={false}
-                                        placeholder="当前文件为空"
+                                        placeholder={localize('com_file_current_empty')}
                                         value={''}
                                         onChange={(e) => fileKindexVpath.current[i] = e}
                                         fileTypes={["pdf"]}
@@ -126,7 +129,9 @@ const InputFormSkill = forwardRef(({ flow, logo }, ref) => {
                 </div>
                 )}
             </div>
-            {type === 'chat' && <Button className="mt-4 w-full" size="sm" onClick={handleStart}>开始</Button>}
+            {type === 'chat' && <div className="flex justify-end">
+                <Button size="sm" className="mt-4 h-8 px-4" onClick={handleStart}>{localize('com_ui_start')}</Button>
+            </div>}
         </div>
     </MessageWarper>
 });

@@ -79,7 +79,7 @@ export const useModelBuilding = () => {
         setShouldPoll(false);
         return false
       }
-      return false
+      return true
     },
     refetchOnWindowFocus: false,
     enabled: shouldPoll, // 由状态控制是否启用查询

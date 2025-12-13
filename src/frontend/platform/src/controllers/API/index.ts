@@ -1,8 +1,8 @@
 import { AppNumType, AppType } from "@/types/app";
+import originAxios from "axios";
 import { AppConfig } from "../../types/api/app";
 import { FlowType } from "../../types/flow";
 import axios from "../request";
-import originAxios from "axios";
 import {
   APIClassType,
   BuildStatusTypeAPI,
@@ -62,6 +62,7 @@ export async function getComponents(): Promise<any[]> {
 export async function saveComponent(data): Promise<any[]> {
   return await axios.post(`/api/v1/component`, data);
 }
+
 /**
  * 覆盖 组件
  */
@@ -156,14 +157,26 @@ export async function readFileLibDatabase({ page = 1, pageSize = 20, name = '', 
 /**
  * 复制知识库
  */
-export async function copyLibDatabase(knowledge_id) {
-  await axios.post(`/api/v1/knowledge/copy`, { knowledge_id });
+export async function copyLibDatabase(knowledge_id, newName) {
+  await axios.post(`/api/v1/knowledge/copy`, { knowledge_id, knowledge_name: newName });
 }
-
+/**
+ * 复制qa知识库
+ */
+export async function copyQaDatabase(knowledge_id, knowledge_name) {
+  await axios.post(`/api/v1/knowledge/qa/copy`, { knowledge_id, knowledge_name });
+}
 /**
  * 获取知识库下文件列表
  */
 export async function readFileByLibDatabase({ id, page, pageSize = 20, name = '', status, file_ids }) {
+  if (Array.isArray(status)) {
+    if (status?.includes(1)) { // 4合并到解析中
+      status.push(4)
+    } else {
+      status = status?.filter(item => item !== 4)
+    }
+  }
 
   const params = {
     page_num: page,
@@ -178,6 +191,59 @@ export async function readFileByLibDatabase({ id, page, pageSize = 20, name = ''
 
   return response
   // return { data, writeable, pages: Math.ceil(total / pageSize) }
+}
+/**
+ * 添加元数据
+ */
+export async function addMetadata(knowledge_id, metadata_fields) {
+  await axios.post(`/api/v1/knowledge/add_metadata_fields`, {
+    knowledge_id: knowledge_id,
+    metadata_fields: metadata_fields,
+  });
+}
+/**
+ * 修改元数据名称
+ */
+export async function updateMetadataFields(
+  knowledge_id: string | number,
+  updates: Array<{ old_field_name: string; new_field_name: string }>
+) {
+  await axios.put(`/api/v1/knowledge/update_metadata_fields`, {
+    knowledge_id: knowledge_id,
+    metadata_fields: updates,
+  });
+}
+/**
+ * 用户自定义元数据
+ */
+export async function saveUserMetadataApi(
+  knowledge_id: string | number,
+  updates: Array<{ field_name: string; field_value: any }>,
+  updated_at?: string | number
+) {
+  await axios.put(`/api/v1/knowledge/file/user_metadata`, {
+    knowledge_file_id: knowledge_id,
+    user_metadata_list: updates,
+    updated_at: updated_at
+  });
+}
+/**
+ * 删除元数据
+ */
+export async function deleteMetadataFields(
+  knowledge_id: string | number,
+  fieldNames: string[]
+) {
+  await axios.delete(`/api/v1/knowledge/delete_metadata_fields`, {
+    data: {
+      knowledge_id: knowledge_id,
+      field_names: fieldNames,
+    },
+  });
+}
+// 获取元数据
+export async function getMetaFile(file_id): Promise<any> {
+  return await axios.get(`/api/v1/knowledge/file/info/${file_id}`);
 }
 
 /**
@@ -234,33 +300,176 @@ export async function subUploadLibFile(data: DefaultUploadFileFc): Promise<any>;
 export async function subUploadLibFile(data: UploadFileFc | DefaultUploadFileFc) {
   return await axios.post(`/api/v1/knowledge/process`, data);
 }
-
+//调整分段策略
+export async function rebUploadFile(data) {
+  return await axios.post(`/api/v1/knowledge/process/rebuild`, data);
+}
 /**
- * 查看文件切片
+ * 查看文件切片（SSE 版本）
+ * 取消逻辑基于 EventSource.close()，无需 CancelToken
  */
-let cancelTokenSource = originAxios.CancelToken.source();
-export async function previewFileSplitApi(data) {
-  // 取消之前的请求
-  cancelTokenSource.cancel('Operation canceled due to new request');
+let currentEventSource = null; // 仅保留此变量用于跟踪当前连接
 
-  // 创建新的取消令牌
-  cancelTokenSource = originAxios.CancelToken.source();
-  return await axios.post(`/api/v1/knowledge/preview`, data, {
-    cancelToken: cancelTokenSource.token
-  }).then(res => {
-    return res
-  });
+// 用 fetch 实现 POST 方式的 SSE
+/**
+ * 预览文档分片（轮询模式）。
+ * 首次请求创建任务，返回任务标识；随后访问 `/api/v1/knowledge/preview/Polling` 轮询状态。
+ * @param {Record<string, any>} data 请求体
+ * @param {(eventType: string, payload: any) => void} onEvent 事件回调
+ * @param {{ pollInterval?: number }} [options] 轮询配置
+ * @returns {() => void} 取消函数
+ */
+export function previewFileSplitApi(
+  data: Record<string, any>,
+  onEvent: (eventType: string, payload: any) => void,
+  options: { pollInterval?: number } = {}
+) {
+  const createController = new AbortController();
+  const pollingController = new AbortController();
+  const createSignal = createController.signal;
+  const pollingSignal = pollingController.signal;
+  const pollInterval = Math.max(1000, options.pollInterval || 2000);
+  let pollTimer = null;
+  let isFinished = false;
+
+  const clear = () => {
+    if (pollTimer) {
+      clearTimeout(pollTimer);
+      pollTimer = null;
+    }
+    createController.abort();
+    pollingController.abort();
+  };
+
+  const emitError = (payload) => {
+    onEvent('error', {
+      code: payload?.code || 10952,
+      message: payload?.message || '文档解析失败'
+    });
+  };
+
+  /**
+   * 轮询状态请求。
+   * @param {string} taskId 任务标识
+   */
+  /**
+   * 轮询状态请求。
+   * @param {string} previewFileId 预览任务标识
+   */
+  const pollStatus = (previewFileId) => {
+    if (isFinished) return;
+    console.log('开始轮询状态, preview_file_id:', previewFileId);
+    axios
+      .get(`/api/v1/knowledge/preview/status`, {
+        params: { preview_file_id: previewFileId },
+        signal: pollingSignal
+      })
+      .then((result: any) => {
+        // axios 拦截器已经返回了 response.data.data，所以这里直接使用 result
+        // 后端返回格式: resp_200(data=file_status)，其中 file_status 是 {"status":"processing"} 或 {"status":"completed","data":{...}}
+        // 经过拦截器后，result 应该是: {"status":"processing"} 或 {"status":"completed","data":{...}}
+        console.log('轮询状态响应:', result);
+        const status: string = result?.status;
+        const payload = result?.data;
+        const code = result?.code;
+        const message = result?.message;
+
+        if (!status || typeof status !== 'string') {
+          console.error('轮询响应缺少 status 字段或格式异常:', result);
+          isFinished = true;
+          emitError({ message: '轮询响应格式异常' });
+          return;
+        }
+
+        switch (status) {
+          case 'processing':
+            onEvent('processing', payload || {});
+            if (!isFinished) {
+              pollTimer = setTimeout(() => pollStatus(previewFileId), pollInterval);
+            }
+            break;
+          case 'completed':
+            isFinished = true;
+            onEvent('completed', payload || {});
+            onEvent('closed', { message: '轮询完成' });
+            break;
+          case 'error':
+            isFinished = true;
+            emitError({ code, message, ...(payload || {}) });
+            break;
+          case 'canceled':
+            isFinished = true;
+            onEvent('canceled', payload || {});
+            break;
+          default:
+            // 未知状态视为错误
+            console.warn('未知的轮询状态:', status);
+            isFinished = true;
+            emitError({ code, message: message || `未知状态: ${status}` });
+        }
+      })
+      .catch((err) => {
+        console.error('preview 轮询请求失败', err);
+
+        if (originAxios.isCancel?.(err) || err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') {
+          return;
+        }
+        isFinished = true;
+        emitError({ message: '文档解析失败' });
+      });
+  };
+
+  axios
+    .post('/api/v1/knowledge/preview', data, {
+      signal: createSignal
+    })
+    .then((result: any) => {
+      console.log('preview 创建任务响应:', result);
+
+      if (!result || isFinished) {
+        console.warn('预览任务创建响应为空或已结束');
+        return;
+      }
+      const previewFileId = result?.preview_file_id || result?.previewFileId;
+
+      if (previewFileId) {
+        console.log('获取到 preview_file_id:', previewFileId, '开始轮询');
+        // 立即开始第一次轮询
+        pollStatus(previewFileId);
+        return;
+      }
+
+      // 如果没有 preview_file_id，可能是响应格式异常
+      console.error('任务创建失败：未找到 preview_file_id，响应数据:', JSON.stringify(result));
+      isFinished = true;
+      emitError({ message: '任务创建失败：响应中缺少任务ID，请检查后端接口返回格式' });
+    })
+    .catch((err) => {
+      console.error('preview 请求失败', err);
+
+      if (originAxios.isCancel?.(err) || err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') {
+        return;
+      }
+      isFinished = true;
+      emitError({ message: '文档解析失败' });
+    });
+
+  return () => {
+    isFinished = true;
+    clear();
+  };
 }
 
 /**
  * 获取知识库下的切分段落
  */
-export async function getKnowledgeChunkApi(params): Promise<{ models: string[] }> {
+export async function getKnowledgeChunkApi(params): Promise<any> {
   let queryStr = ''
   if (params.file_ids?.length) {
     queryStr = params.file_ids.map(id => `file_ids=${id}`).join('&');
   } else {
     delete params.file_ids;
+    return Promise.resolve({ data: [] });
   }
   return await axios.get(`/api/v1/knowledge/chunk?${queryStr}`, { params });
 }
@@ -577,7 +786,7 @@ export const getChatsApi = (page) => {
         ...el,
         latest_message: {
           ...el.latest_message,
-          message: _message.substring(0, 40)
+          message: typeof _message === 'string' ? _message.substring(0, 40) : ''
         }
       }
     })
@@ -628,13 +837,22 @@ export interface MessageDB {
 }
 
 export async function getChatHistory(flowId: string, chatId: string, pageSize: number, id?: number): Promise<MessageDB[]> {
-  return await axios.get(`/api/v1/chat/history?flow_id=${flowId}&chat_id=${chatId}&page_size=${pageSize}&id=${id || ''}`);
+  // hack Switch API URL based on routing 
+  let url = '/api/v1/chat/history'
+  if (location.pathname.indexOf('/log/chatlog') || location.pathname.indexOf('/label/chat')) {
+    url = '/api/v1/session/chat/history'
+  }
+  return await axios.get(`${url}?flow_id=${flowId}&chat_id=${chatId}&page_size=${pageSize}&id=${id || ''}`);
 }
 
 /**
  * 赞 踩消息
  */
 export const likeChatApi = (chatId, liked) => {
+  liked && copyTrackingApi({
+    message_id: chatId,
+    operation_type: liked === 1 ? 'like' : 'dislike'
+  })
   return axios.post(`/api/v1/liked`, { message_id: chatId, liked });
 };
 
@@ -649,7 +867,18 @@ export const disLikeCommentApi = (message_id, comment) => {
  * 点击复制上报
  * */
 export const copyTrackingApi = (msgId) => {
+  trackingApi({
+    message_id: msgId,
+    operation_type: 'copy'
+  })
   return axios.post(`/api/v1/chat/copied`, { message_id: msgId });
+}
+
+/**
+ * Tracking
+ */
+export const trackingApi = (data: { message_id: string, operation_type: 'dislike' | 'like' | 'copy' }) => {
+  return axios.post(`/api/v1/session/chat/message/telemetry`, data);
 }
 
 /**
@@ -786,7 +1015,7 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
     });
 
     return Object.keys(fileMap).map(fileId => {
-      const { file_id: id, source: fileName, source_url: fileUrl, original_url: originUrl, ...other } = fileMap[fileId][0]
+      const { file_id: id, source: fileName, source_url, original_url: originUrl, ...other } = fileMap[fileId][0]
 
       const chunks = fileMap[fileId].sort((a, b) => b.score - a.score)
         .map(chunk => ({
@@ -795,7 +1024,20 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
         }))
       const score = chunks[0].score
 
-      return { id, fileName, fileUrl, originUrl, chunks, ...other, score }
+      // 兼容后端历史逻辑
+      let fileUrl = ''
+      let suffix = fileName.split('.').pop().toLowerCase()
+      let isNew = false
+      if (['uns', 'local'].includes(other.parse_type)) {
+        fileUrl = other.chunk_bboxes ? source_url : originUrl;
+        if (other.chunk_bboxes) {
+          suffix = 'pdf'
+        }
+      } else if (['etl4lm', 'un_etl4lm'].includes(other.parse_type)) {
+        fileUrl = source_url || originUrl
+        isNew = true
+      }
+      return { id, fileName, suffix, isNew, fileUrl, originUrl, chunks, ...other, score }
     }).sort((a, b) => b.score - a.score)
   } catch (error) {
     console.error(error);
@@ -804,13 +1046,19 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
 }
 
 
+export async function updateKnowledge(data): Promise<any[]> {
+  return await axios.post(`/api/v1/knowledge/update_knowledge`, data);
+}
+
+
 /**
- * 上传文件
+ * Knowledge Base Upload
  */
-export async function uploadFileApi({ fileKey, file, onProgress, onFinish, onFail, onAbort }:
+export async function uploadFileApi({ fileKey, knowledgeId, file, onProgress, onFinish, onFail, onAbort }:
   {
     fileKey: string,
     file: File,
+    knowledgeId: string,
     onProgress?: (progressEvent: number) => void,
     onFail?: (error: any) => void,
     onFinish?: (response: any) => void,
@@ -837,7 +1085,7 @@ export async function uploadFileApi({ fileKey, file, onProgress, onFinish, onFai
       },
       signal: abortCtlr.signal,
     }
-    const response = await axios.post('/api/v1/knowledge/upload', formData, config);
+    const response = await axios.post(`/api/v1/knowledge/upload/${knowledgeId}`, formData, config);
     // 处理成功
     isFinished = true;
     onFinish(response);

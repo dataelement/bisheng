@@ -14,6 +14,7 @@ import { useFileHandling } from '~/hooks';
 import AttachFile from './AttachFile';
 import FileRow from './FileRow';
 import store from '~/store';
+import useLocalize from '~/hooks/useLocalize';
 
 function FileFormWrapper({
   children,
@@ -21,7 +22,8 @@ function FileFormWrapper({
   fileTip = false,
   disableInputs,
   disabledSearch,
-  noUpload = false
+  noUpload = false,
+  showVoice = false,
 }: {
   disableInputs: boolean;
   children?: React.ReactNode;
@@ -29,7 +31,9 @@ function FileFormWrapper({
   fileTip?: boolean;
   accept?: string;
   noUpload: boolean;
+  showVoice?: boolean;
 }) {
+  const t = useLocalize();
   const [fileTotalTokens, setFileTotalTokens] = useState(0);
   const chatDirection = useRecoilValue(store.chatDirection).toLowerCase();
   const { files, setFiles, conversation, setFilesLoading } = useChatContext();
@@ -54,26 +58,27 @@ function FileFormWrapper({
   const isUploadDisabled = (disableInputs || endpointFileConfig?.disabled) ?? false;
 
   const renderAttachFile = () => {
-    if (isAgents) {
-      return (
-        <AttachFileMenu
-          isRTL={isRTL}
-          disabled={disableInputs}
-          handleFileChange={handleFileChange}
-        />
-      );
-    }
-    if (endpointSupportsFiles && !isUploadDisabled) {
-      // this
-      return (
-        <AttachFile
-          isRTL={isRTL}
-          accept={accept}
-          disabled={disableInputs || disabledSearch}
-          handleFileChange={handleFileChange}
-        />
-      );
-    }
+    // if (isAgents) {
+    //   return (
+    //     <AttachFileMenu
+    //       isRTL={isRTL}
+    //       disabled={disableInputs}
+    //       handleFileChange={handleFileChange}
+    //     />
+    //   );
+    // }
+    // if (endpointSupportsFiles) {
+    // this
+    return (
+      <AttachFile
+        isRTL={isRTL}
+        showVoice={showVoice}
+        accept={accept}
+        disabled={disableInputs || disabledSearch}
+        handleFileChange={handleFileChange}
+      />
+    );
+    // }
 
     return null;
   };
@@ -89,8 +94,8 @@ function FileFormWrapper({
 
   return (
     <>
-      {fileTip && files.size > 0 && <span className="pl-6 pt-2 text-sm">仅识别附件中的文字</span>}
-      {fileTotalTokens > 0 && <span className="pl-6 pt-2 text-sm">文件内容超出3万token</span>}
+      {fileTip && files.size > 0 && <span className="pl-6 pt-2 text-sm">{t('com_file_tip_text_only')}</span>}
+      {fileTotalTokens > 0 && <span className="pl-6 pt-2 text-sm">{t('com_file_content_exceed_tokens')}</span>}
       <FileRow
         files={files}
         setFiles={setFiles}

@@ -3,9 +3,9 @@ from typing import Any, Dict, List, Optional, Type
 from bisheng.interface.base import LangChainTypeCreator
 from bisheng.interface.importing.utils import import_class
 from bisheng.interface.vector_store.constants import CUSTOM_VECTORSTORE
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.template.frontend_node.vectorstores import VectorStoreFrontendNode
-from bisheng.utils.logger import logger
+from loguru import logger
 from bisheng.utils.util import build_template_from_method
 from bisheng_langchain import vectorstores as contribute_vectorstores
 from langchain_community import vectorstores

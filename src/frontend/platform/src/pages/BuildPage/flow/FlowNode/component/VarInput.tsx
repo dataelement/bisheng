@@ -2,13 +2,15 @@ import { RbDragIcon } from "@/components/bs-icons/rbDrag";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/bs-ui/dialog";
 import { Label } from "@/components/bs-ui/label";
-import { isVarInFlow } from "@/util/flowUtils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import Tip from "@/components/bs-ui/tooltip/tip";
+import { isVarInFlow, updateVariableName } from "@/util/flowUtils";
 import { Expand, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
+import { useUpdateVariableState } from "../flowNodeStore";
 import SelectVar from "./SelectVar";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 
 function encodeHTMLEntities(text) {
     const textarea = document.createElement("textarea");
@@ -22,14 +24,14 @@ function decodeHTMLEntities(text) {
     return doc.documentElement.textContent;
 }
 // 解析富文本内容为保存格式
-function parseToValue(input, flowNode) {
+function parseToValue(input, paramItem) {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = input.replace(
         /<span[^>]*?>(.*?)<\/span>/g, // 匹配所有 <span> 标签
         (match, content) => {
             const _content = decodeHTMLEntities(content);
             // 在对象中查找匹配的 key
-            const key = Object.keys(flowNode.varZh).find((k) => flowNode.varZh[k] === _content);
+            const key = Object.keys(paramItem.varZh).find((k) => paramItem.varZh[k] === _content);
             return key ? `{{#${key}#}}` : content; // 如果找到 key，返回 key，否则保持原内容
         }
     );
@@ -51,12 +53,11 @@ function parseToValue(input, flowNode) {
     return traverseNodes(tempDiv);
 }
 
-
 export default function VarInput({
     nodeId,
     itemKey,
     placeholder = '',
-    flowNode,
+    paramItem,
     label = undefined,
     full = false,
     value,
@@ -87,12 +88,12 @@ export default function VarInput({
     useEffect(() => {
         onVarEvent && onVarEvent(validateVarAvailble);
         return () => onVarEvent && onVarEvent(() => { });
-    }, [flowNode]);
+    }, [paramItem]);
 
     const printPyRef = useRef(false); // 正在输入pyin
     const handleInput = () => {
         if (printPyRef.current) return;
-        const value = parseToValue(textareaRef.current.innerHTML, flowNode);
+        const value = parseToValue(textareaRef.current.innerHTML, paramItem);
         // console.log('textarea value :>> ', value);
         valueRef.current = value;
         setFullVarInputValue(value)
@@ -104,10 +105,10 @@ export default function VarInput({
         let error = '';
         const html = encodeHTMLEntities(input)
             .replace(/{{#(.*?)#}}/g, (a, part) => {
-                const _error = validate ? isVarInFlow(nodeId, flow.nodes, part, flowNode.varZh?.[part]) : ''
+                const _error = validate ? isVarInFlow(nodeId, flow.nodes, part, paramItem.varZh?.[part]) : ''
                 error = _error || error;
-                const msgZh = flowNode.varZh?.[part] || part;
-                return `<span class=${_error ? 'textarea-error' : 'textarea-badge'} contentEditable="false">${msgZh}</span>`;
+                const msgZh = paramItem.varZh?.[part] || part;
+                return `&nbsp;<span class=${_error ? 'textarea-error' : 'textarea-badge'} contentEditable="false">${msgZh}</span>`;
             })
             .replace(/\n/g, '<br>');
         return [html, error];
@@ -118,6 +119,22 @@ export default function VarInput({
         textareaRef.current.innerHTML = parseToHTML(value || '')[0];
         handleBlur();
     }, []);
+
+    // Update Preset Questions 
+    const [updateVariable] = useUpdateVariableState()
+    useEffect(() => {
+        if (!paramItem.varZh) return // No variables, no processing 
+        if (!updateVariable) return
+        const { action } = updateVariable
+        if (action === 'd') {
+            // delete paramItem.varZh[key]
+            // valueRef.current = valueRef.current.replaceAll(`{{#${key}#}}`, '')
+            // onChange(valueRef.current)
+        } else if (action === 'u') {
+            updateVariableName(paramItem, updateVariable)
+        }
+        textareaRef.current.innerHTML = parseToHTML(valueRef.current || '')[0];
+    }, [updateVariable])
 
     // 在光标位置插入内容
     function handleInsertVariable(item, _var, inputOpen) {
@@ -144,12 +161,12 @@ export default function VarInput({
         const key = `${item.id}.${_var.value}`;
         const label = `${item.name.trim()}/${_var.label}`;
 
-        if (flowNode.varZh) {
-            const existingProp = Object.keys(flowNode.varZh).find(prop => flowNode.varZh[prop] === label);
-            if (existingProp) delete flowNode.varZh[existingProp];
-            flowNode.varZh[key] = label;
+        if (paramItem.varZh) {
+            const existingProp = Object.keys(paramItem.varZh).find(prop => paramItem.varZh[prop] === label);
+            if (existingProp) delete paramItem.varZh[existingProp];
+            paramItem.varZh[key] = label;
         } else {
-            flowNode.varZh = { [key]: label };
+            paramItem.varZh = { [key]: label };
         }
 
         const html = `<span class="textarea-badge" contentEditable="false">${label}</span>`;
@@ -179,12 +196,107 @@ export default function VarInput({
         handleInput();
     }
 
+    const handleCopy = (e) => {
+        e.preventDefault();
+
+        const selection = window.getSelection();
+        if (!selection.rangeCount) return;
+        const range = selection.getRangeAt(0);
+        const selectedText = range.cloneContents();
+
+        // Create a new temporary element to store the selected content
+        const wrapper = document.createElement('div');
+        wrapper.appendChild(selectedText);
+
+        if (paramItem.varZh) {
+            try {
+                const jsonStr = JSON.stringify(paramItem.varZh);
+                wrapper.setAttribute('data-custom-data', encodeURIComponent(jsonStr));
+            } catch (err) {
+                console.error('json.stringify varZh failed', err);
+            }
+        }
+
+        // Set the clipboard data
+        e.clipboardData.setData('text/html', wrapper.outerHTML);
+        e.clipboardData.setData('text/plain', selection.toString());
+    }
+
     const handlePaste = (e) => {
-        // fomat text
-        e.preventDefault(); // 阻止默认粘贴行为
-        const text = e.clipboardData.getData('text'); // 从剪贴板中获取纯文本内容
-        document.execCommand('insertText', false, text);
+        e.preventDefault();
+
+        // 1. Get the HTML content
+        let copiedHtml = e.clipboardData.getData('text/html');
+        const copiedText = e.clipboardData.getData('text/plain');
+
+        // If the clipboard doesn't contain HTML, directly insert the plain text and return
+        if (!copiedHtml) {
+            document.execCommand('insertText', false, copiedText);
+            return;
+        }
+
+        // 2. Parse the HTML
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(copiedHtml, 'text/html');
+
+        const dataEl = doc.querySelector('[data-custom-data]');
+        if (dataEl) {
+            const rawData = dataEl.getAttribute('data-custom-data');
+            if (rawData) {
+                try {
+                    const parsedData = JSON.parse(decodeURIComponent(rawData));
+                    console.log('Cross-window data detected:', parsedData);
+
+                    if (paramItem.varZh) {
+                        paramItem.varZh = { ...paramItem.varZh, ...parsedData };
+                    } else {
+                        paramItem.varZh = parsedData;
+                    }
+                } catch (err) {
+                    console.error('Cross-window data error:', err);
+                }
+            }
+        }
+        // 3. Define a recursive processing function
+        const processNodes = (node) => {
+            let result = '';
+
+            node.childNodes.forEach((child) => {
+                // If it is a text node, directly append the text
+                if (child.nodeType === Node.TEXT_NODE) {
+                    result += child.textContent;
+                }
+                // If it is an element node
+                else if (child.nodeType === Node.ELEMENT_NODE) {
+                    // Core logic: if it is a target badge element, keep its HTML (including styles and classes)
+                    if (child.tagName.toLowerCase() === 'span' && child.classList.contains('textarea-badge')) {
+                        result += child.outerHTML;
+                    }
+                    // Special handling: if it is a line break tag, convert it to a space or newline (optional, to prevent text from sticking together)
+                    else if (child.tagName.toLowerCase() === 'br') {
+                        // Here you can decide whether to convert <br> to '\n' or simply ignore it
+                        // result += '\n'; 
+                    }
+                    // For all other tags: ignore the tag itself, recursively extract the content of its child nodes
+                    else {
+                        result += processNodes(child);
+                    }
+                }
+            });
+
+            return result;
+        };
+
+        // 4. Execute the processing
+        const cleanHtml = processNodes(doc.body);
+
+        console.log('Cleaned mixed content:', cleanHtml);
+
+        // 5. Insert the content
+        // Note: Since the span tags are retained, you still need to use insertHTML
+        document.execCommand('insertHTML', false, cleanHtml);
     };
+
     // resize
     const heightClass = mini ? 'max-h-64' : full ? 'min-h-64' : 'max-h-64 min-h-[80px]';
     const { height, handleMouseDown } = useResize(textareaRef, mini ? 40 : 80, 40);
@@ -202,12 +314,14 @@ export default function VarInput({
                 </div>
                 : <div className="flex justify-between gap-1 border-b dark:border-gray-600 px-2 py-1" onClick={() => textareaRef.current.focus()}>
                     <Label className="bisheng-label text-xs" onClick={validateVarAvailble}>
-                        {flowNode.required && <span className="text-red-500">*</span>}
-                        {label ?? flowNode.label}
+                        {paramItem.required && <span className="text-red-500">*</span>}
+                        {label ?? paramItem.label}
                     </Label>
                     <div className="flex gap-2">
                         <SelectVar ref={selectVarRef} nodeId={nodeId} itemKey={itemKey} onSelect={handleInsertVariable}>
-                            <span className="text-muted-foreground hover:text-gray-800 text-xs"  >{"{x}"}</span>
+                            <Tip content={t('insertVariable')} side={"top"}>
+                                <span className="text-muted-foreground hover:text-gray-800 text-xs"  >{"{x}"}</span>
+                            </Tip>
                         </SelectVar>
                         {onUpload && (
                             <TooltipProvider>
@@ -222,7 +336,7 @@ export default function VarInput({
                                         </Button>
                                     </TooltipTrigger>
                                     <TooltipContent>
-                                        <p>上传文件</p>
+                                        <p>{t('uploadFile')}</p>
                                     </TooltipContent>
                                 </Tooltip>
                             </TooltipProvider>
@@ -241,7 +355,8 @@ export default function VarInput({
                                         nodeId={nodeId}
                                         itemKey={itemKey}
                                         placeholder={placeholder}
-                                        flowNode={flowNode}
+                                        paramItem={paramItem}
+                                        label={label}
                                         value={fullVarInputValue}
                                         error={error}
                                         children={children}
@@ -264,6 +379,7 @@ export default function VarInput({
                 style={{ height }}
                 onInput={handleInput}
                 onPaste={handlePaste}
+                onCopy={handleCopy}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
                 onCompositionStart={() => printPyRef.current = true}
@@ -384,5 +500,3 @@ function usePlaceholder(placeholder) {
 
     return { textareaRef: divRef, handleFocus, handleBlur, removePlaceholder };
 }
-
-

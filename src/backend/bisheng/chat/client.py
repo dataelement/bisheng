@@ -1,26 +1,33 @@
 import json
+import time
 from queue import Queue
 from typing import Dict, Callable, List
 
-from bisheng.utils import generate_uuid
-from bisheng_langchain.gpts.message_types import LiberalToolMessage
-from fastapi import WebSocket, status, Request
+from fastapi import WebSocket, Request
 from langchain_core.messages import AIMessage, HumanMessage, BaseMessage, ToolMessage
 from loguru import logger
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.services.user_service import UserPayload
-from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
-from bisheng.chat.types import IgnoreException, WorkType
+from bisheng.chat.types import WorkType
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.assistant import (AssistantDeletedError, AssistantNotOnlineError,
+                                              AssistantOtherError)
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, ApplicationProcessEventData
+from bisheng.common.services import telemetry_service
+from bisheng.common.services.config_service import settings
+from bisheng.core.logger import trace_id_var
 from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessageDao, ChatMessage as ChatMessageModel
 from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.settings import settings
+from bisheng.utils import get_request_ip
 from bisheng.utils.threadpool import thread_pool
+from bisheng_langchain.gpts.message_types import LiberalToolMessage
 
 
 class ChatClient:
@@ -59,22 +66,22 @@ class ChatClient:
         await self.websocket.send_json(message.dict())
 
     async def handle_message(self, message: Dict[any, any]):
-        trace_id = generate_uuid()
-        logger.info(f'client_id={self.client_key} trace_id={trace_id} message={message}')
-        with logger.contextualize(trace_id=trace_id):
-            # 处理客户端发过来的信息, 提交到线程池内执行
-            if self.work_type == WorkType.GPTS:
-                thread_pool.submit(trace_id,
-                                   self.wrapper_task,
-                                   trace_id,
-                                   self.handle_gpts_message,
-                                   message,
-                                   trace_id=trace_id)
-                # await self.handle_gpts_message(message)
+        logger.info(f'client_id={self.client_key} handle_message start, message: {message}')
+        trace_id = trace_id_var.get()
+        # 处理客户端发过来的信息, 提交到线程池内执行
+        if self.work_type == WorkType.GPTS:
+            thread_pool.submit(trace_id,
+                               self.wrapper_task,
+                               trace_id,
+                               self.handle_gpts_message,
+                               message,
+                               trace_id=trace_id)
+            # await self.handle_gpts_message(message)
 
     async def wrapper_task(self, task_id: str, fn: Callable, *args, **kwargs):
         # 包装处理函数为异步任务
         self.task_ids.append(task_id)
+        start_time = time.time()
         try:
             # 执行处理函数
             await fn(*args, **kwargs)
@@ -83,6 +90,20 @@ class ChatClient:
         finally:
             # 执行完成后将任务id从列表移除
             self.task_ids.remove(task_id)
+            end_time = time.time()
+            await telemetry_service.log_event(user_id=self.user_id,
+                                              event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
+                                              trace_id=trace_id_var.get(),
+                                              event_data=ApplicationProcessEventData(
+                                                  app_id=self.client_id,
+                                                  app_name=self.db_assistant.name if self.db_assistant else "",
+                                                  app_type=ApplicationTypeEnum.ASSISTANT,
+                                                  chat_id=self.chat_id,
+
+                                                  start_time=int(start_time),
+                                                  end_time=int(end_time),
+                                                  process_time=int((end_time - start_time) * 1000)
+                                              ))
 
     async def add_message(self, msg_type: str, message: str, category: str, remark: str = ''):
         self.chat_history.append({
@@ -115,6 +136,19 @@ class ChatClient:
                 flow_type=FlowType.ASSISTANT.value,
                 user_id=self.user_id,
             ))
+
+            # 记录Telemetry日志
+            await telemetry_service.log_event(user_id=self.user_id,
+                                              event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
+                                              trace_id=trace_id_var.get(),
+                                              event_data=NewMessageSessionEventData(
+                                                  session_id=self.chat_id,
+                                                  app_id=self.client_id,
+                                                  source="platform",
+                                                  app_name=self.db_assistant.name,
+                                                  app_type=ApplicationTypeEnum.ASSISTANT
+                                              )
+                                              )
             AuditLogService.create_chat_assistant(self.login_user, get_request_ip(self.request), self.client_id)
         return msg
 
@@ -143,33 +177,36 @@ class ChatClient:
                 # 会话业务agent通过数据库数据固定生成,不用每次变化
                 assistant = AssistantDao.get_one_assistant(self.client_id)
                 if not assistant:
-                    raise IgnoreException('该助手已被删除')
+                    raise AssistantDeletedError()
                     # 判断下agent是否上线
                 if assistant.status != AssistantStatus.ONLINE.value:
-                    raise IgnoreException('当前助手未上线，无法直接对话')
+                    raise AssistantNotOnlineError()
             elif not self.chat_id:
                 # 调试界面没测都重新生成
                 assistant = AssistantDao.get_one_assistant(self.client_id)
                 if not assistant:
-                    raise IgnoreException('该助手已被删除')
-        except IgnoreException as e:
-            logger.exception("get assistant info error")
-            await self.websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(e))
-            raise IgnoreException(f'get assistant info error: {str(e)}')
-        try:
+                    raise AssistantDeletedError()
+
+            # await self.websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(e))
+            # raise IgnoreException(f'get assistant info error: {str(e)}')
+
             if self.chat_id and self.gpts_agent is None:
                 self.db_assistant = assistant
                 # 会话业务agent通过数据库数据固定生成,不用每次变化
-                self.gpts_agent = AssistantAgent(assistant, self.chat_id)
+                self.gpts_agent = AssistantAgent(assistant, self.chat_id, invoke_user_id=self.user_id)
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)
             elif not self.chat_id:
                 self.db_assistant = assistant
                 # 调试界面每次都重新生成
-                self.gpts_agent = AssistantAgent(assistant, self.chat_id)
+                self.gpts_agent = AssistantAgent(assistant, self.chat_id, invoke_user_id=self.user_id)
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)
+
+        except BaseErrorCode as e:
+            logger.exception("get assistant info error")
+            raise e
         except Exception as e:
-            logger.exception("agent init error")
-            raise Exception(f'agent init error: {str(e)}')
+            logger.exception("get assistant info error")
+            raise AssistantOtherError(exception=e)
 
     async def init_chat_history(self):
         # 初始化历史记录，不为空则不用重新初始化
@@ -301,16 +338,7 @@ class ChatClient:
                     _ = await self.add_message('bot', one.json(), 'tool_result')
                 else:
                     logger.warning("unexpected message type")
-            # for one in result:
-            #     if isinstance(one, AIMessage):
-            #         answer += one.content
 
-            # todo: 后续优化代码解释器的实现方案，保证输出的文件可以公开访问 ugly solve
-            # 获取minio的share地址，把share域名去掉, 为毕昇的部署方案特殊处理下
-            for one in self.gpts_agent.tools:
-                if one.name == "bisheng_code_interpreter":
-                    minio_share = settings.get_minio_conf().sharepoint
-                    answer = answer.replace(f"http://{minio_share}", "")
             answer_end_type = 'end'
             # 如果是流式的llm则用end_cover结束, 覆盖之前流式的输出
             if getattr(self.gpts_agent.llm, 'streaming', False):
@@ -329,9 +357,15 @@ class ChatClient:
             await self.send_response('answer', answer_end_type, answer, message_id=res.id if res else None)
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} question:{input_msg}')
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} answer:{answer}')
-        except Exception as e:
+
+        except BaseErrorCode as e:
             logger.exception('handle gpts message error: ')
             await self.send_response('system', 'start', '')
-            await self.send_response('system', 'end', 'Error: ' + str(e))
+            await e.websocket_close_message(websocket=self.websocket, close_ws=False)
+        except Exception as e:
+            e = AssistantOtherError(exception=e)
+            logger.exception('handle gpts message error: ')
+            await self.send_response('system', 'start', '')
+            await e.websocket_close_message(websocket=self.websocket, close_ws=False)
         finally:
             await self.send_response('processing', 'close', '')

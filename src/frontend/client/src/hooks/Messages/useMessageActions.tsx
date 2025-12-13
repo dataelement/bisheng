@@ -100,6 +100,7 @@ export default function useMessageActions(props: TMessageActions) {
 
   const messageLabel = useMemo(() => {
     if (message?.isCreatedByUser === true) {
+      if (message?.user_name) return message.user_name
       return UsernameDisplay ? (user?.name ?? '') || user?.username : localize('com_user_message');
     } else if (agent) {
       return agent.name ?? 'Assistant';

@@ -4,22 +4,36 @@ import { Pagination, PaginationContent, PaginationItem, PaginationLink, Paginati
 import { Input } from '../input';
 
 interface IProps {
-    /** 当前页码 */
+    /** Current page number */
     page: number,
-    /** limit */
+    /** Limit */
     pageSize: number,
-    /** item total */
+    /** Item total */
     total: number,
-    /** 最多同时显示 item 数 */
+    /** Maximum number of pages to display at once */
     maxVisiblePages?: number,
     /** Function to handle page change */
     onChange?: (p: number) => void,
     className?: string,
-    /** 是否开启跳转页功能 */
-    showJumpInput?: boolean
+    /** Whether to show jump to page input */
+    showJumpInput?: boolean,
+    /** Text for "Jump to" label */
+    jumpToText?: string,
+    /** Text for "page" label */
+    pageText?: string
 }
 
-const AutoPagination = ({ page, pageSize, total, maxVisiblePages = 5, className, onChange, showJumpInput = false }: IProps) => {
+const AutoPagination = ({
+    page,
+    pageSize,
+    total,
+    maxVisiblePages = 5,
+    className,
+    onChange,
+    showJumpInput = false,
+    jumpToText = 'Go to',
+    pageText = 'page'
+}: IProps) => {
     const totalPages = Math.ceil(total / pageSize);
     const [jumpPage, setJumpPage] = useState<string>("");
 
@@ -109,7 +123,7 @@ const AutoPagination = ({ page, pageSize, total, maxVisiblePages = 5, className,
                 {showJumpInput && (
                     <PaginationItem key="jump">
                         <div className="flex items-center text-sm gap-1">
-                            <span>跳至</span>
+                            <span>{jumpToText}</span>
                             <Input
                                 type="number"
                                 className="w-[40px] h-6 text-center p-0"
@@ -119,7 +133,7 @@ const AutoPagination = ({ page, pageSize, total, maxVisiblePages = 5, className,
                                 onBlur={handleJumpInputBlur}
                                 onKeyDown={(e) => e.key === 'Enter' && handleJumpPage()}
                             />
-                            <span>页</span>
+                            <span>{pageText}</span>
                         </div>
                     </PaginationItem>
                 )}

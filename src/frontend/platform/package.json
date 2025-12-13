@@ -1,6 +1,6 @@
 {
   "name": "bisheng",
-  "version": "2.0.3",
+  "version": "2.3.0-beta2",
   "private": true,
   "dependencies": {
     "@headlessui/react": "^2.0.4",
@@ -26,7 +26,7 @@
     "@radix-ui/react-toggle-group": "^1.1.0",
     "@radix-ui/react-tooltip": "^1.1.2",
     "@tailwindcss/forms": "^0.5.7",
-    "@xyflow/react": "^12.3.3",
+    "@xyflow/react": "^12.8.4",
     "ace-builds": "^1.35.0",
     "ansi-to-html": "^0.7.2",
     "axios": "^1.7.2",
@@ -37,11 +37,12 @@
     "compressorjs": "^1.2.1",
     "date-fns": "^3.6.0",
     "dompurify": "^3.1.5",
+    "howler": "^2.2.4",
     "i18next": "^23.12.1",
     "i18next-http-backend": "^2.5.2",
     "jsencrypt": "^3.3.2",
     "lodash-es": "^4.17.21",
-    "lucide-react": "^0.446.0",
+    "lucide-react": "^0.544.0",
     "mammoth": "^1.9.0",
     "pdfjs-dist": "3.10.111",
     "react": "^18.3.1",
@@ -68,6 +69,7 @@
     "vditor": "file:local-packages/vditor-3.11.1.tgz",
     "web-vitals": "^4.1.1",
     "xlsx": "^0.18.5",
+    "xlsx-populate": "^1.21.0",
     "zustand": "^4.5.2"
   },
   "scripts": {

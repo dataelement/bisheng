@@ -4,6 +4,7 @@ from typing import List, Optional, Dict
 from loguru import logger
 from pydantic import ConfigDict, BaseModel, Field
 
+from bisheng.workflow.common.condition import ComparisonType, LogicType
 from bisheng.workflow.nodes.base import BaseNode
 
 
@@ -28,31 +29,31 @@ class ConditionOne(BaseModel):
         return self.compare_two_value(left_value, right_value)
 
     def compare_two_value(self, left_value: str, right_value: str) -> bool:
-        if self.comparison_operation == 'equals':
+        if self.comparison_operation == ComparisonType.EQUAL:
             return left_value == right_value
-        elif self.comparison_operation == 'not_equals':
+        elif self.comparison_operation == ComparisonType.NOT_EQUAL:
             return left_value != right_value
-        elif self.comparison_operation == 'contains':
+        elif self.comparison_operation == ComparisonType.CONTAINS:
             return left_value.find(right_value) != -1
-        elif self.comparison_operation == 'not_contains':
+        elif self.comparison_operation == ComparisonType.NOT_CONTAINS:
             return left_value.find(right_value) == -1
-        elif self.comparison_operation == 'is_empty':
+        elif self.comparison_operation == ComparisonType.IS_EMPTY:
             return left_value == '' or left_value is None
-        elif self.comparison_operation == 'is_not_empty':
+        elif self.comparison_operation == ComparisonType.IS_NOT_EMPTY:
             return left_value != '' and left_value is not None
-        elif self.comparison_operation == 'starts_with':
+        elif self.comparison_operation == ComparisonType.STARTS_WITH:
             return left_value.startswith(right_value)
-        elif self.comparison_operation == 'ends_with':
+        elif self.comparison_operation == ComparisonType.ENDS_WITH:
             return left_value.endswith(right_value)
-        elif self.comparison_operation == 'greater_than':
+        elif self.comparison_operation == ComparisonType.GREATER_THAN:
             return float(left_value) > float(right_value)
-        elif self.comparison_operation == 'greater_than_or_equal':
+        elif self.comparison_operation == ComparisonType.GREATER_THAN_OR_EQUAL:
             return float(left_value) >= float(right_value)
-        elif self.comparison_operation == 'less_than':
+        elif self.comparison_operation == ComparisonType.LESS_THAN:
             return float(left_value) < float(right_value)
-        elif self.comparison_operation == 'less_than_or_equal':
+        elif self.comparison_operation == ComparisonType.LESS_THAN_OR_EQUAL:
             return float(left_value) <= float(right_value)
-        elif self.comparison_operation == 'regex':
+        elif self.comparison_operation == ComparisonType.REGEX:
             right = re.compile(right_value)
             return right.search(left_value) is not None
         else:
@@ -75,10 +76,10 @@ class ConditionCases(BaseModel):
         for condition in self.conditions:
             flag = condition.evaluate(node_instance)
             self.variable_key_value.update(condition.variable_key_value)
-            if self.operator == 'and':
+            if self.operator == LogicType.AND:
                 if not flag:
                     return False
             else:
                 if flag:
                     return True
-        return True if self.operator == 'and' else False
+        return True if self.operator == LogicType.AND else False

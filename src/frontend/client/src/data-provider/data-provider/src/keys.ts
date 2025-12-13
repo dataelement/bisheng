@@ -1,5 +1,5 @@
 export enum QueryKeys {
-  messages = 'messages',
+  messages = 'rcmessages',
   sharedMessages = 'sharedMessages',
   sharedLinks = 'sharedLinks',
   allConversations = 'allConversations',
@@ -47,6 +47,7 @@ export enum QueryKeys {
   health = 'health',
   userTerms = 'userTerms',
   getLinsightCount = 'getLinsightCount',
+  getWorkspaceModel = 'getWorkspaceModel',
   banner = 'banner',
 }
 

@@ -1,16 +1,14 @@
-import { TitleLogo } from "@/components/bs-comp/cardComponent";
-import { AssistantIcon } from "@/components/bs-icons";
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { Button } from "@/components/bs-ui/button";
 import { DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, Textarea } from "@/components/bs-ui/input";
 import Avator from "@/components/bs-ui/input/avator";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function EditAssistantDialog({ logo, name, desc, onSave, loca }) {
-console.log(loca,66);
 
     const { t } = useTranslation()
     // State for form fields
@@ -86,6 +84,10 @@ console.log(loca,66);
         })
     }
 
+    const previewAvatar = useMemo(() =>
+        formData.logo ? __APP_ENV__.BASE_URL + formData.logo : '',
+        [formData.logo])
+
     return <DialogContent className="sm:max-w-[625px] bg-background-login">
         <DialogHeader>
             <DialogTitle>{t('build.editAssistant')}</DialogTitle>
@@ -93,19 +95,14 @@ console.log(loca,66);
         <div className="flex flex-col gap-8 py-6">
             <div className="">
                 <label htmlFor="name" className="bisheng-label">{t('build.assistantAvatar')}<span className="bisheng-tip">*</span></label>
-                {/* <Avator
-                    value={formData.logo}
+                <Avator
+                    value={previewAvatar}
                     className="mt-2"
                     onChange={uploadAvator}
-                ><AssistantIcon className="bg-primary w-9 h-9 rounded-sm" /></Avator> */}
-                {console.log(loca,666)}
-                                        <TitleLogo
-                  className=" w-7 h-7 rounded-sm" 
-                  url={loca.logo} 
-                  id={loca.id}
-                  type={loca.flow_type}
-                ></TitleLogo>
-                
+                >
+                    <AppAvator id={6} flowType={5} className="size-9"></AppAvator>
+                </Avator>
+
                 {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>}
             </div>
             <div className="">

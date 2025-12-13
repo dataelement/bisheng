@@ -107,22 +107,22 @@ export default function NewChat({
             {/* <CloseToggleIcon className="size-5" /> */}
           </div>
         </div>
-        <div className='flex gap-1'>
-          <Button variant="outline" className='shadow-sm h-10 rounded-xl'
+        <div className='flex gap-1 w-full'>
+          <Button variant="outline" className='shadow-sm h-10 rounded-xl px-3 flex-shrink-0'
             onClick={() => {
               navigate('/apps');
             }}>
             <AppsIcon />
-            <span className="text-sm font-normal">应用中心</span>
+            <span className="text-sm font-normal whitespace-nowrap ml-0.5">{localize('com_nav_app_center')}</span>
           </Button>
           {/* 新建btn */}
           <Button
-            variant="outline" className="shadow-sm h-10  rounded-xl"
+            variant="outline" className="shadow-sm h-10 rounded-xl px-3 flex-shrink-0"
             onClick={clickHandler}
             aria-label={localize('com_ui_new_chat')}
           >
             <img className='size-[18px] grayscale' src={__APP_ENV__.BASE_URL + '/assets/chat2.png'} alt="" />
-            <span className="text-sm font-normal">开始新对话</span>
+            <span className="text-sm font-normal whitespace-nowrap ml-0.5">{localize('com_nav_start_new_chat')}</span>
           </Button>
         </div>
       </div>

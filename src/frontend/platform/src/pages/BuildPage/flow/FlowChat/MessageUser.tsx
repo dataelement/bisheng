@@ -1,31 +1,11 @@
 import { FlagIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
-import { locationContext } from "@/contexts/locationContext";
 import { ChatMessageType } from "@/types/chat";
 import { formatStrTime } from "@/util/utils";
-import { useContext } from "react";
 import { useTranslation } from "react-i18next";
-import { useMessageStore } from "./messageStore";
 
 export default function MessageUser({ mark = false, useName = '', data, onMarkClick }: { data: ChatMessageType }) {
     const { t } = useTranslation()
-
-    const { appConfig } = useContext(locationContext)
-    const running = useMessageStore(state => state.running)
-
-    const handleSearch = () => {
-        window.open(appConfig.dialogQuickSearch + encodeURIComponent(msg))
-    }
-
-    const handleResend = (send) => {
-        const myEvent = new CustomEvent('userResendMsgEvent', {
-            detail: {
-                send,
-                message: data.message
-            }
-        });
-        document.dispatchEvent(myEvent);
-    }
 
     return <div className="flex justify-end w-full">
         <div className="w-fit group min-h-8 max-w-[90%]">
@@ -38,7 +18,7 @@ export default function MessageUser({ mark = false, useName = '', data, onMarkCl
             <div className="rounded-2xl px-6 py-4 bg-[#EEF2FF] dark:bg-[#333A48]">
                 <div className="flex gap-2 ">
                     <div className="text-[#0D1638] dark:text-[#CFD5E8] text-sm break-all whitespace-break-spaces">{typeof data.message === 'string' ? data.message : data.message[data.chatKey]}</div>
-                    <div className="w-6 h-6 min-w-6"><img src={__APP_ENV__.BASE_URL + '/user.png'} alt="" /></div>
+                    <div className="w-6 h-6 min-w-6"><img src={__APP_ENV__.BASE_URL + '/assets/user.png'} alt="" /></div>
                 </div>
             </div>
             {/* 附加信息 */}

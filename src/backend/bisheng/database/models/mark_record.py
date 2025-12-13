@@ -6,8 +6,8 @@ from typing import List, Optional
 from sqlalchemy import Column, DateTime, delete, text
 from sqlmodel import Field, select
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database import get_sync_db_session
 
 
 class MarkRecordStatus(Enum):
@@ -24,10 +24,10 @@ class MarkRecordBase(SQLModelSerializable):
     task_id: int = Field(index=True)
     session_id: str = Field(index=True)
     status: int = Field(index=False, default=1)
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class MarkRecord(MarkRecordBase, table=True):
@@ -38,7 +38,7 @@ class MarkRecordDao(MarkRecordBase):
 
     @classmethod
     def update_record(cls, record_info: MarkRecord) -> MarkRecord:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(record_info)
             session.commit()
             session.refresh(record_info)
@@ -46,14 +46,14 @@ class MarkRecordDao(MarkRecordBase):
 
     @classmethod
     def get_prev_task(cls, user_id: int, task_id: int):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(MarkRecord).where(MarkRecord.create_id == user_id).where(
                 MarkRecord.task_id == task_id).order_by(MarkRecord.id)
             return session.exec(statement).all()
 
     @classmethod
     def create_record(cls, record_info: MarkRecord) -> MarkRecord:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(record_info)
             session.commit()
             session.refresh(record_info)
@@ -61,7 +61,7 @@ class MarkRecordDao(MarkRecordBase):
 
     @classmethod
     def del_record(cls, task_id: int):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             st = delete(MarkRecord).where(MarkRecord.task_id == task_id)
             session.exec(st)
             session.commit()
@@ -69,7 +69,7 @@ class MarkRecordDao(MarkRecordBase):
 
     @classmethod
     def del_task_chat(cls, task_id: int, session_id: str):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             st = delete(MarkRecord).where(MarkRecord.task_id == task_id).where(MarkRecord.session_id == session_id)
             session.exec(st)
             session.commit()
@@ -77,22 +77,22 @@ class MarkRecordDao(MarkRecordBase):
 
     @classmethod
     def get_list_by_taskid(cls, task_id: int):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(MarkRecord).where(MarkRecord.task_id == task_id)
             return session.exec(statement).all()
 
     @classmethod
     def get_count(cls, task_id: int):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             sql = text(
-                "select create_user,count(*) as user_count,create_id from markrecord where task_id=:task_id group by create_id")
+                "select create_user,count(*) as user_count,create_id from markrecord where task_id=:task_id group by create_id,create_user")
             query = session.execute(sql, {"task_id": task_id}).fetchall()
             return query
 
     @classmethod
     def get_record(cls, task_id: int, session_id: str) -> MarkRecord:
 
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(MarkRecord).where(MarkRecord.task_id == task_id).where(
                 MarkRecord.session_id == session_id)
             return session.exec(statement).first()
@@ -107,5 +107,5 @@ class MarkRecordDao(MarkRecordBase):
             statement = statement.where(MarkRecord.status == status)
         if mark_user is not None:
             statement = statement.where(MarkRecord.create_user == str(mark_user))
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()

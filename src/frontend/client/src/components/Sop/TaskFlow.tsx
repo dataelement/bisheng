@@ -6,17 +6,20 @@ import { useGetBsConfig } from '~/data-provider';
 import { useLinsightManager, useLinsightSessionManager } from '~/hooks/useLinsightManager';
 import { useLinsightWebSocket } from '~/hooks/Websocket';
 import { useToastContext } from '~/Providers';
+import { useLocalize } from '~/hooks';
 import { SopStatus } from './SOPEditor';
 import { TaskControls } from './TaskControls';
 import { TaskFlowContent } from './TaskFlowContent';
 import { formatTime } from '~/utils';
 import { useAutoScroll } from '~/hooks/useAutoScroll';
+import { ShareSameSopControls } from '.';
 
-export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
+export const TaskFlow = ({ versionId, isSharePage, setVersions, setVersionId }) => {
     const { data: bsConfig } = useGetBsConfig();
     const { createLinsight, getLinsight, updateLinsight } = useLinsightManager()
     const { showToast } = useToastContext();
     const { stop, sendInput } = useLinsightWebSocket(versionId)
+    const localize = useLocalize()
 
     const linsight = useMemo(() => {
         const linsight = getLinsight(versionId)
@@ -45,14 +48,13 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
             is_reexecute: check,
             cancel_feedback: cancel
         }).then(res => {
-            console.log('res :>> ', res);
             if (res.status_code !== 200) {
-                return showToast({ status: 'error', message: res.status_message })
+                return
             }
 
             const newVersionId = res.data.id
             updateLinsight(versionId, { status: SopStatus.FeedbackCompleted })
-            !cancel && showToast({ status: 'success', message: '提交成功' })
+            if (!check) return showToast({ status: 'success', message: localize('com_sop_submit_success') })
             if (res.data === true) return
 
             // 克隆当前版本
@@ -64,7 +66,12 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
                 tasks: [],
                 summary: '',
                 file_list: [],
-                status: SopStatus.NotStarted
+                status: SopStatus.NotStarted,
+                output_result: {
+                    all_from_session_files: [],
+                    final_files: [],
+                    answer: ''
+                }
             })
 
             setVersions((prve) => [{
@@ -105,7 +112,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
             transition={{ duration: 0.3, ease: "easeInOut" }}
         >
             <div className='flex items-center gap-2 border-b border-b-[#E8E9ED] bg-[#FDFEFF] p-2 px-4 text-[13px] text-[#737780]'>
-                任务流
+                {localize('com_sop_task_flow')}
             </div>
 
             <div ref={flowScrollRef} className='relative flex-1 pb-80 min-h-0 scroll-hover'>
@@ -118,7 +125,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
                                 alt="Loading"
                             />
                         </div>
-                        <p className='text-sm text-gray-400 mt-7'>确认指导手册规划后，任务开始运行</p>
+                        <p className='text-sm text-gray-400 mt-7'>{localize('com_sop_waiting_message')}</p>
                     </div>
                 )}
                 {
@@ -130,16 +137,20 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
                 }
             </div>
 
-            <TaskControls
-                key={versionId}
-                current={currentTask}
-                tasks={linsight.tasks}
-                status={linsight.status}
-                queueCount={linsight.queueCount}
-                feedbackProvided={!!linsight.execute_feedback}
-                onStop={stop}
-                onFeedback={handleFeedback}
-            />
+            {
+                isSharePage ?
+                    [SopStatus.completed, SopStatus.Stoped].includes(linsight.status) && <ShareSameSopControls name={linsight.title} />
+                    : <TaskControls
+                        key={versionId}
+                        current={currentTask}
+                        tasks={linsight.tasks}
+                        status={linsight.status}
+                        queueCount={linsight.queueCount}
+                        feedbackProvided={!!linsight.execute_feedback}
+                        onStop={stop}
+                        onFeedback={handleFeedback}
+                    />
+            }
         </motion.div>
     );
 };

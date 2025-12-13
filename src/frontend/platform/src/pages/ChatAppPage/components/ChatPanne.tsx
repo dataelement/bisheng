@@ -1,8 +1,7 @@
 
-import { TitleLogo } from "@/components/bs-comp/cardComponent";
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import ChatComponent from "@/components/bs-comp/chatComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
-import { AssistantIcon } from "@/components/bs-icons";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
 import ChatPane from "@/pages/BuildPage/flow/FlowChat/ChatPane";
@@ -19,9 +18,7 @@ import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
 import ForcePrompt from "./ForcePrompt";
 
-export default function ChatPanne({ customWsHost = '',chatList,chat, appendHistory = false, data, version = 'v1' }) {
-    console.log(chat,21312312);
-    
+export default function ChatPanne({ customWsHost = '', chatList, chat, appendHistory = false, data, version = 'v1' }) {
     const { id, chatId, type } = data
     const { t } = useTranslation()
 
@@ -43,6 +40,7 @@ export default function ChatPanne({ customWsHost = '',chatList,chat, appendHisto
     // console.log('autoRun :>> ', autoRun);
     const init = async () => {
         const isV1 = version === 'v1';
+        window.chat_version = version
 
         if (type === AppNumType.SKILL) {
             setAssistant(null)
@@ -227,7 +225,7 @@ export default function ChatPanne({ customWsHost = '',chatList,chat, appendHisto
     if (!(flow || assistant || workflow)) {
         return <div
             className="flex-1 chat-box h-full overflow-hidden bs-chat-bg relative"
-            style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}
+            style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/points.png)` }}
         > </div>
     }
 
@@ -237,13 +235,14 @@ export default function ChatPanne({ customWsHost = '',chatList,chat, appendHisto
             flow && <div className={`w-full chat-box h-full relative px-6 ${type === AppNumType.SKILL ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
-                    <TitleLogo url={chat.logo} className="" id={chat.flow_id}  type={chat.flow_type}></TitleLogo>
-                    <span className="text-sm">{chat.flow_name}</span>
+                    <AppAvator id={flow.name} url={flow.logo} flowType={1} ></AppAvator>
+                    <span className="text-sm">{flow.name}</span>
                 </div>
                 <ChatComponent
                     form={flowSate.isForm}
-                    logo={chat.logo}
+                    logo={<AppAvator id={flow.name} url={flow.logo} flowType={1} ></AppAvator>}
                     stop
+                    version={version}
                     // stop={flowSate.isReport || flowSate.isRoom}
                     useName={sendUserName}
                     guideWord={flow.guide_word}
@@ -261,12 +260,12 @@ export default function ChatPanne({ customWsHost = '',chatList,chat, appendHisto
             assistant && <div className={`w-full chat-box h-full relative px-6 ${type === AppNumType.ASSISTANT ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
-                    <TitleLogo url={chat.logo} className="" id={chat.flow_id}  type={chat.flow_type}></TitleLogo>
-                    <span className="text-sm">{chat.flow_name}</span>
+                    <AppAvator id={assistant.name} url={assistant.logo} flowType={5} ></AppAvator>
+                    <span className="text-sm">{assistant.name}</span>
                 </div>
                 <ChatComponent
                     stop
-                    logo={chat.logo}
+                    logo={<AppAvator id={assistant.name} url={assistant.logo} flowType={5} ></AppAvator>}
                     chat={chat}
                     useName={sendUserName}
                     questions={assistantState.guide_question.filter((item) => item)}
@@ -275,6 +274,7 @@ export default function ChatPanne({ customWsHost = '',chatList,chat, appendHisto
                     onBeforSend={getWsParamData}
                     loadMore={() => loadMoreHistoryMsg(assistant.id, appendHistory)}
                     inputForm={null}
+                    version={version}
                 />
                 {/* 强制提醒 */}
                 <ForcePrompt id={assistant.id} />
@@ -284,10 +284,10 @@ export default function ChatPanne({ customWsHost = '',chatList,chat, appendHisto
         {
             workflow && <div className={`w-full chat-box h-full relative ${type === AppNumType.FLOW ? 'block' : 'hidden'}`}>
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-6 py-1 dark:bg-[#1B1B1B]">
-                    <TitleLogo url={chat.logo} className="" id={chat.flow_id}  type={chat.flow_type}></TitleLogo>
-                     <span className="text-sm">{chat.flow_name}</span>
+                    <AppAvator id={workflow.name} url={workflow.logo} flowType={10} ></AppAvator>
+                    <span className="text-sm">{workflow.name}</span>
                 </div>
-                <ChatPane autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl} />
+                <ChatPane  autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl} version={version} />
             </div>
         }
     </div>

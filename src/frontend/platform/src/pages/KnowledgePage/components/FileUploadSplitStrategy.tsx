@@ -3,17 +3,25 @@ import { Button } from '@/components/bs-ui/button';
 import { Input } from '@/components/bs-ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/bs-ui/radio';
 import { generateUUID } from '@/components/bs-ui/utils';
-import i18next from 'i18next';
-import { useState } from 'react';
+import i18next, { use } from 'i18next';
+import { useMemo, useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
+export const ruleI18nMap = {
+  '\\n': 'singleNewlineRule',
+  '\\n\\n': 'doubleNewlineRule',
+  '第.{1,3}章': 'chapterRule',
+  '第.{1,3}条': 'articleRule',
+  '。': 'chinesePeriodRule',
+  '\\.': 'englishPeriodRule',
+}
 
 const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) => {
-  const { t } = useTranslation('knowledge')
+  const { t } = useTranslation('knowledge');
   const [customRegex, setCustomRegex] = useState('');
   const [position, setPosition] = useState('after');
 
-  const handleDragEnd = (result: any) => {
+  const handleDragEnd = (result) => {
     if (!result.destination) return;
 
     const items = Array.from(strategies);
@@ -24,32 +32,52 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
   };
 
   const handleAddCustomStrategy = () => {
-    if (customRegex) {
-      setStrategies([
-        ...strategies,
-        { id: generateUUID(4), regex: customRegex, position }
-      ]);
+    if (customRegex.trim()) {
+      const newStrategy = {
+        id: generateUUID(6),
+        regex: customRegex.trim(),
+        position,
+        rule: t('customRule'),
+      };
+      setStrategies([...strategies, newStrategy]);
       setCustomRegex('');
     }
   };
+  
+  const handleRegexClick = (regex, mode) => {
+    // 根据regex获取对应的规则key
+    const newStrategy = {
+      id: generateUUID(6),
+      regex:t(`predefinedRules.${ruleI18nMap[regex]}.label`),
+      position: mode,
+      rule: t(`predefinedRules.${ruleI18nMap[regex]}.desc`),
+    };
+    setStrategies([...strategies, newStrategy]);
+  };
 
-  const handleRegexClick = (reg: string, position: string, rule: string) => {
-    setStrategies([
-      ...strategies,
-      { id: generateUUID(4), regex: reg, position, rule }
-    ]);
-  }
+  const handleDelete = (id) => {
+    setStrategies(strategies.filter(item => item.id !== id));
+  };
+
+const [predefinedRules] = useState([
+    { regexKey:  '\\n', mode: 'after' },
+    { regexKey:'\\n\\n', mode: 'after' },
+    { regexKey:  '第.{1,3}章', mode: 'before' },
+    { regexKey: '第.{1,3}条', mode: 'before' },
+    { regexKey: '。', mode: 'after' },
+    { regexKey: '\\.', mode: 'after' }
+
+  ]);
 
   return (
     <div className='flex gap-6'>
       {/* 左侧拖拽区域 */}
       <div className='flex-1'>
-        <div className='py-2 px-0 pr-1 overflow-y-auto  max-h-[11.5rem] select-none'> {/* 添加 overflow-y-auto */}
+        <div className='py-2 px-0 pr-1 overflow-y-auto max-h-[11.5rem] select-none'>
           <DragDropContext onDragEnd={handleDragEnd}>
             <Droppable droppableId="strategies">
               {(provided) => (
                 <div {...provided.droppableProps} ref={provided.innerRef}>
-                  {/* 动态渲染实际项目数量 */}
                   {strategies.map((strategy, index) => (
                     <Draggable key={strategy.id} draggableId={strategy.id} index={index}>
                       {(provided) => (
@@ -74,7 +102,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                             {/* 右侧渐变遮罩 */}
                             <div className="absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-accent to-transparent pointer-events-none"></div>
                             <DelIcon
-                              onClick={() => setStrategies(strategies.filter((_, i) => i !== index))}
+                              onClick={() => handleDelete(strategy.id)}
                               className='absolute right-1 top-0 hidden group-hover:block cursor-pointer'
                             />
                           </div>
@@ -96,7 +124,6 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                       </div>
                     ))
                   )}
-                  {/* 拖拽占位符 */}
                   {provided.placeholder}
                 </div>
               )}
@@ -106,17 +133,24 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
         <p className='text-xs text-gray-500 pt-1'>{t('splitPriorityInfo')}</p>
       </div>
       <div className="relative flex-1 flex flex-col gap-4">
-        <h3 className="text-sm text-left font-medium text-gray-700">{t('splitRules')}:</h3>
+        <h3 className="text-sm text-left font-medium text-gray-700">{t('universalRules')}:</h3>
         <div className="flex flex-wrap gap-2">
-          <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\n', 'after', '单换行后切分，用于分隔普通换行')}>\n✂️</Button>
-          <Button className="px-2 h-6" variant="secondary" onClick={() => handleRegexClick('\\n\\n', 'after', '双换行后切分，用于分隔段落')}>\n\n✂️</Button>
-          {i18next.language === 'zh' && <>
-            <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}章', 'before', '“第X章”前切分，切分章节等')}>{'✂️第.{1, 3}章'}</Button>
-            <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}条', 'before', '“第X条”前切分，切分条目等')}>{'✂️第.{1, 3}条'}</Button>
-          </>}
-          <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('。', 'after', '中文句号后切分，中文断句')}>。✂️</Button>
-          <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\.', 'after', '英文句号后切分，英文断句')}>\.✂️</Button>
+            {predefinedRules.map((rule, index) => {
+            const regexDisplay = t("predefinedRules."+ ruleI18nMap[rule.regexKey]+'.label');
+            
+            return (
+              <Button
+                key={index}
+                className="px-2 h-6"
+                variant="secondary"
+                onClick={() => handleRegexClick(rule.regexKey, rule.mode)}
+              >
+                {rule.mode === 'before' ? `✂️${regexDisplay}` : `${regexDisplay}✂️`}
+              </Button>
+            );
+          })}
         </div>
+        
         <h3 className="text-sm text-left font-medium text-gray-700"> {t('addCustomRule')}:</h3>
         <div className="text-sm flex flex-wrap items-center gap-2">
           <div className='flex items-center gap-1'>
@@ -129,11 +163,13 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
             />
           </div>
         </div>
+        
         <RadioGroup value={position} onValueChange={setPosition} className="flex items-center text-sm">
-          <RadioGroupItem className="" value="before" />{t('before')}
-          <RadioGroupItem className="" value="after" />{t('after')}
-          <span>切分</span>
+          <RadioGroupItem value="before" />{t('before')}
+          <RadioGroupItem value="after" />{t('after')}
+          <span>{t('split')}</span>
         </RadioGroup>
+        
         <div className="flex justify-end absolute right-0 bottom-0">
           <Button onClick={handleAddCustomStrategy} className="h-6">
             {t('add')}

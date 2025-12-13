@@ -1,7 +1,8 @@
 import asyncio
 import json
+import time
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 from urllib.parse import unquote
 from uuid import uuid4
 
@@ -10,26 +11,40 @@ from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
+from sse_starlette import EventSourceResponse
 
 from bisheng.api.services import knowledge_imp
-from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.knowledge import KnowledgeService
-from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.services.workstation import (SSECallbackClient, WorkstationConversation,
                                               WorkstationMessage, WorkStationService)
 from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import FrequentlyUsedChat
-from bisheng.api.v1.schemas import WorkstationConfig, resp_200, resp_500, WSPrompt, ExcelRule, UnifiedResponseModel
-from bisheng.cache.redis import redis_client
-from bisheng.cache.utils import file_download, save_download_file, save_uploaded_file
+from bisheng.api.v1.schemas import WorkstationConfig, resp_200, ExcelRule, UnifiedResponseModel
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
+from bisheng.common.errcode.workstation import WebSearchToolNotFoundError, ConversationNotFoundError, \
+    AgentAlreadyExistsError
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, ApplicationAliveEventData, \
+    ApplicationProcessEventData
+from bisheng.common.services import telemetry_service
+from bisheng.common.services.config_service import settings as bisheng_settings
+from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.cache.utils import file_download, save_download_file, save_uploaded_file
+from bisheng.core.logger import trace_id_var
+from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.models.flow import FlowType
-from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.interface.llms.custom import BishengLLM
-from bisheng.settings import settings as bisheng_settings
+from bisheng.llm.domain import LLMService
+from bisheng.llm.domain.llm import BishengLLM
+from bisheng.share_link.api.dependencies import header_share_token_parser
+from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+from bisheng.tool.domain.services.executor import ToolExecutor
 
 router = APIRouter(prefix='/workstation', tags=['WorkStation'])
 
@@ -78,9 +93,9 @@ def step_message(stepId, runId, index, msgId):
     return f'event: message\ndata: {msg}\n\n'
 
 
-def final_message(conversation: MessageSession, title: str, requestMessage: ChatMessage, text: str,
-                  error: bool, modelName: str):
-    responseMessage = ChatMessageDao.insert_one(
+async def final_message(conversation: MessageSession, title: str, requestMessage: ChatMessage, text: str,
+                        error: bool, modelName: str):
+    responseMessage = await ChatMessageDao.ainsert_one(
         ChatMessage(
             user_id=conversation.user_id,
             chat_id=conversation.chat_id,
@@ -101,8 +116,8 @@ def final_message(conversation: MessageSession, title: str, requestMessage: Chat
             'final': True,
             'conversation': WorkstationConversation.from_chat_session(conversation).model_dump(),
             'title': title,
-            'requestMessage': WorkstationMessage.from_chat_message(requestMessage).model_dump(),
-            'responseMessage': WorkstationMessage.from_chat_message(responseMessage).model_dump(),
+            'requestMessage': (await WorkstationMessage.from_chat_message(requestMessage)).model_dump(),
+            'responseMessage': (await WorkstationMessage.from_chat_message(responseMessage)).model_dump(),
         },
         default=custom_json_serializer)
     return f'event: message\ndata: {msg}\n\n'
@@ -111,18 +126,14 @@ def final_message(conversation: MessageSession, title: str, requestMessage: Chat
 @router.get('/config', summary='获取工作台配置', response_model=UnifiedResponseModel)
 def get_config(
         request: Request,
-        login_user: UserPayload = Depends(get_login_user)):
+        login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ 获取评价相关的模型配置 """
     ret = WorkStationService.get_config()
 
-    etl4lm_settings = bisheng_settings.get_knowledge().get("etl4lm", {})
-    etl_for_lm_url = etl4lm_settings.get("url", None)
-    if ret:
-        ret = ret.model_dump()
-    else:
-        ret = {}
-    ret['enable_etl4lm'] = etl_for_lm_url is not None
+    etl_for_lm_url = bisheng_settings.get_knowledge().etl4lm.url
+    ret = ret.model_dump() if ret else {}
 
+    ret['enable_etl4lm'] = bool(etl_for_lm_url)
     linsight_invitation_code = bisheng_settings.get_all_config().get('linsight_invitation_code', None)
     ret['linsight_invitation_code'] = linsight_invitation_code if linsight_invitation_code else False
     ret['linsight_cache_dir'] = "./"
@@ -134,7 +145,7 @@ def get_config(
 @router.post('/config', summary='更新工作台配置', response_model=UnifiedResponseModel)
 def update_config(
         request: Request,
-        login_user: UserPayload = Depends(get_admin_user),
+        login_user: UserPayload = Depends(UserPayload.get_admin_user),
         data: WorkstationConfig = Body(..., description='默认模型配置'),
 ):
     """ 更新评价相关的模型配置 """
@@ -143,16 +154,16 @@ def update_config(
 
 
 @router.post('/knowledgeUpload')
-async def knowledgeUpload(request: Request,
-                          background_tasks: BackgroundTasks,
-                          file: UploadFile = File(...),
-                          login_user: UserPayload = Depends(get_login_user)):
-    file_byte = await file.read()
+def knowledgeUpload(request: Request,
+                    background_tasks: BackgroundTasks,
+                    file: UploadFile = File(...),
+                    login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    file_byte = file.file.read()
     file_path = save_download_file(file_byte, 'bisheng', file.filename)
-    res = await WorkStationService.uploadPersonalKnowledge(request,
-                                                           login_user,
-                                                           file_path=file_path,
-                                                           background_tasks=background_tasks)
+    res = WorkStationService.uploadPersonalKnowledge(request,
+                                                     login_user,
+                                                     file_path=file_path,
+                                                     background_tasks=background_tasks)
     return resp_200(data=res[0])
 
 
@@ -160,7 +171,7 @@ async def knowledgeUpload(request: Request,
 def queryKnoledgeList(request: Request,
                       page: int,
                       size: int,
-                      login_user: UserPayload = Depends(get_login_user)):
+                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
     # 查询是否有个人知识库
     res, total = WorkStationService.queryKnowledgeList(request, login_user, page, size)
     return resp_200(data={'list': res, 'total': total})
@@ -169,7 +180,7 @@ def queryKnoledgeList(request: Request,
 @router.delete('/deleteKnowledge')
 def deleteKnowledge(request: Request,
                     file_id: int,
-                    login_user: UserPayload = Depends(get_login_user)):
+                    login_user: UserPayload = Depends(UserPayload.get_login_user)):
     res = KnowledgeService.delete_knowledge_file(request, login_user, [file_id])
     return resp_200(data=res)
 
@@ -179,14 +190,14 @@ async def upload_file(
         request: Request,
         file: UploadFile = File(...),
         file_id: str = Body(..., description='文件ID'),
-        login_user: UserPayload = Depends(get_login_user),
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """
     上传文件
     """
     # 读取文件内容
     # 保存文件
-    file_path = save_uploaded_file(file.file, 'bisheng', unquote(file.filename))
+    file_path = await save_uploaded_file(file, 'bisheng', unquote(file.filename))
 
     # 返回文件路径
     return resp_200(
@@ -207,32 +218,41 @@ async def upload_file(
 
 @router.post('/gen_title')
 async def gen_title(conversationId: str = Body(..., description='', embed=True),
-                    login_user: UserPayload = Depends(get_login_user)):
+                    login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     生成标题
     """
     # 获取会话消息
     redis_key = f'workstation_title_{conversationId}'
-    title = redis_client.get(redis_key)
+    redis_client = await get_redis_client()
+
+    title = await redis_client.aget(redis_key)
     if not title:
         await asyncio.sleep(5)
         # 如果标题已经存在，则直接返回
-        title = redis_client.get(redis_key)
+        title = await redis_client.aget(redis_key)
     if title:
         # 如果标题已经存在，则直接返回
-        redis_client.delete(redis_key)
+        await redis_client.adelete(redis_key)
         return resp_200({'title': title})
     else:
-        # 如果标题不存在，则返回空值
-        return resp_500(
-            data="Title not found or method not implemented for the conversation\'s endpoint")
+        return resp_200({'title': 'New Chat'})
 
 
 @router.get('/messages/{conversationId}')
-def get_chat_history(conversationId: str):
-    messages = ChatMessageDao.get_messages_by_chat_id(chat_id=conversationId, limit=1000)
+async def get_chat_history(conversationId: str,
+                           login_user: UserPayload = Depends(UserPayload.get_login_user),
+                           share_link: Union['ShareLink', None] = Depends(header_share_token_parser)
+                           ):
+    messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=conversationId, limit=1000)
     if messages:
-        return resp_200([WorkstationMessage.from_chat_message(message) for message in messages])
+
+        if login_user.user_id != messages[0].user_id:
+            # 校验分享链接权限
+            if not share_link or share_link.resource_id != conversationId:
+                return UnAuthorizedError.return_resp()
+
+        return resp_200([await WorkstationMessage.from_chat_message(message) for message in messages])
     else:
         return resp_200([])
 
@@ -244,34 +264,45 @@ async def genTitle(human: str, assistant: str, llm: BishengLLM, conversationId: 
     convo = f'||>User:\n"{human}"\n ||>Response:\n"{assistant}"'
     prompt = f'Please generate {titleInstruction} \n{convo} \n||>Title:'
     logger.info(f'convo: {convo}')
-    res = llm.invoke(prompt)
+    res = await llm.ainvoke(prompt)
     title = res.content
-    redis_client.set(f'workstation_title_{conversationId}', title)
-    session = MessageSessionDao.get_one(conversationId)
+    redis_client = await get_redis_client()
+    await redis_client.aset(f'workstation_title_{conversationId}', title)
+    session = await MessageSessionDao.async_get_one(conversationId)
     if session:
-        session.flow_name = title
-        MessageSessionDao.insert_one(session)
+        session.flow_name = title[:200]
+        await MessageSessionDao.async_insert_one(session)
 
 
-async def webSearch(query: str, web_search_config: WSPrompt):
+async def webSearch(query: str, user_id: int):
     """
     联网搜索
     """
     web_search_info = GptsToolsDao.get_tool_by_tool_key("web_search")
     if not web_search_info:
-        raise Exception(f"No web_search tool found in database")
-    web_search_tool = await AssistantAgent.init_tools_by_tool_ids([web_search_info.id], None)
+        raise WebSearchToolNotFoundError(exception=Exception("No web_search tool found in database"))
+    web_search_tool = await ToolExecutor.init_by_tool_id(web_search_info.id,
+                                                         app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                                                         app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+                                                         app_type=ApplicationTypeEnum.DAILY_CHAT,
+                                                         user_id=user_id)
     if not web_search_tool:
-        raise Exception(f"No web_search tool found in gpts tools")
-    return web_search_tool[0].invoke(input={"query": query})
+        raise WebSearchToolNotFoundError(exception=Exception("No web_search tool found in gpts tools"))
+    search_list = await web_search_tool.ainvoke(input={"query": query})
+    search_list = json.loads(search_list)
+    search_res = ""
+    for index, one in enumerate(search_list):
+        search_res += f'[webpage ${index} begin]\n${one.get("snippet")}\n[webpage ${index} end]\n\n'
+    return search_res, search_list
 
 
-def getFileContent(filepath):
+def getFileContent(filepath: str, invoke_user_id: int):
     """
     获取文件内容
     """
     filepath_local, file_name = file_download(filepath)
     raw_texts, _, _, _ = knowledge_imp.read_chunk_text(
+        invoke_user_id,
         filepath_local,
         file_name,
         ['\n\n', '\n'],
@@ -286,58 +317,84 @@ def getFileContent(filepath):
 @router.post('/chat/completions')
 async def chat_completions(
         data: APIChatCompletion,
-        login_user: UserPayload = Depends(get_login_user),
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    wsConfig = WorkStationService.get_config()
-    conversationId = data.conversationId
-    model = [model for model in wsConfig.models if model.id == data.model][0]
-    modelName = model.displayName
+    start_time = time.time()
+    try:
+        wsConfig = await WorkStationService.aget_config()
+        conversationId = data.conversationId
+        model = [model for model in wsConfig.models if model.id == data.model][0]
+        modelName = model.displayName
 
-    # 如果没有传入会话ID，则使用默认的会话ID
-    if not conversationId:
-        conversationId = uuid4().hex
-        MessageSessionDao.insert_one(
-            MessageSession(
-                chat_id=conversationId,
-                flow_id='',
-                flow_name='New Chat',
-                flow_type=FlowType.WORKSTATION.value,
-                user_id=login_user.user_id,
-            ))
+        # 如果没有传入会话ID，则使用默认的会话ID
+        if not conversationId:
+            conversationId = uuid4().hex
+            await MessageSessionDao.async_insert_one(
+                MessageSession(
+                    chat_id=conversationId,
+                    flow_id='',
+                    flow_name='New Chat',
+                    flow_type=FlowType.WORKSTATION.value,
+                    user_id=login_user.user_id,
+                ))
 
-    conversaiton = MessageSessionDao.get_one(conversationId)
-    if conversaiton is None:
-        return resp_500('会话不存在')
+            # 记录Telemetry日志
+            await telemetry_service.log_event(user_id=login_user.user_id,
+                                              event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
+                                              trace_id=trace_id_var.get(),
+                                              event_data=NewMessageSessionEventData(
+                                                  session_id=conversationId,
+                                                  app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                                                  source="platform",
+                                                  app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+                                                  app_type=ApplicationTypeEnum.DAILY_CHAT
+                                              )
+                                              )
 
-    if data.overrideParentMessageId:
-        message = ChatMessageDao.get_message_by_id(data.overrideParentMessageId)
-    else:
-        message = ChatMessageDao.insert_one(
-            ChatMessage(
-                user_id=login_user.user_id,
-                chat_id=conversationId,
-                flow_id='',
-                type='human',
-                is_bot=False,
-                sender='User',
-                files=json.dumps(data.files) if data.files else None,
-                extra=json.dumps({'parentMessageId': data.parentMessageId}),
-                message=data.text,
-                category='question',
-                source=0,
-            ))
+        conversaiton = await MessageSessionDao.async_get_one(conversationId)
+        if conversaiton is None:
+            return EventSourceResponse(
+                iter([ConversationNotFoundError().to_sse_event_instance()])
+            )
+        # 存储用户消息
+        if data.overrideParentMessageId:
+            message = await ChatMessageDao.aget_message_by_id(data.overrideParentMessageId)
+        else:
+            message = await ChatMessageDao.ainsert_one(
+                ChatMessage(
+                    user_id=login_user.user_id,
+                    chat_id=conversationId,
+                    flow_id='',
+                    type='human',
+                    is_bot=False,
+                    sender='User',
+                    files=json.dumps(data.files) if data.files else None,
+                    extra=json.dumps({'parentMessageId': data.parentMessageId}),
+                    message=data.text,
+                    category='question',
+                    source=0,
+                ))
 
-    # 掉用bishengllm 实现sse 返回
-    bishengllm = BishengLLM(model_id=data.model)
+        # 掉用bishengllm 实现sse 返回
+        bishengllm = await LLMService.get_bisheng_llm(model_id=data.model,
+                                                      app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                                                      app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+                                                      app_type=ApplicationTypeEnum.DAILY_CHAT,
+                                                      user_id=login_user.user_id)
 
-    # 模型掉用实现流式输出
-    SSEClient = SSECallbackClient()
-    callbackHandler = AsyncStreamingLLMCallbackHandler(
-        websocket=SSEClient,
-        flow_id='',
-        chat_id=data.conversationId,
-        user_id=login_user.user_id,
-    )
+        # 模型掉用实现流式输出
+        SSEClient = SSECallbackClient()
+        callbackHandler = AsyncStreamingLLMCallbackHandler(
+            websocket=SSEClient,
+            flow_id='',
+            chat_id=data.conversationId,
+            user_id=login_user.user_id,
+        )
+    except BaseErrorCode as e:
+        return EventSourceResponse(iter([e.to_sse_event_instance()]))
+    except Exception as e:
+        logger.exception(f'Error in chat completions: {e}')
+        return EventSourceResponse(iter([ServerError(exception=e).to_sse_event_instance()]))
 
     # 处理流式输出
     async def event_stream():
@@ -365,7 +422,7 @@ async def chat_completions(
                 if searchRes.content == '1':
                     logger.info(f'需要联网搜索, prompt={data.text}')
                     # 如果需要联网搜索，则调用搜索接口
-                    search_res, web_list = await webSearch(data.text, wsConfig.webSearch)
+                    search_res, web_list = await webSearch(data.text, user_id=login_user.user_id)
                     content = {'content': [{'type': 'search_result', 'search_result': web_list}]}
                     yield SSEResponse(event='on_search_result',
                                       data=delta(id=stepId, delta=content)).toString()
@@ -375,13 +432,23 @@ async def chat_completions(
                         question=data.text)
             elif data.knowledge_enabled:
                 logger.info(f'knowledge, prompt={data.text}')
-                chunks = WorkStationService.queryChunksFromDB(data.text, login_user)
-                prompt = wsConfig.knowledgeBase.prompt.format(
-                    retrieved_file_content='\n'.join(chunks)[:max_token], question=data.text)
+                chunks = await WorkStationService.queryChunksFromDB(data.text, login_user)
+
+                if wsConfig.knowledgeBase.prompt:
+                    prompt = wsConfig.knowledgeBase.prompt.format(
+                        retrieved_file_content='\n'.join(chunks)[:max_token], question=data.text)
+                else:
+                    prompt_service = await get_prompt_manager()
+                    prompt = prompt_service.render_prompt('workstation', 'personal_knowledge',
+                                                          retrieved_file_content='\n'.join(chunks)[:max_token],
+                                                          question=data.text).prompt
+
+                logger.debug(f'Knowledge prompt: {prompt}')
+
             elif data.files:
                 #  获取文件全文
                 filecontent = '\n'.join(
-                    [getFileContent(file.get('filepath')) for file in data.files])
+                    [getFileContent(file.get('filepath'), login_user.user_id) for file in data.files])
                 prompt = wsConfig.fileUpload.prompt.format(file_content=filecontent[:max_token],
                                                            question=data.text)
             if prompt != data.text:
@@ -389,17 +456,12 @@ async def chat_completions(
                 extra = json.loads(message.extra)
                 extra['prompt'] = prompt
                 message.extra = json.dumps(extra, ensure_ascii=False)
-                ChatMessageDao.insert_one(message)
-        except Exception as e:
-            logger.exception(f'Error in processing the prompt')
-            error = True
-            final_res = 'Error in processing the prompt'
+                await ChatMessageDao.ainsert_one(message)
 
-        if not error:
-            messages = WorkStationService.get_chat_history(conversationId, 8)[:-1]
+            messages = (await WorkStationService.get_chat_history(conversationId, 8))[:-1]
             inputs = [*messages, HumanMessage(content=prompt)]
             if wsConfig.systemPrompt:
-                system_content = wsConfig.systemPrompt.format(cur_date=datetime.now().strftime('%Y-%m-%d %%H:%M:%S'))
+                system_content = wsConfig.systemPrompt.format(cur_date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
                 inputs.insert(0, SystemMessage(content=system_content))
             task = asyncio.create_task(
                 bishengllm.ainvoke(
@@ -454,27 +516,67 @@ async def chat_completions(
                 except Exception as e:
                     logger.error(f'Error in task: {e}')
                     break
-        # 结束流式输出
-        if resoning_res:
-            final_res = ''':::thinking\n''' + resoning_res + '''\n:::''' + final_result.content
-        elif web_list:
-            final_res = ''':::web\n''' + json.dumps(
-                web_list, ensure_ascii=False) + '''\n:::''' + final_result.content
-        else:
-            final_res = final_result.content if final_result else final_res
+            # 结束流式输出
+            if resoning_res:
+                final_res = ''':::thinking\n''' + resoning_res + '''\n:::''' + final_result.content
+            elif web_list:
+                final_res = ''':::web\n''' + json.dumps(
+                    web_list, ensure_ascii=False) + '''\n:::''' + final_result.content
+            else:
+                final_res = final_result.content if final_result else final_res
 
-        yield final_message(conversaiton, conversaiton.flow_name, message, final_res, error,
-                            modelName)
+        except BaseErrorCode as e:
+            error = True
+            final_res = json.dumps(e.to_dict())
+            yield e.to_sse_event_instance_str()
+        except Exception as e:
+            e = ServerError(exception=e)
+            logger.exception(f'Error in processing the prompt')
+            error = True
+            final_res = json.dumps(e.to_dict())
+            yield e.to_sse_event_instance_str()
+
+        yield await final_message(conversaiton, conversaiton.flow_name, message, final_res, error,
+                                  modelName)
 
         if not data.conversationId:
             # 生成title
-            asyncio.create_task(genTitle(data.text, final_res, bishengllm, conversationId))
+            asyncio.create_task(
+                genTitle(data.text, final_result.content if final_result else final_res, bishengllm, conversationId))
 
-    return StreamingResponse(event_stream(), media_type='text/event-stream')
+    try:
+        return StreamingResponse(event_stream(), media_type='text/event-stream')
+    finally:
+        end_time = time.time()
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=ApplicationAliveEventData(
+                                              app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                                              app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+                                              app_type=ApplicationTypeEnum.DAILY_CHAT,
+                                              chat_id=conversationId,
+
+                                              start_time=int(start_time),
+                                              end_time=int(end_time)
+                                          ))
+        await telemetry_service.log_event(user_id=login_user.user_id,
+                                          event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
+                                          trace_id=trace_id_var.get(),
+                                          event_data=ApplicationProcessEventData(
+                                              app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                                              app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+                                              app_type=ApplicationTypeEnum.DAILY_CHAT,
+                                              chat_id=conversationId,
+
+                                              start_time=int(start_time),
+                                              end_time=int(end_time),
+                                              process_time=int((end_time - start_time) * 1000)
+                                          ))
 
 
 @router.get('/app/frequently_used')
-def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
+def frequently_used_chat(login_user: UserPayload = Depends(UserPayload.get_login_user),
                          user_link_type: Optional[str] = 'app',
                          page: Optional[int] = 1,
                          limit: Optional[int] = 8
@@ -485,15 +587,18 @@ def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
 
 
 @router.post('/app/frequently_used')
-def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
+def frequently_used_chat(login_user: UserPayload = Depends(UserPayload.get_login_user),
                          data: FrequentlyUsedChat = Body(..., description='添加常用应用')
                          ):
-    WorkFlowService.add_frequently_used_flows(login_user, data.user_link_type, data.type_detail)
-    return resp_200(message='添加成功')
+    is_new = WorkFlowService.add_frequently_used_flows(login_user, data.user_link_type, data.type_detail)
+    if is_new:
+        return resp_200(message='添加成功')
+    else:
+        return AgentAlreadyExistsError.return_resp()
 
 
 @router.delete('/app/frequently_used')
-def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
+def frequently_used_chat(login_user: UserPayload = Depends(UserPayload.get_login_user),
                          user_link_type: Optional[str] = None,
                          type_detail: Optional[str] = None
                          ):
@@ -502,7 +607,7 @@ def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
 
 
 @router.get('/app/uncategorized')
-def get_uncategorized_chat(login_user: UserPayload = Depends(get_login_user),
+def get_uncategorized_chat(login_user: UserPayload = Depends(UserPayload.get_login_user),
                            page: Optional[int] = 1,
                            limit: Optional[int] = 8):
     data, _ = WorkFlowService.get_uncategorized_flows(login_user, page, limit)

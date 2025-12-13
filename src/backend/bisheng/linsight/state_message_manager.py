@@ -1,17 +1,19 @@
 import asyncio
 import pickle
 from enum import Enum
-from loguru import logger
 from typing import List, Dict, Any, Optional
 
+from loguru import logger
 from pydantic import BaseModel, Field
 
-from bisheng.cache.redis import redis_client
+from bisheng.api.v1.schema.linsight_schema import UserInputEventSchema
+from bisheng.common.errcode.http_error import ServerError
+from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
 from bisheng.database.models import LinsightExecuteTask
 from bisheng.database.models.linsight_execute_task import ExecuteTaskStatusEnum, LinsightExecuteTaskDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersion, LinsightSessionVersionDao
 from bisheng.utils.util import retry_async
-from bisheng_langchain.linsight.event import ExecStep
+from bisheng_langchain.linsight.event import BaseEvent
 
 
 class MessageEventType(str, Enum):
@@ -64,7 +66,7 @@ class LinsightStateMessageManager:
             session_version_id: 会话版本ID
         """
         self._session_version_id = session_version_id
-        self._redis_client = redis_client
+        self._redis_client = get_redis_client_sync()
         self._logger = logger
 
         # Redis key管理
@@ -257,13 +259,14 @@ class LinsightStateMessageManager:
             raise
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
-    async def set_user_input(self, task_id: str, user_input: str) -> None:
+    async def set_user_input(self, task_id: str, user_input: str, files: List[Dict[str, str]] = None) -> None:
         """
         设置用户输入
 
         Args:
             task_id: 任务ID
             user_input: 用户输入内容
+            files: 相关文件列表
         """
         task_key = f"{self._keys['execution_tasks']}{task_id}"
 
@@ -274,7 +277,17 @@ class LinsightStateMessageManager:
             if not task_model:
                 raise ValueError(f"Task with ID {task_id} not found in Redis or database.")
 
-            task_model.user_input = user_input
+            user_input_event = task_model.history[-1] if task_model.history else None
+            if user_input_event is None or user_input_event.get("step_type") != "call_user_input":
+                raise ValueError(f"Task with ID {task_id} does not support user input.")
+
+            user_input_event = UserInputEventSchema.model_validate(user_input_event)
+
+            user_input_event.user_input = user_input
+            user_input_event.files = files
+            user_input_event.is_completed = True
+            task_model.history[-1] = user_input_event.model_dump()
+
             task_model.status = ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
 
             # 使用事务确保数据一致性
@@ -285,15 +298,15 @@ class LinsightStateMessageManager:
             # 更新数据库
             await LinsightExecuteTaskDao.update_by_id(
                 task_id,
-                user_input=user_input,
-                status=ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
+                status=ExecuteTaskStatusEnum.USER_INPUT_COMPLETED,
+                history=task_model.history
             )
 
             self._logger.info(f"Set user input for task {task_id}")
 
         except Exception as e:
             self._logger.error(f"Failed to set user input for task {task_id}: {e}")
-            raise
+            raise ServerError.http_exception()
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
     async def get_execution_task(self, task_id: str) -> Optional[LinsightExecuteTask]:
@@ -324,7 +337,7 @@ class LinsightStateMessageManager:
             return None
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
-    async def add_execution_task_step(self, task_id: str, step: ExecStep) -> None:
+    async def add_execution_task_step(self, task_id: str, step: BaseEvent) -> None:
         """
         添加执行任务步骤
 
@@ -399,10 +412,10 @@ class LinsightStateMessageManager:
         """
         try:
             pattern = f"{self._key_prefix}*"
-            keys = await self._redis_client.keys(pattern)
+            keys = await self._redis_client.akeys(pattern)
 
             if keys:
-                await self._redis_client.delete(*keys)
+                await self._redis_client.adelete(*keys)
                 self._logger.info(f"Cleaned up {len(keys)} keys for session {self._session_version_id}")
 
         except Exception as e:
@@ -419,14 +432,14 @@ class LinsightStateMessageManager:
         try:
             stats = {
                 'session_version_id': self._session_version_id,
-                'message_count': await self._redis_client.llen(self._keys['messages']),
+                'message_count': await self._redis_client.allen(self._keys['messages']),
                 'has_session_info': await self._redis_client.exists(self._keys['session_version_info']),
                 'task_count': 0
             }
 
             # 计算任务数量
             pattern = f"{self._keys['execution_tasks']}*"
-            task_keys = await self._redis_client.keys(pattern)
+            task_keys = await self._redis_client.akeys(pattern)
             stats['task_count'] = len(task_keys)
 
             return stats
@@ -435,7 +448,6 @@ class LinsightStateMessageManager:
             self._logger.error(f"Failed to get session stats: {e}")
             return {'error': str(e)}
 
-
     # 清理所有会话相关的Redis数据
     @classmethod
     async def cleanup_all_sessions(cls) -> None:
@@ -443,6 +455,7 @@ class LinsightStateMessageManager:
         清理所有会话相关的Redis数据
         """
         try:
+            redis_client = await get_redis_client()
             pattern = f"{cls.KEY_PREFIX}*"
             keys = await redis_client.async_connection.keys(pattern)
 

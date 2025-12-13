@@ -37,8 +37,8 @@ const Item = ({ item, index, validate, onUpdateItem, onDeleteItem }) => {
                 </SelectTrigger>
                 <SelectContent>
                     <SelectGroup>
-                        <SelectItem value="str">str</SelectItem>
-                        <SelectItem value="list">list</SelectItem>
+                        <SelectItem value="str">String</SelectItem>
+                        <SelectItem value="list">List</SelectItem>
                     </SelectGroup>
                 </SelectContent>
             </Select>
@@ -47,7 +47,7 @@ const Item = ({ item, index, validate, onUpdateItem, onDeleteItem }) => {
     );
 };
 
-export default function CodeOutputItem({ nodeId, data, onValidate, onChange }) {
+export default function CodeOutputItem({ nodeId, data, onValidate, onChange, i18nPrefix }) {
     const { t } = useTranslation('flow');
     const [items, setItems] = useState(data.value);
 

@@ -72,7 +72,11 @@ export const useLinsightWebSocket = (versionId) => {
         websocket.onmessage = (event) => {
             const taskData = JSON.parse(event.data);
             console.log('ws data :>> ', taskData);
-
+            /**
+             * 生成一级任务list
+             * 生成当前一级任务下的二级任务list
+             * 更新生成的任务信息
+             */
             switch (taskData.event_type) {
                 case 'task_generate':
                     // 生成一级任务
@@ -141,7 +145,7 @@ export const useLinsightWebSocket = (versionId) => {
                     });
                     break;
                 case 'user_input':
-                    const { task_id, call_reason } = taskData.data;
+                    const { task_id, call_reason, params } = taskData.data;
                     updateLinsight(id, (prev) => {
                         const newTasks = prev.tasks.map(task => {
                             if (task.id === task_id) {
@@ -150,7 +154,11 @@ export const useLinsightWebSocket = (versionId) => {
                                     ...task,
                                     status: taskData.event_type,
                                     event_type: taskData.event_type,
-                                    call_reason
+                                    params,
+                                    call_reason,
+                                    history: [...(task.history || []), {
+                                        ...taskData.data
+                                    }]
                                 };
                             } else {
                                 return {
@@ -163,7 +171,11 @@ export const useLinsightWebSocket = (versionId) => {
                                                 ...child, // 关键修复：使用 child 而不是 task
                                                 status: taskData.event_type,
                                                 event_type: taskData.event_type,
-                                                call_reason
+                                                params,
+                                                call_reason,
+                                                history: [...(child.history || []), {
+                                                    ...taskData.data
+                                                }]
                                             };
                                         }
                                         return child;
@@ -179,7 +191,7 @@ export const useLinsightWebSocket = (versionId) => {
                 case 'task_end':
                     updateLinsight(id, (prev) => {
                         const newStatus = taskData.data.status
-                        const errorMsg = taskData.data.result.answer
+                        const errorMsg = taskData.data.result?.answer
                         if (!taskData.data.parent_task_id) {
                             // 更新一级任务
                             const newTasks = prev.tasks.map(task =>
@@ -323,14 +335,41 @@ export const useLinsightWebSocket = (versionId) => {
         toggleNav(true)
     }, [versionId])
 
-    const sendInput = useCallback(({ task_id, user_input }) => {
+    const sendInput = useCallback(({ task_id, user_input, files }) => {
         if (MOCK) {
             const ws = connections[versionId];
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ user_input }));
             }
         } else {
-            userInputLinsightEvent(versionId, task_id, user_input)
+            userInputLinsightEvent(versionId, task_id, user_input, files.map((file) => file.result))
+            // update is_completed user_input files
+            // @ts-ignore
+            updateLinsight(versionId, (prev) => ({
+                ...prev,
+                tasks: prev.tasks.map(task => ({
+                    ...task,
+                    status: task_id === task.id ? "success" : task.status,
+                    history: task.history?.map(h => ({
+                        ...h,
+                        is_completed: true,
+                        user_input: h.user_input || user_input,
+                        files: h.files || files
+                    })),
+                    children: task.children
+                        ? task.children.map(child => ({
+                            ...child,
+                            status: task_id === child.id ? "success" : child.status,
+                            history: child.history?.map(h => ({
+                                ...h,
+                                is_completed: true,
+                                user_input: h.user_input || user_input,
+                                files: h.files || files
+                            })),
+                        }))
+                        : [],
+                })),
+            }));
         }
     }, [versionId]);
 

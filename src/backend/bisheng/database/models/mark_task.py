@@ -6,8 +6,8 @@ from typing import List, Optional
 from sqlalchemy import Column, DateTime, and_, delete, func, or_, text
 from sqlmodel import Field, select, update
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database import get_sync_db_session
 
 
 class MarkTaskStatus(Enum):
@@ -23,10 +23,10 @@ class MarkTaskBase(SQLModelSerializable):
     process_users: str = Field(index=False)  # 23,2323
     mark_user: Optional[str] = Field(default=None, index=True, nullable=True)
     status: Optional[int] = Field(index=False, default=1)
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class MarkTask(MarkTaskBase, table=True):
@@ -42,7 +42,7 @@ class MarkTaskDao(MarkTaskBase):
 
     @classmethod
     def create_task(cls, task_info: MarkTask) -> MarkTask:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(task_info)
             session.commit()
             session.refresh(task_info)
@@ -50,32 +50,32 @@ class MarkTaskDao(MarkTaskBase):
 
     @classmethod
     def delete_task(cls, task_id: int):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             st = delete(MarkTask).where(MarkTask.id == task_id)
             session.exec(st)
             session.commit()
 
     @classmethod
     def get_task_byid(cls, task_id: int) -> MarkTask:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(MarkTask).where(MarkTask.id == task_id)
             return session.exec(statement).first()
 
     @classmethod
     def get_task(cls, user_id: int) -> MarkTask:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(MarkTask).where(MarkTask.process_users.like('%{}%'.format(user_id)))
             return session.exec(statement).first()
 
     @classmethod
     def get_task_list_byuid(cls, user_id: int, task_id: int) -> MarkTask:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(MarkTask).where(MarkTask.id == task_id)
             return session.exec(statement).first()
 
     @classmethod
     def update_task(cls, task_id: int, status: int):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             st = update(MarkTask).where(MarkTask.id == task_id).values(status=status)
             session.exec(st)
             session.commit()
@@ -86,7 +86,7 @@ class MarkTaskDao(MarkTaskBase):
             page_size: int = 10,
             page_num: int = 1,
     ):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(MarkTask)
             total_count_query = select(func.count()).select_from(statement.alias('subquery'))
             statement = statement.order_by(MarkTask.create_time.desc())
@@ -103,7 +103,7 @@ class MarkTaskDao(MarkTaskBase):
             page_size: int = 10,
             page_num: int = 1,
     ):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(MarkTask)
 
             filter = []

@@ -5,6 +5,15 @@ import { useTranslation } from "react-i18next";
 import cloneDeep from "lodash-es/cloneDeep";
 import { useReactFlow } from "@xyflow/react";
 
+export function useMiniDebounce(fn, delay = 300) {
+    const timer = useRef(null)
+
+    return useCallback((...args) => {
+        if (timer.current) clearTimeout(timer.current)
+        timer.current = setTimeout(() => fn(...args), delay)
+    }, [fn, delay])
+}
+
 // 防抖
 export function useDebounce(func: any, wait: number, immediate: boolean, callback?: any,): (any?: any) => any {
     let timer = useRef<NodeJS.Timeout | null>();
@@ -72,7 +81,7 @@ export function useTable<T extends object>(param, apiFun) {
     const [data, setData] = useState<T[]>([]);
     const [loaded, setLoaded] = useState(false);
 
-    const paramRef = useRef({});
+    const paramRef = useRef({ ...param });
 
     const requestIdRef = useRef(0); // 控制请求响应顺序
     const loadData = () => {
@@ -127,7 +136,13 @@ export function useTable<T extends object>(param, apiFun) {
         refreshData: (compareFn, data) => {
             // 乐观更新
             setData(list => {
-                return list.map(item => compareFn(item) ? { ...item, ...data } : item)
+                return list.map(item => {
+                    if (compareFn(item)) {
+                        const other = typeof data === 'function' ? data(item) : data
+                        return { ...item, ...other }
+                    }
+                    return item
+                })
             })
         },
         clean: () => {

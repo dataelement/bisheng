@@ -3,11 +3,11 @@ import { TrashIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
 import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
-import { useAssistantLLmModel } from "@/pages/ModelPage/manage";
+import { useModel } from "@/pages/ModelPage/manage";
 import { ModelSelect } from "@/pages/ModelPage/manage/tabs/KnowledgeModel";
 import { Plus } from "lucide-react";
-import { useEffect } from "react";
 import { forwardRef } from "react";
+import { useTranslation } from "react-i18next";
 
 export interface Model {
     key: string;
@@ -26,9 +26,10 @@ interface ModelManagementProps {
 }
 export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps>(
     ({ models, errors, error, onAdd, onRemove, onModelChange, onNameChange }, ref) => {
-        const { llmOptions } = useAssistantLLmModel();
+        const { llmOptions } = useModel();
+        const { t } = useTranslation();
 
-        // 将 ref 绑定到每个模型项
+        // Bind ref to each model item
         const setItemRef = (el: HTMLDivElement | null, index: number) => {
             const refs = ref as React.MutableRefObject<(HTMLDivElement | null)[]>;
             if (refs.current) {
@@ -37,7 +38,7 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
         };
 
         // useEffect(() => {
-        // 如果模型列表为空，则自动添加一个模型
+        // If the model list is empty, automatically add a model
         // models.forEach((model, index) => {
         //     !model.id && llmOptions.length && onModelChange(index, llmOptions[0].children[0].value)
         // })
@@ -45,8 +46,8 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
 
         return (<div className="mt-2 border p-4 rounded-md bg-muted">
             <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(2, 1fr) 40px" }}>
-                <Label className="bisheng-label">模型</Label>
-                <Label className="bisheng-label">显示名称</Label>
+                <Label className="bisheng-label">{t('bench.model')}</Label>
+                <Label className="bisheng-label">{t('bench.displayName')}</Label>
                 <div></div>
             </div>
             {models.map((model, index) => (
@@ -74,7 +75,7 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                         <Input
                             value={model.displayName}
                             onChange={(e) => onNameChange(index, e.target.value)}
-                            placeholder="显示名称"
+                            placeholder={t('bench.displayName')}
                         />
                         {errors[model.key] && <p className="text-red-500 text-xs mt-1">{errors[model.key]?.[1]}</p>}
                     </div>

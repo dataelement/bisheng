@@ -6,13 +6,13 @@ from typing import List, Dict, Any
 from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models import LinsightSessionVersion, LinsightExecuteTask
 from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao, ExecuteTaskStatusEnum
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager
-from bisheng.settings import settings
+from bisheng.common.services.config_service import settings
 from bisheng.utils import util
-from bisheng.utils.minio_client import minio_client
 from bisheng.utils.util import sync_func_to_async
 from bisheng_langchain.linsight.event import ExecStep
 
@@ -31,10 +31,8 @@ step_event_extra_tool_dict = {
 
 
 # 获取任务中的所有操作过的文件
-async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask], file_details: List[Dict]) -> list[
-                                                                                                                  Any] | \
-                                                                                                              list[
-                                                                                                                  Exception | BaseException | None]:
+async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask], file_details: List[Dict]) -> \
+        list[Any] | list[Exception | BaseException | None]:
     """
     获取会话中所有操作过的文件
     :param file_details:
@@ -42,31 +40,7 @@ async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask],
     :return: 包含文件详情的列表
     """
     # 过程文件列表
-    all_from_session_files = []
-    for task in execution_tasks:
-        if task.history is None or not task.history:
-            continue
-
-        for history in task.history:
-            history_name = history.get("name", "")
-            if history_name not in local_file_tool_dict.keys():
-                continue
-
-            file_path = history.get("params", {}).get(local_file_tool_dict[history_name], "")
-
-            if not file_path:
-                continue
-
-            file_name = os.path.basename(file_path)
-
-            # 从 file_details 中查找文件信息
-            file_info = next((f for f in file_details if f["file_name"] == file_name), None)
-
-            # 如果文件信息不存在，则跳过
-            if not file_info:
-                continue
-
-            all_from_session_files.append(file_info)
+    all_from_session_files = file_details
 
     # 去重
     seen = set()
@@ -84,12 +58,13 @@ async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask],
     async def upload_file_to_minio(file_info: Dict) -> dict | None:
         """上传文件到MinIO并返回文件信息"""
         try:
+            minio_client = await get_minio_storage()
             object_name = f"linsight/session_files/{execution_tasks[0].session_version_id}/{file_info['file_name']}"
             # Use async upload if available, otherwise wrap sync call
-            await sync_func_to_async(minio_client.upload_minio)(
+            await minio_client.put_object(
                 bucket_name=minio_client.bucket,
                 object_name=object_name,
-                file_path=file_info["file_path"]
+                file=file_info["file_path"]
             )
             file_info["file_url"] = minio_client.clear_minio_share_host(minio_client.get_share_link(object_name))
             return file_info
@@ -171,10 +146,11 @@ async def get_final_result_file(session_model: LinsightSessionVersion, file_deta
         try:
             object_name = f"linsight/final_result/{session_model.id}/{final_file_info['file_name']}"
             # Use async upload if available, otherwise wrap sync call
-            await sync_func_to_async(minio_client.upload_minio)(
+            minio_client = await get_minio_storage()
+            await minio_client.put_object(
                 bucket_name=minio_client.bucket,
                 object_name=object_name,
-                file_path=final_file_info["file_path"]
+                file=final_file_info["file_path"]
             )
             final_file_info["file_url"] = minio_client.clear_minio_share_host(minio_client.get_share_link(object_name))
             return final_file_info
@@ -255,11 +231,12 @@ async def handle_step_event_extra(event: ExecStep, task_exec_obj) -> ExecStep:
             object_name = f"linsight/step_event/{task_exec_obj.session_version_id}/{uuid.uuid4().hex[:8]}.{file_name.split('.')[-1]}"
             logger.debug(f"步骤事件额外处理，上传文件到MinIO: {object_name}")
 
+            minio_client = await get_minio_storage()
             # 上传文件到MinIO
-            await sync_func_to_async(minio_client.upload_minio)(
+            await minio_client.put_object(
                 bucket_name=minio_client.bucket,
                 object_name=object_name,
-                file_path=file_path
+                file=file_path
             )
 
             event.extra_info["file_info"] = {
@@ -306,7 +283,7 @@ async def check_and_terminate_incomplete_tasks():
             session_version_ids=session_version_ids,
             status=SessionVersionStatusEnum.FAILED,
             output_result={
-                "error_message":"后端服务重启"
+                "error_message": "后端服务重启"
             }
         )
 

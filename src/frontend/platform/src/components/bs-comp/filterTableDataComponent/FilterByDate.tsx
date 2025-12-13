@@ -4,9 +4,10 @@ import { useCallback } from "react";
 interface DateFilterProps {
     value?: [Date | null, Date | null];
     onChange: (value: [Date | null, Date | null]) => void;
+    placeholders?: [string, string];
 }
 
-export default function FilterByDate({ value = [null, null], onChange }: DateFilterProps) {
+export default function FilterByDate({ value = [null, null], placeholders = ['Start Date', 'End Date'], onChange }: DateFilterProps) {
     const [startDate, endDate] = value;
 
     /**
@@ -42,14 +43,14 @@ export default function FilterByDate({ value = [null, null], onChange }: DateFil
             <div className="w-[180px] relative">
                 <DatePicker
                     value={startDate}
-                    placeholder="开始日期"
+                    placeholder={placeholders[0]}
                     onChange={(v) => handleDateChange("start", v)}
                 />
             </div>
             <div className="w-[180px] relative">
                 <DatePicker
                     value={endDate}
-                    placeholder="结束日期"
+                    placeholder={placeholders[1]}
                     onChange={(v) => handleDateChange("end", v)}
                 />
             </div>

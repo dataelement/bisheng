@@ -6,15 +6,15 @@ import { userContext } from "@/contexts/userContext"
 import { useContext, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 // import { transformModule, transformEvent, transformObjectType } from "../LogPage/utils"
+import { LoadingIcon } from "@/components/bs-icons/loading"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { QuestionTooltip } from "@/components/bs-ui/tooltip"
 import { changeLLmServerStatus, getAssistantModelList, getModelListApi } from "@/controllers/API/finetune"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { CircleMinus, CirclePlus } from "lucide-react"
+import { useQuery } from "react-query"
 import ModelConfig from "./ModelConfig"
 import SystemModelConfig from "./SystemModelConfig"
-import { LoadingIcon } from "@/components/bs-icons/loading"
-import { useQuery } from "react-query"
 
 function CustomTableRow({ data, index, user, onModel, onCheck }) {
     const { t } = useTranslation()
@@ -88,12 +88,13 @@ export default function Management() {
     const [modelId, setModelId] = useState(null)
     const [systemModel, setSystemModel] = useState(false)
     const [loading, setLoading] = useState(false)
-    const { refetch } = useAssistantLLmModel()
+    const { refetch } = useModel()
 
     const reload = async () => {
         setLoading(true)
         setData(await getModelListApi())
         setLoading(false)
+        refetch()
     }
     useEffect(() => { reload() }, [])
 
@@ -112,7 +113,7 @@ export default function Management() {
     }
     const { message } = useToast()
 
-    // off&online
+    // off & online
     const handleCheck = (index, bool, id) => {
         captureAndAlertRequestErrorHoc(changeLLmServerStatus(id, bool).then(res => {
             refetch()
@@ -176,41 +177,67 @@ export default function Management() {
 
 }
 
-
-export function useAssistantLLmModel() {
-
-    const { data, refetch } = useQuery({
-        queryKey: "QueryModelsKey",
-        queryFn: () => getModelListApi(),
+// model list（embeddings llm）
+export function useModel(type = 'llm') {
+    const { data, isLoading, refetch } = useQuery({
+        queryKey: type === 'llm' ? "QueryModelsKey" : "QueryAssistantModelsKey",
+        queryFn: () => type === 'llm' ? getModelListApi() : getAssistantModelList(),
         select: (data) => {
             const llmOptions = []
             const embeddings = []
+            const asrModel = []
+            const ttsModel = []
+            const rerank = []
             data.forEach(server => {
                 const serverEmbItem = { value: server.id, label: server.name, children: [] }
                 const serverLlmItem = { value: server.id, label: server.name, children: [] }
+                const serverAsrItem = { value: server.id, label: server.name, children: [] }
+                const serverTtsItem = { value: server.id, label: server.name, children: [] }
+                const rerankItem = { value: server.id, label: server.name, children: [] }
                 server.models.forEach(model => {
                     const item = {
                         value: String(model.id),
                         label: model.model_name
                     }
                     if (!model.online) return
-
-                    model.model_type === 'embedding' ?
-                        serverEmbItem.children.push(item) : serverLlmItem.children.push(item)
+                    if (model.model_type === 'asr') {
+                        serverAsrItem.children.push(item)
+                    } else if (model.model_type === 'tts') {
+                        serverTtsItem.children.push(item)
+                    } else if (model.model_type === 'embedding') {
+                        serverEmbItem.children.push(item)
+                    } else if (model.model_type === 'llm') {
+                        serverLlmItem.children.push(item)
+                    } else {
+                        rerankItem.children.push(item)
+                    }
                 })
 
                 if (serverLlmItem.children.length) llmOptions.push(serverLlmItem)
                 if (serverEmbItem.children.length) embeddings.push(serverEmbItem)
+                if (serverAsrItem.children.length) asrModel.push(serverAsrItem)
+                if (serverTtsItem.children.length) ttsModel.push(serverTtsItem)
+                if (rerankItem.children.length) rerank.push(rerankItem)
             });
 
-            return [llmOptions, embeddings]; // 返回选择的结果
+            return { llmOptions, embeddings, asrModel, ttsModel, rerank }
         }
     });
 
-    const [llmOptions, embeddings] = data ?? [[], []];
+    const {
+        llmOptions = [],
+        embeddings = [],
+        asrModel = [],
+        ttsModel = [],
+        rerank=[]
+    } = data ?? {};
     return {
         llmOptions,
         embeddings,
+        asrModel,
+        ttsModel,
+        isLoading,
+        rerank,
         refetch
     }
 }

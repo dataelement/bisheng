@@ -18,9 +18,18 @@ export interface AssistantItemDB {
  * @returns Promise<any> 创建工具的结果
  */
 export const createTool = async (data: any): Promise<any> => {
-    return await axios.post(`/api/v1/assistant/tool_list`, data);
+    return await axios.post(`/api/v1/tool`, data);
 };
 
+export const getToolsApi = async (type: 'all' | 'default' | 'custom' | 'mcp'): Promise<any> => {
+    const queryStr = {
+        all: '',
+        default: '?is_preset=1',
+        custom: '?is_preset=0',
+        mcp: '?is_preset=2'
+    }
+    return await axios.get(`/api/v1/tool${queryStr[type]}`)
+};
 /**
  * 修改工具接口
  * PUT请求
@@ -28,7 +37,7 @@ export const createTool = async (data: any): Promise<any> => {
  * @returns Promise<any> 修改工具的结果
  */
 export const updateTool = async (data: any): Promise<any> => {
-    return await axios.put(`/api/v1/assistant/tool_list`, data);
+    return await axios.put(`/api/v1/tool`, data);
 };
 
 /**
@@ -39,12 +48,17 @@ export const updateTool = async (data: any): Promise<any> => {
 export const deleteTool = async (id: number): Promise<any> => {
     return await axios({
         method: 'delete',
-        url: '/api/v1/assistant/tool_list',
+        url: '/api/v1/tool',
         data: {
             tool_type_id: id
         }
     })
 };
+
+// 修改内置工具配置
+export const updateToolApi = async (tool_id, extra) => {
+    return await axios.post(`/api/v1/tool/config`, { tool_id, extra })
+}
 
 /**
  * 下载或解析tool schema的内容接口
@@ -54,7 +68,7 @@ export const deleteTool = async (id: number): Promise<any> => {
  * @returns Promise<any> 下载或解析tool schema的结果
  */
 export const downloadToolSchema = async (data: { download_url: string } | { file_content: string }): Promise<any> => {
-    return await axios.post(`/api/v1/assistant/tool_schema`, data);
+    return await axios.post(`/api/v1/tool/schema`, data);
 };
 
 /**
@@ -66,8 +80,8 @@ export const getMcpServeByConfig = async (data: { file_content: string }): Promi
         getMcpServeByConfigController.abort();
     }
     getMcpServeByConfigController = new AbortController();
-    const promise = await axios.post(`/api/v1/assistant/mcp/tool_schema`, data, {
-        signal: getMcpServeByConfigController.signal, // 绑定取消信号
+    const promise = await axios.post(`/api/v1/tool/mcp/schema`, data, {
+        signal: getMcpServeByConfigController.signal, // cancel abort
     });
     getMcpServeByConfigController = null;
     return promise;
@@ -79,7 +93,7 @@ export const getMcpServeByConfig = async (data: { file_content: string }): Promi
 export const testMcpApi = async (data: { file_content: string }) => {
     return await axios({
         method: 'post',
-        url: '/api/v1/assistant/mcp/tool_test',
+        url: '/api/v1/tool/mcp/test',
         data
     })
 }
@@ -101,7 +115,7 @@ export const testToolApi = async (data: {
 }): Promise<any> => {
     return await axios({
         method: 'post',
-        url: '/api/v1/assistant/tool_test',
+        url: '/api/v1/tool/test',
         data
     })
 };

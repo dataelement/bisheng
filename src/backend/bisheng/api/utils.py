@@ -1,20 +1,16 @@
 import hashlib
-import json
-import xml.dom.minidom
 from pathlib import Path
-from typing import Dict, List
 
 import aiohttp
-from bisheng.api.v1.schemas import StreamData
-from bisheng.database.base import session_getter
-from bisheng.database.models.variable_value import Variable
-from bisheng.graph.graph.base import Graph
-from bisheng.utils.logger import logger
-from fastapi import Request, WebSocket
-from fastapi_jwt_auth import AuthJWT
+from loguru import logger
 from platformdirs import user_cache_dir
 from sqlalchemy import delete
 from sqlmodel import select
+
+from bisheng.api.v1.schemas import StreamData
+from bisheng.core.database import get_sync_db_session
+from bisheng.database.models.variable_value import Variable
+from bisheng.graph.graph.base import Graph
 
 API_WORDS = ['api', 'key', 'token']
 
@@ -194,7 +190,7 @@ async def build_flow_no_yield(graph_data: dict,
                 # 注入user_name
                 vertex.params['user_name'] = kwargs.get('user_name') if kwargs else ''
                 if vertex.vertex_type not in [
-                        'MilvusWithPermissionCheck', 'ElasticsearchWithPermissionCheck'
+                    'MilvusWithPermissionCheck', 'ElasticsearchWithPermissionCheck'
                 ]:
                     # 知识库通过参数传参
                     if 'collection_name' in kwargs and 'collection_name' in vertex.params:
@@ -231,17 +227,6 @@ async def build_flow_no_yield(graph_data: dict,
     return graph
 
 
-async def check_permissions(Authorize: AuthJWT, roles: List[str]):
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    user_roles = [payload.get('role')] if isinstance(payload.get('role'),
-                                                     str) else payload.get('role')
-    if any(role in roles for role in user_roles):
-        return True
-    else:
-        raise ValueError('权限不够')
-
-
 def get_L2_param_from_flow(flow_data: dict, flow_id: str, version_id: int = None):
     graph = Graph.from_payload(flow_data)
     node_id = []
@@ -254,7 +239,7 @@ def get_L2_param_from_flow(flow_data: dict, flow_id: str, version_id: int = None
         elif node.vertex_type in {'VariableNode'}:
             variable_ids.append(node.id)
 
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         db_variables = session.exec(
             select(Variable).where(Variable.flow_id == flow_id,
                                    Variable.version_id == version_id)).all()
@@ -380,41 +365,6 @@ def update_frontend_node_with_template_values(frontend_node, raw_frontend_node):
     return frontend_node
 
 
-def parse_server_host(endpoint: str):
-    """ 将数据库中的endpoints解析为http请求的host """
-    endpoint = endpoint.replace('http://', '').split('/')[0]
-    return f'http://{endpoint}'
-
-
-# 将 nvidia-smi -q  -x 的输出解析为可视化数据
-def parse_gpus(gpu_str: str) -> List[Dict]:
-    dom_tree = xml.dom.minidom.parseString(gpu_str)
-    collections = dom_tree.documentElement
-    gpus = collections.getElementsByTagName('gpu')
-    res = []
-    for one in gpus:
-        fb_mem_elem = one.getElementsByTagName('fb_memory_usage')[0]
-        gpu_uuid_elem = one.getElementsByTagName('uuid')[0]
-        gpu_id_elem = one.getElementsByTagName('minor_number')[0]
-        gpu_total_mem = fb_mem_elem.getElementsByTagName('total')[0]
-        free_mem = fb_mem_elem.getElementsByTagName('free')[0]
-        gpu_utility_elem = one.getElementsByTagName('utilization')[0].getElementsByTagName(
-            'gpu_util')[0]
-        res.append({
-            'gpu_uuid':
-            gpu_uuid_elem.firstChild.data,
-            'gpu_id':
-            gpu_id_elem.firstChild.data,
-            'gpu_total_mem':
-            '%.2f G' % (float(gpu_total_mem.firstChild.data.split(' ')[0]) / 1024),
-            'gpu_used_mem':
-            '%.2f G' % (float(free_mem.firstChild.data.split(' ')[0]) / 1024),
-            'gpu_utility':
-            round(float(gpu_utility_elem.firstChild.data.split(' ')[0]) / 100, 2)
-        })
-    return res
-
-
 async def get_url_content(url: str) -> str:
     """ 获取接口的返回的body内容 """
     async with aiohttp.ClientSession() as session:
@@ -423,14 +373,6 @@ async def get_url_content(url: str) -> str:
                 raise Exception(f'Failed to download content, HTTP status code: {response.status}')
             res = await response.read()
             return res.decode('utf-8')
-
-
-def get_request_ip(request: Request | WebSocket) -> str:
-    """ 获取客户端真实IP """
-    x_forwarded_for = request.headers.get('X-Forwarded-For')
-    if x_forwarded_for:
-        return x_forwarded_for.split(',')[0]
-    return request.client.host
 
 
 def md5_hash(original_string: str):

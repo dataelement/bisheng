@@ -34,8 +34,9 @@ const enum KnowledgeType {
 }
 type KnowledgeTypeValues = `${KnowledgeType}`;
 
-export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent, onValidate }) {
+export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent, onValidate, i18nPrefix }) {
     const { flow } = useFlowStore()
+    const { t } = useTranslation('flow')
 
     const currentTabRef = useRef(data.value.type)
     const [tabType, setTabType] = useState<KnowledgeTypeValues>(data.value.type)
@@ -43,7 +44,6 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
         return { label: el.label, value: el.key }
     }))
 
-    const { t } = useTranslation()
     const [options, setOptions] = useState<any>([]);
     const [fileOptions, setFileOptions] = useState<any>([])
     const originOptionsRef = useRef([])
@@ -124,12 +124,11 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
         onValidate((config) => {
             if (data.required && !data.value.value.length) {
                 setError(true)
-                return data.label + ' ' + t('required')
+            //    return `${t(`${i18nPrefix}label`)} ${t('required')}\n选择的元数据字段无效或已被删除`;   
             }
             if (data.value.value.some(item => /input_[a-zA-Z0-9]+\.file/.test(item.key))) {
                 return 'input_file'
             }
-
             setError(false)
             return false
         })
@@ -145,7 +144,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
         // 单节点运行校验临时文件
         if (config?.tmp && data.value.value.length && data.value.type === 'tmp') {
             setError(true)
-            return '临时知识库不支持单节点调试'
+            return t('tmpKnowledgeBaseNotSupportSingleNodeDebug')
         }
         const _errorKeys = [];
         if (typeof value[0].value === 'number') {
@@ -158,7 +157,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
                     //     nodeName: flow.nodes.find(node => node.id === nodeId).data.name,
                     //     varNameCn: ''
                     // });
-                    error = `${flow.nodes.find(node => node.id === nodeId).data.name}节点错误：${el.label}不存在.`
+                    error = `${flow.nodes.find(node => node.id === nodeId).data.name}${t('nodeError')}: ${el.label} ${t('doesNotExist')}.`
                     error && _errorKeys.push(el.value);
                 }
                 setErrorKeys(_errorKeys);
@@ -185,7 +184,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
     return <div className='node-item mb-4'>
         <Label className="flex items-center bisheng-label mb-2">
             {data.required && <span className="text-red-500">*</span>}
-            {data.label}
+            {t(`${i18nPrefix}label`)}
         </Label>
         <MultiSelect
             id="knowledge-select-item"
@@ -197,8 +196,8 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
             hideSearch={tabType === KnowledgeType.Temp}
             value={value}
             options={tabType === KnowledgeType.Knowledge ? options : fileOptions}
-            placeholder={data.placeholder || ''}
-            searchPlaceholder={t('build.searchBaseName')}
+            placeholder={data.placeholder && t(`${i18nPrefix}placeholder`) || ''}
+            searchPlaceholder={t('build.searchBaseName', { ns: 'bs' })}
             onChange={handleSelect}
             onLoad={() => { reload(1, ''); loadFiles() }}
             onSearch={(val) => reload(1, val)}

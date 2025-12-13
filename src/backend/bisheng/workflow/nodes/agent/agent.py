@@ -2,24 +2,22 @@ import typing
 from typing import Any, Dict
 
 from langchain_core.messages import HumanMessage
+from langchain_core.retrievers import BaseRetriever
 from langchain_core.runnables import RunnableConfig
-from pydantic import BaseModel
-
-from bisheng_langchain.gpts.assistant import ConfigurableAssistant
-from bisheng_langchain.gpts.load_tools import load_tools
 from langgraph.prebuilt import create_react_agent
 from loguru import logger
+from pydantic import BaseModel, field_validator, Field
 
-from bisheng.api.services.assistant_agent import AssistantAgent
-from bisheng.api.services.llm import LLMService
-from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
-from bisheng.interface.importing.utils import import_vectorstore
-from bisheng.interface.initialize.loading import instantiate_vectorstore
-from bisheng.utils.embedding import decide_embeddings
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+from bisheng.llm.domain.services import LLMService
+from bisheng.tool.domain.services.executor import ToolExecutor
 from bisheng.workflow.callback.event import StreamMsgOverData
 from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
+from bisheng_langchain.gpts.assistant import ConfigurableAssistant
+from bisheng_langchain.gpts.load_tools import load_tools
 
 agent_executor_dict = {
     'ReAct': 'get_react_agent_executor',
@@ -29,12 +27,24 @@ agent_executor_dict = {
 
 class SqlAgentParams(BaseModel):
     """ SQL Agent 参数模型 """
-    database_engine: typing.Literal['mysql', 'db2', 'postgres', 'gaussdb', 'oracle']
+    database_engine: typing.Optional[str] = Field("mysql",
+                                                  description="数据库类型，支持mysql, db2, postgres, gaussdb, oracle")
     db_username: str
     db_password: str
     db_address: str
     db_name: str
     open: bool = False
+
+    @field_validator("database_engine")
+    @classmethod
+    def validate_database_engine(cls, v):
+        # 转换为小写
+        if v:
+            v = v.lower()
+            if v not in ['mysql', 'db2', 'postgres', 'gaussdb', 'oracle', 'postgresql']:
+                raise ValueError(
+                    "Unsupported database engine. Supported engines are: MySQL, DB2, PostgreSql, GaussDB, Oracle.")
+        return v
 
 
 class AgentNode(BaseNode):
@@ -62,10 +72,12 @@ class AgentNode(BaseNode):
         self._chat_history_flag = self.node_params['chat_history_flag']['value'] > 0
         self._chat_history_num = self.node_params['chat_history_flag']['value']
 
-        self._llm = LLMService.get_bisheng_llm(model_id=self.node_params['model_id'],
-                                               temperature=self.node_params.get(
-                                                   'temperature', 0.3),
-                                               cache=False)
+        self._llm = LLMService.get_bisheng_llm_sync(model_id=self.node_params['model_id'],
+                                                    temperature=self.node_params.get('temperature', 0.3),
+                                                    app_id=self.workflow_id,
+                                                    app_name=self.workflow_name,
+                                                    app_type=ApplicationTypeEnum.WORKFLOW,
+                                                    user_id=self.user_id)
 
         # 是否输出结果给用户
         self._output_user = self.node_params.get('output_user', False)
@@ -82,8 +94,9 @@ class AgentNode(BaseNode):
         ]
 
         # 是否支持nl2sql
-        self._sql_agent = SqlAgentParams.model_validate(self.node_params['sql_agent']) if self.node_params.get(
-            'sql_agent', None) else None
+        self._sql_agent_params = self.node_params.get('sql_agent', None)
+        self._sql_agent = SqlAgentParams.model_validate(self.node_params['sql_agent']) if (
+                self._sql_agent_params and self._sql_agent_params.get("open", False)) else None
         self._sql_address = ''
         if self._sql_agent and self._sql_agent.open:
             self._sql_address = self._init_sql_address()
@@ -94,7 +107,7 @@ class AgentNode(BaseNode):
 
     def _init_agent(self, system_prompt: str):
         # 获取配置的助手模型列表
-        assistant_llm = LLMService.get_assistant_llm()
+        assistant_llm = LLMService.sync_get_assistant_llm()
         if not assistant_llm.llm_list:
             raise Exception('助手推理模型列表为空')
         default_llm = [
@@ -127,7 +140,9 @@ class AgentNode(BaseNode):
     def _init_tools(self):
         if self._tools:
             tool_ids = [int(one['key']) for one in self._tools]
-            return AssistantAgent.init_tools_by_toolid(tool_ids, self._llm, None)
+            return ToolExecutor.init_by_tool_ids_sync(tool_ids, app_id=self.workflow_id, app_name=self.workflow_name,
+                                                      app_type=ApplicationTypeEnum.WORKFLOW,
+                                                      user_id=self.user_id)
         else:
             return []
 
@@ -148,62 +163,45 @@ class AgentNode(BaseNode):
         tools = []
         for index, knowledge_id in enumerate(self._knowledge_ids):
             if self._knowledge_type == 'knowledge':
-                knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
-                name = f'knowledge_{knowledge_id}'
-                description = f'{knowledge_info.name}:{knowledge_info.description}'
-                vector_client = self.init_knowledge_milvus(knowledge_info)
-                es_client = self.init_knowledge_es(knowledge_info)
+                knowledge_tool = ToolExecutor.init_knowledge_tool_sync(self.user_id, knowledge_id,
+                                                                       llm=self._llm,
+                                                                       **knowledge_retriever)
+                tools.append(knowledge_tool)
             else:
                 file_metadata_list = self.get_other_node_variable(knowledge_id)
                 if not file_metadata_list:
                     # 没有上传文件，则不去检索
                     continue
-
-                name = f'{knowledge_id.split(".")[-1].replace("#", "")}_knowledge_{index}'
                 description = ''
                 for one in file_metadata_list:
-                    description += f'<{one.get("source")}>:<{one.get("title")}>'
-                file_metadata = file_metadata_list[0]
-                vector_client = self.init_file_milvus(file_metadata)
-                es_client = self.init_file_es(file_metadata)
-
-            tool_params = {
-                'bisheng_rag': {
-                    'name': name,
-                    'description': description,
-                    'vector_store': vector_client,
-                    'keyword_store': es_client,
-                    'llm': self._llm,
+                    description += f'<{one.get("document_name")}>:<{one.get("abstract")}>; '
+                tool_init_params = {
+                    "name": f'{knowledge_id.split(".")[-1].replace("#", "")}_knowledge_{index}',
+                    "description": description,
+                    "vector_retriever": self.init_file_milvus(file_metadata_list[0]),
+                    "elastic_retriever": self.init_file_es(file_metadata_list[0]),
+                    "llm": self._llm,
                     **knowledge_retriever
                 }
-            }
-            tools.extend(load_tools(tool_params=tool_params, llm=self._llm))
-
+                tmp_file_tool = ToolExecutor.init_tmp_knowledge_tool_sync(**tool_init_params)
+                tools.append(tmp_file_tool)
         return tools
 
-    def init_knowledge_milvus(self, knowledge: Knowledge) -> 'Milvus':
-        """ 初始化用户选择的知识库的milvus """
-        params = {
-            'collection_name': knowledge.collection_name,
-            'embedding': decide_embeddings(knowledge.model)
-        }
-        if knowledge.collection_name.startswith('partition'):
-            params['partition_key'] = knowledge.id
-        return self._init_milvus(params)
-
-    def init_file_milvus(self, file_metadata: Dict) -> 'Milvus':
+    def init_file_milvus(self, file_metadata: Dict) -> BaseRetriever:
         """ 初始化用户选择的临时文件的milvus """
-        embeddings = LLMService.get_knowledge_default_embedding()
+        embeddings = LLMService.get_knowledge_default_embedding(self.user_id)
         if not embeddings:
             raise Exception('没有配置默认的embedding模型')
-        file_ids = [file_metadata['file_id']]
-        params = {
-            'collection_name': self.get_milvus_collection_name(getattr(embeddings, 'model_id')),
-            'partition_key': self.workflow_id,
-            'embedding': embeddings,
-            'metadata_expr': f'file_id in {file_ids}'
-        }
-        return self._init_milvus(params)
+        file_ids = [file_metadata['document_id']]
+        collection_name = self.get_milvus_collection_name(getattr(embeddings, 'model_id'))
+        vector_client = KnowledgeRag.init_milvus_vectorstore(collection_name=collection_name, embeddings=embeddings)
+        return vector_client.as_retriever(
+            search_kwargs={"expr": f'document_id in {file_ids}'})
+
+    def init_file_es(self, file_metadata: Dict):
+        es_client = KnowledgeRag.init_es_vectorstore_sync(index_name=self.tmp_collection_name)
+        return es_client.as_retriever(
+            search_kwargs={"filter": [{"term": {"metadata.document_id": file_metadata['document_id']}}]})
 
     def _init_sql_address(self) -> str:
         """ 初始化 SQL 数据库地址 """
@@ -221,7 +219,7 @@ class AgentNode(BaseNode):
             except ImportError:
                 raise ImportError('Please install ibm_db and ibm_db_sa to use db2 database')
             return f'db2+ibm_db://{self._sql_agent.db_username}:{self._sql_agent.db_password}@{self._sql_agent.db_address}/{self._sql_agent.db_name}'
-        elif self._sql_agent.database_engine == 'postgres':
+        elif self._sql_agent.database_engine in ['postgres', 'postgresql']:
             try:
                 pass
             except ImportError:
@@ -241,33 +239,6 @@ class AgentNode(BaseNode):
             return f'oracle+oracledb://{self._sql_agent.db_username}:{self._sql_agent.db_password}@{self._sql_agent.db_address}?service_name={self._sql_agent.db_name}'
         else:
             raise ValueError(f'Unsupported database engine: {self._sql_agent.database_engine}')
-
-    @staticmethod
-    def _init_milvus(params: dict):
-        class_obj = import_vectorstore('Milvus')
-        return instantiate_vectorstore('Milvus', class_object=class_obj, params=params)
-
-    def init_knowledge_es(self, knowledge: Knowledge):
-        params = {
-            'index_name': knowledge.index_name
-        }
-        return self._init_es(params)
-
-    def init_file_es(self, file_metadata: Dict):
-        params = {
-            'index_name': self.tmp_collection_name,
-            'post_filter': {
-                'terms': {
-                    'metadata.file_id': [file_metadata['file_id']]
-                }
-            }
-        }
-        return self._init_es(params)
-
-    @staticmethod
-    def _init_es(params: Dict):
-        class_obj = import_vectorstore('ElasticKeywordsSearch')
-        return instantiate_vectorstore('ElasticKeywordsSearch', class_object=class_obj, params=params)
 
     def _run(self, unique_id: str):
         ret = {}

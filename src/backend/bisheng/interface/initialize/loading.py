@@ -4,8 +4,21 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Sequence, Type
 
 import httpx
 import openai
-from bisheng.cache.utils import file_download
-from bisheng.database.models.knowledge import KnowledgeDao
+from langchain.agents import agent as agent_module
+from langchain.agents.agent import AgentExecutor
+from langchain.agents.agent_toolkits.base import BaseToolkit
+from langchain.agents.tools import BaseTool
+from langchain.chains.base import Chain
+from langchain.document_loaders.base import BaseLoader
+from langchain.vectorstores.base import VectorStore
+from langchain_community.utils.openai import is_openai_v1
+from loguru import logger
+from pydantic import SecretStr, ValidationError, create_model
+from pydantic.fields import FieldInfo
+
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+from bisheng.common.services.config_service import settings
+from bisheng.core.cache.utils import file_download
 from bisheng.interface.agents.base import agent_creator
 from bisheng.interface.chains.base import chain_creator
 from bisheng.interface.custom_lists import CUSTOM_NODES
@@ -21,22 +34,11 @@ from bisheng.interface.retrievers.base import retriever_creator
 from bisheng.interface.toolkits.base import toolkits_creator
 from bisheng.interface.utils import load_file_into_dict
 from bisheng.interface.wrappers.base import wrapper_creator
-from bisheng.settings import settings
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.llm.domain import LLMService
 from bisheng.utils import validate
 from bisheng.utils.constants import NODE_ID_DICT, PRESET_QUESTION
-from bisheng.utils.embedding import decide_embeddings
 from bisheng_langchain.vectorstores import VectorStoreFilterRetriever
-from langchain.agents import agent as agent_module
-from langchain.agents.agent import AgentExecutor
-from langchain.agents.agent_toolkits.base import BaseToolkit
-from langchain.agents.tools import BaseTool
-from langchain.chains.base import Chain
-from langchain.document_loaders.base import BaseLoader
-from langchain.vectorstores.base import VectorStore
-from langchain_community.utils.openai import is_openai_v1
-from loguru import logger
-from pydantic import SecretStr, ValidationError, create_model
-from pydantic.fields import FieldInfo
 
 if TYPE_CHECKING:
     from bisheng import CustomComponent
@@ -252,6 +254,7 @@ def instantiate_llm(node_type, class_object, params: Dict, user_llm_request: boo
     # This is a workaround so JinaChat works until streaming is implemented
     # if "openai_api_base" in params and "jina" in params["openai_api_base"]:
     # False if condition is True
+    params.pop('cache', None)
     if is_openai_v1() and params.get('openai_proxy'):
         params['http_client'] = httpx.Client(proxies=params.get('openai_proxy'))
         params['http_async_client'] = httpx.AsyncClient(proxies=params.get('openai_proxy'))
@@ -269,7 +272,11 @@ def instantiate_llm(node_type, class_object, params: Dict, user_llm_request: boo
             params['max_tokens'] = int(params['max_tokens'])
         elif not isinstance(params.get('max_tokens'), int):
             params.pop('max_tokens', None)
-
+    if node_type == 'BishengLLM':
+        params['app_id'] = "flow(will be deprecated)"
+        params['app_name'] = "flow(will be deprecated)"
+        params['app_type'] = ApplicationTypeEnum.SKILL
+        params['user_id'] = params.get('user_id', 0)
     llm = class_object(**params)
     llm_config = settings.get_from_db('llm_request')
     # 支持request_timeout & max_retries
@@ -464,7 +471,11 @@ def instantiate_embedding(class_object, params: Dict):
             del params['openai_proxy']
         if class_object.__name__ == 'OpenAIEmbeddings':
             params['check_embedding_ctx_length'] = False
-
+        elif class_object.__name__ == 'BishengEmbedding':
+            params['app_id'] = "flow(will be deprecated)"
+            params['app_name'] = "flow(will be deprecated)"
+            params['app_type'] = ApplicationTypeEnum.SKILL
+            params['user_id'] = params.get('user_id', 0)
         return class_object(**params)
     except ValidationError:
         params = {key: value for key, value in params.items() if key in class_object.__fields__}
@@ -504,12 +515,14 @@ def instantiate_vectorstore(node_type: str, class_object: Type[VectorStore], par
             params['partition_keys'] = []
             for knowledge in knowledge_list:
                 params[col_name].append(knowledge.collection_name)
-                params['collection_embeddings'].append(decide_embeddings(knowledge.model))
+                params['collection_embeddings'].append(
+                    LLMService.get_bisheng_knowledge_embedding_sync(0, model_id=int(knowledge.model)))
                 if knowledge.collection_name.startswith('partition'):
                     params['partition_keys'].append(knowledge.id)
                 else:
                     params['partition_keys'].append(None)
-            params['embedding'] = params['collection_embeddings'][0] if params['collection_embeddings'] else FakeEmbedding()
+            params['embedding'] = params['collection_embeddings'][0] if params[
+                'collection_embeddings'] else FakeEmbedding()
         else:
             params[col_name] = [
                 knowledge.index_name or knowledge.collection_name for knowledge in knowledge_list
@@ -578,8 +591,8 @@ def instantiate_documentloader(class_object: Type[BaseLoader], params: Dict):
 
 
 def instantiate_textsplitter(
-    class_object,
-    params: Dict,
+        class_object,
+        params: Dict,
 ):
     try:
         documents = params.pop('documents')
@@ -590,7 +603,7 @@ def instantiate_textsplitter(
                          'Try changing the chunk_size of the Text Splitter.') from exc
 
     if ('separator_type' in params
-            and params['separator_type'] == 'Text') or 'separator_type' not in params:
+        and params['separator_type'] == 'Text') or 'separator_type' not in params:
         params.pop('separator_type', None)
         # separators might come in as an escaped string like \\n
         # so we need to convert it to a string
@@ -621,7 +634,7 @@ def replace_zero_shot_prompt_with_prompt_template(nodes):
             # Build Prompt Template
             tools = [
                 tool for tool in nodes if tool['type'] != 'chatOutputNode'
-                and 'Tool' in tool['data']['node']['base_classes']
+                                          and 'Tool' in tool['data']['node']['base_classes']
             ]
             node['data'] = build_prompt_template(prompt=node['data'], tools=tools)
             break

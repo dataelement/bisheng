@@ -2,7 +2,7 @@ import { Check, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "~/utils";
 import { Badge } from "./Badge";
-import { Input } from "./Input";
+import { SearchInput } from "./Input";
 import { Select, SelectContent, SelectTrigger } from "./Select";
 
 export function useDebounce(func: any, wait: number, immediate: boolean, callback?: any,): (any?: any) => any {
@@ -278,7 +278,7 @@ const MultiSelect = ({
             headNode={
                 <div className="p-2">
                     {tabs}
-                    {!hideSearch && <Input id={id} ref={inputRef} inputClassName="h-8 dark:border-gray-700" placeholder={searchPlaceholder} onChange={handleSearch} iconClassName="w-4 h-4" />}
+                    {!hideSearch && <SearchInput id={id} ref={inputRef} inputClassName="h-8 dark:border-gray-700" placeholder={searchPlaceholder} onChange={handleSearch} iconClassName="w-4 h-4" />}
                 </div>
             }
             footerNode={children}

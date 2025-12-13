@@ -1,8 +1,8 @@
 from typing import Any
 
-from bisheng.api.services.assistant_agent import AssistantAgent
-from bisheng.database.constants import ToolPresetType
-from bisheng.database.models.gpts_tools import GptsToolsDao
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+from bisheng.tool.domain.services.executor import ToolExecutor
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 
@@ -15,16 +15,20 @@ class ToolNode(BaseNode):
         self._tool_info = GptsToolsDao.get_tool_by_tool_key(tool_key=self._tool_key)
         if not self._tool_info:
             raise Exception(f"工具{self._tool_key}不存在")
-        if self._tool_info.is_preset == ToolPresetType.PRESET.value:
-            self._tool = AssistantAgent.sync_init_preset_tools(tool_list=[self._tool_info], llm=None)[0]
-        elif self._tool_info.is_preset == ToolPresetType.API.value:
-            self._tool = AssistantAgent.sync_init_personal_tools([self._tool_info])[0]
-        else:
-            self._tool = AssistantAgent.sync_init_mcp_tools([self._tool_info])[0]
+
+        self._tool = None
+
+    def _init_tool(self):
+        if self._tool:
+            return
+        self._tool = ToolExecutor.init_by_tool_id_sync(tool_id=self._tool_info.id, app_id=self.workflow_id,
+                                                       app_name=self.workflow_name,
+                                                       app_type=ApplicationTypeEnum.WORKFLOW, user_id=self.user_id)
 
     def _run(self, unique_id: str):
+        self._init_tool()
         tool_input = self.parse_tool_input()
-        output = self._tool.run(tool_input=tool_input)
+        output = self._tool.invoke(input=tool_input)
         return {
             "output": output
         }

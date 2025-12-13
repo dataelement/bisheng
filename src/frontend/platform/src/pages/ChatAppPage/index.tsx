@@ -1,7 +1,6 @@
-import { TitleLogo } from "@/components/bs-comp/cardComponent";
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 import LoadMore from "@/components/bs-comp/loadMore";
-import { AssistantIcon, SkillIcon } from "@/components/bs-icons";
 import { PlusBoxIcon, PlusBoxIconDark } from "@/components/bs-icons/plusBox";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { message } from "@/components/bs-ui/toast/use-toast";
@@ -13,9 +12,9 @@ import { deleteChatApi, getChatsApi } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useDebounce } from "../../util/hook";
 import { generateUUID } from "../../utils";
+import { useMessageStore as useFlowMessageStore } from "../BuildPage/flow/FlowChat/messageStore";
 import HomePage from "./components/ChatHome";
 import ChatPanne from "./components/ChatPanne";
-import { useMessageStore as useFlowMessageStore } from "../BuildPage/flow/FlowChat/messageStore";
 
 const ChatItem = ({ chat, chatId, location, handleSelectChat, handleDeleteChat }) => {
 
@@ -31,11 +30,7 @@ const ChatItem = ({ chat, chatId, location, handleSelectChat, handleDeleteChat }
         >
             <div className="flex place-items-center space-x-3">
                 <div className="inline-block rounded-md">
-               <TitleLogo
-                    url={chat.logo}
-                    id={chat.flow_id}
-                    type={chat.flow_type}
-                />
+                    <AppAvator id={chat.flow_name} url={chat.logo} flowType={chat.flow_type} className="min-w-5 size-5"></AppAvator>
                 </div>
                 <p className="truncate text-sm font-bold leading-6">{chat.flow_name}</p>
             </div>
@@ -155,7 +150,7 @@ export default function SkillChatPage() {
     {
     location
         ? <HomePage onSelect={handlerSelectFlow}></HomePage>
-        : <ChatPanne 
+        : <ChatPanne
             appendHistory 
             chatList={chatList}  
             chat={tchat} // 获取当前选中的chat

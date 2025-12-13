@@ -9,6 +9,7 @@ import '@xyflow/react/dist/base.css';
 import '@xyflow/react/dist/style.css';
 import cloneDeep from "lodash-es/cloneDeep";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Controls } from "./Controls";
 import CustomEdge from "./FlowEdge";
 import FlowNode from "./FlowNode";
@@ -22,6 +23,7 @@ const nodeTypes = { flowNode: FlowNode, noteNode: NoteNode };
 // 流程编排面板
 export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: string }) {
     const [reactFlowInstance, setReactFlowInstance] = useState(null);
+    const { t } = useTranslation('flow')
     // 导入自适应布局
     const fitView = useFlowStore(state => state.fitView)
     const [flowKey, setFlowKey] = useState(1)
@@ -115,6 +117,8 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
                 // start node
                 const nodeId = `${node.type}_${generateUUID(5)}`;
                 node.id = nodeId;
+                node.name = t(`node.${node.type}.name`)
+                node.description = t(`node.${node.type}.description`)
                 if (!flow.nodes || flow.nodes.length === 0) {
                     setTimeout(() => {
                         setNodes([{ id: nodeId, type: 'flowNode', position: { x: window.innerWidth * 0.4, y: 20 }, data: node }]);
@@ -165,7 +169,10 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
                             onEdgesDelete={onEdgesDelete}
                             onNodeDragStart={onNodeDragStart} // 快照
                             onSelectionDragStart={onSelectionDragStart} // 快照
-                            onNodesDelete={() => takeSnapshot(flow)} // 更新setEdges
+                            onNodesDelete={() => {
+                                console.log('【删除节点】');
+                                takeSnapshot(flow)
+                            }} // 更新setEdges
                             // 自定义线组件
                             // connectionLineComponent={ConnectionLineComponent} 
                             // 校验连线合法性
@@ -194,7 +201,7 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
 
 
 const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
-
+    const { t } = useTranslation('flow')
     const reactFlowWrapper = useRef(null);
 
     const [nodes, setNodes] = useState(data.nodes);
@@ -278,9 +285,7 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
                 flowdata.node.id = nodeId
                 // 增加节点
                 setNodes((nds) => {
-                    const newName = autoNodeName(nds, flowdata.node.name)
-                    const newNode = initNode(flowdata.node)
-                    newNode.name = newName
+                    const newNode = initNode(flowdata.node, nds, t)
                     return nds.concat({ id: nodeId, type: 'flowNode', position, data: newNode })
                 });
             } else if (event.dataTransfer.types.some((t) => t === "Files")) {
@@ -301,9 +306,7 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
         flowdata.node.id = nodeId
         // 增加节点
         setNodes((nds) => {
-            const newName = autoNodeName(nds, flowdata.node.name)
-            const newNode = initNode(flowdata.node)
-            newNode.name = newName
+            const newNode = initNode(flowdata.node, nds, t)
             return nds.concat({
                 id: nodeId, type: 'flowNode', position: {
                     x: position.x - 160,
@@ -413,9 +416,7 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
             });
             // 增加节点
             setNodes((nds) => {
-                const newName = autoNodeName(nds, newNode.node.name)
-                const _newNode = initNode(newNode.node)
-                _newNode.name = newName
+                const _newNode = initNode(newNode.node, nds, t)
                 return nds.concat({
                     id: nodeId, type: 'flowNode', position: pos, data: _newNode
                 })

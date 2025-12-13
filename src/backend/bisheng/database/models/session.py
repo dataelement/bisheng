@@ -4,8 +4,8 @@ from typing import Optional, List
 
 from sqlmodel import Field, Column, DateTime, text, select, func, update
 
-from bisheng.database.base import session_getter, async_session_getter
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 
 
 class SensitiveStatus(Enum):
@@ -19,6 +19,8 @@ class MessageSessionBase(SQLModelSerializable):
     flow_id: str = Field(index=True, description='应用唯一ID')
     flow_type: int = Field(description='应用类型。技能、助手、工作流')
     flow_name: str = Field(index=True, description='应用名称')
+    flow_description: Optional[str] = Field(default=None, description='应用描述')
+    flow_logo: Optional[str] = Field(default=None, description='应用logo')
     user_id: int = Field(index=True, description='创建会话的用户ID')
     is_delete: Optional[bool] = Field(default=False, description='对应的技能或者会话本身是否被删除')
     like: Optional[int] = Field(default=0, description='点赞的消息数量')
@@ -28,8 +30,7 @@ class MessageSessionBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP'),
-        onupdate=text('CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class MessageSession(MessageSessionBase, table=True):
@@ -40,7 +41,7 @@ class MessageSessionDao(MessageSessionBase):
 
     @classmethod
     def insert_one(cls, data: MessageSession) -> MessageSession:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(data)
             session.commit()
             session.refresh(data)
@@ -48,7 +49,7 @@ class MessageSessionDao(MessageSessionBase):
 
     @classmethod
     async def async_insert_one(cls, data: MessageSession) -> MessageSession:
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             session.add(data)
             await session.commit()
             await session.refresh(data)
@@ -57,20 +58,20 @@ class MessageSessionDao(MessageSessionBase):
     @classmethod
     def delete_session(cls, chat_id: str):
         statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(is_delete=True)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
 
     @classmethod
     def get_one(cls, chat_id: str) -> MessageSession | None:
         statement = select(MessageSession).where(MessageSession.chat_id == chat_id)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).first()
 
     @classmethod
     async def async_get_one(cls, chat_id: str) -> MessageSession | None:
         statement = select(MessageSession).where(MessageSession.chat_id == chat_id)
-        async with async_session_getter() as session:
+        async with get_async_db_session() as session:
             return (await session.exec(statement)).first()
 
     @classmethod
@@ -144,7 +145,7 @@ class MessageSessionDao(MessageSessionBase):
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(MessageSession.create_time.desc())
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
@@ -157,19 +158,20 @@ class MessageSessionDao(MessageSessionBase):
                              start_date: datetime = None,
                              end_date: datetime = None,
                              include_delete: bool = True,
-                             exclude_chats: List[str] = None) -> int:
+                             exclude_chats: List[str] = None,
+                             flow_type: List[int] = None) -> int:
         statement = select(func.count(MessageSession.chat_id))
         statement = cls.generate_filter_session_statement(statement, chat_ids, sensitive_status,
                                                           flow_ids, user_ids, feedback, start_date,
-                                                          end_date, include_delete, exclude_chats)
-        with session_getter() as session:
+                                                          end_date, include_delete, exclude_chats, flow_type=flow_type)
+        with get_sync_db_session() as session:
             return session.scalar(statement)
 
     @classmethod
     def update_sensitive_status(cls, chat_id: str, sensitive_status: SensitiveStatus):
         statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(
             sensitive_status=sensitive_status.value)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
 
@@ -179,7 +181,7 @@ class MessageSessionDao(MessageSessionBase):
             return
         statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(
             like=MessageSession.like + like_count)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
 
@@ -189,7 +191,7 @@ class MessageSessionDao(MessageSessionBase):
             return
         statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(
             dislike=MessageSession.dislike + dislike_count)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
 
@@ -199,6 +201,20 @@ class MessageSessionDao(MessageSessionBase):
             return
         statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(
             copied=MessageSession.copied + copied_count)
-        with session_getter() as session:
+        with get_sync_db_session() as session:
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def update_session_info_by_flow(cls, name: str, description: str, logo: str, flow_id: str, flow_type: int):
+        statement = update(MessageSession).where(
+            MessageSession.flow_id == flow_id,
+            MessageSession.flow_type == flow_type
+        ).values(
+            flow_name=name,
+            flow_description=description,
+            flow_logo=logo
+        )
+        with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()

@@ -1,16 +1,17 @@
 import json
 from typing import List
 
-from fastapi import Request, HTTPException
+from fastapi import Request
 from loguru import logger
 
-from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.errcode.tag import TagExistError, TagNotExistError
-from bisheng.api.services.user_service import UserPayload
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
+from bisheng.common.errcode.tag import TagExistError, TagNotExistError
+from bisheng.common.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.assistant import AssistantDao
-from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.group_resource import ResourceTypeEnum, GroupResourceDao
+from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.tag import TagDao, Tag, TagLink
 
 
@@ -74,18 +75,22 @@ class TagService:
         if login_user.is_admin():
             return True
         resource_info = None
+        access_type: AccessType
         if resource_type == ResourceTypeEnum.ASSISTANT:
             resource_info = AssistantDao.get_one_assistant(resource_id)
+            access_type = AccessType.ASSISTANT_WRITE
         elif resource_type == ResourceTypeEnum.FLOW:
             resource_info = FlowDao.get_flow_by_id(resource_id)
+            access_type = AccessType.FLOW_WRITE
         elif resource_type == ResourceTypeEnum.WORK_FLOW:
             resource_info = FlowDao.get_flow_by_id(resource_id)
+            access_type = AccessType.WORKFLOW_WRITE
         else:
-            raise HTTPException(status_code=404, detail="资源类型不支持")
+            raise NotFoundError()
         if not resource_info:
-            raise HTTPException(status_code=404, detail="资源不存在")
-        # 是资源的创建人
-        if resource_info.user_id == login_user.user_id:
+            raise NotFoundError()
+
+        if login_user.access_check(resource_info.user_id, resource_id, access_type):
             return True
 
         # 获取资源所属的用户组
@@ -93,7 +98,7 @@ class TagService:
         resource_groups = [int(one.group_id) for one in resource_groups]
         # 判断下操作人是否是用户组的管理员
         if not login_user.check_groups_admin(resource_groups):
-            raise UnAuthorizedError.http_exception()
+            raise UnAuthorizedError()
 
         return True
 

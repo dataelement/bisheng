@@ -1,7 +1,7 @@
 import { ChevronRightIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip2";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/Tooltip2";
 
 export default function SopToolsDown({
     open,
@@ -164,7 +164,7 @@ export default function SopToolsDown({
 
                             return (
                                 <div
-                                    key={index}
+                                    key={option.label}
                                     className={`
                                         relative flex items-center justify-between px-3 py-2 cursor-pointer
                                         transition-colors

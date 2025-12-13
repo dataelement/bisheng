@@ -6,10 +6,9 @@ import * as React from "react"
 import { cname } from "../utils"
 
 const TooltipProvider = TooltipPrimitive.Provider
-
 const Tooltip = TooltipPrimitive.Root
-
 const TooltipTrigger = TooltipPrimitive.Trigger
+const Portal = TooltipPrimitive.Portal
 
 const TooltipContent = React.forwardRef<
     React.ElementRef<typeof TooltipPrimitive.Content>,
@@ -19,7 +18,7 @@ const TooltipContent = React.forwardRef<
         ref={ref}
         sideOffset={sideOffset}
         className={cname(
-            "z-50 overflow-hidden rounded-md bg-primary/80 px-3 py-1.5 text-xs text-primary-foreground animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2,data-[side=top-right]:translate-x-4",
+            "z-50 overflow-hidden rounded-md bg-primary/80 px-3 py-1.5 text-xs text-primary-foreground animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[side=top-right]:translate-x-4",
             className
         )}
         {...props}
@@ -27,17 +26,26 @@ const TooltipContent = React.forwardRef<
 ))
 TooltipContent.displayName = TooltipPrimitive.Content.displayName
 
-export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger }
+export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, Portal }
 
 
-export const QuestionTooltip = ({ error = false, className = '', content }) => (
+export const QuestionTooltip = ({
+    error = false,
+    className = '',
+    content,
+    // 新增：支持自定义触发元素，默认保留问号图标
+    children = null
+}) => (
     <TooltipProvider delayDuration={100}>
         <Tooltip defaultOpen={false}>
             <TooltipTrigger className={className} tabIndex={-1}>
-                <CircleHelp className={`w-3.5 h-3.5 ${error && 'text-red-500'}`} />
+                {/* 保留原有问号图标作为默认值，同时支持传入自定义内容 */}
+                {children || (
+                    <CircleHelp className={`w-3.5 h-3.5 ${error && 'text-red-500'}`} />
+                )}
             </TooltipTrigger>
             <TooltipContent className={error && 'bg-red-500/80'}>
-                <div className=" max-w-96 text-left break-all whitespace-normal">{content}</div>
+                <div className="max-w-96 text-left break-all whitespace-normal">{content}</div>
             </TooltipContent>
         </Tooltip>
     </TooltipProvider>

@@ -5,8 +5,8 @@ from typing import List, Optional, Dict
 from sqlalchemy import Column, DateTime, Text, text, func, and_, JSON
 from sqlmodel import Field, select
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
+from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database import get_sync_db_session
 
 
 class ExecType(Enum):
@@ -37,11 +37,8 @@ class EvaluationBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None,
                                             sa_column=Column(DateTime, nullable=False,
                                                              server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None,
-                                            sa_column=Column(DateTime,
-                                                             nullable=True,
-                                                             server_default=text('CURRENT_TIMESTAMP'),
-                                                             onupdate=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class Evaluation(EvaluationBase, table=True):
@@ -60,7 +57,7 @@ class EvaluationCreate(EvaluationBase):
 class EvaluationDao(EvaluationBase):
     @classmethod
     def get_my_evaluations(cls, user_id: int, page: int, limit: int) -> (List[Evaluation], int):
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(Evaluation).where(and_(Evaluation.is_delete == 0, Evaluation.user_id == user_id))
             count_statement = session.query(func.count(
                 Evaluation.id)).where(and_(Evaluation.is_delete == 0, Evaluation.user_id == user_id))
@@ -73,7 +70,7 @@ class EvaluationDao(EvaluationBase):
 
     @classmethod
     def delete_evaluation(cls, data: Evaluation) -> Evaluation:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             data.is_delete = 1
             session.add(data)
             session.commit()
@@ -81,19 +78,19 @@ class EvaluationDao(EvaluationBase):
 
     @classmethod
     def get_user_one_evaluation(cls, user_id: int, evaluation_id: int) -> Evaluation:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(Evaluation).where(and_(Evaluation.id == evaluation_id, Evaluation.user_id == user_id))
             return session.exec(statement).first()
 
     @classmethod
     def get_one_evaluation(cls, evaluation_id: int) -> Evaluation:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             statement = select(Evaluation).where(Evaluation.id == evaluation_id)
             return session.exec(statement).first()
 
     @classmethod
     def update_evaluation(cls, evaluation: Evaluation) -> Evaluation:
-        with session_getter() as session:
+        with get_sync_db_session() as session:
             session.add(evaluation)
             session.commit()
             session.refresh(evaluation)

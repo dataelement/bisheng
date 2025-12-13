@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { useRecoilState } from 'recoil';
+import { CheckMark, Clipboard, ContinueIcon, RegenerateIcon } from '~/components/svg';
+import { TextToSpeechButton } from '~/components/Voice/TextToSpeechButton';
 import type { TConversation, TMessage } from '~/data-provider/data-provider/src';
-import { EditIcon, Clipboard, CheckMark, ContinueIcon, RegenerateIcon } from '~/components/svg';
 import { useGenerationsByLatest, useLocalize } from '~/hooks';
-import { Fork } from '~/components/Conversations';
-import MessageAudio from './MessageAudio';
-import { cn } from '~/utils';
 import store from '~/store';
+import { cn } from '~/utils';
 
 type THoverButtons = {
   isEditing: boolean;
@@ -168,6 +167,11 @@ export default function HoverButtons({
           <ContinueIcon className="h-4 w-4 hover:text-gray-500 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400" />
         </button>
       ) : null}
+      {regenerateEnabled && message.text && <TextToSpeechButton
+        className={!isLast ? 'md:opacity-0 md:group-hover:opacity-100' : ''}
+        messageId={message.messageId}
+        text={message.text.replace(/:::([\s\S]*?):::/g, '')}
+      />}
     </div>
   );
 }

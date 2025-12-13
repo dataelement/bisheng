@@ -9,26 +9,12 @@ import { CheckCircle } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import MessageMarkDown from "./MessageMarkDown";
-// 颜色列表
-const colorList = [
-    "#111",
-    "#FF5733",
-    "#3498DB",
-    "#27AE60",
-    "#E74C3C",
-    "#9B59B6",
-    "#F1C40F",
-    "#34495E",
-    "#16A085",
-    "#E67E22",
-    "#95A5A6"
-]
+import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
+import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
 
 export default function MessageBsChoose({ type = 'choose', logo, data }: { type?: string, logo: string, data: WorkflowMessage }) {
     const { t } = useTranslation()
-    const avatarColor = colorList[
-        (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
-    ]
+    const { data: linsightConfig } = useLinsightConfig();
 
     const [selected, setSelected] = useState(data.message.hisValue || '')
     const handleSelect = (obj) => {
@@ -87,12 +73,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
             </div>
             <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                 <div className="flex gap-2">
-                    {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
-                        <img className="w-6 h-6" src={logo} />
-                    </div>
-                        : <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} >
-                            <AvatarIcon />
-                        </div>}
+                    {logo}
                     <div className="text-sm max-w-[calc(100%-24px)]">
                         {/* message */}
                         <div>{<MessageMarkDown message={data.message.msg} />}</div>
@@ -143,6 +124,14 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
                         </div>
                     </div>
                 </div>
+            </div>
+            <div className={`text-right group-hover:opacity-100 opacity-0`}>
+                {linsightConfig?.tts_model?.id && (
+                    <AudioPlayComponent
+                        messageId={String(data.message.node_id)}
+                        msg={data.message.msg}
+                    />
+                )}
             </div>
         </div>
     </div>

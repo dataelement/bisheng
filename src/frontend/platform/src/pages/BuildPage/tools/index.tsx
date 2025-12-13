@@ -5,7 +5,8 @@ import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { userContext } from "@/contexts/userContext";
-import { getAssistantMcpApi, getAssistantToolsApi, refreshAssistantMcpApi } from "@/controllers/API/assistant";
+import { refreshMcpApi } from "@/controllers/API/assistant";
+import { getToolsApi } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { CpuIcon, Star, User } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -19,7 +20,7 @@ import ToolSet from "./ToolSet";
 const MANAGED_TOOLS = [
     'Dalle3绘画', 'Bing web搜索', '天眼查',
     'Firecrawl', 'Jina AI', 'SiliconFlow',
-    '发送邮件', '飞书消息', '联网搜索','代码执行器'
+    '发送邮件', '飞书消息', '联网搜索', '代码执行器'
 ];
 
 interface TabToolsProps {
@@ -42,16 +43,14 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     const [loading, setLoading] = useState(false)
 
     const loadData = async (_type = "custom") => {
-        await getAssistantToolsApi(_type).then((res) => {
+        await getToolsApi(_type).then((res) => {
             setAllData(res);
-            // setKeyword("");
         });
         setLoading(false)
     };
     const loadMcpData = async () => {
-        await getAssistantMcpApi().then((res) => {
+        await getToolsApi('mcp').then((res) => {
             setAllData(res);
-            // setKeyword("");
         });
         setLoading(false)
     }
@@ -66,9 +65,9 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
 
     const options = useMemo(() => {
         return allData.filter((el) => {
-            // 搜索范围：工具名称、工具描述、工具api名称、工具api描述
+            // Search in tool name, description, API name, and API description
             const targetStr = `${el.name}-${el.description}-${el.children?.map((el) => {
-                // mcp 搜索包含参数名 参数描述
+                // For MCP, search includes parameter names and descriptions
                 const param = type === 'mcp' ? (el.api_params.map((param) => param.name + param.description).join("-") || '') : ''
                 return el.name + el.desc + param
             }).join("-") || ''}`
@@ -82,18 +81,16 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     }
 
     const toolsetRef = useRef(null)
-    const { loading: btnLoading, refresh } = useMcpRefrensh()
+    const { loading: btnLoading, refresh } = useMcpRefrensh(t)
 
     return (
         <div className="flex h-full relative" onClick={(e) => e.stopPropagation()}>
             <div className="relative w-full flex h-full overflow-y-scroll scrollbar-hide bg-background-main border-t">
                 <div className="relative w-fit p-6">
-                    {/* <h1>{t("tools.addTool")}</h1> */}
                     <SearchInput
                         placeholder={t("tools.search")}
                         className="mt-6"
                         onChange={(e) => setKeyword(e.target.value)}
-                          readOnly={true}
                     />
                     <div className="mt-4">
                         <div
@@ -146,7 +143,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                             className="mt-4  text-[white]"
                             onClick={() => mcpDialogRef.current.open()}
                         >
-                            添加 MCP 服务器
+                            {t("tools.addMcpServer")}
                         </Button>}
                         {type === 'mcp' && <Button
                             variant="outline"
@@ -158,37 +155,38 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                             }}
                         >
                             {btnLoading && <LoadIcon className="text-gray-800" />}
-                            刷新
+                            {t("tools.refresh")}
                         </Button>}
                     </div>
-                    <Accordion type="single" collapsible className="w-full">
-                        {options.length ? (
-                            options.map((el) => (
-                                <ToolItem
-                                    key={el.id}
-                                    type={type}
-                                    select={select}
-                                    data={el}
-                                    onSelect={onSelect}
-                                    onSetClick={hasSet(el.name) ? () => toolsetRef.current.edit(el) : null}
-                                    onEdit={(id) => {
-                                        type === 'mcp' ? mcpDialogRef.current.open(el) :
-                                            editRef.current.edit(el)
-                                    }}
-                                ></ToolItem>
-                            ))
-                        ) : (
-                            <div className="mt-2 pt-40 text-center text-sm text-muted-foreground">
-                                {t("tools.empty")}
-                            </div>
-                        )}
-                    </Accordion>
+                    {
+                        !loading && <Accordion type="single" collapsible className="w-full">
+                            {options.length ? (
+                                options.map((el) => (
+                                    <ToolItem
+                                        key={el.id}
+                                        type={type}
+                                        select={select}
+                                        data={el}
+                                        onSelect={onSelect}
+                                        onSetClick={hasSet(el.name) ? () => toolsetRef.current.edit(el) : null}
+                                        onEdit={(id) => {
+                                            type === 'mcp' ? mcpDialogRef.current.open(el) :
+                                                editRef.current.edit(el)
+                                        }}
+                                    ></ToolItem>
+                                ))
+                            ) : (
+                                <div className="mt-2 pt-40 text-center text-sm text-muted-foreground">
+                                    {t("tools.empty")}
+                                </div>
+                            )}
+                        </Accordion>
+                    }
                 </div>
             </div>
 
             <EditTool
                 onReload={() => {
-                    // 切换自定义工具 并 刷新
                     setType('edit');
                     type === 'edit' && loadData();
                 }}
@@ -202,34 +200,37 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                 onSuccess={() => { }}
             />
 
-            {/* 内置工具设置 */}
             <ToolSet ref={toolsetRef} onChange={() => loadData("default")} />
         </div>
     );
 }
 
-// 刷新mcp服务
 export const useMcpRefrensh = () => {
     const [loading, setLoading] = useState(false);
-    const { message } = useToast()
+    const { message, toast } = useToast()
+    const { t } = useTranslation('tool')
 
     return {
         loading,
         async refresh() {
             setLoading(true);
-            // api
-            const res = await captureAndAlertRequestErrorHoc(refreshAssistantMcpApi())
-            console.log('刷新 :>> ', res);
+            const res = await captureAndAlertRequestErrorHoc(refreshMcpApi())
+            if (res.length) {
+                setLoading(false);
+                return toast({
+                    variant: "error",
+                    description: res.map(e => `${e} ${t("toolFetchFailed")}`)
+                })
+            }
             message({
                 variant: "success",
-                description: "刷新成功"
+                description: t("refreshSuccess")
             })
             setLoading(false);
         }
     }
 }
 
-// 处理跳转参数,默认弹出创建工具
 const useToolType = (setType) => {
     const [searchParams, setSearchParams] = useSearchParams();
     useEffect(() => {

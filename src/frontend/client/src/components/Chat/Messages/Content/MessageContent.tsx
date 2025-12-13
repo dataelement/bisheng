@@ -60,7 +60,7 @@ export const ErrorMessage = ({
         role="alert"
         aria-live="assertive"
         className={cn(
-          'rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2 text-sm text-gray-600 dark:text-gray-200',
+          'rounded-xl mt-2 border border-red-500/20 bg-red-500/5 px-3 py-2 text-sm text-gray-600 dark:text-gray-200',
           className,
         )}
       >
@@ -82,15 +82,17 @@ const DisplayMessage = ({ text, isCreatedByUser, message, showCursor, webContent
     [message.messageId, latestMessage?.messageId],
   );
 
+  const safeText = text ?? '';
+
   let content: React.ReactElement;
   if (!isCreatedByUser) {
     content = (
-      <Markdown content={text} webContent={webContent} showCursor={showCursorState} isLatestMessage={isLatestMessage} />
+      <Markdown content={safeText} webContent={webContent} showCursor={showCursorState} isLatestMessage={isLatestMessage} />
     );
   } else if (enableUserMsgMarkdown) {
-    content = <MarkdownLite content={text} />;
+    content = <MarkdownLite content={safeText} />;
   } else {
-    content = <>{text}</>;
+    content = <>{safeText}</>;
   }
 
   return (
@@ -98,8 +100,8 @@ const DisplayMessage = ({ text, isCreatedByUser, message, showCursor, webContent
       <div
         className={cn(
           isSubmitting ? 'submitting' : '',
-          showCursorState && !!text.length ? 'result-streaming' : '',
-          'markdown prose message-content dark:prose-invert light w-full break-words',
+          showCursorState && !!safeText.length ? 'result-streaming' : '',
+          'bs-mkdown message-content dark:prose-invert light w-full break-words',
           isCreatedByUser && !enableUserMsgMarkdown && 'whitespace-pre-wrap',
           isCreatedByUser ? 'dark:text-gray-20' : 'dark:text-gray-100',
         )}
@@ -131,6 +133,12 @@ const MessageContent = ({
   const { messageId } = message;
 
   const { thinkingContent, regularContent } = useMemo(() => {
+    if (!text) {
+      return {
+        thinkingContent: '',
+        regularContent: '',
+      };
+    }
     const thinkingMatch = text.match(/:::thinking([\s\S]*?):::/);
     let regularContent = text;
     if (thinkingMatch) {
@@ -145,6 +153,9 @@ const MessageContent = ({
   }, [text]);
 
   const webContent = useMemo(() => {
+    if (!text) {
+      return [];
+    }
     const webMatch = text.match(/:::web([\s\S]*?):::/);
     const str = webMatch ? webMatch[1].trim() : ''
     const webContent = str ? JSON.parse(str) : []

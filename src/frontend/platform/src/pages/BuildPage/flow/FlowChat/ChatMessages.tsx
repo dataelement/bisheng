@@ -23,7 +23,8 @@ export default function ChatMessages({
     useName,
     guideWord,
     loadMore,
-    onMarkClick = undefined
+    onMarkClick = undefined,
+    version,
 }) {
     const { t } = useTranslation()
     const { chatId, messages, inputForm } = useMessageStore()
@@ -69,7 +70,6 @@ export default function ChatMessages({
             scrollLockRef.current = (scrollHeight - scrollTop - clientHeight) > 400
 
             if (messagesRef.current.scrollTop <= 90) {
-                console.log('请求 :>> ', 1);
                 queryLockRef.current = true
                 loadMore()
                 // TODO 翻页定位
@@ -138,6 +138,7 @@ export default function ChatMessages({
                             debug={debug}
                             mark={mark}
                             logo={logo}
+                            version={version}
                             key={msg.message_id}
                             data={msg}
                             onUnlike={(chatId) => { thumbRef.current?.openModal(chatId) }}

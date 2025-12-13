@@ -5,6 +5,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import Compressor from "compressorjs";
 import { Plus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 const MaxFileSize = 999 * 1024 * 1024; // 999MB
 export const IconUploadSection = ({
@@ -22,25 +23,26 @@ export const IconUploadSection = ({
 }) => {
 
     const { toast } = useToast();
+    const { t } = useTranslation();
 
     const handleFileChange = async (file: File | null) => {
         if (!file) return onUpload('');
 
         new Compressor(file, {
-            quality: 0.6, // 压缩质量（0-1）
+            quality: 0.6, // Compression quality (0-1)
             maxWidth: 300,
             maxHeight: 300,
             success(result) {
-                // 压缩后的文件（result 是 Blob 类型）
+                // Compressed file (result is a Blob type)
                 const compressedFile = new File([result], file.name, { type: result.type });
                 uploadFileWithProgress(compressedFile, (progress) => { }, 'icon', '').then(res => {
                     onUpload(res.file_path, res.relative_path)
                 });
             },
             error(err) {
-                console.error("压缩失败:", err);
+                console.error("Compression failed:", err);
                 toast({
-                    title: '上传失败,请检查文件格式',
+                    title: t('chat.uploadFailedCheckFormat'),
                     description: err.message,
                     variant: 'error'
                 })

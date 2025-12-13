@@ -1,21 +1,28 @@
-import { CheckCircle, CheckIcon, File } from "lucide-react";
+import { CheckIcon, File } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { ChatMessageType } from "~/@types/chat";
 import { Button, Textarea } from "~/components";
-import AppAvator from "~/components/Avator";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
+import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
+import useLocalize from "~/hooks/useLocalize";
 import { downloadFile } from "~/utils";
 import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
+import { changeMinioUrl } from "./ResouceModal";
 
-export default function MessageBsChoose({ type = 'choose', logo, data, flow }: { type?: string, logo: React.ReactNode, data: ChatMessageType }) {
+export default function MessageBsChoose({ type = 'choose', disabled, logo, data, flow }
+    : { type?: string, disabled?: Boolean, logo: React.ReactNode, data: ChatMessageType }) {
+    const t = useLocalize()
     const [selected, setSelected] = useState(data.message.hisValue || '')
     const handleSelect = (obj) => {
         if (selected) return
-
         emitAreaTextEvent({
             action: EVENT_TYPE.MESSAGE_INPUT, data: {
                 nodeId: data.message.node_id,
-                message: data,
+                message: JSON.stringify({
+                    ...data.message,
+                    hisValue: obj.id
+                }),
+                msgId: data.id,
                 data: {
                     [data.message.key]: obj.id
                 }
@@ -27,20 +34,23 @@ export default function MessageBsChoose({ type = 'choose', logo, data, flow }: {
 
     // download file
     const handleDownloadFile = (file) => {
-        downloadFile(file.path, file.name)
+        downloadFile(changeMinioUrl(file.path), file.name)
     }
 
     // input
     const textRef = useRef(null)
-    const [inputSended, setInputSended] = useState(!!data.message.hisValue || false)
+    const inputSended = useMemo(() => !!data.message.hisValue || false, [data.message.hisValue])
     const handleSend = () => {
         const val = textRef.current.value
         if (!val.trim()) return
-        setInputSended(true)
         emitAreaTextEvent({
             action: EVENT_TYPE.MESSAGE_INPUT, data: {
                 nodeId: data.message.node_id,
-                message: data,
+                message: JSON.stringify({
+                    ...data.message,
+                    hisValue: val
+                }),
+                msgId: data.id,
                 data: {
                     [data.message.key]: val
                 }
@@ -53,8 +63,8 @@ export default function MessageBsChoose({ type = 'choose', logo, data, flow }: {
     }, [data.files])
 
     return <MessageWarper flow={flow} logo={logo} >
-        <div className="">
-            <div className="text-sm">
+        <div className="group">
+            <div className="text-base text-[#0D1638] dark:text-[#CFD5E8]">
                 {/* message */}
                 <div><Markdown content={data.message.msg} isLatestMessage={false} webContent={undefined} /></div>
                 {/* files */}
@@ -66,7 +76,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data, flow }: {
                         <div className="flex items-center"><File size={14} /></div>
                         <div>
                             <h1 className="text-sm font-bold">{file.name}</h1>
-                            <p className="text-xs text-gray-400 mt-1">点击下载</p>
+                            <p className="text-xs text-gray-400 mt-1">{t('com_bschoose_click_to_download')}</p>
                         </div>
                     </div>)
                     }
@@ -78,15 +88,15 @@ export default function MessageBsChoose({ type = 'choose', logo, data, flow }: {
                             <Textarea
                                 className="w-full"
                                 ref={textRef}
-                                disabled={inputSended}
+                                disabled={inputSended || disabled}
                                 defaultValue={data.message.input_msg || data.message.hisValue}
                             />
                             <div className="flex justify-end mt-2">
                                 <Button
                                     className="h-8"
-                                    disabled={inputSended}
+                                    disabled={inputSended || disabled}
                                     onClick={handleSend}
-                                >{inputSended ? '已确认' : '确认'}</Button>
+                                >{inputSended ? t('com_bschoose_confirmed') : t('com_bschoose_confirm')}</Button>
                             </div>
                         </div>
                         : <div>
@@ -103,6 +113,9 @@ export default function MessageBsChoose({ type = 'choose', logo, data, flow }: {
                             }
                         </div>
                     }
+                    <div className="flex justify-end py-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {data.message.msg && <TextToSpeechButton messageId={String(data.id)} text={data.message.msg} />}
+                    </div>
                 </div>
             </div>
         </div>
@@ -116,14 +129,14 @@ export const MessageWarper = ({ flow, logo, children }) => {
             <div className="flex-shrink-0">
                 {logo}
             </div>
-            <span className="text-sm">{flow.name}</span>
+            <span className="text-base">{flow.name}</span>
         </div>
 
-        <p className="text-sm text-gray-500 mt-2 ml-[calc(24px+0.75rem)]">
+        {/* <p className="text-sm text-gray-500 mt-2 ml-[calc(24px+0.75rem)]">
             {flow.description || '无描述信息'}
-        </p>
+        </p> */}
 
-        <div className="border border-gray-200 rounded-md p-4 mt-3 ml-[calc(24px+0.75rem)] bg-white shadow-sm">
+        <div className="p-3 ml-6">
             {children}
         </div>
     </div>

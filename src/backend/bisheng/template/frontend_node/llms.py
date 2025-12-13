@@ -63,7 +63,7 @@ class LLMFrontendNode(FrontendNode):
         if 'openai' in field.name.lower():
             field.display_name = (field.name.title().replace('Openai',
                                                              'OpenAI').replace('_', ' ')).replace(
-                                                                 'Api', 'API')
+                'Api', 'API')
 
         if 'key' not in field.name.lower() and 'token' not in field.name.lower():
             field.password = False
@@ -190,24 +190,24 @@ class LLMFrontendNode(FrontendNode):
             field.advanced = True
             field.show = True
         elif field.name in [
-                'model_name',
-                'temperature',
-                'model_file',
-                'model_type',
-                'deployment_name',
-                'credentials',
-                'openai_proxy',
+            'model_name',
+            'temperature',
+            'model_file',
+            'model_type',
+            'deployment_name',
+            'credentials',
+            'openai_proxy',
         ]:
             field.advanced = False
             field.show = True
         if field.name == 'credentials':
             field.field_type = 'file'
         if name == 'VertexAI' and field.name not in [
-                'callbacks',
-                'client',
-                'stop',
-                'tags',
-                'cache',
+            'callbacks',
+            'client',
+            'stop',
+            'tags',
+            'cache',
         ]:
             field.show = True
         if field.name in ['cache']:
@@ -226,5 +226,5 @@ class LLMFrontendNode(FrontendNode):
             if field.name == 'model_id':
                 field.field_type = "bisheng_model"
                 field.display_name = "Model Name"
-            elif field.name == 'model_name':
+            elif field.name in ['model_name', "app_type", "app_id", "app_name", "user_id"]:
                 field.show = False

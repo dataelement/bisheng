@@ -1,11 +1,6 @@
 import { LinsightInfo } from "~/store/linsight";
 import request from "./request";
 
-// 灵思
-export function getTools(name: string): Promise<any> {
-  return request.get('/api/v1/download?object_name=' + name);
-}
-
 // 保存修改sop
 export function saveSop(data: {
   sop_content: string,
@@ -15,11 +10,13 @@ export function saveSop(data: {
 }
 
 // 获取灵思会话信息
-export function getLinsightSessionVersionList(ConversationId: string): Promise<any> {
+export function getLinsightSessionVersionList(ConversationId: string, shareToken: string): Promise<any> {
+  const headers = shareToken ? { 'share-token': shareToken } : {}
   return request.get('/api/v1/linsight/workbench/session-version-list', {
     params: {
       session_id: ConversationId
     },
+    headers
   }).then(res => {
     return res.data.map(item => {
       return {
@@ -32,11 +29,13 @@ export function getLinsightSessionVersionList(ConversationId: string): Promise<a
 }
 
 // 获取灵思任务信息
-export function getLinsightTaskList(versionId: string, linsight: LinsightInfo): Promise<any> {
+export function getLinsightTaskList(versionId: string, linsight: LinsightInfo, shareToken: string): Promise<any> {
+  const headers = shareToken ? { 'share-token': shareToken } : {}
   return request.get('/api/v1/linsight/workbench/execute-task-detail', {
     params: {
       session_version_id: versionId
     },
+    headers
   }).then(res => {
     if (linsight.status === 'terminated') {
       // 任务手动终止后，后端返回的数据status为in_progress的任务，需要修改为terminated
@@ -58,11 +57,12 @@ export function startLinsight(versionId: string): Promise<any> {
 }
 
 // 用户任务中输入事件
-export function userInputLinsightEvent(session_version_id: string, linsight_execute_task_id: string, input_content: string): Promise<any> {
+export function userInputLinsightEvent(session_version_id: string, linsight_execute_task_id: string, input_content: string, files: any[]): Promise<any> {
   return request.post('/api/v1/linsight/workbench/user-input', {
     session_version_id,
     linsight_execute_task_id,
-    input_content
+    input_content,
+    files
   });
 }
 
@@ -80,7 +80,9 @@ export function submitLinsightFeedback(versionid, data: {
   is_reexecute: boolean,
   cancel_feedback: boolean
 }): Promise<any> {
-  return request.post('/api/v1/linsight/workbench/submit-feedback', { linsight_session_version_id: versionid, ...data }
+  return request.post('/api/v1/linsight/workbench/submit-feedback',
+    { linsight_session_version_id: versionid, ...data },
+    { showError: true }
   )
 }
 
@@ -148,4 +150,33 @@ export function checkSopQueueStatus(id: string) {
       session_version_id: id
     }
   })
+}
+
+// Selected Cases
+export function getFeaturedCases(page: number): Promise<any> {
+  return request.get('/api/v1/linsight/sop/showcase', {
+    params: {
+      page,
+      page_size: 12
+    }
+  });
+}
+
+// Get case details based on SOP ID
+export function getCaseDetail(sop_id: string): Promise<any> {
+  return request.get('/api/v1/linsight/sop/showcase/result', {
+    params: {
+      sop_id
+    }
+  })
+}
+
+export function getMdDownload(file_info: { file_url: string; file_name: string }, to_type: 'pdf' | 'docx'): Promise<any> {
+  return request.post('/api/v1/linsight/workbench/download-md-to-pdf-or-docx', {
+    file_info: file_info,
+    to_type: to_type
+  }
+    , {
+      responseType: 'blob' // 确保这里设置了 responseType
+    })
 }

@@ -1,8 +1,6 @@
-import io
 import json
 import math
 import os
-import time
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -10,40 +8,47 @@ from fastapi import BackgroundTasks, Request
 from loguru import logger
 from pymilvus import Collection
 
-from bisheng.api.errcode.base import NotFoundError, UnAuthorizedError, ServerError
-from bisheng.api.errcode.knowledge import (
-    KnowledgeChunkError,
-    KnowledgeExistError,
-    KnowledgeNoEmbeddingError,
-)
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.knowledge_imp import (
     KnowledgeUtils,
     decide_vectorstores,
     delete_knowledge_file_vectors,
     process_file_task,
-    read_chunk_text,
+    async_read_chunk_text,
 )
-from bisheng.api.services.llm import LLMService
-from bisheng.api.services.user_service import UserPayload
-from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schema.knowledge import KnowledgeFileResp
 from bisheng.api.v1.schemas import (
     FileChunk,
-    FileChunkMetadata,
     FileProcessBase,
     KnowledgeFileOne,
     KnowledgeFileProcess,
-    UpdatePreviewFileChunk, ExcelRule,
+    UpdatePreviewFileChunk, ExcelRule, KnowledgeFileReProcess,
 )
-from bisheng.cache.redis import redis_client
-from bisheng.cache.utils import file_download
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
+from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeChunkError,
+    KnowledgeExistError,
+    KnowledgeNoEmbeddingError, KnowledgeNotQAError, KnowledgeFileFailedError,
+)
+from bisheng.common.schemas.telemetry.event_data_schema import NewKnowledgeBaseEventData
+from bisheng.common.services import telemetry_service
+from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
+from bisheng.core.cache.utils import file_download, async_file_download
+from bisheng.core.logger import trace_id_var
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
 from bisheng.database.models.group_resource import (
     GroupResource,
     GroupResourceDao,
     ResourceTypeEnum,
 )
-from bisheng.database.models.knowledge import (
+from bisheng.database.models.role_access import AccessType, RoleAccessDao
+from bisheng.database.models.user_group import UserGroupDao
+from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+from bisheng.knowledge.domain.models.knowledge import (
     Knowledge,
     KnowledgeCreate,
     KnowledgeDao,
@@ -51,23 +56,17 @@ from bisheng.database.models.knowledge import (
     KnowledgeTypeEnum,
     KnowledgeUpdate, KnowledgeState,
 )
-from bisheng.database.models.knowledge_file import (
+from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileStatus, ParseType,
 )
-from bisheng.database.models.llm_server import LLMDao, LLMModelType
-from bisheng.database.models.role_access import AccessType, RoleAccessDao
-from bisheng.database.models.user import UserDao
-from bisheng.database.models.user_group import UserGroupDao
-from bisheng.database.models.user_role import UserRoleDao
-from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.settings import settings
-from bisheng.utils import generate_uuid
-from bisheng.utils.embedding import decide_embeddings
-from bisheng.utils.minio_client import minio_client
-from bisheng.worker.knowledge import file_worker
-from bisheng_langchain.rag.bisheng_rag_chain import BishengRAGTool
+from bisheng.llm.domain.const import LLMModelType
+from bisheng.llm.domain.models import LLMDao
+from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.models.user_role import UserRoleDao
+from bisheng.utils import generate_uuid, generate_knowledge_index_name
+from bisheng.utils import get_request_ip
 
 
 class KnowledgeService(KnowledgeUtils):
@@ -125,7 +124,7 @@ class KnowledgeService(KnowledgeUtils):
             res.append(
                 KnowledgeRead(
                     **one.model_dump(),
-                    user_name=db_user_dict.get(one.user_id, one.user_id),
+                    user_name=db_user_dict.get(one.user_id, str(one.user_id)),
                     copiable=login_user.access_check(
                         one.user_id, str(one.id), AccessType.KNOWLEDGE_WRITE
                     ),
@@ -156,12 +155,6 @@ class KnowledgeService(KnowledgeUtils):
     def create_knowledge(
             cls, request: Request, login_user: UserPayload, knowledge: KnowledgeCreate
     ) -> Knowledge:
-        # 设置默认的is_partition
-        knowledge.is_partition = (
-            knowledge.is_partition
-            if knowledge.is_partition is not None
-            else settings.get_vectors_conf().milvus.is_partition
-        )
 
         # 判断知识库是否重名
         repeat_knowledge = KnowledgeDao.get_knowledge_by_name(
@@ -181,34 +174,23 @@ class KnowledgeService(KnowledgeUtils):
         if embed_info.model_type != LLMModelType.EMBEDDING.value:
             raise KnowledgeNoEmbeddingError.http_exception()
 
-        # 自动生成 es和milvus的 collection_name
-        if not db_knowledge.collection_name:
-            if knowledge.is_partition:
-                embedding = knowledge.model
-                suffix_id = settings.get_vectors_conf().milvus.partition_suffix
-                db_knowledge.collection_name = (
-                    f"partition_{embedding}_knowledge_{suffix_id}"
-                )
-            else:
-                # 默认collectionName
-                db_knowledge.collection_name = (
-                    f"col_{int(time.time())}_{generate_uuid()[:8]}"
-                )
-        db_knowledge.index_name = f"col_{int(time.time())}_{generate_uuid()[:8]}"
+        # generate index_name and collection_name
+        db_knowledge.index_name = generate_knowledge_index_name()
+        db_knowledge.collection_name = db_knowledge.index_name
 
         # 插入到数据库
         db_knowledge.user_id = login_user.user_id
         db_knowledge = KnowledgeDao.insert_one(db_knowledge)
 
-        # 创建milvus的collection_name和es的index_name
-        embeddings = decide_embeddings(db_knowledge.model)
-        vector_client = decide_vectorstores(
-            db_knowledge.collection_name, "Milvus", embeddings
-        )
-        embeddings = FakeEmbedding()
-        es_client = decide_vectorstores(
-            db_knowledge.index_name, "ElasticKeywordsSearch", embeddings
-        )
+        try:
+            vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id,
+                                                                                knowledge=db_knowledge,
+                                                                                metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
+            es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge,
+                                                                        metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
+            es_client._store._create_index_if_not_exists()
+        except Exception as e:
+            logger.exception("create knowledge index name error")
 
         # 处理创建知识库的后续操作
         cls.create_knowledge_hook(request, login_user, db_knowledge)
@@ -237,6 +219,16 @@ class KnowledgeService(KnowledgeUtils):
         AuditLogService.create_knowledge(
             login_user, get_request_ip(request), knowledge.id
         )
+
+        telemetry_service.log_event_sync(user_id=login_user.user_id,
+                                         event_type=BaseTelemetryTypeEnum.NEW_KNOWLEDGE_BASE,
+                                         trace_id=trace_id_var.get(),
+                                         event_data=NewKnowledgeBaseEventData(
+                                             kb_id=knowledge.id,
+                                             kb_name=knowledge.name,
+                                             kb_type=knowledge.type
+                                         ))
+
         return True
 
     @classmethod
@@ -295,12 +287,16 @@ class KnowledgeService(KnowledgeUtils):
         # 删除mysql数据
         KnowledgeDao.delete_knowledge(knowledge_id, only_clear)
 
+        telemetry_service.log_event_sync(user_id=login_user.user_id,
+                                         event_type=BaseTelemetryTypeEnum.DELETE_KNOWLEDGE_BASE,
+                                         trace_id=trace_id_var.get())
+
         if not only_clear:
             cls.delete_knowledge_hook(request, login_user, knowledge)
         return True
 
     @classmethod
-    def delete_knowledge_file_in_vector(cls, knowledge: Knowledge):
+    def delete_knowledge_file_in_vector(cls, knowledge: Knowledge, del_es: bool = True):
         # 处理vector
         embeddings = FakeEmbedding()
         vector_client = decide_vectorstores(
@@ -322,12 +318,12 @@ class KnowledgeService(KnowledgeUtils):
                 # 判断milvus 是否还有entity
                 if vector_client.col.is_empty:
                     vector_client.col.drop()
-
-        # 处理 es
-        index_name = knowledge.index_name or knowledge.collection_name  # 兼容老版本
-        es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
-        res = es_client.client.indices.delete(index=index_name, ignore=[400, 404])
-        logger.info(f"act=delete_es index={index_name} res={res}")
+        if del_es:
+            # 处理 es
+            index_name = knowledge.index_name or knowledge.collection_name  # 兼容老版本
+            es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
+            res = es_client.client.indices.delete(index=index_name, ignore=[400, 404])
+            logger.info(f"act=delete_es index={index_name} res={res}")
 
     @classmethod
     def delete_knowledge_hook(
@@ -353,14 +349,17 @@ class KnowledgeService(KnowledgeUtils):
             return
         page_size = 1000
         page_num = math.ceil(count / page_size)
+
+        minio_client = get_minio_storage_sync()
+
         for i in range(page_num):
             file_list = KnowledgeFileDao.get_file_simple_by_knowledge_id(
                 knowledge_id, i + 1, page_size
             )
             for file in file_list:
-                minio_client.delete_minio(str(file[0]))
+                minio_client.remove_object_sync(object_name=str(file[0]))
                 if file[1]:
-                    minio_client.delete_minio(file[1])
+                    minio_client.remove_object_sync(object_name=file[1])
 
     @classmethod
     def get_upload_file_original_name(cls, file_name: str) -> str:
@@ -371,11 +370,11 @@ class KnowledgeService(KnowledgeUtils):
             raise ServerError.http_exception("file_name is empty")
         # 从redis内获取
         uuid_file_name = file_name.split(".")[0]
-        original_file_name = redis_client.get(f"file_name:{uuid_file_name}") or file_name
+        original_file_name = get_redis_client_sync().get(f"file_name:{uuid_file_name}") or file_name
         return original_file_name
 
     @classmethod
-    def save_upload_file_original_name(cls, original_file_name: str) -> str:
+    async def save_upload_file_original_name(cls, original_file_name: str) -> str:
         """
         保存上传文件的原始名称到redis，生成一个uuid的文件名
         """
@@ -384,11 +383,12 @@ class KnowledgeService(KnowledgeUtils):
         file_ext = original_file_name.split(".")[-1]
         # 生成一个唯一的uuid作为key
         uuid_file_name = generate_uuid()
-        redis_client.set(f"file_name:{uuid_file_name}", original_file_name, expiration=86400)
+        redis_client = await get_redis_client()
+        await redis_client.aset(f"file_name:{uuid_file_name}", original_file_name, expiration=86400)
         return f"{uuid_file_name}.{file_ext}"
 
     @classmethod
-    def get_preview_file_chunk(
+    async def get_preview_file_chunk(
             cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileProcess
     ) -> (str, str, List[FileChunk], Any):
         """
@@ -397,8 +397,8 @@ class KnowledgeService(KnowledgeUtils):
         2：切分后的chunk列表
         3: ocr识别后的bbox
         """
-        knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
-        if not login_user.access_check(
+        knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
+        if not await login_user.async_access_check(
                 knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
         ):
             raise UnAuthorizedError.http_exception()
@@ -407,12 +407,14 @@ class KnowledgeService(KnowledgeUtils):
         excel_rule = req_data.file_list[0].excel_rule
         cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path)
 
+        redis_client = await get_redis_client()
+
         # 尝试从缓存获取
         if req_data.cache:
-            if cache_value := cls.get_preview_cache(cache_key):
-                parse_type = redis_client.get(f"{cache_key}_parse_type")
-                file_share_url = redis_client.get(f"{cache_key}_file_path")
-                partitions = redis_client.get(f"{cache_key}_partitions")
+            if cache_value := await cls.async_get_preview_cache(cache_key):
+                parse_type = await redis_client.aget(f"{cache_key}_parse_type")
+                file_share_url = await redis_client.aget(f"{cache_key}_file_path")
+                partitions = await redis_client.aget(f"{cache_key}_partitions")
                 res = []
 
                 # 根据分段顺序排序
@@ -422,12 +424,13 @@ class KnowledgeService(KnowledgeUtils):
                     res.append(FileChunk(text=val["text"], metadata=val["metadata"]))
                 return parse_type, file_share_url, res, partitions
 
-        filepath, file_name = file_download(file_path)
+        filepath, file_name = await async_file_download(file_path)
         file_ext = file_name.split(".")[-1].lower()
         file_name = cls.get_upload_file_original_name(file_name)
 
         # 切分文本
-        texts, metadatas, parse_type, partitions = read_chunk_text(
+        texts, metadatas, parse_type, partitions = await async_read_chunk_text(
+            login_user.user_id,
             filepath,
             file_name,
             req_data.separator,
@@ -439,50 +442,53 @@ class KnowledgeService(KnowledgeUtils):
             enable_formula=req_data.enable_formula,
             filter_page_header_footer=req_data.filter_page_header_footer,
             retain_images=req_data.retain_images,
-            excel_rule=excel_rule
+            excel_rule=excel_rule,
+            no_summary=True,
         )
         if len(texts) == 0:
             raise ValueError("文件解析为空")
         res = []
         cache_map = {}
         for index, val in enumerate(texts):
-            cache_map[index] = {"text": val, "metadata": metadatas[index]}
-            res.append(FileChunk(text=val, metadata=metadatas[index]))
+            metadata_dict = metadatas[index].model_dump()
+            cache_map[index] = {"text": val, "metadata": metadata_dict}
+            res.append(FileChunk(text=val, metadata=metadata_dict))
 
         # 默认是源文件的地址
         file_share_url = file_path
         if file_ext in ['doc', 'ppt', 'pptx']:
             file_share_url = ''
             new_file_name = KnowledgeUtils.get_tmp_preview_file_object_name(filepath)
-            if minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
+            minio_client = await get_minio_storage()
+            if await minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
                 file_share_url = minio_client.get_share_link(
                     new_file_name, minio_client.tmp_bucket
                 )
 
         # 存入缓存
-        cls.save_preview_cache(cache_key, mapping=cache_map)
-        redis_client.set(f"{cache_key}_parse_type", parse_type)
-        redis_client.set(f"{cache_key}_file_path", file_share_url)
-        redis_client.set(f"{cache_key}_partitions", partitions)
+        await cls.async_save_preview_cache(cache_key, mapping=cache_map)
+        await redis_client.aset(f"{cache_key}_parse_type", parse_type)
+        await redis_client.aset(f"{cache_key}_file_path", file_share_url)
+        await redis_client.aset(f"{cache_key}_partitions", partitions)
         return parse_type, file_share_url, res, partitions
 
     @classmethod
-    def update_preview_file_chunk(
+    async def update_preview_file_chunk(
             cls, request: Request, login_user: UserPayload, req_data: UpdatePreviewFileChunk
     ):
-        knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
-        if not login_user.access_check(
+        knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
+        if not await login_user.async_access_check(
                 knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
         ):
             raise UnAuthorizedError.http_exception()
 
         cache_key = cls.get_preview_cache_key(req_data.knowledge_id, req_data.file_path)
-        chunk_info = cls.get_preview_cache(cache_key, req_data.chunk_index)
+        chunk_info = await cls.async_get_preview_cache(cache_key, req_data.chunk_index)
         if not chunk_info:
             raise NotFoundError.http_exception()
         chunk_info["text"] = req_data.text
         chunk_info["metadata"]["bbox"] = req_data.bbox
-        cls.save_preview_cache(
+        await cls.async_save_preview_cache(
             cache_key, chunk_index=req_data.chunk_index, value=chunk_info
         )
 
@@ -541,6 +547,8 @@ class KnowledgeService(KnowledgeUtils):
             background_tasks: BackgroundTasks,
             req_data: KnowledgeFileProcess,
     ) -> List[KnowledgeFile]:
+        from bisheng.worker.knowledge import file_worker
+
         """处理上传的文件"""
         knowledge, failed_files, process_files, preview_cache_keys = (
             cls.save_knowledge_file(login_user, req_data)
@@ -581,6 +589,48 @@ class KnowledgeService(KnowledgeUtils):
         return failed_files + process_files
 
     @classmethod
+    async def rebuild_knowledge_file(cls, request: Request,
+                                     login_user: UserPayload,
+                                     req_data: KnowledgeFileReProcess):
+        """
+        重建知识库文件
+        :param request:
+        :param login_user:
+        :param req_data:
+        :return:
+        """
+        from bisheng.worker.knowledge import file_worker
+
+        knowledge = await KnowledgeDao.async_query_by_id(req_data.knowledge_id)
+        if not knowledge:
+            raise NotFoundError.http_exception()
+        if not login_user.access_check(
+                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
+        ):
+            raise UnAuthorizedError.http_exception()
+
+        db_file = await KnowledgeFileDao.query_by_id(req_data.kb_file_id)
+
+        if not db_file:
+            raise NotFoundError.http_exception()
+
+        split_rule_dict = req_data.model_dump(include=set(list(FileProcessBase.model_fields.keys())))
+        if req_data.excel_rule is not None:
+            split_rule_dict["excel_rule"] = req_data.excel_rule.model_dump()
+        db_file.split_rule = json.dumps(split_rule_dict)
+        db_file.status = KnowledgeFileStatus.PROCESSING.value  # 解析中
+        db_file.updater_id = login_user.user_id
+        db_file.updater_name = login_user.user_name
+        db_file = await KnowledgeFileDao.async_update(db_file)
+
+        file_path, _ = cls.get_file_share_url(db_file.id)
+
+        preview_cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path=file_path)
+        file_worker.retry_knowledge_file_celery.delay(db_file.id, preview_cache_key, req_data.callback_url)
+
+        return db_file.model_dump()
+
+    @classmethod
     def retry_files(
             cls,
             request: Request,
@@ -588,6 +638,8 @@ class KnowledgeService(KnowledgeUtils):
             background_tasks: BackgroundTasks,
             req_data: dict,
     ):
+        from bisheng.worker.knowledge import file_worker
+
         db_file_retry = req_data.get("file_objs")
         if not db_file_retry:
             return []
@@ -606,6 +658,9 @@ class KnowledgeService(KnowledgeUtils):
         res = []
 
         req_data["knowledge_id"] = knowledge.id
+
+        minio_client = get_minio_storage_sync()
+
         for file in db_files:
             input_file = id2input.get(file.id)
 
@@ -618,17 +673,16 @@ class KnowledgeService(KnowledgeUtils):
             if file.object_name.startswith('tmp'):
                 # 把临时文件移动到正式目录
                 new_object_name = KnowledgeUtils.get_knowledge_file_object_name(file.id, file.object_name)
-                minio_client.copy_object(file.object_name, new_object_name,
-                                         bucket_name=minio_client.tmp_bucket,
-                                         target_bucket_name=minio_client.bucket)
+                minio_client.copy_object_sync(source_object=file.object_name, dest_object=new_object_name,
+                                              source_bucket=minio_client.tmp_bucket,
+                                              dest_bucket=minio_client.bucket)
                 file.object_name = new_object_name
-
-            if input_file["remark"] and "对应已存在文件" in input_file["remark"]:
-                file.file_name = input_file["remark"].split(" 对应已存在文件 ")[0]
-                file.remark = ""
-
+            file.file_name = input_file.get("file_name", None) or file.file_name
+            file.remark = ""
             file.split_rule = input_file["split_rule"]
             file.status = KnowledgeFileStatus.PROCESSING.value  # 解析中
+            file.updater_id = login_user.user_id
+            file.updater_name = login_user.user_name
 
             file = KnowledgeFileDao.update(file)
             res.append([file, file_preview_cache_key])
@@ -690,6 +744,7 @@ class KnowledgeService(KnowledgeUtils):
             file_info.excel_rule = ExcelRule()
         split_rule["excel_rule"] = file_info.excel_rule.model_dump()
         str_split_rule = json.dumps(split_rule)
+        minio_client = get_minio_storage_sync()
 
         if content_repeat or name_repeat:
             db_file = content_repeat[0] if content_repeat else name_repeat[0]
@@ -697,10 +752,12 @@ class KnowledgeService(KnowledgeUtils):
             file_type = file_name.rsplit(".", 1)[-1]
             obj_name = f"tmp/{db_file.id}.{file_type}"
             db_file.object_name = obj_name
-            db_file.remark = f"{original_file_name} 对应已存在文件 {old_name}"
+            db_file.remark = json.dumps({
+                "new_name": original_file_name,
+                "old_name": old_name}, ensure_ascii=False)
             # 上传到minio，不修改数据库，由前端决定是否覆盖，覆盖的话调用重试接口
             with open(filepath, "rb") as file:
-                minio_client.upload_tmp(db_file.object_name, file.read())
+                minio_client.put_object_tmp_sync(db_file.object_name, file.read())
             db_file.status = KnowledgeFileStatus.FAILED.value
             db_file.split_rule = str_split_rule
             # 更新文件大小信息
@@ -715,14 +772,64 @@ class KnowledgeService(KnowledgeUtils):
             md5=md5_,
             split_rule=str_split_rule,
             user_id=login_user.user_id,
+            user_name=login_user.user_name,
+            updater_id=login_user.user_id,
+            updater_name=login_user.user_name,
         )
         db_file = KnowledgeFileDao.add_file(db_file)
+        telemetry_service.log_event_sync(
+            user_id=login_user.user_id,
+            event_type=BaseTelemetryTypeEnum.NEW_KNOWLEDGE_FILE,
+            trace_id=trace_id_var.get(),
+        )
         # 原始文件保存
         db_file.object_name = KnowledgeUtils.get_knowledge_file_object_name(db_file.id, db_file.file_name)
-        res = minio_client.upload_minio(db_file.object_name, filepath)
-        logger.info("upload_original_file path={} res={}", db_file.object_name, res)
+        minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=db_file.object_name,
+                                     file=filepath)
+        logger.info("upload_original_file path={}", db_file.object_name)
         KnowledgeFileDao.update(db_file)
         return db_file
+
+    @classmethod
+    def get_knowledge_files_title(cls, db_knowledge: Knowledge, files: List[KnowledgeFile]) -> Dict[str, str]:
+        """通过文件id获取文件标题"""
+        if not files:
+            return {}
+        files = [one for one in files if one.status == KnowledgeFileStatus.SUCCESS.value]
+        if not files:
+            return {}
+        file_title_map: Dict[str, str] = {}
+        try:
+            embeddings = FakeEmbedding()
+            es_client = decide_vectorstores(
+                db_knowledge.index_name, "ElasticKeywordsSearch", embeddings
+            )
+            search_data = {
+                "size": len(files),
+                "sort": [
+                    {
+                        "metadata.chunk_index": {
+                            "order": "asc",
+                            "missing": 0,
+                            "unmapped_type": "long",
+                        }
+                    }
+                ],
+                "post_filter": {
+                    "terms": {"metadata.document_id": [one.id for one in files]}
+                },
+                "collapse": {"field": "metadata.document_id"},
+            }
+            es_res = es_client.client.search(
+                index=db_knowledge.index_name, body=search_data
+            )
+            for one in es_res["hits"]["hits"]:
+                file_title_map[str(one["_source"]["metadata"]["document_id"])] = one["_source"]["metadata"]["abstract"]
+        except Exception as e:
+            # maybe es index not exist so ignore this error
+            logger.warning(f"act=get_knowledge_files error={str(e)}")
+            pass
+        return file_title_map
 
     @classmethod
     def get_knowledge_files(
@@ -752,51 +859,20 @@ class KnowledgeService(KnowledgeUtils):
 
         # get file title from es
         finally_res = []
-        file_title_map = {}
-        if res:
-            try:
-                embeddings = FakeEmbedding()
-                es_client = decide_vectorstores(
-                    db_knowledge.index_name, "ElasticKeywordsSearch", embeddings
-                )
-                search_data = {
-                    "size": len(res),
-                    "sort": [
-                        {
-                            "metadata.chunk_index": {
-                                "order": "asc",
-                                "missing": 0,
-                                "unmapped_type": "long",
-                            }
-                        }
-                    ],
-                    "post_filter": {
-                        "terms": {"metadata.file_id": [one.id for one in res]}
-                    },
-                    "collapse": {"field": "metadata.file_id"},
-                }
-                es_res = es_client.client.search(
-                    index=db_knowledge.index_name, body=search_data
-                )
-                for one in es_res["hits"]["hits"]:
-                    file_title_map[one["_source"]["metadata"]["file_id"]] = one[
-                        "_source"
-                    ]["metadata"]["title"]
-            except Exception as e:
-                # maybe es index not exist so ignore this error
-                logger.warning(f"act=get_knowledge_files error={str(e)}")
-                pass
+        file_title_map = cls.get_knowledge_files_title(db_knowledge, res)
         timeout_files = []
         for index, one in enumerate(res):
             finally_res.append(KnowledgeFileResp(**one.model_dump()))
             # 超过一天还在解析中的，将状态置为失败
-            if one.status == KnowledgeFileStatus.PROCESSING.value and (datetime.now() - one.update_time).days > 1:
+            if one.status == KnowledgeFileStatus.PROCESSING.value and (
+                    datetime.now() - one.update_time).total_seconds() > 86400:
                 timeout_files.append(one.id)
                 continue
-            finally_res[index].title = file_title_map.get(one.id, "")
+            finally_res[index].title = file_title_map.get(str(one.id), "")
         if timeout_files:
             KnowledgeFileDao.update_file_status(timeout_files, KnowledgeFileStatus.FAILED,
-                                                '文件处理时间超过24小时')
+                                                KnowledgeFileFailedError(
+                                                    data={"exception": 'Parsing time exceeds 24 hours'}).to_json_str())
 
         return (
             finally_res,
@@ -810,6 +886,8 @@ class KnowledgeService(KnowledgeUtils):
     def delete_knowledge_file(
             cls, request: Request, login_user: UserPayload, file_ids: List[int]
     ):
+        from bisheng.worker.knowledge import file_worker
+
         knowledge_file = KnowledgeFileDao.select_list(file_ids)
         if not knowledge_file:
             raise NotFoundError.http_exception()
@@ -822,6 +900,9 @@ class KnowledgeService(KnowledgeUtils):
         # 处理vectordb
         delete_knowledge_file_vectors(file_ids)
         KnowledgeFileDao.delete_batch(file_ids)
+        telemetry_service.log_event_sync(user_id=login_user.user_id,
+                                         event_type=BaseTelemetryTypeEnum.DELETE_KNOWLEDGE_FILE,
+                                         trace_id=trace_id_var.get())
 
         # 删除知识库文件的审计日志
         cls.delete_knowledge_file_hook(
@@ -855,6 +936,18 @@ class KnowledgeService(KnowledgeUtils):
         )
 
     @classmethod
+    def judge_knowledge_access(cls, login_user: UserPayload, knowledge_id: int, access_type: AccessType) -> Knowledge:
+        db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
+        if not db_knowledge:
+            raise NotFoundError.http_exception()
+
+        if not login_user.access_check(
+                db_knowledge.user_id, str(knowledge_id), access_type
+        ):
+            raise UnAuthorizedError.http_exception()
+        return db_knowledge
+
+    @classmethod
     def get_knowledge_chunks(
             cls,
             request: Request,
@@ -865,29 +958,16 @@ class KnowledgeService(KnowledgeUtils):
             page: int = None,
             limit: int = None,
     ) -> (List[FileChunk], int):
-        db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
-        if not db_knowledge:
-            raise NotFoundError.http_exception()
+        db_knowledge = cls.judge_knowledge_access(login_user, knowledge_id, AccessType.KNOWLEDGE)
 
-        if not login_user.access_check(
-                db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE
-        ):
-            raise UnAuthorizedError.http_exception()
-
-        index_name = (
-            db_knowledge.index_name
-            if db_knowledge.index_name
-            else db_knowledge.collection_name
-        )
-        embeddings = FakeEmbedding()
-        es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
+        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(db_knowledge)
 
         search_data = {
             "from": (page - 1) * limit,
             "size": limit,
             "sort": [
                 {
-                    "metadata.file_id": {
+                    "metadata.document_id": {
                         "order": "desc",
                         "missing": 0,
                         "unmapped_type": "long",
@@ -903,11 +983,11 @@ class KnowledgeService(KnowledgeUtils):
             ],
         }
         if file_ids:
-            search_data["post_filter"] = {"terms": {"metadata.file_id": file_ids}}
+            search_data["post_filter"] = {"terms": {"metadata.document_id": file_ids}}
         if keyword:
             search_data["query"] = {"match_phrase": {"text": keyword}}
         try:
-            res = es_client.client.search(index=index_name, body=search_data)
+            res = es_client.client.search(index=db_knowledge.index_name, body=search_data)
         except Exception as e:
             logger.warning(f"act=get_knowledge_chunks error={str(e)}")
             raise KnowledgeChunkError.http_exception()
@@ -916,13 +996,13 @@ class KnowledgeService(KnowledgeUtils):
         file_ids = set()
         result = []
         for one in res["hits"]["hits"]:
-            file_ids.add(one["_source"]["metadata"]["file_id"])
+            file_ids.add(one["_source"]["metadata"]["document_id"])
         file_map = {}
         if file_ids:
             file_list = KnowledgeFileDao.get_file_by_ids(list(file_ids))
             file_map = {one.id: one for one in file_list}
         for one in res["hits"]["hits"]:
-            file_id = one["_source"]["metadata"]["file_id"]
+            file_id = one["_source"]["metadata"]["document_id"]
             file_info = file_map.get(file_id, None)
             # 过滤文件名和总结的文档摘要内容
             result.append(
@@ -935,6 +1015,47 @@ class KnowledgeService(KnowledgeUtils):
         return result, res["hits"]["total"]["value"]
 
     @classmethod
+    def update_chunk_updater_info(cls, vector_client, es_client, db_knowledge, file_id, login_user):
+        # Product Requirements！！！！！！！
+        logger.debug(f"start update_milvus_chunk_updater_info user={login_user.user_name}")
+        output_fields = [s.name for s in vector_client.col.schema.fields]
+        iterator = vector_client.col.query_iterator(
+            expr=f"document_id == {file_id}",
+            output_fields=output_fields,
+            timeout=10,
+        )
+        update_time = int(datetime.now().timestamp())
+        while True:
+            result = iterator.next()
+            if not result:
+                iterator.close()
+                break
+            for record in result:
+                if not record.get("pk") or not record.get("vector"):
+                    raise ValueError("milvus chunk pk field or vector field is None")
+                record["updater"] = login_user.user_name
+                record["update_time"] = update_time
+                vector_client.col.upsert(record)
+        logger.debug(f"update_milvus_chunk_updater_info over")
+
+        res = es_client.client.update_by_query(
+            index=db_knowledge.index_name,
+            body={
+                "query": {
+                    "bool": {
+                        "must": {"match": {"metadata.document_id": file_id}},
+                    }
+                },
+                "script": {
+                    "source": "ctx._source.metadata.updater=params.updater;ctx._source.metadata.update_time=params.update_time;",
+                    "params": {"updater": login_user.user_name, "update_time": update_time},
+                },
+            },
+            conflicts="proceed",
+        )
+        logger.debug(f"update_es_chunk_updater_info: {res}")
+
+    @classmethod
     def update_knowledge_chunk(
             cls,
             request: Request,
@@ -945,34 +1066,16 @@ class KnowledgeService(KnowledgeUtils):
             text: str,
             bbox: str,
     ):
-        db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
-        if not db_knowledge:
-            raise NotFoundError.http_exception()
-
-        if not login_user.access_check(
-                db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE_WRITE
-        ):
-            raise UnAuthorizedError.http_exception()
-
-        index_name = (
-            db_knowledge.index_name
-            if db_knowledge.index_name
-            else db_knowledge.collection_name
-        )
-
-        embeddings = decide_embeddings(db_knowledge.model)
+        db_knowledge = cls.judge_knowledge_access(login_user, knowledge_id, AccessType.KNOWLEDGE_WRITE)
 
         logger.info(
-            f"act=update_vector knowledge_id={knowledge_id} file_id={file_id} chunk_index={chunk_index}"
+            f"act=update_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}"
         )
-        vector_client = decide_vectorstores(
-            db_knowledge.collection_name, "Milvus", embeddings
-        )
+        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)
         # search metadata
-        output_fields = ["pk"]
-        output_fields.extend(list(FileChunkMetadata.model_fields.keys()))
+        output_fields = [s.name for s in vector_client.col.schema.fields if s.name != "vector"]
         res = vector_client.col.query(
-            expr=f"file_id == {file_id} && chunk_index == {chunk_index}",
+            expr=f"document_id == {file_id} && chunk_index == {chunk_index}",
             output_fields=output_fields,
             timeout=10,
         )
@@ -980,40 +1083,46 @@ class KnowledgeService(KnowledgeUtils):
         pk = []
         for one in res:
             pk.append(one.pop("pk"))
-            one["knowledge_id"] = str(knowledge_id)
             metadata.append(one)
+        if not metadata:
+            raise ValueError("chunk not found in vector db")
         # insert data
-        if metadata:
-            logger.info(f"act=add_vector {knowledge_id}")
-            new_metadata = metadata[0]
-            new_metadata["bbox"] = bbox
-            text = KnowledgeUtils.aggregate_chunk_metadata(text, new_metadata)
-            res = vector_client.add_texts([text], [new_metadata], timeout=10)
+        logger.info(f"act=add_vector {knowledge_id}")
+        new_metadata = metadata[0]
+        new_metadata["bbox"] = bbox
+        new_text = KnowledgeUtils.aggregate_chunk_metadata(text, new_metadata)
+        res = vector_client.add_texts([new_text], [new_metadata], timeout=10)
         # delete data
         logger.info(f"act=delete_vector pk={pk}")
         res = vector_client.col.delete(f"pk in {pk}", timeout=10)
         logger.info(f"act=update_vector_over {res}")
 
         logger.info(
-            f"act=update_es knowledge_id={knowledge_id} file_id={file_id} chunk_index={chunk_index}"
+            f"act=update_es knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}"
         )
-        es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
+        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(db_knowledge)
         res = es_client.client.update_by_query(
-            index=index_name,
+            index=db_knowledge.index_name,
             body={
                 "query": {
                     "bool": {
-                        "must": {"match": {"metadata.file_id": file_id}},
+                        "must": {"match": {"metadata.document_id": file_id}},
                         "filter": {"match": {"metadata.chunk_index": chunk_index}},
                     }
                 },
                 "script": {
                     "source": "ctx._source.text=params.text;ctx._source.metadata.bbox=params.bbox;",
-                    "params": {"text": text, "bbox": bbox},
+                    "params": {"text": new_text, "bbox": bbox},
                 },
             },
         )
-        logger.info(f"act=update_es_over {res}")
+        logger.info(f"act=update_es_chunk_over {res}")
+
+        # update metadata updater and update_time
+        cls.update_chunk_updater_info(vector_client, es_client, db_knowledge, file_id, login_user)
+
+        KnowledgeFileDao.update_file_updater(file_id, login_user.user_id, login_user.user_name)
+
         return True
 
     @classmethod
@@ -1025,68 +1134,59 @@ class KnowledgeService(KnowledgeUtils):
             file_id: int,
             chunk_index: int,
     ):
-        db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
-        if not db_knowledge:
-            raise NotFoundError.http_exception()
-
-        if not login_user.access_check(
-                db_knowledge.user_id, str(knowledge_id), AccessType.KNOWLEDGE_WRITE
-        ):
-            raise UnAuthorizedError.http_exception()
-
-        index_name = (
-            db_knowledge.index_name
-            if db_knowledge.index_name
-            else db_knowledge.collection_name
-        )
-        embeddings = FakeEmbedding()
+        db_knowledge = cls.judge_knowledge_access(login_user, knowledge_id, AccessType.KNOWLEDGE_WRITE)
 
         logger.info(
-            f"act=delete_vector knowledge_id={knowledge_id} file_id={file_id} chunk_index={chunk_index}"
+            f"act=delete_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}"
         )
-        vector_client = decide_vectorstores(
-            db_knowledge.collection_name, "Milvus", embeddings
-        )
+        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)
         res = vector_client.col.delete(
-            expr=f"file_id == {file_id} && chunk_index == {chunk_index}",
+            expr=f"document_id == {file_id} && chunk_index == {chunk_index}",
             timeout=10,
         )
         logger.info(f"act=delete_vector_over {res}")
 
         logger.info(
-            f"act=delete_es knowledge_id={knowledge_id} file_id={file_id} chunk_index={chunk_index} res={res}"
+            f"act=delete_es knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index} res={res}"
         )
-        es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
+        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(db_knowledge)
         res = es_client.client.delete_by_query(
-            index=index_name,
+            index=db_knowledge.index_name,
             query={
                 "bool": {
-                    "must": {"match": {"metadata.file_id": file_id}},
+                    "must": {"match": {"metadata.document_id": file_id}},
                     "filter": {"match": {"metadata.chunk_index": chunk_index}},
                 }
             },
         )
         logger.info(f"act=delete_es_over {res}")
 
+        cls.update_chunk_updater_info(vector_client, es_client, db_knowledge, file_id, login_user)
+
+        KnowledgeFileDao.update_file_updater(file_id, login_user.user_id, login_user.user_name)
+
         return True
 
     @classmethod
-    def get_file_share_url(cls, file_id: int) -> str:
+    def get_file_share_url(cls, file_id: int) -> (str, str):
+        """ 获取文件原始下载地址 和 对应的预览文件下载地址 """
         file = KnowledgeFileDao.get_file_by_ids([file_id])
         if not file:
             raise NotFoundError.http_exception()
         file = file[0]
+        minio_client = get_minio_storage_sync()
         # 130版本以前的文件解析
         if file.parse_type in [ParseType.LOCAL.value, ParseType.UNS.value]:
-            download_url = minio_client.get_share_link(str(file_id))
+            original_url = minio_client.get_share_link(cls.get_knowledge_file_object_name(file.id, file.file_name))
+            preview_url = minio_client.get_share_link(str(file.id))
         else:
+            original_url = cls.get_file_share_url_with_empty(file.object_name)
+            preview_url = ""
             # 130版本以后的文件解析逻辑，只有源文件和预览文件，不再都转pdf了
             if file.file_name.endswith(('.doc', '.ppt', '.pptx')):
                 preview_object_name = KnowledgeUtils.get_knowledge_preview_file_object_name(file.id, file.file_name)
-                download_url = cls.get_file_share_url_with_empty(preview_object_name)
-            else:
-                download_url = cls.get_file_share_url_with_empty(file.object_name)
-        return download_url
+                preview_url = cls.get_file_share_url_with_empty(preview_object_name)
+        return original_url, preview_url
 
     @classmethod
     def get_file_share_url_with_empty(cls, object_name: str) -> str:
@@ -1095,7 +1195,8 @@ class KnowledgeService(KnowledgeUtils):
         :param object_name: 文件在minio中的对象名称
         :return: 文件的分享链接
         """
-        if minio_client.object_exists(minio_client.bucket, object_name):
+        minio_client = get_minio_storage_sync()
+        if minio_client.object_exists_sync(minio_client.bucket, object_name):
             return minio_client.get_share_link(object_name, minio_client.bucket)
         return ""
 
@@ -1108,36 +1209,36 @@ class KnowledgeService(KnowledgeUtils):
         if not file_info.bbox_object_name:
             return None
 
+        minio_client = get_minio_storage_sync()
+
         # download bbox file
-        resp = minio_client.download_minio(file_info.bbox_object_name)
-        new_data = io.BytesIO()
-        for d in resp.stream(32 * 1024):
-            new_data.write(d)
-        resp.close()
-        resp.release_conn()
-        new_data.seek(0)
-        return json.loads(new_data.read().decode("utf-8"))
+        resp = minio_client.get_object_sync(bucket_name=minio_client.bucket, object_name=file_info.bbox_object_name)
+        return json.loads(resp.decode("utf-8"))
 
     @classmethod
-    def copy_knowledge(
+    async def copy_knowledge(
             cls,
             request,
             background_tasks: BackgroundTasks,
             login_user: UserPayload,
             knowledge: Knowledge,
+            knowledge_name: str = None,
     ) -> Any:
-        knowledge.state = KnowledgeState.COPYING.value
-        KnowledgeDao.update_one(knowledge)
+        from bisheng.worker.knowledge import file_worker
+
+        await KnowledgeDao.async_update_state(knowledge.id, KnowledgeState.COPYING, update_time=knowledge.update_time)
         knowldge_dict = knowledge.model_dump()
         knowldge_dict.pop("id")
         knowldge_dict.pop("create_time")
         knowldge_dict.pop("update_time", None)
         knowldge_dict["user_id"] = login_user.user_id
-        knowldge_dict["index_name"] = f"col_{int(time.time())}_{generate_uuid()[:8]}"
-        knowldge_dict["name"] = f"{knowledge.name} 副本"[:30]
+        knowldge_dict["index_name"] = generate_knowledge_index_name()
+        knowldge_dict["collection_name"] = knowldge_dict["index_name"]
+        knowldge_dict["name"] = f"{knowledge.name} Copy"[:200] if not knowledge_name else knowledge_name[:200]
+
         knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
         knowledge_new = Knowledge(**knowldge_dict)
-        target_knowlege = KnowledgeDao.insert_one(knowledge_new)
+        target_knowlege = await KnowledgeDao.async_insert_one(knowledge_new)
         # celery 还没ok
         params = {
             "source_knowledge_id": knowledge.id,
@@ -1149,54 +1250,48 @@ class KnowledgeService(KnowledgeUtils):
         return target_knowlege
 
     @classmethod
+    async def copy_qa_knowledge(
+            cls,
+            request,
+            login_user: UserPayload,
+            qa_knowledge: Knowledge,
+            knowledge_name: str = None,
+    ) -> Any:
+        await KnowledgeDao.async_update_state(qa_knowledge.id, KnowledgeState.COPYING,
+                                              update_time=qa_knowledge.update_time)
+        qa_knowldge_dict = qa_knowledge.model_dump()
+        qa_knowldge_dict.pop("id")
+        qa_knowldge_dict.pop("create_time")
+        qa_knowldge_dict.pop("update_time", None)
+        qa_knowldge_dict["user_id"] = login_user.user_id
+        qa_knowldge_dict["index_name"] = generate_knowledge_index_name()
+        qa_knowldge_dict["collection_name"] = qa_knowldge_dict["index_name"]
+        qa_knowldge_dict["name"] = f"{qa_knowledge.name} Copy"[:200] if not knowledge_name else knowledge_name[:200]
+        qa_knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
+        qa_knowledge_new = Knowledge(**qa_knowldge_dict)
+        target_qa_knowlege = await KnowledgeDao.async_insert_one(qa_knowledge_new)
+
+        cls.create_knowledge_hook(request, login_user, target_qa_knowlege)
+
+        from bisheng.worker.knowledge.qa import copy_qa_knowledge_celery
+        copy_qa_knowledge_celery.delay(source_knowledge_id=qa_knowledge.id, target_knowledge_id=target_qa_knowlege.id,
+                                       login_user_id=login_user.user_id)
+
+        return target_qa_knowlege
+
+    @classmethod
     def judge_qa_knowledge_write(
             cls, login_user: UserPayload, qa_knowledge_id: int
     ) -> Knowledge:
         db_knowledge = KnowledgeDao.query_by_id(qa_knowledge_id)
         # 查询当前知识库，是否有写入权限
         if not db_knowledge:
-            raise ServerError.http_exception(msg="当前知识库不可用，返回上级目录")
+            raise NotFoundError()
         if not login_user.access_check(
                 db_knowledge.user_id, str(qa_knowledge_id), AccessType.KNOWLEDGE
         ):
             raise UnAuthorizedError.http_exception()
 
-        if db_knowledge.type == KnowledgeTypeEnum.NORMAL.value:
-            raise ServerError.http_exception(msg="知识库为普通知识库")
+        if db_knowledge.type != KnowledgeTypeEnum.QA.value:
+            raise KnowledgeNotQAError()
         return db_knowledge
-
-
-def mixed_retrieval_recall(question: str, vector_store, keyword_store, max_content: int, model_id):
-    """
-    使用 BishengRetrieval进行混合检索召回
-    
-    Args:
-        question: 用户查询问题
-        vector_store: 向量存储（Milvus）
-        keyword_store: 关键词存储（Elasticsearch）
-    
-    Returns:
-        dict: 包含检索结果和源文档的字典
-    """
-    try:
-        llm = LLMService.get_bisheng_llm(model_id=model_id,
-                                         temperature=0.01,
-                                         cache=False)
-        # 创建混合检索器
-        rag_tool = BishengRAGTool(
-            llm=llm,
-            vector_store=vector_store,
-            keyword_store=keyword_store,
-            max_content=max_content,
-            sort_by_source_and_index=True
-        )
-
-        # 执行检索和生成
-        answer, docs = rag_tool.run(question, return_only_outputs=False)
-        logger.info(f"act=mixed_retrieval_recall result={docs}")
-        logger.info(f"act=mixed_retrieval_recall answer={answer}")
-        # 格式化返回结果
-        return docs
-
-    except Exception as e:
-        logger.error(f"检索失败: {str(e)}")

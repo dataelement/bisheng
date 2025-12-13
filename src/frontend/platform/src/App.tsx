@@ -1,6 +1,6 @@
 import cloneDeep from "lodash-es/cloneDeep";
 import uniqueId from "lodash-es/uniqueId";
-import { useContext, useEffect, useMemo, useState } from "react";
+import { Suspense, useContext, useEffect, useMemo, useState } from "react";
 import { RouterProvider } from "react-router-dom";
 import "./App.css";
 import "./style/vditor.css"
@@ -161,9 +161,9 @@ export default function App() {
   }, [t])
   // init language
   useEffect(() => {
-    const lang = user?.user_id ? localStorage.getItem('language-' + user.user_id) : null
+    const lang = user?.user_id ? localStorage.getItem('i18nextLng') : null
     if (lang) {
-      i18next.changeLanguage(lang)
+      i18next.changeLanguage(lang === 'zh' ? 'zh-Hans' : lang)
     }
   }, [user])
 
@@ -181,11 +181,24 @@ export default function App() {
   return (
     //need parent component with width and height
     <div className="flex h-full flex-col">
-      {(user?.user_id || noAuthPages.includes(path)) && router ? <RouterProvider router={router} />
+      {(user?.user_id || noAuthPages.includes(path)) && router ?
+        <Suspense fallback={
+          <div className='absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared'>
+            <LoadingIcon className="size-48 text-primary" />
+          </div>
+        }>
+          <RouterProvider router={router} />
+        </Suspense>
         : user ? <div className='absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared'>
           <LoadingIcon className="size-48 text-primary" />
         </div>
-          : <RouterProvider router={publicRouter} />}
+          : <Suspense fallback={
+            <div className='absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared'>
+              <LoadingIcon className="size-48 text-primary" />
+            </div>
+          }>
+            <RouterProvider router={publicRouter} />
+          </Suspense>}
       <div></div>
       <div className="app-div" style={{ zIndex: 1000 }}>
         {alertsList.map((alert) => (

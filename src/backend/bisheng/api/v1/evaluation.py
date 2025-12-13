@@ -1,31 +1,28 @@
 import io
-import json
 from typing import Optional
 
+from datasets import Dataset
 from fastapi import APIRouter, Depends, Query, UploadFile, Form, BackgroundTasks
 
 from bisheng.api.services.evaluation import EvaluationService, add_evaluation_task
-from bisheng.api.services.user_service import UserPayload, get_login_user
-from bisheng.api.v1.schemas import resp_200, resp_500
-from bisheng.cache.utils import convert_encoding_cchardet
-from bisheng.database.base import session_getter
+from bisheng.api.v1.schemas import resp_200
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.server import UploadFileExtError
+from bisheng.core.cache.utils import convert_encoding_cchardet
+from bisheng.core.database import get_sync_db_session
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.evaluation import EvaluationCreate, Evaluation
-from bisheng.utils.minio_client import MinioClient
-from fastapi_jwt_auth import AuthJWT
 
-router = APIRouter(prefix='/evaluation', tags=['Evaluation'], dependencies=[Depends(get_login_user)])
+router = APIRouter(prefix='/evaluation', tags=['Evaluation'], dependencies=[Depends(UserPayload.get_login_user)])
 
 
 @router.get('')
 def get_evaluation(*,
                    page: Optional[int] = Query(default=1, gt=0, description='页码'),
                    limit: Optional[int] = Query(default=10, gt=0, description='每页条数'),
-                   Authorize: AuthJWT = Depends()):
+                   login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ 获取评测任务列表. """
-    Authorize.jwt_required()
-    current_user = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**current_user)
-    return EvaluationService.get_evaluation(user, page, limit)
+    return EvaluationService.get_evaluation(login_user, page, limit)
 
 
 @router.post('')
@@ -36,21 +33,24 @@ def create_evaluation(*,
                       unique_id: str = Form(),
                       version: Optional[int | str] = Form(default=None),
                       background_tasks: BackgroundTasks,
-                      authorize: AuthJWT = Depends()):
+                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ 创建评测任务. """
-    authorize.jwt_required()
-    payload = json.loads(authorize.get_jwt_subject())
-    user_id = payload.get('user_id')
+    user_id = login_user.user_id
     if not version:
         version = 0
 
     try:
         # 尝试做下转码操作
-        output_file = io.BytesIO()
-        file.file = convert_encoding_cchardet(file.file, output_file)
-        EvaluationService.parse_csv(file_data=io.BytesIO(file.file.read()))
-    except ValueError:
-        return resp_500(code=400, message='文件格式不符合要求，请参考模板文件')
+        output_file = convert_encoding_cchardet(file_io=io.BytesIO(file.file.read()))
+        csv_data = EvaluationService.parse_csv(file_data=output_file)
+        data_samples = {
+            "question": [one.get('question') for one in csv_data],
+            "answer": [one.get('answer') for one in csv_data],
+            "ground_truths": [[one.get('ground_truth')] for one in csv_data]
+        }
+        dataset = Dataset.from_dict(data_samples)
+    except Exception:
+        raise UploadFileExtError()
     finally:
         file.file.seek(0)
 
@@ -62,7 +62,7 @@ def create_evaluation(*,
                                                                user_id=user_id,
                                                                file_name=file_name,
                                                                file_path=file_path))
-    with session_getter() as session:
+    with get_sync_db_session() as session:
         session.add(db_evaluation)
         session.commit()
         session.refresh(db_evaluation)
@@ -73,21 +73,17 @@ def create_evaluation(*,
 
 
 @router.delete('/{evaluation_id}', status_code=200)
-def delete_evaluation(*, evaluation_id: int, Authorize: AuthJWT = Depends()):
+def delete_evaluation(*, evaluation_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ 删除评测任务（逻辑删除）. """
-    Authorize.jwt_required()
-    current_user = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**current_user)
-    return EvaluationService.delete_evaluation(evaluation_id, user_payload=user)
+    return EvaluationService.delete_evaluation(evaluation_id, user_payload=login_user)
 
 
 @router.get('/result/file/download')
 async def get_download_url(*,
                            file_url: str,
-                           Authorize: AuthJWT = Depends()):
+                           login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ 获取文件下载地址. """
-    Authorize.jwt_required()
-    minio_client = MinioClient()
+    minio_client = await get_minio_storage()
     download_url = minio_client.get_share_link(file_url)
     return resp_200(data={
         'url': download_url
@@ -95,8 +91,8 @@ async def get_download_url(*,
 
 
 @router.post('/{evaluation_id}/process', status_code=200)
-def delete_evaluation(*, evaluation_id: int, background_tasks: BackgroundTasks, Authorize: AuthJWT = Depends()):
+def process_evaluation(*, evaluation_id: int, background_tasks: BackgroundTasks,
+                       login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ 手动执行评测任务. """
-    Authorize.jwt_required()
     background_tasks.add_task(add_evaluation_task, evaluation_id=evaluation_id)
     return resp_200()

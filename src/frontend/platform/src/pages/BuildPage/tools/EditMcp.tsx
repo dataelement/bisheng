@@ -11,9 +11,10 @@ import { userContext } from "@/contexts/userContext";
 import { createTool, deleteTool, getMcpServeByConfig, testMcpApi, updateTool } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { isValidJSON } from "@/util/utils";
-import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
-// 测试对话框组件
+// test chat
 const TestDialog = forwardRef((props, ref) => {
     const [testShow, setTestShow] = useState(false);
     const [toolData, setToolData] = useState(null);
@@ -37,7 +38,7 @@ const TestDialog = forwardRef((props, ref) => {
     }));
 
     const handleTest = async () => {
-        // 校验必填参数
+        // validate params
         // const requiredParams = Object.entries(toolData.inputSchema.properties)
         //     .filter(([_, schema]) => schema.required)
         //     .map(([name]) => name);
@@ -45,7 +46,7 @@ const TestDialog = forwardRef((props, ref) => {
 
         const errors = requiredParams.filter(name => !params[name]);
         if (errors.length > 0) {
-            return message({ description: `以下参数必填：${errors.join(", ")}`, variant: "warning" });
+            return message({ description: errors.map(n => `${n} ${t('required')}`), variant: "warning" });
         }
 
         setLoading(true);
@@ -71,6 +72,8 @@ const TestDialog = forwardRef((props, ref) => {
         }
     };
 
+    const { t } = useTranslation();
+
     return (
         <Dialog open={testShow} onOpenChange={setTestShow}>
             <DialogContent className="sm:max-w-[625px]">
@@ -82,8 +85,8 @@ const TestDialog = forwardRef((props, ref) => {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>参数</TableHead>
-                                    <TableHead>值</TableHead>
+                                    <TableHead>{t('test.parameter')}</TableHead>
+                                    <TableHead>{t('test.value')}</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -95,7 +98,7 @@ const TestDialog = forwardRef((props, ref) => {
                                         </TableCell>
                                         <TableCell>
                                             <Input
-                                                placeholder={`输入${schema.type || 'string'}类型值`}
+                                                placeholder={t('test.inputTypeValue', { type: schema.type || 'string' })}
                                                 onChange={(e) => setParams(prev => ({
                                                     ...prev,
                                                     [name]: e.target.value
@@ -107,10 +110,10 @@ const TestDialog = forwardRef((props, ref) => {
                             </TableBody>
                         </Table>
                     </div>
-                    <Button onClick={handleTest} disabled={loading}>测试</Button>
+                    <Button onClick={handleTest} disabled={loading}>{t('test.test')}</Button>
                     <Textarea
                         value={result}
-                        placeholder="点击按钮，输出测试结果"
+                        placeholder={t('test.outResultPlaceholder')}
                         readOnly
                         className="mt-2 min-h-[100px]"
                     />
@@ -120,7 +123,7 @@ const TestDialog = forwardRef((props, ref) => {
     );
 });
 
-// 主组件  TODO(重构,状态混乱)
+// Main component  TODO(refactor, state confusion)
 const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref) => {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
@@ -137,29 +140,43 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
     const testToolDialogRef = useRef(null);
     const { user } = useContext(userContext);
     const [isSelf, setIsSelf] = useState(false);
-    // 解析标记
+    // Parse flag
     const textareaRef = useRef(null);
-    const [isLoading, setIsLoading] = useState(false); // 加载状态
-    const latestFormData = useRef(initialFormState); // 存储最新表单数据
-    const parseBeforeSaveRef = useRef(false); // 保存前需要解析
+    const [isLoading, setIsLoading] = useState(false); // Loading state
+    const latestFormData = useRef(initialFormState); // Store latest form data
+    const parseBeforeSaveRef = useRef(false); // Need to parse before saving
+    const [isWrite, setIsWrite] = useState(false)
     useEffect(() => {
         latestFormData.current = formData;
     }, [formData]);
 
-    // 示例配置
-    const exampleConfigs = {
-        gaode: JSON.stringify({
+    const { t } = useTranslation();
+
+    // Example configurations
+    const exampleConfigs = useMemo(() => ({
+        gaode1: JSON.stringify({
             "mcpServers": {
                 "amap-sse": {
-                    "name": "高德地图",
-                    "description": "提供全场景覆盖的地图服务，包括地理编码、逆地理编码、IP 定位、天气查询、骑行路径规划、步行路径规划、驾车路径规划、公交路径规划、距离测量、关键词搜索、周边搜索、详情搜索等。",
+                    "type": "sse",
+                    "name": t('tools.gaodeMap'),
+                    "description": t('tools.gaodeMapDesc'),
                     "url": "https://mcp.amap.com/sse?key=yourapikey"
                 }
             }
+        }, null, 2),
+        gaode2: JSON.stringify({
+            "mcpServers": {
+                "amap-streamable": {
+                    "type": "streamable",
+                    "name": t('tools.gaodeMap'),
+                    "description": t('tools.gaodeMapDesc'),
+                    "url": "https://mcp.amap.com/mcp?key=yourapikey"
+                }
+            }
         }, null, 2)
-    };
+    }), [t]);
 
-    // 暴露方法给父组件
+    // Expose methods to parent component
     useImperativeHandle(ref, () => ({
         open: (serverData = null) => {
             if (serverData) {
@@ -171,6 +188,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                 latestFormData.current = newFormData;
                 serverRef.current = serverData;
                 setIsSelf(serverData.user_id === user.user_id);
+                setIsWrite(serverData.write)
                 originalName.current = serverData.name;
                 setIsEditMode(true);
                 loadToolsFromSchema(serverData.openapi_schema);
@@ -184,7 +202,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
     }));
 
 
-    // 重置表单
+    // Reset form
     const resetFormState = () => {
         setFormData(initialFormState);
         latestFormData.current = initialFormState;
@@ -197,10 +215,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
 
         if (!isValidJSON(schemaContent)) {
             setAvailableTools([]);
-            return message({
-                description: "配置格式错误，请检查JSON格式是否正确",
-                variant: "warning"
-            });
+            return message({ description: t('tools.configFormatError'), variant: "warning" });
         }
 
         // setIsLoading(true);
@@ -218,7 +233,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                 const parsedApis = tools.children.map(item => JSON.parse(item.extra));
                 setAvailableTools(parsedApis);
 
-                // 更新表单数据和ref
+                // Update form data and ref
                 const newFormData = {
                     ...latestFormData.current,
                     children: tools.children
@@ -237,29 +252,29 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
         const name = latestFormData.current.name.trim();
         const schema = latestFormData.current.openapiSchema.trim();
 
-        // 名称校验
+        // Name validation
         if (!name) {
-            errors.push("名称不能为空");
+            errors.push(t('tools.nameRequired'));
         } else if (
             existingNames.some(
                 n => n.toLowerCase() === name.toLowerCase() &&
                     n !== originalName.current
             )
         ) {
-            errors.push("名称已存在，请修改");
+            errors.push(t('tools.nameExists'));
         }
 
-        // Schema校验
+        // Schema validation
         if (!schema) {
-            errors.push("配置不能为空");
+            errors.push(t('tools.configRequired'));
         } else if (!isValidJSON(schema)) {
-            errors.push("配置格式错误，请检查JSON格式是否正确");
+            errors.push(t('tools.configFormatError'));
         }
 
         return errors;
     };
 
-    // 表单提交
+    // Form submission
     const handleSubmit = async () => {
         if (parseBeforeSaveRef.current) {
             setIsLoading(true);
@@ -270,7 +285,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
             }, 0);
         }
 
-        // 使用latestFormData.current获取最新数据
+        // Use latestFormData.current to get latest data
         const validationErrors = validateForm();
         if (validationErrors.length > 0) {
             return message({
@@ -292,7 +307,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                 is_preset: 2
             })).then((res) => {
                 if (!res) return;
-                message({ description: "保存成功", variant: "success" });
+                message({ description: t('skills.saveSuccessful'), variant: "success" });
                 setIsDialogOpen(false);
                 onReload();
             });
@@ -301,11 +316,11 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
         }
     };
 
-    // 删除服务器（保持不变）
+    // Delete server (keep unchanged)
     const handleServerDelete = () => {
         bsConfirm({
-            title: "提示",
-            desc: "确认删除该 MCP 服务器？",
+            title: t('prompt'),
+            desc: t('tools.confirmDeleteMcp'),
             onOk(closeDialog) {
                 captureAndAlertRequestErrorHoc(
                     deleteTool(formData.id)
@@ -331,17 +346,17 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
             <Sheet open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <SheetContent className="w-[800px] sm:max-w-[800px] p-4 bg-background-login">
                     <SheetHeader>
-                        <SheetTitle>{isEditMode ? "编辑" : "添加"} MCP 服务器</SheetTitle>
+                        <SheetTitle>{isEditMode ? t('edit') : t('add')} {t('mcpServer')}</SheetTitle>
                     </SheetHeader>
 
                     <div className="mt-4 space-y-6 px-6 overflow-y-auto h-[calc(100vh-200px)]">
-                        {/* 名称输入 */}
+                        {/* Name input */}
                         <div>
-                            <label className="">名称</label>
+                            <label className="">{t('tools.name')}</label>
                             <Input
                                 value={formData.name}
                                 className="mt-2"
-                                placeholder="输入MCP 服务名称"
+                                placeholder={t('tools.enterMcpName')}
                                 onChange={(e) => setFormData(prev => ({
                                     ...prev,
                                     name: e.target.value
@@ -349,17 +364,18 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                             />
                         </div>
 
-                        {/* 配置输入 */}
+                        {/* Configuration input */}
                         <div>
                             <div className="flex justify-between items-center mb-2">
-                                <label className="">MCP服务器配置</label>
+                                <label className="">{t('tools.mcpServerConfig')}</label>
                                 <Select value={'1'} onValueChange={handleExampleSelect}>
                                     <SelectTrigger className="w-[180px]">
-                                        <span>示例</span>
+                                        <span>{t('tools.examples')}</span>
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectGroup>
-                                            <SelectItem value="gaode">高德地图</SelectItem>
+                                            <SelectItem value="gaode1">{t('tools.gaodeMapSSE')}</SelectItem>
+                                            <SelectItem value="gaode2">{t('tools.gaodeMapStreamable')}</SelectItem>
                                         </SelectGroup>
                                     </SelectContent>
                                 </Select>
@@ -367,7 +383,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                             <Textarea
                                 ref={textareaRef}
                                 value={formData.openapiSchema}
-                                placeholder="输入您的 MCP 服务器配置 json"
+                                placeholder={t('tools.enterOpenAPISchema')}
                                 className="min-h-[200px] font-mono"
                                 onChange={(e) => {
                                     setFormData(prev => ({
@@ -380,20 +396,20 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                             />
                         </div>
 
-                        {/* 工具列表 */}
+                        {/* Tool list */}
                         <div>
                             <div className="flex justify-between items-center mb-2">
-                                <label>可用工具</label>
+                                <label>{t('tools.availableTools')}</label>
                                 <Button variant="outline" disabled={isLoading} onClick={() => loadToolsFromSchema(formData.openapiSchema)}>
-                                    刷新
+                                    {t('build.refresh')}
                                 </Button>
                             </div>
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>名称</TableHead>
-                                        <TableHead>描述</TableHead>
-                                        <TableHead>操作</TableHead>
+                                        <TableHead>{t('tools.name')}</TableHead>
+                                        <TableHead>{t('tools.description')}</TableHead>
+                                        <TableHead>{t('operations')}</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -409,9 +425,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                                                         formData.openapiSchema,
                                                         serverRef.current
                                                     )}
-                                                >
-                                                    测试
-                                                </Button>
+                                                >{t('test.test')}</Button>
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -420,23 +434,23 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                         </div>
                     </div>
 
-                    {/* 底部操作按钮 */}
+                    {/* footer buttons */}
                     <SheetFooter className="absolute bottom-0 right-0 w-full px-6 py-4">
-                        {isEditMode && (user.role === 'admin' || isSelf) && (
+                        {isEditMode && (user.role === 'admin' || isSelf || isWrite) && (
                             <Button
                                 variant="destructive"
                                 className="mr-auto"
                                 onClick={handleServerDelete}
                             >
-                                删除
+                                {t('delete')}
                             </Button>
                         )}
                         <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                            取消
+                            {t('cancel')}
                         </Button>
                         <Button disabled={isLoading} onClick={handleSubmit}>
                             {isLoading && <LoadIcon className="mr-1" />}
-                            保存
+                            {t('save')}
                         </Button>
                     </SheetFooter>
                 </SheetContent>

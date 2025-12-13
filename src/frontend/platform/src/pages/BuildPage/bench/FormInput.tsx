@@ -1,6 +1,5 @@
 // src/features/chat-config/components/FormInput.tsx
 import { Input, Textarea } from "@/components/bs-ui/input";
-import { Label } from "@/components/bs-ui/label";
 import { ReactNode } from "react";
 
 export const FormInput = ({

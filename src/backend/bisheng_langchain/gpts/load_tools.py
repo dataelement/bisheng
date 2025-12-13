@@ -101,7 +101,7 @@ def _get_bearly_code_interpreter(**kwargs: Any) -> Tool:
     return BearlyInterpreterTool(**kwargs).as_tool()
 
 
-def _get_native_code_interpreter(**kwargs: Any) -> Tool:
+def _get_native_code_interpreter(**kwargs: Any) -> BaseTool:
     executor_type = kwargs.pop("type", "local")
     config = kwargs.pop("config", {}).get(executor_type, {})
     kwargs.update(config)
@@ -258,3 +258,12 @@ def get_tool_table():
         df.loc[i, 'function_args'] = f"{tool_func.args_schema.schema()['properties']}"
 
     return df
+
+
+if __name__ == '__main__':
+    tool = load_tools({
+        "sina_realtime_info": {
+
+        }
+    })[0]
+    tool.invoke(input={"stock_symbol": "600519", "stock_exchange": "sh", "prefix": "s_"})

@@ -668,6 +668,7 @@
   "com_ui_select_search_provider": "Buscar proveedor por nombre",
   "com_ui_select_search_region": "Buscar región por nombre",
   "com_ui_share": "Compartir",
+  "no_text_recognized": "El reconocimiento de voz no está disponible. Por favor, contacte al administrador.",
   "com_ui_share_create_message": "Tu nombre y cualquier mensaje que agregues después de compartir se mantendrán privados.",
   "com_ui_share_delete_error": "Hubo un error al eliminar el enlace compartido.",
   "com_ui_share_error": "Hubo un error al compartir el enlace del chat",

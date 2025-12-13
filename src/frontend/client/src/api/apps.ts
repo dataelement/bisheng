@@ -25,13 +25,29 @@ export async function updateHomeLabelApi(tag_ids) {
 /**
  * 技能 工作流详情
  */
-export async function getFlowApi(flowId: string, version: string = 'v1'): Promise<any> {
-    return await request.get(`/api/${version}/flows/${flowId}`)
+export async function getFlowApi(flowId: string, version: string = 'v1', shareToken?: string): Promise<any> {
+    const headers = shareToken ? { 'share-token': shareToken } : {}
+
+    return await request.get(`/api/${version}/flows/${flowId}`, { headers })
+}
+
+/**
+ * 删除的技能 工作流详情
+ */
+export async function getDeleteFlowApi(chatId: string): Promise<any> {
+    return await request.get(`/api/v1/chat/info?chat_id=${chatId}`).then(res => {
+        res.data.name = res.data.flow_name
+        return res
+    })
 }
 
 // 获取助手详情
-export const getAssistantDetailApi = async (id: string, version: string = 'v1'): Promise<any> => {
-    return await request.get(`/api/${version}/assistant/info/${id}`)
+export const getAssistantDetailApi = async (id: string, shareToken?: string): Promise<any> => {
+    const headers = shareToken ? { 'share-token': shareToken } : {}
+
+    return await request.get(`/api/v1/assistant/info/${id}`, {
+        headers
+    })
 };
 
 export const baseMsgItem = {
@@ -52,6 +68,7 @@ export const baseMsgItem = {
  * 赞 踩消息
  */
 export const likeChatApi = (msgId, liked) => {
+    liked && trackingApi({ message_id: msgId, operation_type: liked === 1 ? 'like' : 'dislike' });
     return request.post(`/api/v1/liked`, { message_id: msgId, liked });
 };
 
@@ -59,6 +76,7 @@ export const likeChatApi = (msgId, liked) => {
  * 点击复制上报
  * */
 export const copyTrackingApi = (msgId) => {
+    trackingApi({ message_id: msgId, operation_type: 'copy' });
     return request.post(`/api/v1/chat/copied`, { message_id: msgId });
 }
 
@@ -69,11 +87,18 @@ export const disLikeCommentApi = (message_id, comment) => {
     return request.post(`/api/v1/chat/comment`, { message_id, comment });
 };
 
+/**
+ * Tracking
+ */
+export const trackingApi = (data: { message_id: string, operation_type: 'dislike' | 'like' | 'copy' }) => {
+    return request.post(`/api/v1/session/chat/message/telemetry`, data);
+}
 
 /**
  * 技能 工作流详情
  */
-export async function getChatHistoryApi(flowId: string, chatId: string, flowType: string, id?: number): Promise<any> {
+export async function getChatHistoryApi({ flowId, chatId, flowType, id, shareToken }
+    : { flowId: string, chatId: string, flowType: string, id?: number, shareToken?: string }): Promise<any> {
     const filterFlowMsg = (data) => {
         return data.filter(item =>
             ["question", "output_with_input_msg", "output_with_choose_msg", "stream_msg", "output_msg", "guide_question", "guide_word", "node_run", "answer"].includes(item.category)
@@ -86,7 +111,12 @@ export async function getChatHistoryApi(flowId: string, chatId: string, flowType
         )
     }
 
-    return await request.get(`/api/v1/chat/history?flow_id=${flowId}&chat_id=${chatId}&page_size=40&id=${id || ''}`).then(res => {
+    const headers = shareToken ? { 'share-token': shareToken } : {}
+
+    return await request.get(`/api/v1/chat/history?flow_id=${flowId}&chat_id=${chatId}&page_size=40&id=${id || ''}`, {
+        headers
+    }).then(res => {
+        if (res.status_code !== 200) return []
         const newData = Number(flowType) === 10 ? filterFlowMsg(res.data) : filterSkillMsg(res.data)
 
         return newData.map(item => {
@@ -107,10 +137,13 @@ export async function getChatHistoryApi(flowId: string, chatId: string, flowType
                 }
             })
 
+            let chatKey = Number(flowType) === 5 ? 'input' : (typeof message === 'string' ? undefined : Object.keys(message)[0]);
+            chatKey = chatKey === 'data' ? 'query' : chatKey // 排除data
+
             return {
                 ...other,
                 category: _category,
-                chatKey: typeof message === 'string' ? undefined : Object.keys(message)[0],
+                chatKey,
                 end: true,
                 files: _files,
                 isSend: _isSend,
@@ -149,7 +182,7 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
         });
 
         return Object.keys(fileMap).map(fileId => {
-            const { file_id: id, source: fileName, source_url: fileUrl, original_url: originUrl, ...other } = fileMap[fileId][0]
+            const { file_id: id, source: fileName, source_url, original_url: originUrl, ...other } = fileMap[fileId][0]
 
             const chunks = fileMap[fileId].sort((a, b) => b.score - a.score)
                 .map(chunk => ({
@@ -158,7 +191,20 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
                 }))
             const score = chunks[0].score
 
-            return { id, fileName, fileUrl, originUrl, chunks, ...other, score }
+            // 兼容后端历史逻辑
+            let fileUrl = ''
+            let suffix = fileName.split('.').pop().toLowerCase()
+            let isNew = false
+            if (['uns', 'local'].includes(other.parse_type)) {
+                fileUrl = other.chunk_bboxes ? source_url : originUrl;
+                if (other.chunk_bboxes) {
+                    suffix = 'pdf'
+                }
+            } else if (['etl4lm', 'un_etl4lm'].includes(other.parse_type)) {
+                fileUrl = source_url || originUrl
+                isNew = true
+            }
+            return { id, fileName, suffix, isNew, fileUrl, originUrl, chunks, ...other, score }
         }).sort((a, b) => b.score - a.score)
     } catch (error) {
         console.error(error);
@@ -282,25 +328,24 @@ export function getVariablesApi(params) {
         }) as any[]
     });
 }
-export async function getFrequently(page,limit) {
-    return await request.get('/api/v1/workstation/app/frequently_used',{
-            params: {
+export async function getFrequently(page, limit) {
+    return await request.get('/api/v1/workstation/app/frequently_used', {
+        params: {
             page,
             limit
         }
     })
 }
 
-export async function addToFrequentlyUsed(user_link_type,type_detail) {
-  return await request.post('/api/v1/workstation/app/frequently_used', {
-    user_link_type,type_detail
-  });
+export async function addToFrequentlyUsed(user_link_type, type_detail) {
+    return await request.post('/api/v1/workstation/app/frequently_used', {
+        user_link_type, type_detail
+    }, { showError: true });
 }
 
 // 从常用列表移除
 export async function removeFromFrequentlyUsed(user_id, type, type_detail) {
-    console.log(user_id, type, type_detail, 881);
-    
+
     const url = `/api/v1/workstation/app/frequently_used?user_id=${user_id}&user_link_type=${type}&type_detail=${type_detail}`;
     return await request.delete(url);
 }
@@ -329,15 +374,15 @@ export async function getAppsApi({ page = 1, pageSize = 8, keyword, tag_id = -1,
 }
 
 
-export const getChatOnlineApi = async (page, keyword, tag_id) => {
+export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = 8) => {
     const params = {
         page,
         keyword,
-        limit: 8,
+        limit: disableLimit
     }
     if (tag_id !== -1 && tag_id != null) {
         params.tag_id = tag_id
     }
-    
+
     return await request.get(`/api/v1/chat/online`, { params })
 }

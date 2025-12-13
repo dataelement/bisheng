@@ -14,6 +14,7 @@ import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "../flowStore";
 import NodeLogo from "./NodeLogo";
+import { useParams } from "react-router-dom";
 
 interface Input {
     key: string,
@@ -25,7 +26,7 @@ interface Input {
 
 export const ResultText = ({ title, value }: { title: string, value: any }) => {
     const [copyed, setCopied] = useState(false)
-    const [text, setText] = useState(() => {
+    const [text] = useState(() => {
         if (typeof value === 'object') {
             return JSON.stringify(value, null, 2)
         } else if (Array.isArray(value)) {
@@ -62,6 +63,7 @@ export const RunTest = forwardRef((props, ref) => {
     const { message } = useToast()
     const { t } = useTranslation('flow')
     const [currentIndex, setCurrentIndex] = useState(0)
+    const { id: workflow_id } = useParams();
 
     useEffect(() => {
         if (!open) {
@@ -150,24 +152,25 @@ export const RunTest = forwardRef((props, ref) => {
                 return true
             }
         })
-        
+
         // save cache
         const cacheData = inputs.reduce((res, input) => {
             res[input.key] = input.value
             return res
         }, {})
         setRunCache(node.id, cacheData)
-        
+
         setLoading(true)
         setResults([])
         await captureAndAlertRequestErrorHoc(
-            runWorkflowNodeApi(
-                inputs.reduce((result, input) => {
+            runWorkflowNodeApi({
+                node_input: inputs.reduce((result, input) => {
                     result[`${input.key}`] = input.value;
                     return result;
                 }, {}),
-                node
-            ).then(res => {
+                data: node,
+                workflow_id
+            }).then(res => {
                 const result = res.map(el => TranslationName(el)) // .map(item => ({ title: item.key, text: item.value }))
                 setCurrentIndex(0)
                 setResults(result)
@@ -178,43 +181,47 @@ export const RunTest = forwardRef((props, ref) => {
 
     // 翻译变量名
     const TranslationName = (data) => {
-        const newData = data.reduce((res, item) => {
-            if (item.type === 'variable') {
-                const key = item.key.split('.')
-                res[key[key.length - 1]] = item.value
-            } else {
-                res[item.key] = item.value
-            }
-            return res
-        }, {})
-        let result = [];
-        let hasKeys = []
-
+        const toolMap = {}
         node.group_params.forEach(group => {
             group.params.forEach(param => {
-                if (Array.isArray(param.value) && param.value.some(el => newData[el.key])) {
-                    // 尝试去value中匹配
-                    param.value.forEach(value => {
-                        if (!newData[value.key]) return
-                        result.push({ title: value.label, text: newData[value.key] })
-                        hasKeys.push(value.key)
-                    })
-                } else if (newData[param.key] !== undefined) {
-                    result.push({ title: param.label || param.key, text: newData[param.key] })
-                    hasKeys.push(param.key)
-                } else if (param.key === 'tool_list') {
+                if (param.key === 'tool_list') {
                     // tool
-                    param.value.some(p => {
-                        if (newData[p.tool_key] !== undefined) {
-                            result.push({ title: p.label, text: newData[p.tool_key] })
-                            hasKeys.push(p.tool_key)
-                            return true
-                        }
+                    param.value.forEach(el => {
+                        toolMap[el.tool_key] = el.label
                     })
                 }
             });
         });
-        return result
+
+        return data.map(item => {
+            let label = ''
+            if (['file', 'variable'].includes(item.type)) {
+                const key = item.key.split('.')
+                label = t(`node.${node.type}.${key[key.length - 1]}.label`)
+            } else if (item.type === 'tool') {
+                label = toolMap[item.key]
+            } else {
+                label = t(`node.${node.type}.${item.key}.label`)
+            }
+            return {
+                title: label,
+                type: item.type,
+                text: item.value
+            }
+        })
+        // const newData = data.reduce((res, item) => {
+        //     if (item.type === 'variable') {
+        //         const key = item.key.split('.')
+        //         res[key[key.length - 1]] = item.value
+        //     } else {
+        //         res[item.key] = item.value
+        //     }
+        //     return res
+        // }, {})
+        // let result = [];
+        // let hasKeys = []
+
+        // return result
     }
 
     return (
@@ -263,12 +270,12 @@ export const RunTest = forwardRef((props, ref) => {
                         <Select value={currentIndex + ""} onValueChange={(val => setCurrentIndex(Number(val)))}>
                             <SelectTrigger className="w-[180px]">
                                 {/* <SelectValue /> */}
-                                <span>第 {currentIndex + 1} 轮运行结果</span>
+                                <span>{t('roundRunResult', { index: currentIndex + 1 })}</span>
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectGroup>
                                     {
-                                        results.map((_, index) => <SelectItem key={index} value={index + ""}>第 {index + 1} 轮运行结果</SelectItem>)
+                                        results.map((_, index) => <SelectItem key={index} value={index + ""}>{t('roundRunResult', { index: index + 1 })}</SelectItem>)
                                     }
                                 </SelectGroup>
                             </SelectContent>

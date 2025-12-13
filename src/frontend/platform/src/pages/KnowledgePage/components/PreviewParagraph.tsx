@@ -12,14 +12,19 @@ import AceEditor from "react-ace";
 import Vditor from 'vditor';
 import 'vditor/dist/index.css';
 import useKnowledgeStore from "../useKnowledgeStore";
+// 新增：引入国际化hooks
+import { useTranslation } from "react-i18next";
+import { useMiniDebounce } from "@/util/hook";
 
 export const MarkdownView = ({ noHead = false, data }) => {
+    // 新增：使用knowledge命名空间的国际化
+    const { t } = useTranslation('knowledge');
 
     return <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary transition-shadow w-full">
         {!noHead && <p className="text-sm text-gray-500 flex gap-2 mb-1">
-            <span>分段{data.chunkIndex + 1}</span>
+            <span>{t('chunk')}{data.chunkIndex + 1}</span>
             <span>-</span>
-            <span>{data.text.length} 字符</span>
+            <span>{data.text.length} {t('characters')}</span>
         </p>}
         <MessageMarkDown message={data.text} />
     </div>
@@ -130,14 +135,26 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
         });
 
         return () => {
-            vditorRef.current?.destroy();
+            // 1. 校验实例存在 + 初始化完成 + DOM节点存在
+            if (vditorRef.current && readyRef.current && domRef.current) {
+                try {
+                    vditorRef.current.destroy(); // 仅在安全状态下执行销毁
+                } catch (error) {
+                    console.warn('Vditor销毁时发生异常:', error); // 捕获异常避免阻断流程
+                }
+            }
+            // 2. 清空引用，释放内存
+            vditorRef.current = null;
+            readyRef.current = false;
         };
     }, []);
 
     return <div ref={domRef} className={`${hidden ? 'hidden' : ''} overflow-y-auto border-none file-vditor`}></div>;
 });
 
-const EditMarkdown = ({ data, active, fileSuffix, onClick, onDel, onChange, onPositionClick }) => {
+const EditMarkdown = ({ data, active, oneLeft, fileSuffix, onClick, onDel, onChange, onPositionClick }) => {
+    const { t } = useTranslation('knowledge');
+
     const [edit, setEdit] = useState(false); // 编辑原始格式
     const { appConfig } = useContext(locationContext)
 
@@ -158,19 +175,23 @@ const EditMarkdown = ({ data, active, fileSuffix, onClick, onDel, onChange, onPo
 
     const { toast } = useToast()
     const handleBlur = (newValue, restore) => {
-        if (!value.trim() || newValue.trim() === '') {
+        const _value = value.trim()
+        const _newValue = newValue.trim()
+        if (!_value || _newValue === '') {
             setValue(data.text)
             restore?.()
             return toast({
                 variant: 'error',
-                title: '操作失败',
-                description: '分段内容不可为空',
+                title: t('operationFailed'),
+                description: t('chunkContentCannotBeEmpty'),
             })
         }
 
-        if (data.text === newValue) return // 无需保存
+        if (_value === _newValue) return // 无需保存
+        // chunk diff
         onChange(data.chunkIndex, newValue)
     }
+    const handleBlurDebounced = useMiniDebounce(handleBlur, 300)
 
     return <div
         className={cn("group p-4 py-3 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary transition-shadow w-full",
@@ -183,12 +204,12 @@ const EditMarkdown = ({ data, active, fileSuffix, onClick, onDel, onChange, onPo
     >
         <div className="text-sm text-gray-500 flex gap-2 justify-between mb-1">
             <div className="flex gap-2 items-center">
-                <span>分段{data.chunkIndex + 1}</span>
+                <span>{t('chunk')}{data.chunkIndex + 1}</span>
                 <span>-</span>
-                <span>{data.text.length} 字符</span>
+                <span>{data.text.length} {t('characters')}</span>
                 <div className="flex gap-2 justify-center items-center">
                     {
-                        fileSuffix === 'pdf' && appConfig.enableEtl4lm && <Tip content={"点击定位到原文件"} side={"top"}  >
+                        fileSuffix === 'pdf' && appConfig.enableEtl4lm && <Tip content={t('clickLocateOriginalFile')} side={"top"}  >
                             <Button
                                 size="icon"
                                 variant="ghost"
@@ -201,32 +222,36 @@ const EditMarkdown = ({ data, active, fileSuffix, onClick, onDel, onChange, onPo
                         ? <div
                             className={cn("size-6 text-primary flex justify-center items-center rounded-sm cursor-pointer opacity-0 group-hover:opacity-100", edit && 'bg-primary text-gray-50')}
                             onClick={() => setEdit(!edit)}><FileCode size={18} /></div>
-                        : <Tip content={"点击展示Markdown原文，进行编辑"} side={"top"}  >
+                        : <Tip content={t('clickShowMarkdownEdit')} side={"top"}  >
                             <div
                                 className={cn("size-6 text-primary flex justify-center items-center rounded-sm cursor-pointer opacity-0 group-hover:opacity-100", edit && 'bg-primary text-gray-50')}
                                 onClick={() => setEdit(!edit)}><FileCode size={18} /></div>
                         </Tip>}
                 </div>
             </div>
-            <Tip content={"点击删除分段"} side={"top"}  >
-                <Button
-                    size="icon"
-                    variant="ghost"
-                    className={cn("size-6 text-primary opacity-0 group-hover:opacity-100")}
-                    onClick={() => onDel(data.chunkIndex, data.text)}
-                ><CircleX size={18} /></Button>
-            </Tip>
+            {!oneLeft &&
+                <Tip content={t('clickDeleteChunk')} side={"top"}  >
+                    <Button
+                        size="icon"
+                        variant="ghost"
+                        className={cn("size-6 text-primary opacity-0 group-hover:opacity-100")}
+                        onClick={() => onDel(data.chunkIndex, data.text)}
+                    ><CircleX size={18} /></Button>
+                </Tip>
+            }
         </div>
 
         {/* 所见即所得Markdown编辑器 */}
-        <VditorEditor ref={vditorRef} hidden={edit} defalutValue={value} onChange={setDebounceValue} onBlur={handleBlur} />
+        <VditorEditor ref={vditorRef} hidden={edit} defalutValue={value} onChange={setDebounceValue} onBlur={handleBlurDebounced} />
         {/* 普通Markdown编辑器 */}
-        <AceEditorCom hidden={!edit} markdown={value} onChange={setDebounceValue} onBlur={handleBlur} />
+        <AceEditorCom hidden={!edit} markdown={value} onChange={setDebounceValue} onBlur={handleBlurDebounced} />
     </div>
 }
 
 // 分段结果列表
-export default function PreviewParagraph({ fileId, previewCount, edit, fileSuffix, loading, chunks, onDel, onChange }) {
+export default function PreviewParagraph({ fileId, page = 1, previewCount, edit, fileSuffix, loading, chunks, className, onDel, onChange }) {
+    const { t } = useTranslation('knowledge');
+
     const containerRef = useRef(null);
     const [visibleItems, setVisibleItems] = useState(10); // 初始加载数量
     const loadingRef = useRef(false);
@@ -237,6 +262,17 @@ export default function PreviewParagraph({ fileId, previewCount, edit, fileSuffi
         document.addEventListener('click', fun)
         return () => document.removeEventListener('click', fun)
     }, [])
+
+    useEffect(() => {
+        // 1. 重置懒加载计数（避免显示旧文件的前 N 项）
+        setVisibleItems(10);
+        // 2. 重置选中的分段（避免跨文件选中旧分段）
+        setSelectedChunkIndex(-1);
+        // 3. 重置滚动位置（避免新文件显示旧文件的滚动位置）
+        if (containerRef.current) {
+            containerRef.current.scrollTop = 0;
+        }
+    }, [page, fileId, setSelectedChunkIndex]);
 
     // 懒加载逻辑
     useEffect(() => {
@@ -258,13 +294,13 @@ export default function PreviewParagraph({ fileId, previewCount, edit, fileSuffi
         return () => container.removeEventListener('scroll', handleScroll);
     }, [chunks.length]);
 
-    return <div className="w-full pt-3 pb-10 relative ">
+    return <div className="pt-3 relative w-full">
         {loading && (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <LoadingIcon />
             </div>
         )}
-        <div ref={containerRef} className="h-[calc(100vh-284px)] overflow-y-auto"
+        <div ref={containerRef} className={`${className} overflow-y-auto`}
             style={{ scrollbarWidth: 'thin' }}
         >
             <div className="space-y-6">
@@ -277,13 +313,15 @@ export default function PreviewParagraph({ fileId, previewCount, edit, fileSuffi
                             active={selectedChunkIndex === chunk.chunkIndex}
                             onClick={setSelectedChunkIndex}
                             onPositionClick={setSelectedChunkDistanceFactor}
+                            oneLeft={chunks.length === 1}
                             onDel={onDel}
                             onChange={onChange}
                         />
                         : <MarkdownView key={fileId + previewCount + chunk.chunkIndex} data={chunk} />
                 ))}
-                {!(chunks.length || loading) && <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary transition-shadow text-sm text-gray-500 flex gap-2 mb-1"
-                >文档解析失败</div>}
+                {!(chunks.length || loading) && <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary transition-shadow text-sm text-gray-500 flex gap-2 mb-1">
+                    {t('noAnalysisResult')}
+                </div>}
             </div>
         </div>
     </div>

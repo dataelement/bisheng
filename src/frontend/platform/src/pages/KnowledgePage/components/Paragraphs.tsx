@@ -1,44 +1,66 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronDown, ChevronUp, FileText, Search } from 'lucide-react';
-import { bsConfirm } from '@/components/bs-ui/alertDialog/useConfirm';
+import { FileIcon } from "@/components/bs-icons/file";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Button } from '@/components/bs-ui/button';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/bs-ui/card';
-import { Dialog, DialogContent, DialogHeader } from '@/components/bs-ui/dialog';
+import { Dialog, DialogContent } from '@/components/bs-ui/dialog';
 import { SearchInput } from '@/components/bs-ui/input';
 import AutoPagination from '@/components/bs-ui/pagination/autoPagination';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/bs-ui/select';
-import { LoadingIcon } from '@/components/bs-icons/loading';
-import { delChunkApi, getFilePathApi, getKnowledgeChunkApi, previewFileSplitApi, readFileByLibDatabase } from '@/controllers/API';
+import { toast } from "@/components/bs-ui/toast/use-toast";
+import Tip from "@/components/bs-ui/tooltip/tip";
+import ShadTooltip from "@/components/ShadTooltipComponent";
+import { addMetadata, delChunkApi, getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, getKnowledgeDetailApi, getMetaFile, saveUserMetadataApi, updateChunkApi } from '@/controllers/API';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useTable } from '@/util/hook';
+import { ArrowLeft, ClipboardPenLine, FileText } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import useKnowledgeStore from '../useKnowledgeStore';
+import FileSelector from "./FileSelector";
 import ParagraphEdit from './ParagraphEdit';
-import PreviewParagraph from './PreviewParagraph';
 import PreviewFile from './PreviewFile';
-import { truncateString } from "@/util/utils";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu';
-import { FileIcon } from "@/components/bs-icons/file";
+import PreviewParagraph from './PreviewParagraph';
 
+// Import metadata components
+import { MainMetadataDialog, MetadataSideDialog } from './MetadataDialog';
 
-export default function Paragraphs({ fileId }) {
+export default function Paragraphs({ fileId, onBack }) {
+    console.log('Props fileId:', fileId);
+
     const { t } = useTranslation('knowledge');
     const { id } = useParams();
     const navigate = useNavigate();
-    const { isEditable } = useKnowledgeStore();
+    const { isEditable, selectedBbox } = useKnowledgeStore();
+    const [hasInited, setHasInited] = useState(false);
+    const location = useLocation();
+    const [chunkSwitchTrigger, setChunkSwitchTrigger] = useState(0);
 
     // State management
-    const [selectedFileId, setSelectedFileId] = useState('');
+    const [selectedFileId, setSelectedFileId] = useState(fileId + '');
     const [currentFile, setCurrentFile] = useState(null);
-    const [fileUrl, setFileUrl] = useState(''); // 简化为单个URL状态
+    const [fileUrl, setFileUrl] = useState('');
     const [chunks, setChunks] = useState([]);
-    const [partitions, setPartitions] = useState({});
     const [rawFiles, setRawFiles] = useState([]);
+    const [isKnowledgeAdmin, setIsKnowledgeAdmin] = useState(false);
+
+    // Metadata related states
     const [metadataDialog, setMetadataDialog] = useState({
         open: false,
         file: null
     });
+    const [mainMetadataList, setMainMetadataList] = useState([]);
+    const [newMetadata, setNewMetadata] = useState({
+        name: '',
+        type: 'String'
+    });
+    const [metadataError, setMetadataError] = useState('');
+    const [sideDialog, setSideDialog] = useState({
+        type: null,
+        open: false
+    });
+    const [predefinedMetadata, setPredefinedMetadata] = useState([]);
+    const [searchTerm, setSearchTerm] = useState("");
+    const [fileInfor, setFileInfor] = useState();
+
     const [paragraph, setParagraph] = useState({
         fileId: '',
         chunkId: '',
@@ -46,80 +68,38 @@ export default function Paragraphs({ fileId }) {
         isUns: false,
         show: false
     });
-    const [isInitializing, setIsInitializing] = useState(true);
     const [selectError, setSelectError] = useState(null);
     const [isFetchingUrl, setIsFetchingUrl] = useState(false);
-    const [filesLoaded, setFilesLoaded] = useState(false);
+    const [partitions, setPartitions] = useState()
 
     // Refs
-    const isMountedRef = useRef(true);
-    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-    const [searchTerm, setSearchTerm] = useState("");
-    const searchInputRef = useRef(null);
+    const isChangingRef = useRef(false);
+    const [previewUrl, setPreviewUrl] = useState()
+    const [hasChunkBboxes, setHasChunkBboxes] = useState(false);
+    const latestFileUrlRef = useRef('');
+    const latestPreviewUrlRef = useRef('');
+    const latestOriginalUrlRef = useRef('');
+    const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
 
+    // Right sidebar dialog related states and refs
+    const mainMetadataDialogRef = useRef(null);
+    const [sideDialogPosition, setSideDialogPosition] = useState({ top: 0, left: 0 });
+    const [screenWidth, setScreenWidth] = useState(window.innerWidth);
+    const isSmallScreen = screenWidth < 1366;
+    const sideDialogWidth = isSmallScreen ? 240 : 300;
+    const [isSideDialogPositioned, setIsSideDialogPositioned] = useState(false);
 
+    const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
 
-    // 获取文件URL
-    const fetchFileUrl = useCallback(async (fileId) => {
-        console.log('获取文件URL:', fileId);
+    useEffect(() => {
+        // Clear selected highlight bbox when switching chunks
+        setSelectedBbox([])
+    }, [selectedChunkIndex])
 
-        if (!fileId) return;
-
-        try {
-            setIsFetchingUrl(true);
-            const res = await getFilePathApi(fileId);
-            console.log(res);
-
-            if (isMountedRef.current) {
-                console.log('获取文件URL成功:', res);
-
-                setFileUrl(res || '');
-                setCurrentFile(prev => ({ ...prev, url: res }));
-            }
-        } catch (err) {
-            console.error('获取文件URL失败:', err);
-            if (isMountedRef.current) {
-                setFileUrl('');
-            }
-        } finally {
-            setIsFetchingUrl(false);
-        }
-    }, []);
-
-    // 加载文件预览数据
-    const loadFilePreview = useCallback(async (file) => {
-        if (!file || !isMountedRef.current) return null;
-
-        try {
-            const res = await previewFileSplitApi({
-                knowledge_id: id,
-                file_list: [{
-                    file_path: file?.filePath || '',
-                    excel_rule: {}
-                }]
-            });
-
-            if (res && res !== 'canceled') {
-                return {
-                    chunks: (res.chunks || []).map(chunk => ({
-                        ...chunk,
-                        bbox: chunk?.metadata?.bbox || {},
-                        activeLabels: {},
-                        chunkIndex: chunk?.metadata?.chunk_index || 0,
-                        page: chunk?.metadata?.page || 0
-                    })),
-                    partitions: res.partitions || {}
-                };
-            }
-            return null;
-        } catch (err) {
-            console.error('File preview failed:', err);
-            return null;
-        }
-    }, [id]);
-    // 表格配置
+    // Table configuration (keep original logic)
     const tableConfig = useMemo(() => ({
-        file_ids: selectedFileId ? [selectedFileId] : []
+        file_ids: selectedFileId ? [selectedFileId] : [],
+        unInitData: true
     }), [selectedFileId]);
 
     const {
@@ -133,352 +113,758 @@ export default function Paragraphs({ fileId }) {
         reload,
         filterData,
         refreshData
-    } = useTable(tableConfig, (param) =>
-        getKnowledgeChunkApi({ ...param, limit: param.pageSize, knowledge_id: id })
+    } = useTable(tableConfig,
+        async (param) => {
+            const response = await getKnowledgeChunkApi({
+                ...param,
+                limit: param.pageSize,
+                knowledge_id: id
+            });
+
+            // Fix: Parse chunk_bboxes and store boolean value for "is not empty"
+            let chunkBboxes = [];
+            try {
+                const firstChunk = response.data?.[0];
+                if (firstChunk?.metadata?.bbox) {
+
+                    // First check if bbox is empty string
+                    if (typeof firstChunk.metadata.bbox === 'string' && JSON.parse(firstChunk?.metadata?.bbox).chunk_bboxes === '') {
+                        console.log('bbox is empty string');
+                        chunkBboxes = [];
+                    } else {
+                        // Parse JSON
+                        const bboxObj = JSON.parse(firstChunk.metadata.bbox);
+                        chunkBboxes = bboxObj.chunk_bboxes || [];
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to parse chunk_bboxes:', e);
+                chunkBboxes = [];
+            }
+
+            // Store boolean value for "is not empty array" (not the original array)
+            const isBboxesNotEmpty = Array.isArray(chunkBboxes) && chunkBboxes.length > 0;
+            setHasChunkBboxes(isBboxesNotEmpty);
+            console.log('chunk_bboxes is not empty:', isBboxesNotEmpty, 'Original data:', chunkBboxes);
+
+            return response;
+        }
     );
-    // 处理文件切换
-    const handleFileChange = useCallback(async (newFileId) => {
-        if (!newFileId || !isMountedRef.current) return;
+
+    const [load, setLoad] = useState(true);
+
+    const safeChunks = useMemo(() => {
+        if (!selectedFileId || !datalist.length) return [];
+        return (datalist || []).map((item, index) => ({
+            text: item?.text || '',
+            title: `Segment ${index + 1}`,
+            chunkIndex: item?.metadata?.chunk_index || index,
+            bbox: item?.metadata?.bbox
+        }));
+    }, [datalist, selectedFileId, chunkSwitchTrigger]);
+
+    const handleChunkChange = useCallback((chunkIndex, text) => {
+        let chunkIndexPage = chunkIndex % pageSize;
+        console.log('Converted localIndex:', chunkIndexPage);
+
+        const bbox = { chunk_bboxes: selectedBbox };
+
+        const bboxStr = selectedBbox.length ? JSON.stringify(bbox) : safeChunks[chunkIndexPage]?.bbox || '';
+        captureAndAlertRequestErrorHoc(updateChunkApi({
+            knowledge_id: Number(id),
+            file_id: selectedFileId || currentFile?.id || '',
+            chunk_index: chunkIndex,
+            text,
+            bbox: bboxStr
+        }))
+        setChunks(chunks => chunks.map(chunk =>
+            chunk.chunkIndex === chunkIndex ? { ...chunk, bbox: bboxStr, text } : chunk
+        ));
+
+        refreshData(
+            (item) => item?.metadata?.chunk_index === chunkIndex,
+            (item) => ({ text, metadata: { ...item.metadata, bbox: bboxStr } })
+        );
+    }, [id, currentFile, refreshData, selectedBbox, safeChunks, pageSize, selectedFileId]);
+
+    const fetchFileUrl = useCallback(async (fileId) => {
+        console.log('Getting file URL:', fileId);
+        if (!fileId) return '';
 
         try {
-            setSelectError(null);
-            setSelectedFileId(newFileId);
+            setIsFetchingUrl(true);
+            const res = await getFilePathApi(fileId);
+            const pares = await getFileBboxApi(fileId);
+            setPartitions(pares || []);
 
-            const selectedFile = rawFiles.find(f => String(f.id) === String(newFileId));
-            if (!selectedFile) throw new Error('未找到选中的文件');
+            // Get current selected file information
+            const currentFile = rawFiles.find(f => String(f.id) === String(fileId));
+            let finalUrl = '';
+            let finalPreviewUrl = '';
 
-            const fileData = {
+            // Check if there are valid preview_url and original_url
+            const hasPreviewUrl = typeof res.preview_url === 'string' && res.preview_url.trim() !== '';
+            const hasOriginalUrl = typeof res.original_url === 'string' && res.original_url.trim() !== '';
+
+            if (currentFile) {
+
+                // Determine if it's UNS or LOCAL type
+                const isUnsOrLocal = currentFile.parse_type === "uns" || currentFile.parse_type === "local";
+
+                if (isUnsOrLocal) {
+                    // UNS or LOCAL type: select URL based on whether bbox is valid
+                    const isBboxesValid = hasChunkBboxes;
+                    const isBboxesEmpty = !hasChunkBboxes;
+                    if (!isBboxesEmpty && hasPreviewUrl) {
+                        // Has valid bbox and preview_url → use preview_url
+                        finalUrl = res.preview_url.trim();
+                        finalPreviewUrl = res.preview_url.trim();
+                    } else {
+                        // No valid bbox (empty array/string) or no preview_url → force use original_url
+                        finalUrl = hasOriginalUrl ? res.original_url.trim() : '';
+                        finalPreviewUrl = finalUrl;
+                    }
+                } else {
+                    // Other types: prioritize preview_url, fallback to original_url
+                    if (hasPreviewUrl) {
+                        // Has preview_url → prioritize use
+                        finalUrl = res.preview_url.trim();
+                        finalPreviewUrl = res.preview_url.trim();
+                    } else {
+                        // No preview_url → use original_url or alternative URL
+                        finalUrl = hasOriginalUrl ? res.original_url.trim() : '';
+                        finalPreviewUrl = finalUrl;
+                    }
+                }
+            } else {
+                // If current file not found, use default strategy
+                finalUrl = hasPreviewUrl ? res.preview_url.trim() : (hasOriginalUrl ? res.original_url.trim() : '');
+                finalPreviewUrl = finalUrl;
+            }
+
+            if (finalUrl) {
+                finalUrl = decodeURIComponent(finalUrl);
+                finalPreviewUrl = decodeURIComponent(finalPreviewUrl);
+                // Update both state and ref (ref takes effect immediately)
+                setFileUrl(finalUrl);
+                setPreviewUrl(finalPreviewUrl);
+                // Store original_url in ref
+                latestOriginalUrlRef.current = hasOriginalUrl ? decodeURIComponent(res.original_url.trim()) : '';
+                return finalUrl;
+            } else {
+                setFileUrl('');
+                setPreviewUrl('');
+                latestOriginalUrlRef.current = '';
+                return '';
+            }
+        } catch (err) {
+            console.error('Failed to get file URL:', err);
+            setFileUrl('');
+            setPreviewUrl('');
+            setPartitions([]);
+            latestOriginalUrlRef.current = '';
+            return '';
+        } finally {
+            setIsFetchingUrl(false);
+        }
+    }, [rawFiles, hasChunkBboxes]);
+
+    useEffect(() => {
+        // Check if current path is adjust page and doesn't have valid state data
+        if (location.pathname.startsWith('/filelib/adjust/') && !window.history.state?.isAdjustMode) {
+            // Extract ID (e.g., extract 2066 from /filelib/adjust/2066)
+            const adjustId = location.pathname.split('/')[3];
+            if (adjustId) {
+                // Redirect to corresponding filelib page
+                navigate(`/filelib/${adjustId}`, { replace: true });
+            }
+        }
+    }, [location.pathname, navigate]);
+
+    // Generate chunks from datalist (keep original logic)
+    useEffect(() => {
+        if (!selectedFileId || !datalist.length) {
+            setChunks([]);
+            return;
+        }
+
+        const generatedChunks = datalist.map((item, index) => ({
+            ...item,
+            text: item.text || '',
+            bbox: item.metadata?.bbox || {},
+            activeLabels: {},
+            chunkIndex: item.metadata?.chunk_index || index,
+            page: item.metadata?.page || 0,
+            metadata: item.metadata || {}
+        }));
+
+        setChunks(generatedChunks);
+    }, [datalist, selectedFileId]);
+
+    const handleFileChange = useCallback(async (newFileId, selectedFile) => {
+        console.log('File change triggered:', newFileId, 'Current selected:', selectedFile);
+
+        // Immediately update UI to avoid flickering
+        // const selectedFile = rawFiles.find(f => String(f.id) === newFileId);
+        if (selectedFile) {
+            setCurrentFile({
                 label: selectedFile.file_name || '',
-                value: String(selectedFile.id || ''),
+                value: newFileId,
                 id: selectedFile.id || '',
                 name: selectedFile.file_name || '',
                 size: selectedFile.size || 0,
                 type: selectedFile.file_name?.split('.').pop() || '',
-                filePath: selectedFile.object_name || '',
+                filePath: fileUrl || previewUrl,
                 suffix: selectedFile.file_name?.split('.').pop() || '',
                 fileType: selectedFile.parse_type || 'unknown',
-                fullData: selectedFile || {}
-            };
-            setCurrentFile(fileData);
-
-            // 并行获取数据
-            await Promise.all([
-                fetchFileUrl(selectedFile.id),
-                loadFilePreview(selectedFile).then(data => {
-                    if (data) {
-                        setChunks(data.chunks || []);
-                        setPartitions(data.partitions || {});
-                    }
-                })
-            ]);
-
-            // 强制刷新表格数据
-            filterData && filterData({ file_ids: [newFileId] });
-            reload(); // 确保数据刷新
-
-        } catch (err) {
-            console.error('文件切换失败:', err);
-            setSelectError(err.message || '文件切换失败');
-            setFileUrl('');
-        }
-    }, [rawFiles, fetchFileUrl, loadFilePreview, filterData, reload]);
-
-
-
-    // 加载文件列表
-    useEffect(() => {
-        const loadFiles = async () => {
-            try {
-                setIsInitializing(true);
-                const res = await readFileByLibDatabase({
-                    id,
-                    page: 1,
-                    pageSize: 4000,
-                    status: 2
-                });
-                const filesData = res?.data || [];
-                console.log('filesData', filesData);
-
-                setRawFiles(filesData);
-
-                if (filesData.length) {
-                    const defaultFileId = fileId ? String(fileId) : String(filesData[0]?.id || '');
-                    setSelectedFileId(defaultFileId);
-
-                    // 立即设置currentFile而不等待handleFileChange
-                    const selectedFile = filesData.find(f => String(f.id) === defaultFileId);
-                    if (selectedFile) {
-                        const fileData = {
-                            label: selectedFile.file_name || '',
-                            value: String(selectedFile.id || ''),
-                            id: selectedFile.id || '',
-                            name: selectedFile.file_name || '',
-                            size: selectedFile.size || 0,
-                            type: selectedFile.file_name?.split('.').pop() || '',
-                            filePath: selectedFile.object_name || '',
-                            suffix: selectedFile.file_name?.split('.').pop() || '',
-                            fileType: selectedFile.parse_type || 'unknown',
-                            fullData: selectedFile || {}
-                        };
-                        setCurrentFile(fileData); // 立即设置当前文件
-
-                        // 立即触发文件URL获取
-                        fetchFileUrl(selectedFile.id);
-
-                        // 立即触发文件预览加载
-                        loadFilePreview(selectedFile).then(data => {
-                            if (data) {
-                                setChunks(data.chunks || []);
-                                setPartitions(data.partitions || {});
-                            }
-                        });
-                    }
-
-                    // 强制刷新表格数据
-                    filterData && filterData({ file_ids: [defaultFileId] });
-                    reload(); // 确保数据刷新
-                }
-                setFilesLoaded(true);
-            } catch (err) {
-                console.error('Failed to load files:', err);
-                setSelectError('加载文件列表失败');
-            } finally {
-                setIsInitializing(false);
-            }
-        };
-
-        loadFiles();
-
-        return () => {
-            isMountedRef.current = false;
-        };
-    }, [id, fileId]);
-
-    const files = useMemo(() => {
-        return (rawFiles || []).map(el => ({
-            label: el?.file_name || '未命名文件',
-            value: String(el?.id || ''),
-            id: el?.id || '',
-            name: el?.file_name || '',
-            size: el?.size || 0,
-            type: el?.file_name?.split('.').pop() || '',
-            filePath: el?.object_name || '',
-            suffix: el?.file_name?.split('.').pop() || '',
-            fileType: el?.parse_type || 'unknown',
-            fullData: el || {}
-        }));
-    }, [rawFiles]);
-
-    const safeChunks = useMemo(() => {
-        return (datalist || []).map((item, index) => ({
-            text: item?.text || '',
-            title: `分段${index + 1}`,
-            chunkIndex: item?.metadata?.chunk_index || index,
-            metadata: item?.metadata || {}
-        }));
-    }, [datalist]);
-
-    const handleMetadataClick = useCallback(() => {
-        if (currentFile?.fullData) {
-            setMetadataDialog({
-                open: true,
-                file: currentFile.fullData
+                fullData: selectedFile || {},
             });
+            setSelectedFileId(newFileId);
+        }
+
+        isChangingRef.current = true;
+        setSelectError(null);
+        setIsFetchingUrl(true);
+        setChunks([]);
+        setFileUrl('');
+        setPreviewUrl('');
+        latestOriginalUrlRef.current = '';
+
+        try {
+            // if (!selectedFile) throw new Error(t('file.fileNotFound'));
+
+            if (filterData) filterData({ file_ids: [newFileId] });
+            await fetchFileUrl(newFileId);
+            if (!filterData) await reload();
+            setChunkSwitchTrigger(prev => prev + 1);
+        } catch (err) {
+            console.error('File change failed:', err);
+            setSelectError(err.message || t('file.changeFailed'));
+        } finally {
+            setIsFetchingUrl(false);
+            isChangingRef.current = false;
+            setLoad(false);
+        }
+    }, [rawFiles, fetchFileUrl, filterData, reload, selectedFileId, fileUrl, previewUrl, t]);
+
+    // 初始化时设置默认选中的文件 ID
+    useEffect(() => {
+        if (fileId && !selectedFileId) {
+            setSelectedFileId(String(fileId));
+        }
+    }, [fileId, selectedFileId]);
+
+    const handleDeleteMainMetadata = useCallback((id) => {
+        setMainMetadataList(prev => prev.filter(item => item.id !== id));
+    }, []);
+
+    const handleMainMetadataValueChange = useCallback((id, value) => {
+        setMainMetadataList(prev => prev.map(item =>
+            item.id === id ? { ...item, value } : item
+        ));
+    }, []);
+
+    const handleSaveNewMetadata = useCallback(async () => {
+        const name = newMetadata.name.trim();
+        const type = newMetadata.type;
+
+        if (!name) {
+            setMetadataError(t('metadialog.nameRequired'));
+            return;
+        }
+
+        if (name.length > 255) {
+            setMetadataError(t('metadialog.nameTooLong'));
+            return;
+        }
+
+        const nameRegex = /^[a-z][a-z0-9_]*$/;
+        if (!nameRegex.test(name)) {
+            setMetadataError(t('metadialog.nameInvalid'));
+            return;
+        }
+
+        const exists = predefinedMetadata.some(item => item.name === name);
+        if (exists) {
+            setMetadataError(t('metadialog.nameExists'));
+            return;
+        }
+
+        try {
+            await addMetadata(Number(id), [{
+                field_name: name,
+                field_type: type.toLowerCase()
+            }]);
+            const knowledgeDetails = await getKnowledgeDetailApi([id]);
+            const knowledgeDetail = knowledgeDetails[0];
+
+            if (knowledgeDetail && knowledgeDetail.metadata_fields) {
+                const formattedFields = Object.entries(knowledgeDetail.metadata_fields).map(([fieldName, fieldData]) => ({
+                    id: `meta_${fieldName}`,
+                    name: fieldData.field_name || fieldName,
+                    type: fieldData.field_type.charAt(0).toUpperCase() + fieldData.field_type.slice(1),
+                    updated: fieldData.updated_at
+                }));
+                setPredefinedMetadata(formattedFields);
+            }
+            setNewMetadata({ name: '', type: 'String' });
+            setMetadataError('');
+
+            setSideDialog({ type: 'search', open: true });
+
+        } catch (error) {
+            console.error("Failed to create metadata field:", error);
+            setMetadataError(t('metadialog.nameReserved'));
+        }
+    }, [newMetadata, predefinedMetadata, t, id]);
+
+    const handleSearchMetadataClick = useCallback(async () => {
+        try {
+            const knowledgeDetails = await getKnowledgeDetailApi([id]);
+            const knowledgeDetail = knowledgeDetails[0];
+
+            if (knowledgeDetail && knowledgeDetail.metadata_fields) {
+                const formattedFields = Object.entries(knowledgeDetail.metadata_fields).map(([fieldName, fieldData]) => ({
+                    id: `meta_${fieldName}`,
+                    name: fieldData.field_name || fieldName,
+                    type: fieldData.field_type.charAt(0).toUpperCase() + fieldData.field_type.slice(1),
+                    updated: fieldData.updated_at
+                }));
+                setPredefinedMetadata(formattedFields);
+            } else {
+                setPredefinedMetadata([]);
+            }
+        } catch (error) {
+            console.error("Failed to get knowledge base metadata fields:", error);
+            setPredefinedMetadata([]);
+        } finally {
+            setMetadataError('');
+            setSideDialog({ type: 'search', open: true });
+        }
+    }, [id, t]);
+
+    const handleCreateMetadataClick = useCallback(() => {
+        setNewMetadata({ name: '', type: 'String' });
+        setMetadataError('');
+        setSideDialog({ type: 'create', open: true });
+    }, []);
+
+    const closeSideDialog = useCallback(() => {
+        setSideDialog({ type: null, open: false });
+        setMetadataError('');
+        setNewMetadata({ name: '', type: 'String' });
+        setIsSideDialogPositioned(false);
+    }, []);
+
+    const handleAddFromSearch = useCallback((metadata) => {
+        const exists = mainMetadataList.some(item => item.name === metadata.name);
+        if (exists) {
+            toast({ description: t('metadialog.alreadyExists') });
+            return;
+        }
+        const newItem = {
+            ...metadata,
+            id: `temp_meta_${Date.now()}_${metadata.name}`,
+            updated_at: Date.now(),
+            value: ''
+        };
+        setMainMetadataList(prev => [...prev, newItem]);
+        closeSideDialog();
+    }, [closeSideDialog, mainMetadataList, t]);
+
+    const handleMetadataClick = useCallback(async () => {
+        if (currentFile?.fullData) {
+            try {
+                const res = await getMetaFile(currentFile.id);
+                setFileInfor(res);
+                const fetchedMetadata = res.user_metadata || [];
+                const metadataArray = Object.entries(fetchedMetadata).map(([fieldName, fieldData]) => ({
+                    id: `meta_${fieldName}`,
+                    name: fieldData.field_name || fieldName,
+                    type: fieldData.field_type ?
+                        fieldData.field_type.charAt(0).toUpperCase() + fieldData.field_type.slice(1).toLowerCase() :
+                        'String',
+                    value: fieldData.field_value || '',
+                    originalValue: fieldData.field_value || '',
+                    updated_at: fieldData.updated_at || 0,
+                }));
+                const sortedMetadata = metadataArray.sort((a, b) => {
+                    return (a.updated_at || 0) - (b.updated_at || 0);
+                });
+
+                setMainMetadataList(sortedMetadata);
+
+                setMetadataDialog({
+                    open: true,
+                    file: currentFile.fullData
+                });
+            } catch (error) {
+                console.error("Failed to get file metadata:", error);
+                setMetadataDialog({
+                    open: true,
+                    file: currentFile.fullData
+                });
+            }
         }
     }, [currentFile]);
 
-
+    // Adjust segmentation strategy
     const handleAdjustSegmentation = useCallback(() => {
-        console.log(selectedFileId, currentFile, '098');
+        const currentFileUrl = latestOriginalUrlRef.current;
+        const currentPreviewUrl = latestPreviewUrlRef.current;
 
-        navigate(`/filelib/upload/${id}`, {
+        navigate(`/filelib/adjust/${id}`, {
             state: {
                 skipToStep: 2,
                 fileId: selectedFileId,
-                fileData: { // 确保传递正确的数据结构
-                    id: currentFile.id,
-                    name: currentFile.name,
-                    filePath: currentFile.filePath,
-                    suffix: currentFile.suffix,
-                    fileType: currentFile.fileType
+                fileData: {
+                    previewUrl: currentPreviewUrl,
+                    id: currentFile?.id,
+                    name: currentFile?.name,
+                    split_rule: currentFile?.split_rule || currentFile?.fullData?.split_rule,
+                    status: currentFile?.status,
+                    filePath: currentFileUrl || currentPreviewUrl,
+                    suffix: currentFile?.suffix,
+                    fileType: currentFile?.fileType,
                 },
                 isAdjustMode: true
             }
         });
     }, [id, selectedFileId, currentFile, navigate]);
 
+    // Parse segmentation strategy description (keep original logic)
+    const splitRuleDesc = useCallback((file) => {
+        if (!file.split_rule) return '';
+        const suffix = file.file_name?.split('.').pop()?.toUpperCase() || '';
+        try {
+            const rule = JSON.parse(file.split_rule);
+            const { excel_rule } = rule;
+
+            // Process Excel file rules
+            if (excel_rule && ['XLSX', 'XLS', 'CSV'].includes(suffix)) {
+                return t('file.excelRule', { length: excel_rule.slice_length });
+            }
+
+            // Process separator rules
+            const { separator, separator_rule } = rule;
+            if (separator && separator_rule && separator.length === separator_rule.length) {
+                const displayItems = separator.map((sep, index) => {
+                    // Core fix: Convert actual newlines to visible \n string
+                    const displaySep = sep
+                        .replace(/\n/g, '\\n')  // Replace newline
+                        .replace(/\r/g, '\\r')  // Replace carriage return (optional)
+                        .replace(/\t/g, '\\t'); // Replace tab (optional)
+
+                    // Add cutting symbol based on rule
+                    const prefix = separator_rule[index] === 'before' ? '✂️' : '';
+                    const suffix = separator_rule[index] === 'after' ? '✂️' : '';
+
+                    return `${prefix}${displaySep}${suffix}`;
+                });
+                return displayItems.join(', ');
+            }
+        } catch (e) {
+            console.error('Failed to parse segmentation strategy:', e);
+        }
+
+        // Fallback handling when parsing fails
+        return file.split_rule
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\r')
+            .replace(/\t/g, '\\t');
+    }, [t]);
+
     const handleDeleteChunk = useCallback((data) => {
+        const updatedChunks = chunks.filter(chunk => chunk.chunkIndex !== data);
+        setChunks(updatedChunks);
+
+        if (selectedChunkIndex === data) {
+            setSelectedBbox([]);
+        }
+
         captureAndAlertRequestErrorHoc(delChunkApi({
-            knowledge_id: id,
-            file_id: data?.metadata?.file_id || '',
-            chunk_index: data?.metadata?.chunk_index || 0
+            knowledge_id: Number(id),
+            file_id: selectedFileId || currentFile?.id || '',
+            chunk_index: data || 0
         }));
+
         reload();
-    }, [id, reload]);
+
+    }, [
+        id,
+        reload,
+        chunks,
+        selectedFileId,
+        currentFile?.id,
+        selectedChunkIndex,
+        setSelectedBbox
+    ]);
 
     const formatFileSize = useCallback((bytes) => {
         if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }, []);
-    const filteredFiles = files.filter(file =>
-        file.label.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    return (
-        <div className="relative">
-            {loading && (
-                <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                    <LoadingIcon />
-                </div>
-            )}
 
-            <div className="absolute left-10 right-0 top-[-62px] flex justify-between items-center px-4">
-                <div className="min-w-72 max-w-[400px]">
-                    <div className="relative">
-                        <DropdownMenu onOpenChange={setIsDropdownOpen}>
-                            <DropdownMenuTrigger asChild>
-                                <div className={`
-            flex items-center gap-2 max-w-[430px] px-3 py-2 rounded-md cursor-pointer
-            hover:bg-gray-100 ${isDropdownOpen ? 'ring-1 ring-gray-300' : ''}
-          `}>
-                                    {selectedFileId ? (
-                                        <>
-                                            <FileIcon
-                                                type={files.find(f => f.value === selectedFileId)?.label.split('.').pop().toLowerCase() || 'txt'}
-                                                className="size-[30px] min-w-[30px]"
-                                            />
-                                            {truncateString(files.find(f => f.value === selectedFileId)?.label || '', 35)}
-                                        </>
-                                    ) : (
-                                        <span>{t('selectFile')}</span>
-                                    )}
-                                    {isDropdownOpen ? (
-                                        <ChevronUp className="ml-2 h-4 w-4 opacity-50" />
-                                    ) : (
-                                        <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
-                                    )}
-                                </div>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                                className="w-[300px] border border-gray-200 bg-white shadow-md p-0 z-[100]"
-                                align="start"
-                                sideOffset={5}
-                                style={{ zIndex: 9999 }}
-                            >
-                                <div className="p-2 border-b border-gray-200">
-                                    <div className="relative">
-                                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500" />
-                                        <input
-                                            ref={searchInputRef}
-                                            type="text"
-                                            placeholder={t('搜索文件')}
-                                            className="w-full pl-9 pr-3 py-2 text-sm bg-white rounded-md outline-none ring-1 ring-gray-200"
-                                            value={searchTerm}
-                                            onChange={(e) => setSearchTerm(e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="max-h-[300px] overflow-y-auto">
-                                    {filteredFiles.map((file) => (
-                                        <DropdownMenuItem
-                                            key={file.value}
-                                            onSelect={() => {
-                                                handleFileChange(file.value);
-                                                setSearchTerm("");
-                                            }}
-                                            disabled={!file.value}
-                                            className="cursor-pointer hover:bg-gray-50 px-3 py-2"
-                                        >
-                                            <div className="flex items-center gap-3 w-full h-full">
-                                                <FileIcon
-                                                    type={file.label.split('.').pop().toLowerCase() || 'txt'}
-                                                    className="size-[30px] min-w-[30px]  text-current"
-                                                />
-                                                <span className="flex-1 min-w-0 truncate">
-                                                    {truncateString(file.label, 35)}
-                                                </span>
-                                            </div>
-                                        </DropdownMenuItem>
-                                    ))}
-                                </div>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                        {selectError && (
-                            <p className="absolute text-sm text-red-500 mt-1">{selectError}</p>
-                        )}
-                    </div>
+        // Define unit conversion boundaries (1024-based)
+        const KB = 1024;
+        const MB = KB * 1024;
+        const GB = MB * 1024;
+
+        // Select appropriate unit based on file size
+        if (bytes < MB) {
+            // Less than 1024KB (1MB), use KB
+            return `${(bytes / KB).toFixed(2)} KB`;
+        } else if (bytes < GB) {
+            // Between 1024KB and 1024MB, use MB
+            return `${(bytes / MB).toFixed(2)} MB`;
+        } else {
+            // 1024MB and above, use GB
+            return `${(bytes / GB).toFixed(2)} GB`;
+        }
+    }, []);
+
+    // Preview component rule configuration (keep original logic)
+    const previewRules = useMemo(() => ({
+        fileList: currentFile ? [{
+            id: currentFile.id,
+            filePath: fileUrl,
+            fileName: currentFile.name,
+            suffix: currentFile.suffix,
+            fileType: currentFile.fileType,
+            excelRule: {} // Add excel rules as needed
+        }] : [],
+        pageHeaderFooter: false, // Page header/footer processing
+        chunkOverlap: 200, // Chunk overlap size
+        chunkSize: 1000, // Chunk size
+        enableFormula: false, // Whether to enable formulas
+        forceOcr: false, // Whether to force OCR
+        knowledgeId: id, // Knowledge base ID
+        retainImages: false, // Whether to retain images
+        separator: [], // Separators
+        separatorRule: [] // Separation rules
+    }), [currentFile, fileUrl, id]);
+
+    // Preview display judgment (keep original logic)
+    // const isExcelFile = currentFile && ['xlsx', 'xls', 'csv'].includes(currentFile.suffix?.toLowerCase());
+    const isPreviewVisible =
+        selectedFileId &&
+        currentFile &&
+        (previewUrl || fileUrl) && // Compatible with either previewUrl or fileUrl having value
+        !isFetchingUrl;
+    const isParagraphVisible = datalist.length > 0;
+
+    // Layout class name calculation (keep original logic)
+    const contentLayoutClass = useMemo(() => {
+        const isSingleVisible = isPreviewVisible !== isParagraphVisible;
+        if (isSingleVisible) {
+            return "flex justify-center bg-background-main min-h-0";
+        }
+        return "flex bg-background-main min-h-0";
+    }, [isPreviewVisible, isParagraphVisible,]);
+
+    useEffect(() => {
+        latestFileUrlRef.current = fileUrl;
+        latestPreviewUrlRef.current = previewUrl;
+    }, [fileUrl, previewUrl]);
+
+    const updateSideDialogPosition = useCallback(() => {
+        if (!mainMetadataDialogRef.current || !sideDialog.open) return;
+
+        const rect = mainMetadataDialogRef.current.getBoundingClientRect();
+        const gap = isSmallScreen ? 0 : 4;
+        let left = rect.right + gap;
+
+        if (left + sideDialogWidth > screenWidth) {
+            left = screenWidth - sideDialogWidth - 8;
+        }
+
+        const newPosition = {
+            top: Math.max(rect.top, 8),
+            left: Math.max(left, 8)
+        };
+
+        setSideDialogPosition(newPosition);
+        setIsSideDialogPositioned(true);
+    }, [mainMetadataDialogRef, sideDialog.open, isSmallScreen, screenWidth, sideDialogWidth]);
+
+    useEffect(() => {
+        const handleResize = () => {
+            const newWidth = window.innerWidth;
+            setScreenWidth(newWidth);
+        };
+
+        window.addEventListener("resize", handleResize);
+        return () => window.removeEventListener("resize", handleResize);
+    }, []);
+
+    useEffect(() => {
+        if (!metadataDialog.open || !sideDialog.open) {
+            setIsSideDialogPositioned(false);
+            return;
+        }
+
+        const timer1 = setTimeout(() => {
+            updateSideDialogPosition();
+        }, 0);
+
+        const timer2 = setTimeout(() => {
+            updateSideDialogPosition();
+        }, 50);
+
+        const timer3 = setTimeout(() => {
+            updateSideDialogPosition();
+        }, 100);
+
+        return () => {
+            clearTimeout(timer1);
+            clearTimeout(timer2);
+            clearTimeout(timer3);
+        };
+    }, [metadataDialog.open, sideDialog.open, updateSideDialogPosition]);
+
+    const handleWriteableChange = (writable: boolean) => {
+        setIsKnowledgeAdmin(writable);
+    }
+
+    const handleSaveUserMetadata = useCallback(async () => {
+        const knowledge_id = selectedFileId
+        const user_metadata_list = mainMetadataList.map(item => {
+            if (!item.id.startsWith('temp_') && item.updated_at !== undefined) {
+                return {
+                    field_name: item.name,
+                    field_value: item.value || '',
+                    updated_at: item.updated_at,
+                };
+            }
+            return {
+                field_name: item.name,
+                field_value: item.value || '',
+                updated_at: item.updated_at || Math.floor(Date.now() / 1000),
+            };
+        });
+        try {
+            await saveUserMetadataApi(knowledge_id, user_metadata_list);
+
+            toast({
+                title: t('common.success'),
+                description: t('metadialog.saveSuccess'),
+            });
+            setMetadataDialog(prev => ({ ...prev, open: false }));
+            setMetadataError('');
+        } catch (error) {
+            toast({
+                variant: 'error',
+                description: error,
+            });
+            console.error('Failed to save metadata:', error);
+            setMetadataError(t('metadialog.saveFailed'));
+        }
+    }, [mainMetadataList, selectedFileId, t]);
+
+    return (
+        <div className="relative flex flex-col h-[calc(100vh-64px)]">
+            {load && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,1)] dark:bg-blur-shared">
+                <LoadingIcon />
+            </div>}
+            {/* Top navigation bar */}
+            <div className="flex justify-between items-center px-4 pt-4 pb-4">
+                <div className="min-w-72 max-w-[440px] flex items-center gap-2">
+                    <ShadTooltip content={t('common.back')} side="top">
+                        <button
+                            className="extra-side-bar-buttons w-[36px] max-h-[36px]"
+                            onClick={onBack}
+                        >
+                            <ArrowLeft className="side-bar-button-size" />
+                        </button>
+                    </ShadTooltip>
+                    <FileSelector
+                        knowledgeId={id}
+                        selectedFileId={selectedFileId}
+                        onWriteableChange={handleWriteableChange}
+                        onFileChange={handleFileChange}
+                        disabled={false}
+                    />
                 </div>
 
                 <div className="flex items-center gap-2 ml-auto">
                     <div className="w-60">
                         <SearchInput
-                            placeholder={t('searchSegments')}
+                            placeholder={t('segment.searchSegments')}
                             onChange={(e) => search(e.target.value)}
                             disabled={!selectedFileId}
                         />
                     </div>
                     <Button variant="outline" onClick={handleMetadataClick} className="px-4 whitespace-nowrap">
-                        {t('元数据')}
+                        <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-1" />
+                        {t('metadialog.title')}
                     </Button>
-                    <Button onClick={handleAdjustSegmentation} className="px-4 whitespace-nowrap">
-                        {t('调整分段策略')}
-                    </Button>
+                    <Tip content={!isEditable && t('common.noPermission')} side='top'>
+                        <Button
+                            disabled={!isEditable}
+                            onClick={handleAdjustSegmentation}
+                            className={`px-4 whitespace-nowrap disabled:pointer-events-auto`}>
+                            {t('segment.adjustStrategy')}
+                        </Button>
+                    </Tip>
                 </div>
             </div>
 
-            <div className="flex bg-background-main">
-
-                {selectedFileId && currentFile && fileUrl ? (
-
+            {/* Main content area */}
+            <div className={contentLayoutClass}>
+                {/* Preview component - fix display issues */}
+                {isPreviewVisible ? (
                     <PreviewFile
-                        key={`preview-${currentFile.id}`}
-                        urlState={{ load: !isFetchingUrl, url: fileUrl }}
-                        file={currentFile}
-                        chunks={safeChunks}
-                        setChunks={setChunks}
+                        rawFiles={rawFiles}
+                        key={selectedFileId}
                         partitions={partitions}
-                        h={false}
+                        previewUrl={previewUrl}
+                        urlState={{ load: !isFetchingUrl, url: previewUrl || fileUrl }}
+                        file={currentFile}
+                        chunks={chunks}
+                        setChunks={setChunks}
+                        rules={previewRules}
+                        edit
                     />
-
                 ) : (
-                    <div className="flex justify-center items-center h-full text-gray-400">
-                        <FileText width={160} height={160} className="text-border" />
-                        {selectError || t('noFileSelected')}
-                    </div>
+                    !isParagraphVisible && (
+                        <div className="flex justify-center items-center h-[400px] text-gray-500 bg-gray-50 rounded-lg w-full max-w-4xl">
+                            <FileIcon className="size-8 mb-3 opacity-50" />
+                            <p className="text-lg font-medium">{t('file.previewNotAvailable')}</p>
+                        </div>
+                    )
                 )}
 
-
-                <div className="w-1/2 overflow-y-auto pb-20">
-                    <div className="flex flex-wrap gap-2 p-2 items-start">
-                        {datalist.length ? (
+                {/* Segment component */}
+                {isParagraphVisible ? (
+                    <div className={isPreviewVisible ? "w-1/2" : " w-full max-w-3xl"}>
+                        <div className="flex justify-center items-center relative text-sm gap-2 p-2 pt-0 ">
                             <PreviewParagraph
+                                key={`preview-${selectedFileId}-${chunkSwitchTrigger}`}
                                 fileId={selectedFileId}
                                 previewCount={datalist.length}
                                 edit={isEditable}
+                                page={page}
+                                className="h-[calc(100vh-206px)] pb-6"
                                 fileSuffix={currentFile?.suffix || ''}
                                 loading={loading}
-                                chunks={safeChunks}
+                                chunks={chunks}
                                 onDel={handleDeleteChunk}
-                                onChange={(index, newText) => {
-                                    refreshData(
-                                        (item) => item?.metadata?.chunk_index === datalist[index]?.metadata?.chunk_index,
-                                        { text: newText }
-                                    );
-                                }}
+                                onChange={handleChunkChange}
                             />
-                        ) : (
-                            <div className="flex justify-center items-center flex-col size-full text-gray-400">
-                                <FileText width={160} height={160} className="text-border" />
-                            </div>
-                        )}
+                        </div>
                     </div>
-                </div>
+                ) : (
+                    !isPreviewVisible && (
+                        <div className="flex justify-center items-center flex-col h-[400px] text-gray-500 bg-gray-50 rounded-lg w-full max-w-4xl">
+                            <FileText className="size-8 mb-3 opacity-50" />
+                            <p className="text-lg font-medium">{t('segment.noData')}</p>
+                        </div>
+                    )
+                )}
             </div>
 
+            {/* Pagination */}
             <div className="bisheng-table-footer px-6">
                 <AutoPagination
+                    className="justify-end"
                     page={page}
                     pageSize={pageSize}
                     total={total}
@@ -487,33 +873,24 @@ export default function Paragraphs({ fileId }) {
                 />
             </div>
 
-            <Dialog open={metadataDialog.open} onOpenChange={(open) => setMetadataDialog(prev => ({ ...prev, open }))}>
-                <DialogContent className="sm:max-w-[625px]">
-                    <DialogHeader>
-                        <h3 className="text-lg font-semibold">{t('文档元数据')}</h3>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="space-y-2">
-                            {[
-                                { label: t('文件名称'), value: metadataDialog.file?.file_name },
-                                { label: t('原始文件大小'), value: metadataDialog.file?.size ? formatFileSize(metadataDialog.file.size) : null },
-                                { label: t('创建时间'), value: metadataDialog.file?.create_time },
-                                { label: t('更新时间'), value: metadataDialog.file?.update_time },
-                                { label: t('切分策略'), value: metadataDialog.file?.split_rule },
-                                { label: t('全文摘要'), value: metadataDialog.file?.tilte }
-                            ].map((item, index) => (
-                                item.value && (
-                                    <div key={index} className="grid grid-cols-4 gap-4 items-center">
-                                        <span className="text-sm text-muted-foreground col-span-1">{item.label}</span>
-                                        <span className="col-span-3 text-sm">{item.value || t('none')}</span>
-                                    </div>
-                                )
-                            ))}
-                        </div>
-                    </div>
-                </DialogContent>
-            </Dialog>
+            <MainMetadataDialog
+                metadataDialog={metadataDialog}
+                setMetadataDialog={setMetadataDialog}
+                mainMetadataList={mainMetadataList}
+                fileInfor={fileInfor}
+                isKnowledgeAdmin={isKnowledgeAdmin}
+                isSmallScreen={isSmallScreen}
+                t={t}
+                formatFileSize={formatFileSize}
+                splitRuleDesc={splitRuleDesc}
+                handleSaveUserMetadata={handleSaveUserMetadata}
+                handleSearchMetadataClick={handleSearchMetadataClick}
+                handleDeleteMainMetadata={handleDeleteMainMetadata}
+                handleMainMetadataValueChange={handleMainMetadataValueChange}
+                mainMetadataDialogRef={mainMetadataDialogRef}
+            />
 
+            {/* Segment editing dialog */}
             <Dialog open={paragraph.show} onOpenChange={(show) => setParagraph(prev => ({ ...prev, show }))}>
                 <DialogContent close={false} className='size-full max-w-full sm:rounded-none p-0 border-none'>
                     <ParagraphEdit
@@ -530,6 +907,29 @@ export default function Paragraphs({ fileId }) {
                     />
                 </DialogContent>
             </Dialog>
+
+            {/* Right metadata sidebar dialog */}
+            <MetadataSideDialog
+                sideDialog={sideDialog}
+                closeSideDialog={closeSideDialog}
+                predefinedMetadata={predefinedMetadata}
+                searchTerm={searchTerm}
+                setSearchTerm={setSearchTerm}
+                newMetadata={newMetadata}
+                setNewMetadata={setNewMetadata}
+                metadataError={metadataError}
+                setMetadataError={setMetadataError}
+                isKnowledgeAdmin={isKnowledgeAdmin}
+                isSmallScreen={isSmallScreen}
+                t={t}
+                sideDialogWidth={sideDialogWidth}
+                sideDialogPosition={sideDialogPosition}
+                isSideDialogPositioned={isSideDialogPositioned}
+                handleAddFromSearch={handleAddFromSearch}
+                handleCreateMetadataClick={handleCreateMetadataClick}
+                handleSaveNewMetadata={handleSaveNewMetadata}
+                setSideDialog={setSideDialog}
+            />
         </div>
     );
 }

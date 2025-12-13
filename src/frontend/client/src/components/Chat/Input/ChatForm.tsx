@@ -1,10 +1,13 @@
-import { Rotate3DIcon, Spline } from 'lucide-react';
+import { Rotate3DIcon } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
+import { File_Accept } from '~/common';
 import { Button, TextareaAutosize } from '~/components/ui';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '~/components/ui/Select';
-import { useGetBsConfig, useGetFileConfig, useGetUserLinsightCountQuery } from '~/data-provider';
+import SpeechToTextComponent from '~/components/Voice/SpeechToText';
+import { useRecordingAudioLoading } from '~/components/Voice/textToSpeechStore';
+import { useGetBsConfig, useGetFileConfig, useGetUserLinsightCountQuery, useGetWorkbenchModelsQuery } from '~/data-provider';
 import {
   BsConfig,
   fileConfig as defaultFileConfig,
@@ -32,10 +35,11 @@ import { checkIfScrollable, cn, removeFocusRings } from '~/utils';
 import { ChatToolDown } from './ChatFormTools';
 import CollapseChat from './CollapseChat';
 import FileFormWrapper from './Files/FileFormWrapper';
+import SameSopSpan, { sameSopLabelState } from './SameSopSpan';
 import SendButton from './SendButton';
 import StopButton from './StopButton';
 
-const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
+const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
   const submitButtonRef = useRef<HTMLButtonElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   useQueryParams({ textAreaRef });
@@ -71,17 +75,20 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
   });
 
   const { data: bsConfig } = useGetBsConfig()
+  const [sameSopLabel] = useRecoilState(sameSopLabelState)
   const { handlePaste, handleKeyDown, handleCompositionStart, handleCompositionEnd } = useTextarea({
     textAreaRef,
     submitButtonRef,
     setIsScrollable,
     disabled: !!(requiresKey ?? false),
-    placeholder: isLingsi ? (bsConfig?.linsightConfig?.input_placeholder || '请输入你的任务目标，然后交给 BISHENG 灵思') : bsConfig?.inputPlaceholder
+    placeholder: isLingsi ? (sameSopLabel ? '请输入与此案例相似的目标' : bsConfig?.linsightConfig?.input_placeholder || localize('com_linsight_input_placeholder')) : bsConfig?.inputPlaceholder
   });
 
   const {
     files,
     setFiles,
+    dailyFiles,
+    setDailyFiles,
     conversation,
     isSubmitting,
     filesLoading,
@@ -103,6 +110,8 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
     textAreaRef,
     files,
     setFiles,
+    dailyFiles,
+    setDailyFiles
   });
 
   const navigator = useNavigate()
@@ -126,8 +135,14 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
     [conversation?.assistant_id, conversation?.endpoint, assistantMap],
   );
   const disableInputs = useMemo(
-    () => !!((requiresKey ?? false) || invalidAssistant),
-    [requiresKey, invalidAssistant],
+    () => {
+      if (readOnly) return true
+      if (isLingsi) return false
+      if (!bsConfig?.models) return true
+      if (bsConfig.models.length === 0) return true
+      return !!((requiresKey ?? false) || invalidAssistant)
+    },
+    [requiresKey, invalidAssistant, isLingsi, readOnly, bsConfig],
   );
 
   const { ref, ...registerProps } = methods.register('text', {
@@ -190,11 +205,22 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
   const accept = useMemo(() => {
     if (isLingsi) {
       return bsConfig?.enable_etl4lm
-        ? '.pdf,.txt,.docx,.ppt,.pptx,.md,.html,.xls,.xlsx,.doc,.png,.jpg,.jpeg,.bmp'
-        : '.pdf,.txt,.docx,.doc,.ppt,.pptx,.md,.html,.xls,.xlsx'
+        ? File_Accept.Linsight_Etl4lm
+        : File_Accept.Linsight
     }
     return ''
   }, [isLingsi])
+
+  const { data: modelData } = useGetWorkbenchModelsQuery()
+  const showVoice = modelData?.asr_model.id
+
+  const [audioOpening] = useRecordingAudioLoading()
+  const noModel = useMemo(() => {
+    if (isLingsi) return false
+    if (!bsConfig?.models) return true
+    if (bsConfig.models.length === 0) return true
+    return false
+  }, [isLingsi, bsConfig])
 
   return (
     <form
@@ -205,11 +231,11 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
         isLingsi && navigator('/linsight/new')
       })}
       className={cn(
-        'mx-auto flex flex-row gap-3 pl-2 transition-all duration-200 last:mb-2',
+        'mx-auto flex flex-row gap-3 transition-all duration-200 last:mb-2',
         maximizeChatSpace ? 'w-full max-w-full' : 'md:max-w-2xl xl:max-w-3xl',
       )}
     >
-      <div className="relative flex h-full flex-1 items-stretch md:flex-col">
+      <div className={`relative flex h-full flex-1 items-stretch md:flex-col ${!isLingsi && 'overflow-hidden'}`}>
         {/* 切换模型 */}
         {/* {showPlusPopover && !isAssistantsEndpoint(endpoint) && (
           <Mention
@@ -241,74 +267,78 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
           {/* 操作已添加的对话 */}
           {/* <TextareaHeader addedConvo={addedConvo} setAddedConvo={setAddedConvo} /> */}
           {/* {bsConfig?.fileUpload.enabled && */}
+          {/* 做同款 */}
+          {isLingsi && <SameSopSpan></SameSopSpan>}
+
           <FileFormWrapper
             accept={accept}
+            showVoice={showVoice}
             fileTip={!isLingsi}
             noUpload={!bsConfig?.fileUpload.enabled}
-            disableInputs={disableInputs}
+            disableInputs={disableInputs || audioOpening}
             disabledSearch={isSearch && !isLingsi}
           >
-            {endpoint && (
-              <>
-                <CollapseChat
-                  isCollapsed={isCollapsed}
-                  isScrollable={isScrollable}
-                  setIsCollapsed={setIsCollapsed}
-                />
-                <TextareaAutosize
-                  {...registerProps}
-                  ref={(e) => {
-                    ref(e);
-                    textAreaRef.current = e;
-                  }}
-                  disabled={disableInputs}
-                  onPaste={handlePaste}
-                  onKeyDown={handleKeyDown}
-                  onKeyUp={handleKeyUp}
-                  onHeightChange={() => {
-                    if (textAreaRef.current) {
-                      const scrollable = checkIfScrollable(textAreaRef.current);
-                      setIsScrollable(scrollable);
-                    }
-                  }}
-                  onCompositionStart={handleCompositionStart}
-                  onCompositionEnd={handleCompositionEnd}
-                  tabIndex={0}
-                  data-testid="text-input"
-                  rows={2}
-                  onFocus={() => isCollapsed && setIsCollapsed(false)}
-                  onClick={() => isCollapsed && setIsCollapsed(false)}
-                  style={{ height: isLingsi ? 124 : 84, overflowY: 'auto' }}
-                  className={cn(
-                    baseClasses,
-                    speechClass,
-                    removeFocusRings,
-                    'transition-[max-height] duration-200',
-                    'transition-[height] duration-500',
-                    isLingsi ? 'min-h-32' : 'min-h-24'
-                  )}
-                />
-              </>
-            )}
+            <>
+              <CollapseChat
+                isCollapsed={isCollapsed}
+                isScrollable={isScrollable}
+                setIsCollapsed={setIsCollapsed}
+              />
+              <TextareaAutosize
+                {...registerProps}
+                ref={(e) => {
+                  ref(e);
+                  textAreaRef.current = e;
+                }}
+                disabled={disableInputs}
+                onPaste={handlePaste}
+                onKeyDown={handleKeyDown}
+                onKeyUp={handleKeyUp}
+                onHeightChange={() => {
+                  if (textAreaRef.current) {
+                    const scrollable = checkIfScrollable(textAreaRef.current);
+                    setIsScrollable(scrollable);
+                  }
+                }}
+                onCompositionStart={handleCompositionStart}
+                onCompositionEnd={handleCompositionEnd}
+                tabIndex={0}
+                data-testid="text-input"
+                rows={2}
+                onFocus={() => isCollapsed && setIsCollapsed(false)}
+                onClick={() => isCollapsed && setIsCollapsed(false)}
+                style={{ height: isLingsi ? 124 : 84, overflowY: 'auto' }}
+                className={cn(
+                  baseClasses,
+                  speechClass,
+                  removeFocusRings,
+                  'transition-[max-height] duration-200',
+                  'transition-[height] duration-500',
+                  isLingsi ? 'min-h-32' : 'min-h-24'
+                )}
+              />
+            </>
           </FileFormWrapper>
           {/* 发送和停止 */}
-          <div className="absolute bottom-2 right-3">
+          <div className="absolute bottom-2 right-3 flex gap-2 items-center">
+            {showVoice && <SpeechToTextComponent disabled={readOnly || noModel} onChange={(e) => {
+              const text = textAreaRef.current.value + e
+              methods.setValue('text', text, { shouldValidate: true });
+            }} />}
             {(isSubmitting || isSubmittingAdded) && (showStopButton || showStopAdded) ? (
               <StopButton stop={handleStopGenerating} setShowStopButton={setShowStopButton} />
             ) : (
-              endpoint && (
-                <SendButton
-                  ref={submitButtonRef}
-                  isLingsi={isLingsi}
-                  control={methods.control}
-                  disabled={!!(filesLoading || isSubmitting || disableInputs || isOutMaxToken)}
-                />
-              )
+              <SendButton
+                ref={submitButtonRef}
+                isLingsi={isLingsi}
+                control={methods.control}
+                disabled={!!(filesLoading || isSubmitting || disableInputs || isOutMaxToken) || audioOpening}
+              />
             )}
           </div>
           {/* 深度思考 联网 */}
           <div className="absolute bottom-2 left-3 flex gap-2">
-            {!isLingsi && <ModelSelect value={chatModel.id} options={bsConfig?.models} onChange={val => {
+            {!isLingsi && <ModelSelect disabled={readOnly} value={chatModel.id} options={bsConfig?.models} onChange={val => {
               setChatModel({ id: Number(val), name: bsConfig?.models?.find(item => item.id === val)?.displayName || '' })
             }} />}
             <ChatToolDown
@@ -318,7 +348,7 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
               config={bsConfig}
               searchType={searchType}
               setSearchType={setSearchType}
-              disabled={!!files.size}
+              disabled={!!files.size || readOnly}
             />
           </div>
         </div>
@@ -343,12 +373,12 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
               <div className='w-0.5 h-3 bg-[#4A5AA1] absolute -rotate-45'></div>
               <div className='size-1.5 rounded-full bg-[#4A5AA1] absolute bottom-0 left-0.5'></div>
             </div>
-            大模型结合业务指导手册自主规划并完成复杂任务
+            {localize('com_linsight_tagline')}
           </p>
           {bsConfig?.linsight_invitation_code &&
             <div className='flex gap-4 items-center pr-6'>
-              <span className='text-xs text-gray-500'>剩余任务次数： {count}次</span>
-              {!count && <Button size="sm" className='h-6 text-xs' onClick={() => setShowCode(true)}>去激活</Button>}
+              <span className='text-xs text-gray-500'>{localize('com_linsight_remaining_times', { count })}</span>
+              {!count && <Button size="sm" className='h-6 text-xs' onClick={() => setShowCode(true)}>{localize('com_linsight_activate')}</Button>}
             </div>
           }
         </div>
@@ -357,22 +387,30 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
   );
 };
 
-const ModelSelect = ({ options, value, onChange }: { options?: BsConfig['models'], value: number, onChange: (value: string) => void }) => {
+const ModelSelect = ({ options, value, disabled, onChange }: { options?: BsConfig['models'], disabled: boolean, value: number, onChange: (value: string) => void }) => {
 
   const label = useMemo(() => {
-    if (!options) return ''
-    // 默认选中第一个
-    if (!value) onChange(options[0].id + '')
-    const currentOpt = options.find(opt => Number(opt.id) === value)
-    if (currentOpt) {
-      return currentOpt.displayName
+    if (!options || options.length === 0 || value == null) return ''
+
+    const currentOpt = options.find(opt => String(opt.id) === String(value))
+    return currentOpt?.displayName ?? ''
+  }, [options, value])
+
+  useEffect(() => {
+    if (!options || options.length === 0) return
+
+    // 当前值是否在 options 里
+    const hasCurrent = options.find(opt => String(opt.id) === String(value))
+
+    // 没有值 / 值不合法时，默认选中第一个
+    if (!hasCurrent) {
+      onChange(String(options[0].id))
     } else {
-      options[0] && onChange(options[0].id + '')
-      return ''
+      onChange(hasCurrent.id)
     }
   }, [options, value])
 
-  return <Select onValueChange={onChange}>
+  return <Select value={useMemo(() => value + '', [value])} disabled={disabled} onValueChange={onChange}>
     <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent">
       <div
         className='flex gap-2'
