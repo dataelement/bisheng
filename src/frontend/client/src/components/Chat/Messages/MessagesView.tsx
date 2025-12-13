@@ -91,8 +91,11 @@ export default function MessagesView({
             className="flex items-center h-8 justify-center gap-2 rounded-2xl bg-blue-100 px-4 py-1 font-medium text-blue-main hover:bg-blue-200"
             disabled={readOnly}
             onClick={() => {
-              newConvo();
-              navigate('/c/new');
+              document.getElementById('create-convo-btn')?.click();
+              // hack
+              setTimeout(() => {
+                document.getElementById('create-convo-btn')?.click();
+              }, 300);
             }}
             aria-label={localize('com_ui_new_chat')}
           >

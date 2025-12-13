@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
-export default function FileUploadStep4({ data, kId }) {
+export default function FileUploadStep4({ data, kId, hasRepeat }) {
     const { t } = useTranslation('knowledge');
     const [finish, setFinish] = useState(true)
     const navigate = useNavigate()
@@ -27,10 +27,11 @@ export default function FileUploadStep4({ data, kId }) {
 
     // Initialize file status (executed only once)
     useEffect(() => {
-        if (data.length > 0 && !hasInitialized.current) {
+        if ((data.length > 0 && !hasInitialized.current) || hasRepeat) {
 
             const initialFiles = data.map(item => ({
-                id: item.id || item.fileId, // Frontend file unique identifier
+                id: item.resultId || item.fileId || item.id, // Frontend file unique identifier
+                fileId: item.fileId,
                 fileName: item.fileName,
                 error: false,
                 reason: '',
@@ -40,7 +41,7 @@ export default function FileUploadStep4({ data, kId }) {
             setFiles(initialFiles);
 
             // Key: fileIdsRef and processingRef both store frontend file IDs (ensure data consistency)
-            const frontEndFileIds = initialFiles.map(file => file.id);
+            const frontEndFileIds = initialFiles.map(file => file.fileId);
             fileIdsRef.current = frontEndFileIds;
             processingRef.current.clear();
             frontEndFileIds.forEach(id => processingRef.current.add(id)); // Use same batch of IDs
@@ -53,7 +54,7 @@ export default function FileUploadStep4({ data, kId }) {
             return res;
         }, {}))
 
-    }, [data]);
+    }, [data, hasRepeat]);
 
     // Poll file status (complete fix version)
     useEffect(() => {
@@ -130,7 +131,7 @@ export default function FileUploadStep4({ data, kId }) {
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
         };
-    }, [kid, kId, t]); // Add t to dependencies
+    }, [kid, kId, t, data]); // Add t to dependencies
 
     useEffect(() => {
         return () => {
@@ -141,7 +142,8 @@ export default function FileUploadStep4({ data, kId }) {
     // Check if all files are completed
     useEffect(() => {
         // Mark as complete when processing set is empty
-        if (processingRef.current.size === 0 && fileIdsRef.current.length > 0) {
+        // if (processingRef.current.size === 0 && fileIdsRef.current.length > 0) {
+        if (processingRef.current.size === 0) {
             console.log('所有文件处理完成');
             if (timerRef.current) {
                 clearInterval(timerRef.current);
@@ -181,7 +183,7 @@ export default function FileUploadStep4({ data, kId }) {
                 <h1 className="text-3xl text-primary mt-2">{finish ? t('documentDataParsingCompleted') : t('documentDataBeingPrepared')}</h1>
                 <p className="text-base text-gray-500 mt-2">{t('youCanReturn')}</p>
                 <div className="overflow-y-auto mt-4 space-y-2 pb-10 max-h-[calc(100vh-400px)]">
-                    {files.map(item => premainingFileIds[item.id] ? <ProgressItem analysis key={item.id} item={item} /> : null)}
+                    {files.map(item => <ProgressItem analysis key={item.id} item={item} />)}
                 </div>
                 <div className="flex justify-end gap-4">
                     <Button onClick={() => navigate(-1)}>

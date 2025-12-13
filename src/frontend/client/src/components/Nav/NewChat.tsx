@@ -85,13 +85,13 @@ export default function NewChat({
   const clickHandler = (event: React.MouseEvent<HTMLAnchorElement>) => {
     if (event.button === 0 && !(event.ctrlKey || event.metaKey)) {
       event.preventDefault();
+      newConvo();
+      navigate('/c/new');
+      toggleNav();
       queryClient.setQueryData<TMessage[]>(
         [QueryKeys.messages, conversation?.conversationId ?? Constants.NEW_CONVO],
         [],
       );
-      newConvo();
-      navigate('/c/new');
-      toggleNav();
     }
   };
 
@@ -117,6 +117,7 @@ export default function NewChat({
           </Button>
           {/* 新建btn */}
           <Button
+            id="create-convo-btn"
             variant="outline" className="shadow-sm h-10 rounded-xl px-3 flex-shrink-0"
             onClick={clickHandler}
             aria-label={localize('com_ui_new_chat')}

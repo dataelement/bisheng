@@ -1357,7 +1357,7 @@
     "10532": "Workflow version upgraded. Contact owner to re-edit",
     "10540": "Server thread limit reached. Please try again later",
     "10541": "Workflow execution failed: {{exception}}",
-    "10599": "no viewing permission",
+    "10599": "No permission to view",
     "10600": "Incorrect username or password",
     "10601": "Password expired. Please update it",
     "10602": "Password not set. Contact admin to reset",

@@ -106,9 +106,10 @@ export default function FilesUpload() {
         }
         break;
       case 3: // Step 3 → Step 4 (compare → process)
-        setCurrentStep(4);
         if (segmentRules) {
           handleSave(segmentRules); // Save config
+        } else {
+          setCurrentStep(4);
         }
         break;
       default:
@@ -138,7 +139,7 @@ export default function FilesUpload() {
 
   // API: Save segmentation strategy config (normal mode exclusive)
   const handleSave = (_config) => {
-    if (submittingRef.current) return;
+    if (submittingRef.current) return setCurrentStep(4);
     submittingRef.current = true;
     setIsSubmitting(true);
 
@@ -179,14 +180,15 @@ export default function FilesUpload() {
         }
       } else {
         message({ variant: 'success', description: t('addSuccess') });
-        setCurrentStep(4);
       }
 
       // Update file ID
       setResultFiles(files => files.map((file, index) => ({
         ...file,
-        fileId: res[index]?.id
+        fileId: res[index]?.id,
+        resultId: res[index]?.id
       })));
+      setCurrentStep(4)
     }).finally(() => {
       submittingRef.current = false;
       setIsSubmitting(false);
@@ -286,9 +288,10 @@ export default function FilesUpload() {
       setRepeatFiles([]);
       return setCurrentStep(2);
     }
-
-    setRepeatFiles([]);
-    repeatCallBackRef.current();
+    setTimeout(() => {
+      setRepeatFiles([]);
+      repeatCallBackRef.current();
+    }, 100);
   }
   return (
     <div className="relative h-full flex flex-col">
@@ -354,7 +357,6 @@ export default function FilesUpload() {
                   handlePreviewResult={handlePreviewResult}
                   onPrev={handleBack}
                   onNext={() => {
-                    setCurrentStep(4);
                     handleSave(segmentRules);
                   }}
                   onDeleteFile={(filePath) => {
@@ -395,7 +397,7 @@ export default function FilesUpload() {
 
             {/* Step 4: Data processing */}
             {currentStep === 4 && (
-              <FileUploadStep4 data={resultFiles} />
+              <FileUploadStep4 data={resultFiles} hasRepeat={repeatFiles.length > 0}/>
             )}
           </div>
         </div>

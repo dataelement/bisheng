@@ -186,8 +186,8 @@ const EditMarkdown = ({ data, active, oneLeft, fileSuffix, onClick, onDel, onCha
                 description: t('chunkContentCannotBeEmpty'),
             })
         }
-
-        if (_value === _newValue) return // 无需保存
+        // Edit mode does not judge 
+        if (!edit && _value === _newValue) return // 无需保存
         // chunk diff
         onChange(data.chunkIndex, newValue)
     }
