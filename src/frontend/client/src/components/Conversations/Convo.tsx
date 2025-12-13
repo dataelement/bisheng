@@ -1,17 +1,20 @@
-import { Check, X } from 'lucide-react';
-import type { FocusEvent, KeyboardEvent, MouseEvent } from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useRecoilValue } from 'recoil';
-import { NotificationSeverity } from '~/common';
-import { useGetEndpointsQuery, useUpdateConversationMutation } from '~/data-provider';
-import type { TConversation } from '~/data-provider/data-provider/src';
-import { Constants } from '~/data-provider/data-provider/src';
-import { useLocalize, useMediaQuery, useNavigateToConvo } from '~/hooks';
-import { useToastContext } from '~/Providers';
-import store from '~/store';
-import { cn } from '~/utils';
-import { ConvoOptions } from './ConvoOptions';
+import { Check, X } from "lucide-react";
+import type { FocusEvent, KeyboardEvent, MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useRecoilValue } from "recoil";
+import { NotificationSeverity } from "~/common";
+import {
+  useGetEndpointsQuery,
+  useUpdateConversationMutation,
+} from "~/data-provider";
+import type { TConversation } from "~/data-provider/data-provider/src";
+import { Constants } from "~/data-provider/data-provider/src";
+import { useLocalize, useMediaQuery, useNavigateToConvo } from "~/hooks";
+import { useToastContext } from "~/Providers";
+import store from "~/store";
+import { cn } from "~/utils";
+import { ConvoOptions } from "./ConvoOptions";
 
 type KeyEvent = KeyboardEvent<HTMLInputElement>;
 
@@ -30,8 +33,13 @@ export default function Conversation({
 }: ConversationProps) {
   const params = useParams();
 
-  const currentConvoId = useMemo(() => params.conversationId, [params.conversationId]);
-  const updateConvoMutation = useUpdateConversationMutation(currentConvoId ?? '');
+  const currentConvoId = useMemo(
+    () => params.conversationId,
+    [params.conversationId]
+  );
+  const updateConvoMutation = useUpdateConversationMutation(
+    currentConvoId ?? ""
+  );
   const activeConvos = useRecoilValue(store.allConversationsSelector);
   const { data: endpointsConfig } = useGetEndpointsQuery();
   const { navigateWithLastTools } = useNavigateToConvo();
@@ -41,7 +49,7 @@ export default function Conversation({
   const [titleInput, setTitleInput] = useState(title);
   const [renaming, setRenaming] = useState(false);
   const [isPopoverActive, setIsPopoverActive] = useState(false);
-  const isSmallScreen = useMediaQuery('(max-width: 768px)');
+  const isSmallScreen = useMediaQuery("(max-width: 768px)");
   const localize = useLocalize();
   const navigate = useNavigate();
 
@@ -60,14 +68,14 @@ export default function Conversation({
     toggleNav();
 
     // set document title
-    if (typeof title === 'string' && title.length > 0) {
+    if (typeof title === "string" && title.length > 0) {
       // document.title = title;
     }
 
     /* Note: Latest Message should not be reset if existing convo */
     navigateWithLastTools(
       conversation,
-      !(conversationId ?? '') || conversationId === Constants.NEW_CONVO,
+      !(conversationId ?? "") || conversationId === Constants.NEW_CONVO
     );
   };
 
@@ -84,43 +92,57 @@ export default function Conversation({
   }, [renaming]);
 
   const onRename = useCallback(
-    (e: MouseEvent<HTMLButtonElement> | FocusEvent<HTMLInputElement> | KeyEvent) => {
+    (
+      e: MouseEvent<HTMLButtonElement> | FocusEvent<HTMLInputElement> | KeyEvent
+    ) => {
       e.preventDefault();
       setRenaming(false);
       if (titleInput === title) {
         return;
       }
-      if (typeof conversationId !== 'string' || conversationId === '') {
+      if (typeof conversationId !== "string" || conversationId === "") {
         return;
       }
 
       updateConvoMutation.mutate(
-        { conversationId, title: titleInput ?? '', flowType: conversation.flowType },
+        {
+          conversationId,
+          title: titleInput ?? "",
+          flowId: conversation.flowId,
+          flowType: conversation.flowType,
+        },
         {
           onError: () => {
             setTitleInput(title);
             showToast({
-              message: 'Failed to rename conversation',
+              message: "Failed to rename conversation",
               severity: NotificationSeverity.ERROR,
               showIcon: true,
             });
           },
-        },
+        }
       );
     },
-    [title, titleInput, conversationId, showToast, conversation, updateConvoMutation],
+    [
+      title,
+      titleInput,
+      conversationId,
+      showToast,
+      conversation,
+      updateConvoMutation,
+    ]
   );
 
   const handleKeyDown = useCallback(
     (e: KeyEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         setTitleInput(title);
         setRenaming(false);
-      } else if (e.key === 'Enter') {
+      } else if (e.key === "Enter") {
         onRename(e);
       }
     },
-    [title, onRename],
+    [title, onRename]
   );
 
   const cancelRename = useCallback(
@@ -129,25 +151,25 @@ export default function Conversation({
       setTitleInput(title);
       setRenaming(false);
     },
-    [title],
+    [title]
   );
 
   const isActiveConvo: boolean = useMemo(
     () =>
       currentConvoId === conversationId ||
       (isLatestConvo &&
-        currentConvoId === 'new' &&
+        currentConvoId === "new" &&
         activeConvos[0] != null &&
-        activeConvos[0] !== 'new'),
-    [currentConvoId, conversationId, isLatestConvo, activeConvos],
+        activeConvos[0] !== "new"),
+    [currentConvoId, conversationId, isLatestConvo, activeConvos]
   );
 
   return (
     <div
       className={cn(
-        'group relative mt-2 flex h-10 w-full items-center rounded-lg hover:bg-[#EBEFF8]',
-        isActiveConvo ? 'bg-[#EBEFF8]' : '',
-        isSmallScreen ? 'h-12' : '',
+        "group relative mt-2 flex h-10 w-full items-center rounded-lg hover:bg-[#EBEFF8]",
+        isActiveConvo ? "bg-[#EBEFF8]" : "",
+        isSmallScreen ? "h-12" : ""
       )}
     >
       {renaming ? (
@@ -156,15 +178,19 @@ export default function Conversation({
             ref={inputRef}
             type="text"
             className="w-full rounded bg-transparent p-0.5 text-sm leading-tight focus-visible:outline-none"
-            value={titleInput ?? ''}
+            value={titleInput ?? ""}
             onChange={(e) => setTitleInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            aria-label={`${localize('com_ui_rename')} ${localize('com_ui_chat')}`}
+            aria-label={`${localize("com_ui_rename")} ${localize(
+              "com_ui_chat"
+            )}`}
           />
           <div className="flex gap-1">
             <button
               onClick={cancelRename}
-              aria-label={`${localize('com_ui_cancel')} ${localize('com_ui_rename')}`}
+              aria-label={`${localize("com_ui_cancel")} ${localize(
+                "com_ui_rename"
+              )}`}
             >
               <X
                 aria-hidden={true}
@@ -173,7 +199,9 @@ export default function Conversation({
             </button>
             <button
               onClick={onRename}
-              aria-label={`${localize('com_ui_submit')} ${localize('com_ui_rename')}`}
+              aria-label={`${localize("com_ui_submit")} ${localize(
+                "com_ui_rename"
+              )}`}
             >
               <Check
                 aria-hidden={true}
@@ -189,10 +217,10 @@ export default function Conversation({
           data-testid="convo-item"
           onClick={clickHandler}
           className={cn(
-            'flex grow cursor-pointer items-center gap-2 overflow-hidden whitespace-nowrap break-all rounded-lg px-2 py-2',
-            isActiveConvo ? 'bg-[#EBEFF8]' : '',
+            "flex grow cursor-pointer items-center gap-2 overflow-hidden whitespace-nowrap break-all rounded-lg px-2 py-2",
+            isActiveConvo ? "bg-[#EBEFF8]" : ""
           )}
-          title={title ?? ''}
+          title={title ?? ""}
         >
           {/* <EndpointIcon
             conversation={conversation}
@@ -210,7 +238,16 @@ export default function Conversation({
             }}
             alt={conversation?.flowType}
           >
-            <img src={__APP_ENV__.BASE_URL + (conversation?.flowType === 20 ? "/assets/linsi.png" : "/assets/talk.png")} className='size-6 inline-block mr-2.5' alt="" />
+            <img
+              src={
+                __APP_ENV__.BASE_URL +
+                (conversation?.flowType === 20
+                  ? "/assets/linsi.png"
+                  : "/assets/talk.png")
+              }
+              className="size-6 inline-block mr-2.5"
+              alt=""
+            />
             {title}
           </div>
           {isActiveConvo ? (
@@ -222,10 +259,10 @@ export default function Conversation({
       )}
       <div
         className={cn(
-          'mr-2',
+          "mr-2",
           isPopoverActive || isActiveConvo
-            ? 'flex'
-            : 'hidden group-focus-within:flex group-hover:flex',
+            ? "flex"
+            : "hidden group-focus-within:flex group-hover:flex"
         )}
       >
         {!renaming && (
