@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Column, DateTime, delete, text
+from sqlalchemy import Column, DateTime, delete, text, INT
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -30,7 +30,7 @@ class UserGroupBase(SQLModelSerializable):
 
 
 class UserGroup(UserGroupBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(INT, primary_key=True, autoincrement=True))
 
 
 class UserGroupRead(UserGroupBase):
