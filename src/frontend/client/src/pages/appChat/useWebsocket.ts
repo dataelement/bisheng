@@ -80,6 +80,11 @@ export const useWebSocket = (helpers) => {
                     description: helpers.flow.description
                 }
                 ws?.send(JSON.stringify(msg))
+                // skill hack
+                if (helpers.flow.flow_type === 1 && callBack) {
+                    callBack?.(ws)
+                    callBack = null
+                }
             }
         }
 

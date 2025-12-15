@@ -245,7 +245,7 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                                         onChange={(e) => {
                                             const value = e.target.value;
                                             setInputAdvancedParams(value);
-                                            
+
                                             if (value.trim()) {
                                                 try {
                                                     const parsed = JSON.parse(value.trim());
@@ -305,13 +305,13 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectGroup>
-                                <SelectItem value="llm">{t('model.llm')}</SelectItem>
-                                <SelectItem value="embedding">{t('model.embedding')}</SelectItem>
-                                <SelectItem value="rerank">{t('model.rerank')}</SelectItem>
+                                <SelectItem value="llm">LLM</SelectItem>
+                                <SelectItem value="embedding">Embedding</SelectItem>
+                                <SelectItem value="rerank">Rerank</SelectItem>
                                 {showAsrTtsTypes.includes(type) && (
                                     <>
-                                        <SelectItem value="asr">{t('model.asr')}</SelectItem>
-                                        <SelectItem value="tts">{t('model.tts')}</SelectItem>
+                                        <SelectItem value="asr">ASR</SelectItem>
+                                        <SelectItem value="tts">TTS</SelectItem>
                                     </>
                                 )}
                             </SelectGroup>
@@ -370,15 +370,15 @@ export const modelProvider = [
     { "name": "xinference", "value": "xinference" },
     { "name": "llamacpp", "value": "llamacpp" },
     { "name": "vllm", "value": "vllm" },
-    { "name": t('model.aliYunBaiLian'), "value": "qwen" }, // Using translation key
+    { "name": "阿里云百炼", "value": "qwen" },
     { "name": "DeepSeek", "value": "deepseek" },
-    { "name": t('model.guiJiLiuDong'), "value": "silicon" }, // Using translation key
-    { "name": t('model.huoShanYinQing'), "value": "volcengine" }, // Using translation key
-    { "name": t('model.zhiPuAI'), "value": "zhipu" }, // Using translation key
-    { "name": t('model.xunFeiXingHuo'), "value": "spark" }, // Using translation key
-    { "name": t('model.tengXunYun'), "value": "tencent" }, // Using translation key
-    { "name": t('model.yueZhiAnMian'), "value": "moonshot" }, // Using translation key
-    { "name": t('model.baiDuQianFan'), "value": "qianfan" }, // Using translation key
+    { "name": "硅基流动", "value": "silicon" },
+    { "name": "火山引擎", "value": "volcengine" },
+    { "name": "智谱 AI", "value": "zhipu" },
+    { "name": "讯飞星火", "value": "spark" },
+    { "name": "腾讯云", "value": "tencent" },
+    { "name": "月之暗面", "value": "moonshot" },
+    { "name": "百度千帆", "value": "qianfan" },
     { "name": "Minimax", "value": "minimax" },
     { "name": "Anthropic", "value": "anthropic" },
     { "name": "MindIE", "value": "MindIE" },

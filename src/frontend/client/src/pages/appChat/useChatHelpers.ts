@@ -301,16 +301,18 @@ export default function useChatHelpers() {
             )
         },
         skillCloseMsg: () => {
-            setRunningState((prev) => ({
-                ...prev,
-                [chatId]: {
-                    ...prev[chatId],
-                    running: false,
-                    inputDisabled: false,
-                    inputForm: false,
-                    showStop: false
-                },
-            }))
+            setRunningState((prev) => {
+                return {
+                    ...prev,
+                    [chatId]: {
+                        ...prev[chatId],
+                        running: false,
+                        inputDisabled: !!prev[chatId].error?.code,
+                        inputForm: false,
+                        showStop: false
+                    },
+                }
+            })
         },
         endMsg: (chatid: string, data: any) => {
             // 删除所有未结束消息

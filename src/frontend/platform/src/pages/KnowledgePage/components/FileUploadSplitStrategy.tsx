@@ -132,12 +132,12 @@ const [predefinedRules] = useState([
         </div>
         <p className='text-xs text-gray-500 pt-1'>{t('splitPriorityInfo')}</p>
       </div>
-      <div className="relative flex-1 flex flex-col gap-4">
+
+      <div className="flex-1 flex flex-col gap-3 px-1"> 
         <h3 className="text-sm text-left font-medium text-gray-700">{t('universalRules')}:</h3>
         <div className="flex flex-wrap gap-2">
-            {predefinedRules.map((rule, index) => {
-            const regexDisplay = t("predefinedRules."+ ruleI18nMap[rule.regexKey]+'.label');
-            
+          {predefinedRules.map((rule, index) => {
+            const regexDisplay = t(`predefinedRules.${ruleI18nMap[rule.regexKey]}.label`);
             return (
               <Button
                 key={index}
@@ -153,25 +153,39 @@ const [predefinedRules] = useState([
         
         <h3 className="text-sm text-left font-medium text-gray-700"> {t('addCustomRule')}:</h3>
         <div className="text-sm flex flex-wrap items-center gap-2">
-          <div className='flex items-center gap-1'>
+          <div className='flex items-center gap-1 w-full'>
             <span>{t('in')}</span>
             <Input
               value={customRegex}
               onChange={(e) => setCustomRegex(e.target.value)}
               placeholder={t('enterRegex')}
-              className='w-full py-0 h-6'
+              className='flex-1 py-0 h-6' 
             />
           </div>
         </div>
-        
-        <RadioGroup value={position} onValueChange={setPosition} className="flex items-center text-sm">
-          <RadioGroupItem value="before" />{t('before')}
-          <RadioGroupItem value="after" />{t('after')}
-          <span>{t('split')}</span>
+
+        <RadioGroup 
+          value={position} 
+          onValueChange={setPosition} 
+          className="flex items-center flex-wrap text-sm gap-2" 
+        >
+          <div className="flex items-center gap-1"> 
+            <RadioGroupItem value="before" id={`radio-before-${Date.now()}`} />
+            <label htmlFor={`radio-before-${Date.now()}`} className="cursor-pointer">
+              {t('before')}
+            </label>
+          </div>
+          <div className="flex items-center gap-1">
+            <RadioGroupItem value="after" id={`radio-after-${Date.now()}`} />
+            <label htmlFor={`radio-after-${Date.now()}`} className="cursor-pointer">
+              {t('after')}
+            </label>
+          </div>
+          <span className="ml-1">{t('split')}</span> 
         </RadioGroup>
-        
-        <div className="flex justify-end absolute right-0 bottom-0">
-          <Button onClick={handleAddCustomStrategy} className="h-6">
+
+        <div className="flex justify-end mt-2"> 
+          <Button onClick={handleAddCustomStrategy} className="h-6 px-3"> 
             {t('add')}
           </Button>
         </div>
