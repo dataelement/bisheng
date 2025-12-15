@@ -104,7 +104,10 @@ const SelectVar = forwardRef(({
                 // 过滤不相同tab
                 if (item.tab && param.tab && item.tab !== param.tab) return
                 // 过滤当前节点的output变量
-                if (nodeId === item.id &&( param.key.indexOf('output') === 0 || param.key.indexOf('retrieved') === 0)) return
+                if (nodeId === item.id && (
+                    param.key.indexOf('output') === 0 ||
+                    (param.key.indexOf('retrieved') === 0 && param.global.split('=')[0] !== 'self')
+                )) return
                 // 不能选自己(相同变量名视为self) param.key
                 if (nodeId === item.id && param.key === itemKey) return
                 if (!param.global) return
