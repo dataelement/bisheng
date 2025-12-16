@@ -510,7 +510,7 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
             getWorkstationConfigApi().then((res) => {
                 if (res) {
                     // 确保 systemPrompt 有值
-                    const defaultSystemPrompt = t('chatConfig.webSearchPrompt')
+                    const defaultSystemPrompt = t('chatConfig.systemPrompt2')
                     const systemPrompt = res.systemPrompt || defaultSystemPrompt;
 
                     setFormData((prev) => {
