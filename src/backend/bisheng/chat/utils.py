@@ -104,12 +104,15 @@ def sync_judge_source(result, source_document, chat_id, extra: Dict):
         metadata = result.metadata
         question = result.page_content
         result = json.loads(metadata.get('extra', '{}')).get('answer')
-        source = SourceType.QA.value
-        extra.update({
-            'qa': f'本答案来源于已有问答库: {question}',
-            'url': json.loads(metadata.get('extra', '{}')).get('url')
-        })
-    elif source_document and chat_id:
+        if result:
+            source = SourceType.QA.value
+            extra.update({
+                'qa': question,
+                'url': json.loads(metadata.get('extra', '{}')).get('url')
+            })
+            return source, result
+        source_document = [source_document]
+    if source_document and chat_id:
         if any(not doc.metadata.get('right', True) for doc in source_document):
             source = SourceType.NO_PERMISSION.value
         elif all(
