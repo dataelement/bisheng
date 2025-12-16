@@ -32,7 +32,7 @@ def get_all_operators(*, login_user: UserPayload = Depends(UserPayload.get_login
     """
     获取操作过组下资源的所有用户
     """
-    return AuditLogService.get_all_operators(login_user)
+    return resp_200(data=AuditLogService.get_all_operators(login_user))
 
 
 @router.get('/session')

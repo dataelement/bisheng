@@ -1,7 +1,7 @@
 import csv
 from datetime import datetime
 from tempfile import NamedTemporaryFile
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Dict
 
 from loguru import logger
 
@@ -49,10 +49,13 @@ class AuditLogService:
         return resp_200(data={'data': data, 'total': total})
 
     @classmethod
-    def get_all_operators(cls, login_user: UserPayload) -> Any:
+    def get_all_operators(cls, login_user: UserPayload) -> List[Dict]:
         groups = []
         if not login_user.is_admin():
             groups = [one.group_id for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
+            # not any group admin
+            if not groups:
+                raise UnAuthorizedError()
 
         data = AuditLogDao.get_all_operators(groups)
         res = {}
@@ -60,7 +63,7 @@ class AuditLogService:
             if not one[1]:
                 continue
             res[one[0]] = {'user_id': one[0], 'user_name': one[1]}
-        return resp_200(data=list(res.values()))
+        return list(res.values())
 
     @classmethod
     def _chat_log(cls, user: UserPayload, ip_address: str, event_type: EventType, object_type: ObjectType,
