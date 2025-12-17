@@ -286,7 +286,7 @@ async def process_flow(
                                                   event_data=NewMessageSessionEventData(
                                                       session_id=session_id,
                                                       app_id=flow_id,
-                                                      source=source,  # type: ignore
+                                                      source='api',
                                                       app_name=flow.name,
                                                       app_type=ApplicationTypeEnum.SKILL
                                                   )

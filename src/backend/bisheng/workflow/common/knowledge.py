@@ -300,7 +300,7 @@ class RagUtils(BaseNode):
     def init_knowledge_retriever(self):
         """ retriever from knowledge base """
         if not self._knowledge_vector_list:
-            self._knowledge_vector_list = KnowledgeRag.get_multi_knowledge_vectorstore(
+            self._knowledge_vector_list = KnowledgeRag.get_multi_knowledge_vectorstore_sync(
                 invoke_user_id=self.user_id,
                 knowledge_ids=self._knowledge_value,
                 user_name=self.user_info.user_name,

@@ -41,6 +41,19 @@ class APIAddQAParam(BaseModel):
     relative_questions: Optional[List[str]] = []
 
 
+class UseKnowledgeBaseParam(BaseModel):
+    personal_knowledge_enabled: Optional[bool] = False
+    organization_knowledge_ids: Optional[List[int]] = []
+
+    @field_validator('organization_knowledge_ids', mode='before')
+    @classmethod
+    def convert_organization_knowledge_ids(cls, v: Any):
+        if len(v) > 20:
+            raise ValueError('最多只能使用20个组织知识库')
+
+        return v
+
+
 class APIChatCompletion(BaseModel):
     clientTimestamp: str
     conversationId: Optional[str] = None
@@ -51,7 +64,7 @@ class APIChatCompletion(BaseModel):
     model: str
     text: Optional[str] = ''
     search_enabled: Optional[bool] = False
-    knowledge_enabled: Optional[bool] = False
+    use_knowledge_base: Optional[UseKnowledgeBaseParam] = None
     files: Optional[List[Dict]] = None
     parentMessageId: Optional[str] = None
     overrideParentMessageId: Optional[str] = None

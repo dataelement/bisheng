@@ -11,6 +11,7 @@ from pydantic import field_validator
 
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.knowledge import KnowledgeService
+from bisheng.api.v1.schema.chat_schema import UseKnowledgeBaseParam
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.server import EmbeddingModelStatusError
@@ -19,6 +20,7 @@ from bisheng.core.ai.rerank.rrf_rerank import RRFRerank
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
+from bisheng.knowledge.domain.knowledge_merge_search import RRFMultiVectorRetriever
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.llm.domain.services import LLMService
@@ -156,47 +158,56 @@ class WorkStationService(BaseService):
         return res, total
 
     @classmethod
-    async def queryChunksFromDB(cls, question: str, login_user: UserPayload):
+    async def queryChunksFromDB(cls, question: str, use_knowledge_param: UseKnowledgeBaseParam,
+                                login_user: UserPayload) -> list[str]:
         """
         从数据库中查询相关知识块
         
         Args:
             question: 用户查询问题
+            use_knowledge_param: 使用知识库的参数
             login_user: 登录用户信息
             
         Returns:
             List[str]: 格式化后的知识库内容列表，格式为：
                 "[file name]:文件名\n[file content begin]\n内容\n[file content end]\n"
         """
-        knowledge = await KnowledgeDao.aget_user_knowledge(login_user.user_id, knowledge_type=KnowledgeTypeEnum.PRIVATE)
+        knowledge_ids = []
 
-        if not knowledge:
+        if use_knowledge_param.organization_knowledge_ids:
+            # 如果有组织知识库，则调用知识库服务获取知识块
+            knowledge_ids.extend(use_knowledge_param.organization_knowledge_ids)
+
+        if use_knowledge_param.personal_knowledge_enabled:
+            # 如果启用了个人知识库，则添加个人知识库ID
+            personal_knowledge = await KnowledgeDao.aget_user_knowledge(login_user.user_id,
+                                                                        knowledge_type=KnowledgeTypeEnum.PRIVATE)
+            if personal_knowledge:
+                knowledge_ids.append(personal_knowledge[0].id)
+
+        knowledge_vector_list = await KnowledgeRag.get_multi_knowledge_vectorstore(invoke_user_id=login_user.user_id,
+                                                                                   knowledge_ids=knowledge_ids,
+                                                                                   user_name=login_user.user_name)
+
+        vectors = []
+        for knowledge_id, vectorstore_info in knowledge_vector_list.items():
+            milvus_vectorstore = vectorstore_info.get("milvus")
+            es_vectorstore = vectorstore_info.get("es")
+            if milvus_vectorstore:
+                vectors.append(milvus_vectorstore)
+            if es_vectorstore:
+                vectors.append(es_vectorstore)
+
+        if not vectors:
             return []
-        knowledge = knowledge[0]
-        try:
-            embedding = await LLMService.get_bisheng_daily_embedding(model_id=int(knowledge.model),
-                                                                     invoke_user_id=login_user.user_id)
-        except Exception as e:
-            raise EmbeddingModelStatusError(exception=e)
 
-        vector_store = KnowledgeRag.init_milvus_vectorstore(knowledge.collection_name, embeddings=embedding)
-        keyword_store = KnowledgeRag.init_es_vectorstore(knowledge.index_name)
+        rrf_multivector_retriever = RRFMultiVectorRetriever(
+            vector_stores=vectors,
+            top_k=100,
+        )
+        # 使用 RAG 方法进行检索
+        finally_docs = await rrf_multivector_retriever.ainvoke(question)
 
-        # 获取配置中的最大token数，如果没有配置则使用默认值
-        config = await cls.aget_config()
-        max_tokens = config.maxTokens if config else 15000
-
-        # 获取知识库溯源模型 ID，如果没有配置则使用知识库的嵌入模型 ID
-
-        milvus_retriever = vector_store.as_retriever(search_kwargs={"k": 100})
-        es_retriever = keyword_store.as_retriever(search_kwargs={"k": 100})
-
-        milvus_docs = await milvus_retriever.ainvoke(question)
-        es_docs = await es_retriever.ainvoke(question)
-
-        rrf_rerank = RRFRerank(retrievers=[milvus_retriever, es_retriever])
-
-        finally_docs = await rrf_rerank.acompress_documents(documents=[milvus_docs, es_docs], query=question)
         # 将检索结果格式化为指定的模板格式
         formatted_results = []
         if finally_docs:

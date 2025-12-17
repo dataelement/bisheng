@@ -3,7 +3,7 @@ import json
 import urllib.parse
 from datetime import datetime
 from io import BytesIO
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Literal
 
 import pandas as pd
 from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request,
@@ -258,11 +258,13 @@ async def get_knowledge(*,
                         name: str = None,
                         knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value,
                                                     alias='type'),
+                        sort_by: Literal['create_time', 'update_time', 'name'] = Query(default='update_time'),
                         page_size: Optional[int] = 10,
                         page_num: Optional[int] = 1):
     """ 读取所有知识库信息. """
     knowledge_type = KnowledgeTypeEnum(knowledge_type)
     res, total = await KnowledgeService.get_knowledge(request, login_user, knowledge_type, name,
+                                                      sort_by,
                                                       page_num, page_size)
     return resp_200(data={'data': res, 'total': total})
 

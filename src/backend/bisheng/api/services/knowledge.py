@@ -78,6 +78,7 @@ class KnowledgeService(KnowledgeUtils):
             login_user: UserPayload,
             knowledge_type: KnowledgeTypeEnum,
             name: str = None,
+            sort_by: str = "update_time",
             page: int = 1,
             limit: int = 10,
     ) -> (List[KnowledgeRead], int):
@@ -96,6 +97,7 @@ class KnowledgeService(KnowledgeUtils):
                 knowledge_id_extra,
                 knowledge_type,
                 name,
+                sort_by,
                 page,
                 limit,
             )
@@ -104,7 +106,7 @@ class KnowledgeService(KnowledgeUtils):
             )
         else:
             res = await KnowledgeDao.aget_all_knowledge(
-                name, knowledge_type, page=page, limit=limit
+                name, knowledge_type, sort_by, page=page, limit=limit
             )
             total = await KnowledgeDao.acount_all_knowledge(name, knowledge_type)
 
