@@ -1,6 +1,6 @@
 from typing import Optional, List
 
-from pydantic import Field, BaseModel
+from pydantic import Field, BaseModel, model_validator
 
 from bisheng.llm.domain.models import LLMModelBase, LLMServerBase
 from bisheng_langchain.linsight.const import TaskMode
@@ -13,6 +13,22 @@ class LLMModelInfo(LLMModelBase):
 class LLMServerInfo(LLMServerBase):
     id: Optional[int] = None
     models: List[LLMModelInfo] = Field(default_factory=list, description='模型列表')
+
+    # 敏感数据脱敏
+    @model_validator(mode='after')
+    def mask_sensitive_data(self):
+        if not self.config:
+            return self
+
+        def mask_config_value(config_key: str):
+            if config_key in self.config and self.config[config_key]:
+                self.config[config_key] = '*' * len(self.config[config_key])
+
+        mask_config_value("api_key")
+        mask_config_value("api_secret")
+        mask_config_value("openai_api_key")
+        mask_config_value("access_token")
+        return self
 
 
 class WSModel(BaseModel):
