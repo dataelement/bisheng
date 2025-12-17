@@ -24,6 +24,7 @@ from bisheng.llm.domain.models import LLMDao, LLMServer, LLMModel
 from bisheng.llm.domain.schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig, AssistantLLMConfig, \
     EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq, WorkbenchModelConfig, WSModel
 from bisheng.utils import generate_uuid, md5_hash
+from bisheng.utils.mask_data import JsonFieldMasker
 from ..llm import BishengASR, BishengLLM, BishengTTS, BishengEmbedding
 from ..llm.rerank import BishengRerank
 
@@ -272,7 +273,8 @@ class LLMService:
         exist_server.type = server.type
         exist_server.limit_flag = server.limit_flag
         exist_server.limit = server.limit
-        exist_server.config.update(server.config)
+        mask_maker = JsonFieldMasker()
+        exist_server.config = mask_maker.update_json_with_masked(exist_server.config, server.config)
 
         db_server = await LLMDao.update_server_with_models(exist_server, list(model_dict.values()))
         new_server_info = await cls.get_one_llm(db_server.id)

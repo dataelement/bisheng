@@ -3,6 +3,7 @@ from typing import Optional, List
 from pydantic import Field, BaseModel, model_validator
 
 from bisheng.llm.domain.models import LLMModelBase, LLMServerBase
+from bisheng.utils.mask_data import JsonFieldMasker
 from bisheng_langchain.linsight.const import TaskMode
 
 
@@ -19,15 +20,8 @@ class LLMServerInfo(LLMServerBase):
     def mask_sensitive_data(self):
         if not self.config:
             return self
-
-        def mask_config_value(config_key: str):
-            if config_key in self.config and self.config[config_key]:
-                self.config[config_key] = '*' * len(self.config[config_key])
-
-        mask_config_value("api_key")
-        mask_config_value("api_secret")
-        mask_config_value("openai_api_key")
-        mask_config_value("access_token")
+        mask_maker = JsonFieldMasker()
+        self.config = mask_maker.mask_json(self.config)
         return self
 
 
@@ -72,22 +66,6 @@ class LLMServerCreateReq(BaseModel):
     limit: Optional[int] = Field(default=0, description='每日调用次数限制')
     config: Optional[dict] = Field(default=None, description='服务提供方配置')
     models: Optional[List[LLMModelCreateReq]] = Field(default_factory=list, description='服务提供方下的模型列表')
-
-    @model_validator(mode='after')
-    def remove_sensitive_data_key(self):
-        if not self.config:
-            return self
-
-        def remove_config_value(config_key: str):
-            if (config_key in self.config and self.config[config_key] and
-                    self.config[config_key] == '*' * len(self.config[config_key])):
-                self.config.pop(config_key)
-
-        remove_config_value("api_key")
-        remove_config_value("api_secret")
-        remove_config_value("openai_api_key")
-        remove_config_value("access_token")
-        return self
 
 
 class KnowledgeLLMConfig(BaseModel):
