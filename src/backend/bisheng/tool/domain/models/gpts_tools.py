@@ -87,21 +87,6 @@ class GptsToolsTypeRead(GptsToolsTypeBase):
             self.extra = json.dumps(extra_json, ensure_ascii=False)
         return self
 
-    def update_sensitive_data(self, original_extra: str) -> str:
-        """
-        合并敏感数据
-        """
-        if not self.extra:
-            return self.extra
-
-        original_json = json.loads(original_extra)
-        new_json = json.loads(self.extra)
-        for key, value in original_json.items():
-            if key not in new_json or not new_json[key]:
-                new_json[key] = value
-        self.extra = json.dumps(new_json, ensure_ascii=False)
-        return self
-
 
 class GptsToolsRead(GptsToolsBase):
     id: int
