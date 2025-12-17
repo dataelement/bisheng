@@ -683,6 +683,8 @@
   "com_tools_web_search": "オンライン検索",
   "com_tools_personal_knowledge": "個人ナレッジ",
   "com_tools_org_knowledge": "組織ナレッジ",
+  "com_tools_knowledge_base": "ナレッジベース",
+  "com_tools_knowledge_base_search": "ナレッジベース検索",
   "com_tools_knowledge_rebuilding": "個人ナレッジの embedding モデルが変更されました。再構築中のため、しばらくしてからお試しください",
   "com_ui_edit": "編集",
   "com_ui_endpoint": "チャネル",

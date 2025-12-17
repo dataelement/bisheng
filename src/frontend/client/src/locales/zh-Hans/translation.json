@@ -683,6 +683,8 @@
   "com_tools_web_search": "联网搜索",
   "com_tools_personal_knowledge": "个人知识库",
   "com_tools_org_knowledge": "组织知识库",
+  "com_tools_knowledge_base": "知识库",
+  "com_tools_knowledge_base_search": "搜索知识库名称",
   "com_tools_knowledge_rebuilding": "个人知识库 embedding 模型已更换，正在重建知识库，请稍后再试",
   "com_ui_edit": "编辑",
   "com_ui_endpoint": "渠道",

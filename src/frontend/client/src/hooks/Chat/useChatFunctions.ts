@@ -78,7 +78,8 @@ export default function useChatFunctions({
   const chatModel = useRecoilValue(store.chatModel);
   const searchType = useRecoilValue(store.searchType);
   // const netSearch = useRecoilValue(store.netSearch);
-
+  const selectedOrgKbs = useRecoilValue(store.selectedOrgKbs);
+  const enableOrgKb = useRecoilValue(store.enableOrgKb);
   const queryClient = useQueryClient();
   const { getExpiry } = useUserKey(conversation?.endpoint ?? '');
   // const model = useShouGangModel()
@@ -112,6 +113,18 @@ export default function useChatFunctions({
     const custom_model = modelType || 'deepseek-chat';
     const search_enabled = searchType && searchType === 'netSearch' || false;
     const knowledge_enabled = searchType && searchType === 'knowledgeSearch' || false;
+    
+    const use_knowledge_base = {
+      personal_knowledge_enabled: knowledge_enabled,
+
+      // 是否用组织知识库
+      enableOrgKb: enableOrgKb,
+
+      organization_knowledge_ids:
+        knowledge_enabled && enableOrgKb
+          ? selectedOrgKbs.map(kb => kb.id)
+          : [],
+    };
 
     // const endpoint = conversation?.endpoint;
     if (endpoint === null) {
@@ -202,7 +215,7 @@ export default function useChatFunctions({
       endpointType: 'custom',
       model: chatModel.id + '',
       search_enabled,
-      knowledge_enabled,
+      use_knowledge_base,
     });
     const responseSender = chatModel.name // getSender({ ...endpointOption });
 
@@ -315,6 +328,7 @@ export default function useChatFunctions({
       isEdited: isEditOrContinue,
       isContinued,
       isRegenerate,
+      //1
       initialResponse,
       isTemporary,
     };

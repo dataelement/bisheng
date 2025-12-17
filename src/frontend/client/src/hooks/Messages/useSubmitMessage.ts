@@ -31,7 +31,10 @@ export default function useSubmitMessage(helpers?: { clearDraft?: () => void }) 
   const [sameSopLabel, setSameSopLabel] = useRecoilState(sameSopLabelState)
 
   const submitMessage = useCallback(
-    (data?: { text: string, linsight?: boolean, tools?: any[] }) => {
+    (data?: { text: string, linsight?: boolean, tools?: any[],knowledge?: {
+    personal?: boolean;
+    orgKbIds?: string[];
+  }; }) => {
       if (!data) {
         return console.warn('No data provided to submitMessage');
       }
@@ -50,7 +53,8 @@ export default function useSubmitMessage(helpers?: { clearDraft?: () => void }) 
           tools: data.tools,
           model: 'gpt-4',
           enableWebSearch: false,
-          useKnowledgeBase: true
+          useKnowledgeBase: true,
+          orgKnowledgeBaseIds: data.knowledge?.orgKbIds ?? [],
         });
         // 重置表单和清理草稿
         methods.reset();
