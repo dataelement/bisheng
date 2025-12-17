@@ -124,7 +124,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
         onValidate((config) => {
             if (data.required && !data.value.value.length) {
                 setError(true)
-            //    return `${t(`${i18nPrefix}label`)} ${t('required')}\n选择的元数据字段无效或已被删除`;   
+               return `${t(`${i18nPrefix}label`)} ${t('required')}`;   
             }
             if (data.value.value.some(item => /input_[a-zA-Z0-9]+\.file/.test(item.key))) {
                 return 'input_file'
