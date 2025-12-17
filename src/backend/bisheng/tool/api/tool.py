@@ -7,7 +7,6 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.mcp_manage.langchain.tool import McpTool
 from bisheng.mcp_manage.manager import ClientManager
-from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.models.gpts_tools import GptsToolsTypeRead
 from bisheng.tool.domain.schemas import TestToolReq
 from bisheng.tool.domain.services.openapi import OpenApiSchema
@@ -129,17 +128,4 @@ async def get_linsight_tools():
     获取灵思预置工具列表
     """
     tools = await ToolServices.get_linsight_tools()
-    return resp_200(data=tools)
-
-
-@router.get("/manage", summary="获取有管理权限的工具列表", response_model=UnifiedResponseModel)
-async def get_manage_tools(
-        is_preset: Optional[int] = None,
-        login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """
-    获取有管理权限的工具列表
-    """
-    if is_preset is not None:
-        is_preset = ToolPresetType(is_preset)
-    tools = await ToolServices(login_user=login_user).get_manage_tools(is_preset)
     return resp_200(data=tools)
