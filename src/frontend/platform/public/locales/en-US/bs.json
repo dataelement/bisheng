@@ -286,6 +286,7 @@
     "connectionbreak": "Network Disconnected!",
     "copyTip": "Content copied",
     "noAccess": "Due to insufficient permissions, this answer has excluded content that you are not authorized to view",
+    "sourceFromQaLibrary": "This answer is sourced from the existing Q&A library.",
     "source": "Reference Source",
     "file": "File",
     "filePrsing": "File is currently being parsed",

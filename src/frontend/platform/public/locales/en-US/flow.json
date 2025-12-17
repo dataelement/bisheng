@@ -236,6 +236,8 @@
   "referenceFormatTip": "Please adjust the reference format to 'YYYY-MM-DD HH:mm:ss', e.g., '2025-01-10 21:08:20' for January 10, 2025 at 21:08:20",
   "+ Add Condition": "+ Add condition",
   "playbackUnavailable": "Playback is not available. Please contact the administrator.",
+  "wordEditorLoadFailed": "Word editor failed to load",
+  "checkOfficeServiceConfig": "Please ensure the Office service address is configured correctly and the service is running.",
   "node": {
     "start": {
       "name": "Start",

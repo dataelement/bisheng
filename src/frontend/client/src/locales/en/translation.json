@@ -984,6 +984,7 @@
   "com_source_modal_no_files": "No matching source files",
   "com_source_modal_file_url_invalid": "File URL is invalid!",
   "com_msg_source_reference": "Reference",
+  "sourceFromQaLibrary": "This answer is sourced from the existing Q&A library.",
   "com_msg_source_no_permission": "Due to insufficient permissions, content you cannot view has been excluded from this answer",
   "com_runlog_used": "Used",
   "com_runlog_using": "Using",

@@ -281,6 +281,7 @@
     "connectionbreak": "ネットワークが切断されました！",
     "copyTip": "内容をコピーしました",
     "noAccess": "権限不足のため、閲覧権限のない内容は回答から除外されています",
+    "sourceFromQaLibrary": "この回答は既存のQ&Aライブラリに基づいています。",
     "source": "参照元",
     "file": "ファイル",
     "filePrsing": "ファイルを解析中",

@@ -345,7 +345,7 @@ export default function VarInput({
                             <DialogTrigger asChild>
                                 <Button className="text-muted-foreground absolute right-2 top-6 size-5" size="icon" variant="ghost"><Expand size={14} /></Button>
                             </DialogTrigger>
-                            <DialogContent className="lg:max-w-[800px]">
+                            <DialogContent className="lg:max-w-[620px] translate-x-[-50%]">
                                 {/* <DialogHeader>
                                 <DialogTitle className="flex items-center"></DialogTitle>
                             </DialogHeader> */}

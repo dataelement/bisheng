@@ -223,7 +223,8 @@ export default function AppUseLog() {
                 // output
                 if ('output_with_input_msg' === category) return `${msg.msg} :${msg.hisValue}`
                 if ('output_with_choose_msg' === category) return `${msg.msg} :${msg.options.find(el => el.id === msg.hisValue)?.label}`
-                return typeof msg === 'string' ? msg : (msg.input || msg.msg)
+                const newMsg = typeof msg === 'string' ? msg : (msg.input || msg.msg)
+                return /^[=+-@]/.test(newMsg) ? "'" + newMsg : msg
             }
 
             // Data transformation

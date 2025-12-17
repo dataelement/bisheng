@@ -904,6 +904,7 @@
   "com_source_modal_no_files": "一致するソースファイルはありません",
   "com_source_modal_file_url_invalid": "ファイル URL が無効です！",
   "com_msg_source_reference": "参照元",
+  "sourceFromQaLibrary": "この回答は既存のQ&Aライブラリに基づいています。",
   "com_msg_source_no_permission": "権限不足のため、閲覧権限のない内容は回答から除外されています",
   "com_runlog_used": "使用済み",
   "com_runlog_using": "使用中",

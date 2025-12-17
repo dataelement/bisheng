@@ -9,14 +9,14 @@ import { useTranslation } from "react-i18next";
 // import GuideQuestions from "./GuideQuestions";
 // import { useMessageStore } from "./messageStore";
 import Tip from "@/components/bs-ui/tooltip/tip";
+import { useAudioStore } from "@/components/voiceFunction/audioPlayerStore";
 import SpeechToTextComponent from "@/components/voiceFunction/speechToText";
 import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
-import { RefreshCw, Volume2 } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import useFlowStore from "../flowStore";
 import ChatFiles from "./ChatFiles";
 import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
-import { useAudioStore } from "@/components/voiceFunction/audioPlayerStore";
 const GuideQuestionsAny = GuideQuestions as any;
 
 export const FileTypes = {
@@ -271,7 +271,9 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             if (status_code === 500) {
                 setInputLock({ locked: true, reason: data.message.message })
             } else {
-                setInputLock({ locked: true, reason: t(`errors.${status_code}`, params) })
+                // 特殊状态吗支持输入框展示reason
+                const reason = [10421, 13002, 13010].includes(status_code) ? t(`errors.${status_code}`, params) : ' '
+                setInputLock({ locked: true, reason })
             }
 
             // 记录
