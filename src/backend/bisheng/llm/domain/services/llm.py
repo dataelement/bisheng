@@ -272,7 +272,7 @@ class LLMService:
         exist_server.type = server.type
         exist_server.limit_flag = server.limit_flag
         exist_server.limit = server.limit
-        exist_server.config = server.config
+        exist_server.config.update(server.config)
 
         db_server = await LLMDao.update_server_with_models(exist_server, list(model_dict.values()))
         new_server_info = await cls.get_one_llm(db_server.id)

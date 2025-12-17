@@ -73,6 +73,22 @@ class LLMServerCreateReq(BaseModel):
     config: Optional[dict] = Field(default=None, description='服务提供方配置')
     models: Optional[List[LLMModelCreateReq]] = Field(default_factory=list, description='服务提供方下的模型列表')
 
+    @model_validator(mode='after')
+    def remove_sensitive_data_key(self):
+        if not self.config:
+            return self
+
+        def remove_config_value(config_key: str):
+            if (config_key in self.config and self.config[config_key] and
+                    self.config[config_key] == '*' * len(self.config[config_key])):
+                self.config.pop(config_key)
+
+        remove_config_value("api_key")
+        remove_config_value("api_secret")
+        remove_config_value("openai_api_key")
+        remove_config_value("access_token")
+        return self
+
 
 class KnowledgeLLMConfig(BaseModel):
     embedding_model_id: Optional[int] = Field(None, description='知识库默认embedding模型的ID')
