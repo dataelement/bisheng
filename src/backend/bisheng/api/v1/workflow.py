@@ -60,8 +60,18 @@ async def check_app_write_auth(
 async def get_report_file(
         request: Request,
         login_user: UserPayload = Depends(UserPayload.get_login_user),
-        version_key: str = Query("", description="minio的object_name")):
+        version_key: str = Query("", description="minio的object_name"),
+        workflow_id: str = Query(..., description="工作流ID")
+):
     """ 获取report节点的模板文件 """
+
+    # 检查用户对应用是否有读取权限
+    flow_info = await FlowDao.aget_flow_by_id(workflow_id)
+    if not flow_info:
+        raise NotFoundError.http_exception()
+    if not await login_user.async_access_check(flow_info.user_id, workflow_id, AccessType.WORKFLOW):
+        return UnAuthorizedError.return_resp()
+
     if not version_key:
         #  重新生成一个version_key
         version_key = generate_uuid()
