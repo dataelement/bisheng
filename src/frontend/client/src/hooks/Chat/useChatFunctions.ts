@@ -113,15 +113,14 @@ export default function useChatFunctions({
     const custom_model = modelType || 'deepseek-chat';
     const search_enabled = searchType && searchType === 'netSearch' || false;
     const knowledge_enabled = searchType && searchType === 'knowledgeSearch' || false;
-    
+
     const use_knowledge_base = {
       personal_knowledge_enabled: knowledge_enabled,
 
       // 是否用组织知识库
-      enableOrgKb: enableOrgKb,
-
+      // enableOrgKb: enableOrgKb,
       organization_knowledge_ids:
-        knowledge_enabled && enableOrgKb
+        enableOrgKb
           ? selectedOrgKbs.map(kb => kb.id)
           : [],
     };

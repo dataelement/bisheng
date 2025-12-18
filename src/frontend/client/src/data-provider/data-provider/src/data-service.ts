@@ -994,6 +994,9 @@ export function queryKnowledge(payload: t.TVerify2FARequest): Promise<f.TFile[]>
 export function deleteKnowledge(id: string): Promise<t.TConversationTagResponse> {
   return request.delete(endpoints.deleteKnowledge(id));
 }
-export function getFileDownloadApi(name: string): Promise<f.TFile> {
-  return request.get('/api/v1/download?object_name=' + name);
+export async function getFilePathApi(file_id: string) {
+  return request.get(`/api/v1/knowledge/file_share`, { params: { file_id } });
+}
+export function getLinsightFileDownloadApi(fileUrl: string, vid: string): Promise<f.TFile> {
+  return request.post('/api/v1/linsight/workbench/file_download', { file_url: fileUrl, session_version_id: vid });
 }

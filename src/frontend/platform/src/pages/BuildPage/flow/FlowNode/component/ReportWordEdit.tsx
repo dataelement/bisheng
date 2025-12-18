@@ -1,18 +1,20 @@
 import { LoadingIcon } from "@/components/bs-icons/loading"
 import { Button } from "@/components/bs-ui/button"
+import { DialogClose } from "@/components/bs-ui/dialog"
 import { getWorkflowReportTemplate } from "@/controllers/API/workflow"
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload"
 import Word from "@/pages/Report/components/Word"
 import { ChevronDown, ChevronLeft } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { useParams } from "react-router-dom"
 import SelectVar from "./SelectVar"
-import { DialogClose } from "@/components/bs-ui/dialog"
 // save(fe) -> office(onlyofc) -> upload(be)
 export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
     const { t } = useTranslation()
+    const { id: flowId } = useParams();
 
-    const { docx, loading, pageLoading, createDocx, importDocx } = useReport(versionKey, onChange)
+    const { docx, loading, pageLoading, createDocx, importDocx } = useReport(versionKey, flowId, onChange)
 
     // inset var
     const iframeRef = useRef(null)
@@ -83,7 +85,7 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
 };
 
 
-const useReport = (versionKey, onchange) => {
+const useReport = (versionKey, flowId, onchange) => {
     const [loading, setLoading] = useState(false)
     const [pageLoading, setPageLoading] = useState(true)
 
@@ -93,7 +95,7 @@ const useReport = (versionKey, onchange) => {
     })
 
     useEffect(() => {
-        getWorkflowReportTemplate(versionKey).then(res => {
+        getWorkflowReportTemplate(versionKey, flowId).then(res => {
             setPageLoading(false)
             setDocx({
                 key: res.version_key,

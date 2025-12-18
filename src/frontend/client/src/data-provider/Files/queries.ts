@@ -102,6 +102,6 @@ export const useGetKnowledgeFiles = <TData = t.TFile[] | boolean>(
 };
 
 // 获取下载链接
-export const useGetDownloadUrl = (object_name: string) => {
-  return dataService.getFileDownloadApi(object_name);
+export const useGetDownloadUrl = (object_id: string) => {
+  return dataService.getFilePathApi(object_id);
 };

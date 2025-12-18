@@ -83,7 +83,7 @@ export const useLinsightData = ({ vid, sopId, conversationId, shareToken }
     // 获取工具列表
     const { data: linsightTools } = useGetLinsightToolList();
     const { data: PersonalTool } = useGetPersonalToolList();
-    const { data: orgTools } = useGetOrgToolList();
+    const { data: orgTools } = useGetOrgToolList({ page: 1 });
 
     const [loading, setLoading] = useState(false);
 

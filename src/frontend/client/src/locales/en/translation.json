@@ -731,6 +731,8 @@
   "com_tools_knowledge_base": "Knowledge Base",
   "com_tools_knowledge_base_search": "Knowledge Base Search",
   "com_tools_knowledge_rebuilding": "Personal knowledge base embedding model has been changed, rebuilding knowledge base, please try again later",
+  "com_tools_no_more": "No more data",
+  "com_tools_no_results": "No results found",
   "com_ui_edit": "Edit",
   "com_ui_empty_category": "-",
   "com_ui_endpoint": "Endpoint",

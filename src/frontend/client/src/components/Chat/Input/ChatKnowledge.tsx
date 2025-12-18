@@ -1,24 +1,21 @@
-import {
-  FileText,
-  GlobeIcon,
-  Settings2Icon,
-  Check,
-  BookOpen,
-  BookOpenText,
-} from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { Switch } from "~/components/ui";
+import { useEffect, useState, useMemo } from "react";
+import { Check, BookOpen, BookOpenText, Loader2 } from "lucide-react";
+import { Switch, Input } from "~/components/ui";
 import { Select, SelectContent, SelectTrigger } from "~/components/ui/Select";
-import { Input } from "~/components/ui/input";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "~/components/ui/Tooltip2";
-import { cn } from "~/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { useLocalize } from "~/hooks";
 import { useGetOrgToolList, useModelBuilding } from "~/data-provider";
 import { BsConfig } from "~/data-provider/data-provider/src";
+
+// Custom Hook: Debounce value
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
+}
 
 export const ChatKnowledge = ({
   config,
@@ -32,43 +29,66 @@ export const ChatKnowledge = ({
 }: {
   config?: BsConfig;
   disabled: boolean;
-
   searchType: string;
   setSearchType: React.Dispatch<React.SetStateAction<string>>;
-  selectedPersonalKbIds: string[];
-  setSelectedPersonalKbIds: React.Dispatch<React.SetStateAction<string[]>>;
-
   enableOrgKb: boolean;
   setEnableOrgKb: (v: boolean) => void;
-  selectedOrgKbs: string[];
-  setSelectedOrgKbs: React.Dispatch<React.SetStateAction<string[]>>;
+  selectedOrgKbs: { id: string; name: string }[];
+  setSelectedOrgKbs: React.Dispatch<React.SetStateAction<{ id: string; name: string }[]>>;
 }) => {
   const [building] = useModelBuilding();
   const localize = useLocalize();
+  const PAGE_SIZE = 20;
   const MAX_ORG_KB = 50;
 
-  const { data: orgTools } = useGetOrgToolList();
-
+  // Search and Pagination State
   const [keyword, setKeyword] = useState("");
+  const debouncedKeyword = useDebounce(keyword, 500);
+  const [page, setPage] = useState(1);
+  const [allOrgKbs, setAllOrgKbs] = useState<any[]>([]);
+  const [hasMore, setHasMore] = useState(true);
 
-  const filteredList = useMemo(() => {
-    if (!orgTools) return [];
+  // Fetch Data
+  const { data: currentPageData, isFetching } = useGetOrgToolList({
+    page,
+    page_size: PAGE_SIZE,
+    name: debouncedKeyword,
+  });
 
-    return orgTools.filter((item) => item.name?.includes(keyword));
-  }, [orgTools, keyword]);
+  // Reset list when search keyword changes
+  useEffect(() => {
+    setPage(1);
+    setAllOrgKbs([]);
+    setHasMore(true);
+  }, [debouncedKeyword]);
+
+  // Accumulate data when page or response changes
+  useEffect(() => {
+    if (currentPageData) {
+      setAllOrgKbs((prev) => {
+        if (page === 1) return currentPageData;
+        const newItems = currentPageData.filter(
+          (item: any) => !prev.some((p) => p.id === item.id)
+        );
+        return [...prev, ...newItems];
+      });
+      setHasMore(currentPageData.length === PAGE_SIZE);
+    }
+  }, [currentPageData, page]);
+
+  // Infinite Scroll Handler
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop <= clientHeight + 10 && !isFetching && hasMore) {
+      setPage((prev) => prev + 1);
+    }
+  };
 
   const toggleOrgKb = (kb: { id: string; name: string }) => {
     setSelectedOrgKbs((prev) => {
       const exists = prev.some((i) => i.id === kb.id);
-
-      if (exists) {
-        return prev.filter((i) => i.id !== kb.id);
-      }
-
-      if (prev.length >= MAX_ORG_KB) {
-        return prev;
-      }
-
+      if (exists) return prev.filter((i) => i.id !== kb.id);
+      if (prev.length >= MAX_ORG_KB) return prev;
       return [{ id: kb.id, name: kb.name }, ...prev];
     });
   };
@@ -80,38 +100,34 @@ export const ChatKnowledge = ({
   return (
     <Select disabled={disabled}>
       <SelectTrigger className="h-7 rounded-full px-2 bg-white data-[state=open]:border-blue-500">
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           <BookOpenText size={16} />
-          <span className="text-xs">
-            {localize("com_tools_knowledge_base")}
-          </span>
+          <span className="text-xs">{localize("com_tools_knowledge_base")}</span>
         </div>
       </SelectTrigger>
 
-      <SelectContent className="bg-white rounded-xl p-3 w-60">
-        {/* ===== 个人知识库 ===== */}
+      <SelectContent className="bg-white rounded-xl p-3 w-64 shadow-lg border">
+        {/* Section 1: Personal Knowledge Base */}
         {config?.knowledgeBase.enabled && (
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center">
             <div className="flex gap-2 items-center">
-              <BookOpen size={16} />
-              <span className="text-xs">
+              <BookOpen size={16} className="text-slate-500" />
+              <span className="text-xs font-medium">
                 {localize("com_tools_personal_knowledge")}
               </span>
             </div>
             <Tooltip delayDuration={200}>
-              <TooltipTrigger>
-                <Switch
-                  className="data-[state=checked]:bg-blue-600"
-                  disabled={building || disabled}
-                  checked={searchType === "knowledgeSearch"}
-                  onCheckedChange={(val) => {
-                    if (searchType === "knowledgeSearch") {
-                      setSearchType("");
-                    } else {
-                      setSearchType("knowledgeSearch");
+              <TooltipTrigger asChild>
+                <div>
+                  <Switch
+                    className="data-[state=checked]:bg-blue-600"
+                    disabled={building || disabled}
+                    checked={searchType === "knowledgeSearch"}
+                    onCheckedChange={(val) =>
+                      setSearchType(val ? "knowledgeSearch" : "")
                     }
-                  }}
-                />
+                  />
+                </div>
               </TooltipTrigger>
               {building && (
                 <TooltipContent>
@@ -122,14 +138,15 @@ export const ChatKnowledge = ({
           </div>
         )}
 
+        {/* Section 2: Organization Knowledge Base */}
         <div className="flex justify-between items-center mt-3">
           <div className="flex gap-2 items-center">
             <img
-              className="size-5 pr-1"
+              className="size-4 object-contain"
               src={__APP_ENV__.BASE_URL + "/assets/books.png"}
-              alt=""
+              alt="org-kb"
             />
-            <span className="text-xs">
+            <span className="text-xs font-medium">
               {localize("com_tools_org_knowledge")}
             </span>
           </div>
@@ -141,28 +158,56 @@ export const ChatKnowledge = ({
           />
         </div>
 
+        {/* Org KB Search and List */}
         {enableOrgKb && (
-          <>
+          <div className="mt-3">
             <Input
-              className="mt-3 h-7 text-xs"
+              className="h-8 text-xs mb-2 bg-slate-50 border-none focus-visible:ring-1 focus-visible:ring-blue-500"
               placeholder={localize("com_tools_knowledge_base_search")}
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
             />
-            {filteredList.map((item) => {
-              const checked = selectedOrgKbs.some((kb) => kb.id === item.id);
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => toggleOrgKb(item)}
-                  className="flex justify-between items-center px-4 py-1.5 rounded cursor-pointer text-xs hover:bg-slate-100"
-                >
-                  <span>{item.name}</span>
-                  {checked && <Check size={14} className="text-blue-600" />}
+
+            <div
+              className="max-h-52 overflow-y-auto custom-scrollbar"
+              onScroll={handleScroll}
+            >
+              {allOrgKbs.map((item) => {
+                const checked = selectedOrgKbs.some((kb) => kb.id === item.id);
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => toggleOrgKb(item)}
+                    className="flex justify-between items-center px-2 py-2 rounded-md cursor-pointer text-xs hover:bg-slate-50 group"
+                  >
+                    <span className="truncate flex-1 pr-2 text-slate-700">
+                      {item.name}
+                    </span>
+                    {checked && <Check size={14} className="text-blue-600 shrink-0" />}
+                  </div>
+                );
+              })}
+
+              {/* Loading & Empty State Feedback */}
+              {isFetching && (
+                <div className="flex justify-center py-2">
+                  <Loader2 size={14} className="animate-spin text-slate-400" />
                 </div>
-              );
-            })}
-          </>
+              )}
+
+              {!hasMore && allOrgKbs.length > 0 && (
+                <div className="text-center text-[10px] text-slate-400 py-2 border-t mt-1">
+                  {localize("com_tools_no_more")}
+                </div>
+              )}
+
+              {!isFetching && allOrgKbs.length === 0 && (
+                <div className="text-center text-xs text-slate-400 py-6">
+                  {localize("com_tools_no_results")}
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </SelectContent>
     </Select>

@@ -69,7 +69,7 @@ export const getKnowledgeColumns = (
           <div className="flex items-center gap-3">
             <div
               className="cursor-pointer rounded-md px-2 py-1 hover:bg-gray-100"
-              onClick={() => handleDownload(row.original.object_name, row.original.file_name)}
+              onClick={() => handleDownload(row.original.id, row.original.file_name)}
             >
               <Download className="h-5 w-5" />
             </div>

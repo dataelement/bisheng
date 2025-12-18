@@ -269,7 +269,7 @@ const useSopTools = (linsight) => {
 
     const { data: linsightTools } = useGetLinsightToolList();
     const { data: personalTool } = useGetPersonalToolList();
-    const { data: orgTools } = useGetOrgToolList();
+    const { data: orgTools } = useGetOrgToolList({ page: 1 });
 
     const nameToValueRef = useRef({});
     const valueToNameRef = useRef({});

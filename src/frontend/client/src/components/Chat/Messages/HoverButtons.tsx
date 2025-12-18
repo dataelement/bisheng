@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useRecoilState } from 'recoil';
 import { CheckMark, Clipboard, ContinueIcon, RegenerateIcon } from '~/components/svg';
 import { TextToSpeechButton } from '~/components/Voice/TextToSpeechButton';
 import type { TConversation, TMessage } from '~/data-provider/data-provider/src';
 import { useGenerationsByLatest, useLocalize } from '~/hooks';
+import MessageSource from '~/pages/appChat/components/MessageSource';
+import ResouceModal from '~/pages/appChat/components/ResouceModal';
 import store from '~/store';
 import { cn } from '~/utils';
 
@@ -34,6 +36,7 @@ export default function HoverButtons({
   latestMessage,
   isLast,
 }: THoverButtons) {
+  console.log('message :>> ', message);
   const localize = useLocalize();
   const { endpoint: _endpoint, endpointType } = conversation ?? {};
   const endpoint = endpointType ?? _endpoint;
@@ -62,6 +65,7 @@ export default function HoverButtons({
   }
 
   const { isCreatedByUser, error } = message;
+  const sourceRef = useRef(null)
 
   const renderRegenerate = () => {
     if (!regenerateEnabled) {
@@ -102,6 +106,15 @@ export default function HoverButtons({
 
   return (
     <div className="visible mt-0 flex justify-center gap-1 self-end text-gray-500 lg:justify-start">
+      <div className='mr-2 pt-0.5'>
+        <MessageSource extra={null} end={true} source={message.source} onSource={() => {
+          sourceRef.current?.openModal({
+            messageId: message.messageId,
+            message: message.text.replace(/:::thinking[\s\S]*?:::/, '').trim(),
+            chatId: message.conversationId
+          })
+        }} />
+      </div>
       {/* {TextToSpeech && (
         <MessageAudio
           index={index}
@@ -172,6 +185,8 @@ export default function HoverButtons({
         messageId={message.messageId}
         text={message.text.replace(/:::([\s\S]*?):::/g, '')}
       />}
+
+      <ResouceModal ref={sourceRef}></ResouceModal>
     </div>
   );
 }
