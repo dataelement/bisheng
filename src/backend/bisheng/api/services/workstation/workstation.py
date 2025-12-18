@@ -265,6 +265,7 @@ class WorkstationMessage(BaseModel):
     error: Optional[bool] = False
     unfinished: Optional[bool] = False
     flow_name: Optional[str] = None
+    source: Optional[int] = None
 
     @field_validator('messageId', mode='before')
     @classmethod
@@ -300,6 +301,7 @@ class WorkstationMessage(BaseModel):
             text=message.message,
             files=files,
             flow_name=message_session_model.flow_name if message_session_model else None,
+            source=message.source
         )
 
 
