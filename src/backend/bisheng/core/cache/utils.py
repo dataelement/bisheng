@@ -292,12 +292,21 @@ def save_download_file(file_byte, folder_name, filename):
 
 def file_download(file_path: str):
     """download file and return path"""
-    if not os.path.isfile(file_path) and _is_valid_url(file_path):
 
+    # 优先尝试作为本地文件处理 (剥离 URL 参数)
+    # 如果系统挂载了存储卷，去除 ? 后面的签名参数直接读取
+    local_candidate = file_path.split('?')[0]
+    if os.path.isfile(local_candidate):
+        file_name = os.path.basename(local_candidate)
+        # 兼容原有逻辑：处理文件名中可能包含的 md5 前缀
+        file_name = file_name.split('_', 1)[-1] if '_' in file_name else file_name
+        return local_candidate, file_name
+
+    # 原有逻辑: 检查是否为标准 URL (带 http/https)
+    if _is_valid_url(file_path):
         minio_client = get_minio_storage_sync()
-
         minio_share_host = minio_client.get_minio_share_host()
-        url_obj = parse_url(file_path)
+        url_obj = urlparse(file_path)
         filename = unquote(url_obj.path.split('/')[-1])
 
         if file_path.startswith(minio_share_host):
@@ -311,27 +320,63 @@ def file_download(file_path: str):
                 raise ValueError('Check the url of your file; returned status code %s' % r.status_code)
             # 检查Content-Disposition头来找出文件名
             content_disposition = r.headers.get('Content-Disposition')
-            filename = unquote(content_disposition).split('filename=')[-1].strip("\"'")
+            if content_disposition:
+                filename = unquote(content_disposition).split('filename=')[-1].strip("\"'")
             file_content = r.content
 
         file_path = save_download_file(file_content, 'bisheng', filename)
         return file_path, filename
+
+    # 处理 MinIO 相对路径 (以 / 开头且包含签名参数)
+    # 针对输入: /bisheng/original/82324.docx?X-Amz-Algorithm=...
+    # 这种情况下没有 host，无法进入 _is_valid_url 分支
+    elif file_path.startswith('/') and 'X-Amz-Algorithm' in file_path:
+        try:
+            minio_client = get_minio_storage_sync()
+
+            # 使用 urlparse 解析，它能自动分离 path 和 query
+            url_obj = urlparse(file_path)
+            # path 类似于 /bisheng/original/82324.docx
+            # 去掉开头的 /，然后分割第一个 / 得到 bucket 和 object
+            path_parts = url_obj.path.lstrip("/").split('/', 1)
+
+            if len(path_parts) == 2:
+                bucket_name, object_name = path_parts
+                # 调用同步的 minio 方法下载
+                file_content = minio_client.get_object_sync(bucket_name, object_name)
+
+                filename = unquote(object_name.split('/')[-1])
+                file_path = save_download_file(file_content, 'bisheng', filename)
+                return file_path, filename
+        except Exception as e:
+            # 解析失败则打印日志，让程序继续向下抛出 ValueError
+            print(f"Error handling relative MinIO path: {e}")
+
     elif not os.path.isfile(file_path):
         raise ValueError('File path %s is not a valid file or url' % file_path)
+
+    # 这里是处理纯本地文件路径的（不带参数的那种），通常会被最上面的逻辑 1 拦截
     file_name = os.path.basename(file_path)
-    # 处理下是否包含了md5的逻辑
     file_name = file_name.split('_', 1)[-1] if '_' in file_name else file_name
     return file_path, file_name
 
 
 async def async_file_download(file_path: str):
     """download file and return path"""
-    if not os.path.isfile(file_path) and _is_valid_url(file_path):
 
+    # 优先尝试作为本地文件处理 (剥离 URL 参数)
+    # 如果系统挂载了存储卷，这步就能直接解决问题
+    local_candidate = file_path.split('?')[0]
+    if os.path.isfile(local_candidate):
+        file_name = os.path.basename(local_candidate)
+        # 处理下是否包含了md5的逻辑 (保留原逻辑)
+        file_name = file_name.split('_', 1)[-1] if '_' in file_name else file_name
+        return local_candidate, file_name
+
+    # 检查是否为标准 URL
+    if _is_valid_url(file_path):
         http_client = await get_http_client()
-
         minio_client = await get_minio_storage()
-
         minio_share_host = minio_client.get_minio_share_host()
         url_obj = parse_url(file_path)
         filename = unquote(url_obj.path.split('/')[-1])
@@ -344,20 +389,36 @@ async def async_file_download(file_path: str):
             r = await http_client.get(url=file_path, data_type="binary")
             if r.status_code != 200:
                 raise ValueError('Check the url of your file; returned status code %s' % r.status_code)
-            # 检查Content-Disposition头来找出文件名
             content_disposition = r.headers.get('Content-Disposition') if r.headers else None
             if content_disposition:
                 filename = unquote(content_disposition).split('filename=')[-1].strip("\"'")
             file_content = r.body
         file_path = save_download_file(file_content, 'bisheng', filename)
         return file_path, filename
-    elif not os.path.isfile(file_path):
-        raise ValueError('File path %s is not a valid file or url' % file_path)
-    file_name = os.path.basename(file_path)
-    # 处理下是否包含了md5的逻辑
-    file_name = file_name.split('_', 1)[-1] if '_' in file_name else file_name
-    return file_path, file_name
 
+    # 处理 MinIO 相对路径 (以 / 开头且包含签名参数)
+    # 针对输入: /bisheng/original/82324.docx?X-Amz-Algorithm=...
+    elif file_path.startswith("/") and "X-Amz-Algorithm" in file_path:
+        try:
+            minio_client = await get_minio_storage()
+            # 解析路径 /bucket/object_key
+            url_obj = urlparse(file_path)
+            # path 变成 /bisheng/original/82324.docx，去掉开头的 / 并分割第一个 /
+            path_parts = url_obj.path.lstrip("/").split('/', 1)
+
+            if len(path_parts) == 2:
+                bucket_name, object_name = path_parts
+                # 直接使用 minio client 下载，无需 http 请求
+                file_content = await minio_client.get_object(bucket_name, object_name)
+
+                filename = unquote(object_name.split('/')[-1])
+                file_path = save_download_file(file_content, 'bisheng', filename)
+                return file_path, filename
+        except Exception as e:
+            # 如果解析或下载失败，记录日志或让其落入下方的 ValueError
+            print(f"Error handling relative MinIO path: {e}")
+
+    raise ValueError('File path %s is not a valid file or url' % file_path)
 
 def _is_valid_url(url: str):
     """Check if the url is valid."""
