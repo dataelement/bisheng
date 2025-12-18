@@ -250,7 +250,7 @@ async def save_uploaded_file(file: UploadFile, folder_name, file_name, bucket_na
         file_io = convert_encoding_cchardet(file_io)
 
     await minio_client.put_object_tmp(object_name=file_name, file=file_io)
-    file_path = minio_client.get_share_link(file_name, bucket_name, clear_host=False)
+    file_path = await minio_client.get_share_link(file_name, bucket_name, clear_host=False)
     return file_path
 
 
