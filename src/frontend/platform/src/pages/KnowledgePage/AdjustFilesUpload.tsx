@@ -217,7 +217,8 @@ export default function AdjustFilesUpload() {
       retain_images: _config.rules.retainImages,
       enable_formula: _config.rules.enableFormula,
       force_ocr: _config.rules.forceOcr,
-      fileter_page_header_footer: _config.rules.pageHeaderFooter
+      fileter_page_header_footer: _config.rules.pageHeaderFooter,
+      file_path: _config.rules.fileList[0].filePath
     };
 
     captureAndAlertRequestErrorHoc(
