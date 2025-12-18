@@ -136,7 +136,7 @@ class RagNode(RagUtils):
             tmp_retrieved_type = 'file'
             tmp_object_name = f'/workflow/source_document/{time.time()}.txt'
             self._minio_client.put_object_tmp_sync(tmp_object_name, tmp_retrieved_result.encode('utf-8'))
-            share_url = self._minio_client.get_share_link(tmp_object_name, self._minio_client.tmp_bucket)
+            share_url = self._minio_client.get_share_link_sync(tmp_object_name, self._minio_client.tmp_bucket)
             tmp_retrieved_result = self._minio_client.clear_minio_share_host(share_url)
 
         for key, val in result.items():

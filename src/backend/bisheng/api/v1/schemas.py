@@ -490,6 +490,7 @@ class KnowledgeFileProcess(FileProcessBase):
 # 知识库重新分段调整
 class KnowledgeFileReProcess(FileProcessBase):
     kb_file_id: int = Field(..., description='知识库文件ID')
+    file_path: str = Field(default="", description='文件路径')
     excel_rule: Optional[ExcelRule] = Field(default=None, description="Excel rules")
     callback_url: Optional[str] = Field(default=None, description='异步任务回调地址')
     extra: Optional[Dict] = Field(default=None, description='附加信息')

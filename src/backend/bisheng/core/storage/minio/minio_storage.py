@@ -1,5 +1,5 @@
-import json
 from abc import ABC
+from datetime import timedelta
 from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO, Union, Optional
@@ -44,43 +44,6 @@ class MinioStorage(BaseStorage, ABC):
         # create need bucket
         self.create_bucket_sync(bucket_name=self.bucket)
         self.create_bucket_sync(bucket_name=self.tmp_bucket)
-
-        anonymous_read_policy = {
-            "Version": "2012-10-17",
-            "Statement": [{
-                "Effect": "Allow",
-                "Principal": {
-                    "AWS": ["*"]
-                },
-                "Action": ["s3:GetObject"],
-                "Resource": [f"arn:aws:s3:::{self.bucket}/**"]
-            }]
-        }
-        tmp_policy = {
-            "Version": "2012-10-17",
-            "Statement": [{
-                "Effect": "Allow",
-                "Principal": {
-                    "AWS": ["*"]
-                },
-                "Action": ["s3:GetObject"],
-                "Resource": [f"arn:aws:s3:::{self.tmp_bucket}/**"]
-            }]
-        }
-
-        try:
-            policy = self.minio_client_sync.get_bucket_policy(self.bucket)
-        except Exception as e:
-            if str(e).find('NoSuchBucketPolicy') == -1:
-                raise e
-            self.minio_client_sync.set_bucket_policy(self.bucket, json.dumps(anonymous_read_policy))
-
-        try:
-            policy = self.minio_client_sync.get_bucket_policy(self.tmp_bucket)
-        except Exception as e:
-            if str(e).find('NoSuchBucketPolicy') == -1:
-                raise e
-            self.minio_client_sync.set_bucket_policy(self.tmp_bucket, json.dumps(tmp_policy))
 
         # set tmp bucket lifecycle
         if not self.minio_client_sync.get_bucket_lifecycle(self.tmp_bucket):
@@ -348,23 +311,49 @@ class MinioStorage(BaseStorage, ABC):
 
         self.minio_client_sync.remove_object(bucket_name, object_name)
 
-    def get_share_link(self, object_name, bucket=None) -> str:
+    async def get_share_link(self, object_name, bucket=None, clear_host: bool = True, expire_days: int = 7) -> str:
         """
         获取minio文件分享链接
         :param object_name:
         :param bucket:
+        :param clear_host:  是否去除host地址， url通过前端nginx代理访问
+        :param expire_days:  链接过期时间， 天
         :return:
         """
 
         if bucket is None:
             bucket = self.bucket
-
         # filepath "/" 开头会有nginx问题
         if object_name[0] == '/':
             object_name = object_name[1:]
-        # 因为bucket都允许公开访问了，所以不再需要生成有期限的url
-        share_host = self.get_minio_share_host()
-        return f'{share_host}/{bucket}/{object_name}'
+
+        share_link = await self.minio_client.presigned_get_object(bucket, object_name,
+                                                                  expires=timedelta(days=expire_days))
+        if clear_host:
+            share_link = self.clear_minio_share_host(share_link)
+        return share_link
+
+    def get_share_link_sync(self, object_name, bucket=None, clear_host: bool = True, expire_days: int = 7) -> str:
+        """
+        同步获取minio文件分享链接, 默认去除host地址 url会通过前端nginx代理访问
+        :param object_name:
+        :param bucket:
+        :param clear_host:  是否去除host地址， url通过前端nginx代理访问
+        :param expire_days:  链接过期时间， 天
+        :return:
+        """
+
+        if bucket is None:
+            bucket = self.bucket
+        # filepath "/" 开头会有nginx问题
+        if object_name[0] == '/':
+            object_name = object_name[1:]
+
+        share_link = self.minio_client_sync.presigned_get_object(bucket, object_name,
+                                                                 expires=timedelta(days=expire_days))
+        if clear_host:
+            share_link = self.clear_minio_share_host(share_link)
+        return share_link
 
     def get_minio_share_host(self) -> str:
         """

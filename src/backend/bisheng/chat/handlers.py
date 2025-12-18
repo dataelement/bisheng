@@ -179,11 +179,11 @@ class Handler:
             logger.error('template not support')
             return
         minio_client = await get_minio_storage()
-        template_muban = minio_client.get_share_link(template.object_name)
+        template_muban = await minio_client.get_share_link(template.object_name, clear_host=False)
         report_name = langchain_object.report_name
         report_name = report_name if report_name.endswith('.docx') else f'{report_name}.docx'
         test_replace_string(template_muban, result, report_name)
-        file = minio_client.get_share_link(report_name)
+        file = await minio_client.get_share_link(report_name, clear_host=False)
         response = ChatResponse(type='end',
                                 files=[{
                                     'file_url': file,

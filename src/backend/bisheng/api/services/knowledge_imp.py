@@ -560,7 +560,7 @@ def add_file_embedding(
         f"start download original file={db_file.id} file_name={db_file.file_name}"
     )
 
-    file_url = minio_client.get_share_link(db_file.object_name)
+    file_url = minio_client.get_share_link_sync(db_file.object_name, clear_host=False)
     filepath, _ = file_download(file_url)
 
     # Convert split_rule string to dict if needed

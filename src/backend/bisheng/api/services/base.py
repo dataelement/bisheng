@@ -25,9 +25,7 @@ class BaseService:
             return share_url
 
         minio_client = get_minio_storage_sync()
-        share_url = minio_client.get_share_link(logo_path)
-        # 去除前缀通过nginx访问，防止访问不到文件
-        share_url = minio_client.clear_minio_share_host(share_url)
+        share_url = minio_client.get_share_link_sync(logo_path)
 
         # 缓存5天， 临时链接有效期为7天
         redis_client.set(cache_key, share_url, 3600 * 120)
@@ -53,9 +51,7 @@ class BaseService:
             return share_url
 
         minio_client = await get_minio_storage()
-        share_url = minio_client.get_share_link(logo_path)
-        # 去除前缀通过nginx访问，防止访问不到文件
-        share_url = minio_client.clear_minio_share_host(share_url)
+        share_url = await minio_client.get_share_link(logo_path)
 
         # 缓存5天， 临时链接有效期为7天
         await redis_client.aset(cache_key, share_url, 3600 * 120)

@@ -16,6 +16,7 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 router = APIRouter(prefix='/qa', tags=['QA'])
 
 
+# 溯源模块的一些接口
 @router.get('/keyword')
 async def get_answer_keyword(message_id: int):
     # 获取命中的key

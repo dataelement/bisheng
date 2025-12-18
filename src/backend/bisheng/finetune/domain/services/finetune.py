@@ -73,7 +73,7 @@ class FinetuneService:
             return
         minio_client = get_minio_storage_sync()
         for i in train_data:
-            params['dataset'].append(minio_client.get_share_link(i['url']))
+            params['dataset'].append(minio_client.get_share_link_sync(i['url'], clear_host=False))
             params['each_max_samples'].append(str(i.get('num', 0)))
 
     @classmethod

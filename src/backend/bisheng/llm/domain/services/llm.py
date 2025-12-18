@@ -690,8 +690,7 @@ class LLMService:
         minio_client = await get_minio_storage()
         await minio_client.put_object(object_name=object_name, file=audio_bytes, content_type="audio/mpeg",
                                       bucket_name=minio_client.tmp_bucket)
-        cache_value = minio_client.clear_minio_share_host(
-            minio_client.get_share_link(object_name, bucket=minio_client.tmp_bucket))
+        cache_value = await minio_client.get_share_link(object_name, bucket=minio_client.tmp_bucket)
         # The tmp bucket automatically clears files older than 7 days, so set the expiration time to 6 days
         await redis_client.aset(cache_key, cache_value, expiration=6 * 24 * 3600)
         return cache_value

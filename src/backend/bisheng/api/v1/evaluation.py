@@ -84,7 +84,7 @@ async def get_download_url(*,
                            login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ 获取文件下载地址. """
     minio_client = await get_minio_storage()
-    download_url = minio_client.get_share_link(file_url)
+    download_url = await minio_client.get_share_link(file_url)
     return resp_200(data={
         'url': download_url
     })

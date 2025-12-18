@@ -106,6 +106,33 @@ async def get_file_parsing_status(
     return resp_200(data=parsing_status, message="文件解析状态获取成功")
 
 
+@router.post("/workbench/file_download", summary="灵思文件下载", response_model=UnifiedResponseModel)
+async def linsight_file_download(
+        file_url: str = Body(..., embed=True),
+        session_version_id: str = Body(..., embed=True),
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        share_link: Union['ShareLink', None] = Depends(header_share_token_parser)) -> UnifiedResponseModel:
+    session_version_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
+    if not session_version_model:
+        raise NotFoundError()
+
+    # judge permission
+    if session_version_model.user_id != login_user.user_id:
+        # 通过分享链接访问
+        if (share_link is None or
+                share_link.meta_data is None or
+                share_link.meta_data.get("versionId") != session_version_id):
+            raise UnAuthorizedError()
+
+    minio_client = await get_minio_storage()
+    if file_url.startswith(minio_client.bucket):
+        file_url = file_url[len(minio_client.bucket) + 1:]
+    file_share_url = await minio_client.get_share_link(file_url)
+    return resp_200(data={
+        "file_path": file_share_url
+    })
+
+
 # 提交灵思用户问题请求
 @router.post("/workbench/submit", summary="提交灵思用户问题请求")
 async def submit_linsight_workbench(
@@ -1351,14 +1378,16 @@ async def integrated_execute(
                             for final_file in final_files:
                                 if final_file.get("url"):
                                     try:
-                                        final_file["url"] = minio_client.get_share_link(final_file["url"])
+                                        final_file["url"] = await minio_client.get_share_link(final_file["url"],
+                                                                                              clear_host=False)
                                     except Exception as e:
                                         logger.warning(f"生成最终文件分享链接失败: {str(e)}")
 
                             for session_file in all_from_session_files:
                                 if session_file.get("url"):
                                     try:
-                                        session_file["url"] = minio_client.get_share_link(session_file["url"])
+                                        session_file["url"] = await minio_client.get_share_link(session_file["url"],
+                                                                                                clear_host=False)
                                     except Exception as e:
                                         logger.warning(f"生成会话文件分享链接失败: {str(e)}")
 

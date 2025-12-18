@@ -602,8 +602,7 @@ class AuditLogService:
             minio_client.put_object_sync(object_name=tmp_object_name, file=tmp_file.name,
                                          content_type='application/text',
                                          bucket_name=minio_client.tmp_bucket)
-        share_url = minio_client.get_share_link(tmp_object_name, minio_client.tmp_bucket)
-        return minio_client.clear_minio_share_host(share_url)
+        return minio_client.get_share_link_sync(tmp_object_name, minio_client.tmp_bucket)
 
     @classmethod
     def get_chat_messages(cls, chat_list: List[AppChatList]) -> List[AppChatList]:

@@ -93,8 +93,7 @@ class OutputNode(BaseNode):
         if self._parsed_files:
             return
         for one in self._output_files:
-            one['path'] = self._minio_client.clear_minio_share_host(
-                self._minio_client.get_share_link(one['path']))
+            one['path'] = self._minio_client.get_share_link_sync(one['path'])
             self._parsed_files.append(one)
 
     def send_output_msg(self, unique_id: str):

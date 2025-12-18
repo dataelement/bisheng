@@ -1534,7 +1534,7 @@ class ReportNode(BaseNode):
         self._minio_client.put_object_tmp_sync(tmp_object_name, document_content)
 
         # 获取分享链接
-        share_url = self._minio_client.get_share_link(tmp_object_name, self._minio_client.tmp_bucket)
+        share_url = self._minio_client.get_share_link_sync(tmp_object_name, self._minio_client.tmp_bucket)
 
         logger.info(f"文档保存成功: {tmp_object_name}")
         logger.info(f"分享链接: {share_url}")

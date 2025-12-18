@@ -15,6 +15,7 @@ import cchardet
 import requests
 from appdirs import user_cache_dir
 from fastapi import UploadFile
+from urllib3.util import parse_url
 
 from bisheng.core.external.http_client.http_client_manager import get_http_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
@@ -187,7 +188,7 @@ async def upload_file_to_minio(file: UploadFile, object_name, bucket_name: str) 
     minio_client = await get_minio_storage()
     file_byte = await file.read()
     await minio_client.put_object(bucket_name=bucket_name, object_name=object_name, file=file_byte)
-    return minio_client.get_share_link(object_name, bucket_name)
+    return await minio_client.get_share_link(object_name, bucket_name)
 
 
 @create_cache_folder_async
@@ -249,7 +250,7 @@ async def save_uploaded_file(file: UploadFile, folder_name, file_name, bucket_na
         file_io = convert_encoding_cchardet(file_io)
 
     await minio_client.put_object_tmp(object_name=file_name, file=file_io)
-    file_path = minio_client.get_share_link(file_name, bucket_name)
+    file_path = minio_client.get_share_link(file_name, bucket_name, clear_host=False)
     return file_path
 
 
@@ -296,11 +297,12 @@ def file_download(file_path: str):
         minio_client = get_minio_storage_sync()
 
         minio_share_host = minio_client.get_minio_share_host()
-        filename = unquote(urlparse(file_path).path.split('/')[-1])
+        url_obj = parse_url(file_path)
+        filename = unquote(url_obj.path.split('/')[-1])
 
         if file_path.startswith(minio_share_host):
             # download file from minio sdk
-            bucket_name, object_name = file_path.replace(minio_share_host, "", 1).lstrip("/").split('/', 1)
+            bucket_name, object_name = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split('/', 1)
             file_content = minio_client.get_object_sync(bucket_name, object_name)
         else:
             # download file from http url
@@ -331,10 +333,12 @@ async def async_file_download(file_path: str):
         minio_client = await get_minio_storage()
 
         minio_share_host = minio_client.get_minio_share_host()
-        filename = unquote(urlparse(file_path).path.split('/')[-1])
+        url_obj = parse_url(file_path)
+        filename = unquote(url_obj.path.split('/')[-1])
+
         if file_path.startswith(minio_share_host):
             # download file from minio sdk
-            bucket_name, object_name = file_path.replace(minio_share_host, "", 1).lstrip("/").split('/', 1)
+            bucket_name, object_name = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split('/', 1)
             file_content = await minio_client.get_object(bucket_name, object_name)
         else:
             r = await http_client.get(url=file_path, data_type="binary")
