@@ -2,12 +2,13 @@ import asyncio
 import json
 import time
 from datetime import datetime
-from typing import Optional, Union
+from typing import Optional, Union, List
 from urllib.parse import unquote
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Request, UploadFile
 from fastapi.responses import StreamingResponse
+from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
@@ -22,6 +23,7 @@ from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import FrequentlyUsedChat
 from bisheng.api.v1.schemas import WorkstationConfig, resp_200, ExcelRule, UnifiedResponseModel
+from bisheng.chat.utils import SourceType, process_source_document
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
@@ -94,7 +96,7 @@ def step_message(stepId, runId, index, msgId):
 
 
 async def final_message(conversation: MessageSession, title: str, requestMessage: ChatMessage, text: str,
-                        error: bool, modelName: str):
+                        error: bool, modelName: str, source_document: List[Document] = None):
     responseMessage = await ChatMessageDao.ainsert_one(
         ChatMessage(
             user_id=conversation.user_id,
@@ -109,8 +111,16 @@ async def final_message(conversation: MessageSession, title: str, requestMessage
                 'parentMessageId': requestMessage.id,
                 'error': error
             }),
-            source=0,
+            source=0 if source_document is None else SourceType.FILE.value
         ))
+    if source_document:
+        # 异步处理溯源信息存储
+        asyncio.create_task(process_source_document(source_document=source_document,
+                                                    chat_id=conversation.chat_id,
+                                                    message_id=responseMessage.id,
+                                                    answer=text))
+
+    # 更新会话的最后消息时间
     msg = json.dumps(
         {
             'final': True,
@@ -446,6 +456,7 @@ async def chat_completions(
         runId = uuid4().hex
         index = 0
         stepId = None
+        source_document = None
 
         try:
             # Prepare prompt based on different modes (search, knowledge base, files)
@@ -470,10 +481,11 @@ async def chat_completions(
 
             elif data.use_knowledge_base:
                 logger.info(f'Using knowledge base for prompt: {data.text}')
-                chunks = await WorkStationService.queryChunksFromDB(data.text,
-                                                                    use_knowledge_param=data.use_knowledge_base,
-                                                                    login_user=login_user)
-                context_str = '\n'.join(chunks)[:max_token]
+                chunks, source_document = await WorkStationService.queryChunksFromDB(data.text,
+                                                                                     use_knowledge_param=data.use_knowledge_base,
+                                                                                     max_token=max_token,
+                                                                                     login_user=login_user)
+                context_str = '\n'.join(chunks)
                 if wsConfig.knowledgeBase.prompt:
                     prompt = wsConfig.knowledgeBase.prompt.format(retrieved_file_content=context_str,
                                                                   question=data.text)
@@ -540,7 +552,7 @@ async def chat_completions(
 
         # Send final message and generate title if needed
         yield await final_message(conversation, conversation.flow_name, message, final_content_for_db,
-                                  error, modelName)
+                                  error, modelName, source_document)
 
         if is_new_conv:
             asyncio.create_task(

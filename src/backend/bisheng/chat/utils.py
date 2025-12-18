@@ -12,7 +12,7 @@ from langchain.schema.document import Document
 from loguru import logger
 
 from bisheng.api.v1.schemas import ChatMessage
-from bisheng.core.database import get_sync_db_session
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.interface.utils import try_setting_streaming_options
@@ -87,6 +87,25 @@ def extract_answer_keys(answer, llm):
         llm_chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt_template))
     try:
         keywords_str = llm_chain.run(answer)
+        keywords_str = re.sub('<think>.*</think>', '', keywords_str, flags=re.S).strip()
+        keywords = ast.literal_eval(keywords_str[9:])
+    except Exception:
+        import jieba.analyse
+        logger.warning(f'llm {llm} extract_not_support, change to jieba')
+        keywords = jieba.analyse.extract_tags(answer, topK=100, withWeight=False)
+
+    return keywords
+
+
+async def extract_answer_keys_async(answer, llm):
+    """
+    提取answer中的关键词
+    """
+    llm_chain = None
+    if llm:
+        llm_chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt_template))
+    try:
+        keywords_str = await llm_chain.arun(answer)
         keywords_str = re.sub('<think>.*</think>', '', keywords_str, flags=re.S).strip()
         keywords = ast.literal_eval(keywords_str[9:])
     except Exception:
@@ -187,7 +206,33 @@ def sync_process_source_document(source_document: List[Document], chat_id, messa
 
 
 async def process_source_document(source_document: List[Document], chat_id, message_id, answer):
-    sync_process_source_document(source_document, chat_id, message_id, answer)
+    if not source_document or not message_id:
+        return
+
+    message_info = await ChatMessageDao.aget_message_by_id(message_id)
+    if not message_info:
+        return
+    # 使用大模型进行关键词抽取，模型配置临时方案
+    llm = await LLMService.get_knowledge_source_llm_async(message_info.user_id)
+
+    answer_keywords = await extract_answer_keys_async(answer, llm)
+
+    batch_insert = []
+    for doc in source_document:
+        if 'bbox' in doc.metadata:
+            # 表示支持溯源
+            content = doc.page_content
+            recall_chunk = RecallChunk(chat_id=chat_id,
+                                       keywords=json.dumps(answer_keywords),
+                                       chunk=content,
+                                       file_id=doc.metadata.get('file_id') or doc.metadata.get('document_id'),
+                                       meta_data=json.dumps(doc.metadata),
+                                       message_id=message_id)
+            batch_insert.append(recall_chunk)
+    if batch_insert:
+        async with get_async_db_session() as db_session:
+            db_session.add_all(batch_insert)
+            await db_session.commit()
 
 
 # 将需要额外输入的节点数据，转为tweak

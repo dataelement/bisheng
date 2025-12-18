@@ -331,6 +331,19 @@ class LLMService:
                                         user_id=invoke_user_id)
 
     @classmethod
+    async def get_knowledge_source_llm_async(cls, invoke_user_id: int) -> Optional[BaseChatModel]:
+        """ 获取知识库溯源的默认模型配置 """
+        knowledge_llm = await cls.aget_knowledge_llm()
+        # 没有配置模型，则用jieba
+        if not knowledge_llm.source_model_id:
+            return None
+        return await cls.get_bisheng_llm(model_id=knowledge_llm.source_model_id,
+                                        app_id=ApplicationTypeEnum.RAG_TRACEABILITY.value,
+                                        app_name=ApplicationTypeEnum.RAG_TRACEABILITY.value,
+                                        app_type=ApplicationTypeEnum.RAG_TRACEABILITY,
+                                        user_id=invoke_user_id)
+
+    @classmethod
     def get_knowledge_similar_llm(cls, invoke_user_id: int) -> Optional[BaseChatModel]:
         """ 获取知识库相似问的默认模型配置 """
         knowledge_llm = cls.get_knowledge_llm()

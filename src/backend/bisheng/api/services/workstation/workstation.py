@@ -1,9 +1,10 @@
 import asyncio
 import json
 from datetime import datetime
-from typing import Optional, Any
+from typing import Optional, Any, Coroutine
 
 from fastapi import BackgroundTasks, Request
+from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, HumanMessage
 from loguru import logger
 from openai import BaseModel
@@ -16,11 +17,10 @@ from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, Works
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.server import EmbeddingModelStatusError
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
-from bisheng.core.ai.rerank.rrf_rerank import RRFRerank
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.knowledge.domain.knowledge_merge_search import RRFMultiVectorRetriever
+from bisheng.core.vectorstore.ensemble_retriever import RRFMultiVectorRetriever, VectorRetrieverParams
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.llm.domain.services import LLMService
@@ -159,11 +159,13 @@ class WorkStationService(BaseService):
 
     @classmethod
     async def queryChunksFromDB(cls, question: str, use_knowledge_param: UseKnowledgeBaseParam,
-                                login_user: UserPayload) -> list[str]:
+                                max_token: int,
+                                login_user: UserPayload) -> tuple[list[Any], None] | tuple[list[Any], Any]:
         """
         从数据库中查询相关知识块
         
         Args:
+            max_token: 最大token限制
             question: 用户查询问题
             use_knowledge_param: 使用知识库的参数
             login_user: 登录用户信息
@@ -189,21 +191,28 @@ class WorkStationService(BaseService):
                                                                                    knowledge_ids=knowledge_ids,
                                                                                    user_name=login_user.user_name)
 
-        vectors = []
+        vector_store_params = []
         for knowledge_id, vectorstore_info in knowledge_vector_list.items():
             milvus_vectorstore = vectorstore_info.get("milvus")
             es_vectorstore = vectorstore_info.get("es")
             if milvus_vectorstore:
-                vectors.append(milvus_vectorstore)
+                vector_store_params.append(VectorRetrieverParams(
+                    vector_store=milvus_vectorstore,
+                    search_kwargs={"top_k": 100},
+                ))
             if es_vectorstore:
-                vectors.append(es_vectorstore)
+                vector_store_params.append(VectorRetrieverParams(
+                    vector_store=es_vectorstore,
+                    search_kwargs={"top_k": 100},
+                ))
 
-        if not vectors:
-            return []
+        if not vector_store_params:
+            return [], None
 
         rrf_multivector_retriever = RRFMultiVectorRetriever(
-            vector_stores=vectors,
+            vector_store_params=vector_store_params,
             top_k=100,
+            max_context_length=max_token,
         )
         # 使用 RAG 方法进行检索
         finally_docs = await rrf_multivector_retriever.ainvoke(question)
@@ -222,7 +231,7 @@ class WorkStationService(BaseService):
                 formatted_content = f"[file name]:{file_name}\n[file content begin]\n{content}\n[file content end]\n"
                 formatted_results.append(formatted_content)
 
-        return formatted_results
+        return formatted_results, finally_docs
 
     @classmethod
     async def get_chat_history(cls, chat_id: str, size: int = 4):
