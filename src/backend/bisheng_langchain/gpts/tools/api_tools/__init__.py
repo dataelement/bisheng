@@ -23,7 +23,7 @@ tianyancha_class_methods = [
 ]
 
 _TIAN_YAN_CHA_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
-    f'tianyancha_{name}': (CompanyInfo.get_api_tool, ['api_key'])
+    f'tianyancha_{name}': (CompanyInfo.get_api_tool, ['api_key', 'proxy'])
     for name in tianyancha_class_methods
 }
 
@@ -32,7 +32,7 @@ sina_class_methods = [
 ]
 
 _SINA_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
-    f'sina_{name}': (StockInfo.get_api_tool, [])
+    f'sina_{name}': (StockInfo.get_api_tool, ['proxy'])
     for name in sina_class_methods
 }
 
@@ -56,8 +56,8 @@ firecrawl_class_methods = [
 ]
 
 _FIRE_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
-    'fire_search_crawl': (FireCrawl.get_api_tool, ['api_key','maxdepth', 'limit', 'timeout','base_url']),
-    'fire_search_scrape': (FireCrawl.get_api_tool, ['api_key','maxdepth', 'limit', 'timeout','base_url'])
+    'fire_search_crawl': (FireCrawl.get_api_tool, ['api_key', 'maxdepth', 'limit', 'timeout', 'base_url']),
+    'fire_search_scrape': (FireCrawl.get_api_tool, ['api_key', 'maxdepth', 'limit', 'timeout', 'base_url'])
 }
 jina_class_methods = [
     method for method in JinaTool.__dict__
@@ -83,14 +83,14 @@ _DING_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
     'ding_send_message': (DingdingMessageTool.get_api_tool, [])
 }
 
-
 email_class_methods = [
     method for method in EmailMessageTool.__dict__
     if isinstance(EmailMessageTool.__dict__[method], classmethod)
 ]
 
 _EMAIL_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
-    'email_send_email': (EmailMessageTool.get_api_tool, ['email_account','email_password','smtp_server','smtp_port','encrypt_method']),
+    'email_send_email': (EmailMessageTool.get_api_tool,
+                         ['email_account', 'email_password', 'smtp_server', 'smtp_port', 'encrypt_method']),
 }
 
 feishu_class_methods = [
@@ -111,7 +111,6 @@ wechat_class_methods = [
 _WECHAT_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
     'wechat_send_message': (WechatMessageTool.get_api_tool, [])
 }
-
 
 ALL_API_TOOLS = {}
 ALL_API_TOOLS.update(_TIAN_YAN_CHA_TOOLS)

@@ -1,11 +1,11 @@
 """Lightweight wrapper around requests library, with async support."""
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator, Dict, Optional, Tuple, Union
+from typing import Any, AsyncGenerator, Dict, Optional, Tuple, Union, List
 
 import aiohttp
 import requests
 from loguru import logger
-from pydantic import ConfigDict, BaseModel
+from pydantic import ConfigDict, BaseModel, model_validator
 
 
 class Requests(BaseModel):
@@ -15,7 +15,8 @@ class Requests(BaseModel):
     headers) and enable easy async methods on the same base object.
     """
 
-    headers: Optional[Dict[str, str]] = None
+    headers: Optional[Union[Dict[str, str], List[str]]] = None
+    proxy: Optional[str] = None
     aiosession: Optional[aiohttp.ClientSession] = None
     auth: Optional[Any] = None
     request_timeout: Union[float, Tuple[float, float]] = 120
@@ -27,6 +28,7 @@ class Requests(BaseModel):
                             headers=self.headers,
                             auth=self.auth,
                             timeout=self.request_timeout,
+                            proxies=None if not self.proxy else {'http': self.proxy, 'https': self.proxy},
                             **kwargs)
 
     def post(self, url: str, json: Dict[str, Any], **kwargs: Any) -> requests.Response:
@@ -36,6 +38,7 @@ class Requests(BaseModel):
                              headers=self.headers,
                              auth=self.auth,
                              timeout=self.request_timeout,
+                             proxies=None if not self.proxy else {'http': self.proxy, 'https': self.proxy},
                              **kwargs)
 
     def patch(self, url: str, json: Dict[str, Any], **kwargs: Any) -> requests.Response:
@@ -45,6 +48,7 @@ class Requests(BaseModel):
                               headers=self.headers,
                               auth=self.auth,
                               timeout=self.request_timeout,
+                              proxies=None if not self.proxy else {'http': self.proxy, 'https': self.proxy},
                               **kwargs)
 
     def put(self, url: str, json: Dict[str, Any], **kwargs: Any) -> requests.Response:
@@ -54,6 +58,7 @@ class Requests(BaseModel):
                             headers=self.headers,
                             auth=self.auth,
                             timeout=self.request_timeout,
+                            proxies=None if not self.proxy else {'http': self.proxy, 'https': self.proxy},
                             **kwargs)
 
     def delete(self, url: str, **kwargs: Any) -> requests.Response:
@@ -62,12 +67,14 @@ class Requests(BaseModel):
                                headers=self.headers,
                                auth=self.auth,
                                timeout=self.request_timeout,
+                               proxies=None if not self.proxy else {'http': self.proxy, 'https': self.proxy},
                                **kwargs)
 
     @asynccontextmanager
     async def _arequest(self, method: str, url: str,
                         **kwargs: Any) -> AsyncGenerator[aiohttp.ClientResponse, None]:
         """Make an async request."""
+
         if not self.aiosession:
             if not self.request_timeout:
                 self.request_timeout = 120
@@ -78,7 +85,8 @@ class Requests(BaseModel):
                 timeout = aiohttp.ClientTimeout(total=self.request_timeout)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 logger.info(f'aio_http url={url}')
-                async with session.request(method, url, headers=self.headers,
+                async with session.request(method, url, headers=self.headers, proxy=self.proxy,
+                                           auth=self.auth,
                                            **kwargs) as response:
                     yield response
         else:
@@ -86,6 +94,7 @@ class Requests(BaseModel):
                 async with self.aiosession.request(method,
                                                    url,
                                                    headers=self.headers,
+                                                   proxy=self.proxy,
                                                    auth=self.auth,
                                                    **kwargs) as response:
                     yield response
@@ -134,6 +143,7 @@ class TextRequestsWrapper(BaseModel):
     headers: Optional[Dict[str, str]] = None
     aiosession: Optional[aiohttp.ClientSession] = None
     auth: Optional[Any] = None
+    proxy: Optional[str] = None
     request_timeout: Union[float, Tuple[float, float]] = 120
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
@@ -142,6 +152,7 @@ class TextRequestsWrapper(BaseModel):
         return Requests(headers=self.headers,
                         aiosession=self.aiosession,
                         auth=self.auth,
+                        proxy=self.proxy,
                         request_timeout=self.request_timeout)
 
     def get(self, url: str, **kwargs: Any) -> str:

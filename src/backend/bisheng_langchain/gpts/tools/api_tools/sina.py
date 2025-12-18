@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime
-from typing import List, Type
+from typing import List, Type, Optional
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -194,15 +194,15 @@ class StockInfo(APIToolBase):
                 return stock
 
     @classmethod
-    def realtime_info(cls) -> StockInfo:
+    def realtime_info(cls, proxy: Optional[str] = None) -> StockInfo:
         """查询中国A股（沪深北交易所）股票或指数的实时行情数据，返回收盘价、涨跌额、涨跌幅、成交量、成交额"""
         url = 'https://hq.sinajs.cn'
         input_key = 'list'
         headers = {'Referer': 'https://finance.sina.com.cn'}
-        return cls(url=url, input_key=input_key, headers=headers)
+        return cls(url=url, input_key=input_key, headers=headers, proxy=proxy)
 
     @classmethod
-    def history_KLine(cls) -> StockInfo:
+    def history_KLine(cls, proxy: Optional[str] = None, ) -> StockInfo:
         """查询中国A股（沪深北交易所）股票或指数的的历史行情数据，返回时间、开盘价、最高价、最低价、收盘价、成交量（股）"""
         url = 'https://quotes.sina.cn/cn/api/jsonp_v2.php/var%20_{stock}=/CN_MarketDataService.getKLineData?symbol={stockName}&scale=240&ma=no&datalen={count}'  # noqa
         input_key = 'kLine'
@@ -219,7 +219,7 @@ class StockInfo(APIToolBase):
                 '交易所简写。股票上市的交易所，或者发布行情指数的交易所。可选项有"sh"(上海证券交易所)、" sz"( 深圳证券交易所)、"bj"( 北京证券交易所)', )
             date: str = Field(description='需要查询的时间，按照”2024-03-26“格式，传入日期')
 
-        return cls(url=url, input_key=input_key, headers=header, args_schema=stockK)
+        return cls(url=url, input_key=input_key, headers=header, args_schema=stockK, proxy=proxy)
 
     # @classmethod
     # def history_KLine(cls, stockid: str) -> StockInfo:
