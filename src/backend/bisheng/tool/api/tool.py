@@ -59,7 +59,7 @@ async def delete_tool_type(*, request: Request, login_user: UserPayload = Depend
 async def update_tool_config(*,
                              login_user: UserPayload = Depends(UserPayload.get_admin_user),
                              tool_id: int = Body(description='工具类别唯一ID'),
-                             extra: dict = Body(description='工具配置项')):
+                             extra: Dict = Body(..., description='工具的配置信息')):
     """ 更新工具的配置 """
     data = await ToolServices(login_user=login_user).update_tool_config(tool_id, extra)
     return resp_200(data=data)

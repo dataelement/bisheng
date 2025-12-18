@@ -145,6 +145,9 @@ class ToolServices(BaseModel):
                                                         AccessType.GPTS_TOOL_WRITE):
             raise UnAuthorizedError()
 
+        if tool_type.extra is None:
+            tool_type.extra = '{}'
+
         # 更新工具类别下所有工具的配置
         json_masker = JsonFieldMasker()
         merge_extra = json_masker.update_json_with_masked(json.loads(tool_type.extra), extra)
