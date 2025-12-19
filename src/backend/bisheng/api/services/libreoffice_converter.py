@@ -89,7 +89,7 @@ def convert_doc_to_docx(input_doc_path, output_dir=None):
         soffice_path,
         "--headless",  # Run in headless mode (no GUI)
         "--convert-to",
-        "docx",  # Specify the output format
+        "docx:Office Open XML Text",  # Specify the output format
         "--outdir",
         output_dir,  # Specify the output directory
         input_doc_path,  # The input file
