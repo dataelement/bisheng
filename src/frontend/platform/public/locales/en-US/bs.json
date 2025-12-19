@@ -295,6 +295,7 @@
     "uploadingShort": "Uploading...",
     "fileUploadFailed": "File upload failed: {{name}}",
     "fileExceedRemoved": "File: {{name}} exceeds {{size}}MB and has been removed",
+    "fileTypeNotAllowed": "Unsupported file type: {{type}}",
     "uploadFailedCheckFormat": "Upload failed, please check file format",
     "sourceTooltip": "Source Paragraph",
     "filterLabel": "Filter Labels",
