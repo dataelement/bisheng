@@ -100,7 +100,7 @@ export function getPersonalKnowledgeInfo(): Promise<any> {
 
 // 获取组织知识库
 export function getKnowledgeInfo({ page = 1, name = '', page_size = 200 }): Promise<any> {
-  return request.get(`/api/v1/knowledge?page_num=${page}&page_size=${page_size}&type=0&sort_by=name&name=${name}`);
+  return request.get(`/api/v1/knowledge?page_num=${page}&page_size=${page_size}&type=0&name=${name}`);
 }
 
 // 获取linsight剩余次数

@@ -1,11 +1,22 @@
 import { useEffect, useState, useMemo } from "react";
-import { Check, BookOpen, BookOpenText, Loader2 } from "lucide-react";
+import {
+  Check,
+  BookOpen,
+  BookOpenText,
+  Loader2,
+  SearchIcon,
+} from "lucide-react";
 import { Switch, Input } from "~/components/ui";
 import { Select, SelectContent, SelectTrigger } from "~/components/ui/Select";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "~/components/ui/Tooltip2";
 import { useLocalize } from "~/hooks";
 import { useGetOrgToolList, useModelBuilding } from "~/data-provider";
 import { BsConfig } from "~/data-provider/data-provider/src";
+import { cn } from "~/utils";
 
 // Custom Hook: Debounce value
 function useDebounce<T>(value: T, delay: number): T {
@@ -34,7 +45,9 @@ export const ChatKnowledge = ({
   enableOrgKb: boolean;
   setEnableOrgKb: (v: boolean) => void;
   selectedOrgKbs: { id: string; name: string }[];
-  setSelectedOrgKbs: React.Dispatch<React.SetStateAction<{ id: string; name: string }[]>>;
+  setSelectedOrgKbs: React.Dispatch<
+    React.SetStateAction<{ id: string; name: string }[]>
+  >;
 }) => {
   const [building] = useModelBuilding();
   const localize = useLocalize();
@@ -66,7 +79,7 @@ export const ChatKnowledge = ({
   useEffect(() => {
     if (currentPageData) {
       setAllOrgKbs((prev) => {
-        if (page === 1) return currentPageData;
+        if (page === 1) return [...currentPageData];
         const newItems = currentPageData.filter(
           (item: any) => !prev.some((p) => p.id === item.id)
         );
@@ -74,12 +87,16 @@ export const ChatKnowledge = ({
       });
       setHasMore(currentPageData.length === PAGE_SIZE);
     }
-  }, [currentPageData, page]);
+  }, [currentPageData, page, debouncedKeyword]);
 
   // Infinite Scroll Handler
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-    if (scrollHeight - scrollTop <= clientHeight + 10 && !isFetching && hasMore) {
+    if (
+      scrollHeight - scrollTop <= clientHeight + 10 &&
+      !isFetching &&
+      hasMore
+    ) {
       setPage((prev) => prev + 1);
     }
   };
@@ -100,9 +117,16 @@ export const ChatKnowledge = ({
   return (
     <Select disabled={disabled}>
       <SelectTrigger className="h-7 rounded-full px-2 bg-white data-[state=open]:border-blue-500">
-        <div className="flex gap-2 items-center">
+        <div
+          className={cn(
+            "flex gap-2 items-center ",
+            (searchType === "knowledgeSearch" || enableOrgKb) && "text-blue-600"
+          )}
+        >
           <BookOpenText size={16} />
-          <span className="text-xs">{localize("com_tools_knowledge_base")}</span>
+          <span className="text-xs">
+            {localize("com_tools_knowledge_base")}
+          </span>
         </div>
       </SelectTrigger>
 
@@ -161,12 +185,19 @@ export const ChatKnowledge = ({
         {/* Org KB Search and List */}
         {enableOrgKb && (
           <div className="mt-3">
-            <Input
-              className="h-8 text-xs mb-2 bg-slate-50 border-none focus-visible:ring-1 focus-visible:ring-blue-500"
-              placeholder={localize("com_tools_knowledge_base_search")}
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-            />
+            <div className="relative">
+              <Input
+                className="h-8 text-xs mb-2 bg-slate-50 border-none focus-visible:ring-1 focus-visible:ring-blue-500 pr-8" // 新增 pr-8 给图标留空间
+                placeholder={localize("com_tools_knowledge_base_search")}
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+              />
+              {/* 搜索图标 - 固定在输入框右侧 */}
+              <SearchIcon
+                className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"
+                aria-hidden="true"
+              />
+            </div>
 
             <div
               className="max-h-52 overflow-y-auto custom-scrollbar"
@@ -183,7 +214,9 @@ export const ChatKnowledge = ({
                     <span className="truncate flex-1 pr-2 text-slate-700">
                       {item.name}
                     </span>
-                    {checked && <Check size={14} className="text-blue-600 shrink-0" />}
+                    {checked && (
+                      <Check size={14} className="text-blue-600 shrink-0" />
+                    )}
                   </div>
                 );
               })}
@@ -195,11 +228,11 @@ export const ChatKnowledge = ({
                 </div>
               )}
 
-              {!hasMore && allOrgKbs.length > 0 && (
+              {/* {allOrgKbs.length === 0 && (
                 <div className="text-center text-[10px] text-slate-400 py-2 border-t mt-1">
                   {localize("com_tools_no_more")}
                 </div>
-              )}
+              )} */}
 
               {!isFetching && allOrgKbs.length === 0 && (
                 <div className="text-center text-xs text-slate-400 py-6">
