@@ -123,6 +123,18 @@ class RoleAccessDao(RoleAccessBase):
             return session.exec(select(RoleAccess).where(RoleAccess.role_id.in_(role_ids))).all()
 
     @classmethod
+    async def afind_role_access(cls, role_ids: List[int], third_ids: List[str], access_type: AccessType) -> List[
+        RoleAccess]:
+        statement = select(RoleAccess).where(
+            col(RoleAccess.role_id).in_(role_ids),
+            col(RoleAccess.third_id).in_(third_ids)
+        )
+        if access_type:
+            statement = statement.where(col(RoleAccess.type) == access_type.value)
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
     async def update_role_access_all(cls, role_id: int, access_type: AccessType,
                                      access_ids: List[Union[str, int]]) -> None:
         """

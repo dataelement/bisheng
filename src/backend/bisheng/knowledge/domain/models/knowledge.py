@@ -376,8 +376,7 @@ class KnowledgeDao(KnowledgeBase):
         if is_admin:
             return await cls.aget_list_by_ids(knowledge_ids)
         # 查询角色 有使用权限的知识库列表
-        role_access_list = await RoleAccessDao.afind_role_access(role_id_list, knowledge_ids
-                                                                 , AccessType.KNOWLEDGE)
+        role_access_list = await RoleAccessDao.afind_role_access(role_id_list, knowledge_ids, AccessType.KNOWLEDGE)
         # 查询是否包含了用户自己创建的知识库
         if include_private:
             # 如果需要包含个人知识库，则不进行类型过滤

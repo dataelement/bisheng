@@ -479,7 +479,8 @@ async def chat_completions(
                         cur_date=datetime.now().strftime('%Y-%m-%d'),
                         question=data.text)
 
-            elif data.use_knowledge_base:
+            elif data.use_knowledge_base and (data.use_knowledge_base.personal_knowledge_enabled or len(
+                    data.use_knowledge_base.organization_knowledge_ids) > 0):
                 logger.info(f'Using knowledge base for prompt: {data.text}')
                 chunks, source_document = await WorkStationService.queryChunksFromDB(data.text,
                                                                                      use_knowledge_param=data.use_knowledge_base,
