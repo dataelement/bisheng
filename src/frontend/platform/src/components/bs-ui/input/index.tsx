@@ -142,6 +142,28 @@ export const PassInput = React.forwardRef<HTMLInputElement, InputProps & {
         const newValue = e.target.value;
         const selectionStart = e.target.selectionStart;
         const selectionEnd = e.target.selectionEnd;
+    if (
+        newValue.length !== displayValue.length &&
+        selectionStart === selectionEnd &&
+        Math.abs(newValue.length - displayValue.length) > 1
+        ) {
+        setRealValue(newValue);
+        setDisplayValue('•'.repeat(newValue.length));
+        setShowClear(newValue.length > 0);
+
+        if (onChange) {
+            const syntheticEvent = {
+            ...e,
+            target: {
+                ...e.target,
+                value: newValue,
+                name: name || ''
+            }
+            };
+            onChange(syntheticEvent as React.ChangeEvent<HTMLInputElement>);
+        }
+        return;
+    }
 
         // 处理全选删除的情况
         if (selectionStart === 0 && selectionEnd === displayValue.length && newValue === '') {
