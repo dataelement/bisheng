@@ -1,4 +1,4 @@
-import { Rotate3DIcon } from "lucide-react";
+import { BookOpen, Rotate3DIcon } from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRecoilState, useRecoilValue } from "recoil";
@@ -155,6 +155,11 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
     endpoint: null,
   };
   const endpoint = endpointType ?? _endpoint;
+  // 知识库是否开启
+  const isKnowledgeOn = enableOrgKb || searchType === "knowledgeSearch";
+
+  // 联网搜索是否开启
+  const isNetSearchOn = searchType === "netSearch";
 
   const { data: fileConfig = defaultFileConfig } = useGetFileConfig({
     select: (data) => mergeFileConfig(data),
@@ -211,6 +216,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
   useEffect(() => {
     searchType || enableOrgKb ? setIsSearch(true) : setIsSearch(false);
   }, [searchType, enableOrgKb]);
+
   const endpointSupportsFiles: boolean =
     supportsFiles[endpointType ?? endpoint ?? ""] ?? false;
   const isUploadDisabled: boolean = endpointFileConfig?.disabled ?? false;
@@ -329,12 +335,17 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
                 {selectedOrgKbs.map((kb) => (
                   <div
                     key={kb.id}
-                    className="group flex items-center gap-1 px-2 py-1 rounded-full
-                     bg-white border border-slate-200
-                     text-xs text-slate-700 max-w-[180px]
-                     hover:bg-slate-50"
+                    className="group relative flex items-center gap-1
+    px-2 py-1 pr-4
+    rounded-full bg-white border border-slate-200
+    text-xs text-slate-700
+    w-[180px]
+    hover:bg-slate-50"
                   >
-                    <span className="truncate max-w-[140px]">{kb.name}</span>
+                    <BookOpen size={14} className="text-slate-500 shrink-0" />
+
+                    {/* 文字区域 */}
+                    <span className="truncate flex-1 min-w-0">{kb.name}</span>
 
                     {setSelectedOrgKbs && (
                       <button
@@ -343,8 +354,11 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
                             prev.filter((i) => i.id !== kb.id)
                           )
                         }
-                        className="hidden group-hover:flex w-4 h-4 items-center justify-center
-                         rounded-full hover:bg-slate-200 text-slate-400"
+                        className="absolute right-1 top-1/2 -translate-y-1/2
+        hidden group-hover:flex
+        w-4 h-4 items-center justify-center
+        rounded-full hover:bg-slate-200
+        text-slate-400"
                       >
                         ✕
                       </button>
@@ -461,7 +475,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
               config={bsConfig}
               searchType={searchType}
               setSearchType={setSearchType}
-              disabled={!!files.size || readOnly}
+              disabled={!!files.size || readOnly || isNetSearchOn}
               selectedOrgKbs={selectedOrgKbs}
               setSelectedOrgKbs={setSelectedOrgKbs}
               enableOrgKb={enableOrgKb}
@@ -475,7 +489,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
               config={bsConfig}
               searchType={searchType}
               setSearchType={setSearchType}
-              disabled={!!files.size || readOnly}
+              disabled={!!files.size || readOnly || isKnowledgeOn}
             />
           </div>
         </div>

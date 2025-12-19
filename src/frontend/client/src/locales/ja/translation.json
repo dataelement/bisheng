@@ -684,6 +684,7 @@
   "com_tools_personal_knowledge": "個人ナレッジ",
   "com_tools_org_knowledge": "組織ナレッジ",
   "com_tools_knowledge_base": "ナレッジベース",
+  "kbLimitReached": "ナレッジベースの数が上限（最大50件）に達しました",
   "com_tools_knowledge_base_search": "ナレッジベース検索",
   "com_tools_knowledge_rebuilding": "個人ナレッジの embedding モデルが変更されました。再構築中のため、しばらくしてからお試しください",
   "com_tools_no_more": "これ以上のデータはありません",

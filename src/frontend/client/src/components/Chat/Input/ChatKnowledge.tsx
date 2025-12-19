@@ -17,6 +17,7 @@ import { useLocalize } from "~/hooks";
 import { useGetOrgToolList, useModelBuilding } from "~/data-provider";
 import { BsConfig } from "~/data-provider/data-provider/src";
 import { cn } from "~/utils";
+import { useToastContext } from "~/Providers";
 
 // Custom Hook: Debounce value
 function useDebounce<T>(value: T, delay: number): T {
@@ -60,6 +61,7 @@ export const ChatKnowledge = ({
   const [page, setPage] = useState(1);
   const [allOrgKbs, setAllOrgKbs] = useState<any[]>([]);
   const [hasMore, setHasMore] = useState(true);
+  const { showToast } = useToastContext();
 
   // Fetch Data
   const { data: currentPageData, isFetching } = useGetOrgToolList({
@@ -105,13 +107,20 @@ export const ChatKnowledge = ({
     setSelectedOrgKbs((prev) => {
       const exists = prev.some((i) => i.id === kb.id);
       if (exists) return prev.filter((i) => i.id !== kb.id);
-      if (prev.length >= MAX_ORG_KB) return prev;
+      if (prev.length >= MAX_ORG_KB) {
+        showToast({
+          message: localize("kbLimitReached"),
+          status: "error",
+        });
+        return prev;
+      }
       return [{ id: kb.id, name: kb.name }, ...prev];
     });
   };
 
   useEffect(() => {
     setSelectedOrgKbs([]);
+    setEnableOrgKb(false);
   }, []);
 
   return (
