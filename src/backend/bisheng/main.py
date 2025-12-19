@@ -91,7 +91,7 @@ def create_app():
 
     @app.exception_handler(AuthJWTException)
     def authjwt_exception_handler(request: Request, exc: AuthJWTException):
-        return JSONResponse(status_code=401, content={'detail': exc.message})
+        return JSONResponse(status_code=401, content={'detail': str(exc)})
 
     app.include_router(router)
     app.include_router(router_rpc)
