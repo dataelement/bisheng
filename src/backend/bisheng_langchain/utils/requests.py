@@ -5,7 +5,7 @@ from typing import Any, AsyncGenerator, Dict, Optional, Tuple, Union, List
 import aiohttp
 import requests
 from loguru import logger
-from pydantic import ConfigDict, BaseModel, model_validator
+from pydantic import ConfigDict, BaseModel
 
 
 class Requests(BaseModel):
@@ -85,9 +85,7 @@ class Requests(BaseModel):
                 timeout = aiohttp.ClientTimeout(total=self.request_timeout)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 logger.info(f'aio_http url={url}')
-                async with session.request(method, url, headers=self.headers, proxy=self.proxy,
-                                           auth=self.auth,
-                                           **kwargs) as response:
+                async with session.request(method, url, headers=self.headers, proxy=self.proxy, **kwargs) as response:
                     yield response
         else:
             async with self.aiosession:
@@ -95,7 +93,6 @@ class Requests(BaseModel):
                                                    url,
                                                    headers=self.headers,
                                                    proxy=self.proxy,
-                                                   auth=self.auth,
                                                    **kwargs) as response:
                     yield response
 
