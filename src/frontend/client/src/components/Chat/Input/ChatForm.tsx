@@ -339,7 +339,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
     px-2 py-1 pr-4
     rounded-full bg-white border border-slate-200
     text-xs text-slate-700
-    w-[180px]
+    w-[176px]
     hover:bg-slate-50"
                   >
                     <BookOpen size={14} className="text-slate-500 shrink-0" />
