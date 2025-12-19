@@ -148,10 +148,28 @@ class ToolServices(BaseModel):
         if tool_type.extra is None:
             tool_type.extra = '{}'
 
-        # 更新工具类别下所有工具的配置
         json_masker = JsonFieldMasker()
-        merge_extra = json_masker.update_json_with_masked(json.loads(tool_type.extra), extra)
-        merge_extra = json.dumps(merge_extra, ensure_ascii=False)
+
+        old_config = json.loads(tool_type.extra)
+        # special handle dall-e config update。 等到把这块配置统一和其他工具一样的配置逻辑（配置的参数不变），再删除这块特殊处理逻辑
+        if tool_type.name == "Dalle3绘画":
+            # 说明没有切换tab。只是更改了配置
+            if ("azure_endpoint" in old_config and "azure_endpoint" in extra) or (
+                    "azure_endpoint" not in old_config and "azure_endpoint" not in extra
+            ):
+                # 更新工具类别下所有工具的配置
+                merge_extra = json_masker.update_json_with_masked(old_config, extra)
+                merge_extra = json.dumps(merge_extra, ensure_ascii=False)
+            elif not old_config:
+                # 说明之前没有配置，现在配置了
+                merge_extra = json.dumps(extra, ensure_ascii=False)
+            else:
+                # 说明切换了tab，需要把之前的配置覆盖掉
+                merge_extra = json.dumps(extra, ensure_ascii=False)
+        else:
+            # 更新工具类别下所有工具的配置
+            merge_extra = json_masker.update_json_with_masked(old_config, extra)
+            merge_extra = json.dumps(merge_extra, ensure_ascii=False)
         await GptsToolsDao.update_tools_extra(tool_type_id, merge_extra)
         return True
 
