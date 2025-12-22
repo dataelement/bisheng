@@ -22,120 +22,119 @@ export default function ChatFiles({ v, accepts, disabled, onChange }) {
     const fileInputRef = useRef(null);
     const fileSizeLimit = appConfig.uploadFileMaxSize * 1024 * 1024; // File size limit in bytes
 
-    const handleFileChange = (e) => {
-        const selectedFiles = Array.from(e.target.files);
-        const validFiles = [];
-        const invalidFiles = [];
 
-        fileInputRef.current.value = '';
-        const allowedExtensions = accepts
-            ? new Set(accepts.split(',').map(ext => ext.trim().toLowerCase().replace(/^\./, '')))
-            : new Set();
+const handleFileChange = (e) => {
+    const selectedFiles = Array.from(e.target.files);
+    const validFiles = [];
+    const invalidTips = []; // 仅存储无效文件的提示文案
 
-        selectedFiles.forEach((file) => {
-            if (allowedExtensions.size > 0) {
-                const fileExt = getFileExtension(file.name).toLowerCase();
-                if (!allowedExtensions.has(fileExt)) {
-                    invalidFiles.push(t('chat.fileTypeNotAllowed', { name: file.name }));
-                    return;
-                }
+    fileInputRef.current.value = '';
+    const allowedExtensions = accepts
+        ? new Set(accepts.split(',').map(ext => ext.trim().toLowerCase().replace(/^\./, '')))
+        : new Set();
+
+    selectedFiles.forEach((file) => {
+        // 1. 先校验文件类型
+        if (allowedExtensions.size > 0) {
+            const fileExt = getFileExtension(file.name).toLowerCase();
+            if (!allowedExtensions.has(fileExt)) {
+                 invalidTips.push(t('chat.fileTypeNotAllowed', { 
+                    name: file.name, 
+                    type: fileExt
+                    }));
+                return; // 类型不符合，跳过后续校验
             }
-
-            if (file.size <= fileSizeLimit) {
-                validFiles.push({ id: generateUUID(6), file });
-            } else {
-                invalidFiles.push({ id: generateUUID(6), file });
-            }
-        });
-
-        // Show invalid file toast
-        if (invalidFiles.length > 0) {
-            toast({
-                variant: 'info',
-                description: invalidFiles.map((file) => t('chat.fileExceedRemoved', { name: file.file.name, size: appConfig.uploadFileMaxSize })),
-            });
         }
 
-        if (!validFiles.length) return;
+        // 2. 再校验文件大小
+        if (file.size > fileSizeLimit) {
+            invalidTips.push(t('chat.fileExceedRemoved', { name: file.name, size: appConfig.uploadFileMaxSize }));
+            return; // 大小不符合，跳过
+        }
 
-        // Trigger onChange with null to indicate uploading state
-        onChange(null);
+        // 3. 所有校验通过，加入有效文件列表
+        validFiles.push({ id: generateUUID(6), file });
+    });
 
-        // Add valid files to state with initial progress
-        const filesWithProgress = validFiles.map(({ file, id }) => {
-            return {
-                name: file.name,
-                size: file.size,
-                type: file.type,
-                isUploading: true,
-                progress: 0, // Set initial progress to 0
-                id, // Use the generated id
-                file // Keep original file object for later use
-            };
+    // 显示无效文件提示（区分类型/大小错误）
+    if (invalidTips.length > 0) {
+        toast({
+            variant: 'info',
+            description: invalidTips.join('；'),
         });
+    }
 
-        setFiles(prevFiles => {
-            const res = [...prevFiles, ...filesWithProgress];
-            filesRef.current = res;
-            return res;
-        });
+    // 只要有有效文件就继续上传流程
+    if (!validFiles.length) return;
 
-        // Keep track of the number of remaining uploads
-        remainingUploadsRef.current = validFiles.length;
+    // 以下逻辑完全保留，无需修改
+    onChange(null);
+    const filesWithProgress = validFiles.map(({ file, id }) => {
+        return {
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            isUploading: true,
+            progress: 0,
+            id,
+            file
+        };
+    });
 
-        // Create an array of promises to handle multiple file uploads concurrently
-        const uploadPromises = validFiles.map(({ file, id }) => {
-            return uploadChatFile(v, file, (progress) => {
-                // Update progress for each file individually
-                setFiles((prevFiles) => {
-                    const updatedFiles = prevFiles.map(f => {
-                        if (f.id === id) {
-                            return { ...f, progress }; // Update progress for the specific file
-                        }
-                        return f;
-                    });
-                    filesRef.current = updatedFiles;
-                    return updatedFiles;
-                });
-            }).then(response => {
-                const filePath = response.file_path; // Assuming the response contains the file ID
-                filesRef.current = filesRef.current.map(f => {
+    setFiles(prevFiles => {
+        const res = [...prevFiles, ...filesWithProgress];
+        filesRef.current = res;
+        return res;
+    });
+
+    remainingUploadsRef.current = validFiles.length;
+
+    const uploadPromises = validFiles.map(({ file, id }) => {
+        return uploadChatFile(v, file, (progress) => {
+            setFiles((prevFiles) => {
+                const updatedFiles = prevFiles.map(f => {
                     if (f.id === id) {
-                        return { ...f, isUploading: false, filePath, progress: 100 }; // Set progress to 100 when uploaded
+                        return { ...f, progress };
                     }
                     return f;
                 });
-                setFiles(filesRef.current);
-
-                remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
-                if (remainingUploadsRef.current === 0) {
-                    // Once all files are uploaded, trigger onChange with the file IDs
-                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
-                    onChange(uploadedFileIds); // Pass the file IDs to onChange
-                }
-            }).catch(() => {
-                // Handle upload failure
-                toast({
-                    variant: 'error',
-                    description: t('chat.fileUploadFailed', { name: file.name }),
-                });
-                handleFileRemove(file.name);
-                remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
-                if (remainingUploadsRef.current === 0) {
-                    // If no files remain, trigger onChange immediately
-                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
-                    onChange(uploadedFileIds);
-                }
+                filesRef.current = updatedFiles;
+                return updatedFiles;
             });
-        });
+        }).then(response => {
+            const filePath = response.file_path;
+            filesRef.current = filesRef.current.map(f => {
+                if (f.id === id) {
+                    return { ...f, isUploading: false, filePath, progress: 100 };
+                }
+                return f;
+            });
+            setFiles(filesRef.current);
 
-        // Wait for all files to finish uploading
-        Promise.all(uploadPromises).then(() => {
-            // Once all files are uploaded, trigger onChange with the file IDs
-            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
-            onChange(uploadedFileIds); // Pass the file IDs to onChange
+            remainingUploadsRef.current -= 1;
+            if (remainingUploadsRef.current === 0) {
+                const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
+                onChange(uploadedFileIds);
+            }
+        }).catch(() => {
+            toast({
+                variant: 'error',
+                description: t('chat.fileUploadFailed', { name: file.name }),
+            });
+            handleFileRemove(file.name);
+            remainingUploadsRef.current -= 1;
+            if (remainingUploadsRef.current === 0) {
+                const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
+                onChange(uploadedFileIds);
+            }
         });
-    };
+    });
+
+    Promise.all(uploadPromises).then(() => {
+        const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
+        onChange(uploadedFileIds);
+    });
+};
 
     const handleFileRemove = (fileName) => {
         const res = filesRef.current.filter(file => file.name !== fileName);

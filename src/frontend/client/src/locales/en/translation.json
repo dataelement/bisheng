@@ -729,6 +729,7 @@
   "com_tools_personal_knowledge": "Personal Knowledge",
   "com_tools_org_knowledge": "Organization Knowledge",
   "com_tools_knowledge_base": "Knowledge Base",
+  "kbLimitReached": "Knowledge base limit reached (maximum 50)",
   "com_tools_knowledge_base_search": "Knowledge Base Search",
   "com_tools_knowledge_rebuilding": "Personal knowledge base embedding model has been changed, rebuilding knowledge base, please try again later",
   "com_tools_no_more": "No more data",

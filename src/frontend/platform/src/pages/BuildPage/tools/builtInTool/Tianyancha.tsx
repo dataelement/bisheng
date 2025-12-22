@@ -62,7 +62,7 @@ const TianyanchaToolForm = ({ formData, onSubmit }) => {
                     label="proxy"
                     name="proxy"
                     tooltip={t('build.proxyDescription')}
-                    placeholder={t('build.enterProxy')}
+                    placeholder=''
                     value={localFormData.proxy}
                     onChange={handleChange}
                 // No 'label' prop here because we rendered a custom one with the icon above

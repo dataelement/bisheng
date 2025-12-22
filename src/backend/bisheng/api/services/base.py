@@ -12,7 +12,7 @@ class BaseService:
         redis_client = get_redis_client_sync()
         if not logo_path:
             return ''
-        cache_key = f'logo_cache:{logo_path}'
+        cache_key = f'logo_cache_new:{logo_path}'
         # 先从内存中获取
         share_url = cls.LogoMemoryCache.get(cache_key)
         if share_url:
@@ -38,7 +38,7 @@ class BaseService:
         redis_client = await get_redis_client()
         if not logo_path:
             return ''
-        cache_key = f'logo_cache:{logo_path}'
+        cache_key = f'logo_cache_new:{logo_path}'
         # 先从内存中获取
         share_url = cls.LogoMemoryCache.get(cache_key)
         if share_url:

@@ -518,7 +518,13 @@
       "description": "Execute custom code.",
       "入参": "Input Parameters",
       "执行代码": "Execute Code",
-      "出参": "Output Parameters"
+      "出参": "Output Parameters",
+      "code_input": {
+        "label": "Input Parameters"
+      },
+      "code_output": {
+        "label": "Output Parameters"
+      }
     },
     "condition": {
       "name": "Condition",

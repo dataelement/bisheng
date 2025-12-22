@@ -73,7 +73,8 @@ class GptsToolsTypeRead(GptsToolsTypeBase):
 
     @model_validator(mode="after")
     def validate(self):
-        if self.extra:
+        # 回显的时候需要填充api_location和parameter_name字段
+        if self.extra and not self.api_location:
             result = json.loads(self.extra)
             self.api_location = result.get('api_location')
             self.parameter_name = result.get('parameter_name')
