@@ -1,3 +1,4 @@
+import json
 from abc import ABC
 from datetime import timedelta
 from io import BytesIO
@@ -44,6 +45,26 @@ class MinioStorage(BaseStorage, ABC):
         # create need bucket
         self.create_bucket_sync(bucket_name=self.bucket)
         self.create_bucket_sync(bucket_name=self.tmp_bucket)
+
+        # set knowledge chunk images anonymous read policy
+        anonymous_read_policy = {
+            "Version": "2012-10-17",
+            "Statement": [{
+                "Effect": "Allow",
+                "Principal": {
+                    "AWS": ["*"]
+                },
+                "Action": ["s3:GetObject"],
+                "Resource": [f"arn:aws:s3:::{self.bucket}/knowledge/images/*",
+                             f"arn:aws:s3:::{self.bucket}/tmp/images/*"]
+            }]
+        }
+        try:
+            policy = self.minio_client_sync.get_bucket_policy(self.bucket)
+        except Exception as e:
+            if str(e).find('NoSuchBucketPolicy') == -1:
+                raise e
+            self.minio_client_sync.set_bucket_policy(self.bucket, json.dumps(anonymous_read_policy))
 
         # set tmp bucket lifecycle
         if not self.minio_client_sync.get_bucket_lifecycle(self.tmp_bucket):
