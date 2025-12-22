@@ -51,10 +51,6 @@ export default function HoverButtons({
   const { endpoint: _endpoint, endpointType } = conversation ?? {};
   const endpoint = endpointType ?? _endpoint;
   const [isCopied, setIsCopied] = useState(false);
-  const [TextToSpeech] = useRecoilState<boolean>(store.textToSpeech);
-  const [selectedOrgKbs, setSelectedOrgKbs] = useRecoilState(
-    store.selectedOrgKbs
-  );
   const [enableOrgKb, setEnableOrgKb] = useRecoilState(store.enableOrgKb);
 
   const {
@@ -117,10 +113,6 @@ export default function HoverButtons({
     }
     enterEdit();
   };
-  useEffect(() => {
-    setSelectedOrgKbs([]);
-    setEnableOrgKb(false);
-  }, []);
   return (
     <div className="visible mt-0 flex justify-center gap-1 self-end text-gray-500 lg:justify-start">
       <div className="mr-2 pt-0.5">

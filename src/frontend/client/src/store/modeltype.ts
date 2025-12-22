@@ -13,16 +13,20 @@ const selectedOrgKbs = atomWithLocalStorage<SelectedOrgKb[]>(
   'selectedOrgKbs',
   []
 );
-
+const chatId = atomWithLocalStorage('chatId', '');
 const enableOrgKb = atomWithLocalStorage<boolean>(
   'enableOrgKb',
   false
 );
+const chatStatesMap = atomWithLocalStorage('chatStatesMap', {});
+
 export default {
   modelType,
   searchType,
   isSearch,
   chatModel,
   selectedOrgKbs,
-  enableOrgKb,  
+  enableOrgKb,
+  chatId,
+  chatStatesMap,
 };

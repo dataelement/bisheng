@@ -74,6 +74,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
   );
   const [enableOrgKb, setEnableOrgKb] = useRecoilState(store.enableOrgKb);
 
+  const [chatStatesMap, setChatStatesMap] = useRecoilState(store.chatStatesMap);
   const isSearching = useRecoilValue(store.isSearching);
   const [showStopButton, setShowStopButton] = useRecoilState(
     store.showStopButtonByIndex(index)
@@ -84,7 +85,8 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
   const [showMentionPopover, setShowMentionPopover] = useRecoilState(
     store.showMentionPopoverFamily(index)
   );
-
+  const isInitialMount = useRef(true);
+  const [chatId, setChatId] = useRecoilState(store.chatId);
   const chatDirection = useRecoilValue(store.chatDirection).toLowerCase();
   const isRTL = chatDirection === "rtl";
 
@@ -217,6 +219,46 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
     searchType || enableOrgKb ? setIsSearch(true) : setIsSearch(false);
   }, [searchType, enableOrgKb]);
 
+  useEffect(() => {
+    if (conversation?.conversationId) {
+      const newChatId = conversation.conversationId;
+      if (isInitialMount.current) {
+        console.log("Initial mount, keeping current state");
+        isInitialMount.current = false;
+        setChatId(newChatId);
+        return;
+      }
+      const savedState = chatStatesMap[newChatId];
+
+      if (savedState) {
+        // 恢复保存的状态
+        setSelectedOrgKbs(savedState.selectedOrgKbs || []);
+        setEnableOrgKb(savedState.enableOrgKb || false);
+        setSearchType(savedState.searchType || "");
+      } else {
+        // 清空状态
+        setSelectedOrgKbs([]);
+        setEnableOrgKb(false);
+        setSearchType("");
+      }
+
+      setChatId(newChatId);
+    }
+  }, [conversation?.conversationId]);
+
+  // 2. 保存状态：当状态变化时
+  useEffect(() => {
+    if (chatId && !isInitialMount.current) {
+      setChatStatesMap((prev) => ({
+        ...prev,
+        [chatId]: {
+          selectedOrgKbs,
+          enableOrgKb,
+          searchType,
+        },
+      }));
+    }
+  }, [chatId, selectedOrgKbs, enableOrgKb, searchType]);
   const endpointSupportsFiles: boolean =
     supportsFiles[endpointType ?? endpoint ?? ""] ?? false;
   const isUploadDisabled: boolean = endpointFileConfig?.disabled ?? false;
