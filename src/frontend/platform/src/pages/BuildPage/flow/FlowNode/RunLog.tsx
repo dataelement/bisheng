@@ -48,6 +48,8 @@ export default function RunLog({ node, children }) {
                         label = toolMap[item.key]
                     } else if (item.key === 'output_msg') {
                         label = item.key
+                    } else if (item.key === 'error') {
+                        label = item.key
                     } else {
                         label = t(`node.${node.type}.${item.key}.label`)
                     }
