@@ -109,6 +109,10 @@ class KnowledgeRag:
                 },
             }
         """
+
+        if knowledge_ids is None or len(knowledge_ids) == 0:
+            return {}
+
         if not include_es and not include_milvus:
             raise RuntimeError('at least one of include_es and include_milvus must be True')
         if check_auth:
