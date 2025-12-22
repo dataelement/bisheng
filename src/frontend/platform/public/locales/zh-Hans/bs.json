@@ -860,6 +860,7 @@
     "enterProxy": "请输入代理",
     "enterDeploymentName": "请输入部署名称",
     "proxyDescription": "中国大陆地区以外使用时，需要配置代理",
+    "fdProxyDescription": "中国大陆地区以外查询股票行情数据时，需要配置代理",
     "editTool": "编辑内置工具",
     "assistantAvatar": "助手头像",
     "confirmDeleteSkill": "确认删除该技能?",

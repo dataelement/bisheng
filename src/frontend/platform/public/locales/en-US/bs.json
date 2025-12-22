@@ -866,6 +866,7 @@
     "enterProxy": "Enter Proxy",
     "enterDeploymentName": "Enter Deployment Name",
     "proxyDescription": "Required when using outside mainland China",
+    "fdProxyDescription": "A proxy configuration is required when querying stock market data outside the Chinese mainland",
     "editTool": "Edit Built-in Tool",
     "assistantAvatar": "Assistant avatar",
     "confirmDeleteSkill": "Confirm delete skill?",

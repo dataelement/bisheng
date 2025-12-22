@@ -35,8 +35,8 @@ const FinancialDataToolForm = ({ formData, onSubmit }) => {
                     id="proxy"
                     name="proxy"
                     label="proxy"
-                    tooltip={t('build.proxyDescription')}
-                    placeholder={t('build.enterProxy')}
+                    tooltip={t('build.fdProxyDescription')}
+                    placeholder=''
                     value={localFormData.proxy}
                     onChange={handleChange}
                 />

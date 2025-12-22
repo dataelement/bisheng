@@ -857,6 +857,7 @@
     "enterProxy": "プロキシを入力してください",
     "enterDeploymentName": "デプロイ名を入力してください",
     "proxyDescription": "中国本土以外で使用する場合、プロキシ設定が必要です",
+    "fdProxyDescription": "中国本土以外の地域で株価情報を照会する場合、プロキシの設定が必要となります",
     "editTool": "内蔵ツール編集",
     "assistantAvatar": "アシスタントアバター",
     "confirmDeleteSkill": "このスキルを削除しますか？",
