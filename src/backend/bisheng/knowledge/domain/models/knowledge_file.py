@@ -18,6 +18,8 @@ class KnowledgeFileStatus(Enum):
     SUCCESS = 2  # 成功
     FAILED = 3  # 解析失败
     REBUILDING = 4  # 重建中
+    WAITING = 5  # 排队中
+    TIMEOUT = 6  # 超24小时还未解析完成，解析超时
 
 
 class QAStatus(Enum):
@@ -48,7 +50,7 @@ class KnowledgeFileBase(SQLModelSerializable):
                                       description='采用什么模式解析的文件')
     split_rule: Optional[str] = Field(default=None, sa_column=Column(Text), description='采用什么模式解析的文件')
     bbox_object_name: Optional[str] = Field(default='', description='bbox文件在minio存储的对象名称')
-    status: Optional[int] = Field(default=KnowledgeFileStatus.PROCESSING.value,
+    status: Optional[int] = Field(default=KnowledgeFileStatus.WAITING.value,
                                   index=False,
                                   description='1: 解析中；2: 解析成功；3: 解析失败')
     object_name: Optional[str] = Field(default=None, index=False, description='文件在minio存储的对象名称')

@@ -269,7 +269,7 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
         logger.error("file_id={} not found in db", file_id)
         return
     db_file = db_file[0]
-    if db_file.status != KnowledgeFileStatus.PROCESSING.value:
+    if db_file.status not in [KnowledgeFileStatus.PROCESSING.value, KnowledgeFileStatus.WAITING.value]:
         logger.error(
             "file_id={} status={} not processing, skip parse",
             file_id,
@@ -280,6 +280,9 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
     if not db_knowledge:
         logger.error("knowledge_id={} not found", db_file.knowledge_id)
         return
+    if db_file.status == KnowledgeFileStatus.WAITING.value:
+        db_file.status = KnowledgeFileStatus.PROCESSING.value
+        KnowledgeFileDao.update_file_status([db_file.id], KnowledgeFileStatus.PROCESSING)
 
     # 获取切分规则
     file_rule = FileProcessBase(**json.loads(db_file.split_rule))

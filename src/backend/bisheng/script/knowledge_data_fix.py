@@ -183,6 +183,10 @@ def _file_status(file: KnowledgeFile):
         return "解析失败"
     elif file.status == KnowledgeFileStatus.REBUILDING.value:
         return "重建中"
+    elif file.status == KnowledgeFileStatus.WAITING.value:
+        return "排队中"
+    elif file.status == KnowledgeFileStatus.TIMEOUT.value:
+        return "超时"
     else:
         return "未知状态"
 

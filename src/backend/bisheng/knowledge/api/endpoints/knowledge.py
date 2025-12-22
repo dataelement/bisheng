@@ -209,7 +209,7 @@ async def copy_knowledge(*,
 
     knowledge_count = await KnowledgeFileDao.async_count_file_by_filters(
         knowledge_id,
-        status=[KnowledgeFileStatus.PROCESSING.value],
+        status=[KnowledgeFileStatus.PROCESSING.value, KnowledgeFileStatus.WAITING.value],
     )
     if knowledge.state != KnowledgeState.PUBLISHED.value or knowledge_count > 0:
         return KnowledgeCPError.return_resp()

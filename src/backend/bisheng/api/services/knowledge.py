@@ -620,7 +620,7 @@ class KnowledgeService(KnowledgeUtils):
         if req_data.excel_rule is not None:
             split_rule_dict["excel_rule"] = req_data.excel_rule.model_dump()
         db_file.split_rule = json.dumps(split_rule_dict)
-        db_file.status = KnowledgeFileStatus.PROCESSING.value  # 解析中
+        db_file.status = KnowledgeFileStatus.WAITING.value  # 解析中
         db_file.updater_id = login_user.user_id
         db_file.updater_name = login_user.user_name
         db_file = await KnowledgeFileDao.async_update(db_file)
@@ -680,7 +680,7 @@ class KnowledgeService(KnowledgeUtils):
             file.file_name = input_file.get("file_name", None) or file.file_name
             file.remark = ""
             file.split_rule = input_file["split_rule"]
-            file.status = KnowledgeFileStatus.PROCESSING.value  # 解析中
+            file.status = KnowledgeFileStatus.WAITING.value  # 解析中
             file.updater_id = login_user.user_id
             file.updater_name = login_user.user_name
 
@@ -864,13 +864,13 @@ class KnowledgeService(KnowledgeUtils):
         for index, one in enumerate(res):
             finally_res.append(KnowledgeFileResp(**one.model_dump()))
             # 超过一天还在解析中的，将状态置为失败
-            if one.status == KnowledgeFileStatus.PROCESSING.value and (
+            if one.status in [KnowledgeFileStatus.PROCESSING.value, KnowledgeFileStatus.WAITING.value] and (
                     datetime.now() - one.update_time).total_seconds() > 86400:
                 timeout_files.append(one.id)
                 continue
             finally_res[index].title = file_title_map.get(str(one.id), "")
         if timeout_files:
-            KnowledgeFileDao.update_file_status(timeout_files, KnowledgeFileStatus.FAILED,
+            KnowledgeFileDao.update_file_status(timeout_files, KnowledgeFileStatus.TIMEOUT,
                                                 KnowledgeFileFailedError(
                                                     data={"exception": 'Parsing time exceeds 24 hours'}).to_json_str())
 
