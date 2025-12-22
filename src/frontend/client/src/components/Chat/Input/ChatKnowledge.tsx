@@ -172,12 +172,12 @@ export const ChatKnowledge = ({
         )}
 
         {/* Section 2: Organization Knowledge Base */}
-        <div className="flex justify-between items-center mt-3">
+        <div className="flex justify-between items-center mt-3  -ml-0.5">
           <div className="flex gap-2 items-center">
             <img
-              className="size-4 object-contain"
-              src={__APP_ENV__.BASE_URL + "/assets/books.png"}
-              alt="org-kb"
+              className="size-5"
+              src={__APP_ENV__.BASE_URL + "/assets/books.svg"}
+              alt=""
             />
             <span className="text-xs font-medium">
               {localize("com_tools_org_knowledge")}
