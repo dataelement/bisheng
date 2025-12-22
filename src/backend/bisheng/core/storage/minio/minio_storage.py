@@ -50,9 +50,9 @@ class MinioStorage(BaseStorage, ABC):
             lifecycle_conf = LifecycleConfig([
                 Rule(
                     'Enabled',
-                    rule_filter=Filter(prefix='documents/'),
+                    rule_filter=Filter(prefix='*'),
                     rule_id='rule1',
-                    expiration=Expiration(days=1),
+                    expiration=Expiration(days=3),
                 ),
             ], )
             self.minio_client_sync.set_bucket_lifecycle(self.tmp_bucket, lifecycle_conf)
