@@ -38,7 +38,7 @@ from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.knowledge import KnowledgeSimilarError, KnowledgeFileDeleteError, KnowledgeFileEmptyError, \
     KnowledgeFileChunkMaxError, KnowledgeLLMError, KnowledgeFileDamagedError, KnowledgeFileNotSupportedError, \
-    KnowledgeEtl4lmTimeoutError, KnowledgeFileFailedError
+    KnowledgeEtl4lmTimeoutError, KnowledgeFileFailedError, KnowledgeExcelChunkMaxError
 from bisheng.common.schemas.telemetry.event_data_schema import FileParseEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -562,6 +562,7 @@ def add_file_embedding(
 
     file_url = minio_client.get_share_link_sync(db_file.object_name, clear_host=False)
     filepath, _ = file_download(file_url)
+    file_ext = db_file.file_name.split(".")[-1].lower()
 
     # Convert split_rule string to dict if needed
     excel_rule = ExcelRule()
@@ -609,6 +610,8 @@ def add_file_embedding(
                 metadatas.append(Metadata(**val["metadata"]))
     for index, one in enumerate(texts):
         if len(one) > 10000:
+            if file_ext in (".xlsx", ".xls", ".csv"):
+                raise KnowledgeExcelChunkMaxError()
             raise KnowledgeFileChunkMaxError()
         # 入库时 拼接文件名和文档摘要
         texts[index] = KnowledgeUtils.aggregate_chunk_metadata(one, metadatas[index].model_dump())
@@ -658,7 +661,7 @@ def add_file_embedding(
     if preview_cache_key:
         KnowledgeUtils.delete_preview_cache(preview_cache_key)
 
-    if db_file.file_name.endswith((".doc", ".ppt", ".pptx")):
+    if file_ext in (".doc", ".ppt", ".pptx"):
         tmp_preview_file = KnowledgeUtils.get_tmp_preview_file_object_name(filepath)
 
         preview_object_name = KnowledgeUtils.get_knowledge_preview_file_object_name(

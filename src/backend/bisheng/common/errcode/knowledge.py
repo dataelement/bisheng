@@ -47,6 +47,11 @@ class KnowledgeEtl4lmTimeoutError(BaseErrorCode):
     Msg: str = 'etl4lm服务繁忙，请升级etl4lm服务的算力'
 
 
+class KnowledgeExcelChunkMaxError(BaseErrorCode):
+    Code: int = 10916
+    Msg: str = '分段结果超长，请尝试在自定义策略中减少表格分段行数'
+
+
 class KnowledgeSimilarError(BaseErrorCode):
     Code: int = 10920
     Msg: str = '未配置QA知识库相似问模型'
