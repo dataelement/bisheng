@@ -174,64 +174,67 @@ class WorkStationService(BaseService):
             List[str]: 格式化后的知识库内容列表，格式为：
                 "[file name]:文件名\n[file content begin]\n内容\n[file content end]\n"
         """
-        knowledge_ids = []
+        try:
+            knowledge_ids = []
 
-        if use_knowledge_param.organization_knowledge_ids:
-            # 如果有组织知识库，则调用知识库服务获取知识块
-            knowledge_ids.extend(use_knowledge_param.organization_knowledge_ids)
+            if use_knowledge_param.organization_knowledge_ids:
+                # 如果有组织知识库，则调用知识库服务获取知识块
+                knowledge_ids.extend(use_knowledge_param.organization_knowledge_ids)
 
-        if use_knowledge_param.personal_knowledge_enabled:
-            # 如果启用了个人知识库，则添加个人知识库ID
-            personal_knowledge = await KnowledgeDao.aget_user_knowledge(login_user.user_id,
-                                                                        knowledge_type=KnowledgeTypeEnum.PRIVATE)
-            if personal_knowledge:
-                knowledge_ids.append(personal_knowledge[0].id)
+            if use_knowledge_param.personal_knowledge_enabled:
+                # 如果启用了个人知识库，则添加个人知识库ID
+                personal_knowledge = await KnowledgeDao.aget_user_knowledge(login_user.user_id,
+                                                                            knowledge_type=KnowledgeTypeEnum.PRIVATE)
+                if personal_knowledge:
+                    knowledge_ids.append(personal_knowledge[0].id)
 
-        knowledge_vector_list = await KnowledgeRag.get_multi_knowledge_vectorstore(invoke_user_id=login_user.user_id,
-                                                                                   knowledge_ids=knowledge_ids,
-                                                                                   user_name=login_user.user_name)
+            knowledge_vector_list = await KnowledgeRag.get_multi_knowledge_vectorstore(invoke_user_id=login_user.user_id,
+                                                                                       knowledge_ids=knowledge_ids,
+                                                                                       user_name=login_user.user_name)
 
-        vector_store_params = []
-        for knowledge_id, vectorstore_info in knowledge_vector_list.items():
-            milvus_vectorstore = vectorstore_info.get("milvus")
-            es_vectorstore = vectorstore_info.get("es")
-            if milvus_vectorstore:
-                vector_store_params.append(VectorRetrieverParams(
-                    vector_store=milvus_vectorstore,
-                    search_kwargs={"top_k": 100},
-                ))
-            if es_vectorstore:
-                vector_store_params.append(VectorRetrieverParams(
-                    vector_store=es_vectorstore,
-                    search_kwargs={"top_k": 100},
-                ))
+            vector_store_params = []
+            for knowledge_id, vectorstore_info in knowledge_vector_list.items():
+                milvus_vectorstore = vectorstore_info.get("milvus")
+                es_vectorstore = vectorstore_info.get("es")
+                if milvus_vectorstore:
+                    vector_store_params.append(VectorRetrieverParams(
+                        vector_store=milvus_vectorstore,
+                        search_kwargs={"top_k": 100},
+                    ))
+                if es_vectorstore:
+                    vector_store_params.append(VectorRetrieverParams(
+                        vector_store=es_vectorstore,
+                        search_kwargs={"top_k": 100},
+                    ))
 
-        if not vector_store_params:
+            if not vector_store_params:
+                return [], None
+
+            rrf_multivector_retriever = RRFMultiVectorRetriever(
+                vector_store_params=vector_store_params,
+                top_k=100,
+                max_context_length=max_token,
+            )
+            # 使用 RAG 方法进行检索
+            finally_docs = await rrf_multivector_retriever.ainvoke(question)
+
+            # 将检索结果格式化为指定的模板格式
+            formatted_results = []
+            if finally_docs:
+                for doc in finally_docs:
+                    # 获取文件名，优先从 metadata 中获取
+                    file_name = doc.metadata.get('source') or doc.metadata.get('document_name')
+                    # 获取文档内容
+                    content = doc.page_content.strip()
+
+                    # 按照模板格式组织内容
+                    formatted_content = f"[file name]:{file_name}\n[file content begin]\n{content}\n[file content end]\n"
+                    formatted_results.append(formatted_content)
+
+            return formatted_results, finally_docs
+        except Exception as e:
+            logger.error(f"queryChunksFromDB error: {e}")
             return [], None
-
-        rrf_multivector_retriever = RRFMultiVectorRetriever(
-            vector_store_params=vector_store_params,
-            top_k=100,
-            max_context_length=max_token,
-        )
-        # 使用 RAG 方法进行检索
-        finally_docs = await rrf_multivector_retriever.ainvoke(question)
-
-        # 将检索结果格式化为指定的模板格式
-        formatted_results = []
-        if finally_docs:
-            for doc in finally_docs:
-                # 获取文件名，优先从 metadata 中获取
-                file_name = doc.metadata.get('source') or doc.metadata.get('document_name')
-
-                # 获取文档内容
-                content = doc.page_content.strip()
-
-                # 按照模板格式组织内容
-                formatted_content = f"[file name]:{file_name}\n[file content begin]\n{content}\n[file content end]\n"
-                formatted_results.append(formatted_content)
-
-        return formatted_results, finally_docs
 
     @classmethod
     async def get_chat_history(cls, chat_id: str, size: int = 4):
