@@ -471,16 +471,18 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
               />
             )}
             {/* 知识库 */}
-            <ChatKnowledge
-              config={bsConfig}
-              searchType={searchType}
-              setSearchType={setSearchType}
-              disabled={!!files.size || readOnly || isNetSearchOn}
-              selectedOrgKbs={selectedOrgKbs}
-              setSelectedOrgKbs={setSelectedOrgKbs}
-              enableOrgKb={enableOrgKb}
-              setEnableOrgKb={setEnableOrgKb}
-            />
+            {!isLingsi && (
+              <ChatKnowledge
+                config={bsConfig}
+                searchType={searchType}
+                setSearchType={setSearchType}
+                disabled={!!files.size || readOnly || isNetSearchOn}
+                selectedOrgKbs={selectedOrgKbs}
+                setSelectedOrgKbs={setSelectedOrgKbs}
+                enableOrgKb={enableOrgKb}
+                setEnableOrgKb={setEnableOrgKb}
+              />
+            )}
 
             <ChatToolDown
               tools={tools}

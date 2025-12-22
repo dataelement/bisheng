@@ -1,18 +1,28 @@
-import React, { useRef, useState } from 'react';
-import { useRecoilState } from 'recoil';
-import { CheckMark, Clipboard, ContinueIcon, RegenerateIcon } from '~/components/svg';
-import { TextToSpeechButton } from '~/components/Voice/TextToSpeechButton';
-import type { TConversation, TMessage } from '~/data-provider/data-provider/src';
-import { useGenerationsByLatest, useLocalize } from '~/hooks';
-import MessageSource from '~/pages/appChat/components/MessageSource';
-import ResouceModal from '~/pages/appChat/components/ResouceModal';
-import store from '~/store';
-import { cn } from '~/utils';
+import React, { useEffect, useRef, useState } from "react";
+import { useRecoilState } from "recoil";
+import {
+  CheckMark,
+  Clipboard,
+  ContinueIcon,
+  RegenerateIcon,
+} from "~/components/svg";
+import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
+import type {
+  TConversation,
+  TMessage,
+} from "~/data-provider/data-provider/src";
+import { useGenerationsByLatest, useLocalize } from "~/hooks";
+import MessageSource from "~/pages/appChat/components/MessageSource";
+import ResouceModal from "~/pages/appChat/components/ResouceModal";
+import store from "~/store";
+import { cn } from "~/utils";
 
 type THoverButtons = {
   isEditing: boolean;
   enterEdit: (cancel?: boolean) => void;
-  copyToClipboard: (setIsCopied: React.Dispatch<React.SetStateAction<boolean>>) => void;
+  copyToClipboard: (
+    setIsCopied: React.Dispatch<React.SetStateAction<boolean>>
+  ) => void;
   conversation: TConversation | null;
   isSubmitting: boolean;
   message: TMessage;
@@ -36,12 +46,16 @@ export default function HoverButtons({
   latestMessage,
   isLast,
 }: THoverButtons) {
-  console.log('message :>> ', message);
+  console.log("message :>> ", message);
   const localize = useLocalize();
   const { endpoint: _endpoint, endpointType } = conversation ?? {};
   const endpoint = endpointType ?? _endpoint;
   const [isCopied, setIsCopied] = useState(false);
   const [TextToSpeech] = useRecoilState<boolean>(store.textToSpeech);
+  const [selectedOrgKbs, setSelectedOrgKbs] = useRecoilState(
+    store.selectedOrgKbs
+  );
+  const [enableOrgKb, setEnableOrgKb] = useRecoilState(store.enableOrgKb);
 
   const {
     hideEditButton,
@@ -53,7 +67,7 @@ export default function HoverButtons({
     isEditing,
     isSubmitting,
     error: message.error,
-    endpoint: endpoint ?? '',
+    endpoint: endpoint ?? "",
     messageId: message.messageId,
     searchResult: message.searchResult,
     finish_reason: message.finish_reason,
@@ -65,7 +79,7 @@ export default function HoverButtons({
   }
 
   const { isCreatedByUser, error } = message;
-  const sourceRef = useRef(null)
+  const sourceRef = useRef(null);
 
   const renderRegenerate = () => {
     if (!regenerateEnabled) {
@@ -74,12 +88,12 @@ export default function HoverButtons({
     return (
       <button
         className={cn(
-          'hover-button active rounded-md p-1 hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 md:invisible md:group-hover:visible md:group-[.final-completion]:visible',
-          !isLast ? 'md:opacity-0 md:group-hover:opacity-100' : '',
+          "hover-button active rounded-md p-1 hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 md:invisible md:group-hover:visible md:group-[.final-completion]:visible",
+          !isLast ? "md:opacity-0 md:group-hover:opacity-100" : ""
         )}
         onClick={regenerate}
         type="button"
-        title={localize('com_ui_regenerate')}
+        title={localize("com_ui_regenerate")}
       >
         <RegenerateIcon
           className="hover:text-gray-500 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400"
@@ -103,17 +117,27 @@ export default function HoverButtons({
     }
     enterEdit();
   };
-
+  useEffect(() => {
+    setSelectedOrgKbs([]);
+    setEnableOrgKb(false);
+  }, []);
   return (
     <div className="visible mt-0 flex justify-center gap-1 self-end text-gray-500 lg:justify-start">
-      <div className='mr-2 pt-0.5'>
-        <MessageSource extra={null} end={true} source={message.source} onSource={() => {
-          sourceRef.current?.openModal({
-            messageId: message.messageId,
-            message: message.text.replace(/:::thinking[\s\S]*?:::/, '').trim(),
-            chatId: message.conversationId
-          })
-        }} />
+      <div className="mr-2 pt-0.5">
+        <MessageSource
+          extra={null}
+          end={true}
+          source={message.source}
+          onSource={() => {
+            sourceRef.current?.openModal({
+              messageId: message.messageId,
+              message: message.text
+                .replace(/:::thinking[\s\S]*?:::/, "")
+                .trim(),
+              chatId: message.conversationId,
+            });
+          }}
+        />
       </div>
       {/* {TextToSpeech && (
         <MessageAudio
@@ -147,17 +171,25 @@ export default function HoverButtons({
       )} */}
       <button
         className={cn(
-          'ml-0 flex items-center gap-1.5 rounded-md p-1 text-xs hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 md:group-hover:visible md:group-[.final-completion]:visible',
-          isSubmitting && isCreatedByUser ? 'md:opacity-0 md:group-hover:opacity-100' : '',
-          !isLast ? 'md:opacity-0 md:group-hover:opacity-100' : '',
+          "ml-0 flex items-center gap-1.5 rounded-md p-1 text-xs hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 md:group-hover:visible md:group-[.final-completion]:visible",
+          isSubmitting && isCreatedByUser
+            ? "md:opacity-0 md:group-hover:opacity-100"
+            : "",
+          !isLast ? "md:opacity-0 md:group-hover:opacity-100" : ""
         )}
         onClick={() => copyToClipboard(setIsCopied)}
         type="button"
         title={
-          isCopied ? localize('com_ui_copied_to_clipboard') : localize('com_ui_copy_to_clipboard')
+          isCopied
+            ? localize("com_ui_copied_to_clipboard")
+            : localize("com_ui_copy_to_clipboard")
         }
       >
-        {isCopied ? <CheckMark className="h-[18px] w-[18px]" /> : <Clipboard size="19" />}
+        {isCopied ? (
+          <CheckMark className="h-[18px] w-[18px]" />
+        ) : (
+          <Clipboard size="19" />
+        )}
       </button>
       {renderRegenerate()}
       {/* <Fork
@@ -170,21 +202,23 @@ export default function HoverButtons({
       {continueSupported === true ? (
         <button
           className={cn(
-            'hover-button active rounded-md p-1 hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 md:invisible md:group-hover:visible',
-            !isLast ? 'md:opacity-0 md:group-hover:opacity-100' : '',
+            "hover-button active rounded-md p-1 hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 md:invisible md:group-hover:visible",
+            !isLast ? "md:opacity-0 md:group-hover:opacity-100" : ""
           )}
           onClick={handleContinue}
           type="button"
-          title={localize('com_ui_continue')}
+          title={localize("com_ui_continue")}
         >
           <ContinueIcon className="h-4 w-4 hover:text-gray-500 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400" />
         </button>
       ) : null}
-      {regenerateEnabled && message.text && <TextToSpeechButton
-        className={!isLast ? 'md:opacity-0 md:group-hover:opacity-100' : ''}
-        messageId={message.messageId}
-        text={message.text.replace(/:::([\s\S]*?):::/g, '')}
-      />}
+      {regenerateEnabled && message.text && (
+        <TextToSpeechButton
+          className={!isLast ? "md:opacity-0 md:group-hover:opacity-100" : ""}
+          messageId={message.messageId}
+          text={message.text.replace(/:::([\s\S]*?):::/g, "")}
+        />
+      )}
 
       <ResouceModal ref={sourceRef}></ResouceModal>
     </div>
