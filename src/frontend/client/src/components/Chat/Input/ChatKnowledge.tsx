@@ -125,7 +125,12 @@ export const ChatKnowledge = ({
 
   return (
     <Select disabled={disabled}>
-      <SelectTrigger className="h-7 rounded-full px-2 bg-white data-[state=open]:border-blue-500">
+      <SelectTrigger
+        className={cn(
+          "h-7 rounded-full px-2 data-[state=open]:border-blue-500",
+          (searchType === "knowledgeSearch" || enableOrgKb) && "bg-blue-100"
+        )}
+      >
         <div
           className={cn(
             "flex gap-2 items-center ",
@@ -144,7 +149,12 @@ export const ChatKnowledge = ({
         {config?.knowledgeBase.enabled && (
           <div className="flex justify-between items-center">
             <div className="flex gap-2 items-center">
-              <BookOpen size={16} className="text-slate-500" />
+              <BookOpen
+                size={16}
+                color="#595959"
+                strokeWidth={2.75}
+                className="text-slate-500"
+              />
               <span className="text-xs font-medium">
                 {localize("com_tools_personal_knowledge")}
               </span>
@@ -175,7 +185,7 @@ export const ChatKnowledge = ({
         <div className="flex justify-between items-center mt-3  -ml-0.5">
           <div className="flex gap-2 items-center">
             <img
-              className="size-5"
+              className="size-5 text-slate-500"
               src={__APP_ENV__.BASE_URL + "/assets/books.svg"}
               alt=""
             />

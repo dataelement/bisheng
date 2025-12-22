@@ -50,7 +50,12 @@ export const ChatToolDown = ({
 
   return (
     <Select disabled={disabled}>
-      <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent data-[state=open]:border-blue-500">
+      <SelectTrigger
+        className={cn(
+          "h-7 rounded-full px-2 data-[state=open]:border-blue-500",
+          searchType === "netSearch" && "bg-blue-100"
+        )}
+      >
         <div
           className={cn(
             "flex gap-2",
