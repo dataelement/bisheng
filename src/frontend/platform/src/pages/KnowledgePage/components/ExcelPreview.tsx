@@ -20,16 +20,13 @@ console.log(filePath,3);
   const getFileExtension = (filePath) => {
     if (!filePath) return "";
     
-    // 移除查询参数
     const withoutQuery = filePath.split('?')[0];
     
-    // 获取扩展名
     const parts = withoutQuery.split('.');
     if (parts.length < 2) return "";
     
     const ext = parts.pop()?.toLowerCase() || "";
     
-    // 确保是有效的扩展名
     const validExtensions = ['csv', 'xlsx', 'xls', 'txt'];
     if (validExtensions.includes(ext)) {
       return ext;
