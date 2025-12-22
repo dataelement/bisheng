@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 
 const ExcelPreview = ({ filePath }) => {
   const { t } = useTranslation('knowledge');
+console.log(filePath,3);
 
   // ---------------------- State Management ----------------------
   const [loading, setLoading] = useState(true);
@@ -16,9 +17,28 @@ const ExcelPreview = ({ filePath }) => {
   const [images, setImages] = useState([]); // 存储图片数据
   const [imagePositions, setImagePositions] = useState({}); // 图片位置映射
   const tableContainerRef = useRef(null);
-
+  const getFileExtension = (filePath) => {
+    if (!filePath) return "";
+    
+    // 移除查询参数
+    const withoutQuery = filePath.split('?')[0];
+    
+    // 获取扩展名
+    const parts = withoutQuery.split('.');
+    if (parts.length < 2) return "";
+    
+    const ext = parts.pop()?.toLowerCase() || "";
+    
+    // 确保是有效的扩展名
+    const validExtensions = ['csv', 'xlsx', 'xls', 'txt'];
+    if (validExtensions.includes(ext)) {
+      return ext;
+    }
+    
+    return "";
+  };
   // ---------------------- File Type Detection ----------------------
-  const fileExt = filePath?.toLowerCase()?.split(".")?.pop() || "";
+  const fileExt = getFileExtension(filePath);
   const isCSV = fileExt === "csv";
   const isExcel = ["xlsx", "xls"].includes(fileExt);
   const isXLSX = fileExt === "xlsx"; // 用于图片提取
