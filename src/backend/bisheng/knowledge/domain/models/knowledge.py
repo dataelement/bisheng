@@ -205,13 +205,17 @@ class KnowledgeDao(KnowledgeBase):
             # 默认情况下过滤掉个人知识库
             statement = statement.where(Knowledge.type != KnowledgeTypeEnum.PRIVATE.value)
         if name:
-            # 同时模糊检索知识库内的文件名称来查询对应的知识库
+
+            conditions = [col(Knowledge.name).like(f'%{name}%'), col(Knowledge.description).like(f'%{name}%')]
+
             file_knowledge_ids = KnowledgeFileDao.get_knowledge_ids_by_name(name)
             if file_knowledge_ids:
-                statement = statement.where(
-                    or_(Knowledge.name.like(f'%{name}%'), Knowledge.id.in_(file_knowledge_ids)))
-            else:
-                statement = statement.where(Knowledge.name.like(f'%{name}%'))
+                conditions.append(Knowledge.id.in_(file_knowledge_ids))
+
+            if conditions:
+                statement = statement.where(or_(*conditions))
+
+            return statement
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         return statement
