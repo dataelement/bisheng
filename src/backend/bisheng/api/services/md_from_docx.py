@@ -5,6 +5,8 @@ from uuid import uuid4
 import pypandoc
 from loguru import logger
 
+from bisheng.api.services.libreoffice_converter import convert_doc_to_docx
+
 try:
     # 尝试检查 pandoc 版本，如果失败则尝试下载
     pandoc_path = pypandoc.get_pandoc_path()
@@ -21,7 +23,7 @@ except OSError:  # OSError 是 get_pandoc_path 在找不到时抛出的
 
 
 def convert_doc_to_md_pandoc_high_quality(
-        doc_path_str: str, output_md_str: str, image_dir_name: str = "media"
+        doc_path_str: str, output_md_str: str, image_dir_name: str = "media", retry_convert_docx: bool = True,
 ):
     """
     使用 Pandoc 将 .doc 或 .docx 文件高质量地转换为 Markdown，并提取图片。
@@ -75,7 +77,18 @@ def convert_doc_to_md_pandoc_high_quality(
             )
     except Exception as e:  # 其他潜在错误
         logger.debug(f"转换文件 {doc_path} 时发生未知错误: {e}")
+
+    # 如果转换失败，尝试把docx转换为标准的docx，再试一次
     if not os.path.exists(output_md_path):
+        if retry_convert_docx:
+            output_dir = os.path.dirname(doc_path_str)
+            output_dir = os.path.join(output_dir, "tmp")
+            output_docx_path = convert_doc_to_docx(doc_path_str, output_dir)
+            if not output_docx_path:
+                raise RuntimeError("convert to docx failed")
+            convert_doc_to_md_pandoc_high_quality(doc_path_str=output_docx_path, output_md_str=output_md_str,
+                                                  image_dir_name=image_dir_name, retry_convert_docx=False)
+            return
         raise RuntimeError("convert to md failed")
 
 

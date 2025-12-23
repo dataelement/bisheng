@@ -50,7 +50,7 @@ def convert_doc_to_docx(input_doc_path, output_dir=None):
     if not os.path.isabs(input_doc_path):
         input_doc_path = os.path.abspath(input_doc_path)
 
-    if not input_doc_path.lower().endswith(".doc"):
+    if not input_doc_path.lower().endswith((".doc", ".docx")):
         logger.debug(f"Error: Input file '{input_doc_path}' is not a .doc file.")
         return None
 
