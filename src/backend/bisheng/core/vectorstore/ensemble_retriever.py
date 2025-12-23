@@ -94,10 +94,20 @@ class RRFMultiVectorRetriever(BaseRetriever):
             )
 
         # 并发执行
-        results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+
+        docs_lists = []
+        for idx, result in enumerate(results):
+            if isinstance(result, Exception):
+                # 记录异常但继续执行其他检索器
+                await run_manager.on_text(f"Retriever {self._retrievers[idx]} failed with error: {result}", end="\n")
+                docs_lists.append([])
+            else:
+                docs_lists.append(result)
 
         # RRF 重排
-        reranked_docs = self._rrf_rerank.compress_documents(query=query, documents=results)
+        reranked_docs = self._rrf_rerank.compress_documents(query=query, documents=docs_lists)
 
         return self._post_process_documents(reranked_docs)
 
