@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import re
@@ -25,7 +26,7 @@ from sqlmodel import select
 from bisheng.api.services.etl4lm_loader import Etl4lmLoader
 from bisheng.api.services.libreoffice_converter import (
     convert_doc_to_docx,
-    convert_ppt_to_pdf,
+    convert_ppt_to_pdf, convert_ppt_to_pptx,
 )
 from bisheng.api.services.md_from_pdf import is_pdf_damaged
 from bisheng.api.services.patch_130 import (
@@ -851,6 +852,10 @@ def read_chunk_text(
                 raise Exception(
                     f"failed to convert {file_name} to docx, please check backend log"
                 )
+        elif file_extension_name == "ppt":
+            input_file = convert_ppt_to_pptx(input_path=input_file)
+            if not input_file:
+                raise Exception("failed convert ppt to pptx, please check backend log")
 
         md_file_name, local_image_dir, doc_id = convert_file_to_md(
             file_name=file_name,
@@ -1054,7 +1059,10 @@ async def async_read_chunk_text(
                 raise Exception(
                     f"failed to convert {file_name} to docx, please check backend log"
                 )
-
+        elif file_extension_name == "ppt":
+            input_file = await asyncio.to_thread(convert_ppt_to_pptx, input_path=input_file)
+            if not input_file:
+                raise Exception("failed convert ppt to pptx, please check backend log")
         md_file_name, local_image_dir, doc_id = await util.sync_func_to_async(convert_file_to_md)(
             file_name=file_name,
             input_file_name=input_file,
