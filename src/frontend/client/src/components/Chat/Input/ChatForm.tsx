@@ -447,7 +447,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
           {/* {bsConfig?.fileUpload.enabled && */}
           {/* 做同款 */}
           {isLingsi && <SameSopSpan></SameSopSpan>}
-          {enableOrgKb && selectedOrgKbs.length > 0 && (
+          {enableOrgKb && selectedOrgKbs.length > 0 && !isLingsi && (
             <div className="mx-2 mt-2 max-h-[100px] overflow-y-auto">
               <div className="flex flex-wrap gap-2">
                 {selectedOrgKbs.map((kb) => (
