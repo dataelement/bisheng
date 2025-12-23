@@ -1,6 +1,7 @@
 import os
 import shutil  # For checking if the executable is in PATH
 import subprocess
+import tempfile
 
 from loguru import logger
 
@@ -85,26 +86,25 @@ def convert_doc_to_docx(input_doc_path, output_dir=None):
     file_name_no_ext = os.path.splitext(base_name)[0]
     output_docx_path = os.path.join(output_dir, f"{file_name_no_ext}.docx")
 
-    command = [
-        soffice_path,
-        "--headless",  # Run in headless mode (no GUI)
-        "--norestore",
-        "--invisible",
-        "-env:SingleAppInstance=false",
-        f"-env:UserInstallation=file://{output_dir}",
-        "--convert-to",
-        "docx:Office Open XML Text",  # Specify the output format
-        "--outdir",
-        output_dir,  # Specify the output directory
-        input_doc_path,  # The input file
-    ]
-
-    logger.debug(f"Executing command: {' '.join(command)}")
-
     try:
-        process = subprocess.run(
-            command, check=True, capture_output=True, text=True, timeout=120
-        )  # 120 seconds timeout
+        with tempfile.TemporaryDirectory() as temp_dir:
+            command = [
+                soffice_path,
+                "--headless",  # Run in headless mode (no GUI)
+                "--norestore",
+                "--invisible",
+                "-env:SingleAppInstance=false",
+                f"-env:UserInstallation=file://{temp_dir}",
+                "--convert-to",
+                "docx:Office Open XML Text",  # Specify the output format
+                "--outdir",
+                output_dir,  # Specify the output directory
+                input_doc_path,  # The input file
+            ]
+            logger.debug(f"Executing command: {' '.join(command)}")
+            process = subprocess.run(
+                command, check=True, capture_output=True, text=True, timeout=120
+            )  # 120 seconds timeout
         logger.debug(f"LibreOffice STDOUT: {process.stdout}")
         if (
                 process.stderr
@@ -196,27 +196,27 @@ def convert_ppt_to_pdf(input_path, output_dir=None):
     pdf_name = os.path.splitext(base_name)[0] + ".pdf"
     expected_pdf_path = os.path.join(output_dir, pdf_name)
 
-    command = [
-        soffice_path,
-        "--headless",
-        "--norestore",
-        "--invisible",
-        "-env:SingleAppInstance=false",
-        f"-env:UserInstallation=file://{output_dir}",
-        "--convert-to",
-        "pdf",
-        "--outdir",
-        output_dir,
-        input_path,
-    ]
-
     try:
-        logger.debug(f"Converting {input_path} to PDF using {soffice_path}...")
-        # LibreOffice can sometimes be slow to start up and convert.
-        # It may also not provide much stdout/stderr unless there's a significant error.
-        process = subprocess.run(
-            command, capture_output=True, text=True, check=True, timeout=180
-        )  # 180 seconds timeout
+        with tempfile.TemporaryDirectory() as temp_dir:
+            command = [
+                soffice_path,
+                "--headless",
+                "--norestore",
+                "--invisible",
+                "-env:SingleAppInstance=false",
+                f"-env:UserInstallation=file://{temp_dir}",
+                "--convert-to",
+                "pdf",
+                "--outdir",
+                output_dir,
+                input_path,
+            ]
+            logger.debug(f"Converting {input_path} to PDF using {soffice_path}...")
+            # LibreOffice can sometimes be slow to start up and convert.
+            # It may also not provide much stdout/stderr unless there's a significant error.
+            process = subprocess.run(
+                command, capture_output=True, text=True, check=True, timeout=180
+            )  # 180 seconds timeout
 
         if process.stdout:
             logger.debug(f"soffice stdout: {process.stdout}")  # Often empty on success
