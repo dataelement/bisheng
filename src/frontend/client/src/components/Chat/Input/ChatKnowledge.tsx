@@ -28,7 +28,10 @@ function useDebounce<T>(value: T, delay: number): T {
   }, [value, delay]);
   return debouncedValue;
 }
-
+const PERSONAL_KB = {
+  id: "personal_knowledge_base",
+  name: "个人知识库",
+};
 export const ChatKnowledge = ({
   config,
   disabled,
@@ -117,7 +120,31 @@ export const ChatKnowledge = ({
       return [{ id: kb.id, name: kb.name }, ...prev];
     });
   };
-
+  useEffect(() => {
+    if (searchType === "knowledgeSearch") {
+      // 检查是否已经包含个人知识库
+      const hasPersonalKb = selectedOrgKbs.some(
+        (kb) => kb.id === PERSONAL_KB.id
+      );
+      if (!hasPersonalKb && enableOrgKb) {
+        setSelectedOrgKbs((prev) => [...prev, PERSONAL_KB]);
+      } else {
+        setSelectedOrgKbs([PERSONAL_KB]);
+      }
+    } else {
+      // 关闭个人知识库时移除
+      setSelectedOrgKbs((prev) =>
+        prev.filter((kb) => kb.id !== PERSONAL_KB.id)
+      );
+    }
+  }, [searchType, setSelectedOrgKbs]);
+  useEffect(() => {
+    if (!enableOrgKb) {
+      setSelectedOrgKbs((prev) =>
+        prev.filter((kb) => kb.id === PERSONAL_KB.id)
+      );
+    }
+  }, [enableOrgKb, setSelectedOrgKbs]);
   useEffect(() => {
     setSelectedOrgKbs([]);
     setEnableOrgKb(false);
