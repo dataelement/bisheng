@@ -25,6 +25,7 @@ class JsonFieldMasker:
             'siliconflow_api_key': self.mask_api_key,
             'email_password': self.mask_api_key,
             'jina_api_key': self.mask_api_key,
+            'app_secret': self.mask_api_key,
         }
 
         # 记录脱敏模式的正则表达式
@@ -43,6 +44,7 @@ class JsonFieldMasker:
             'siliconflow_api_key': r'^\*+$',
             'email_password': r'^\*+$',
             'jina_api_key': r'^\*+$',
+            'app_secret': r'^\*+$',
         }
 
     def mask_api_key(self, api_key: str) -> str:
