@@ -147,7 +147,8 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                 return onSave({
                     name: formData.name,
                     description: formData.desc,
-                    logo: formData.url
+                    logo: formData.url,
+                    viewUrl: formData.viewUrl,
                 })
             }
 
@@ -211,12 +212,12 @@ ${t('build.exampleTwo', { ns: 'bs' })}
 
         const uploadAvator = (file: File) => {
             uploadFileWithProgress(file, (progress) => { }, 'icon').then(res => {
-                setFormData(prev => ({ ...prev, url: res.file_path }));
+                setFormData(prev => ({ ...prev, url: res.relative_path, viewUrl: res.file_path }));
             });
         };
 
         const previewAvatar = useMemo(() =>
-            formData.url ? __APP_ENV__.BASE_URL + formData.url : '',
+            formData.url ? __APP_ENV__.BASE_URL + (formData.viewUrl || formData.url) : '',
             [formData.url]);
 
         return (

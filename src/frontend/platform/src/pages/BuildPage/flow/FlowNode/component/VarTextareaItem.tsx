@@ -5,17 +5,18 @@ import VarInput from "./VarInput";
 export default function VarTextareaItem({ node, nodeId, data, onChange, onValidate, onVarEvent, i18nPrefix }) {
     const [error, setError] = useState(false)
     const { t } = useTranslation('flow')
+
     useEffect(() => {
         data.required && onValidate(() => {
             if (!data.value.trim()) {
                 setError(true)
-                return t(`${i18nPrefix}label`) + ' ' + t('required')
+                return (node.type === 'tool' ? data.label : t(`${i18nPrefix}label`)) + ' ' + t('required')
             }
             setError(false)
             return false
         })
         return () => onValidate(() => { })
-    }, [data.value])
+    }, [data.value, nodeId])
 
     return (
         <div className='node-item mb-4 max-w-2xl nodrag' data-key={data.key}>

@@ -8,15 +8,15 @@ import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-export default function EditAssistantDialog({ logo, name, desc, onSave, loca }) {
+export default function EditAssistantDialog({ logo, viewLogo, name, desc, onSave, loca }) {
 
     const { t } = useTranslation()
     // State for form fields
     const [formData, setFormData] = useState({ logo: '', name: '', desc: '' });
 
     useEffect(() => {
-        setFormData({ logo, name, desc })
-    }, [logo, name, desc])
+        setFormData({ logo, name, desc, viewLogo })
+    }, [logo, name, desc, viewLogo])
     // console.log(formData, name, desc);
 
     // State for errors
@@ -80,12 +80,12 @@ export default function EditAssistantDialog({ logo, name, desc, onSave, loca }) 
 
     const uploadAvator = (file) => {
         uploadFileWithProgress(file, (progress) => { }, 'icon').then(res => {
-            setFormData(prev => ({ ...prev, logo: res.file_path }));
+            setFormData(prev => ({ ...prev, logo: res.relative_path, viewLogo: res.file_path }));
         })
     }
 
     const previewAvatar = useMemo(() =>
-        formData.logo ? __APP_ENV__.BASE_URL + formData.logo : '',
+        formData.logo ? __APP_ENV__.BASE_URL + (formData.viewLogo || formData.logo) : '',
         [formData.logo])
 
     return <DialogContent className="sm:max-w-[625px] bg-background-login">

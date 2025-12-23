@@ -63,7 +63,9 @@ export default function ReportItem({ nodeId, data, onChange, onValidate, i18nPre
                         {t('editReportTemplate')}
                     </Button>
                 </DialogTrigger>
-                <DialogContent close={false} className='size-full lg:max-w-full pt-12'>
+                <DialogContent close={false} className='size-full lg:max-w-full pt-12' onKeyDown={(e) => {
+                    e.stopPropagation();
+                }}>
                     <ReportWordEdit nodeId={nodeId} versionKey={value.key} onChange={handleChange} />
                 </DialogContent>
             </Dialog>

@@ -67,13 +67,17 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
                     <DialogClose className="">
                         <Button variant="outline" size="icon" className="bg-[#fff] size-8"><ChevronLeft /></Button>
                     </DialogClose>
-                    {show && <SelectVar nodeId={nodeId} itemKey={''} onSelect={(E, v) => {
-                        handleInset(`${E.id}.${v.value}`)
-                        setShow(false)
-                        setTimeout(() => {
-                            setShow(true)
-                        }, 1);
-                    }}>
+                    {show && <SelectVar
+                        nodeId={nodeId}
+                        itemKey={''}
+                        align="normal"
+                        onSelect={(E, v) => {
+                            handleInset(`${E.id}.${v.value}`)
+                            setShow(false)
+                            setTimeout(() => {
+                                setShow(true)
+                            }, 1);
+                        }}>
                         <Button className="h-8">{t('inserVar')}<ChevronDown size={14} /></Button>
                     </SelectVar>}
                 </div>

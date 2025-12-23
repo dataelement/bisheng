@@ -4,6 +4,7 @@ import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { changeAssistantStatusApi, saveAssistanttApi } from "@/controllers/API/assistant";
+import { checkAppEditPermission } from "@/controllers/API/flow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useAssistantStore } from "@/store/assistantStore";
 import { OnlineState } from "@/types/flow";
@@ -15,7 +16,6 @@ import Header from "./Header";
 import Prompt from "./Prompt";
 import Setting from "./Setting";
 import TestChat from "./TestChat";
-import { checkAppEditPermission } from "@/controllers/API/flow";
 
 export default function editAssistant() {
     const { t } = useTranslation()
@@ -31,7 +31,7 @@ export default function editAssistant() {
 
     const flowInit = async () => {
         await checkAppEditPermission(assisId, 5)
-        
+
         loadAssistantState(assisId, 'v1').then((res) => {
             setChecking(false)
             setShowGuideQuestion(true)
@@ -68,7 +68,8 @@ export default function editAssistant() {
             flow_list: assistantState.flow_list.map(item => item.id),
             tool_list: assistantState.tool_list.map(item => item.id),
             knowledge_list: assistantState.knowledge_list.map(item => item.id),
-            guide_question: assistantState.guide_question.filter((item) => item)
+            guide_question: assistantState.guide_question.filter((item) => item),
+            logo: assistantState.viewLogo ? assistantState.logo : '',
         })).then(res => {
             if (!res) return
             showMessage && message({

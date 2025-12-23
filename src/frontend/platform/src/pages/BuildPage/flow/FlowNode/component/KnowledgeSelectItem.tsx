@@ -33,6 +33,7 @@ const enum KnowledgeType {
     Temp = 'tmp'
 }
 type KnowledgeTypeValues = `${KnowledgeType}`;
+const pageSize = 60
 
 export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent, onValidate, i18nPrefix }) {
     const { flow } = useFlowStore()
@@ -49,12 +50,15 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
     const originOptionsRef = useRef([])
 
     const pageRef = useRef(1)
+    const hasMoreRef = useRef(true)
     const reload = (page, name) => {
-        readFileLibDatabase({ page, pageSize: 60, name, type: 0 }).then(res => {
+        if (page > 1 && !hasMoreRef.current) return
+        readFileLibDatabase({ page, pageSize, name, type: 0 }).then(res => {
             pageRef.current = page
             originOptionsRef.current = res.data
             const opts = res.data.map(el => ({ label: el.name, value: el.id }))
             setOptions(_ops => page > 1 ? [..._ops, ...opts] : opts)
+            hasMoreRef.current = res.data.length === pageSize
         })
     }
     // input文件变量s
@@ -91,7 +95,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
 
     // 加载更多
     const loadMore = (name) => {
-        reload(pageRef.current + 1, name)
+        hasMoreRef.current && reload(pageRef.current + 1, name)
     }
 
     const handleTabChange = (val) => {
@@ -124,7 +128,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
         onValidate((config) => {
             if (data.required && !data.value.value.length) {
                 setError(true)
-               return `${t(`${i18nPrefix}label`)} ${t('required')}`;   
+                return `${t(`${i18nPrefix}label`)} ${t('required')}`;
             }
             if (data.value.value.some(item => /input_[a-zA-Z0-9]+\.file/.test(item.key))) {
                 return 'input_file'
