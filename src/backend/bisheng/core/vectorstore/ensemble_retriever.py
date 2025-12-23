@@ -69,8 +69,13 @@ class RRFMultiVectorRetriever(BaseRetriever):
         run_config: RunnableConfig = {"callbacks": run_manager.get_child()}
 
         for retriever in self._retrievers:
-            tmp_docs = retriever.invoke(query, config=run_config, **kwargs)
-            docs_lists.append(tmp_docs)
+            try:
+                tmp_docs = retriever.invoke(query, config=run_config, **kwargs)
+                docs_lists.append(tmp_docs)
+            except Exception as e:
+                # 记录异常但继续执行其他检索器
+                run_manager.on_text(f"Retriever {retriever} failed with error: {e}", end="\n")
+                docs_lists.append([])
 
         # 调用 RRF 进行重排序
         reranked_docs = self._rrf_rerank.compress_documents(query=query, documents=docs_lists)
