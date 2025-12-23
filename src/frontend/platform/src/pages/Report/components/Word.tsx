@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next"
 
 export default function Word({ data, workflow }) {
     const { appConfig } = useContext(locationContext)
-    const {t} = useTranslation('flow')
+    const { t } = useTranslation('flow')
 
     const wordUrl = appConfig.officeUrl
     // console.log('wordUrl :>> ', wordUrl, data);
@@ -90,6 +90,13 @@ export default function Word({ data, workflow }) {
         if (window.DocsAPI) {
             createEditor()
         } else {
+            if (!wordUrl) {
+                toast({
+                    variant: 'error',
+                    title: t('wordEditorLoadFailed'), // 'word编辑器加载失败',
+                    description: t('checkOfficeServiceConfig') // '请检查Office服务地址配置是否正确并正常启动.'
+                })
+            }
             const script = document.createElement('script')
             script.src = wordUrl + '/web-apps/apps/api/documents/api.js' // 在线编辑服务
             script.onload = createEditor

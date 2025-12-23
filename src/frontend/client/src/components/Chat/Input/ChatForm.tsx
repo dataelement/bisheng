@@ -74,6 +74,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
   );
   const [enableOrgKb, setEnableOrgKb] = useRecoilState(store.enableOrgKb);
 
+  const [chatStatesMap, setChatStatesMap] = useRecoilState(store.chatStatesMap);
   const isSearching = useRecoilValue(store.isSearching);
   const [showStopButton, setShowStopButton] = useRecoilState(
     store.showStopButtonByIndex(index)
@@ -84,7 +85,8 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
   const [showMentionPopover, setShowMentionPopover] = useRecoilState(
     store.showMentionPopoverFamily(index)
   );
-
+  const isInitialMount = useRef(true);
+  const [chatId, setChatId] = useRecoilState(store.chatId);
   const chatDirection = useRecoilValue(store.chatDirection).toLowerCase();
   const isRTL = chatDirection === "rtl";
 
@@ -216,6 +218,122 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
   useEffect(() => {
     searchType || enableOrgKb ? setIsSearch(true) : setIsSearch(false);
   }, [searchType, enableOrgKb]);
+  const prevChatId = useRef("");
+  useEffect(() => {
+    if (conversation?.conversationId === prevChatId.current) {
+      return;
+    }
+
+    // 情况1: 切换到 "new" 状态
+    if (conversation?.conversationId === "new") {
+      console.log("切换到 new 状态，清空所有状态");
+
+      // 清空状态
+      setSelectedOrgKbs([]);
+      setEnableOrgKb(false);
+      setSearchType("");
+      setChatId("new");
+      prevChatId.current = "new";
+      return;
+    }
+
+    // 情况2: 从 "new" 转换到实际 ID
+    if (prevChatId.current === "new" && conversation?.conversationId) {
+      const newChatId = conversation.conversationId;
+      console.log("从 new 转换到实际 ID", newChatId);
+
+      // 先检查是否已经有保存的状态
+      const savedState = chatStatesMap[newChatId];
+
+      if (savedState) {
+        // 如果已经有保存的状态，恢复它
+        console.log("恢复已保存的状态", savedState);
+        setSelectedOrgKbs(savedState.selectedOrgKbs || []);
+        setEnableOrgKb(savedState.enableOrgKb || false);
+        setSearchType(savedState.searchType || "");
+      } else {
+        // 如果没有保存的状态，保存当前状态
+        console.log("保存当前状态到新ID");
+        const newChatState = {
+          selectedOrgKbs: selectedOrgKbs,
+          enableOrgKb: enableOrgKb,
+          searchType: searchType,
+        };
+
+        // 保存到新的 conversationId 中
+        setChatStatesMap((prev) => ({
+          ...prev,
+          [newChatId]: newChatState,
+        }));
+      }
+
+      setChatId(newChatId);
+      prevChatId.current = newChatId;
+      return;
+    }
+
+    // 情况3: 从实际 ID 切换到另一个实际 ID
+    if (
+      conversation?.conversationId &&
+      prevChatId.current &&
+      prevChatId.current !== "new"
+    ) {
+      const newChatId = conversation.conversationId;
+      // 先保存当前会话的状态
+      if (prevChatId.current) {
+        setChatStatesMap((prev) => ({
+          ...prev,
+          [prevChatId.current]: {
+            selectedOrgKbs,
+            enableOrgKb,
+            searchType,
+          },
+        }));
+      }
+
+      // 然后恢复新会话的状态
+      const savedState = chatStatesMap[newChatId];
+      if (savedState) {
+        console.log("恢复新会话的状态", savedState);
+        setSelectedOrgKbs(savedState.selectedOrgKbs || []);
+        setEnableOrgKb(savedState.enableOrgKb || false);
+        setSearchType(savedState.searchType || "");
+      } else {
+        console.log("新会话没有保存的状态，清空");
+        setSelectedOrgKbs([]);
+        setEnableOrgKb(false);
+        setSearchType("");
+      }
+
+      setChatId(newChatId);
+      prevChatId.current = newChatId;
+      return;
+    }
+    if (conversation?.conversationId) {
+      const newChatId = conversation.conversationId;
+
+      // 恢复保存的状态
+      const savedState = chatStatesMap[newChatId];
+      if (savedState) {
+        console.log("恢复保存的状态", savedState);
+        setSelectedOrgKbs(savedState.selectedOrgKbs || []);
+        setEnableOrgKb(savedState.enableOrgKb || false);
+        setSearchType(savedState.searchType || "");
+      } else {
+        console.log("没有保存的状态，清空");
+        setSelectedOrgKbs([]);
+        setEnableOrgKb(false);
+        setSearchType("");
+      }
+
+      setChatId(newChatId);
+      prevChatId.current = newChatId;
+    } else {
+      // conversationId 不存在的情况
+      setChatId("");
+      prevChatId.current = conversation?.conversationId;
+    }
+  }, [conversation?.conversationId]);
 
   const endpointSupportsFiles: boolean =
     supportsFiles[endpointType ?? endpoint ?? ""] ?? false;
@@ -329,7 +447,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
           {/* {bsConfig?.fileUpload.enabled && */}
           {/* 做同款 */}
           {isLingsi && <SameSopSpan></SameSopSpan>}
-          {enableOrgKb && selectedOrgKbs.length > 0 && (
+          {enableOrgKb && selectedOrgKbs.length > 0 && !isLingsi && (
             <div className="mx-2 mt-2 max-h-[100px] overflow-y-auto">
               <div className="flex flex-wrap gap-2">
                 {selectedOrgKbs.map((kb) => (
@@ -471,7 +589,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
               />
             )}
             {/* 知识库 */}
-            {!isLingsi && (
+            {!isLingsi && bsConfig?.knowledgeBase.enabled && (
               <ChatKnowledge
                 config={bsConfig}
                 searchType={searchType}
@@ -483,7 +601,6 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
                 setEnableOrgKb={setEnableOrgKb}
               />
             )}
-
             <ChatToolDown
               tools={tools}
               setTools={setTools}

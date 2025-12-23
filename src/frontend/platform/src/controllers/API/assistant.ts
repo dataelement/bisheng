@@ -50,10 +50,6 @@ export const changeAssistantStatusApi = async (id, status) => {
 export const saveAssistanttApi = async (
     data: Omit<AssistantDetail, 'flow_list' | 'tool_list' | 'knowledge_list'> & { flow_list: string[], tool_list: number[], knowledge_list: number[] }
 ): Promise<any> => {
-    if (data.logo) {
-        // logo保存相对路径
-        data.logo = data.logo.replace(/^\/\w+/, '')
-    }
     return await axios.put(`/api/v1/assistant`, data)
 };
 

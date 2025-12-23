@@ -69,8 +69,13 @@ class RRFMultiVectorRetriever(BaseRetriever):
         run_config: RunnableConfig = {"callbacks": run_manager.get_child()}
 
         for retriever in self._retrievers:
-            tmp_docs = retriever.invoke(query, config=run_config, **kwargs)
-            docs_lists.append(tmp_docs)
+            try:
+                tmp_docs = retriever.invoke(query, config=run_config, **kwargs)
+                docs_lists.append(tmp_docs)
+            except Exception as e:
+                # 记录异常但继续执行其他检索器
+                run_manager.on_text(f"Retriever {retriever} failed with error: {e}", end="\n")
+                docs_lists.append([])
 
         # 调用 RRF 进行重排序
         reranked_docs = self._rrf_rerank.compress_documents(query=query, documents=docs_lists)
@@ -89,10 +94,20 @@ class RRFMultiVectorRetriever(BaseRetriever):
             )
 
         # 并发执行
-        results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+
+        docs_lists = []
+        for idx, result in enumerate(results):
+            if isinstance(result, Exception):
+                # 记录异常但继续执行其他检索器
+                await run_manager.on_text(f"Retriever {self._retrievers[idx]} failed with error: {result}", end="\n")
+                docs_lists.append([])
+            else:
+                docs_lists.append(result)
 
         # RRF 重排
-        reranked_docs = self._rrf_rerank.compress_documents(query=query, documents=results)
+        reranked_docs = self._rrf_rerank.compress_documents(query=query, documents=docs_lists)
 
         return self._post_process_documents(reranked_docs)
 

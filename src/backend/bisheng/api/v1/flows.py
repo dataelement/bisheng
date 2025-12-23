@@ -159,6 +159,8 @@ async def update_flow(*,
     for key, value in flow_data.items():
         if key in ['data', 'create_time', 'update_time']:
             continue
+        if key == 'logo' and not value:
+            continue
         setattr(db_flow, key, value)
     async with get_async_db_session() as session:
         session.add(db_flow)

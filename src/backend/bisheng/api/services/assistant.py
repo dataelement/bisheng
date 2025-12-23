@@ -1,5 +1,4 @@
 from datetime import datetime
-from datetime import datetime
 from typing import Any, List, Optional, Union
 
 from fastapi import Request
@@ -297,7 +296,7 @@ class AssistantService(BaseService, AssistantUtils):
                 raise AssistantNameRepeatError()
             assistant.name = req.name
         assistant.desc = req.desc
-        assistant.logo = req.logo
+        assistant.logo = req.logo if req.logo else assistant.logo
         assistant.prompt = req.prompt
         assistant.guide_word = req.guide_word
         assistant.guide_question = req.guide_question

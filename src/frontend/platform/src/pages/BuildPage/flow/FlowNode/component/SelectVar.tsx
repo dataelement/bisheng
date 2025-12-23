@@ -59,6 +59,7 @@ const getSpecialVar = (obj, type, onlyImg = false) => {
  */
 const SelectVar = forwardRef(({
     nodeId,
+    align = "left",
     findInputFile = false, // 只展示input节点file_image变量(视觉表单项使用)
     itemKey, multip = false, value = [], children, onSelect, onCheck, className = '' }, ref) => {
     const [open, setOpen] = useState(false)
@@ -343,7 +344,7 @@ const SelectVar = forwardRef(({
             className={cname('group shrink min-w-0 p-0 h-auto data-[placeholder]:text-inherit border-none bg-transparent shadow-none outline-none focus:shadow-none focus:outline-none focus:ring-0', className)}>
             {children}
         </SelectTrigger>
-        <SelectContent position="popper" avoidCollisions={false} className=" overflow-auto -translate-x-28">
+        <SelectContent position="popper" avoidCollisions={false} className={align === 'left' ? "overflow-auto -translate-x-28" : 'overflow-auto'} >
             <div className="flex max-h-[360px] ">
                 {/* 三级级联菜单 */}
                 <div className="w-36 min-w-36 border-l first:border-none overflow-y-auto  scrollbar-hide">
@@ -414,7 +415,7 @@ const SelectVar = forwardRef(({
                 }
             </div>
         </SelectContent>
-    </Select>
+    </Select >
 });
 
 

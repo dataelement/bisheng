@@ -117,7 +117,7 @@ async def linsight_file_download(
         raise NotFoundError()
 
     # judge permission
-    if session_version_model.user_id != login_user.user_id:
+    if session_version_model.user_id != login_user.user_id and not login_user.is_admin():
         # 通过分享链接访问
         if (share_link is None or
                 share_link.meta_data is None or

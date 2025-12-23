@@ -26,7 +26,7 @@ common_properties = {
             "group_id": {"type": "integer"}
         }
     },
-    "timestamp": {"type": "date", "format": "strict_date_optional_time||epoch_millis"},
+    "timestamp": {"type": "date", "format": "strict_date_optional_time||epoch_second"},
 }
 
 

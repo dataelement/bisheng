@@ -188,9 +188,10 @@ class WorkStationService(BaseService):
                 if personal_knowledge:
                     knowledge_ids.append(personal_knowledge[0].id)
 
-            knowledge_vector_list = await KnowledgeRag.get_multi_knowledge_vectorstore(invoke_user_id=login_user.user_id,
-                                                                                       knowledge_ids=knowledge_ids,
-                                                                                       user_name=login_user.user_name)
+            knowledge_vector_list = await KnowledgeRag.get_multi_knowledge_vectorstore(
+                invoke_user_id=login_user.user_id,
+                knowledge_ids=knowledge_ids,
+                user_name=login_user.user_name, include_private=True)
 
             vector_store_params = []
             for knowledge_id, vectorstore_info in knowledge_vector_list.items():

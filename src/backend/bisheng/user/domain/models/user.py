@@ -199,33 +199,33 @@ class UserDao(UserBase):
             return db_user
 
     @classmethod
-    def add_user_and_default_role(cls, user: User) -> User:
+    async def add_user_and_default_role(cls, user: User) -> User:
         """
         新增用户，并添加默认角色
         """
-        with get_sync_db_session() as session:
+        async with get_async_db_session() as session:
             session.add(user)
-            session.commit()
-            session.refresh(user)
+            await session.commit()
+            await session.refresh(user)
             db_user_role = UserRole(user_id=user.user_id, role_id=DefaultRole)
             session.add(db_user_role)
-            session.commit()
-            session.refresh(user)
+            await session.commit()
+            await session.refresh(user)
             return user
 
     @classmethod
-    def add_user_and_admin_role(cls, user: User) -> User:
+    async def add_user_and_admin_role(cls, user: User) -> User:
         """
         新增用户，并添加超级管理员角色
         """
-        with get_sync_db_session() as session:
+        async with get_async_db_session() as session:
             session.add(user)
-            session.commit()
-            session.refresh(user)
+            await session.commit()
+            await session.refresh(user)
             db_user_role = UserRole(user_id=user.user_id, role_id=AdminRole)
             session.add(db_user_role)
-            session.commit()
-            session.refresh(user)
+            await session.commit()
+            await session.refresh(user)
             return user
 
     @classmethod

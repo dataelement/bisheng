@@ -10,14 +10,15 @@ from bisheng.api.v1.schemas import CreateUserReq
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.errcode.user import (UserNameAlreadyExistError,
                                          UserNeedGroupAndRoleError, UserForbiddenError, CaptchaError, UserValidateError,
-                                         UserPasswordMaxTryError, UserPasswordExpireError)
+                                         UserPasswordMaxTryError, UserPasswordExpireError, UserNameTooLongError)
 from bisheng.common.schemas.api import resp_200
 from bisheng.common.schemas.telemetry.event_data_schema import UserLoginEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
 from bisheng.core.logger import trace_id_var
-from bisheng.user.domain.models.user import User, UserDao, UserLogin, UserRead
+from bisheng.database.models.user_group import UserGroupDao
+from bisheng.user.domain.models.user import User, UserDao, UserLogin, UserRead, UserCreate
 from bisheng.utils import md5_hash, get_request_ip
 from bisheng.utils.constants import RSA_KEY
 from .auth import LoginUser, AuthJwt
@@ -99,6 +100,33 @@ class UserService:
             await UserDao.aupdate_user(db_user)
             raise UserPasswordMaxTryError()
         raise UserValidateError()
+
+    @classmethod
+    async def user_register(cls, user: UserCreate):
+        # 验证码校验
+        if settings.get_from_db('use_captcha'):
+            if not user.captcha_key or not await verify_captcha(user.captcha, user.captcha_key):
+                raise CaptchaError()
+
+        db_user = User.model_validate(user)
+
+        # check if user already exist
+        user_exists = await UserDao.aget_user_by_username(db_user.user_name)
+        if user_exists:
+            raise UserNameAlreadyExistError()
+        if len(db_user.user_name) > 30:
+            raise UserNameTooLongError()
+        db_user.password = cls.decrypt_md5_password(user.password)
+        # 判断下admin用户是否存在
+        admin = await UserDao.aget_user(1)
+        if admin:
+            db_user = await UserDao.add_user_and_default_role(db_user)
+        else:
+            db_user.user_id = 1
+            db_user = await UserDao.add_user_and_admin_role(db_user)
+        # 将用户写入到默认用户组下
+        await UserGroupDao.add_default_user_group(db_user.user_id)
+        return db_user
 
     @classmethod
     async def user_login(cls, request: Request, user: UserLogin, auth_jwt: AuthJwt = Depends()):

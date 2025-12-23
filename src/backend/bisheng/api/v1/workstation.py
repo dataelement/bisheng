@@ -111,7 +111,7 @@ async def final_message(conversation: MessageSession, title: str, requestMessage
                 'parentMessageId': requestMessage.id,
                 'error': error
             }),
-            source=0 if source_document is None else SourceType.FILE.value
+            source=SourceType.FILE.value if source_document else SourceType.NOT_SUPPORT.value
         ))
     if source_document:
         # 异步处理溯源信息存储

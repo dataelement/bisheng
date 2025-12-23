@@ -110,7 +110,7 @@ export async function getWorkFlowVersions(flow_id): Promise<{ data: any[], total
 */
 export const onlineWorkflow = async (flow, status = ''): Promise<any> => {
     const { name, description, logo } = flow
-    const data = { name, description, logo: logo && logo.replace(/^\/\w+/, '') }
+    const data = { name, description, logo }
     if (status) {
         data['status'] = status
     }

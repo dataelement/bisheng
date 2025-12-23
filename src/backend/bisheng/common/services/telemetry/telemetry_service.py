@@ -22,7 +22,7 @@ INDEX_MAPPING = {
             "event_id": {"type": "keyword"},
             "event_type": {"type": "keyword"},
             "trace_id": {"type": "keyword"},
-            "timestamp": {"type": "date", "format": "strict_date_optional_time||epoch_millis"},
+            "timestamp": {"type": "date", "format": "strict_date_optional_time||epoch_second"},
             "user_context": {
                 "type": "object",
                 "properties": {

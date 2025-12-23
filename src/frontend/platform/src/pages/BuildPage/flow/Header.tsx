@@ -275,7 +275,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                     onClick={returnPage}
                 ><ChevronLeft /></Button>
                 <div className="flex items-center ml-5">
-                    <AppAvator id={flow.name} url={flow.logo || loca?.logo} flowType={10} className=""></AppAvator>
+                    <AppAvator id={flow.name} url={flow.viewUrl || flow.logo || loca?.logo} flowType={10} className=""></AppAvator>
                     <div className="pl-3">
                         <h1 className="font-medium text-sm flex gap-2">
                             <span id="app-title" className="truncate max-w-48 font-bold">{flow.name}</span>
@@ -406,7 +406,8 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
             <CreateApp ref={updateAppModalRef} loca={loca} onSave={(base) => {
                 captureAndAlertRequestErrorHoc(onlineWorkflow({
                     ...f,
-                    ...base
+                    ...base,
+                    logo: base.viewUrl ? base.logo : '' // When there is no change, the value is empty 
                 }).then(res => {
                     f.name = base.name
                     f.description = base.description
