@@ -46,7 +46,6 @@ export default function HoverButtons({
   latestMessage,
   isLast,
 }: THoverButtons) {
-  console.log("message :>> ", message);
   const localize = useLocalize();
   const { endpoint: _endpoint, endpointType } = conversation ?? {};
   const endpoint = endpointType ?? _endpoint;

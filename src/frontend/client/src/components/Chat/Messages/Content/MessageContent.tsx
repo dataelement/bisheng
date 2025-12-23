@@ -143,9 +143,12 @@ const MessageContent = ({
     let regularContent = text;
     if (thinkingMatch) {
       regularContent = text.replace(/:::thinking[\s\S]*?:::/, '').trim()
-    } else if (text.match(/:::web([\s\S]*?):::/)) {
-      regularContent = text.replace(/:::web[\s\S]*?:::/, '').trim() // + '[citation:2]'  test
     }
+    if (text.match(/:::web([\s\S]*?):::/)) {
+      regularContent = regularContent.replace(/:::web[\s\S]*?:::/, '').trim() // + '[citation:2]'  test
+    }
+
+    regularContent.replaceAll(`\``, '')
     return {
       thinkingContent: thinkingMatch ? thinkingMatch[1].trim() : '',
       regularContent,
