@@ -1,7 +1,7 @@
-from typing import Any, Type, List
+from typing import Any, Type, List, Optional
 
 from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.documents import Document
+from langchain_core.documents import Document, BaseDocumentCompressor
 from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import SystemMessagePromptTemplate, HumanMessagePromptTemplate, ChatPromptTemplate
 from langchain_core.retrievers import BaseRetriever
@@ -31,42 +31,54 @@ class ToolInputSchema(BaseModel):
     query: str = Field(description='question asked by the user.')
 
 
-class KnowledgeRagTool(BaseTool):
-    vector_retriever: BaseRetriever
-    elastic_retriever: BaseRetriever
-    llm: BaseChatModel
-    max_content: int = Field(default=15000, description='The max length of the combined document content.')
-    sort_by_source_and_index: bool = Field(default=False, description='Sort by document name & chunk index.')
-
-    name: str
-    description: str
+class KnowledgeRetrieverTool(BaseTool):
+    name: str = "knowledge_retriever_tool"
+    description: str = "在知识库中检索与查询相关的文档内容。"
     args_schema: Type[BaseModel] = ToolInputSchema
 
-    @classmethod
-    def init_knowledge_rag_tool(cls, name: str, description: str, **kwargs) -> BaseTool:
-        return cls(name=name,
-                   description=description,
-                   args_schema=ToolInputSchema,
-                   **kwargs)
+    vector_retriever: Optional[BaseRetriever] = None
+    elastic_retriever: Optional[BaseRetriever] = None
+    rerank: Optional[BaseDocumentCompressor] = None
+    max_content: int = Field(default=15000, description='The max length of the combined document content.')
+    sort_by_source_and_index: bool = Field(default=False, description='Sort by document name & chunk index.')
+    rrf_weights: List[float] = Field(default=None)
+    rrf_remove_zero_score: bool = Field(default=False)
 
-    def _run(self, query: str) -> Any:
-        # 1. retrieve documents
-        milvus_docs = self.vector_retriever.invoke(query)
-        es_docs = self.elastic_retriever.invoke(query)
-        return self._rag(query, milvus_docs, es_docs)
+    def _run(self, query: str, **kwargs: Any) -> List[Document]:
+        milvus_docs, es_docs = [], []
+        if self.vector_retriever:
+            milvus_docs = self.vector_retriever.invoke(query)
+        if self.elastic_retriever:
+            es_docs = self.elastic_retriever.invoke(query)
 
-    async def _arun(self, query: str) -> Any:
-        milvus_docs = await self.vector_retriever.ainvoke(query)
-        es_docs = await self.elastic_retriever.ainvoke(query)
-        return self._rag(query, milvus_docs, es_docs)
+        finally_docs = self._rrf_rerank(milvus_docs, es_docs, query)
 
-    def _rag(self, query: str, milvus_docs: List[Document], es_docs: List[Document]) -> Any:
-        # 2. merge documents
+        if self.rerank:
+            finally_docs = self.rerank.compress_documents(finally_docs, query)
+        return finally_docs
+
+    async def _arun(self, query: str, **kwargs: Any) -> List[Document]:
+        milvus_docs, es_docs = [], []
+        if self.vector_retriever:
+            milvus_docs = await self.vector_retriever.ainvoke(query)
+        if self.elastic_retriever:
+            es_docs = await self.elastic_retriever.ainvoke(query)
+
+        finally_docs = self._rrf_rerank(milvus_docs, es_docs, query)
+
+        if self.rerank:
+            finally_docs = await self.rerank.acompress_documents(finally_docs, query)
+        return finally_docs
+
+    def _rrf_rerank(self, milvus_docs: List[Document], es_docs: List[Document], query: str) -> List[Document]:
+        if not milvus_docs and not es_docs:
+            return []
         rrf_rerank = RRFRerank(retrievers=[self.vector_retriever, self.elastic_retriever],
-                               remove_zero_score=False)
+                               weights=self.rrf_weights,
+                               remove_zero_score=self.rrf_remove_zero_score)
         finally_docs = rrf_rerank.compress_documents(documents=[es_docs, milvus_docs], query=query)
 
-        # 4. limit by max_chunk_size
+        # limit by max_chunk_size
         doc_num, doc_content_sum = 0, 0
         same_file_id = set()
 
@@ -74,18 +86,65 @@ class KnowledgeRagTool(BaseTool):
             if doc_content_sum > self.max_content:
                 break
             doc_content_sum += len(doc.page_content)
-            same_file_id.add(doc.metadata.get('document_id') or doc.metadata.get('file_id'))
+            same_file_id.add((doc.metadata.get('document_id'), doc.metadata.get('document_name')))
             doc_num += 1
         finally_docs = finally_docs[:doc_num]
 
+        # sort by source and index if only one file
         if self.sort_by_source_and_index and len(same_file_id) == 1:
             finally_docs = sorted(finally_docs,
-                                  key=lambda x: (x.metadata.get('document_name', ""), x.metadata['chunk_index']))
+                                  key=lambda x: (x.metadata.get('document_name', ""), x.metadata.get('chunk_index', 0)))
+        return finally_docs
 
-        qa_chain = create_stuff_documents_chain(llm=self.llm, prompt=CHAT_PROMPT)
+
+class KnowledgeRagTool(BaseTool):
+    name: str
+    description: str
+    args_schema: Type[BaseModel] = ToolInputSchema
+
+    llm: BaseChatModel
+    chat_prompt: Optional[ChatPromptTemplate] = CHAT_PROMPT
+
+    vector_retriever: Optional[BaseRetriever] = None
+    elastic_retriever: Optional[BaseRetriever] = None
+    max_content: int = Field(default=15000, description='The max length of the combined document content.')
+    sort_by_source_and_index: bool = Field(default=False, description='Sort by document name & chunk index.')
+    rrf_weights: List[float] = Field(default=None)
+    rrf_remove_zero_score: bool = Field(default=False)
+
+    knowledge_retriever_tool: KnowledgeRetrieverTool = None
+
+    @classmethod
+    def init_knowledge_rag_tool(cls, name: str, description: str, **kwargs) -> BaseTool:
+        llm = kwargs.pop('llm')
+        chat_prompt = kwargs.pop('chat_prompt', CHAT_PROMPT)
+        # cancel 助手 deep callback
+        kwargs.pop("callbacks", None)
+        knowledge_retriever_tool = KnowledgeRetrieverTool(**kwargs)
+        return cls(name=name,
+                   description=description,
+                   args_schema=ToolInputSchema,
+                   llm=llm,
+                   chat_prompt=chat_prompt,
+                   knowledge_retriever_tool=knowledge_retriever_tool)
+
+    def _run(self, query: str) -> Any:
+        # 1. retrieve documents
+        finally_docs = self.knowledge_retriever_tool.invoke({"query": query})
+        llm_inputs = self._get_llm_inputs(query, finally_docs)
+        qa_chain = create_stuff_documents_chain(llm=self.llm, prompt=self.chat_prompt)
+        return qa_chain.invoke(llm_inputs)
+
+    async def _arun(self, query: str) -> Any:
+        finally_docs = await self.knowledge_retriever_tool.ainvoke({"query": query})
+        llm_inputs = self._get_llm_inputs(query, finally_docs)
+        qa_chain = create_stuff_documents_chain(llm=self.llm, prompt=self.chat_prompt)
+        return await qa_chain.ainvoke(llm_inputs)
+
+    def _get_llm_inputs(self, query: str, finally_docs: List[Document]) -> Any:
         inputs = {
             "context": finally_docs,
         }
-        if "question" in CHAT_PROMPT.input_variables:
+        if "question" in self.chat_prompt.input_variables:
             inputs["question"] = query
-        return qa_chain.invoke(inputs)
+        return inputs

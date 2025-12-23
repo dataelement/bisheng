@@ -7,12 +7,12 @@ from pydantic import BaseModel, Field
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
-from bisheng.core.ai.rerank.rrf_rerank import RRFRerank
 from bisheng.core.vectorstore.multi_retriever import MultiRetriever
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, MetadataFieldType
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.llm.domain import LLMService
+from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.workflow.common.condition import ComparisonType
 from bisheng.workflow.nodes.base import BaseNode
 
@@ -205,6 +205,7 @@ class RagUtils(BaseNode):
         self._knowledge_vector_list = []
         self._retriever_kwargs = {"k": 100, "param": {"ef": 110}}
         self._rerank_model = None
+        self._knowledge_retriever_tool = None
 
     def _run(self, unique_id: str) -> Dict[str, Any]:
         raise NotImplementedError()
@@ -219,46 +220,20 @@ class RagUtils(BaseNode):
 
     def retrieve_question(self, question: str) -> List[Document]:
         # 1: retrieve documents from multi retrievers
-        milvus_docs = []
-        es_docs = []
-        if self._multi_milvus_retriever:
-            milvus_docs = self._multi_milvus_retriever.invoke(question)
-        if self._multi_es_retriever:
-            es_docs = self._multi_es_retriever.invoke(question)
-
-        logger.debug(f'retrieve es chunks: {es_docs}')
-        logger.debug(f'retrieve milvus chunks: {milvus_docs}')
-        # 2: merge documents
-        rrf_rerank = RRFRerank(retrievers=[self._multi_es_retriever, self._multi_milvus_retriever],
-                               weights=[self._keyword_weight, self._vector_weight], remove_zero_score=True)
-        finally_docs = rrf_rerank.compress_documents(documents=[es_docs, milvus_docs], query=question)
-
-        logger.debug(f'retrieve rrf chunks: {finally_docs}')
-        # 3: rerank documents
-        if self._rerank_model:
-            finally_docs = self._rerank_model.compress_documents(documents=finally_docs, query=question)
-            logger.debug(f'retrieve rerank model chunks: {finally_docs}')
-
-        # 4. limit  by max_chunk_size
-        doc_num, doc_content_sum = 0, 0
-        same_file_id = set()
-        for doc in finally_docs:
-            if doc_content_sum > self._max_chunk_size:
-                break
-            doc_content_sum += len(doc.page_content)
-            same_file_id.add(doc.metadata.get('document_id') or doc.metadata.get('file_id'))
-            doc_num += 1
-        finally_docs = finally_docs[:doc_num]
-
-        logger.debug(f'retrieve finally chunks: {finally_docs}')
-        if len(same_file_id) == 1:
-            # 来自同一个文件，则按照chunk_index排序
-            finally_docs.sort(key=lambda x: x.metadata.get('chunk_index', 0))
-            logger.debug(f'retrieve sort by chunk index: {finally_docs}')
+        knowledge_retriever_tool = KnowledgeRetrieverTool(
+            vector_retriever=self._multi_milvus_retriever,
+            elastic_retriever=self._multi_es_retriever,
+            max_content=self._max_chunk_size,
+            rrf_weights=[self._vector_weight, self._keyword_weight],
+            rrf_remove_zero_score=True,
+            rerank=self._rerank_model
+        )
+        finally_docs = knowledge_retriever_tool.invoke(input={"query": question})
+        all_file_id = set([one.metadata.get("document_id") for one in finally_docs])
         file_map = {}
         if finally_docs:
             if self._knowledge_type == 'knowledge':
-                file_info = KnowledgeFileDao.get_file_by_ids(list(same_file_id))
+                file_info = KnowledgeFileDao.get_file_by_ids(list(all_file_id))
                 file_map = {one.id: one for one in file_info}
             for one in finally_docs:
                 if "upload_time" in one.metadata:
