@@ -88,6 +88,10 @@ def convert_doc_to_docx(input_doc_path, output_dir=None):
     command = [
         soffice_path,
         "--headless",  # Run in headless mode (no GUI)
+        "--norestore",
+        "--invisible",
+        "-env:SingleAppInstance=false",
+        f"-env:UserInstallation=file://{output_dir}",
         "--convert-to",
         "docx:Office Open XML Text",  # Specify the output format
         "--outdir",
@@ -195,6 +199,10 @@ def convert_ppt_to_pdf(input_path, output_dir=None):
     command = [
         soffice_path,
         "--headless",
+        "--norestore",
+        "--invisible",
+        "-env:SingleAppInstance=false",
+        f"-env:UserInstallation=file://{output_dir}",
         "--convert-to",
         "pdf",
         "--outdir",
