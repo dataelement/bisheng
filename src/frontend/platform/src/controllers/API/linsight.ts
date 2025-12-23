@@ -77,5 +77,8 @@ export const sopApi = {
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
+  },
+  getLinsightFileDownloadApi: async (fileUrl: string, vid: string): Promise<any> => {
+    return axios.post('/api/v1/linsight/workbench/file_download', { file_url: fileUrl, session_version_id: vid });
   }
 }

@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Dict
 
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
@@ -25,11 +26,17 @@ class MultiRetriever(BaseRetriever):
     async def _aget_relevant_documents(
             self, query: str, *, run_manager: CallbackManagerForRetrieverRun, **kwargs
     ) -> list[Document]:
-        docs: List[tuple[Document, float]] = []
+        tasks = []
         for index, vector in enumerate(self.vectors):
             kwargs_ = self.search_kwargs[index] | kwargs
-            tmp_docs = await vector.asimilarity_search_with_score(query, **kwargs_)
+            tasks.append(vector.asimilarity_search_with_score(query, **kwargs_))
+
+        results = await asyncio.gather(*tasks)
+
+        docs: List[tuple[Document, float]] = []
+        for tmp_docs in results:
             docs.extend(tmp_docs)
+
         return self.parse_doc_with_score(docs)
 
     def parse_doc_with_score(self, docs_with_score: List[tuple[Document, float]]) -> List[Document]:

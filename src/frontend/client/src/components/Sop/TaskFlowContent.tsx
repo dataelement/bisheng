@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useToastContext } from '~/Providers';
+import { getLinsightFileDownloadApi } from '~/data-provider/data-provider/src/data-service';
 import { useLocalize } from '~/hooks';
 import { formatStrTime, playDing } from '~/utils';
 import Markdown from '../Chat/Messages/Content/Markdown';
@@ -22,9 +23,9 @@ import FileDrawer from './TaskFiles';
 import DownloadResultFileBtn from './components/DownloadResultFileBtn';
 import ErrorDisplay from './components/ErrorDisplay';
 import { SearchKnowledgeSheet } from './components/SearchKnowledgeSheet';
+import { SvgImage } from './components/SvgImage';
 import UserInput from './components/UserInput';
 import { WebSearchSheet } from './components/WebSearchSheet';
-import { SvgImage } from './components/SvgImage';
 
 const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
     if (!params) return null
@@ -369,7 +370,7 @@ const Task = ({
 };
 
 
-export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
+export const TaskFlowContent = ({ versionId, linsight, sendInput, onSearchKnowledge }) => {
     const { status, sop, title, tasks, taskError, summary, file_list: files, queueCount = 0 } = linsight
     const allFiles = linsight?.output_result?.all_from_session_files || []
 
@@ -392,9 +393,10 @@ export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
         return mergedFiles;
     }, [files, allFiles]);
 
-    const downloadFile = (file) => {
+    const downloadFile = async (file) => {
         const { file_name, file_url } = file;
-        const url = `${__APP_ENV__.BASE_URL}${file_url}`;
+        const res = await getLinsightFileDownloadApi(file_url, versionId)
+        const url = `${__APP_ENV__.BASE_URL}${res.data.file_path}`;
 
         return axios.get(url, { responseType: "blob" }).then((res: any) => {
             let blob: any = null
@@ -645,6 +647,7 @@ export const TaskFlowContent = ({ linsight, sendInput, onSearchKnowledge }) => {
                 directFile={currentDirectFile}
                 currentFileId={currentPreviewFileId}
                 onFileChange={(fileId) => setCurrentPreviewFileId(fileId)}
+                vid={versionId}
                 onBack={currentDirectFile || triggerDrawerFromCard ? undefined : (() => {
                     setIsDrawerOpen(true);
                     setIsPreviewOpen(false);

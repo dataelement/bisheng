@@ -60,8 +60,9 @@ class KnowledgeRag:
         return cls.init_es_vectorstore_sync(knowledge.index_name, **kwargs)
 
     @classmethod
-    def get_multi_knowledge_vectorstore(cls, invoke_user_id: int, knowledge_ids: list[int], user_name: str = None,
-                                        check_auth: bool = True, include_es: bool = True, include_milvus: bool = True) \
+    def get_multi_knowledge_vectorstore_sync(cls, invoke_user_id: int, knowledge_ids: list[int], user_name: str = None,
+                                             check_auth: bool = True, include_es: bool = True,
+                                             include_milvus: bool = True) \
             -> Dict[int, Dict[str, VectorStore | Knowledge]]:
         """ get multiple knowledge vectorstore, including milvus and es
             return: {
@@ -93,6 +94,47 @@ class KnowledgeRag:
                 ret[knowledge.id]["milvus"] = vectorstore
             if include_es:
                 es_vectorstore = cls.init_knowledge_es_vectorstore_sync(knowledge)
+                ret[knowledge.id]["es"] = es_vectorstore
+        return ret
+
+    @classmethod
+    async def get_multi_knowledge_vectorstore(cls, invoke_user_id: int, knowledge_ids: list[int], user_name: str = None,
+                                              check_auth: bool = True, include_es: bool = True,
+                                              include_milvus: bool = True, include_private=False) \
+            -> Dict[int, Dict[str, VectorStore | Knowledge]]:
+        """ get multiple knowledge vectorstore, including milvus and es
+            return: {
+                knowledge_id: {
+                    "knowledge": Knowledge
+                    "milvus": Milvus,
+                    "es": ElasticsearchStore,
+                },
+            }
+        """
+
+        if knowledge_ids is None or len(knowledge_ids) == 0:
+            return {}
+
+        if not include_es and not include_milvus:
+            raise RuntimeError('at least one of include_es and include_milvus must be True')
+        if check_auth:
+            if not user_name:
+                raise RuntimeError('knowledge check auth user_name must be provided')
+            knowledge_list = await KnowledgeDao.ajudge_knowledge_permission(user_name, knowledge_ids, include_private=include_private)
+        else:
+            knowledge_list = await KnowledgeDao.aget_list_by_ids(knowledge_ids)
+        ret = {}
+        for knowledge in knowledge_list:
+            ret[knowledge.id] = {
+                "knowledge": knowledge,
+                "milvus": None,
+                "es": None,
+            }
+            if include_milvus:
+                vectorstore = await cls.init_knowledge_milvus_vectorstore(invoke_user_id, knowledge)
+                ret[knowledge.id]["milvus"] = vectorstore
+            if include_es:
+                es_vectorstore = await cls.init_knowledge_es_vectorstore(knowledge)
                 ret[knowledge.id]["es"] = es_vectorstore
         return ret
 

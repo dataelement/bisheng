@@ -3,6 +3,13 @@ import json
 from pathlib import Path
 from typing import Any, Coroutine, Dict, List, Optional, Tuple, Union
 
+from langchain.chains.base import Chain
+from langchain.schema import AgentAction, Document
+from langchain.vectorstores.base import VectorStore
+from loguru import logger
+from pydantic import BaseModel
+from sqlmodel import select
+
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.message import ChatMessage
@@ -11,13 +18,7 @@ from bisheng.interface.run import build_sorted_vertices, get_memory_key, update_
 from bisheng.services.deps import get_session_service
 from bisheng.template.field.base import TemplateField
 from bisheng.utils.docx_temp import test_replace_string
-from loguru import logger
 from bisheng_langchain.input_output import Report
-from langchain.chains.base import Chain
-from langchain.schema import AgentAction, Document
-from langchain.vectorstores.base import VectorStore
-from pydantic import BaseModel
-from sqlmodel import select
 
 
 def fix_memory_inputs(langchain_object):
@@ -151,12 +152,12 @@ class Result(BaseModel):
 
 
 async def process_graph_cached(
-    data_graph: Dict[str, Any],
-    inputs: Optional[dict] = None,
-    clear_cache=False,
-    session_id=None,
-    flow_id=None,
-    history_count=10,
+        data_graph: Dict[str, Any],
+        inputs: Optional[dict] = None,
+        clear_cache=False,
+        session_id=None,
+        flow_id=None,
+        history_count=10,
 ) -> Result:
     session_service = get_session_service()
     if clear_cache:
@@ -183,7 +184,7 @@ async def process_graph_cached(
                 select(ChatMessage).where(
                     ChatMessage.chat_id == session_id,
                     ChatMessage.category.in_(['question', 'answer'])).order_by(
-                        ChatMessage.id.desc()).limit(history_count)).all()
+                    ChatMessage.id.desc()).limit(history_count)).all()
         history = list(reversed(history))
         next_loop = -1
         for index, chat_message in enumerate(history):
@@ -210,16 +211,16 @@ async def process_graph_cached(
             logger.error('template not found flow_id={}', flow_id)
             raise ValueError(f'template not found flow_id={flow_id}')
         minio_client = get_minio_storage_sync()
-        template_muban = minio_client.get_share_link(template.object_name)
+        template_muban = await minio_client.get_share_link(template.object_name, clear_host=False)
         report_name = built_object.report_name
         report_name = report_name if report_name.endswith('.docx') else f'{report_name}.docx'
         result = (result.get(built_object.output_keys[0]) if isinstance(result, dict) else result)
         test_replace_string(template_muban, result, report_name)
-        result = {built_object.output_keys[0]: minio_client.get_share_link(report_name)}
+        result = {built_object.output_keys[0]: await minio_client.get_share_link(report_name, clear_host=False)}
     elif any(
-        (vertex.id.startswith('InputNode')
-         for vertex in graph.vertices)) and (not inputs
-                                             or all(len(ins) == 0 for ins in inputs.values())):
+            (vertex.id.startswith('InputNode')
+             for vertex in graph.vertices)) and (not inputs
+                                                 or all(len(ins) == 0 for ins in inputs.values())):
         input_batch = []
         for vertex in graph.vertices:
             if vertex.id.startswith('InputNode'):
@@ -329,7 +330,7 @@ def apply_tweaks(node: Dict[str, Any], node_tweaks: Dict[str, Any]) -> None:
 
 
 def process_tweaks(graph_data: Dict[str, Any], tweaks: Dict[str, Dict[str,
-                                                                      Any]]) -> Dict[str, Any]:
+Any]]) -> Dict[str, Any]:
     """
     This function is used to tweak the graph data using the node id and the tweaks dict.
 

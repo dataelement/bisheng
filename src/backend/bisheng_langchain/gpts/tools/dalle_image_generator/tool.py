@@ -19,8 +19,7 @@ class DallEInput(BaseModel):
 
 class ProxyDallEAPIWrapper(DallEAPIWrapper):
     """Wrapper for OpenAI's DALL-E Image Generator with proxy support."""
-
-    http_async_client: Any
+    http_async_client: Optional[Any] = None
 
     @model_validator(mode="after")
     def validate_environment(self) -> Self:

@@ -1,7 +1,7 @@
 import csv
 from datetime import datetime
 from tempfile import NamedTemporaryFile
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Dict
 
 from loguru import logger
 
@@ -49,10 +49,13 @@ class AuditLogService:
         return resp_200(data={'data': data, 'total': total})
 
     @classmethod
-    def get_all_operators(cls, login_user: UserPayload) -> Any:
+    def get_all_operators(cls, login_user: UserPayload) -> List[Dict]:
         groups = []
         if not login_user.is_admin():
             groups = [one.group_id for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
+            # not any group admin
+            if not groups:
+                raise UnAuthorizedError()
 
         data = AuditLogDao.get_all_operators(groups)
         res = {}
@@ -60,7 +63,7 @@ class AuditLogService:
             if not one[1]:
                 continue
             res[one[0]] = {'user_id': one[0], 'user_name': one[1]}
-        return resp_200(data=list(res.values()))
+        return list(res.values())
 
     @classmethod
     def _chat_log(cls, user: UserPayload, ip_address: str, event_type: EventType, object_type: ObjectType,
@@ -599,8 +602,7 @@ class AuditLogService:
             minio_client.put_object_sync(object_name=tmp_object_name, file=tmp_file.name,
                                          content_type='application/text',
                                          bucket_name=minio_client.tmp_bucket)
-        share_url = minio_client.get_share_link(tmp_object_name, minio_client.tmp_bucket)
-        return minio_client.clear_minio_share_host(share_url)
+        return minio_client.get_share_link_sync(tmp_object_name, minio_client.tmp_bucket)
 
     @classmethod
     def get_chat_messages(cls, chat_list: List[AppChatList]) -> List[AppChatList]:

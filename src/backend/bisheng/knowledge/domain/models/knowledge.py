@@ -205,13 +205,16 @@ class KnowledgeDao(KnowledgeBase):
             # 默认情况下过滤掉个人知识库
             statement = statement.where(Knowledge.type != KnowledgeTypeEnum.PRIVATE.value)
         if name:
-            # 同时模糊检索知识库内的文件名称来查询对应的知识库
+
+            conditions = [col(Knowledge.name).like(f'%{name}%'), col(Knowledge.description).like(f'%{name}%')]
+
             file_knowledge_ids = KnowledgeFileDao.get_knowledge_ids_by_name(name)
             if file_knowledge_ids:
-                statement = statement.where(
-                    or_(Knowledge.name.like(f'%{name}%'), Knowledge.id.in_(file_knowledge_ids)))
-            else:
-                statement = statement.where(Knowledge.name.like(f'%{name}%'))
+                conditions.append(Knowledge.id.in_(file_knowledge_ids))
+
+            if conditions:
+                statement = statement.where(or_(*conditions))
+
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         return statement
@@ -241,6 +244,7 @@ class KnowledgeDao(KnowledgeBase):
                                   knowledge_id_extra: List[int] = None,
                                   knowledge_type: KnowledgeTypeEnum = None,
                                   name: str = None,
+                                  sort_by: str = "update_time",
                                   page: int = 0,
                                   limit: int = 10,
                                   filter_knowledge: List[int] = None) -> List[Knowledge]:
@@ -250,7 +254,12 @@ class KnowledgeDao(KnowledgeBase):
                                                 knowledge_type, name, page, limit,
                                                 filter_knowledge)
 
-        statement = statement.order_by(Knowledge.update_time.desc())
+        if sort_by == "create_time":
+            statement = statement.order_by(Knowledge.create_time.desc())
+        elif sort_by == "update_time":
+            statement = statement.order_by(Knowledge.update_time.desc())
+        elif sort_by == "name":
+            statement = statement.order_by(text('CONVERT(name USING gbk) ASC'))
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
 
@@ -339,6 +348,59 @@ class KnowledgeDao(KnowledgeBase):
             return session.exec(statement).all()
 
     @classmethod
+    async def ajudge_knowledge_permission(cls, user_name: str,
+                                          knowledge_ids: List[int],
+                                          include_private: bool = False) -> List[Knowledge]:
+        """
+        依据用户名和知识库ID列表，异步获取用户有权限查看的知识库列表
+        Args:
+            user_name:
+            knowledge_ids:
+            include_private:
+
+        Returns:
+
+        """
+        # 获取用户信息
+        user_info = await UserDao.aget_user_by_username(user_name)
+        if not user_info:
+            return []
+        # 查询用户所属于的角色
+        role_list = await UserRoleDao.aget_user_roles(user_info.user_id)
+        if not role_list:
+            return []
+        role_id_list = []
+        is_admin = False
+        for role in role_list:
+            role_id_list.append(role.role_id)
+            if role.role_id == 1:
+                is_admin = True
+        # admin 用户拥有所有知识库权限
+        if is_admin:
+            return await cls.aget_list_by_ids(knowledge_ids)
+        # 查询角色 有使用权限的知识库列表
+        role_access_list = await RoleAccessDao.afind_role_access(role_id_list, knowledge_ids, AccessType.KNOWLEDGE)
+        # 查询是否包含了用户自己创建的知识库
+        if include_private:
+            # 如果需要包含个人知识库，则不进行类型过滤
+            user_knowledge_list = await cls.aget_user_knowledge(user_info.user_id,
+                                                                filter_knowledge=knowledge_ids,
+                                                                knowledge_type=False)
+        else:
+            # 默认行为：过滤掉个人知识库
+            user_knowledge_list = await cls.aget_user_knowledge(user_info.user_id,
+                                                                filter_knowledge=knowledge_ids)
+        if not role_access_list and not user_knowledge_list:
+            return []
+        finally_knowledge_list = [access.third_id for access in role_access_list]
+        finally_knowledge_list.extend([str(one.id) for one in user_knowledge_list])
+        statement = select(Knowledge).where(Knowledge.id.in_(finally_knowledge_list
+                                                             ))
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
     def filter_knowledge_by_ids(cls,
                                 knowledge_ids: List[int],
                                 keyword: str = None,
@@ -373,14 +435,17 @@ class KnowledgeDao(KnowledgeBase):
                                       knowledge_type: KnowledgeTypeEnum = None):
         if knowledge_type:
             statement = statement.where(Knowledge.type == knowledge_type.value)
+
         if name:
-            # 同时模糊检索知识库内的文件名称来查询对应的知识库
+            conditions = [col(Knowledge.name).like(f'%{name}%'), col(Knowledge.description).like(f'%{name}%')]
+
             file_knowledge_ids = KnowledgeFileDao.get_knowledge_ids_by_name(name)
             if file_knowledge_ids:
-                statement = statement.where(
-                    or_(Knowledge.name.like(f'%{name}%'), Knowledge.id.in_(file_knowledge_ids)))
-            else:
-                statement = statement.where(Knowledge.name.like(f'%{name}%'))
+                conditions.append(Knowledge.id.in_(file_knowledge_ids))
+
+            if conditions:
+                statement = statement.where(or_(*conditions))
+
         return statement
 
     @classmethod
@@ -404,6 +469,7 @@ class KnowledgeDao(KnowledgeBase):
     async def aget_all_knowledge(cls,
                                  name: str = None,
                                  knowledge_type: KnowledgeTypeEnum = None,
+                                 sort_by: str = "update_time",
                                  page: int = 0,
                                  limit: int = 0) -> List[Knowledge]:
         statement = select(Knowledge)
@@ -413,7 +479,12 @@ class KnowledgeDao(KnowledgeBase):
 
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
-        statement = statement.order_by(Knowledge.update_time.desc())
+        if sort_by == "create_time":
+            statement = statement.order_by(Knowledge.create_time.desc())
+        elif sort_by == "update_time":
+            statement = statement.order_by(Knowledge.update_time.desc())
+        elif sort_by == "name":
+            statement = statement.order_by(text('CONVERT(name USING gbk) ASC'))
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
 

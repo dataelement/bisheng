@@ -2,12 +2,13 @@ import asyncio
 import json
 import time
 from datetime import datetime
-from typing import Optional, Union
+from typing import Optional, Union, List
 from urllib.parse import unquote
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Request, UploadFile
 from fastapi.responses import StreamingResponse
+from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
@@ -22,6 +23,7 @@ from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import FrequentlyUsedChat
 from bisheng.api.v1.schemas import WorkstationConfig, resp_200, ExcelRule, UnifiedResponseModel
+from bisheng.chat.utils import SourceType, process_source_document
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
@@ -94,7 +96,7 @@ def step_message(stepId, runId, index, msgId):
 
 
 async def final_message(conversation: MessageSession, title: str, requestMessage: ChatMessage, text: str,
-                        error: bool, modelName: str):
+                        error: bool, modelName: str, source_document: List[Document] = None):
     responseMessage = await ChatMessageDao.ainsert_one(
         ChatMessage(
             user_id=conversation.user_id,
@@ -109,8 +111,16 @@ async def final_message(conversation: MessageSession, title: str, requestMessage
                 'parentMessageId': requestMessage.id,
                 'error': error
             }),
-            source=0,
+            source=SourceType.FILE.value if source_document else SourceType.NOT_SUPPORT.value
         ))
+    if source_document:
+        # 异步处理溯源信息存储
+        asyncio.create_task(process_source_document(source_document=source_document,
+                                                    chat_id=conversation.chat_id,
+                                                    message_id=responseMessage.id,
+                                                    answer=text))
+
+    # 更新会话的最后消息时间
     msg = json.dumps(
         {
             'final': True,
@@ -314,6 +324,102 @@ def getFileContent(filepath: str, invoke_user_id: int):
     return knowledge_imp.KnowledgeUtils.chunk2promt(''.join(raw_texts), {'source': file_name})
 
 
+async def _initialize_chat(data: APIChatCompletion, login_user: UserPayload):
+    """Initializes chat session, message, and LLM."""
+    wsConfig = await WorkStationService.aget_config()
+
+    model_info = next((m for m in wsConfig.models if m.id == data.model), None)
+    if not model_info:
+        raise ValueError(f"Model with id '{data.model}' not found.")
+
+    conversationId = data.conversationId
+    is_new_conversation = False
+    if not conversationId:
+        is_new_conversation = True
+        conversationId = uuid4().hex
+        await MessageSessionDao.async_insert_one(
+            MessageSession(
+                chat_id=conversationId,
+                flow_id='',
+                flow_name='New Chat',
+                flow_type=FlowType.WORKSTATION.value,
+                user_id=login_user.user_id,
+            ))
+
+        # Telemetry for new session
+        await telemetry_service.log_event(
+            user_id=login_user.user_id,
+            event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
+            trace_id=trace_id_var.get(),
+            event_data=NewMessageSessionEventData(
+                session_id=conversationId,
+                app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                source="platform",
+                app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+                app_type=ApplicationTypeEnum.DAILY_CHAT
+            ))
+
+    conversation = await MessageSessionDao.async_get_one(conversationId)
+    if conversation is None:
+        raise ConversationNotFoundError()
+
+    if data.overrideParentMessageId:
+        message = await ChatMessageDao.aget_message_by_id(int(data.overrideParentMessageId))
+    else:
+        message = await ChatMessageDao.ainsert_one(
+            ChatMessage(
+                user_id=login_user.user_id,
+                chat_id=conversationId,
+                flow_id='',
+                type='human',
+                is_bot=False,
+                sender='User',
+                files=json.dumps(data.files) if data.files else None,
+                extra=json.dumps({'parentMessageId': data.parentMessageId}),
+                message=data.text,
+                category='question',
+                source=0,
+            ))
+
+    bishengllm = await LLMService.get_bisheng_llm(
+        model_id=data.model,
+        app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+        app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+        app_type=ApplicationTypeEnum.DAILY_CHAT,
+        user_id=login_user.user_id)
+
+    return wsConfig, conversation, message, bishengllm, model_info.displayName, is_new_conversation
+
+
+async def _log_telemetry_events(user_id: str, conversation_id: str, start_time: float):
+    """Logs telemetry events for application alive and process."""
+    end_time = time.time()
+    duration_ms = int((end_time - start_time) * 1000)
+
+    common_data = {
+        "app_id": ApplicationTypeEnum.DAILY_CHAT.value,
+        "app_name": ApplicationTypeEnum.DAILY_CHAT.value,
+        "app_type": ApplicationTypeEnum.DAILY_CHAT,
+        "chat_id": conversation_id,
+        "start_time": int(start_time),
+        "end_time": int(end_time),
+    }
+
+    await telemetry_service.log_event(
+        user_id=user_id,
+        event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
+        trace_id=trace_id_var.get(),
+        event_data=ApplicationAliveEventData(**common_data)
+    )
+
+    await telemetry_service.log_event(
+        user_id=user_id,
+        event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
+        trace_id=trace_id_var.get(),
+        event_data=ApplicationProcessEventData(**common_data, process_time=duration_ms)
+    )
+
+
 @router.post('/chat/completions')
 async def chat_completions(
         data: APIChatCompletion,
@@ -321,107 +427,49 @@ async def chat_completions(
 ):
     start_time = time.time()
     try:
-        wsConfig = await WorkStationService.aget_config()
-        conversationId = data.conversationId
-        model = [model for model in wsConfig.models if model.id == data.model][0]
-        modelName = model.displayName
-
-        # 如果没有传入会话ID，则使用默认的会话ID
-        if not conversationId:
-            conversationId = uuid4().hex
-            await MessageSessionDao.async_insert_one(
-                MessageSession(
-                    chat_id=conversationId,
-                    flow_id='',
-                    flow_name='New Chat',
-                    flow_type=FlowType.WORKSTATION.value,
-                    user_id=login_user.user_id,
-                ))
-
-            # 记录Telemetry日志
-            await telemetry_service.log_event(user_id=login_user.user_id,
-                                              event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
-                                              trace_id=trace_id_var.get(),
-                                              event_data=NewMessageSessionEventData(
-                                                  session_id=conversationId,
-                                                  app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-                                                  source="platform",
-                                                  app_name=ApplicationTypeEnum.DAILY_CHAT.value,
-                                                  app_type=ApplicationTypeEnum.DAILY_CHAT
-                                              )
-                                              )
-
-        conversaiton = await MessageSessionDao.async_get_one(conversationId)
-        if conversaiton is None:
-            return EventSourceResponse(
-                iter([ConversationNotFoundError().to_sse_event_instance()])
-            )
-        # 存储用户消息
-        if data.overrideParentMessageId:
-            message = await ChatMessageDao.aget_message_by_id(data.overrideParentMessageId)
-        else:
-            message = await ChatMessageDao.ainsert_one(
-                ChatMessage(
-                    user_id=login_user.user_id,
-                    chat_id=conversationId,
-                    flow_id='',
-                    type='human',
-                    is_bot=False,
-                    sender='User',
-                    files=json.dumps(data.files) if data.files else None,
-                    extra=json.dumps({'parentMessageId': data.parentMessageId}),
-                    message=data.text,
-                    category='question',
-                    source=0,
-                ))
-
-        # 掉用bishengllm 实现sse 返回
-        bishengllm = await LLMService.get_bisheng_llm(model_id=data.model,
-                                                      app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-                                                      app_name=ApplicationTypeEnum.DAILY_CHAT.value,
-                                                      app_type=ApplicationTypeEnum.DAILY_CHAT,
-                                                      user_id=login_user.user_id)
-
-        # 模型掉用实现流式输出
-        SSEClient = SSECallbackClient()
-        callbackHandler = AsyncStreamingLLMCallbackHandler(
-            websocket=SSEClient,
-            flow_id='',
-            chat_id=data.conversationId,
-            user_id=login_user.user_id,
-        )
-    except BaseErrorCode as e:
-        return EventSourceResponse(iter([e.to_sse_event_instance()]))
+        wsConfig, conversation, message, bishengllm, modelName, is_new_conv = await _initialize_chat(data, login_user)
+        conversationId = conversation.chat_id
+        conversation_id_for_telemetry = conversationId
+    except (BaseErrorCode, ValueError) as e:
+        error_response = e if isinstance(e, BaseErrorCode) else ServerError(message=str(e))
+        return EventSourceResponse(iter([error_response.to_sse_event_instance()]))
     except Exception as e:
-        logger.exception(f'Error in chat completions: {e}')
+        logger.exception(f'Error in chat completions setup: {e}')
         return EventSourceResponse(iter([ServerError(exception=e).to_sse_event_instance()]))
 
-    # 处理流式输出
+    def _build_final_content_for_db(final_res, reasoning_res, web_list):
+        if reasoning_res:
+            final_res = ''':::thinking\n''' + reasoning_res + '''\n:::''' + final_res
+        if web_list:
+            final_res = ''':::web\n''' + json.dumps(web_list, ensure_ascii=False) + '''\n:::''' + final_res
+        return final_res
+
     async def event_stream():
         yield user_message(message.id, conversationId, 'User', data.text)
+
         prompt = data.text
         web_list = []
         error = False
-        final_res = ''
-        final_result = None
-        resoning_res = ''
-        # prompt 长度token截断
+        final_res = ''  # Accumulates the final response for the user
+        reasoning_res = ''  # Accumulates the reasoning process
         max_token = wsConfig.maxTokens
         runId = uuid4().hex
         index = 0
+        stepId = None
+        source_document = None
 
         try:
+            # Prepare prompt based on different modes (search, knowledge base, files)
             if data.search_enabled:
-                # 如果开启搜索，先检查prompt 是否需要搜索
                 stepId = f'step_${uuid4().hex}'
                 yield step_message(stepId, runId, index, f'msg_{uuid4().hex}')
                 index += 1
-                searchTExt = promptSearch % data.text
-                inputs = [HumanMessage(content=searchTExt)]
-                searchRes = await bishengllm.ainvoke(searchTExt)
+
+                search_decision_prompt = promptSearch % data.text
+                searchRes = await bishengllm.ainvoke(search_decision_prompt)
+
                 if searchRes.content == '1':
-                    logger.info(f'需要联网搜索, prompt={data.text}')
-                    # 如果需要联网搜索，则调用搜索接口
+                    logger.info(f'Web search needed for prompt: {data.text}')
                     search_res, web_list = await webSearch(data.text, user_id=login_user.user_id)
                     content = {'content': [{'type': 'search_result', 'search_result': web_list}]}
                     yield SSEResponse(event='on_search_result',
@@ -430,149 +478,91 @@ async def chat_completions(
                         search_results=search_res[:max_token],
                         cur_date=datetime.now().strftime('%Y-%m-%d'),
                         question=data.text)
-            elif data.knowledge_enabled:
-                logger.info(f'knowledge, prompt={data.text}')
-                chunks = await WorkStationService.queryChunksFromDB(data.text, login_user)
 
+            elif data.use_knowledge_base and (data.use_knowledge_base.personal_knowledge_enabled or len(
+                    data.use_knowledge_base.organization_knowledge_ids) > 0):
+                logger.info(f'Using knowledge base for prompt: {data.text}')
+                chunks, source_document = await WorkStationService.queryChunksFromDB(data.text,
+                                                                                     use_knowledge_param=data.use_knowledge_base,
+                                                                                     max_token=max_token,
+                                                                                     login_user=login_user)
+                context_str = '\n'.join(chunks)
                 if wsConfig.knowledgeBase.prompt:
-                    prompt = wsConfig.knowledgeBase.prompt.format(
-                        retrieved_file_content='\n'.join(chunks)[:max_token], question=data.text)
+                    prompt = wsConfig.knowledgeBase.prompt.format(retrieved_file_content=context_str,
+                                                                  question=data.text)
                 else:
                     prompt_service = await get_prompt_manager()
                     prompt = prompt_service.render_prompt('workstation', 'personal_knowledge',
-                                                          retrieved_file_content='\n'.join(chunks)[:max_token],
+                                                          retrieved_file_content=context_str,
                                                           question=data.text).prompt
-
                 logger.debug(f'Knowledge prompt: {prompt}')
 
             elif data.files:
-                #  获取文件全文
-                filecontent = '\n'.join(
-                    [getFileContent(file.get('filepath'), login_user.user_id) for file in data.files])
-                prompt = wsConfig.fileUpload.prompt.format(file_content=filecontent[:max_token],
-                                                           question=data.text)
+                logger.info(f'Using file content for prompt.')
+                file_contents = [getFileContent(file.get('filepath'), login_user.user_id) for file in data.files]
+                file_context = '\n'.join(file_contents)[:max_token]
+                prompt = wsConfig.fileUpload.prompt.format(file_content=file_context, question=data.text)
+
+            # Update message with the generated prompt if it changed
             if prompt != data.text:
-                # 需要将原始消息存储
-                extra = json.loads(message.extra)
+                extra = json.loads(message.extra) if message.extra else {}
                 extra['prompt'] = prompt
                 message.extra = json.dumps(extra, ensure_ascii=False)
                 await ChatMessageDao.ainsert_one(message)
 
-            messages = (await WorkStationService.get_chat_history(conversationId, 8))[:-1]
-            inputs = [*messages, HumanMessage(content=prompt)]
+            # Prepare message history and call LLM
+            history_messages = (await WorkStationService.get_chat_history(conversationId, 8))[:-1]
+            inputs = [*history_messages, HumanMessage(content=prompt)]
             if wsConfig.systemPrompt:
                 system_content = wsConfig.systemPrompt.format(cur_date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
                 inputs.insert(0, SystemMessage(content=system_content))
-            task = asyncio.create_task(
-                bishengllm.ainvoke(
-                    inputs,
-                    config=RunnableConfig(callbacks=[callbackHandler]),
-                ))
 
-            stepId = None
-            # 消息存储
-            # 处理流式输出
-            needBreak = False
-            while True:
-                try:
-                    token = SSEClient.queue.get_nowait()
-                    content = token.get('message').get('content')
-                    reasoning_content = token.get('message').get('reasoning_content')
-                    if content:
-                        if not final_res:
-                            # 第一次返回的消息
-                            stepId = 'step_' + uuid4().hex
-                            yield step_message(stepId, runId, index, f'msg_{uuid4().hex}')
-                            index += 1
-                        final_res += content
-                        content = {'content': [{'type': 'text', 'text': content}]}
-                        yield SSEResponse(event='on_message_delta',
-                                          data=delta(id=stepId, delta=content)).toString()
+            if not stepId:
+                stepId = 'step_' + uuid4().hex
+                yield step_message(stepId, runId, index, f'msg_{uuid4().hex}')
+                index += 1
 
-                    elif reasoning_content:
-                        if not resoning_res:
-                            # 第一次返回的消息
-                            stepId = 'step_' + uuid4().hex
-                            yield step_message(stepId, runId, index, f'msg_{uuid4().hex}')
-                            index += 1
-                        resoning_res += reasoning_content
-                        content = {'content': [{'type': 'think', 'think': reasoning_content}]}
-                        yield SSEResponse(event='on_reasoning_delta',
-                                          data=delta(id=stepId, delta=content)).toString()
-                except asyncio.QueueEmpty:
-                    if needBreak:
-                        break
-                    await asyncio.sleep(0.3)  # 等待一段时间再继续检查队列
-                except Exception as e:
-                    logger.error(f'Error in processing the message: {e}')
-                    error = True
-                    break
+            # Stream LLM response
+            async for chunk in bishengllm.astream(inputs):
+                content = chunk.content
+                reasoning_content = chunk.additional_kwargs.get('reasoning_content', '')
 
-                # 循环获取task 结果，不等待
-                try:
-                    if task.done():
-                        final_result = task.result()  # Raise any exception if the task failed
-                        needBreak = True
-                except Exception as e:
-                    logger.error(f'Error in task: {e}')
-                    break
-            # 结束流式输出
-            if resoning_res:
-                final_res = ''':::thinking\n''' + resoning_res + '''\n:::''' + final_result.content
-            elif web_list:
-                final_res = ''':::web\n''' + json.dumps(
-                    web_list, ensure_ascii=False) + '''\n:::''' + final_result.content
-            else:
-                final_res = final_result.content if final_result else final_res
+                if content:
+                    final_res += content
+                    yield SSEResponse(event='on_message_delta',
+                                      data=delta(id=stepId,
+                                                 delta={'content': [{'type': 'text', 'text': content}]})).toString()
+                if reasoning_content:
+                    reasoning_res += reasoning_content
+                    yield SSEResponse(event='on_reasoning_delta',
+                                      data=delta(id=stepId, delta={
+                                          'content': [{'type': 'think', 'think': reasoning_content}]})).toString()
+
+            final_content_for_db = _build_final_content_for_db(final_res, reasoning_res, web_list)
 
         except BaseErrorCode as e:
             error = True
-            final_res = json.dumps(e.to_dict())
+            final_content_for_db = json.dumps(e.to_dict())
             yield e.to_sse_event_instance_str()
         except Exception as e:
-            e = ServerError(exception=e)
-            logger.exception(f'Error in processing the prompt')
             error = True
-            final_res = json.dumps(e.to_dict())
-            yield e.to_sse_event_instance_str()
+            server_error = ServerError(exception=e)
+            logger.exception(f'Error in processing the prompt')
+            final_content_for_db = json.dumps(server_error.to_dict())
+            yield server_error.to_sse_event_instance_str()
 
-        yield await final_message(conversaiton, conversaiton.flow_name, message, final_res, error,
-                                  modelName)
+        # Send final message and generate title if needed
+        yield await final_message(conversation, conversation.flow_name, message, final_content_for_db,
+                                  error, modelName, source_document)
 
-        if not data.conversationId:
-            # 生成title
+        if is_new_conv:
             asyncio.create_task(
-                genTitle(data.text, final_result.content if final_result else final_res, bishengllm, conversationId))
+                genTitle(data.text, final_content_for_db, bishengllm, conversationId))
 
     try:
         return StreamingResponse(event_stream(), media_type='text/event-stream')
     finally:
-        end_time = time.time()
-        await telemetry_service.log_event(user_id=login_user.user_id,
-                                          event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
-                                          trace_id=trace_id_var.get(),
-                                          event_data=ApplicationAliveEventData(
-                                              app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-                                              app_name=ApplicationTypeEnum.DAILY_CHAT.value,
-                                              app_type=ApplicationTypeEnum.DAILY_CHAT,
-                                              chat_id=conversationId,
-
-                                              start_time=int(start_time),
-                                              end_time=int(end_time)
-                                          ))
-        await telemetry_service.log_event(user_id=login_user.user_id,
-                                          event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
-                                          trace_id=trace_id_var.get(),
-                                          event_data=ApplicationProcessEventData(
-                                              app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-                                              app_name=ApplicationTypeEnum.DAILY_CHAT.value,
-                                              app_type=ApplicationTypeEnum.DAILY_CHAT,
-                                              chat_id=conversationId,
-
-                                              start_time=int(start_time),
-                                              end_time=int(end_time),
-                                              process_time=int((end_time - start_time) * 1000)
-                                          ))
+        await _log_telemetry_events(login_user.user_id, conversation_id_for_telemetry, start_time)
 
 
 @router.get('/app/frequently_used')

@@ -232,7 +232,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
         return knowledge_files
 
     @classmethod
-    def get_file_by_ids(cls, file_ids: List[int]):
+    def get_file_by_ids(cls, file_ids: List[int]) -> List[KnowledgeFile]:
         if not file_ids:
             return []
         with get_sync_db_session() as session:

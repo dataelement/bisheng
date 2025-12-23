@@ -32,11 +32,13 @@ interface FilePreviewDrawerProps {
     onOpenChange: (open: boolean) => void
     onBack?: () => void
     children?: React.ReactNode
+    vid?: string
 }
 
 export default function FilePreviewDrawer({
     files,
     isOpen,
+    vid,
     onOpenChange,
     currentFileId,
     onFileChange,
@@ -169,6 +171,7 @@ export default function FilePreviewDrawer({
                     <FilePreview
                         files={files}
                         fileId={currentFileId}
+                        vid={vid}
                         currentDisplayFile={currentDisplayFile}
                         onDownloadFile={downloadFile}
                     />

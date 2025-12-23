@@ -114,7 +114,6 @@ export default function PreviewResult({
           case 'processing':
             break;
           case 'completed':
-            console.log(data,7878);
             setEtl(data.parse_type)
             // 解析完成：处理结果（对应原 .then(res) 逻辑）
             handlePreviewResult(true);

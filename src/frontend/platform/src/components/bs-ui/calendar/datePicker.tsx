@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next"
 const parseDate = (value: string | Date | number | undefined): Date | null => {
   if (!value) return null
   if (value instanceof Date) return value
-  
+
   // 处理数字时间戳（可能是秒级或毫秒级）
   if (typeof value === 'number') {
     console.log('Parsing timestamp:', value)
@@ -22,15 +22,15 @@ const parseDate = (value: string | Date | number | undefined): Date | null => {
     console.log('Timestamp result:', date)
     return isNaN(date.getTime()) ? null : date
   }
-  
+
   // 处理字符串日期
   if (typeof value === 'string') {
     let date: Date
-    
+
     // 处理 ISO 格式 (包含 T 的格式)
     if (value.includes('T')) {
       date = new Date(value)
-    } 
+    }
     // 处理 yyyy-MM-dd HH:mm:ss 格式
     else if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)) {
       date = new Date(value.replace(' ', 'T'))
@@ -43,11 +43,11 @@ const parseDate = (value: string | Date | number | undefined): Date | null => {
     else {
       date = new Date(value)
     }
-    
+
     console.log('Parsing date string:', value, '->', date)
     return isNaN(date.getTime()) ? null : date
   }
-  
+
   return null
 }
 
@@ -94,26 +94,26 @@ const TimeColumn = ({
   // 处理滚动事件
   const handleScroll = useCallback(() => {
     if (!columnRef.current) return
-    
+
     isScrollingRef.current = true
-    
+
     // 清除之前的定时器
     if (scrollTimeoutRef.current) {
       clearTimeout(scrollTimeoutRef.current)
     }
-    
+
     // 设置新的定时器，在滚动停止后对齐
     scrollTimeoutRef.current = setTimeout(() => {
       if (!columnRef.current) return
-      
+
       const scrollTop = columnRef.current.scrollTop
       const currentIndex = Math.round(scrollTop / itemHeight)
       const clampedIndex = Math.max(0, Math.min(max, currentIndex))
-      
+
       if (clampedIndex !== value) {
         onChange(clampedIndex)
       }
-      
+
       isScrollingRef.current = false
     }, 150) // 滚动结束后150ms触发对齐
   }, [value, onChange, max, itemHeight])
@@ -128,10 +128,10 @@ const TimeColumn = ({
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault()
     if (!columnRef.current) return
-    
+
     const delta = e.deltaY > 0 ? 1 : -1
     const newValue = Math.max(0, Math.min(max, value + delta))
-    
+
     onChange(newValue)
     scrollToValue(newValue, true)
   }, [value, onChange, max, scrollToValue])
@@ -299,7 +299,7 @@ export function DatePicker({
 }: DatePickerProps) {
   const { t } = useTranslation('knowledge');
   console.log('DatePicker value:', value)
-  
+
   const initialDate = useMemo(() => parseDate(value), [value])
   const now = useMemo(() => new Date(), [])
 
@@ -341,6 +341,11 @@ export function DatePicker({
 
   const handleConfirm = useCallback(() => {
     if (!date) return
+    handleSave(date)
+    setOpen(false)
+  }, [date, time, showTime, onChange])
+
+  const handleSave = (date) => {
     const mergedDate = new Date(date)
     if (showTime) {
       mergedDate.setHours(time.hour, time.minute, time.second, 0)
@@ -348,8 +353,7 @@ export function DatePicker({
       mergedDate.setHours(0, 0, 0, 0)
     }
     onChange?.(mergedDate)
-    setOpen(false)
-  }, [date, time, showTime, onChange])
+  }
 
   const handleNow = useCallback(() => {
     const now = new Date()
@@ -377,7 +381,7 @@ export function DatePicker({
           <CalendarDays className={cname(
             "h-4 w-4",
             !dateStr && "mr-2"
-          )}/>
+          )} />
           {dateStr || <span>{placeholder}</span>}
         </Button>
       </PopoverTrigger>
@@ -389,7 +393,10 @@ export function DatePicker({
           <Calendar
             mode="single"
             selected={date}
-            onSelect={setDate}
+            onSelect={(d) => {
+              setDate(d)
+              !showTime && handleSave(d)
+            }}
             initialFocus
           />
 
@@ -417,18 +424,6 @@ export function DatePicker({
                   </Button>
                 </div>
               </div>
-            </div>
-          )}
-
-          {!showTime && (
-            <div className="flex justify-end pt-2 border-t">
-              <Button
-                size="sm"
-                onClick={handleConfirm}
-                disabled={!date}
-              >
-                {t('confirm')}
-              </Button>
             </div>
           )}
         </div>

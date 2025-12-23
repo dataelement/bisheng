@@ -230,7 +230,7 @@ class LinsightWorkflowTask:
         file_path = os.path.join(target_dir, file_name)
         minio_client = await get_minio_storage()
         try:
-            file_url = minio_client.get_share_link(object_name)
+            file_url = await minio_client.get_share_link(object_name, clear_host=False)
             http_client = await get_http_client()
 
             with open(file_path, "wb") as f:

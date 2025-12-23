@@ -29,6 +29,7 @@ import { WebSearchSheet } from './WebSearchSheet';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/bs-ui/tooltip';
 import { SvgImage } from '@/components/LinSight/SvgImage';
 import DownloadList from './DownloadList';
+import { sopApi } from '@/controllers/API/linsight';
 
 const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
     if (!params) return null
@@ -432,9 +433,10 @@ export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
         return mergedFiles;
     }, [files, allFiles]);
 
-    const downloadFile = (file) => {
+    const downloadFile = async (file) => {
         const { file_name, file_url } = file;
-        const url = `${__APP_ENV__.BASE_URL}${file_url}`;
+        const res = await sopApi.getLinsightFileDownloadApi(file_url, linsight.id)
+        const url = `${__APP_ENV__.BASE_URL}${res.file_path}`;
 
         return axios.get(url, { responseType: "blob" }).then((res: any) => {
             let blob: any = null
@@ -825,6 +827,7 @@ export const TaskFlowContent = ({ linsight, showFeedBack = false }) => {
                     directFile={currentDirectFile}
                     currentFileId={currentPreviewFileId}
                     onFileChange={(fileId) => setCurrentPreviewFileId(fileId)}
+                    vid={linsight.id}
                     onBack={currentDirectFile || triggerDrawerFromCard ? undefined : (() => {
                         setIsDrawerOpen(true);
                         setIsPreviewOpen(false);

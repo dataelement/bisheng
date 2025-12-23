@@ -16,7 +16,7 @@ class DatasetService(BaseService):
     def build_dataset_list(cls,
                            page: int,
                            limit: int,
-                           keyword: Optional[str] = None) -> List[Dict]:
+                           keyword: Optional[str] = None) -> (List[Dict], int):
         """补全list 数据"""
 
         dataset_list = DatasetDao.filter_dataset_by_ids(dataset_ids=[],
@@ -31,12 +31,11 @@ class DatasetService(BaseService):
         user_ids = [one.user_id for one in dataset_list]
         user_list = UserDao.get_user_by_ids(user_ids)
         user_dict = {one.user_id: one for one in user_list}
-        res = [DatasetRead.validate(one) for one in dataset_list]
-        minio_client = get_minio_storage_sync()
+        res = [DatasetRead.model_validate(one) for one in dataset_list]
         for one in res:
             one.user_name = user_dict[one.user_id].user_name
             if one.object_name:
-                one.url = minio_client.get_share_link(one.object_name)
+                one.url = one.object_name
 
         return res, total_count
 
@@ -74,3 +73,7 @@ class DatasetService(BaseService):
             minio_client.remove_object_sync(object_name=object_name)
         DatasetDao.delete(dataset)
         return True
+
+    @classmethod
+    async def get_one_by_object_name(cls, object_name: str) -> Optional[Dataset]:
+        dataset = await DatasetDao.aget_dataset_by_object_name(object_name)

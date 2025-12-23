@@ -78,6 +78,7 @@ class KnowledgeService(KnowledgeUtils):
             login_user: UserPayload,
             knowledge_type: KnowledgeTypeEnum,
             name: str = None,
+            sort_by: str = "update_time",
             page: int = 1,
             limit: int = 10,
     ) -> (List[KnowledgeRead], int):
@@ -96,6 +97,7 @@ class KnowledgeService(KnowledgeUtils):
                 knowledge_id_extra,
                 knowledge_type,
                 name,
+                sort_by,
                 page,
                 limit,
             )
@@ -104,7 +106,7 @@ class KnowledgeService(KnowledgeUtils):
             )
         else:
             res = await KnowledgeDao.aget_all_knowledge(
-                name, knowledge_type, page=page, limit=limit
+                name, knowledge_type, sort_by, page=page, limit=limit
             )
             total = await KnowledgeDao.acount_all_knowledge(name, knowledge_type)
 
@@ -461,7 +463,7 @@ class KnowledgeService(KnowledgeUtils):
             new_file_name = KnowledgeUtils.get_tmp_preview_file_object_name(filepath)
             minio_client = await get_minio_storage()
             if await minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
-                file_share_url = minio_client.get_share_link(
+                file_share_url = await minio_client.get_share_link(
                     new_file_name, minio_client.tmp_bucket
                 )
 
@@ -623,9 +625,7 @@ class KnowledgeService(KnowledgeUtils):
         db_file.updater_name = login_user.user_name
         db_file = await KnowledgeFileDao.async_update(db_file)
 
-        file_path, _ = cls.get_file_share_url(db_file.id)
-
-        preview_cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path=file_path)
+        preview_cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path=req_data.file_path)
         file_worker.retry_knowledge_file_celery.delay(db_file.id, preview_cache_key, req_data.callback_url)
 
         return db_file.model_dump()
@@ -1172,13 +1172,13 @@ class KnowledgeService(KnowledgeUtils):
         """ 获取文件原始下载地址 和 对应的预览文件下载地址 """
         file = KnowledgeFileDao.get_file_by_ids([file_id])
         if not file:
-            raise NotFoundError.http_exception()
+            raise NotFoundError()
         file = file[0]
         minio_client = get_minio_storage_sync()
         # 130版本以前的文件解析
         if file.parse_type in [ParseType.LOCAL.value, ParseType.UNS.value]:
-            original_url = minio_client.get_share_link(cls.get_knowledge_file_object_name(file.id, file.file_name))
-            preview_url = minio_client.get_share_link(str(file.id))
+            original_url = minio_client.get_share_link_sync(cls.get_knowledge_file_object_name(file.id, file.file_name))
+            preview_url = minio_client.get_share_link_sync(str(file.id))
         else:
             original_url = cls.get_file_share_url_with_empty(file.object_name)
             preview_url = ""
@@ -1197,7 +1197,7 @@ class KnowledgeService(KnowledgeUtils):
         """
         minio_client = get_minio_storage_sync()
         if minio_client.object_exists_sync(minio_client.bucket, object_name):
-            return minio_client.get_share_link(object_name, minio_client.bucket)
+            return minio_client.get_share_link_sync(object_name)
         return ""
 
     @classmethod

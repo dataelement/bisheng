@@ -1,8 +1,9 @@
 from typing import Optional, List
 
-from pydantic import Field, BaseModel
+from pydantic import Field, BaseModel, model_validator
 
 from bisheng.llm.domain.models import LLMModelBase, LLMServerBase
+from bisheng.utils.mask_data import JsonFieldMasker
 from bisheng_langchain.linsight.const import TaskMode
 
 
@@ -13,6 +14,15 @@ class LLMModelInfo(LLMModelBase):
 class LLMServerInfo(LLMServerBase):
     id: Optional[int] = None
     models: List[LLMModelInfo] = Field(default_factory=list, description='模型列表')
+
+    # 敏感数据脱敏
+    @model_validator(mode='after')
+    def mask_sensitive_data(self):
+        if not self.config:
+            return self
+        mask_maker = JsonFieldMasker()
+        self.config = mask_maker.mask_json(self.config)
+        return self
 
 
 class WSModel(BaseModel):

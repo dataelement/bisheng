@@ -38,7 +38,7 @@ export default function MessageSource({ extra, end, source, className = '', onSo
                         </div>
                     );
                 case SourceType.HAS_QA:
-                    return <a href={extraObj.url} target="_blank" className="text-blue-500 text-xs">{extraObj.qa}</a>;
+                    return <a href={extraObj.url} target="_blank" className="text-blue-500 text-xs">{t('sourceFromQaLibrary')}：{extraObj.qa}</a>;
                 default:
                     return null;
             }

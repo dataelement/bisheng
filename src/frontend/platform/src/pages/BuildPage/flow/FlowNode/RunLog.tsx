@@ -27,13 +27,13 @@ export default function RunLog({ node, children }) {
         const buildData = (data) => {
             if (data) {
 
-                const toolMap = {}
+                const keyMap = {}
                 node.group_params.forEach(group => {
                     group.params.forEach(param => {
                         if (param.key === 'tool_list') {
                             // tool
                             param.value.forEach(el => {
-                                toolMap[el.tool_key] = el.label
+                                keyMap[el.tool_key] = el.label
                             })
                         }
                     });
@@ -43,10 +43,13 @@ export default function RunLog({ node, children }) {
                     let label = ''
                     if (['file', 'variable'].includes(item.type)) {
                         const key = item.key.split('.')
-                        label = t(`node.${node.type}.${key[key.length - 1]}.label`)
+                        label = key[key.length - 1]
+                        //  t(`node.${node.type}.${key[key.length - 1]}.label`)
                     } else if (item.type === 'tool') {
-                        label = toolMap[item.key]
+                        label = keyMap[item.key]
                     } else if (item.key === 'output_msg') {
+                        label = item.key
+                    } else if (item.key === 'error') {
                         label = item.key
                     } else {
                         label = t(`node.${node.type}.${item.key}.label`)

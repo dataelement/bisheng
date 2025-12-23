@@ -929,9 +929,12 @@ class LinsightWorkbenchImpl:
 
         # todo 更好的工具初始化方案
         if need_upload and file_dir:
-            bisheng_code_tool = await cls._init_bisheng_code_tool(config_tool_ids, file_dir,
-                                                                  user_id=session_version.user_id)
-            tools.extend(bisheng_code_tool)
+            try:
+                bisheng_code_tool = await cls._init_bisheng_code_tool(config_tool_ids, file_dir,
+                                                                      user_id=session_version.user_id)
+                tools.extend(bisheng_code_tool)
+            except Exception as e:
+                logger.error(f"初始化毕昇代码解释器工具失败: session_version_id={session_version.id}, error={str(e)}")
 
         # 过滤有效的工具ID
         valid_tool_ids = [tid for tid in tool_ids if tid in config_tool_ids]

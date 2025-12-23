@@ -223,7 +223,8 @@ export default function AppUseLog() {
                 // output
                 if ('output_with_input_msg' === category) return `${msg.msg} :${msg.hisValue}`
                 if ('output_with_choose_msg' === category) return `${msg.msg} :${msg.options.find(el => el.id === msg.hisValue)?.label}`
-                return typeof msg === 'string' ? msg : (msg.input || msg.msg)
+                const newMsg = typeof msg === 'string' ? msg : (msg.input || msg.msg)
+                return /^[=+\-@]/.test(newMsg) ? "'" + newMsg : newMsg
             }
 
             // Data transformation
@@ -236,7 +237,7 @@ export default function AppUseLog() {
                         item.flow_name,
                         item.create_time.replace('T', ' '),
                         item.user_name,
-                        msg.is_bot ? t('log.aiRole') : t('log.userRole'),
+                        msg.category === 'question' ? t('log.userRole') : t('log.aiRole'),
                         msg.create_time.replace('T', ' '),
                         handleMessage(message, msg.category, item.flow_id + '_' + item.chat_id),
                         msg.liked === 1 ? t('log.yes') : t('log.no'),

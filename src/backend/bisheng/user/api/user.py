@@ -32,7 +32,6 @@ from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_PASSWORD_ERROR
 from ..domain.models.user import User, UserCreate, UserDao, UserLogin, UserRead, UserUpdate
 from ..domain.models.user_role import UserRole, UserRoleCreate, UserRoleDao
 from ..domain.services.auth import AuthJwt, LoginUser
-from ..domain.services.captcha import verify_captcha
 from ..domain.services.user import UserService
 from ...common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from ...common.schemas.telemetry.event_data_schema import UserLoginEventData
@@ -48,31 +47,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl='token')
 @router.post('/user/regist')
 async def regist(*, user: UserCreate):
     # 验证码校验
-    if settings.get_from_db('use_captcha'):
-        if not user.captcha_key or not await verify_captcha(user.captcha, user.captcha_key):
-            raise HTTPException(status_code=500, detail='验证码错误')
-
-    db_user = User.model_validate(user)
-
-    # check if user already exist
-    user_exists = UserDao.get_user_by_username(db_user.user_name)
-    if user_exists:
-        raise HTTPException(status_code=500, detail='用户名已存在')
-    if len(db_user.user_name) > 30:
-        raise HTTPException(status_code=500, detail='用户名最长 30 个字符')
-    try:
-        db_user.password = UserService.decrypt_md5_password(user.password)
-        # 判断下admin用户是否存在
-        admin = UserDao.get_user(1)
-        if admin:
-            db_user = UserDao.add_user_and_default_role(db_user)
-        else:
-            db_user.user_id = 1
-            db_user = UserDao.add_user_and_admin_role(db_user)
-        # 将用户写入到默认用户组下
-        UserGroupDao.add_default_user_group(db_user.user_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f'数据库写入错误， {str(e)}') from e
+    db_user = await UserService.user_register(user)
     return resp_200(db_user)
 
 
@@ -92,11 +67,11 @@ async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends
             # 如果平台没有用户或者用户名和配置的管理员用户名一致，则插入为超级管理员
             if len(user_all) == 0 or (default_admin and default_admin == account_name):
                 # 创建为超级管理员
-                user_exist = UserDao.add_user_and_admin_role(user_exist)
+                user_exist = await UserDao.add_user_and_admin_role(user_exist)
             else:
                 # 创建为普通用户
-                user_exist = UserDao.add_user_and_default_role(user_exist)
-            UserGroupDao.add_default_user_group(user_exist.user_id)
+                user_exist = await UserDao.add_user_and_default_role(user_exist)
+            await UserGroupDao.add_default_user_group(user_exist.user_id)
         if 1 == user_exist.delete:
             raise UserForbiddenError.http_exception()
         access_token = LoginUser.create_access_token(user_exist, auth_jwt=auth_jwt)

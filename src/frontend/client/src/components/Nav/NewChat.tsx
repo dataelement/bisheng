@@ -117,16 +117,23 @@ export default function NewChat({
           </Button>
           {/* 新建btn */}
           <Button
-            id="create-convo-btn"
-            variant="outline" className="shadow-sm h-10 rounded-xl px-3 flex-shrink-0"
-            onClick={clickHandler}
+            variant="outline"
+            className="shadow-sm h-10 rounded-xl px-3 flex-shrink-0"
             aria-label={localize('com_ui_new_chat')}
+            onClick={() => {
+              document.getElementById("create-convo-btn")?.click();
+              // hack
+              setTimeout(() => {
+                document.getElementById("create-convo-btn")?.click();
+              }, 300);
+            }}
           >
             <img className='size-[18px] grayscale' src={__APP_ENV__.BASE_URL + '/assets/chat2.png'} alt="" />
             <span className="text-sm font-normal whitespace-nowrap ml-0.5">{localize('com_nav_start_new_chat')}</span>
           </Button>
         </div>
       </div>
+      <div id="create-convo-btn" className='opacity-0' onClick={clickHandler}></div>
       {subHeaders != null ? subHeaders : null}
     </div>
   );

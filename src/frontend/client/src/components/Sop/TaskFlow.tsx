@@ -131,6 +131,7 @@ export const TaskFlow = ({ versionId, isSharePage, setVersions, setVersionId }) 
                 {
                     showTask && <TaskFlowContent
                         key={versionId}
+                        versionId={versionId}
                         linsight={linsight}
                         sendInput={sendInput}
                     />

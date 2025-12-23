@@ -1,4 +1,4 @@
-from typing import Any, Dict, Tuple, Type, Union, Optional
+from typing import Any, Dict, Tuple, Type, Union, Optional, List
 
 from langchain_core.tools import BaseTool, Tool
 from loguru import logger
@@ -32,6 +32,7 @@ class APIToolBase(BaseModel):
     url: str = None
     params: Dict[str, Any] = {}
     input_key: str = 'keyword'
+    proxy: Optional[str] = None
     args_schema: Type[BaseModel] = ApiArg
     model_config = ConfigDict(extra="forbid")
 
@@ -41,9 +42,11 @@ class APIToolBase(BaseModel):
         """Validate that api key and python package exists in environment."""
         timeout = values.get('request_timeout', 30)
         if not values.get('client'):
-            values['client'] = Requests(headers=values.get('headers'), request_timeout=timeout)
+            values['client'] = Requests(headers=values.get('headers'), request_timeout=timeout,
+                                        proxy=values.get('proxy'))
         if not values.get('async_client'):
             values['async_client'] = RequestsWrapper(headers=values.get('headers'),
+                                                     proxy=values.get('proxy'),
                                                      request_timeout=timeout)
         return values
 

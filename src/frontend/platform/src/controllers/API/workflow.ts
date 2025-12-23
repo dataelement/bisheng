@@ -13,8 +13,8 @@ export const getWorkflowNodeTemplate = async (): Promise<any[]> => {
 /**
  * 获取某工作流报告模板信息
  */
-export const getWorkflowReportTemplate = async (key: string): Promise<any> => {
-    return await axios.get(`/api/v1/workflow/report/file?version_key=${key}`);
+export const getWorkflowReportTemplate = async (key: string, flowId: string): Promise<any> => {
+    return await axios.get(`/api/v1/workflow/report/file?version_key=${key}&workflow_id=${flowId}`);
 }
 
 /**
@@ -110,7 +110,7 @@ export async function getWorkFlowVersions(flow_id): Promise<{ data: any[], total
 */
 export const onlineWorkflow = async (flow, status = ''): Promise<any> => {
     const { name, description, logo } = flow
-    const data = { name, description, logo: logo && logo.replace(/^\/\w+/, '') }
+    const data = { name, description, logo }
     if (status) {
         data['status'] = status
     }

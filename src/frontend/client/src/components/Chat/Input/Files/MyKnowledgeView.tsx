@@ -30,12 +30,12 @@ export default function MyKnowledgeView({ open, onOpenChange }) {
     refetchInterval: 10000, // 10s一刷新
   });
 
-  const handleDownload = async (object_name: string, filename: string) => {
+  const handleDownload = async (id: string, filename: string) => {
     if (building) return backToast()
 
-    const res = await useGetDownloadUrl(object_name)
+    const res = await useGetDownloadUrl(id)
 
-    return axios.get(__APP_ENV__.BASE_URL + res.data, { responseType: "blob" }).then((res: any) => {
+    return axios.get(__APP_ENV__.BASE_URL + res.data.original_url, { responseType: "blob" }).then((res: any) => {
       const blob = new Blob([res.data]);
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);

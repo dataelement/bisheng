@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import FileIcon from "./FileIcon";
 import { Button } from "@/components/bs-ui/button";
+import { sopApi } from "@/controllers/API/linsight";
 
 interface FilePreviewProps {
     // 原有方式：通过 fileId 查找文件
@@ -14,7 +15,7 @@ interface FilePreviewProps {
     currentDisplayFile?: any
 }
 
-export default function FilePreview({ files, fileId, currentDisplayFile, onDownloadFile }: FilePreviewProps) {
+export default function FilePreview({ files, fileId, currentDisplayFile, onDownloadFile, vid }: FilePreviewProps) {
     const { t: localize } = useTranslation()
     // 获取当前文件信息
     const currentFile = useMemo(() => {
@@ -69,22 +70,26 @@ export default function FilePreview({ files, fileId, currentDisplayFile, onDownl
                 </div>
             case 'md':
                 return <TxtFileViewer
+                    vid={vid}
                     markdown
-                    filePath={url}
+                    filePath={file_url}
                 />
             case 'csv':
                 return <TxtFileViewer
+                    vid={vid}
                     csv
-                    filePath={url}
+                    filePath={file_url}
                 />
             case 'txt':
                 return <TxtFileViewer
-                    filePath={url}
+                    vid={vid}
+                    filePath={file_url}
                 />
             case 'html':
                 return <TxtFileViewer
+                    vid={vid}
                     html
-                    filePath={url}
+                    filePath={file_url}
                 />
             case 'svg':
                 return <SvgImage
@@ -115,7 +120,7 @@ interface TxtFileViewerProps {
     directContent?: string // 新增：直接传入的内容
 }
 
-const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath }: TxtFileViewerProps) => {
+const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath, vid }: TxtFileViewerProps) => {
     const [content, setContent] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -132,7 +137,8 @@ const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath }
         const fetchTextFile = async () => {
             try {
                 setLoading(true);
-                const url = filePath.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)
+                const res = await sopApi.getLinsightFileDownloadApi(filePath, vid)
+                const url = __APP_ENV__.BASE_URL + res.file_path
                 const response = await fetch(url);
                 if (!response.ok) {
                     throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);

@@ -2,18 +2,16 @@ import { Button } from "@/components/bs-ui/button";
 import { DialogClose, DialogFooter } from "@/components/bs-ui/dialog";
 import { useEffect, useState } from 'react';
 import { useTranslation } from "react-i18next";
+import { HelpCircle } from "lucide-react";
 import { InputField } from "./InputField";
 
-const TianyanchaToolForm = ({ formData, onSubmit }) => {
+/**
+ * Component for editing economic and financial data tool settings.
+ * Focuses specifically on network configurations like proxy settings.
+ */
+const FinancialDataToolForm = ({ formData, onSubmit }) => {
     const { t } = useTranslation();
-
-    // Initialize with proxy field
-    const [localFormData, setLocalFormData] = useState(() => ({
-        api_key: '',
-        proxy: '',
-        ...formData
-    }));
-    const [errors, setErrors] = useState({});
+    const [localFormData, setLocalFormData] = useState(() => ({ proxy: '', ...formData }));
 
     useEffect(() => {
         setLocalFormData((prev) => ({ ...prev, ...formData }));
@@ -24,48 +22,23 @@ const TianyanchaToolForm = ({ formData, onSubmit }) => {
         setLocalFormData((prev) => ({ ...prev, [name]: value }));
     };
 
-    const validateForm = () => {
-        const formErrors = {};
-        let isValid = true;
-        if (!localFormData.api_key) {
-            formErrors.api_key = 'API key is required';
-            isValid = false;
-        }
-        setErrors(formErrors);
-        return isValid;
-    };
-
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (validateForm()) {
-            onSubmit(localFormData);
-        }
+        // Proxy is optional, so no heavy validation needed
+        onSubmit(localFormData);
     };
 
     return (
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" autoComplete="off">
-            <InputField
-                required
-                label="API Key"
-                type="password"
-                id="api_key"
-                name="api_key"
-                placeholder={t('build.enterApiKey')}
-                value={localFormData.api_key}
-                onChange={handleChange}
-                error={errors.api_key}
-            />
-
-            <div className="relative">
+            <div className="space-y-2">
                 <InputField
                     id="proxy"
-                    label="proxy"
                     name="proxy"
-                    tooltip={t('build.proxyDescription')}
+                    label="proxy"
+                    tooltip={t('build.fdProxyDescription')}
                     placeholder=''
                     value={localFormData.proxy}
                     onChange={handleChange}
-                // No 'label' prop here because we rendered a custom one with the icon above
                 />
             </div>
 
@@ -83,4 +56,4 @@ const TianyanchaToolForm = ({ formData, onSubmit }) => {
     );
 };
 
-export default TianyanchaToolForm;
+export default FinancialDataToolForm;

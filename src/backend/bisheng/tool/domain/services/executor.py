@@ -89,20 +89,24 @@ class ToolExecutor(BaseTool):
                    tool_id=tool.id, tool_is_preset=tool.is_preset, tool_name=tool.name)
 
     @staticmethod
-    def parse_preset_tool_params(tool: GptsTools) -> Dict:
+    def parse_preset_tool_params(tool: GptsTools, tool_type: GptsToolsType) -> Dict:
         """ parse tool init params """
-        # 特殊处理下bisheng_code_interpreter的参数
+        # get tool config from tool.extra first
+        params = {}
+        if tool.extra:
+            if isinstance(tool.extra, str):
+                params = json.loads(tool.extra)
+            elif isinstance(tool.extra, dict):
+                params = tool.extra
+        elif tool_type.extra:
+            if isinstance(tool_type.extra, str):
+                params = json.loads(tool_type.extra)
+            elif isinstance(tool_type.extra, dict):
+                params = tool_type.extra
+
+        # special handling for bisheng_code_interpreter, because it needs minio config
         if tool.tool_key == 'bisheng_code_interpreter':
-            params = {}
-            if tool.extra:
-                if isinstance(tool.extra, str):
-                    params = json.loads(tool.extra)
-                elif isinstance(tool.extra, dict):
-                    params = tool.extra
             return {'minio': settings.get_minio_conf().model_dump(), **params}
-        if not tool.extra:
-            return {}
-        params = json.loads(tool.extra)
         return params
 
     @staticmethod
@@ -123,7 +127,7 @@ class ToolExecutor(BaseTool):
     @classmethod
     def _init_preset_tool(cls, tool: GptsTools, tool_type: GptsToolsType, **kwargs) -> BaseTool:
         tool_name_param = {
-            tool.tool_key: cls.parse_preset_tool_params(tool)
+            tool.tool_key: cls.parse_preset_tool_params(tool, tool_type)
         }
         tool_langchain = load_tools(tool_params=tool_name_param, **kwargs)
         if not tool_langchain:

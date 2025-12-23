@@ -24,7 +24,6 @@ from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.cache.utils import save_uploaded_file, upload_file_to_minio
 from bisheng.core.logger import trace_id_var
-from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
@@ -286,7 +285,7 @@ async def process_flow(
                                                   event_data=NewMessageSessionEventData(
                                                       session_id=session_id,
                                                       app_id=flow_id,
-                                                      source=source,  # type: ignore
+                                                      source='api',
                                                       app_name=flow.name,
                                                       app_type=ApplicationTypeEnum.SKILL
                                                   )
@@ -363,9 +362,8 @@ async def _upload_file(file: UploadFile, object_name_prefix: str, file_supports:
     if not isinstance(file_path, str):
         file_path = str(file_path)
 
-    minio_client = get_minio_storage_sync()
     return UploadFileResponse(
-        file_path=minio_client.clear_minio_share_host(file_path),  # minio可访问的链接
+        file_path=file_path,  # minio可访问的链接
         relative_path=object_name,  # minio中的object_name
     )
 
@@ -405,19 +403,6 @@ async def create_upload_file(file: UploadFile, flow_id: str):
             flowId=flow_id,
             file_path=file_path,
         ))
-    except Exception as exc:
-        logger.error(f'Error saving file: {exc}')
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@router.get('/download')
-async def get_download_url(object_name: str):
-    # Cache file
-    minio_client = await get_minio_storage()
-    try:
-        url = minio_client.get_share_link(object_name)
-        url = minio_client.clear_minio_share_host(file_url=url)
-        return resp_200(url)
     except Exception as exc:
         logger.error(f'Error saving file: {exc}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc

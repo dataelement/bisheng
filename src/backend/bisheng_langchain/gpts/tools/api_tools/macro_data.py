@@ -97,21 +97,11 @@ class MacroData(BaseModel):
             '_': str(int(round(t * 1000))),
         }
         headers = {
-            'accept': '*/*',
-            'accept-encoding': 'gzip, deflate, br',
-            'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
-            'cache-control': 'no-cache',
-            'origin': 'https://datacenter.jin10.com',
-            'pragma': 'no-cache',
-            'referer': 'https://datacenter.jin10.com/reportType/dc_usa_michigan_consumer_sentiment',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-site',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Safari/537.36',
-            # noqa
-            'x-app-id': 'rU6QIu7JHe2gOUeR',
-            'x-csrf-token': '',
-            'x-version': '1.0.0',
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/107.0.0.0 Safari/537.36",
+            "x-app-id": "rU6QIu7JHe2gOUeR",
+            "x-csrf-token": "x-csrf-token",
+            "x-version": "1.0.0",
         }
         r = requests.get(url, params=params, headers=headers)
         temp_se = pd.DataFrame(r.json()['data']['values']).iloc[:, :2]

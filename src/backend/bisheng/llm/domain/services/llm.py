@@ -24,6 +24,7 @@ from bisheng.llm.domain.models import LLMDao, LLMServer, LLMModel
 from bisheng.llm.domain.schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig, AssistantLLMConfig, \
     EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq, WorkbenchModelConfig, WSModel
 from bisheng.utils import generate_uuid, md5_hash
+from bisheng.utils.mask_data import JsonFieldMasker
 from ..llm import BishengASR, BishengLLM, BishengTTS, BishengEmbedding
 from ..llm.rerank import BishengRerank
 
@@ -272,7 +273,8 @@ class LLMService:
         exist_server.type = server.type
         exist_server.limit_flag = server.limit_flag
         exist_server.limit = server.limit
-        exist_server.config = server.config
+        mask_maker = JsonFieldMasker()
+        exist_server.config = mask_maker.update_json_with_masked(exist_server.config, server.config)
 
         db_server = await LLMDao.update_server_with_models(exist_server, list(model_dict.values()))
         new_server_info = await cls.get_one_llm(db_server.id)
@@ -323,6 +325,19 @@ class LLMService:
         if not knowledge_llm.source_model_id:
             return None
         return cls.get_bisheng_llm_sync(model_id=knowledge_llm.source_model_id,
+                                        app_id=ApplicationTypeEnum.RAG_TRACEABILITY.value,
+                                        app_name=ApplicationTypeEnum.RAG_TRACEABILITY.value,
+                                        app_type=ApplicationTypeEnum.RAG_TRACEABILITY,
+                                        user_id=invoke_user_id)
+
+    @classmethod
+    async def get_knowledge_source_llm_async(cls, invoke_user_id: int) -> Optional[BaseChatModel]:
+        """ 获取知识库溯源的默认模型配置 """
+        knowledge_llm = await cls.aget_knowledge_llm()
+        # 没有配置模型，则用jieba
+        if not knowledge_llm.source_model_id:
+            return None
+        return await cls.get_bisheng_llm(model_id=knowledge_llm.source_model_id,
                                         app_id=ApplicationTypeEnum.RAG_TRACEABILITY.value,
                                         app_name=ApplicationTypeEnum.RAG_TRACEABILITY.value,
                                         app_type=ApplicationTypeEnum.RAG_TRACEABILITY,
@@ -688,8 +703,7 @@ class LLMService:
         minio_client = await get_minio_storage()
         await minio_client.put_object(object_name=object_name, file=audio_bytes, content_type="audio/mpeg",
                                       bucket_name=minio_client.tmp_bucket)
-        cache_value = minio_client.clear_minio_share_host(
-            minio_client.get_share_link(object_name, bucket=minio_client.tmp_bucket))
+        cache_value = await minio_client.get_share_link(object_name, bucket=minio_client.tmp_bucket)
         # The tmp bucket automatically clears files older than 7 days, so set the expiration time to 6 days
         await redis_client.aset(cache_key, cache_value, expiration=6 * 24 * 3600)
         return cache_value

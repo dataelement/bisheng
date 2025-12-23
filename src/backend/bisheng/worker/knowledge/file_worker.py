@@ -53,6 +53,12 @@ def file_copy_celery(param: json) -> str:
             files = KnowledgeFileDao.get_file_by_filters(
                 source_knowledge_id, page=page_num, page_size=page_size
             )
+
+            if not files:
+                # 没有文件了 创建milvus collection 和 es index
+                create_milvus_col_and_es_index(source_knowledge, target_knowledge)
+                break
+
             for one in files:
                 if target_list and one.md5 in target_list:
                     # 重复任务防止重复写入
@@ -196,6 +202,27 @@ def copy_vector(
     )
     if es_db:
         insert_es(source_data, es_db)
+
+
+def create_milvus_col_and_es_index(source_konwledge: Knowledge, target_knowledge: Knowledge):
+    embedding = FakeEmbedding()
+    source_col = source_konwledge.collection_name
+    source_milvus: Milvus = decide_vectorstores(source_col, "Milvus", embedding)
+    milvus_db: Milvus = decide_vectorstores(
+        target_knowledge.collection_name, "Milvus", embedding
+    )
+    if milvus_db.col is None and source_milvus.col is not None:
+        new_col = Collection(name=target_knowledge.collection_name, schema=source_milvus.col.schema,
+                             using=source_milvus.alias,
+                             consistency_level=source_milvus.consistency_level)
+        new_col.load()
+
+    # 创建es index
+    es_db = decide_vectorstores(
+        target_knowledge.index_name, "ElasticKeywordsSearch", embedding
+    )
+
+    es_db.client.indices.create(index=target_knowledge.index_name, ignore=400)
 
 
 def insert_milvus(li: List, fields: list, target: Milvus):

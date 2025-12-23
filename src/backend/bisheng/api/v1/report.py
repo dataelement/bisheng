@@ -1,13 +1,14 @@
+from fastapi import APIRouter, HTTPException
+from loguru import logger
+from sqlalchemy import or_
+from sqlmodel import select
+
 from bisheng.api.v1.schemas import resp_200
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.report import Report
 from bisheng.utils import generate_uuid
-from loguru import logger
 from bisheng_langchain.utils.requests import Requests
-from fastapi import APIRouter, HTTPException
-from sqlalchemy import or_
-from sqlmodel import select
 
 # build router
 router = APIRouter(prefix='/report', tags=['report'])
@@ -57,7 +58,7 @@ async def get_template(*, flow_id: str):
         db_report = Report(flow_id=flow_id)
     elif db_report.object_name:
         minio_client = await get_minio_storage()
-        file_url = minio_client.get_share_link(db_report.object_name)
+        file_url = await minio_client.get_share_link(db_report.object_name, clear_host=False)
 
     if not db_report.newversion_key or not db_report.object_name:
         version_key = generate_uuid()

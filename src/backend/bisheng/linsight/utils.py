@@ -6,14 +6,13 @@ from typing import List, Dict, Any
 from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
+from bisheng.common.services.config_service import settings
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models import LinsightSessionVersion, LinsightExecuteTask
 from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao, ExecuteTaskStatusEnum
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager
-from bisheng.common.services.config_service import settings
 from bisheng.utils import util
-from bisheng.utils.util import sync_func_to_async
 from bisheng_langchain.linsight.event import ExecStep
 
 # 灵思文件处理工具对应文件参数名
@@ -66,7 +65,7 @@ async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask],
                 object_name=object_name,
                 file=file_info["file_path"]
             )
-            file_info["file_url"] = minio_client.clear_minio_share_host(minio_client.get_share_link(object_name))
+            file_info["file_url"] = object_name
             return file_info
         except Exception as e:
             logger.error(f"上传文件到MinIO失败 {file_info['file_name']}: {e}")
@@ -152,7 +151,7 @@ async def get_final_result_file(session_model: LinsightSessionVersion, file_deta
                 object_name=object_name,
                 file=final_file_info["file_path"]
             )
-            final_file_info["file_url"] = minio_client.clear_minio_share_host(minio_client.get_share_link(object_name))
+            final_file_info["file_url"] = object_name
             return final_file_info
         except Exception as e:
             logger.error(f"上传文件到MinIO失败 {final_file_info['file_name']}: {e}")
@@ -242,8 +241,7 @@ async def handle_step_event_extra(event: ExecStep, task_exec_obj) -> ExecStep:
             event.extra_info["file_info"] = {
                 "file_name": file_name,
                 "file_md5": file_md5,
-                "file_url": minio_client.clear_minio_share_host(
-                    minio_client.get_share_link(object_name, minio_client.bucket))
+                "file_url": object_name
             }
 
             # 添加到步骤事件额外文件列表

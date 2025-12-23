@@ -164,7 +164,7 @@ async def delete_preset_file(*, file_id: str, login_user: UserPayload = Depends(
 @router.get('/job/file/download')
 async def get_download_url(*, file_url: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     minio_client = get_minio_storage_sync()
-    download_url = minio_client.get_share_link(file_url)
+    download_url = await minio_client.get_share_link(file_url, clear_host=False)
     return resp_200(data={'url': download_url})
 
 

@@ -9,6 +9,7 @@ from sqlmodel import Field, or_, select, Text, update, col
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.utils import md5_hash, generate_uuid
+from bisheng.utils.mask_data import JsonFieldMasker
 from ..const import AuthType, ToolPresetType
 
 
@@ -72,10 +73,20 @@ class GptsToolsTypeRead(GptsToolsTypeBase):
 
     @model_validator(mode="after")
     def validate(self):
-        if self.extra:
+        # 回显的时候需要填充api_location和parameter_name字段
+        if self.extra and not self.api_location:
             result = json.loads(self.extra)
             self.api_location = result.get('api_location')
             self.parameter_name = result.get('parameter_name')
+
+    def mask_sensitive_data(self):
+        json_masker = JsonFieldMasker()
+        # 预置工具需要脱敏extra字段
+        if self.extra and self.is_preset == ToolPresetType.PRESET.value:
+            extra_json = json.loads(self.extra)
+            extra_json = json_masker.mask_json(extra_json)
+            self.extra = json.dumps(extra_json, ensure_ascii=False)
+        return self
 
 
 class GptsToolsRead(GptsToolsBase):
@@ -432,7 +443,7 @@ class GptsToolsDao(GptsToolsBase):
         async with get_async_db_session() as session:
             statement = update(GptsToolsType).where(col(GptsToolsType.id) == tool_type_id).values(extra=extra)
             await session.exec(statement)
-            statement = update(GptsTools).where(col(GptsTools.type) == tool_type_id).values(extra=extra)
+            statement = update(GptsTools).where(col(GptsTools.type) == tool_type_id).values(extra=text('NULL'))
             await session.exec(statement)
             await session.commit()
             return True

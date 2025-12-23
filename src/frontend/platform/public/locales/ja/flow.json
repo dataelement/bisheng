@@ -237,6 +237,8 @@
   "referenceFormatTip": "変数を参照する場合は、形式を「YYYY-MM-DD HH:mm:ss」に変更してください。例：「2025-01-10 21:08:20」は2025年1月10日21時08分20秒を示します",
   "+ Add Condition": "+ 条件を追加",
   "playbackUnavailable": "再生機能は利用できません。管理者に連絡してください。",
+  "wordEditorLoadFailed": "Wordエディタの読み込みに失敗しました",
+  "checkOfficeServiceConfig": "Officeサービスの実行状態とアドレス設定が正しいか確認してください。",
   "node": {
     "start": {
       "name": "開始",
@@ -517,7 +519,13 @@
       "description": "実行するカスタムコードを定義します。",
       "入参": "入力パラメータ",
       "执行代码": "コード実行",
-      "出参": "出力パラメータ"
+      "出参": "出力パラメータ",
+      "code_input": {
+        "label": "入力パラメータ"
+      },
+      "code_output": {
+        "label": "出力パラメータ"
+      }
     },
     "condition": {
       "name": "条件分岐",

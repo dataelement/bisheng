@@ -20,7 +20,7 @@ import ToolSet from "./ToolSet";
 const MANAGED_TOOLS = [
     'Dalle3绘画', 'Bing web搜索', '天眼查',
     'Firecrawl', 'Jina AI', 'SiliconFlow',
-    '发送邮件', '飞书消息', '联网搜索', '代码执行器'
+    '发送邮件', '飞书消息', '联网搜索', '代码执行器', '经济金融数据'
 ];
 
 interface TabToolsProps {

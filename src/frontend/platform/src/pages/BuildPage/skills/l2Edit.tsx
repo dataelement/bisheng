@@ -39,14 +39,14 @@ export default function l2Edit() {
 
     const flowInit = async () => {
         await checkAppEditPermission(id, 1)
-        
+
         getFlowApi(id).then(_flow => {
             setFlow('l2 flow init', _flow);
             setIsL2(true);
             setName(_flow.name);
             setDescription(_flow.description);
             setGuideWords(_flow.guide_word);
-            setLogo(_flow.logo);
+            setViewLogo(_flow.logo);
             setChecking(false)
         });
     }
@@ -149,15 +149,17 @@ export default function l2Edit() {
 
     // 头像
     const [logo, setLogo] = useState('')
+    const [viewLogo, setViewLogo] = useState('')
     const uploadAvator = (file) => {
         uploadFileWithProgress(file, (progress) => { }, 'icon').then(res => {
-            setLogo(res.file_path);
+            setLogo(res.relative_path);
+            setViewLogo(res.file_path);
         })
     }
 
     const previewAvatar = useMemo(() =>
-        logo ? __APP_ENV__.BASE_URL + logo : '',
-        [logo])
+        (viewLogo || logo) ? __APP_ENV__.BASE_URL + (viewLogo || logo) : '',
+        [logo, viewLogo])
 
     if (checking) return null
 

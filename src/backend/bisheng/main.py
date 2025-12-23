@@ -1,11 +1,9 @@
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, ORJSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse, ORJSONResponse
 from loguru import logger
 
 from bisheng.api import router, router_rpc
@@ -93,7 +91,7 @@ def create_app():
 
     @app.exception_handler(AuthJWTException)
     def authjwt_exception_handler(request: Request, exc: AuthJWTException):
-        return JSONResponse(status_code=401, content={'detail': exc.message})
+        return JSONResponse(status_code=401, content={'detail': str(exc)})
 
     app.include_router(router)
     app.include_router(router_rpc)
@@ -102,35 +100,6 @@ def create_app():
         tracemalloc.start()
 
     return app
-
-
-def setup_static_files(app: FastAPI, static_files_dir: Path):
-    """
-    Setup the static files directory.
-    Args:
-        app (FastAPI): FastAPI app.
-        path (str): Path to the static files directory.
-    """
-    app.mount(
-        '/',
-        StaticFiles(directory=static_files_dir, html=True),
-        name='static',
-    )
-
-    @app.exception_handler(404)
-    async def custom_404_handler(request, __):
-        path = static_files_dir / 'index.html'
-
-        if not path.exists():
-            raise RuntimeError(f'File at path {path} does not exist.')
-        return FileResponse(path)
-
-
-def setup_promethues(app: FastAPI):
-    # Add prometheus asgi middleware to route /metrics requests
-    from prometheus_client import make_asgi_app
-    metrics_app = make_asgi_app()
-    app.mount('/metrics', metrics_app)
 
 
 app = create_app()
