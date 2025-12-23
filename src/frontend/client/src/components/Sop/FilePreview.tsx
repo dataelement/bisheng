@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { useLocalize } from "~/hooks";
 import { Input, Button, Label } from '~/components';
 import FileIcon from "../ui/icon/File"
+import { getLinsightFileDownloadApi } from "~/data-provider/data-provider/src/data-service";
 
 
 
@@ -14,9 +15,10 @@ interface FilePreviewProps {
     fileId?: string
     // 新增方式：直接传入文件对象
     currentDisplayFile?: any
+    vid: string
 }
 
-export default function FilePreview({ files, fileId, currentDisplayFile, onDownloadFile }: FilePreviewProps) {
+export default function FilePreview({ files, fileId, currentDisplayFile, onDownloadFile, vid }: FilePreviewProps) {
     const localize = useLocalize();
     // 获取当前文件信息
     const currentFile = useMemo(() => {
@@ -71,22 +73,26 @@ export default function FilePreview({ files, fileId, currentDisplayFile, onDownl
                 </div>
             case 'md':
                 return <TxtFileViewer
+                    vid={vid}
                     markdown
-                    filePath={url}
+                    filePath={file_url}
                 />
             case 'csv':
                 return <TxtFileViewer
+                    vid={vid}
                     csv
-                    filePath={url}
+                    filePath={file_url}
                 />
             case 'txt':
                 return <TxtFileViewer
-                    filePath={url}
+                    vid={vid}
+                    filePath={file_url}
                 />
             case 'html':
                 return <TxtFileViewer
+                    vid={vid}
                     html
-                    filePath={url}
+                    filePath={file_url}
                 />
             case 'svg':
                 return (
@@ -100,11 +106,7 @@ export default function FilePreview({ files, fileId, currentDisplayFile, onDownl
             case 'jpg':
             case 'jpeg':
             case 'bmp':
-                return <img
-                    className="border"
-                    src={url.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL) || "/placeholder.svg"}
-                    alt={file_name}
-                />
+                return <ImageFileViewer filePath={file_url} vid={vid} fileName={file_name} />
             default:
                 return <div className="flex justify-center items-center h-full text-gray-400">{localize('com_sop_preview_failed')}</div>
         }
@@ -144,14 +146,14 @@ const SvgViewer = ({ fileUrl, fileName, onDownload }: SvgViewerProps) => {
                         'Accept': 'image/svg+xml' // 明确请求SVG类型
                     }
                 });
-                
+
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status} - ${response.statusText}`);
                 }
 
                 // 直接获取SVG文本内容
                 const content = await response.text();
-                
+
                 setSvgContent(content);
             } catch (err) {
                 if (!abortController.signal.aborted) { // 排除手动取消的情况
@@ -212,7 +214,7 @@ const SvgViewer = ({ fileUrl, fileName, onDownload }: SvgViewerProps) => {
         </div>
     );
 };
-const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath }: TxtFileViewerProps) => {
+const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath, vid }: TxtFileViewerProps) => {
     const [content, setContent] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -228,7 +230,8 @@ const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath }
         const fetchTextFile = async () => {
             try {
                 setLoading(true);
-                const url = filePath.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)
+                const res = await getLinsightFileDownloadApi(filePath, vid)
+                const url = __APP_ENV__.BASE_URL + res.data.file_path
                 const response = await fetch(url);
                 if (!response.ok) {
                     throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
@@ -278,6 +281,74 @@ const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath }
     return (
         <div className="p-4 text-sm whitespace-pre-wrap bg-gray-50 rounded border border-gray-200 h-full overflow-y-auto">
             {content || <span className="text-gray-400">({localize('com_sop_empty_file')})</span>}
+        </div>
+    );
+};
+
+interface ImageFileViewerProps {
+    filePath: string;
+    vid?: string | number;
+    fileName?: string;
+    className?: string;
+}
+
+const ImageFileViewer = ({ filePath, vid, fileName = 'image', className = "" }: ImageFileViewerProps) => {
+    const [imageUrl, setImageUrl] = useState<string>('');
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const localize = useLocalize(); // 假设你已有这个 hook
+
+    useEffect(() => {
+        if (!filePath) {
+            setError('No file path provided');
+            setLoading(false);
+            return;
+        }
+
+        const fetchImageSource = async () => {
+            try {
+                setLoading(true);
+                const res = await getLinsightFileDownloadApi(filePath, vid);
+                const url = __APP_ENV__.BASE_URL + res.data.file_path;
+
+                setImageUrl(url);
+                setError(null);
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'Unknown error');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchImageSource();
+    }, [filePath, vid]);
+
+    if (loading) {
+        return (
+            <div className="p-4 text-sm text-gray-500">
+                <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/load.webp'} alt="" />
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="p-4 text-sm text-red-500">
+                {localize('com_sop_file_load_error')}: {error}
+            </div>
+        );
+    }
+
+    return (
+        <div className={`flex justify-center items-center overflow-hidden ${className}`}>
+            <img
+                className="max-w-full h-auto border object-contain"
+                src={imageUrl || "/placeholder.svg"}
+                alt={fileName}
+                onError={(e) => {
+                    (e.target as HTMLImageElement).src = "/placeholder.svg";
+                }}
+            />
         </div>
     );
 };

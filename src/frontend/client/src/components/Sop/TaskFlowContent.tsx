@@ -647,6 +647,7 @@ export const TaskFlowContent = ({ versionId, linsight, sendInput, onSearchKnowle
                 directFile={currentDirectFile}
                 currentFileId={currentPreviewFileId}
                 onFileChange={(fileId) => setCurrentPreviewFileId(fileId)}
+                vid={versionId}
                 onBack={currentDirectFile || triggerDrawerFromCard ? undefined : (() => {
                     setIsDrawerOpen(true);
                     setIsPreviewOpen(false);
