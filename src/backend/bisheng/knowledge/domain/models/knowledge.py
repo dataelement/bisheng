@@ -215,7 +215,6 @@ class KnowledgeDao(KnowledgeBase):
             if conditions:
                 statement = statement.where(or_(*conditions))
 
-            return statement
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         return statement
@@ -439,7 +438,6 @@ class KnowledgeDao(KnowledgeBase):
 
         if name:
             conditions = [col(Knowledge.name).like(f'%{name}%'), col(Knowledge.description).like(f'%{name}%')]
-
 
             file_knowledge_ids = KnowledgeFileDao.get_knowledge_ids_by_name(name)
             if file_knowledge_ids:
