@@ -589,7 +589,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
               />
             )}
             {/* 知识库 */}
-            {!isLingsi && (
+            {!isLingsi && bsConfig?.knowledgeBase.enabled && (
               <ChatKnowledge
                 config={bsConfig}
                 searchType={searchType}
@@ -601,7 +601,6 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
                 setEnableOrgKb={setEnableOrgKb}
               />
             )}
-
             <ChatToolDown
               tools={tools}
               setTools={setTools}

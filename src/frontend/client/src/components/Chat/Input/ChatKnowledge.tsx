@@ -146,40 +146,39 @@ export const ChatKnowledge = ({
 
       <SelectContent className="bg-white rounded-xl p-3 w-64 shadow-lg border">
         {/* Section 1: Personal Knowledge Base */}
-        {config?.knowledgeBase.enabled && (
-          <div className="flex justify-between items-center">
-            <div className="flex gap-2 items-center">
-              <BookOpen
-                size={16}
-                color="#595959"
-                strokeWidth={2.75}
-                className="text-slate-500"
-              />
-              <span className="text-xs font-medium">
-                {localize("com_tools_personal_knowledge")}
-              </span>
-            </div>
-            <Tooltip delayDuration={200}>
-              <TooltipTrigger asChild>
-                <div>
-                  <Switch
-                    className="data-[state=checked]:bg-blue-600"
-                    disabled={building || disabled}
-                    checked={searchType === "knowledgeSearch"}
-                    onCheckedChange={(val) =>
-                      setSearchType(val ? "knowledgeSearch" : "")
-                    }
-                  />
-                </div>
-              </TooltipTrigger>
-              {building && (
-                <TooltipContent>
-                  {localize("com_tools_knowledge_rebuilding")}
-                </TooltipContent>
-              )}
-            </Tooltip>
+
+        <div className="flex justify-between items-center">
+          <div className="flex gap-2 items-center">
+            <BookOpen
+              size={16}
+              color="#595959"
+              strokeWidth={2.75}
+              className="text-slate-500"
+            />
+            <span className="text-xs font-medium">
+              {localize("com_tools_personal_knowledge")}
+            </span>
           </div>
-        )}
+          <Tooltip delayDuration={200}>
+            <TooltipTrigger asChild>
+              <div>
+                <Switch
+                  className="data-[state=checked]:bg-blue-600"
+                  disabled={building || disabled}
+                  checked={searchType === "knowledgeSearch"}
+                  onCheckedChange={(val) =>
+                    setSearchType(val ? "knowledgeSearch" : "")
+                  }
+                />
+              </div>
+            </TooltipTrigger>
+            {building && (
+              <TooltipContent>
+                {localize("com_tools_knowledge_rebuilding")}
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </div>
 
         {/* Section 2: Organization Knowledge Base */}
         <div className="flex justify-between items-center mt-3  -ml-0.5">
