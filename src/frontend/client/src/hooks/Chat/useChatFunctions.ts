@@ -114,6 +114,7 @@ export default function useChatFunctions({
     const search_enabled = searchType && searchType === 'netSearch' || false;
     const knowledge_enabled = searchType && searchType === 'knowledgeSearch' || false;
 
+    debugger
     const use_knowledge_base = {
       personal_knowledge_enabled: knowledge_enabled,
 
@@ -121,7 +122,7 @@ export default function useChatFunctions({
       // enableOrgKb: enableOrgKb,
       organization_knowledge_ids:
         enableOrgKb
-          ? selectedOrgKbs.map(kb => kb.id)
+          ? selectedOrgKbs.map(kb => kb.id).filter(kb => kb !== 'personal_knowledge_base')
           : [],
     };
 
