@@ -190,14 +190,14 @@ class UserGroupDao(UserGroupBase):
             return user_groups
 
     @classmethod
-    def add_default_user_group(cls, user_id: int) -> None:
+    async def add_default_user_group(cls, user_id: int) -> None:
         """
         给默认用户组内添加用户
         """
-        with get_sync_db_session() as session:
+        async with get_async_db_session() as session:
             user_group = UserGroup(user_id=user_id, group_id=DefaultGroup, is_group_admin=False)
             session.add(user_group)
-            session.commit()
+            await session.commit()
 
     @classmethod
     def delete_group_admins(cls, group_id: int, admin_ids: List[int]) -> None:

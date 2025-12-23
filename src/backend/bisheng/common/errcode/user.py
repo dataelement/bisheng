@@ -42,6 +42,11 @@ class CaptchaError(BaseErrorCode):
     Msg: str = '验证码错误'
 
 
+class UserNameTooLongError(BaseErrorCode):
+    Code: int = 10608
+    Msg: str = '用户名长度不能超过30个字符'
+
+
 class UserGroupNotDeleteError(BaseErrorCode):
     Code: int = 10610
     Msg: str = '用户组内还有用户，不能删除'
