@@ -1,6 +1,7 @@
 import os
 import shutil  # For checking if the executable is in PATH
 import subprocess
+import tempfile
 
 from loguru import logger
 
@@ -57,25 +58,28 @@ def _convert_file_extension(input_path, convert_extension, output_dir=None, exce
             "Error: LibreOffice (soffice) command not found. Please install LibreOffice and ensure it's in your PATH, or adjust 'get_libreoffice_path()'."
         )
         return False
-    command = [
-        soffice_path,
-        "--headless",  # Run in headless mode (no GUI)
-        "--convert-to",
-        convert_extension,
-        "--outdir",
-        output_dir,  # Specify the output directory
-        input_path,  # The input file
-    ]
 
-    logger.debug(f"Executing command: {' '.join(command)}")
     base_name = os.path.basename(input_path)
     file_name_no_ext = os.path.splitext(base_name)[0]
     output_path = os.path.join(output_dir, f"{file_name_no_ext}.{except_file_ext}")
 
     try:
-        process = subprocess.run(
-            command, check=True, capture_output=True, text=True, timeout=180
-        )  # 120 seconds timeout
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            command = [
+                soffice_path,
+                "--headless",  # Run in headless mode (no GUI)
+                "-env:SingleAppInstance=false",
+                f"-env:UserInstallation=file://{tmp_dir}",
+                "--convert-to",
+                convert_extension,
+                "--outdir",
+                output_dir,  # Specify the output directory
+                input_path,  # The input file
+            ]
+            logger.debug(f"Executing command: {' '.join(command)}")
+            process = subprocess.run(
+                command, check=True, capture_output=True, text=True, timeout=180
+            )  # 120 seconds timeout
         logger.debug(f"LibreOffice STDOUT: {process.stdout}")
         if process.stderr:  # LibreOffice sometimes logger.debugs info to stderr even on success
             logger.debug(f"LibreOffice STDERR: {process.stderr}")
