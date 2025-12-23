@@ -218,47 +218,123 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
   useEffect(() => {
     searchType || enableOrgKb ? setIsSearch(true) : setIsSearch(false);
   }, [searchType, enableOrgKb]);
-
+  const prevChatId = useRef("");
   useEffect(() => {
-    if (conversation?.conversationId) {
+    if (conversation?.conversationId === prevChatId.current) {
+      return;
+    }
+
+    // 情况1: 切换到 "new" 状态
+    if (conversation?.conversationId === "new") {
+      console.log("切换到 new 状态，清空所有状态");
+
+      // 清空状态
+      setSelectedOrgKbs([]);
+      setEnableOrgKb(false);
+      setSearchType("");
+      setChatId("new");
+      prevChatId.current = "new";
+      return;
+    }
+
+    // 情况2: 从 "new" 转换到实际 ID
+    if (prevChatId.current === "new" && conversation?.conversationId) {
       const newChatId = conversation.conversationId;
-      if (isInitialMount.current) {
-        console.log("Initial mount, keeping current state");
-        isInitialMount.current = false;
-        setChatId(newChatId);
-        return;
-      }
+      console.log("从 new 转换到实际 ID", newChatId);
+
+      // 先检查是否已经有保存的状态
       const savedState = chatStatesMap[newChatId];
 
       if (savedState) {
-        // 恢复保存的状态
+        // 如果已经有保存的状态，恢复它
+        console.log("恢复已保存的状态", savedState);
         setSelectedOrgKbs(savedState.selectedOrgKbs || []);
         setEnableOrgKb(savedState.enableOrgKb || false);
         setSearchType(savedState.searchType || "");
       } else {
-        // 清空状态
+        // 如果没有保存的状态，保存当前状态
+        console.log("保存当前状态到新ID");
+        const newChatState = {
+          selectedOrgKbs: selectedOrgKbs,
+          enableOrgKb: enableOrgKb,
+          searchType: searchType,
+        };
+
+        // 保存到新的 conversationId 中
+        setChatStatesMap((prev) => ({
+          ...prev,
+          [newChatId]: newChatState,
+        }));
+      }
+
+      setChatId(newChatId);
+      prevChatId.current = newChatId;
+      return;
+    }
+
+    // 情况3: 从实际 ID 切换到另一个实际 ID
+    if (
+      conversation?.conversationId &&
+      prevChatId.current &&
+      prevChatId.current !== "new"
+    ) {
+      const newChatId = conversation.conversationId;
+      // 先保存当前会话的状态
+      if (prevChatId.current) {
+        setChatStatesMap((prev) => ({
+          ...prev,
+          [prevChatId.current]: {
+            selectedOrgKbs,
+            enableOrgKb,
+            searchType,
+          },
+        }));
+      }
+
+      // 然后恢复新会话的状态
+      const savedState = chatStatesMap[newChatId];
+      if (savedState) {
+        console.log("恢复新会话的状态", savedState);
+        setSelectedOrgKbs(savedState.selectedOrgKbs || []);
+        setEnableOrgKb(savedState.enableOrgKb || false);
+        setSearchType(savedState.searchType || "");
+      } else {
+        console.log("新会话没有保存的状态，清空");
         setSelectedOrgKbs([]);
         setEnableOrgKb(false);
         setSearchType("");
       }
 
       setChatId(newChatId);
+      prevChatId.current = newChatId;
+      return;
+    }
+    if (conversation?.conversationId) {
+      const newChatId = conversation.conversationId;
+
+      // 恢复保存的状态
+      const savedState = chatStatesMap[newChatId];
+      if (savedState) {
+        console.log("恢复保存的状态", savedState);
+        setSelectedOrgKbs(savedState.selectedOrgKbs || []);
+        setEnableOrgKb(savedState.enableOrgKb || false);
+        setSearchType(savedState.searchType || "");
+      } else {
+        console.log("没有保存的状态，清空");
+        setSelectedOrgKbs([]);
+        setEnableOrgKb(false);
+        setSearchType("");
+      }
+
+      setChatId(newChatId);
+      prevChatId.current = newChatId;
+    } else {
+      // conversationId 不存在的情况
+      setChatId("");
+      prevChatId.current = conversation?.conversationId;
     }
   }, [conversation?.conversationId]);
 
-  // 2. 保存状态：当状态变化时
-  useEffect(() => {
-    if (chatId && !isInitialMount.current) {
-      setChatStatesMap((prev) => ({
-        ...prev,
-        [chatId]: {
-          selectedOrgKbs,
-          enableOrgKb,
-          searchType,
-        },
-      }));
-    }
-  }, [chatId, selectedOrgKbs, enableOrgKb, searchType]);
   const endpointSupportsFiles: boolean =
     supportsFiles[endpointType ?? endpoint ?? ""] ?? false;
   const isUploadDisabled: boolean = endpointFileConfig?.disabled ?? false;
