@@ -233,11 +233,12 @@ def del_chat_id(*,
 
     if not session_chat or session_chat.is_delete:
         return resp_200()
-    # 处理临时数据
-    col_name = f'tmp_{session_chat.flow_id}_{chat_id}'
-    logger.info('tmp_delete_milvus col={}', col_name)
-    delete_vector(col_name, None)
-    delete_es(col_name)
+    if session_chat.flow_type == FlowType.FLOW.value:
+        # 处理临时数据
+        col_name = f'tmp_{session_chat.flow_id}_{chat_id}'
+        logger.info('tmp_delete_milvus col={}', col_name)
+        delete_vector(col_name, None)
+        delete_es(col_name)
     if session_chat.flow_type == FlowType.ASSISTANT.value:
         assistant_info = AssistantDao.get_one_assistant(session_chat.flow_id)
         if assistant_info:
