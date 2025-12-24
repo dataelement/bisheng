@@ -498,9 +498,8 @@ def instantiate_vectorstore(node_type: str, class_object: Type[VectorStore], par
 
         # 获取执行用户 有权限查看的知识库列表
         knowledge_ids = [one['key'] for one in params[col_name]]
-        include_private = params.pop('_include_private', False)  # 获取是否包含个人知识库参数
         if params.pop('_is_check_auth', True):
-            knowledge_list = KnowledgeDao.judge_knowledge_permission(user_name, knowledge_ids, include_private)
+            knowledge_list = KnowledgeDao.judge_knowledge_permission(user_name, knowledge_ids)
         else:
             knowledge_list = KnowledgeDao.get_list_by_ids(knowledge_ids)
         logger.debug(f'{node_type} after filter, get knowledge_list: {knowledge_list}')

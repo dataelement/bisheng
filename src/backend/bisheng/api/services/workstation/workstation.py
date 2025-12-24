@@ -1,10 +1,9 @@
 import asyncio
 import json
 from datetime import datetime
-from typing import Optional, Any, Coroutine
+from typing import Optional, Any
 
 from fastapi import BackgroundTasks, Request
-from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, HumanMessage
 from loguru import logger
 from openai import BaseModel
@@ -17,13 +16,14 @@ from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, Works
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.server import EmbeddingModelStatusError
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
+from bisheng.core.vectorstore.multi_retriever import MultiRetriever
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.core.vectorstore.ensemble_retriever import RRFMultiVectorRetriever, VectorRetrieverParams
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.llm.domain.services import LLMService
+from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.user.domain.models.user import UserDao
 
@@ -191,33 +191,38 @@ class WorkStationService(BaseService):
             knowledge_vector_list = await KnowledgeRag.get_multi_knowledge_vectorstore(
                 invoke_user_id=login_user.user_id,
                 knowledge_ids=knowledge_ids,
-                user_name=login_user.user_name, include_private=True)
+                user_name=login_user.user_name)
 
-            vector_store_params = []
+            all_milvus, all_milvus_filter = [], []
+            all_es, all_es_filter = [], []
+            multi_milvus_retriever, multi_es_retriever = None, None
             for knowledge_id, vectorstore_info in knowledge_vector_list.items():
                 milvus_vectorstore = vectorstore_info.get("milvus")
                 es_vectorstore = vectorstore_info.get("es")
-                if milvus_vectorstore:
-                    vector_store_params.append(VectorRetrieverParams(
-                        vector_store=milvus_vectorstore,
-                        search_kwargs={"top_k": 100},
-                    ))
-                if es_vectorstore:
-                    vector_store_params.append(VectorRetrieverParams(
-                        vector_store=es_vectorstore,
-                        search_kwargs={"top_k": 100},
-                    ))
-
-            if not vector_store_params:
-                return [], None
-
-            rrf_multivector_retriever = RRFMultiVectorRetriever(
-                vector_store_params=vector_store_params,
-                top_k=100,
-                max_context_length=max_token,
+                all_milvus.append(milvus_vectorstore)
+                all_milvus_filter.append({"k": 100, "param": {"ef": 110}})
+                all_es.append(es_vectorstore)
+                all_es_filter.append({"k": 100})
+            if all_milvus:
+                multi_milvus_retriever = MultiRetriever(
+                    vectors=all_milvus,
+                    search_kwargs=all_milvus_filter,
+                    finally_k=100
+                )
+            if all_es:
+                multi_es_retriever = MultiRetriever(
+                    vectors=all_es,
+                    search_kwargs=all_es_filter,
+                    finally_k=100
+                )
+            knowledge_retriever_tool = KnowledgeRetrieverTool(
+                vector_retriever=multi_milvus_retriever,
+                elastic_retriever=multi_es_retriever,
+                max_content=max_token,
+                rrf_remove_zero_score=True
             )
-            # 使用 RAG 方法进行检索
-            finally_docs = await rrf_multivector_retriever.ainvoke(question)
+
+            finally_docs = await knowledge_retriever_tool.ainvoke({"query": question})
 
             # 将检索结果格式化为指定的模板格式
             formatted_results = []

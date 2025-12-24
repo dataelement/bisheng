@@ -294,13 +294,11 @@ class KnowledgeDao(KnowledgeBase):
 
     @classmethod
     def judge_knowledge_permission(cls, user_name: str,
-                                   knowledge_ids: List[int],
-                                   include_private: bool = False) -> List[Knowledge]:
+                                   knowledge_ids: List[int]) -> List[Knowledge]:
         """
         根据用户名和知识库ID列表，获取用户有权限查看的知识库列表
         :param user_name: 用户名
         :param knowledge_ids: 知识库ID列表
-        :param include_private: 是否包含个人知识库
         :return: 返回用户有权限的知识库列表
         """
         # 获取用户信息
@@ -324,39 +322,23 @@ class KnowledgeDao(KnowledgeBase):
             return KnowledgeDao.get_list_by_ids(knowledge_ids)
 
         # 查询角色 有使用权限的知识库列表
-        role_access_list = RoleAccessDao.find_role_access(role_id_list, knowledge_ids,
+        role_access_list = RoleAccessDao.find_role_access(role_id_list, [str(one) for one in knowledge_ids],
                                                           AccessType.KNOWLEDGE)
 
-        # 查询是否包含了用户自己创建的知识库
-        if include_private:
-            # 如果需要包含个人知识库，则不进行类型过滤
-            user_knowledge_list = cls.get_user_knowledge(user_info.user_id,
-                                                         filter_knowledge=knowledge_ids,
-                                                         knowledge_type=False)
-        else:
-            # 默认行为：过滤掉个人知识库
-            user_knowledge_list = cls.get_user_knowledge(user_info.user_id,
-                                                         filter_knowledge=knowledge_ids)
-        if not role_access_list and not user_knowledge_list:
-            return []
-
-        finally_knowledge_list = [access.third_id for access in role_access_list]
-        finally_knowledge_list.extend([str(one.id) for one in user_knowledge_list])
-        statement = select(Knowledge).where(Knowledge.id.in_(finally_knowledge_list))
-
-        with get_sync_db_session() as session:
-            return session.exec(statement).all()
+        user_knowledge_list = cls.get_user_knowledge(user_info.user_id,
+                                                     knowledge_id_extra=[int(access.third_id) for access in
+                                                                         role_access_list],
+                                                     filter_knowledge=knowledge_ids)
+        return user_knowledge_list
 
     @classmethod
     async def ajudge_knowledge_permission(cls, user_name: str,
-                                          knowledge_ids: List[int],
-                                          include_private: bool = False) -> List[Knowledge]:
+                                          knowledge_ids: List[int]) -> List[Knowledge]:
         """
         依据用户名和知识库ID列表，异步获取用户有权限查看的知识库列表
         Args:
             user_name:
             knowledge_ids:
-            include_private:
 
         Returns:
 
@@ -379,26 +361,14 @@ class KnowledgeDao(KnowledgeBase):
         if is_admin:
             return await cls.aget_list_by_ids(knowledge_ids)
         # 查询角色 有使用权限的知识库列表
-        role_access_list = await RoleAccessDao.afind_role_access(role_id_list, knowledge_ids, AccessType.KNOWLEDGE)
+        role_access_list = await RoleAccessDao.afind_role_access(role_id_list, [str(one) for one in knowledge_ids],
+                                                                 AccessType.KNOWLEDGE)
         # 查询是否包含了用户自己创建的知识库
-        if include_private:
-            # 如果需要包含个人知识库，则不进行类型过滤
-            user_knowledge_list = await cls.aget_user_knowledge(user_info.user_id,
-                                                                filter_knowledge=knowledge_ids,
-                                                                knowledge_type=False)
-        else:
-            # 默认行为：过滤掉个人知识库
-            user_knowledge_list = await cls.aget_user_knowledge(user_info.user_id,
-                                                                filter_knowledge=knowledge_ids)
-        if not role_access_list and not user_knowledge_list:
-            return []
-        finally_knowledge_list = [access.third_id for access in role_access_list]
-        finally_knowledge_list.extend([str(one.id) for one in user_knowledge_list])
-        statement = select(Knowledge).where(Knowledge.id.in_(finally_knowledge_list
-                                                             ))
-        async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            return result.all()
+        user_knowledge_list = await cls.aget_user_knowledge(user_info.user_id,
+                                                            knowledge_id_extra=[int(access.third_id) for access in
+                                                                                role_access_list],
+                                                            filter_knowledge=knowledge_ids)
+        return user_knowledge_list
 
     @classmethod
     def filter_knowledge_by_ids(cls,
