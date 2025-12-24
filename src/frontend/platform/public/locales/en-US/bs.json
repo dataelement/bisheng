@@ -111,6 +111,7 @@
     "system": "System",
     "log": "Logs",
     "dataset": "Dataset",
+    "dashboard": "Dashboard",
     "themeSwitch": "Theme Switch",
     "document": "Documentation",
     "logout": "Logout",

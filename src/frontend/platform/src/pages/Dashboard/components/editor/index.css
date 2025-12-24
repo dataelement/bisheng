@@ -1,0 +1,16 @@
+.react-grid-item>.react-resizable-handle::after {
+    border-right: 2px solid hsl(var(--primary));
+    border-bottom: 2px solid hsl(var(--primary));
+}
+
+.react-grid-item.react-grid-placeholder {
+    background-color: rgba(140, 140, 140, 0.2);
+    border-radius: 6px;
+    opacity: 0.5;
+    border: 1px dashed hsl(var(--primary));
+}
+
+.writing-mode-vertical {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+}

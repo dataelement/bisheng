@@ -1,6 +1,6 @@
 {
   "name": "bisheng",
-  "version": "2.3.0-beta3",
+  "version": "2.3.0",
   "private": true,
   "dependencies": {
     "@headlessui/react": "^2.0.4",
@@ -53,6 +53,7 @@
     "react-dom": "^18.3.1",
     "react-dropzone": "^14.2.3",
     "react-error-boundary": "^4.0.13",
+    "react-grid-layout": "^2.1.0",
     "react-i18next": "^15.0.0",
     "react-markdown": "^10.1.0",
     "react-query": "^3.39.3",

@@ -563,11 +563,11 @@ export default function Files({ onPreview }) {
                                 <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-1">
                                         {el.status === 3 && (
-                                            <Tip content={!isEditable && 'No operation permission'} side='top'>
+                                            <Tip content={isEditable && 'No operation permission'} side='top'>
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    disabled={!isEditable}
+                                                    disabled={isEditable}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleRetry([el]); // Single retry passes complete object

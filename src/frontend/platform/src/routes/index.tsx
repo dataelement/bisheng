@@ -7,40 +7,42 @@ import Page403 from "../pages/Page403";
 import Page404 from "../pages/Page404";
 import { AppNumType } from "../types/app";
 import RouteErrorBoundary from "./RouteErrorBoundary";
+import EditorPage from "@/pages/Dashboard/editor";
 
 // 异步加载页面组件
-const Templates = lazy(() => import("../pages/BuildPage/appTemps"));
-const Apps = lazy(() => import("../pages/BuildPage/apps"));
-const EditAssistantPage = lazy(() => import("../pages/BuildPage/assistant/editAssistant"));
-const WorkBenchPage = lazy(() => import("../pages/BuildPage/bench/DialogueWork"));
-const FlowPage = lazy(() => import("../pages/BuildPage/flow"));
-const SkillPage = lazy(() => import("../pages/BuildPage/skills/editSkill"));
-const L2Edit = lazy(() => import("../pages/BuildPage/skills/l2Edit"));
-const SkillToolsPage = lazy(() => import("../pages/BuildPage/tools"));
-const SkillChatPage = lazy(() => import("../pages/ChatAppPage"));
-const ChatAssitantShare = lazy(() => import("../pages/ChatAppPage/chatAssitantShare"));
-const ChatShare = lazy(() => import("../pages/ChatAppPage/chatShare"));
-const ChatPro = lazy(() => import("../pages/ChatAppPage/chatWebview"));
-const DataSetPage = lazy(() => import("../pages/DataSetPage"));
-const DiffFlowPage = lazy(() => import("../pages/DiffFlowPage"));
-const EvaluatingPage = lazy(() => import("../pages/EvaluationPage"));
-const EvaluatingCreate = lazy(() => import("../pages/EvaluationPage/EvaluationCreate"));
-const KnowledgePage = lazy(() => import("../pages/KnowledgePage"));
-const AdjustFilesUpload = lazy(() => import("../pages/KnowledgePage/AdjustFilesUpload"));
-const FilesPage = lazy(() => import("../pages/KnowledgePage/detail"));
-const FilesUpload = lazy(() => import("../pages/KnowledgePage/filesUpload"));
-const QasPage = lazy(() => import("../pages/KnowledgePage/qas"));
-const LabelPage = lazy(() => import("../pages/LabelPage"));
-const TaskAppChats = lazy(() => import("../pages/LabelPage/taskAppChats"));
-const TaskApps = lazy(() => import("../pages/LabelPage/taskApps"));
-const LogPage = lazy(() => import("../pages/LogPage"));
-const AppChatDetail = lazy(() => import("../pages/LogPage/useAppLog/appChatDetail"));
-const Doc = lazy(() => import("../pages/ModelPage/doc"));
-const Finetune = lazy(() => import("../pages/ModelPage/finetune").then(module => ({ default: module.Finetune })));
-const Management = lazy(() => import("../pages/ModelPage/manage"));
-const Report = lazy(() => import("../pages/Report"));
-const SystemPage = lazy(() => import("../pages/SystemPage"));
-const ResoucePage = lazy(() => import("../pages/resoucePage"));
+const Templates = lazy(() => import("@/pages/BuildPage/appTemps"));
+const Apps = lazy(() => import("@/pages/BuildPage/apps"));
+const EditAssistantPage = lazy(() => import("@/pages/BuildPage/assistant/editAssistant"));
+const WorkBenchPage = lazy(() => import("@/pages/BuildPage/bench/DialogueWork"));
+const FlowPage = lazy(() => import("@/pages/BuildPage/flow"));
+const SkillPage = lazy(() => import("@/pages/BuildPage/skills/editSkill"));
+const L2Edit = lazy(() => import("@/pages/BuildPage/skills/l2Edit"));
+const SkillToolsPage = lazy(() => import("@/pages/BuildPage/tools"));
+const SkillChatPage = lazy(() => import("@/pages/ChatAppPage"));
+const ChatAssitantShare = lazy(() => import("@/pages/ChatAppPage/chatAssitantShare"));
+const ChatShare = lazy(() => import("@/pages/ChatAppPage/chatShare"));
+const ChatPro = lazy(() => import("@/pages/ChatAppPage/chatWebview"));
+const DataSetPage = lazy(() => import("@/pages/DataSetPage"));
+const DiffFlowPage = lazy(() => import("@/pages/DiffFlowPage"));
+const EvaluatingPage = lazy(() => import("@/pages/EvaluationPage"));
+const EvaluatingCreate = lazy(() => import("@/pages/EvaluationPage/EvaluationCreate"));
+const KnowledgePage = lazy(() => import("@/pages/KnowledgePage"));
+const AdjustFilesUpload = lazy(() => import("@/pages/KnowledgePage/AdjustFilesUpload"));
+const FilesPage = lazy(() => import("@/pages/KnowledgePage/detail"));
+const FilesUpload = lazy(() => import("@/pages/KnowledgePage/filesUpload"));
+const QasPage = lazy(() => import("@/pages/KnowledgePage/qas"));
+const LabelPage = lazy(() => import("@/pages/LabelPage"));
+const TaskAppChats = lazy(() => import("@/pages/LabelPage/taskAppChats"));
+const TaskApps = lazy(() => import("@/pages/LabelPage/taskApps"));
+const LogPage = lazy(() => import("@/pages/LogPage"));
+const AppChatDetail = lazy(() => import("@/pages/LogPage/useAppLog/appChatDetail"));
+const Doc = lazy(() => import("@/pages/ModelPage/doc"));
+const Finetune = lazy(() => import("@/pages/ModelPage/finetune").then(module => ({ default: module.Finetune })));
+const Management = lazy(() => import("@/pages/ModelPage/manage"));
+const Report = lazy(() => import("@/pages/Report"));
+const SystemPage = lazy(() => import("@/pages/SystemPage"));
+const ResoucePage = lazy(() => import("@/pages/resoucePage"));
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
 
 const baseConfig = {
   //@ts-ignore
@@ -90,6 +92,8 @@ const privateRouter = [
       { path: "label", element: <LabelPage /> },
       { path: "label/:id", element: <TaskApps /> },
       { path: "label/chat/:id/:fid/:cid/:type", element: <TaskAppChats /> },
+      { path: "dashboard", element: <Dashboard /> },
+      { path: "dashboard/:id", element: <EditorPage />, permission: 'dashboard', },
     ],
   },
   { path: "model/doc", element: <Doc />, errorElement: <RouteErrorBoundary /> },
