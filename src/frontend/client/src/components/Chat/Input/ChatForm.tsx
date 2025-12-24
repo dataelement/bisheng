@@ -447,45 +447,59 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
           {/* {bsConfig?.fileUpload.enabled && */}
           {/* 做同款 */}
           {isLingsi && <SameSopSpan></SameSopSpan>}
-          {enableOrgKb && selectedOrgKbs.length > 0 && !isLingsi && (
-            <div className="mx-2 mt-2 max-h-[100px] overflow-y-auto">
-              <div className="flex flex-wrap gap-2">
-                {selectedOrgKbs.map((kb) => (
-                  <div
-                    key={kb.id}
-                    className="group relative flex items-center gap-1
-                      px-2 py-1 pr-4
-                      rounded-full bg-white border border-slate-200
-                      text-xs text-slate-700
-                      w-[176px]
-                      hover:bg-slate-50"
-                  >
-                    <BookOpen size={14} className="text-slate-500 shrink-0" />
+          {(enableOrgKb || searchType === "knowledgeSearch") &&
+            selectedOrgKbs.length > 0 &&
+            !isLingsi && (
+              <div className="mx-2 mt-2 max-h-[100px] overflow-y-auto">
+                <div className="flex flex-wrap gap-2">
+                  {selectedOrgKbs.map((kb) => (
+                    <div
+                      key={kb.id}
+                      className="group relative flex items-center gap-1
+              px-2 py-1 pr-6
+              rounded-full bg-white border border-slate-200
+              text-xs text-slate-700
+              max-w-[200px]
+              hover:bg-slate-50 transition-all duration-200"
+                    >
+                      {kb.id === "personal_knowledge_base" ? (
+                        <BookOpen
+                          size={14}
+                          className="text-slate-500 shrink-0"
+                        />
+                      ) : (
+                        <img
+                          className="size-[14px] text-slate-500 shrink-0"
+                          src={__APP_ENV__.BASE_URL + "/assets/books.svg"}
+                          alt=""
+                        />
+                      )}
 
-                    {/* 文字区域 */}
-                    <span className="truncate flex-1 min-w-0">{kb.name}</span>
+                      <span className="truncate flex-1 min-w-0 transition-all duration-200 group-hover:text-[11px]">
+                        {kb.name}
+                      </span>
 
-                    {setSelectedOrgKbs && (
-                      <button
-                        onClick={() =>
-                          setSelectedOrgKbs((prev) =>
-                            prev.filter((i) => i.id !== kb.id)
-                          )
-                        }
-                        className="absolute right-1 top-1/2 -translate-y-1/2
-        hidden group-hover:flex
-        w-4 h-4 items-center justify-center
-        rounded-full hover:bg-slate-200
-        text-slate-400"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                ))}
+                      {setSelectedOrgKbs && (
+                        <button
+                          onClick={() =>
+                            setSelectedOrgKbs((prev) =>
+                              prev.filter((i) => i.id !== kb.id)
+                            )
+                          }
+                          className="absolute right-1 top-1/2 -translate-y-1/2
+                  opacity-0 group-hover:opacity-100
+                  w-4 h-4 flex items-center justify-center
+                  rounded-full hover:bg-slate-200
+                  text-slate-400 transition-opacity duration-200"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
           <FileFormWrapper
             accept={accept}
             showVoice={showVoice}

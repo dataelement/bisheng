@@ -1169,6 +1169,7 @@
     "11040": "Failed to submit question",
     "11050": "Vector retrieval model error. Contact admin",
     "11060": "Manual search failed. Both vector and keyword search unavailable",
+    "10608": "Username must not exceed 30 characters",
     "11070": "Manual search failed",
     "11080": "Failed to initialize workspace tools",
     "11090": "Bisheng LLM error",
