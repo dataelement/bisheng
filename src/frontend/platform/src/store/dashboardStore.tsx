@@ -11,8 +11,6 @@ interface EditorState {
     currentDashboard: Dashboard | null
     // 选中的组件ID
     selectedComponentId: string | null
-    // 是否为预览模式（false为编辑模式）
-    isPreviewMode: boolean
     // 布局配置
     layouts: LayoutItem[]
 
@@ -24,8 +22,6 @@ interface EditorState {
     setCurrentDashboard: (dashboard: Dashboard | null) => void
     // 设置选中的组件ID
     setSelectedComponentId: (id: string | null) => void
-    // 切换预览/编辑模式
-    setPreviewMode: (isPreview: boolean) => void
     // 更新布局配置
     setLayouts: (layouts: LayoutItem[]) => void
     // 添加组件到布局
@@ -47,7 +43,6 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     isSaving: false,
     currentDashboard: null,
     selectedComponentId: null,
-    isPreviewMode: false,
     layouts: [],
 
     setHasUnsavedChanges: (value) => set({ hasUnsavedChanges: value }),
@@ -59,7 +54,6 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
         })
     },
     setSelectedComponentId: (id) => set({ selectedComponentId: id }),
-    setPreviewMode: (isPreview) => set({ isPreviewMode: isPreview }),
     setLayouts: (layouts) => {
         set({ layouts, hasUnsavedChanges: true })
     },
@@ -147,7 +141,6 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
         isSaving: false,
         currentDashboard: null,
         selectedComponentId: null,
-        isPreviewMode: false,
         layouts: []
     }),
 }))

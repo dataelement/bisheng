@@ -28,7 +28,7 @@ export function EditorHeader({
     dashboard,
     dashboardId,
 }: EditorHeaderProps) {
-    const { hasUnsavedChanges, isSaving, reset, setIsSaving, setHasUnsavedChanges, isPreviewMode, setPreviewMode } = useEditorDashboardStore()
+    const { hasUnsavedChanges, isSaving, reset, setIsSaving, setHasUnsavedChanges } = useEditorDashboardStore()
     const [isEditingTitle, setIsEditingTitle] = useState(false)
     const [title, setTitle] = useState(dashboard?.title || "")
     const inputRef = useRef<HTMLInputElement>(null)
@@ -218,7 +218,8 @@ export function EditorHeader({
             await saveMutation.mutateAsync({})
         }
 
-        publish(dashboard.id, dashboard?.status === "published")
+        publish(dashboard.id, false)
+        navigator(`/dashboard?selected=${dashboardId}`)
     }
 
     const handleShare = async () => {
@@ -305,24 +306,6 @@ export function EditorHeader({
 
             {/* Right section */}
             <div className="flex items-center gap-2">
-                <Button
-                    variant={isPreviewMode ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setPreviewMode(!isPreviewMode)}
-                >
-                    {isPreviewMode ? (
-                        <>
-                            <Pencil className="h-4 w-4 mr-1" />
-                            编辑模式
-                        </>
-                    ) : (
-                        <>
-                            <Eye className="h-4 w-4 mr-1" />
-                            预览模式
-                        </>
-                    )}
-                </Button>
-
                 <Button variant="ghost" size="sm" onClick={() => {
                     const element = document.getElementById('edit-charts-panne');
                     element.requestFullscreen();
@@ -336,7 +319,7 @@ export function EditorHeader({
                 </Button>
 
                 <Button variant="outline" size="sm" disabled={isPublishing} onClick={handlePublish}>
-                    {dashboard?.status === "published" ? "取消发布" : "发布"}
+                    发布
                 </Button>
 
                 <Button variant="default" size="sm" onClick={handleShare}>

@@ -6,6 +6,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import { EditorCanvas } from "./components/editor/EditorCanvas"
 import { EditorHeader } from "./components/editor/EditorHeader"
 import { DashboardsQueryKey } from "./hook"
+import { useState } from "react"
 
 export default function EditorPage() {
     const navgator = useNavigate()

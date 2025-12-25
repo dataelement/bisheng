@@ -19,6 +19,7 @@ import { ComponentConfigDrawer } from "./ComponentConfigDrawer"
 import "./index.css"
 
 interface EditorCanvasProps {
+    isPreviewMode?: boolean
     dashboard: Dashboard | null
 }
 
@@ -210,7 +211,7 @@ function ComponentWrapper({ dashboards, component, isSelected, isPreviewMode, on
     )
 }
 
-export function EditorCanvas({ dashboard }: EditorCanvasProps) {
+export function EditorCanvas({ isPreviewMode = false, dashboard }: EditorCanvasProps) {
     const { width, containerRef, mounted } = useContainerWidth()
     const {
         currentDashboard,
@@ -219,7 +220,6 @@ export function EditorCanvas({ dashboard }: EditorCanvasProps) {
         setLayouts,
         selectedComponentId,
         setSelectedComponentId,
-        isPreviewMode,
         updateComponent: updateComponentInStore,
         duplicateComponent: duplicateComponentInStore,
         deleteComponent: deleteComponentInStore,
@@ -331,7 +331,7 @@ export function EditorCanvas({ dashboard }: EditorCanvasProps) {
     // 如果没有dashboard，显示空状态
     if (!currentDashboard) {
         return (
-            <div id="edit-charts-panne" className="flex-1 p-6 bg-muted/30 overflow-auto">
+            <div id="edit-charts-panne" className="flex-1 p-2 bg-muted/30 overflow-auto">
                 <div className="max-w-7xl mx-auto">
                     <div className="bg-background rounded-lg border-2 border-dashed p-12 text-center">
                         <p className="text-muted-foreground">加载中...</p>
@@ -344,7 +344,7 @@ export function EditorCanvas({ dashboard }: EditorCanvasProps) {
     // 如果没有组件，显示空状态
     if (!currentDashboard.components || currentDashboard.components.length === 0) {
         return (
-            <div id="edit-charts-panne" className="flex-1 p-6 bg-muted/30 overflow-auto" onClick={handleCanvasClick}>
+            <div id="edit-charts-panne" className="flex-1 p-2 bg-muted/30 overflow-auto" onClick={handleCanvasClick}>
                 <div className="max-w-7xl mx-auto">
                     <div className="bg-background rounded-lg border-2 border-dashed p-12 text-center">
                         <p className="text-muted-foreground">画布区域</p>
@@ -368,7 +368,7 @@ export function EditorCanvas({ dashboard }: EditorCanvasProps) {
             <div
                 id="edit-charts-panne"
                 ref={containerRef}
-                className="flex-1 p-6 overflow-auto"
+                className="flex-1 p-2 overflow-auto"
                 style={{
                     backgroundColor: currentTheme.backgroundColor,
                 }}

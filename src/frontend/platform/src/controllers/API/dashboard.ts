@@ -1,6 +1,7 @@
 // Mock API functions for dashboard operations
 
 import { generateUUID } from "@/components/bs-ui/utils"
+import { ComponentConfig, createDefaultDataConfig } from "@/pages/Dashboard/types/dataConfig"
 
 // React-Grid-Layout 布局项
 export interface LayoutItem {
@@ -68,7 +69,7 @@ export interface DashboardComponent {
     title: string
     type: 'chart' | 'query' | 'metric' // 图表组件、查询组件、指标组件
     dataset_code: string
-    data_config: Record<string, any>
+    data_config: ComponentConfig // 图表/指标组件使用 DataConfig，查询组件使用 QueryConfig
     style_config: ComponentStyleConfig
     created_at: string
     updated_at: string
@@ -136,7 +137,7 @@ let mockDashboards: Dashboard[] = [
                 title: "销售趋势",
                 type: 'chart',
                 dataset_code: "sales_data",
-                data_config: { chartType: "line" },
+                data_config: createDefaultDataConfig('line'),
                 style_config: {},
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
@@ -147,7 +148,7 @@ let mockDashboards: Dashboard[] = [
                 title: "产品分布",
                 type: 'chart',
                 dataset_code: "product_data",
-                data_config: { chartType: "bar" },
+                data_config: createDefaultDataConfig('bar'),
                 style_config: {},
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
@@ -158,7 +159,7 @@ let mockDashboards: Dashboard[] = [
                 title: "总销售额",
                 type: 'metric',
                 dataset_code: "sales_metric",
-                data_config: {},
+                data_config: createDefaultDataConfig('metric'),
                 style_config: {},
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
@@ -169,7 +170,7 @@ let mockDashboards: Dashboard[] = [
                 title: "活跃用户",
                 type: 'metric',
                 dataset_code: "user_metric",
-                data_config: {},
+                data_config: createDefaultDataConfig('metric'),
                 style_config: {},
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
@@ -180,7 +181,7 @@ let mockDashboards: Dashboard[] = [
                 title: "地区分布",
                 type: 'chart',
                 dataset_code: "region_data",
-                data_config: { chartType: "pie" },
+                data_config: createDefaultDataConfig('pie'),
                 style_config: {},
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),

@@ -12,6 +12,7 @@ import { type Dashboard } from "@/controllers/API/dashboard"
 import { Edit, Eye, EyeOff, Maximize2, Share2 } from "lucide-react"
 import { useContext, useEffect, useRef, useState } from "react"
 import { DashboardStatus, usePublishDashboard } from "../../hook"
+import { EditorCanvas } from "../editor/EditorCanvas"
 
 interface DashboardDetailProps {
     dashboard: Dashboard | null
@@ -168,10 +169,8 @@ export function DashboardDetail({
                 </div>
             </div>
 
-            <div id="view-panne" className="flex-1 overflow-auto p-6">
-                <div className="border-2 border-dashed border-border rounded-lg h-full flex items-center justify-center text-muted-foreground">
-                    看板画板区域（待实现）
-                </div>
+            <div id="view-panne" className="flex-1 overflow-auto">
+                <EditorCanvas isPreviewMode dashboard={dashboard || null} />
             </div>
         </div>
     )
