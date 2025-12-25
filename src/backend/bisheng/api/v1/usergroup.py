@@ -137,7 +137,7 @@ async def get_group_resources(*,
     # 判断是否是用户组的管理员
     if not user.check_group_admin(group_id):
         return UnAuthorizedError.return_resp()
-    res, total = RoleGroupService().get_group_resources(
+    res, total = await RoleGroupService().get_group_resources(
         group_id,
         resource_type=ResourceTypeEnum(resource_type),
         name=name,

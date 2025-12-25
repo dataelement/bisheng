@@ -87,6 +87,16 @@ class GroupResourceDao(GroupResourceBase):
             return session.exec(statement).all()
 
     @classmethod
+    async def aget_group_resources(cls, group_id: int, resource_type: ResourceTypeEnum) -> List[GroupResource]:
+        statement = select(GroupResource).where(
+            GroupResource.group_id == group_id,
+            GroupResource.type == resource_type.value
+        )
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
     def get_groups_resource(cls,
                             group_ids: List[int],
                             resource_types: List[ResourceTypeEnum] = None,

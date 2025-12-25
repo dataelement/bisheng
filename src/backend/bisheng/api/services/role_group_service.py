@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime
 from typing import List, Any, Dict, Optional
@@ -244,24 +245,31 @@ class RoleGroupService():
         """设置用户组管理员"""
         GroupDao.update_group_update_user(group_id, login_user.user_id)
 
-    def get_group_resources(self, group_id: int, resource_type: ResourceTypeEnum, name: str,
-                            page_size: int, page_num: int) -> (List[Any], int):
+    async def get_group_resources(self, group_id: int, resource_type: ResourceTypeEnum, name: str,
+                                  page_size: int, page_num: int) -> (List[Any], int):
         """ 获取用户下的资源 """
         if resource_type.value == ResourceTypeEnum.FLOW.value:
-            return self.get_group_flow(group_id, name, page_size, page_num)
+            return await asyncio.to_thread(self.get_group_flow, group_id, name, page_size, page_num)
         elif resource_type.value == ResourceTypeEnum.KNOWLEDGE.value:
-            return self.get_group_knowledge(group_id, name, page_size, page_num)
+            return await asyncio.to_thread(self.get_group_knowledge, group_id, name, page_size, page_num)
         elif resource_type.value == ResourceTypeEnum.WORK_FLOW.value:
-            return self.get_group_flow(group_id, name, page_size, page_num, FlowType.WORKFLOW)
+            return await asyncio.to_thread(self.get_group_flow, group_id, name, page_size, page_num, FlowType.WORKFLOW)
         elif resource_type.value == ResourceTypeEnum.ASSISTANT.value:
-            return self.get_group_assistant(group_id, name, page_size, page_num)
+            return await asyncio.to_thread(self.get_group_assistant, group_id, name, page_size, page_num)
         elif resource_type.value == ResourceTypeEnum.GPTS_TOOL.value:
-            return self.get_group_tool(group_id, name, page_size, page_num)
+            return await asyncio.to_thread(self.get_group_tool, group_id, name, page_size, page_num)
+        elif resource_type.value == ResourceTypeEnum.DASHBOARD.value:
+            return await self.get_group_dashboards(group_id, name, page_size, page_num)
         logger.warning('not support resource type: %s', resource_type)
         return [], 0
 
     def get_user_map(self, user_ids: set[int]):
         user_list = UserDao.get_user_by_ids(list(user_ids))
+        user_map = {user.user_id: user.user_name for user in user_list}
+        return user_map
+
+    async def aget_user_map(self, user_ids: set[int]):
+        user_list = await UserDao.aget_user_by_ids(list(user_ids))
         user_map = {user.user_id: user.user_name for user in user_list}
         return user_map
 
@@ -337,6 +345,28 @@ class RoleGroupService():
             one_dict["user_name"] = user_map.get(one.user_id, one.user_id)
             res.append(one_dict)
         return res, total
+
+    async def get_group_dashboards(self, group_id: int, keyword: str, page_size: int, page_num: int) -> (List[Any],
+                                                                                                         int):
+        from bisheng.telemetry_search.domain.services.dashboard import DashboardService
+
+        """ 获取用户组下的仪表盘列表 """
+        # 查询用户组下的仪表盘ID列表
+        resource_list = await GroupResourceDao.aget_group_resources(group_id=group_id,
+                                                                    resource_type=ResourceTypeEnum.DASHBOARD)
+        if not resource_list:
+            return [], 0
+        res = []
+        dashboard_ids = [int(resource.third_id) for resource in resource_list]
+        # 查询仪表盘
+        data = await DashboardService.get_simple_dashboards(keyword=keyword, filter_ids=dashboard_ids)
+
+        user_map = await self.aget_user_map(set([one.user_id for one in data]))
+        for one in data:
+            one_dict = one.model_dump()
+            one_dict["user_name"] = user_map.get(one.user_id, one.user_id)
+            res.append(one_dict)
+        return res, len(res)
 
     def get_manage_resources(self, login_user: UserPayload, keyword: str, page: int, page_size: int) -> (list, int):
         """ 获取用户所管理的用户组下的应用列表 包含技能、助手、工作流"""
