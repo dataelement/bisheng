@@ -179,3 +179,8 @@ class UserService:
     def get_first_user(cls) -> User | None:
         """ 获取第一个用户 """
         return UserDao.get_first_user()
+
+    @classmethod
+    async def get_user_by_id(cls, user_id: int) -> User | None:
+        """ 通过用户名获取用户 """
+        return await UserDao.aget_user(user_id)

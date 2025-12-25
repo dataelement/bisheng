@@ -237,6 +237,12 @@ class LoginUser(BaseModel):
                 res.append(self.group_cache.get(group_info.id))
         return res
 
+    async def get_user_group_ids(self, user_id: int = None):
+        if user_id is None:
+            user_id = self.user_id
+        user_groups = await UserGroupDao.aget_user_group(user_id)
+        return [one_group.group_id for one_group in user_groups]
+
     def get_user_access_resource_ids(self, access_types: List[AccessType]) -> List[str]:
         """ 查询用户有对应权限的资源ID列表 """
         role_access = RoleAccessDao.get_role_access_batch(self.user_role, access_types)

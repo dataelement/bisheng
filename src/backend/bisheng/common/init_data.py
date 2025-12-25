@@ -15,7 +15,7 @@ from bisheng.database.models.component import Component
 from bisheng.database.models.flow_version import FlowVersion
 from bisheng.database.models.group import Group, DefaultGroup
 from bisheng.database.models.role import Role
-from bisheng.database.models.role_access import RoleAccess, AccessType
+from bisheng.database.models.role_access import RoleAccess, AccessType, WebMenuResource
 from bisheng.database.models.template import Template
 from bisheng.finetune.domain.models.sft_model import SftModel
 from bisheng.tool.domain.models.gpts_tools import GptsTools
@@ -44,9 +44,12 @@ async def init_default_data():
                     session.add(db_role_normal)
                     # 给普通用户赋予 构建、知识、模型菜单栏的查看权限
                     session.add_all([
-                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value, third_id='build'),
-                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value, third_id='knowledge'),
-                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value, third_id='model'),
+                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
+                                   third_id=WebMenuResource.BUILD.value),
+                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
+                                   third_id=WebMenuResource.KNOWLEDGE.value),
+                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
+                                   third_id=WebMenuResource.MODEL.value),
                     ])
                     await session.commit()
                 # 添加默认用户组

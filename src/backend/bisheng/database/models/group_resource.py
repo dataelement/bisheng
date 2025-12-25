@@ -15,6 +15,7 @@ class ResourceTypeEnum(Enum):
     ASSISTANT = 3
     GPTS_TOOL = 4
     WORK_FLOW = 5
+    DASHBOARD = 6  # 看板
 
 
 class GroupResourceBase(SQLModelSerializable):
@@ -60,6 +61,13 @@ class GroupResourceDao(GroupResourceBase):
         with get_sync_db_session() as session:
             session.add_all(group_resources)
             session.commit()
+            return group_resources
+
+    @classmethod
+    async def ainsert_group_batch(cls, group_resources: List[GroupResource]) -> List[GroupResource]:
+        async with get_async_db_session() as session:
+            session.add_all(group_resources)
+            await session.commit()
             return group_resources
 
     @classmethod

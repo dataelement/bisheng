@@ -15,6 +15,7 @@ class SystemId(Enum):
     BUILD = "build"  # 构建
     KNOWLEDGE = "knowledge"  # 知识库
     SYSTEM = "system"  # 系统
+    DASHBOARD = "dashboard"  # 看板
 
 
 # 操作行为枚举
@@ -47,6 +48,10 @@ class EventType(Enum):
 
     USER_LOGIN = "user_login"  # 用户登录
 
+    CREATE_DASHBOARD = "create_dashboard"
+    UPDATE_DASHBOARD = "update_dashboard"
+    DELETE_DASHBOARD = "delete_dashboard"
+
 
 # 操作对象类型枚举
 class ObjectType(Enum):
@@ -60,6 +65,7 @@ class ObjectType(Enum):
     USER_GROUP_CONF = "user_group_conf"  # 用户组配置
     ROLE_CONF = "role_conf"  # 角色配置
     TOOL = "tool"
+    DASHBOARD = "dashboard"  # 看板
 
 
 class AuditLogBase(SQLModelSerializable):

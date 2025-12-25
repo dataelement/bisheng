@@ -32,6 +32,20 @@ class RoleAccessCreate(RoleAccessBase):
     pass
 
 
+class WebMenuResource(Enum):
+    """前端菜单栏资源"""
+
+    BUILD = 'build'  # 构建菜单
+    KNOWLEDGE = 'knowledge'  # 知识菜单
+    MODEL = 'model'  # 模型菜单
+    EVALUATION = 'evaluation'  # 评测菜单
+
+    FRONTEND = 'frontend'  # 前台权限
+    BACKEND = 'backend'  # 后台权限
+
+    CREATE_DASHBOARD = 'create_dashboard'  # 创建看板权限
+
+
 class AccessType(Enum):
     """Type of the role_access"""
 
@@ -45,6 +59,8 @@ class AccessType(Enum):
     GPTS_TOOL_WRITE = 8  # 工具写权限
     WORKFLOW = 9  # 工作流读权限
     WORKFLOW_WRITE = 10  # 工作流写权限
+    DASHBOARD = 11  # 看板读权限
+    DASHBOARD_WRITE = 12  # 看板写权限
 
     WEB_MENU = 99  # 前端菜单栏权限限制
 

@@ -62,6 +62,16 @@ class UserGroupDao(UserGroupBase):
             return session.exec(statement).all()
 
     @classmethod
+    async def aget_user_group(cls, user_id: int) -> List[UserGroup]:
+        """
+        异步获取用户所在的用户组
+        """
+        statement = select(UserGroup).where(UserGroup.user_id == user_id).where(UserGroup.is_group_admin == 0)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
     def get_user_admin_group(cls, user_id: int) -> List[UserGroup]:
         """
         获取用户是管理员的用户组

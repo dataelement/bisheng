@@ -454,6 +454,41 @@ class AuditLogService:
                         ObjectType.NONE, '', '')
 
     @classmethod
+    async def _dashboard_log(cls, user: UserPayload, ip_address: str, group_ids: List[int], event_type: EventType,
+                             object_id: str, object_name: str):
+
+        audit_log = AuditLog(
+            operator_id=user.user_id,
+            operator_name=user.user_name,
+            group_ids=group_ids,
+            system_id=SystemId.DASHBOARD.value,
+            event_type=event_type.value,
+            object_type=ObjectType.DASHBOARD.value,
+            object_id=object_id,
+            object_name=object_name,
+            ip_address=ip_address,
+        )
+        await AuditLogDao.ainsert_audit_logs([audit_log])
+
+    @classmethod
+    async def create_dashboard(cls, user: UserPayload, ip_address: str, dashboard_id: str, dashboard_name: str,
+                               group_ids: List[int]):
+        logger.info(f"act=create_dashboard user={user.user_name} ip={ip_address} dashboard_id={dashboard_id}")
+        await cls._dashboard_log(user, ip_address, group_ids, EventType.CREATE_DASHBOARD, dashboard_id, dashboard_name)
+
+    @classmethod
+    async def update_dashboard(cls, user: UserPayload, ip_address: str, dashboard_id: str, dashboard_name: str,
+                               group_ids: List[int]):
+        logger.info(f"act=update_dashboard user={user.user_name} ip={ip_address} dashboard_id={dashboard_id}")
+        await cls._dashboard_log(user, ip_address, group_ids, EventType.UPDATE_DASHBOARD, dashboard_id, dashboard_name)
+
+    @classmethod
+    async def delete_dashboard(cls, user: UserPayload, ip_address: str, dashboard_id: str, dashboard_name: str,
+                               group_ids: List[int]):
+        logger.info(f"act=delete_dashboard user={user.user_name} ip={ip_address} dashboard_id={dashboard_id}")
+        await cls._dashboard_log(user, ip_address, group_ids, EventType.DELETE_DASHBOARD, dashboard_id, dashboard_name)
+
+    @classmethod
     def get_filter_flow_ids(cls, user: UserPayload, flow_ids: List[str], group_ids: List[int]) -> (bool, List):
         """ 通过flow_ids和group_ids获取最终的 技能id筛选条件 false: 表示返回空列表"""
         flow_ids = [one for one in flow_ids]
