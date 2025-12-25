@@ -1,13 +1,12 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { useQuery } from "react-query"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select"
 import { Input } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
-import { Search, Calendar, Hash, Type, ChevronRight, ChevronDown } from "lucide-react"
-import { getDatasets, DashboardDataset, DimensionConfig, MetricConfig } from "@/controllers/API/dashboard"
-import { cname } from "@/components/bs-ui/utils"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select"
+import { getDatasets, MetricConfig } from "@/controllers/API/dashboard"
+import { Calendar, ChevronDown, ChevronRight, Hash, Search, Type } from "lucide-react"
+import { useMemo, useState } from "react"
+import { useQuery } from "react-query"
 
 interface DatasetSelectorProps {
     selectedDatasetCode?: string

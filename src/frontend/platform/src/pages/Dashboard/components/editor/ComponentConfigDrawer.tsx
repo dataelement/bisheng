@@ -1,10 +1,10 @@
 "use client"
 
-import { useState } from "react"
-import { Sheet, SheetContent } from "@/components/bs-ui/sheet"
-import { DashboardComponent } from "@/controllers/API/dashboard"
-import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/bs-ui/button"
+import { Sheet, SheetContent } from "@/components/bs-ui/sheet"
+import { ChevronLeft, ChevronRight } from "lucide-react"
+import { useState } from "react"
+import { DashboardComponent } from "../../types/dataConfig"
 import { DatasetSelector } from "./DatasetSelector"
 import "./index.css"
 

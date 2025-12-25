@@ -2,14 +2,14 @@
 
 import type React from "react"
 
-import { useState, useRef, useEffect } from "react"
-import type { Dashboard } from "@/controllers/API/dashboard"
-import { MoreHorizontal } from "lucide-react"
-import { cn } from "@/utils"
-import { Input } from "@/components/bs-ui/input"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/bs-ui/dropdownMenu"
 import { Button } from "@/components/bs-ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/bs-ui/dropdownMenu"
+import { Input } from "@/components/bs-ui/input"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
+import { cn } from "@/utils"
+import { MoreHorizontal } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { Dashboard } from "../../types/dataConfig"
 
 
 interface DashboardListItemProps {

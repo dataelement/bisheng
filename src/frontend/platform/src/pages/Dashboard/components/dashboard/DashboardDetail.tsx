@@ -8,10 +8,10 @@ import { useToast } from "@/components/bs-ui/toast/use-toast"
 import Tip from "@/components/bs-ui/tooltip/tip"
 import { locationContext } from "@/contexts/locationContext"
 import { userContext } from "@/contexts/userContext"
-import { type Dashboard } from "@/controllers/API/dashboard"
 import { Edit, Eye, EyeOff, Maximize2, Share2 } from "lucide-react"
 import { useContext, useEffect, useRef, useState } from "react"
 import { DashboardStatus, usePublishDashboard } from "../../hook"
+import { Dashboard } from "../../types/dataConfig"
 import { EditorCanvas } from "../editor/EditorCanvas"
 
 interface DashboardDetailProps {

@@ -1,3 +1,75 @@
+
+// React-Grid-Layout 布局项
+export interface LayoutItem {
+  i: string // 组件ID
+  x: number // 横向位置 (0-11)
+  y: number // 纵向位置
+  w: number // 宽度 (1-12)
+  h: number // 高度
+  minW?: number // 最小宽度
+  minH?: number // 最小高度
+  maxW?: number // 最大宽度
+  maxH?: number // 最大高度
+  static?: boolean // 是否静态（不可拖拽）
+}
+
+// 看板布局配置
+export interface LayoutConfig {
+  layouts: LayoutItem[] // 布局数组
+}
+
+// 主题配置
+export interface ThemeConfig {
+  backgroundColor: string
+  textColor: string
+  borderColor: string
+  chartColors: string[] // echarts 配色
+}
+
+// 看板样式配置
+export interface StyleConfig {
+  theme: 'light' | 'dark' | 'blue' | 'green' // 当前主题
+  themes: {
+    light: ThemeConfig
+    dark: ThemeConfig
+    blue: ThemeConfig
+    green: ThemeConfig
+  }
+}
+
+// 组件样式配置
+export interface ComponentStyleConfig {
+  backgroundColor?: string
+  borderColor?: string
+  textColor?: string
+  chartColors?: string[] // echarts 配色
+}
+
+export interface Dashboard {
+  id: string
+  title: string
+  description: string
+  status: 'draft' | 'published',
+  dashboard_type: 'custom',
+  layout_config: LayoutConfig,
+  style_config: StyleConfig,
+  created_by: string
+  created_at: string
+  updated_at: string
+  components: DashboardComponent[]
+}
+
+export interface DashboardComponent {
+  id: string
+  dashboard_id: string
+  title: string
+  type: ChartType
+  dataset_code: string
+  data_config: ComponentConfig // 图表/指标组件使用 DataConfig，查询组件使用 QueryConfig
+  style_config: ComponentStyleConfig
+  created_at: string
+  updated_at: string
+}
 /**
  * Dashboard 组件数据配置类型定义
  */
@@ -16,6 +88,7 @@ export type ChartType =
   | 'pie'                      // 饼状图
   | 'donut'                    // 环状图
   | 'metric'                   // 指标卡
+  | 'query'                   // 查询组件
 
 
 // 维度配置
@@ -81,7 +154,6 @@ export interface TimeFilter {
 
 // 数据配置（图表组件和指标组件使用）
 export interface DataConfig {
-  chartType: ChartType          // 图表类型
   dimensions: DimensionField[]  // 维度字段列表（对应 echarts xAxis）
   stackDimension?: DimensionField // 堆叠维度字段（某些图表类型才有，如堆叠柱状图）
   metrics: MetricField[]        // 指标字段列表（对应 echarts yAxis）
@@ -113,8 +185,6 @@ export interface QueryConfig {
 
 // 组件配置联合类型
 export type ComponentConfig = DataConfig | QueryConfig
-
-
 
 
 export const createDefaultDataConfig = (chartType: ChartType = 'bar'): DataConfig => ({

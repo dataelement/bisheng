@@ -1,6 +1,6 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/bs-ui/popover';
 import { cn } from '@/utils';
-import { AreaChart, BarChart3, Filter, LayoutGrid, LineChart, PieChart, Ratio, Type } from "lucide-react";
+import { BarChart3, Filter, LineChart, PieChart, Ratio } from "lucide-react";
 import React, { useState } from 'react';
 
 export const items = [
