@@ -93,9 +93,9 @@ const privateRouter = [
       { path: "label/:id", element: <TaskApps /> },
       { path: "label/chat/:id/:fid/:cid/:type", element: <TaskAppChats /> },
       { path: "dashboard", element: <Dashboard /> },
-      { path: "dashboard/:id", element: <EditorPage />, permission: 'dashboard', },
     ],
   },
+  { path: "dashboard/:id", element: <EditorPage />, permission: 'dashboard', },
   { path: "model/doc", element: <Doc />, errorElement: <RouteErrorBoundary /> },
   {
     path: "/skill/:id/",

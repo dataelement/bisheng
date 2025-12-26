@@ -1,41 +1,45 @@
 import { create } from "zustand"
-import { Dashboard, LayoutItem, DashboardComponent } from "@/controllers/API/dashboard"
 import { generateUUID } from "@/components/bs-ui/utils"
+import { Dashboard, DashboardComponent, LayoutItem } from "@/pages/Dashboard/types/dataConfig"
 
 interface EditorState {
-    // 是否有未保存的修改
-    hasUnsavedChanges: boolean
-    // 是否正在保存
-    isSaving: boolean
-    // 当前编辑的dashboard
-    currentDashboard: Dashboard | null
-    // 选中的组件ID
-    selectedComponentId: string | null
-    // 布局配置
-    layouts: LayoutItem[]
+    // Whether there are unsaved changes
+    hasUnsavedChanges: boolean;
+    // Whether currently saving
+    isSaving: boolean;
+    // Currently edited dashboard
+    currentDashboard: Dashboard | null;
+    // Selected component ID
+    selectedComponentId: string | null;
+    // Layout configuration
+    layouts: LayoutItem[];
+    // Query trigger (triggers re-query for all charts when changed)
+    queryTrigger: number;
 
-    // 设置修改状态
-    setHasUnsavedChanges: (value: boolean) => void
-    // 设置保存状态
-    setIsSaving: (value: boolean) => void
-    // 设置当前dashboard
-    setCurrentDashboard: (dashboard: Dashboard | null) => void
-    // 设置选中的组件ID
-    setSelectedComponentId: (id: string | null) => void
-    // 更新布局配置
-    setLayouts: (layouts: LayoutItem[]) => void
-    // 添加组件到布局
-    addComponentToLayout: (componentId: string) => void
-    // 从布局中删除组件
-    removeComponentFromLayout: (componentId: string) => void
-    // 更新组件
-    updateComponent: (componentId: string, data: Partial<DashboardComponent>) => void
-    // 复制组件
-    duplicateComponent: (componentId: string) => void
-    // 删除组件
-    deleteComponent: (componentId: string) => void
-    // 重置状态
-    reset: () => void
+    // Set modification state
+    setHasUnsavedChanges: (value: boolean) => void;
+    // Set saving state
+    setIsSaving: (value: boolean) => void;
+    // Set current dashboard
+    setCurrentDashboard: (dashboard: Dashboard | null) => void;
+    // Set selected component ID
+    setSelectedComponentId: (id: string | null) => void;
+    // Update layout configuration
+    setLayouts: (layouts: LayoutItem[]) => void;
+    // Add component to layout
+    addComponentToLayout: (componentId: string) => void;
+    // Remove component from layout
+    removeComponentFromLayout: (componentId: string) => void;
+    // Update component
+    updateComponent: (componentId: string, data: Partial<DashboardComponent>) => void;
+    // Duplicate component
+    duplicateComponent: (componentId: string) => void;
+    // Delete component
+    deleteComponent: (componentId: string) => void;
+    // Trigger query
+    triggerQuery: () => void;
+    // Reset state
+    reset: () => void;
 }
 
 export const useEditorDashboardStore = create<EditorState>((set, get) => ({
@@ -44,6 +48,7 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     currentDashboard: null,
     selectedComponentId: null,
     layouts: [],
+    queryTrigger: 0,
 
     setHasUnsavedChanges: (value) => set({ hasUnsavedChanges: value }),
     setIsSaving: (value) => set({ isSaving: value }),
@@ -103,8 +108,8 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
         const newComponent: DashboardComponent = {
             ...component,
             id: newComponentId,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
+            created_at: Date.now(),
+            updated_at: Date.now()
         }
         // Calculate position below the original component
         const newLayoutItem: LayoutItem = {
@@ -136,11 +141,16 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             selectedComponentId: null
         })
     },
+    // Trigger query for all charts
+    triggerQuery: () => {
+        set((state) => ({ queryTrigger: state.queryTrigger + 1 }))
+    },
     reset: () => set({
         hasUnsavedChanges: false,
         isSaving: false,
         currentDashboard: null,
         selectedComponentId: null,
-        layouts: []
+        layouts: [],
+        queryTrigger: 0
     }),
 }))

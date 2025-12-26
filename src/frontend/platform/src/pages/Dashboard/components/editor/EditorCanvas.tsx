@@ -15,7 +15,7 @@ import { useMutation, useQuery, useQueryClient } from "react-query"
 import "react-resizable/css/styles.css"
 import { DashboardsQueryKey } from "../../hook"
 import { Dashboard, DashboardComponent } from "../../types/dataConfig"
-import ChartWidget from "../ChartWidget"
+import { ChartContainer } from "../charts/ChartContainer"
 import { ComponentConfigDrawer } from "./ComponentConfigDrawer"
 import "./index.css"
 
@@ -30,6 +30,7 @@ interface ComponentWrapperProps {
     isSelected: boolean
     isPreviewMode: boolean
     dashboards: Dashboard[],
+    queryTrigger: number,
     onClick: () => void
     onRename: (componentId: string, newTitle: string) => void
     onDuplicate: (componentId: string) => void
@@ -37,7 +38,10 @@ interface ComponentWrapperProps {
     onDelete: (componentId: string) => void
 }
 
-function ComponentWrapper({ dashboards, component, isSelected, isPreviewMode, onClick, onRename, onDuplicate, onCopyTo, onDelete }: ComponentWrapperProps) {
+function ComponentWrapper({
+    dashboards, queryTrigger, component, isSelected, isPreviewMode,
+    onClick, onRename, onDuplicate, onCopyTo, onDelete
+}: ComponentWrapperProps) {
     const [isHovered, setIsHovered] = useState(false)
     const [isEditing, setIsEditing] = useState(false)
     const [title, setTitle] = useState(component.title)
@@ -189,30 +193,23 @@ function ComponentWrapper({ dashboards, component, isSelected, isPreviewMode, on
                 </div>
 
                 {/* Component content */}
-                {component.type === 'chart' ? (
-                    <div className="h-[calc(100%-2.5rem)] overflow-hidden">
-                        <ChartWidget type="bar" />
-                    </div>
-                ) : component.type === 'metric' ? (
-                    <div className="h-[calc(100%-2.5rem)] overflow-hidden flex items-center justify-center">
-                        <div className="text-center">
-                            <div className="text-4xl font-bold text-primary">1,234</div>
-                            <div className="text-sm text-muted-foreground mt-2">{component.title}</div>
+                <div className="h-[calc(100%-2.5rem)] overflow-hidden">
+                    {component.type === 'query' ? (
+                        <div className="flex items-center justify-center h-full">
+                            <div className="text-center text-muted-foreground">
+                                查询组件
+                            </div>
                         </div>
-                    </div>
-                ) : (
-                    <div className="h-[calc(100%-2.5rem)] overflow-hidden flex items-center justify-center">
-                        <div className="text-center">
-                            <div className="text-muted-foreground">{component.type} 组件</div>
-                        </div>
-                    </div>
-                )}
+                    ) : (
+                        <ChartContainer component={component} queryTrigger={queryTrigger} />
+                    )}
+                </div>
             </div>
         </div>
     )
 }
 
-export function EditorCanvas({ isPreviewMode = false, dashboard }: EditorCanvasProps) {
+export function EditorCanvas({ isPreviewMode, dashboard }: EditorCanvasProps) {
     const { width, containerRef, mounted } = useContainerWidth()
     const {
         currentDashboard,
@@ -221,6 +218,7 @@ export function EditorCanvas({ isPreviewMode = false, dashboard }: EditorCanvasP
         setLayouts,
         selectedComponentId,
         setSelectedComponentId,
+        queryTrigger,
         updateComponent: updateComponentInStore,
         duplicateComponent: duplicateComponentInStore,
         deleteComponent: deleteComponentInStore,
@@ -400,6 +398,7 @@ export function EditorCanvas({ isPreviewMode = false, dashboard }: EditorCanvasP
                                         component={component}
                                         isSelected={selectedComponentId === component.id}
                                         isPreviewMode={isPreviewMode}
+                                        queryTrigger={queryTrigger}
                                         onClick={() => handleComponentClick(component.id)}
                                         onRename={handleRename}
                                         onDuplicate={handleDuplicate}
