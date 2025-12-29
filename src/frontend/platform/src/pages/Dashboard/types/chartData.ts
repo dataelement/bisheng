@@ -70,11 +70,11 @@ export type QueryDataResponse = ChartDataResponse | MetricDataResponse
  */
 export const createBarChartMockData = (): ChartDataResponse => ({
   dimensions: ['1月', '2月', '3月', '4月', '5月', '6月'],
-  series: [
+  series: [ 
     {
       name: '销售额',
       data: [320, 432, 301, 434, 390, 530]
-    }
+    },
   ]
 })
 

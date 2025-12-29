@@ -95,7 +95,6 @@ export function ChartContainer({ component, queryTrigger = 0 }: ChartContainerPr
         data={data as ChartDataResponse}
         chartType={component.type}
         dataConfig={component.data_config}
-        height={300}
       />
     </div>
   );

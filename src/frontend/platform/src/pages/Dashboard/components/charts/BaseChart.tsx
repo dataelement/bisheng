@@ -3,6 +3,7 @@
 import { ChartType, ComponentConfig } from '@/pages/Dashboard/types/dataConfig'
 import { useEffect, useRef, useState } from 'react'
 import { ChartDataResponse } from '../../types/chartData'
+import { colorSchemes, convertToEChartsTheme } from '../../colorSchemes'
 
 // Dynamic loading of ECharts.
 const loadECharts = async () => {
@@ -32,10 +33,9 @@ interface BaseChartProps {
   data: ChartDataResponse
   chartType: ChartType
   dataConfig?: ComponentConfig // Chart component configuration.
-  height?: number
 }
 
-export function BaseChart({ data, chartType, dataConfig, height = 300 }: BaseChartProps) {
+export function BaseChart({ data, chartType, dataConfig }: BaseChartProps) {
   const chartRef = useRef<any>(null)
   const domRef = useRef<HTMLDivElement>(null)
   const echartsLibRef = useRef(null)
@@ -64,9 +64,18 @@ export function BaseChart({ data, chartType, dataConfig, height = 300 }: BaseCha
       chartRef.current = null
     }
 
+
     try {
+      // theme
+      const theme = 'professional-blue'
+      const isDark = false
+      const activeScheme = colorSchemes.find(s => s.id === theme);
+      const themeName = `${activeScheme.id}${isDark ? '-dark' : ''}`;
+      const themeConfig = convertToEChartsTheme(activeScheme, isDark ? 'dark' : 'light');
+      // register Theme
+      echartsLibRef.current.registerTheme(themeName, themeConfig);
       // init echarts
-      chartRef.current = echartsLibRef.current.init(domRef.current)
+      chartRef.current = echartsLibRef.current.init(domRef.current, themeName)
       const option = generateChartOption(data, chartType, dataConfig)
       chartRef.current.setOption(option, true)
     } catch (err) {
@@ -112,7 +121,7 @@ export function BaseChart({ data, chartType, dataConfig, height = 300 }: BaseCha
     )
   }
 
-  return <div ref={domRef} style={{ width: '100%', height: `${height}px` }} />
+  return <div ref={domRef} style={{ width: '100%', height: `100%` }} />
 }
 
 /**
@@ -132,7 +141,10 @@ function generateChartOption(data: ChartDataResponse, chartType: ChartType, data
     return {
       tooltip: {
         trigger: 'item',
-        formatter: '{a} <br/>{b}: {c} ({d}%)'
+        // formatter: '{a} <br/>{b}: {c} ({d}%)'
+        formatter: function (params) {
+          return `${params.seriesName}<br/>${params.name}: ${params.value} (${params.percent}%)`;
+        }
       },
       legend: {
         orient: 'vertical',
@@ -172,10 +184,23 @@ function generateChartOption(data: ChartDataResponse, chartType: ChartType, data
       trigger: 'axis',
       axisPointer: {
         type: 'shadow'
+      },
+      formatter: function (params) {
+        // params 是一个数组，包含当前轴点上的所有系列数据
+        let res = params[0].name + '<br/>'; // 第一行显示 X 轴的值（如：周一）
+
+        params.forEach(item => {
+          // item.marker 是对应系列颜色的小圆点
+          // item.seriesName 是系列名称
+          // item.value 是当前数值
+          res += `${item.marker} ${item.seriesName}: <b>${item.value} formatter</b><br/>`;
+        });
+
+        return res;
       }
     },
     legend: {
-      data: series.map(s => s.name),
+      data: series.map(s => s.name), // 多指标 堆叠维度
       top: 0
     },
     grid: {
@@ -192,11 +217,16 @@ function generateChartOption(data: ChartDataResponse, chartType: ChartType, data
   if (isHorizontal) {
     // Bar chart: X-axis is value axis, Y-axis is category axis
     option.xAxis = {
-      type: 'value'
+      type: 'value',
+      axisLabel: {
+        formatter: function (value) {
+          return value + 'formatter'
+        }
+      }
     };
     option.yAxis = {
       type: 'category',
-      data: dimensions
+      data: dimensions  // 多维度拼\n
     };
   } else {
     // Column chart/line chart: X-axis is category axis, Y-axis is value axis
@@ -204,11 +234,16 @@ function generateChartOption(data: ChartDataResponse, chartType: ChartType, data
       type: 'category',
       data: dimensions,
       axisLabel: {
-        rotate: dimensions.length > 10 ? 45 : 0
+        rotate: dimensions.length > 10 ? 45 : 0,  // 多维度拼\n
       }
     };
     option.yAxis = {
-      type: 'value'
+      type: 'value',
+      axisLabel: {
+        formatter: function (value) {
+          return value + 'formatter'
+        }
+      }
     };
   }
 
@@ -217,7 +252,10 @@ function generateChartOption(data: ChartDataResponse, chartType: ChartType, data
     let seriesType: 'bar' | 'line' = 'bar';
     const seriesConfig: any = {
       name: s.name,
-      data: s.data
+      data: s.data,
+      itemStyle: {
+        borderRadius: isHorizontal ? [0, 2, 2, 0] : [2, 2, 0, 0]
+      }
     };
 
     // Set series type based on chart type

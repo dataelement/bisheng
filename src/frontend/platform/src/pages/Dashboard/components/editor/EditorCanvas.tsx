@@ -16,6 +16,7 @@ import "react-resizable/css/styles.css"
 import { DashboardsQueryKey } from "../../hook"
 import { Dashboard, DashboardComponent } from "../../types/dataConfig"
 import { ChartContainer } from "../charts/ChartContainer"
+import { QueryFilter } from "../charts/QueryFilter"
 import { ComponentConfigDrawer } from "./ComponentConfigDrawer"
 import "./index.css"
 
@@ -120,86 +121,110 @@ function ComponentWrapper({
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                            <DropdownMenuItem onClick={(e) => {
-                                e.stopPropagation()
-                                setIsEditing(true)
-                            }}>
-                                <Edit3 className="h-4 w-4 mr-2" />
-                                重命名
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={(e) => {
-                                e.stopPropagation()
-                                onDuplicate(component.id)
-                            }}>
-                                <Copy className="h-4 w-4 mr-2" />
-                                复制
-                            </DropdownMenuItem>
-                            <DropdownMenuSub>
-                                <DropdownMenuSubTrigger onClick={(e) => e.stopPropagation()}>
-                                    <Copy className="h-4 w-4 mr-2" />
-                                    复制到
-                                </DropdownMenuSubTrigger>
-                                <DropdownMenuSubContent onClick={(e) => e.stopPropagation()}>
-                                    {dashboards.length === 0 ? (
-                                        <div className="px-2 py-1.5 text-sm text-muted-foreground">暂无其他看板</div>
-                                    ) : (
-                                        dashboards
-                                            .filter(d => d.id !== component.dashboard_id)
-                                            .map(dashboard => (
-                                                <DropdownMenuItem
-                                                    key={dashboard.id}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        onCopyTo(component.id, dashboard.id)
-                                                    }}
-                                                >
-                                                    {dashboard.title}
-                                                </DropdownMenuItem>
-                                            ))
-                                    )}
-                                </DropdownMenuSubContent>
-                            </DropdownMenuSub>
-                            <DropdownMenuItem
-                                variant="destructive"
-                                onClick={(e) => {
-                                    e.stopPropagation()
-                                    onDelete(component.id)
-                                }}
-                            >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                删除
-                            </DropdownMenuItem>
+                            {component.type === 'query' ? (
+                                // Query component: only duplicate and delete
+                                <>
+                                    <DropdownMenuItem onClick={(e) => {
+                                        e.stopPropagation()
+                                        onDuplicate(component.id)
+                                    }}>
+                                        <Copy className="h-4 w-4 mr-2" />
+                                        复制
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        variant="destructive"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            onDelete(component.id)
+                                        }}
+                                    >
+                                        <Trash2 className="h-4 w-4 mr-2" />
+                                        删除
+                                    </DropdownMenuItem>
+                                </>
+                            ) : (
+                                // Other components: full menu
+                                <>
+                                    <DropdownMenuItem onClick={(e) => {
+                                        e.stopPropagation()
+                                        setIsEditing(true)
+                                    }}>
+                                        <Edit3 className="h-4 w-4 mr-2" />
+                                        重命名
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={(e) => {
+                                        e.stopPropagation()
+                                        onDuplicate(component.id)
+                                    }}>
+                                        <Copy className="h-4 w-4 mr-2" />
+                                        复制
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSub>
+                                        <DropdownMenuSubTrigger onClick={(e) => e.stopPropagation()}>
+                                            <Copy className="h-4 w-4 mr-2" />
+                                            复制到
+                                        </DropdownMenuSubTrigger>
+                                        <DropdownMenuSubContent onClick={(e) => e.stopPropagation()}>
+                                            {dashboards.length === 0 ? (
+                                                <div className="px-2 py-1.5 text-sm text-muted-foreground">暂无其他看板</div>
+                                            ) : (
+                                                dashboards
+                                                    .filter(d => d.id !== component.dashboard_id)
+                                                    .map(dashboard => (
+                                                        <DropdownMenuItem
+                                                            key={dashboard.id}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                onCopyTo(component.id, dashboard.id)
+                                                            }}
+                                                        >
+                                                            {dashboard.title}
+                                                        </DropdownMenuItem>
+                                                    ))
+                                            )}
+                                        </DropdownMenuSubContent>
+                                    </DropdownMenuSub>
+                                    <DropdownMenuItem
+                                        variant="destructive"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            onDelete(component.id)
+                                        }}
+                                    >
+                                        <Trash2 className="h-4 w-4 mr-2" />
+                                        删除
+                                    </DropdownMenuItem>
+                                </>
+                            )}
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
             )}
 
             <div className="w-full h-full p-2">
-                {/* Component title with rename ability */}
-                <div className="mb-2">
-                    {isEditing ? (
-                        <Input
-                            ref={inputRef}
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
-                            onBlur={handleRenameBlur}
-                            onKeyDown={handleKeyDown}
-                            className="h-7 px-2 text-sm font-medium"
-                            onClick={(e) => e.stopPropagation()}
-                        />
-                    ) : (
-                        <h3 className="text-sm font-medium truncate">{component.title}</h3>
-                    )}
-                </div>
+                {/* Component title with rename ability - hidden for query type */}
+                {component.type !== 'query' && (
+                    <div className="mb-2">
+                        {isEditing ? (
+                            <Input
+                                ref={inputRef}
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                onBlur={handleRenameBlur}
+                                onKeyDown={handleKeyDown}
+                                className="h-7 px-2 text-sm font-medium"
+                                onClick={(e) => e.stopPropagation()}
+                            />
+                        ) : (
+                            <h3 className="text-sm font-medium truncate">{component.title}</h3>
+                        )}
+                    </div>
+                )}
 
                 {/* Component content */}
-                <div className="h-[calc(100%-2.5rem)] overflow-hidden">
+                <div className={component.type === 'query' ? 'h-full overflow-hidden' : 'h-[calc(100%-2.5rem)] overflow-hidden'}>
                     {component.type === 'query' ? (
-                        <div className="flex items-center justify-center h-full">
-                            <div className="text-center text-muted-foreground">
-                                查询组件
-                            </div>
-                        </div>
+                        <QueryFilter isPreviewMode={isPreviewMode} />
                     ) : (
                         <ChartContainer component={component} queryTrigger={queryTrigger} />
                     )}
@@ -380,11 +405,15 @@ export function EditorCanvas({ isPreviewMode, dashboard }: EditorCanvasProps) {
                             layout={layouts}
                             width={width}
                             gridConfig={{
-                                cols: 12,
-                                rowHeight: 60
+                                cols: 24,
+                                rowHeight: 32
                             }}
                             dragConfig={{ enabled: !isPreviewMode }}
-                            resizeConfig={{ enabled: !isPreviewMode }}
+                            resizeConfig={
+                                {
+                                    enabled: !isPreviewMode,
+                                    handles: ["sw", "nw", "se", "ne"]
+                                }}
                             onLayoutChange={handleLayoutChange}
                             draggableHandle=".drag-handle"
                             margin={[16, 16]}

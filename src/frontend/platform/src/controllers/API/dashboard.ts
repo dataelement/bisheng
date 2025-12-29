@@ -47,25 +47,28 @@ let mockDashboards: Dashboard[] = [
         dashboard_type: 'custom',
         layout_config: {
             layouts: [
-                // 第一行：柱状图
-                { i: "bar-basic", x: 0, y: 0, w: 4, h: 4, minW: 2, minH: 2 },
-                { i: "bar-stacked", x: 4, y: 0, w: 4, h: 4, minW: 2, minH: 2 },
-                { i: "bar-grouped", x: 8, y: 0, w: 4, h: 4, minW: 2, minH: 2 },
+                // 第一行：查询组件
+                { i: "query-filter", x: 0, y: 0, w: 6, h: 6, minW: 4, minH: 4 },
 
-                // 第二行：条形图
-                { i: "horizontal-bar-basic", x: 0, y: 4, w: 4, h: 4, minW: 2, minH: 2 },
-                { i: "horizontal-bar-stacked", x: 4, y: 4, w: 4, h: 4, minW: 2, minH: 2 },
-                { i: "horizontal-bar-grouped", x: 8, y: 4, w: 4, h: 4, minW: 2, minH: 2 },
+                // 第二行：柱状图
+                { i: "bar-basic", x: 0, y: 6, w: 8, h: 8, minW: 4, minH: 4 },
+                { i: "bar-stacked", x: 8, y: 6, w: 8, h: 8, minW: 4, minH: 4 },
+                { i: "bar-grouped", x: 16, y: 6, w: 8, h: 8, minW: 4, minH: 4 },
 
-                // 第三行：折线图
-                { i: "line-basic", x: 0, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
-                { i: "area-chart", x: 4, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
-                { i: "line-stacked", x: 8, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
+                // 第三行：条形图
+                { i: "horizontal-bar-basic", x: 0, y: 14, w: 8, h: 8, minW: 4, minH: 4 },
+                { i: "horizontal-bar-stacked", x: 8, y: 14, w: 8, h: 8, minW: 4, minH: 4 },
+                { i: "horizontal-bar-grouped", x: 16, y: 14, w: 8, h: 8, minW: 4, minH: 4 },
 
-                // 第四行：饼图、环形图、指标卡
-                { i: "pie-chart", x: 0, y: 12, w: 4, h: 4, minW: 2, minH: 2 },
-                { i: "donut-chart", x: 4, y: 12, w: 4, h: 4, minW: 2, minH: 2 },
-                { i: "metric-card", x: 8, y: 12, w: 4, h: 4, minW: 2, minH: 2 },
+                // 第四行：折线图
+                { i: "line-basic", x: 0, y: 22, w: 8, h: 8, minW: 4, minH: 4 },
+                { i: "area-chart", x: 8, y: 22, w: 8, h: 8, minW: 4, minH: 4 },
+                { i: "line-stacked", x: 16, y: 22, w: 8, h: 8, minW: 4, minH: 4 },
+
+                // 第五行：饼图、环形图、指标卡
+                { i: "pie-chart", x: 0, y: 30, w: 8, h: 8, minW: 4, minH: 4 },
+                { i: "donut-chart", x: 8, y: 30, w: 8, h: 8, minW: 4, minH: 4 },
+                { i: "metric-card", x: 16, y: 30, w: 6, h: 6, minW: 4, minH: 4 },
             ]
         },
         style_config: defaultStyleConfig,
@@ -73,6 +76,19 @@ let mockDashboards: Dashboard[] = [
         created_at: Date.now(),
         updated_at: Date.now(),
         components: [
+            // 查询组件
+            {
+                id: "query-filter",
+                dashboard_id: "1",
+                title: "时间查询",
+                type: 'query',
+                dataset_code: "",
+                data_config: {},
+                style_config: {},
+                created_at: Date.now(),
+                updated_at: Date.now(),
+            },
+
             // 柱状图系列
             {
                 id: "bar-basic",
