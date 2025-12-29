@@ -1499,3 +1499,140 @@ def extract_code_blocks(markdown_code_block: str):
 
     # 去除每段代码块两端的空白字符
     return [match.strip() for match in matches]
+
+def extract_file_to_raw_text(
+        input_file: str,
+        file_name: str,
+        retain_images: int = 1,
+        enable_formula: int = 1,
+        force_ocr: int = 1,
+        filter_page_header_footer: int = 0,
+        knowledge_id: Optional[int] = None,
+        excel_rule: ExcelRule = None
+) -> str:
+    """
+    将任意支持的文件类型转换为纯文本（移除切割、元数据等逻辑，仅保留文本提取）
+
+    Args:
+        input_file: 文件本地路径
+        file_name: 原始文件名（含扩展名）
+        retain_images: 是否保留图片（仅影响转换过程，不影响文本提取）
+        enable_formula: 是否启用公式解析
+        force_ocr: 是否强制OCR识别（PDF等文件）
+        filter_page_header_footer: 是否过滤页眉页脚
+        knowledge_id: 知识库ID（用于图片存储等，非必需）
+        excel_rule: Excel解析规则（仅Excel文件生效）
+
+    Returns:
+        str: 提取后的完整文本内容
+
+    Raises:
+        Exception: 文件类型不支持/转换失败/文件损坏等
+    """
+    # 初始化返回文本
+    raw_text = ""
+    # 获取文件扩展名
+    file_extension_name = file_name.split(".")[-1].lower()
+    etl_for_lm_url = settings.get_knowledge().get("etl4lm", {}).get("url", None)
+
+    try:
+        # 1. Excel/CSV文件处理：转为MD后提取文本
+        if file_extension_name in ["xls", "xlsx", "csv"]:
+            # 设置Excel默认解析规则
+            if not excel_rule:
+                excel_rule = ExcelRule()
+
+            # 将Excel转为MD文件
+            md_files_path, _, _ = convert_file_to_md(
+                file_name=file_name,
+                input_file_name=input_file,
+                header_rows=[
+                    excel_rule.header_start_row - 1,  # 转0基索引
+                    excel_rule.header_end_row - 1,
+                ],
+                data_rows=excel_rule.slice_length,
+                append_header=excel_rule.append_header,
+                retain_images=bool(retain_images),
+            )
+
+            # 读取MD文件并拼接文本（补充原函数中combine_multiple_md_files_to_raw_texts的核心逻辑）
+            if isinstance(md_files_path, list):
+                for md_path in md_files_path:
+                    with open(md_path, "r", encoding="utf-8") as f:
+                        raw_text += f.read() + "\n"
+            else:
+                with open(md_files_path, "r", encoding="utf-8") as f:
+                    raw_text = f.read()
+
+        # 2. Word/PowerPoint/HTML文件处理：转为MD后提取文本
+        elif file_extension_name in ["doc", "docx", "html", "mhtml", "ppt", "pptx"]:
+            # DOC文件先转为DOCX
+            if file_extension_name == "doc":
+                input_file = convert_doc_to_docx(input_doc_path=input_file)
+                if not input_file:
+                    raise Exception(f"转换DOC文件失败: {file_name}")
+
+            # 转为MD文件
+            md_file_name, _, _ = convert_file_to_md(
+                file_name=file_name,
+                input_file_name=input_file,
+                knowledge_id=knowledge_id,
+                retain_images=bool(retain_images),
+            )
+            if not md_file_name:
+                raise Exception(f"解析文件失败: {file_name}")
+
+            # 读取MD文件内容
+            raw_text = open(md_file_name, "r", encoding="utf-8").read()
+
+        # 3. 纯文本/MD文件：直接读取
+        elif file_extension_name in ["txt", "md"]:
+            raw_text = open(input_file, "r", encoding="utf-8").read()
+
+        # 4. PDF及其他文件：优先用ETL4LM，否则转MD
+        else:
+            if etl_for_lm_url and file_extension_name in ["pdf"]:
+                # 检查PDF是否损坏
+                if is_pdf_damaged(input_file):
+                    raise Exception(f"PDF文件损坏: {file_name}")
+
+                # 使用ETL4LM加载器提取文本
+                etl4lm_settings = settings.get_knowledge().get("etl4lm", {})
+                loader = Etl4lmLoader(
+                    file_name,
+                    input_file,
+                    unstructured_api_url=etl4lm_settings.get("url", ""),
+                    ocr_sdk_url=etl4lm_settings.get("ocr_sdk_url", ""),
+                    force_ocr=bool(force_ocr),
+                    enable_formular=bool(enable_formula),
+                    timeout=etl4lm_settings.get("timeout", 60),
+                    filter_page_header_footer=bool(filter_page_header_footer),
+                    knowledge_id=knowledge_id,
+                )
+                documents = loader.load()
+                raw_text = "\n".join([doc.page_content for doc in documents])
+            else:
+                # 其他文件类型：尝试转MD后提取
+                if file_extension_name in ["pdf"]:
+                    md_file_name, _, _ = convert_file_to_md(
+                        file_name=file_name,
+                        input_file_name=input_file,
+                        knowledge_id=knowledge_id,
+                        retain_images=bool(retain_images),
+                    )
+                    if not md_file_name:
+                        raise Exception(f"解析PDF文件失败: {file_name}")
+
+                    raw_text = open(md_file_name, "r", encoding="utf-8").read()
+                else:
+                    # 不支持的文件类型
+                    raise Exception(f"不支持的文件类型: {file_extension_name}")
+
+        # 清理多余空行，保证文本整洁
+        raw_text = "\n".join([line.strip() for line in raw_text.split("\n") if line.strip()])
+        logger.info(f"文件文本提取完成: {file_name}, 文本长度: {len(raw_text)}")
+        return raw_text
+
+    except Exception as e:
+        logger.error(f"提取文件文本失败: {file_name}, 错误: {str(e)}", exc_info=True)
+        raise Exception(f"提取文件文本失败: {str(e)}")

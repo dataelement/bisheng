@@ -64,6 +64,7 @@ from bisheng.llm.models import LLMDao
 from bisheng.utils import generate_uuid, generate_knowledge_index_name
 from bisheng.utils import get_request_ip
 from bisheng.utils.embedding import decide_embeddings
+from bisheng.utils.es_similar_doc_ngram import ESSimilarDocNGram
 from bisheng.worker.knowledge import file_worker
 from bisheng_langchain.rag.bisheng_rag_chain import BishengRAGTool
 
@@ -1237,6 +1238,285 @@ class KnowledgeService(KnowledgeUtils):
         if db_knowledge.type == KnowledgeTypeEnum.NORMAL.value:
             raise ServerError.http_exception(msg="知识库为普通知识库")
         return db_knowledge
+
+    @classmethod
+    def search_file_ids_by_text(
+            cls,
+            text: str,
+            knowledge_id: int,
+            n: int = 200,
+            es_client=None
+    ) -> List[int]:
+        """
+        根据文本从文档知识库的ES中搜索，直到获取到大于n个唯一文件ID
+
+        Args:
+            text: 搜索文本
+            knowledge_id: 文档知识库ID
+            n: 需要获取的文件ID数量阈值
+            es_client: ElasticKeywordsSearch = None
+
+        Returns:
+            List[int]: 唯一的文件ID列表
+        """
+        # 初始化ES客户端
+        knowledge = KnowledgeDao.query_by_id(knowledge_id)
+        if not knowledge:
+            raise NotFoundError.http_exception()
+        if not es_client:
+            db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
+            if not db_knowledge:
+                raise NotFoundError.http_exception()
+
+            index_name = (
+                db_knowledge.index_name
+                if db_knowledge.index_name
+                else db_knowledge.collection_name
+            )
+            embeddings = FakeEmbedding()
+            es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
+
+        unique_file_ids = set()
+        batch_size = 2000
+        from_offset = 0
+
+        logger.info(f"start search_file_ids_by_text knowledge_id={knowledge_id} text={text[:50]}... n={n}")
+
+        while len(unique_file_ids) <= n:
+            # 构建搜索请求
+            search_data = {
+                "from": from_offset,
+                "size": batch_size,
+                "query": {
+                    "match_phrase": {"text": text}
+                },
+                "_source": ["metadata.file_id"]
+            }
+
+            try:
+                res = es_client.client.search(index=knowledge.index_name, body=search_data)
+            except Exception as e:
+                logger.warning(f"search_file_ids_by_text error={str(e)}")
+                raise KnowledgeChunkError.http_exception()
+
+            # 提取文件ID
+            hits = res["hits"]["hits"]
+            if not hits:
+                # 没有更多结果，退出循环
+                break
+
+            # 收集唯一文件ID
+            for hit in hits:
+                file_id = hit["_source"]["metadata"]["file_id"]
+                unique_file_ids.add(file_id)
+
+            logger.debug(
+                f"batch search completed: from={from_offset}, size={len(hits)}, unique_file_ids={len(unique_file_ids)}")
+
+            # 更新偏移量
+            from_offset += batch_size
+
+            # 防止无限循环，设置最大搜索次数
+            if from_offset > 100000:
+                logger.warning(f"search_file_ids_by_text reached max offset: {from_offset}")
+                break
+
+        logger.info(f"search_file_ids_by_text completed: found {len(unique_file_ids)} unique file ids")
+        return list(unique_file_ids)
+
+    @classmethod
+    def _scroll_file_chunks(cls, es_client, index_name, file_ids, batch_size=10000):
+        """
+        使用ES scroll API获取所有文件分块
+        :param es_client: Elasticsearch客户端
+        :param index_name: 索引名称
+        :param file_ids: 文件ID列表
+        :param batch_size: 每次scroll返回的数量
+        :return: 生成器，逐个返回分块
+        """
+        if not file_ids:
+            return
+        search_data = {
+            "post_filter": {
+                "terms": {"metadata.file_id": file_ids}
+            },
+            "sort": [
+                {
+                    "metadata.file_id": {
+                        "order": "desc",
+                        "missing": 0,
+                        "unmapped_type": "long",
+                    }
+                },
+                {
+                    "metadata.chunk_index": {
+                        "order": "asc",
+                        "missing": 0,
+                        "unmapped_type": "long",
+                    }
+                },
+            ],
+            "size": batch_size  # 每次scroll返回的数量
+        }
+
+        try:
+            # 初始化scroll，获取第一批数据
+            res = es_client.client.search(
+                index=index_name,
+                body=search_data,
+                scroll="5m"  # scroll上下文保持5分钟
+            )
+
+            scroll_id = res["_scroll_id"]
+            hits = res["hits"]["hits"]
+
+            # 处理第一批数据
+            for hit in hits:
+                yield hit
+
+            # 继续获取后续批次数据
+            while len(hits) > 0:
+                res = es_client.client.scroll(
+                    scroll_id=scroll_id,
+                    scroll="5m"
+                )
+                scroll_id = res["_scroll_id"]
+                hits = res["hits"]["hits"]
+
+                for hit in hits:
+                    yield hit
+
+            # 清理scroll上下文
+            es_client.client.clear_scroll(scroll_id=scroll_id)
+
+        except Exception as e:
+            logger.warning(f"_scroll_file_chunks error={str(e)}")
+            # 确保scroll上下文被清理
+            if 'scroll_id' in locals():
+                try:
+                    es_client.client.clear_scroll(scroll_id=scroll_id)
+                except Exception:
+                    pass
+            return
+
+    @classmethod
+    def get_similar_files_by_text(
+            cls,
+            text: str,
+            knowledge_id: int,
+            n: int = 200
+    ) -> List[dict]:
+        """
+        根据文本搜索相似文件，返回文件ID、URL和相似度
+
+        Args:
+            text: 搜索文本
+            knowledge_id: 文档知识库ID
+            n: 需要获取的文件ID数量阈值
+
+        Returns:
+            List[dict]: 包含文件ID、URL和相似度的字典列表
+        """
+        # 预处理文本
+
+        # 初始化Redis客户端
+        from bisheng.core.cache.redis_manager import get_redis_client_sync
+        redis_client = get_redis_client_sync()
+
+        # 生成文件ngram集合的Redis键
+        def get_ng_word_key(file_id: str) -> str:
+            return f"file_ngram_4:{file_id}"
+
+        # 生成文本的ngram集合
+        def get_text_tzset(text):
+            ngram = 4
+            wc = {}
+            result = set()
+            for i in range(len(text) - ngram + 1):
+                ngram_text = text[i:i + ngram]
+                wc[ngram_text] = wc.get(ngram_text, 0) + 1
+                result.add(f"{ngram_text}_{wc[ngram_text]}")
+            return result
+
+        # 初始化ES客户端
+        knowledge = KnowledgeDao.query_by_id(knowledge_id)
+        if not knowledge:
+            raise NotFoundError.http_exception()
+        # es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge)
+
+        # 获取所有文件ID
+        es_similar_doc_ngram = ESSimilarDocNGram(knowledge_id)
+        text = es_similar_doc_ngram.preprocess_text(text)
+        file_ids_all = es_similar_doc_ngram.search_similar_docs_plus(text, min(n * 3, 100))
+        file_ids_need_es = []
+
+        # 生成搜索文本的ngram集合
+        base_set = get_text_tzset(text)
+        result = []
+
+        logger.info(f"search_file_ids {file_ids_all}")
+
+        # 记录开始时间
+        import time
+        start_time = time.time()
+
+        # 1. 先从Redis获取每个文件的ngram集合，立即计算相似度
+        for file_id in file_ids_all:
+            ng_word_key = get_ng_word_key(file_id)
+            cached_ngram = redis_client.get(ng_word_key)
+            if cached_ngram:
+                # 立即计算相似度，不存储集合
+                similarity = len(base_set & cached_ngram) / len(base_set | cached_ngram) if (
+                            base_set | cached_ngram) else 0
+
+                # 获取文件URL
+                original_url, preview_url = cls.get_file_share_url(int(file_id))
+
+                # 添加到结果列表
+                result.append({
+                    "file_id": file_id,
+                    "file_url": original_url,
+                    "preview_url": preview_url,
+                    "similar": similarity
+                })
+            else:
+                file_ids_need_es.append(file_id)
+
+        # 2. 处理需要从ES获取的文件
+        for file_id in file_ids_need_es:
+            current_file_text = es_similar_doc_ngram.get_doc_full_content(file_id)
+            if current_file_text == "":
+                continue
+            file_tzset = get_text_tzset(current_file_text)
+
+            # 计算相似度
+            similarity = len(base_set & file_tzset) / len(base_set | file_tzset) if (base_set | file_tzset) else 0
+
+            # 获取文件URL
+
+            original_url, preview_url = cls.get_file_share_url(int(file_id))
+
+            # 添加到结果列表
+            result.append({
+                "file_id": file_id,
+                "file_url": original_url,
+                "preview_url": preview_url,
+                "similar": similarity
+            })
+
+            # 存入Redis缓存，设置1小时过期
+            ng_word_key = get_ng_word_key(file_id)
+            redis_client.set(ng_word_key, file_tzset, expiration=3600)
+            logger.info(f"Save file ngram to Redis, file_id: {file_id}")
+
+        # 3. 按相似度排序并返回结果
+        result.sort(key=lambda x: -x['similar'])
+
+        # 记录总时间
+        total_time = time.time() - start_time
+        logger.info(f"get_similar_files_by_text total time: {total_time:.4f}s")
+
+        return result[:n]
 
 
 def mixed_retrieval_recall(question: str, vector_store, keyword_store, max_content: int, model_id):

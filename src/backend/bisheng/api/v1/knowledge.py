@@ -1,4 +1,5 @@
 import json
+import time
 import urllib.parse
 from datetime import datetime
 from io import BytesIO
@@ -841,3 +842,71 @@ def update_knowledge_model(*,
     except Exception as e:
         logger.exception(f"rebuilding knowledge error: {str(e)}")
         return resp_500(message=f"重建知识库失败: {str(e)}")
+
+
+@router.post('/similar_files_by_url')
+async def similar_files_by_url(
+        request: Request,
+        login_user: UserPayload = Depends(get_login_user),
+        knowledge_id: int = Body(..., embed=True, description='知识库ID'),
+        file_url: str = Body(..., embed=True, description='文件URL'),
+        top_k: int = Body(default=200, embed=True, description='返回的最大文件数量')
+):
+    """
+    根据文件URL搜索相似文件
+
+    Args:
+        request: 请求对象
+        login_user: 登录用户信息
+        knowledge_id: 知识库ID
+        file_url: 文件URL
+        top_k: 返回的最大文件数量
+
+    Returns:
+        包含相似文件信息的响应
+    """
+    try:
+        # 1. 验证用户权限
+        knowledge = KnowledgeDao.query_by_id(knowledge_id)
+        if not login_user.access_check(
+                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE
+        ):
+            raise UnAuthorizedError.http_exception()
+
+        # 2. 下载文件到本地临时路径
+        from bisheng.core.cache.utils import file_download
+        logger.info(f"start download file from url: {file_url}")
+        filepath, file_name = file_download(file_url)
+
+        # 3. 提取文件内容
+        from bisheng.api.services.knowledge_imp import extract_file_to_raw_text
+        logger.info(f"start extract file content: {file_name}")
+        file_content = extract_file_to_raw_text(
+            input_file=filepath,
+            file_name=file_name,
+            knowledge_id=knowledge_id
+        )
+
+        # 4. 搜索相似文件
+        logger.info(f"start search similar files, knowledge_id: {knowledge_id}, text_len: {len(file_content[:100])}...")
+        start_time = time.time()
+        similar_files = KnowledgeService.get_similar_files_by_text(
+            text=file_content,
+            knowledge_id=knowledge_id,
+            n=top_k
+        )
+        logger.info(f"search similar files use time is {time.time() - start_time}")
+
+        # 5. 清理临时文件
+        import os
+        os.remove(filepath)
+
+        logger.info(f"similar_files_by_url completed, found {len(similar_files)} files")
+        return resp_200(data={
+            "similar_files": similar_files,
+            "total": len(similar_files)
+        })
+    except Exception as e:
+        logger.exception(f"similar_files_by_url error: {str(e)}")
+        return resp_500(message=f"搜索相似文件失败: {str(e)}")
+
