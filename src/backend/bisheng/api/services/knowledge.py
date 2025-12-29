@@ -14,7 +14,7 @@ from bisheng.api.services.knowledge_imp import (
     decide_vectorstores,
     delete_knowledge_file_vectors,
     process_file_task,
-    async_read_chunk_text,
+    async_read_chunk_text, extract_file_to_raw_text,
 )
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.knowledge import KnowledgeFileResp
@@ -282,6 +282,13 @@ class KnowledgeService(KnowledgeUtils):
 
         if not only_clear:
             cls.delete_knowledge_hook(request, login_user, knowledge)
+        # 清理es的数据
+        try:
+            es_similar_doc_ngram = ESSimilarDocNGram(knowledge.id)
+            es_similar_doc_ngram.delete_index()
+        except Exception as e:
+            logger.error(f"act=delete_knowledge_file error={str(e)}")
+
         return True
 
     @classmethod
@@ -503,6 +510,7 @@ class KnowledgeService(KnowledgeUtils):
                 knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
         ):
             raise UnAuthorizedError.http_exception()
+        es_similar_doc_ngram = ESSimilarDocNGram(req_data.knowledge_id)
         failed_files = []
         # 处理每个文件
         process_files = []
@@ -523,6 +531,13 @@ class KnowledgeService(KnowledgeUtils):
                 failed_file_info = db_file.model_dump()
                 failed_file_info["file_path"] = one.file_path
                 failed_files.append(failed_file_info)
+            try:
+                filepath, file_name = file_download(one.file_path)
+                file_content = extract_file_to_raw_text(filepath, file_name)
+                es_similar_doc_ngram.insert_doc(db_file.id, one.file_path, file_content)
+                os.remove(filepath)
+            except Exception as e:
+                logger.error(f"处理文件 {one.file_path} 时出错: {e}")
         return knowledge, failed_files, process_files, preview_cache_keys
 
     @classmethod
@@ -876,6 +891,15 @@ class KnowledgeService(KnowledgeUtils):
         # 5分钟检查下文件是否真的被删除
         file_worker.delete_knowledge_file_celery.apply_async(args=(file_ids, knowledge_file[0].knowledge_id, True),
                                                              countdown=300)
+        try:
+            es_similar_doc_ngram = ESSimilarDocNGram(db_knowledge.id)
+            for fid in file_ids:
+                try:
+                    es_similar_doc_ngram.delete_doc(str(fid))
+                except Exception as e:
+                    logger.error(f"act=delete_knowledge_file error={str(e)}")
+        except Exception as e:
+            logger.error(f"act=delete_knowledge_file error={str(e)}")
 
         return True
 
