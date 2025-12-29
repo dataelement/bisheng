@@ -312,6 +312,7 @@ def file_download(file_path: str):
         if file_path.startswith(minio_share_host):
             # download file from minio sdk
             bucket_name, object_name = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split('/', 1)
+            object_name = unquote(object_name)
             file_content = minio_client.get_object_sync(bucket_name, object_name)
         else:
             # download file from http url
@@ -343,6 +344,7 @@ def file_download(file_path: str):
             if len(path_parts) == 2:
                 bucket_name, object_name = path_parts
                 # 调用同步的 minio 方法下载
+                object_name = unquote(object_name)
                 file_content = minio_client.get_object_sync(bucket_name, object_name)
 
                 filename = unquote(object_name.split('/')[-1])
@@ -384,6 +386,7 @@ async def async_file_download(file_path: str):
         if file_path.startswith(minio_share_host):
             # download file from minio sdk
             bucket_name, object_name = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split('/', 1)
+            object_name = unquote(object_name)
             file_content = await minio_client.get_object(bucket_name, object_name)
         else:
             r = await http_client.get(url=file_path, data_type="binary")
@@ -408,6 +411,7 @@ async def async_file_download(file_path: str):
 
             if len(path_parts) == 2:
                 bucket_name, object_name = path_parts
+                object_name = unquote(object_name)
                 # 直接使用 minio client 下载，无需 http 请求
                 file_content = await minio_client.get_object(bucket_name, object_name)
 
@@ -419,6 +423,7 @@ async def async_file_download(file_path: str):
             print(f"Error handling relative MinIO path: {e}")
 
     raise ValueError('File path %s is not a valid file or url' % file_path)
+
 
 def _is_valid_url(url: str):
     """Check if the url is valid."""
