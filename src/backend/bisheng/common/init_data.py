@@ -164,6 +164,8 @@ async def init_default_data():
             # we can ignore it
             if 'already exists' not in str(exc):
                 logger.exception(f'Error creating DB and tables: {exc}')
+                import traceback
+                traceback.print_exc()
                 raise RuntimeError('Error creating DB and tables') from exc
         finally:
             await redis_client.adelete('init_default_data')
