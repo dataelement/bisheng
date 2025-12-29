@@ -41,78 +41,178 @@ const defaultStyleConfig: StyleConfig = {
 let mockDashboards: Dashboard[] = [
     {
         id: "1",
-        title: "看板 1",
-        description: "這是一個測試用的看板",
+        title: "图表展示看板",
+        description: "展示所有图表类型",
         status: 'draft',
         dashboard_type: 'custom',
         layout_config: {
             layouts: [
-                { i: "chart-1", x: 0, y: 0, w: 3, h: 4, minW: 2, minH: 2 },
-                { i: "chart-2", x: 5, y: 0, w: 3, h: 4, minW: 2, minH: 2 },
-                { i: "metric-1", x: 0, y: 4, w: 3, h: 2, minW: 2, minH: 2 },
-                { i: "metric-2", x: 3, y: 4, w: 3, h: 2, minW: 2, minH: 2 },
-                { i: "chart-3", x: 6, y: 4, w: 6, h: 4, minW: 2, minH: 2 },
+                // 第一行：柱状图
+                { i: "bar-basic", x: 0, y: 0, w: 4, h: 4, minW: 2, minH: 2 },
+                { i: "bar-stacked", x: 4, y: 0, w: 4, h: 4, minW: 2, minH: 2 },
+                { i: "bar-grouped", x: 8, y: 0, w: 4, h: 4, minW: 2, minH: 2 },
+
+                // 第二行：条形图
+                { i: "horizontal-bar-basic", x: 0, y: 4, w: 4, h: 4, minW: 2, minH: 2 },
+                { i: "horizontal-bar-stacked", x: 4, y: 4, w: 4, h: 4, minW: 2, minH: 2 },
+                { i: "horizontal-bar-grouped", x: 8, y: 4, w: 4, h: 4, minW: 2, minH: 2 },
+
+                // 第三行：折线图
+                { i: "line-basic", x: 0, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
+                { i: "area-chart", x: 4, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
+                { i: "line-stacked", x: 8, y: 8, w: 4, h: 4, minW: 2, minH: 2 },
+
+                // 第四行：饼图、环形图、指标卡
+                { i: "pie-chart", x: 0, y: 12, w: 4, h: 4, minW: 2, minH: 2 },
+                { i: "donut-chart", x: 4, y: 12, w: 4, h: 4, minW: 2, minH: 2 },
+                { i: "metric-card", x: 8, y: 12, w: 4, h: 4, minW: 2, minH: 2 },
             ]
         },
         style_config: defaultStyleConfig,
         created_by: "admin",
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        created_at: Date.now(),
+        updated_at: Date.now(),
         components: [
+            // 柱状图系列
             {
-                id: "chart-1",
+                id: "bar-basic",
                 dashboard_id: "1",
-                title: "销售趋势",
-                type: 'chart',
+                title: "基础柱状图",
+                type: 'bar',
+                dataset_code: "sales_data",
+                data_config: createDefaultDataConfig('bar'),
+                style_config: {},
+                created_at: Date.now(),
+                updated_at: Date.now(),
+            },
+            {
+                id: "bar-stacked",
+                dashboard_id: "1",
+                title: "堆叠柱状图",
+                type: 'stacked-bar',
+                dataset_code: "sales_data",
+                data_config: createDefaultDataConfig('stacked-bar'),
+                style_config: {},
+                created_at: Date.now(),
+                updated_at: Date.now(),
+            },
+            {
+                id: "bar-grouped",
+                dashboard_id: "1",
+                title: "分组柱状图",
+                type: 'grouped-bar',
+                dataset_code: "sales_data",
+                data_config: createDefaultDataConfig('grouped-bar'),
+                style_config: {},
+                created_at: Date.now(),
+                updated_at: Date.now(),
+            },
+
+            // 条形图系列
+            {
+                id: "horizontal-bar-basic",
+                dashboard_id: "1",
+                title: "基础条形图",
+                type: 'horizontal-bar',
+                dataset_code: "sales_data",
+                data_config: createDefaultDataConfig('horizontal-bar'),
+                style_config: {},
+                created_at: Date.now(),
+                updated_at: Date.now(),
+            },
+            {
+                id: "horizontal-bar-stacked",
+                dashboard_id: "1",
+                title: "堆叠条形图",
+                type: 'stacked-horizontal-bar',
+                dataset_code: "sales_data",
+                data_config: createDefaultDataConfig('stacked-horizontal-bar'),
+                style_config: {},
+                created_at: Date.now(),
+                updated_at: Date.now(),
+            },
+            {
+                id: "horizontal-bar-grouped",
+                dashboard_id: "1",
+                title: "分组条形图",
+                type: 'grouped-horizontal-bar',
+                dataset_code: "sales_data",
+                data_config: createDefaultDataConfig('grouped-horizontal-bar'),
+                style_config: {},
+                created_at: Date.now(),
+                updated_at: Date.now(),
+            },
+
+            // 折线图系列
+            {
+                id: "line-basic",
+                dashboard_id: "1",
+                title: "基础折线图",
+                type: 'line',
                 dataset_code: "sales_data",
                 data_config: createDefaultDataConfig('line'),
                 style_config: {},
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
+                created_at: Date.now(),
+                updated_at: Date.now(),
             },
             {
-                id: "chart-2",
+                id: "area-chart",
                 dashboard_id: "1",
-                title: "产品分布",
-                type: 'chart',
-                dataset_code: "product_data",
-                data_config: createDefaultDataConfig('bar'),
+                title: "面积图",
+                type: 'area',
+                dataset_code: "sales_data",
+                data_config: createDefaultDataConfig('area'),
                 style_config: {},
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
+                created_at: Date.now(),
+                updated_at: Date.now(),
             },
             {
-                id: "metric-1",
+                id: "line-stacked",
+                dashboard_id: "1",
+                title: "堆叠折线图",
+                type: 'stacked-line',
+                dataset_code: "sales_data",
+                data_config: createDefaultDataConfig('stacked-line'),
+                style_config: {},
+                created_at: Date.now(),
+                updated_at: Date.now(),
+            },
+
+            // 饼图和环形图
+            {
+                id: "pie-chart",
+                dashboard_id: "1",
+                title: "饼图",
+                type: 'pie',
+                dataset_code: "sales_data",
+                data_config: createDefaultDataConfig('pie'),
+                style_config: {},
+                created_at: Date.now(),
+                updated_at: Date.now(),
+            },
+            {
+                id: "donut-chart",
+                dashboard_id: "1",
+                title: "环形图",
+                type: 'donut',
+                dataset_code: "sales_data",
+                data_config: createDefaultDataConfig('donut'),
+                style_config: {},
+                created_at: Date.now(),
+                updated_at: Date.now(),
+            },
+
+            // 指标卡
+            {
+                id: "metric-card",
                 dashboard_id: "1",
                 title: "总销售额",
                 type: 'metric',
-                dataset_code: "sales_metric",
+                dataset_code: "sales_data",
                 data_config: createDefaultDataConfig('metric'),
                 style_config: {},
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-            },
-            {
-                id: "metric-2",
-                dashboard_id: "1",
-                title: "活跃用户",
-                type: 'metric',
-                dataset_code: "user_metric",
-                data_config: createDefaultDataConfig('metric'),
-                style_config: {},
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-            },
-            {
-                id: "chart-3",
-                dashboard_id: "1",
-                title: "地区分布",
-                type: 'chart',
-                dataset_code: "region_data",
-                data_config: createDefaultDataConfig('pie'),
-                style_config: {},
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
+                created_at: Date.now(),
+                updated_at: Date.now(),
             },
         ]
     },
@@ -125,8 +225,8 @@ let mockDashboards: Dashboard[] = [
         layout_config: { layouts: [] },
         style_config: defaultStyleConfig,
         created_by: "admin",
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        created_at: Date.now(),
+        updated_at: Date.now(),
         components: []
     },
 ]
@@ -147,8 +247,8 @@ export async function createDashboard(data: Partial<Dashboard>): Promise<Dashboa
         layout_config: { layouts: [] },
         style_config: defaultStyleConfig,
         created_by: "admin",
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        created_at: Date.now(),
+        updated_at: Date.now(),
         components: []
     }
     mockDashboards.push(newDashboard)
@@ -163,7 +263,7 @@ export async function updateDashboard(id: string, data: Partial<Dashboard>): Pro
     mockDashboards[index] = {
         ...mockDashboards[index],
         ...data,
-        updated_at: new Date().toISOString(),
+        updated_at: Date.now(),
     }
     return mockDashboards[index]
 }
@@ -182,8 +282,8 @@ export async function duplicateDashboard(id: string): Promise<Dashboard> {
         ...dashboard,
         id: Date.now().toString(),
         title: `${dashboard.title} (副本)`,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        created_at: Date.now(),
+        updated_at: Date.now()
     }
     mockDashboards.push(newDashboard)
     return newDashboard
@@ -212,8 +312,8 @@ export async function copyComponentTo(dashboard: Dashboard, component: Dashboard
         ...component,
         id: newComponentId,
         dashboard_id: dashboard.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        created_at: Date.now(),
+        updated_at: Date.now()
     }
     // Calculate position at bottom left of target dashboard
     const maxY = dashboard.layout_config.layouts.length > 0
@@ -400,5 +500,62 @@ export async function getDatasets(params?: {
     filteredDatasets = filteredDatasets.slice(offset, offset + limit)
 
     return filteredDatasets
+}
+
+// 查询图表数据
+import {
+    QueryDataResponse,
+    ChartDataResponse,
+    MetricDataResponse,
+    createBarChartMockData,
+    createStackedBarChartMockData,
+    createGroupedBarChartMockData,
+    createLineChartMockData,
+    createAreaChartMockData,
+    createStackedLineChartMockData,
+    createPieChartMockData,
+    createDonutChartMockData,
+    createMetricMockData
+} from '@/pages/Dashboard/types/chartData'
+
+export async function queryChartData(params: {
+    componentId: string
+    chartType: string
+    dataConfig: any
+    queryParams?: any
+}): Promise<QueryDataResponse> {
+    await delay(500)
+
+    const { chartType } = params
+
+    // 根据图表类型返回对应的 mock 数据
+    switch (chartType) {
+        case 'bar':
+            return createBarChartMockData()
+        case 'stacked-bar':
+            return createStackedBarChartMockData()
+        case 'grouped-bar':
+            return createGroupedBarChartMockData()
+        case 'horizontal-bar':
+            return createBarChartMockData() // 条形图使用相同数据，只是方向不同
+        case 'stacked-horizontal-bar':
+            return createStackedBarChartMockData()
+        case 'grouped-horizontal-bar':
+            return createGroupedBarChartMockData()
+        case 'line':
+            return createLineChartMockData()
+        case 'area':
+            return createAreaChartMockData()
+        case 'stacked-line':
+            return createStackedLineChartMockData()
+        case 'pie':
+            return createPieChartMockData()
+        case 'donut':
+            return createDonutChartMockData()
+        case 'metric':
+            return createMetricMockData()
+        default:
+            return createBarChartMockData()
+    }
 }
 

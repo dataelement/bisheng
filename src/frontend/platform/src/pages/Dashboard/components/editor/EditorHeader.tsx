@@ -6,10 +6,10 @@ import { Button } from "@/components/bs-ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
 import { Input } from "@/components/bs-ui/input"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { getShareLink, updateDashboard, Dashboard } from "@/controllers/API/dashboard"
+import { getShareLink, updateDashboard } from "@/controllers/API/dashboard"
 import { useEditorDashboardStore } from "@/store/dashboardStore"
 import { cn, copyText } from "@/utils"
-import { ArrowLeft, Eye, Maximize, Pencil, Plus, Share2 } from "lucide-react"
+import { ArrowLeft, Eye, Maximize, Pencil, Plus, RefreshCw, Share2 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQueryClient } from "react-query"
@@ -17,6 +17,7 @@ import { useNavigate } from "react-router-dom"
 import { usePublishDashboard } from "../../hook"
 import ComponentPicker from "./ComponentPicker"
 import ThemePicker from "./ThemePicker"
+import { Dashboard } from "../../types/dataConfig"
 
 
 interface EditorHeaderProps {
@@ -28,7 +29,7 @@ export function EditorHeader({
     dashboard,
     dashboardId,
 }: EditorHeaderProps) {
-    const { hasUnsavedChanges, isSaving, reset, setIsSaving, setHasUnsavedChanges } = useEditorDashboardStore()
+    const { hasUnsavedChanges, isSaving, reset, setIsSaving, setHasUnsavedChanges, triggerQuery } = useEditorDashboardStore()
     const [isEditingTitle, setIsEditingTitle] = useState(false)
     const [title, setTitle] = useState(dashboard?.title || "")
     const inputRef = useRef<HTMLInputElement>(null)
@@ -306,6 +307,12 @@ export function EditorHeader({
 
             {/* Right section */}
             <div className="flex items-center gap-2">
+                {/* 临时查询按钮 */}
+                <Button variant="ghost" size="sm" onClick={triggerQuery}>
+                    <RefreshCw className="h-4 w-4 mr-1" />
+                    查询
+                </Button>
+
                 <Button variant="ghost" size="sm" onClick={() => {
                     const element = document.getElementById('edit-charts-panne');
                     element.requestFullscreen();
