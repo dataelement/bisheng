@@ -1,6 +1,5 @@
 import hashlib
 import random
-import string
 from base64 import b64encode
 from datetime import datetime
 from io import BytesIO
@@ -545,7 +544,7 @@ async def access_list(*, role_id: int, access_type: Optional[int] = Query(defaul
 @router.get('/user/get_captcha', status_code=200)
 async def get_captcha():
     # generate captcha
-    chr_all = string.ascii_letters + string.digits
+    chr_all = "abcdefghjkmnpqrstuvwxyABCDEFGHJKMNPQRSTUVWXY3456789"
     chr_4 = ''.join(random.sample(chr_all, 4))
     image = ImageCaptcha().generate_image(chr_4)
     # 对image 进行base 64 编码
