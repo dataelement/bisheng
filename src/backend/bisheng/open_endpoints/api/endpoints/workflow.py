@@ -31,6 +31,7 @@ router = APIRouter(prefix='/workflow', tags=['OpenAPI', 'Workflow'])
 @router.post('/invoke')
 async def invoke_workflow(request: Request,
                           workflow_id: UUID = Body(..., description='工作流唯一ID'),
+                          override: Optional[dict] = Body(default=None, description='override node params'),
                           stream: Optional[bool] = Body(default=True, description='是否流式调用'),
                           user_input: Optional[dict] = Body(default=None, description='用户输入', alias='input'),
                           message_id: Optional[int] = Body(default=None, description='消息ID'),
@@ -61,7 +62,7 @@ async def invoke_workflow(request: Request,
     status_info = workflow.get_workflow_status()
     if not status_info:
         # 初始化工作流
-        workflow.set_workflow_data(workflow_info.data)
+        workflow.set_workflow_data(workflow_info.data, override=override)
         workflow.set_workflow_status(WorkflowStatus.WAITING.value)
         # 发起异步任务
         execute_workflow.delay(unique_id, workflow_id, chat_id, str(login_user.user_id))
