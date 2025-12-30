@@ -113,6 +113,7 @@ export const onlineWorkflow = async (flow, status = ''): Promise<any> => {
     const data = { name, description, logo }
     if (status) {
         data['status'] = status
+        delete data['logo']
     }
     return await axios.patch(`/api/v1/workflow/update/${flow.id}`, data);
 }
