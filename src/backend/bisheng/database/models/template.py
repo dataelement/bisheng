@@ -10,7 +10,7 @@ from bisheng.common.models.base import SQLModelSerializable
 
 class TemplateSkillBase(SQLModelSerializable):
     name: str = Field(index=True)
-    description: str = Field(index=False)
+    description: Optional[str] = Field(default=None, sa_column=Column(String(length=1000)))
     data: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
     order_num: Optional[int] = Field(default=True, index=True)
     # 1 flow 5 assistant 10 workflow
