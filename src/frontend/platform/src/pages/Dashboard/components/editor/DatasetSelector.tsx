@@ -11,6 +11,7 @@ import { useQuery } from "react-query"
 interface DatasetSelectorProps {
     selectedDatasetCode?: string
     onDatasetChange?: (datasetCode: string) => void
+    onDragStart?: (e: React.DragEvent, data: any) => void
 }
 
 // 根据字段类型返回对应的图标
@@ -31,7 +32,7 @@ const isVirtualMetric = (metric: MetricConfig): boolean => {
     return metric.bucket_path !== undefined && metric.bucket_path !== metric.aggregation_name
 }
 
-export function DatasetSelector({ selectedDatasetCode, onDatasetChange }: DatasetSelectorProps) {
+export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragStart }: DatasetSelectorProps) {
     const [searchTerm, setSearchTerm] = useState("")
     const [dimensionsExpanded, setDimensionsExpanded] = useState(true)
     const [metricsExpanded, setMetricsExpanded] = useState(true)
@@ -57,6 +58,25 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange }: Datase
     const selectedDataset = useMemo(() => {
         return allDatasets.find(d => d.dataset_code === selectedDatasetCode)
     }, [allDatasets, selectedDatasetCode])
+
+    // 处理拖拽开始
+    const handleDragStart = (e: React.DragEvent, data: any, fieldType: 'dimension' | 'metric') => {
+        e.dataTransfer.effectAllowed = 'copy'
+        const dragData = {
+            ...data,
+            fieldType,
+            id: data.name || `field_${Date.now()}`,
+            displayName: data.name || data.aggregation_name || '字段'
+        }
+        
+        // 设置数据到 dataTransfer
+        e.dataTransfer.setData('application/json', JSON.stringify(dragData))
+        
+        // 如果有父组件传递的 onDragStart 回调，也调用它
+        if (onDragStart) {
+            onDragStart(e, dragData)
+        }
+    }
 
     return (
         <div className="flex flex-col h-full">
@@ -122,11 +142,9 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange }: Datase
                                 {selectedDataset.schema_config.dimensions.map((dimension, index) => (
                                     <div
                                         key={index}
-                                        className="flex items-center gap-2 p-2 rounded hover:bg-accent/30 cursor-pointer transition-colors"
+                                        className="flex items-center gap-2 p-2 rounded hover:bg-accent/30 cursor-move transition-colors"
                                         draggable
-                                        onDragStart={(e) => {
-                                            e.dataTransfer.setData('dimension', JSON.stringify(dimension))
-                                        }}
+                                        onDragStart={(e) => handleDragStart(e, dimension, 'dimension')}
                                     >
                                         <div className="text-blue-500">
                                             {getFieldTypeIcon(dimension.type)}
@@ -158,11 +176,9 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange }: Datase
                                     return (
                                         <div
                                             key={index}
-                                            className="flex items-center gap-2 p-2 rounded hover:bg-accent/30 cursor-pointer transition-colors"
+                                            className="flex items-center gap-2 p-2 rounded hover:bg-accent/30 cursor-move transition-colors"
                                             draggable
-                                            onDragStart={(e) => {
-                                                e.dataTransfer.setData('metric', JSON.stringify(metric))
-                                            }}
+                                            onDragStart={(e) => handleDragStart(e, metric, 'metric')}
                                         >
                                             <div className="text-green-500">
                                                 <Hash className="h-4 w-4" />

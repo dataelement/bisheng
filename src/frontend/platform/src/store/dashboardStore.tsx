@@ -87,15 +87,40 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     // Update component in the current dashboard
     updateComponent: (componentId: string, data: Partial<DashboardComponent>) => {
         const { currentDashboard } = get()
-        if (!currentDashboard) return
+        if (!currentDashboard) {
+            console.warn('updateComponent: currentDashboard is null')
+            return
+        }
 
-        const updatedComponents = currentDashboard.components.map(c =>
-            c.id === componentId ? { ...c, ...data } : c
-        )
+        console.log('=== updateComponent 被调用 ===')
+        console.log('组件ID:', componentId)
+        console.log('更新数据:', data)
+        console.log('更新前的组件:', currentDashboard.components.find(c => c.id === componentId))
+        console.log('所有组件数量:', currentDashboard.components.length)
+
+        const updatedComponents = currentDashboard.components.map(c => {
+            if (c.id === componentId) {
+                const updated = { ...c, ...data }
+                console.log('更新后的组件:', updated)
+                return updated
+            }
+            return c
+        })
+
+        console.log('更新后的组件列表:', updatedComponents)
+
         set({
-            currentDashboard: { ...currentDashboard, components: updatedComponents },
+            currentDashboard: {
+                ...currentDashboard,
+                components: updatedComponents
+            },
             hasUnsavedChanges: true
         })
+
+        // 验证更新是否成功
+        const updatedState = get()
+        const updatedComponent = updatedState.currentDashboard?.components.find(c => c.id === componentId)
+        console.log('store 更新验证:', updatedComponent)
     },
     // Duplicate component
     duplicateComponent: (componentId: string) => {

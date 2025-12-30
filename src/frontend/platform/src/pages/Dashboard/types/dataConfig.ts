@@ -1,4 +1,3 @@
-
 // React-Grid-Layout 布局项
 export interface LayoutItem {
   i: string // 组件ID
@@ -12,12 +11,10 @@ export interface LayoutItem {
   maxH?: number // 最大高度
   static?: boolean // 是否静态（不可拖拽）
 }
-
 // 看板布局配置
 export interface LayoutConfig {
   layouts: LayoutItem[] // 布局数组
 }
-
 // 主题配置
 export interface ThemeConfig {
   backgroundColor: string
@@ -25,7 +22,6 @@ export interface ThemeConfig {
   borderColor: string
   chartColors: string[] // echarts 配色
 }
-
 // 看板样式配置
 export interface StyleConfig {
   theme: 'light' | 'dark' | 'blue' | 'green' // 当前主题
@@ -36,15 +32,33 @@ export interface StyleConfig {
     green: ThemeConfig
   }
 }
-
 // 组件样式配置
 export interface ComponentStyleConfig {
-  backgroundColor?: string
-  borderColor?: string
-  textColor?: string
-  chartColors?: string[] // echarts 配色
+ themeColor: string        // 主体颜色
+  bgColor: string           // 背景颜色
+  titleFontSize: number     // 主标题字体大小
+  titleBold: boolean        // 主标题加粗
+  titleItalic: boolean      // 主标题斜体
+  titleUnderline: boolean   // 主标题下划线
+  titleAlign: "left" | "center" | "right" // 主标题对齐方式
+  axis: "x" | "y"           // 轴选择
+  axisTitle: string         // 轴标题文字
+  axisFontSize: number      // 轴标题字体大小
+  axisBold: boolean         // 轴标题加粗
+  axisItalic: boolean       // 轴标题斜体
+  axisUnderline: boolean    // 轴标题下划线
+  axisAlign: "left" | "center" | "right" // 轴标题对齐方式
+  legendPosition: "top" | "bottom" | "left" | "right" // 图例位置
+  legendFontSize: number    // 图例字体大小
+  legendBold: boolean       // 图例加粗
+  legendItalic: boolean     // 图例斜体
+  legendUnderline: boolean  // 图例下划线
+  legendAlign: "left" | "center" | "right" // 图例对齐
+  showLegend: boolean       // 是否显示图例
+  showAxis: boolean         // 是否显示坐标轴
+  showDataLabel: boolean    // 是否显示数据标签
+  showGrid: boolean         // 是否显示网格线
 }
-
 export interface Dashboard {
   id: string
   title: string
@@ -58,9 +72,8 @@ export interface Dashboard {
   updated_at: string
   components: DashboardComponent[]
 }
-
 export interface DashboardComponent {
-  id: string
+  id: string //
   dashboard_id: string
   title: string
   type: ChartType
@@ -73,7 +86,6 @@ export interface DashboardComponent {
 /**
  * Dashboard 组件数据配置类型定义
  */
-
 // 图表类型
 export type ChartType =
   | 'bar'                      // 基础柱状图
@@ -89,17 +101,15 @@ export type ChartType =
   | 'donut'                    // 环状图
   | 'metric'                   // 指标卡
   | 'query'                   // 查询组件
-
-
 // 维度配置
 export interface DimensionField {
   fieldId: string               // 字段ID（来自数据集）
   fieldName: string             // 字段名称
   fieldCode: string             // 字段编码
   displayName?: string          // 展示名称（不填则使用 fieldName）
-  sort: 'none' | 'asc' | 'desc' // 排序方式
+  sort: null | 'asc' | 'desc' // 排序方式
+  timeGranularity: string // 时间子维度（仅时间字段有效）
 }
-
 //  指标配置 
 export interface MetricField {
   fieldId: string               // 字段ID（来自数据集）
@@ -108,7 +118,7 @@ export interface MetricField {
   displayName?: string          // 展示名称
   aggregation?: string // 汇总方式（虚拟指标无此属性）
   isVirtual: boolean            // 是否为虚拟指标
-  sort: 'none' | 'asc' | 'desc' // 排序方式
+  sort: null | 'asc' | 'desc' // 排序方式
   numberFormat: {               // 数值格式
     type: 'number' | 'percent' | 'duration' | 'storage'    // 数值 百分比 时长 存储大小      
     decimalPlaces: number         // 小数位数
@@ -117,33 +127,22 @@ export interface MetricField {
     thousandSeparator: boolean    // 是否显示千分位符
   }
 }
-
-
 export interface FilterCondition {
-  id: string                    // 筛选条件唯一ID
-  fieldId: string               // 字段ID
-  fieldName: string             // 字段名称
-  filterType: string            // 筛选类型
-  // 文本筛选
-  textOperator?: string         // 文本操作符
-  textValue?: string            // 文本值
-  // 枚举筛选
-  enumValues?: string[]         // 多选值数组
-  // 数字筛选
-  numberOperator?: string       // 数字操作符
-  numberValue?: number          // 数字值
+  id: string                           // 筛选条件唯一ID
+  fieldId: string                      // 字段ID
+  fieldName: string                    // 字段名称
+  filterType: string                   // 筛选类型
+  operator?: string                    // 操作符
+  value?: string | number | string[]   // 值
 }
-
 // 时间筛选 
 export type TimeRangeType =
   | 'all'          // 全部时间
   | 'recent_days'  // 最近n天
   | 'custom'       // 自定义时间范围
-
 export type TimeRangeMode =
   | 'fixed'    // 固定时间范围
   | 'dynamic'  // 动态时间范围（相对当前时间）
-
 export interface TimeFilter {
   type: TimeRangeType           // 时间范围类型
   mode?: TimeRangeMode          // 时间范围模式（type 为 recent_days 时有效）
@@ -151,7 +150,6 @@ export interface TimeFilter {
   startDate?: number            // 自定义开始日期
   endDate?: number              // 自定义结束日期
 }
-
 // 数据配置（图表组件和指标组件使用）
 export interface DataConfig {
   dimensions: DimensionField[]  // 维度字段列表（对应 echarts xAxis）
@@ -168,7 +166,6 @@ export interface DataConfig {
     limit?: number                // 具体条数（limitType 为 limited 时有效）
   }
 }
-
 // 查询组件配置 
 export interface QueryConfig {
   linkedComponentIds: string[]    // 关联的图表组件ID列表（查询时会更新这些组件）
@@ -182,11 +179,8 @@ export interface QueryConfig {
     defaultValue?: TimeFilter // 默认值配置
   }[] // 查询条件列表
 }
-
 // 组件配置联合类型
 export type ComponentConfig = DataConfig | QueryConfig
-
-
 export const createDefaultDataConfig = (chartType: ChartType = 'bar'): DataConfig => ({
   chartType,
   dimensions: [],

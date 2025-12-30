@@ -377,16 +377,20 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
   const { setErrorData, setSuccessData } = useContext(alertContext);
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'menu' | 'assistant' | 'skill' | 'flow' | 'knowledge' | 'tool'|'board'>('menu');
+
+  const [form, setForm] = useState({
+    name,
+    useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE, MenuType.MODEL, MenuType.EVALUATION, MenuType.BOARD],
+    manageLibs: [], manageAssistants: [], manageSkills: [], manageFlows: [], manageTools: [],useBoards: [], manageBoards: [],
+    allowCreateBoard: false,
+  });
+  
+  // 独立的空间权限状态 - 只控制工作台和管理后台的访问
   const [spacePermissions, setSpacePermissions] = useState({
     workspace: true,    // 工作台
     admin: true,        // 管理后台
   });
-  const [form, setForm] = useState({
-    name,
-    useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE],
-    manageLibs: [], manageAssistants: [], manageSkills: [], manageFlows: [], manageTools: [],useBoards: [], manageBoards: [],
-    allowCreateBoard: false,
-  });
+
   const handleAllowCreateBoardChange = (checked: boolean) => {
     setForm(prev => ({ ...prev, allowCreateBoard: checked }));
   };
@@ -407,16 +411,25 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
   const PERMISSION_TABS = ['menu', 'assistant', 'skill', 'flow', 'knowledge', 'tool','board'];
 
   const renderPermissionPanne = (type) => {
-    const config = getSearchPanneConfig(type, form, switches, t, groupId, roleId,handleAllowCreateBoardChange);
+    const config = getSearchPanneConfig(type, form, switches, t, groupId, roleId, handleAllowCreateBoardChange);
     return <SearchPanne key={type} {...config} />;
   };
+
   const handleSpacePermissionChange = (key: 'workspace' | 'admin', checked: boolean) => {
-    setSpacePermissions(prev => ({ ...prev, [key]: checked }));
+    // 检查是否要关闭最后一个开启的空间
+    const workspaceOpen = key === 'workspace' ? checked : spacePermissions.workspace;
+    const adminOpen = key === 'admin' ? checked : spacePermissions.admin;
     
-    // 同步更新菜单权限
-    const menuId = key === 'workspace' ? MenuType.BUILD : MenuType.KNOWLEDGE;
-    switches.switchMenu(menuId, checked);
+    if (!workspaceOpen && !adminOpen) {
+      // 两个都关闭，不允许
+      setErrorData({ title: t('prompt'), list: [t('system.atLeastOneSpaceRequired')] });
+      return;
+    }
+    
+    // 只更新空间权限，不影响菜单权限
+    setSpacePermissions(prev => ({ ...prev, [key]: checked }));
   };
+
   const handleSave = async () => {
     const sanitizeIds = (arr: any[]) => (arr || []).filter(Boolean);
     if (!form.name.length || form.name.length > 50) {
@@ -424,6 +437,11 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
     }
     if (onBeforeChange(form.name)) {
       return setErrorData({ title: t('prompt'), list: [t('system.roleNameExists')] });
+    }
+
+    // 检查是否至少有一个空间权限被选中
+    if (!spacePermissions.workspace && !spacePermissions.admin) {
+      return setErrorData({ title: t('prompt'), list: [t('system.atLeastOneSpaceRequired')] });
     }
 
     let roleIdLocal = id;
@@ -434,6 +452,10 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
       await captureAndAlertRequestErrorHoc(updateRoleNameApi(roleIdLocal, form.name));
     }
 
+    // 保存菜单权限（type: 99）
+    const menuPermissionsToSave = form.useMenu;
+    // 如果需要保存空间权限，可以在这里添加对应的API调用
+    
     await Promise.all([
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: form.useSkills as any, type: 2 as any }),
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: form.useLibs as any, type: 1 as any }),
@@ -445,14 +467,17 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.manageSkills) as any, type: 4 as any }),
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.manageFlows) as any, type: 10 as any }),
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.manageTools) as any, type: 8 as any }),
-      updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.useMenu) as any, type: 99 as any }),
+      updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(menuPermissionsToSave) as any, type: 99 as any }),
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.useBoards) as any, type: 11 as any }),
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.manageBoards) as any, type: 12 as any }),
       updateRolePermissionsApi({
         role_id: roleIdLocal,
         allow_create_board: form.allowCreateBoard,
         type: 13
-    })
+      }),
+      // 保存空间权限，添加新的API调用
+      // updateRolePermissionsApi({ role_id: roleIdLocal, access_id: spacePermissions.workspace ? ['workspace'] : [], type: 100 as any }),
+      // updateRolePermissionsApi({ role_id: roleIdLocal, access_id: spacePermissions.admin ? ['admin'] : [], type: 101 as any }),
     ]);
 
     setSuccessData({ title: t('saved') });
@@ -473,7 +498,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
         />
       </div>
 
-      {/* 空间授权 */}
+      {/* 空间授权 - 完全独立于菜单权限 */}
       <div className="mt-10">
         <div className="items-center relative">
           <p className="text-xl font-bold">{t('空间授权')}</p>
@@ -500,7 +525,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
               <TableRow>
                 <TableCell className="font-medium">{t('管理后台')}</TableCell>
                 <TableCell className="text-center">
-                 <Switch 
+                  <Switch 
                     checked={spacePermissions.admin} 
                     onCheckedChange={(bln) => handleSpacePermissionChange('admin', bln)} 
                   />
