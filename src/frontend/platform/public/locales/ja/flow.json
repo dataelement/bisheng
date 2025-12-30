@@ -239,6 +239,18 @@
   "playbackUnavailable": "再生機能は利用できません。管理者に連絡してください。",
   "wordEditorLoadFailed": "Wordエディタの読み込みに失敗しました",
   "checkOfficeServiceConfig": "Officeサービスの実行状態とアドレス設定が正しいか確認してください。",
+  "variableNameEmpty": "変数名を空にすることはできません",
+  "variableNameStartsWithNumber": "変数名は数字で始めることはできません",
+  "variableNameInvalidChars": "変数名には英字、数字、アンダースコアのみ使用できます",
+  "variableValueEmpty": "変数値を空にすることはできません",
+  "variableValueTooLong": "変数値は1000文字を超えることはできません",
+  "addVariable": "変数を追加",
+  "variableValue": "変数値",
+  "editGlobalVariable": "グローバル変数を編集",
+  "addGlobalVariable": "グローバル変数を追加",
+  "variableNameRuleTip": "英字、数字、アンダースコアが使用可能。数字で始めることはできません。最大50文字",
+  "variableValueRuleTip": "変数値は空にできません。最大1000文字",
+  "enterVariableValue": "変数値を入力",
   "node": {
     "start": {
       "name": "開始",
@@ -264,6 +276,10 @@
         "label": "予置質問リスト",
         "placeholder": "一括で入力する予置質問",
         "help": "ドキュメントレビューやレポート生成などに適しており、事前に質問を準備してRAG問答を実行できます。"
+      },
+      "custom_variables": {
+        "label": "カスタムグローバル変数",
+        "help": "他のノードで参照できる変数を設定します"
       }
     },
     "input": {

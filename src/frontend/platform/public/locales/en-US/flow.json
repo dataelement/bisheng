@@ -238,6 +238,18 @@
   "playbackUnavailable": "Playback is not available. Please contact the administrator.",
   "wordEditorLoadFailed": "Word editor failed to load",
   "checkOfficeServiceConfig": "Please ensure the Office service address is configured correctly and the service is running.",
+  "variableNameEmpty": "Variable name cannot be empty",
+  "variableNameStartsWithNumber": "Variable name cannot start with a number",
+  "variableNameInvalidChars": "Variable name can only contain English letters, numbers, and underscores",
+  "variableValueEmpty": "Variable value cannot be empty",
+  "variableValueTooLong": "Variable value cannot exceed 1000 characters",
+  "addVariable": "Add Variable",
+  "variableValue": "Variable Value",
+  "editGlobalVariable": "Edit Global Variable",
+  "addGlobalVariable": "Add Global Variable",
+  "variableNameRuleTip": "Supports letters, numbers, underscores; cannot start with a number; maximum 50 characters",
+  "variableValueRuleTip": "Variable value cannot be empty; maximum 1000 characters",
+  "enterVariableValue": "Enter variable value",
   "node": {
     "start": {
       "name": "Start",
@@ -263,6 +275,10 @@
         "label": "Preset Question List",
         "placeholder": "Enter batch preset questions",
         "help": "Useful for document review or report generation to run multiple RAG queries using preset questions."
+      },
+      "custom_variables": {
+        "label": "Custom Global Variables",
+        "help": "Set variables that can be referenced in other nodes"
       }
     },
     "input": {

@@ -46,7 +46,7 @@ const getSpecialVar = (obj, type, onlyImg = false) => {
             if (!obj.value.length) return []
             if (!obj.value[0].value) return []
             const param = cloneDeep(obj)
-            param.value = param.value.map(item => ({ label: item.value, value: item.key }))
+            param.value = param.value.map(item => ({ label: item.label || item.value, value: item.key }))
             return [{ param, label: obj.key, value: obj.key }]
     }
     return []

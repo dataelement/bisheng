@@ -77,7 +77,7 @@
   "variableNameCannotBeEmpty": "变量名称不能为空",
   "variableNameInvalid": "变量名称只能包含英文字符、数字和下划线，且不能以数字开头",
   "variableNameTooLong": "变量名称不能超过 50 个字符",
-  "variableNameDuplicate": "变量名称不能重复",
+  "variableNameDuplicate": "变量名已存在",
   "addNewParameter": "+添加新的参数",
   "dataType": "数据类型",
   "parameterName": "参数名称",
@@ -239,6 +239,18 @@
   "playbackUnavailable": "播放功能不可用，请联系管理员",
   "wordEditorLoadFailed": "word编辑器加载失败",
   "checkOfficeServiceConfig": "请检查Office服务地址配置是否正确并正常启动",
+  "variableNameEmpty": "变量名称不可为空",
+  "variableNameStartsWithNumber": "变量名不能以数字开头",
+  "variableNameInvalidChars": "变量名称只能包含英文字符、数字和下划线",
+  "variableValueEmpty": "变量值不可为空",
+  "variableValueTooLong": "变量值不能超过1000个字符",
+  "addVariable": "添加变量",
+  "variableValue": "变量值",
+  "editGlobalVariable": "编辑全局变量",
+  "addGlobalVariable": "添加全局变量",
+  "variableNameRuleTip": "支持字母、数字、下划线，不能以数字开头，不超过 50 个字符",
+  "variableValueRuleTip": "变量值不允许为空，不超过1000个字符",
+  "enterVariableValue": "请输入变量值",
   "node": {
     "start": {
       "name": "开始",
@@ -264,6 +276,10 @@
         "label": "预置问题列表",
         "placeholder": "输入批量预置问题",
         "help": "适合文档审核、报告生成等场景，利用提前预置的问题批量进行 RAG 问答。"
+      },
+      "custom_variables": {
+        "label": "自定义全局变量",
+        "help": "设置可以在其他节点引用的变量"
       }
     },
     "input": {
