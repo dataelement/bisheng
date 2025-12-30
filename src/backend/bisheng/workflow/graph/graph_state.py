@@ -6,13 +6,13 @@ from pydantic import BaseModel, Field
 
 
 class GraphState(BaseModel):
-    """ 所有节点的 全局状态管理 """
+    """ nodes share state """
 
-    # 存储聊天历史
     history_memory: Optional[ConversationBufferWindowMemory] = None
 
-    # 全局变量池
-    variables_pool: Dict[str, Dict[str, Any]] = Field(default_factory=dict, description='全局变量池: {node_id: {key: value}}')
+    # global variable pool
+    variables_pool: Dict[str, Dict[str, Any]] = Field(default_factory=dict,
+                                                      description='全局变量池: {node_id: {key: value}}')
 
     def get_history_memory(self, count: int) -> str:
         """ 获取聊天历史记录
@@ -30,7 +30,6 @@ class GraphState(BaseModel):
 
     def get_history_list(self, count: int) -> List[BaseMessage]:
         return self.history_memory.buffer_as_messages[-count:]
-
 
     def save_context(self, content: str, msg_sender: str) -> None:
         """  保存聊天记录
@@ -101,8 +100,8 @@ class GraphState(BaseModel):
         for node_id, node_variables in self.variables_pool.items():
             for key, value in node_variables.items():
                 ret[f'{node_id}.{key}'] = self.get_variable(node_id, key)
-                # 特殊处理下 preset_question key
-                if key == 'preset_question':
+                # get preset_question and custom_variables all keys
+                if key in ['preset_question', 'custom_variables']:
                     for k, v in value.items():
                         ret[f'{node_id}.{key}#{k}'] = v
         return ret

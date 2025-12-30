@@ -17,10 +17,10 @@ const FileContainer = ({
   // 聊天框兼容展示文件名
   const currentFile = useMemo(() => {
     if (!file.filename && file.filepath) {
-      const fileName = file.filepath.split('/').pop();
+      const fileName = file.filepath.split('/').pop()?.split('?').shift() || '';
       return {
         ...file,
-        filename: fileName,
+        filename: decodeURIComponent(fileName),
       };
     }
     return file;
