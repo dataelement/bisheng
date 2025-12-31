@@ -15,14 +15,14 @@ common_properties = {
         "type": "object",
         "properties": {
             "user_group_id": {"type": "integer"},
-            "user_group_name": {"type": "keyword"}
+            "user_group_name": {"type": "keyword", "fields": {"text": {"type": "text"}}}
         }
     },
     "user_role_infos": {
         "type": "object",
         "properties": {
             "role_id": {"type": "integer"},
-            "role_name": {"type": "keyword"},
+            "role_name": {"type": "keyword", "fields": {"text": {"type": "text"}}},
             "group_id": {"type": "integer"}
         }
     },

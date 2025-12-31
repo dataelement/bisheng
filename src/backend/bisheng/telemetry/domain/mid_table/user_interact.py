@@ -14,10 +14,10 @@ class UserInteract(BaseMidTable):
     _index_name = 'mid_user_interact_dtl'
     _mappings = {
         "message_id": {"type": "integer"},
-        "event_id": {"type": "keyword"},
-        "interact_type": {"type": "keyword"},
-        "app_id": {"type": "keyword"},
-        "app_name": {"type": "keyword"},
+        "event_id": {"type": "keyword", "fields": {"text": {"type": "text"}}},
+        "interact_type": {"type": "keyword", "fields": {"text": {"type": "text"}}},
+        "app_id": {"type": "keyword", "fields": {"text": {"type": "text"}}},
+        "app_name": {"type": "keyword", "fields": {"text": {"type": "text"}}},
     }
 
     def get_records_by_time_range_sync(self, start_time: int, end_time: int, page: int = 1, page_size: int = 1000):

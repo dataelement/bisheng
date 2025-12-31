@@ -11,6 +11,6 @@ class KnowledgeIncrement(BaseMidTable):
     _index_name = 'mid_knowledge_increment'
     _mappings = {
         "knowledge_id": {"type": "integer"},
-        "knowledge_name": {"type": "keyword"},
+        "knowledge_name": {"type": "keyword", "fields": {"text": {"type": "text"}}},
         "knowledge_type": {"type": "integer"},
     }
