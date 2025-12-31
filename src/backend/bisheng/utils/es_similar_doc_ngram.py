@@ -73,8 +73,8 @@ class ESSimilarDocNGram:
         # 构建生产级索引配置（优化ngram参数，适配ES默认限制）
         index_mapping = {
             "settings": {
-                "number_of_shards": 1,  # 生产环境建议根据集群规模调整
-                "number_of_replicas": 1,  # 生产环境至少1个副本保证高可用
+                "number_of_shards": 1,
+                "number_of_replicas": 1,
                 "index.max_ngram_diff": 2,  # 放开ngram差值限制（适配2-3字）
                 "analysis": {
                     "analyzer": {
@@ -399,12 +399,11 @@ class ESSimilarDocNGram:
                 body={
                     "size": top_n,
                     "query": {
-                        "simple_query_string": {
-                            "query": processed_query,
-                            "fields": ["file_content"],
-                            "default_operator": "OR",  # 任意词匹配，确保所有文档召回
-                            "flags": "ALL",
-                            "boost": 1.0
+                        "match": {  # 查询类型
+                            "file_content": {
+                                "query": processed_query,
+                                "operator": "or"
+                            }
                         }
                     },
                     "_source": ["file_id"],

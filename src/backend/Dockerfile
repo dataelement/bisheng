@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir SQLAlchemy==2.0.39 && \
     pip install --no-cache-dir /app/soft/dmpython-2.5.30-cp310-cp310-linux_x86_64.whl && \
     pip install --no-cache-dir /app/soft/dmSQLAlchemy2.0/ && \
     pip install --no-cache-dir /app/soft/dmAsync/ && \
-    rm -rf /root/.cache/pip  # 清理缓存，减少镜像体积
+    rm -rf /root/.cache/pip  # 清理缓存
 
 ENV LD_LIBRARY_PATH "/usr/lib64:$LD_LIBRARY_PATH:/app/soft/bin/:/app/soft/bin/dependencies"
 
