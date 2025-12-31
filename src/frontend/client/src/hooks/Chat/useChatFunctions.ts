@@ -114,7 +114,6 @@ export default function useChatFunctions({
     const search_enabled = searchType && searchType === 'netSearch' || false;
     const knowledge_enabled = searchType && searchType === 'knowledgeSearch' || false;
 
-    debugger
     const use_knowledge_base = {
       personal_knowledge_enabled: knowledge_enabled,
 

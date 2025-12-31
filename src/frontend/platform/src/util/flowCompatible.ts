@@ -124,7 +124,8 @@ const comptibleStart = (node) => {
         // TODO 历史使用过的预知问题变量替换
 
         node.v = 1
-    } else if (node.v == 1) {
+    }
+    if (node.v == 1) {
         node.group_params[1].params.unshift({
             "key": "user_info",
             "global": "key",
@@ -134,6 +135,17 @@ const comptibleStart = (node) => {
         })
 
         node.v = 2
+    }
+    if (node.v == 2) {
+        node.group_params[1].params.push({
+            "key": "custom_variables",
+            "label": "true",
+            "global": "item:input_list",
+            "type": "global_var",
+            "value": [],
+            "help": "true"
+        })
+        node.v = 3
     }
 }
 

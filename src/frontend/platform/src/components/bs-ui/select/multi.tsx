@@ -160,11 +160,13 @@ const MultiSelect = ({
 
     // search
     const handleSearch = useDebounce((e) => {
+        if (onSearch) {
+            return onSearch?.(inputRef.current?.value || '')
+        }
         const newValues = options.filter((item) => {
             return item.label.toLowerCase().indexOf(e.target.value.trim().toLowerCase()) !== -1
         })
         setOptionFilter(newValues)
-        onSearch?.(inputRef.current?.value || '')
     }, 500, false)
 
     // scroll laod

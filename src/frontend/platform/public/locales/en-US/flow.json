@@ -238,6 +238,18 @@
   "playbackUnavailable": "Playback is not available. Please contact the administrator.",
   "wordEditorLoadFailed": "Word editor failed to load",
   "checkOfficeServiceConfig": "Please ensure the Office service address is configured correctly and the service is running.",
+  "variableNameEmpty": "Variable name cannot be empty",
+  "variableNameStartsWithNumber": "Variable name cannot start with a number",
+  "variableNameInvalidChars": "Variable name can only contain English letters, numbers, and underscores",
+  "variableValueEmpty": "Variable value cannot be empty",
+  "variableValueTooLong": "Variable value cannot exceed 1000 characters",
+  "addVariable": "Add Variable",
+  "variableValue": "Variable Value",
+  "editGlobalVariable": "Edit Global Variable",
+  "addGlobalVariable": "Add Global Variable",
+  "variableNameRuleTip": "Supports letters, numbers, underscores; cannot start with a number; maximum 50 characters",
+  "variableValueRuleTip": "Variable value cannot be empty; maximum 1000 characters",
+  "enterVariableValue": "Enter variable value",
   "node": {
     "start": {
       "name": "Start",
@@ -263,6 +275,10 @@
         "label": "Preset Question List",
         "placeholder": "Enter batch preset questions",
         "help": "Useful for document review or report generation to run multiple RAG queries using preset questions."
+      },
+      "custom_variables": {
+        "label": "Custom Global Variables",
+        "help": "Set variables that can be referenced in other nodes"
       }
     },
     "input": {
@@ -459,7 +475,7 @@
       },
       "system_prompt": {
         "label": "System Prompt",
-        "value": "You are a knowledge base Q&A assistant. Follow these rules to answer the questions:\n1. Answer the user's questions in a formal and professional manner in Chinese.\n2. Your answers must be strictly based on the content in the [Reference Text]:\n\n- If the [Reference Text] contains specific content relevant to the user's question, use that content to answer. If no relevant content exists, simply reply: 'No relevant content found'.\n- If the content in the [Reference Text] includes markdown-formatted images (e.g., ![image](path/IMAGE_1.png)), it must strictly preserve its original markdown format, without adding quotes, code blocks (` or ```) or other special symbols. The image path must not be altered, ensuring proper rendering of the markdown image.\n3. When the content in the [Reference Text] comes from multiple sources and there are obvious differences or conflicts, list each answer separately to reflect these differences. If no conflicts exist, provide a unified answer."
+        "value": "You are a knowledge base Q&A assistant. Follow these rules to answer the questions:\n1. Answer the user's questions in a formal and professional manner in English.\n2. Your answers must be strictly based on the content in the [Reference Text]:\n\n- If the [Reference Text] contains specific content relevant to the user's question, use that content to answer. If no relevant content exists, simply reply: 'No relevant content found'.\n- If the content in the [Reference Text] includes markdown-formatted images (e.g., ![image](path/IMAGE_1.png)), it must strictly preserve its original markdown format, without adding quotes, code blocks (` or ```) or other special symbols. The image path must not be altered, ensuring proper rendering of the markdown image.\n3. When the content in the [Reference Text] comes from multiple sources and there are obvious differences or conflicts, list each answer separately to reflect these differences. If no conflicts exist, provide a unified answer."
       },
       "user_prompt": {
         "label": "User Prompt",
