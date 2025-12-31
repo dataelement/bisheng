@@ -11,10 +11,12 @@ export interface LayoutItem {
   maxH?: number // 最大高度
   static?: boolean // 是否静态（不可拖拽）
 }
+
 // 看板布局配置
 export interface LayoutConfig {
   layouts: LayoutItem[] // 布局数组
 }
+
 // 主题配置
 export interface ThemeConfig {
   backgroundColor: string
@@ -22,6 +24,7 @@ export interface ThemeConfig {
   borderColor: string
   chartColors: string[] // echarts 配色
 }
+
 // 看板样式配置
 export interface StyleConfig {
   theme: 'light' | 'dark' | 'blue' | 'green' // 当前主题
@@ -32,9 +35,10 @@ export interface StyleConfig {
     green: ThemeConfig
   }
 }
+
 // 组件样式配置
 export interface ComponentStyleConfig {
- themeColor: string        // 主体颜色
+  themeColor: string        // 主体颜色
   bgColor: string           // 背景颜色
   titleFontSize: number     // 主标题字体大小
   titleBold: boolean        // 主标题加粗
@@ -59,6 +63,7 @@ export interface ComponentStyleConfig {
   showDataLabel: boolean    // 是否显示数据标签
   showGrid: boolean         // 是否显示网格线
 }
+
 export interface Dashboard {
   id: string
   title: string
@@ -72,6 +77,7 @@ export interface Dashboard {
   updated_at: string
   components: DashboardComponent[]
 }
+
 export interface DashboardComponent {
   id: string //
   dashboard_id: string
@@ -83,24 +89,40 @@ export interface DashboardComponent {
   created_at: string
   updated_at: string
 }
+
 /**
  * Dashboard 组件数据配置类型定义
  */
 // 图表类型
-export type ChartType =
-  | 'bar'                      // 基础柱状图
-  | 'stacked-bar'              // 堆叠柱状图
-  | 'grouped-bar'              // 分组柱状图
-  | 'horizontal-bar'           // 基础条形图
-  | 'stacked-horizontal-bar'   // 堆叠条形图
-  | 'grouped-horizontal-bar'   // 分组条形图
-  | 'line'                     // 基础折线图
-  | 'area'                     // 面积图
-  | 'stacked-line'             // 堆叠折线图
-  | 'pie'                      // 饼状图
-  | 'donut'                    // 环状图
-  | 'metric'                   // 指标卡
-  | 'query'                   // 查询组件
+export enum ChartType {
+  /** 基础柱状图 */
+  Bar = 'bar',
+  /** 堆叠柱状图 */
+  StackedBar = 'stacked-bar',
+  /** 分组柱状图 */
+  GroupedBar = 'grouped-bar',
+  /** 基础条形图 */
+  HorizontalBar = 'horizontal-bar',
+  /** 堆叠条形图 */
+  StackedHorizontalBar = 'stacked-horizontal-bar',
+  /** 分组条形图 */
+  GroupedHorizontalBar = 'grouped-horizontal-bar',
+  /** 基础折线图 */
+  Line = 'line',
+  /** 面积图 */
+  Area = 'area',
+  /** 堆叠折线图 */
+  StackedLine = 'stacked-line',
+  /** 饼状图 */
+  Pie = 'pie',
+  /** 环状图 */
+  Donut = 'donut',
+  /** 指标卡 */
+  Metric = 'metric',
+  /** 查询组件 */
+  Query = 'query'
+}
+
 // 维度配置
 export interface DimensionField {
   fieldId: string               // 字段ID（来自数据集）
@@ -110,6 +132,7 @@ export interface DimensionField {
   sort: null | 'asc' | 'desc' // 排序方式
   timeGranularity: string // 时间子维度（仅时间字段有效）
 }
+
 //  指标配置 
 export interface MetricField {
   fieldId: string               // 字段ID（来自数据集）
@@ -127,6 +150,7 @@ export interface MetricField {
     thousandSeparator: boolean    // 是否显示千分位符
   }
 }
+
 export interface FilterCondition {
   id: string                           // 筛选条件唯一ID
   fieldId: string                      // 字段ID
@@ -135,6 +159,7 @@ export interface FilterCondition {
   operator?: string                    // 操作符
   value?: string | number | string[]   // 值
 }
+
 // 时间筛选 
 export type TimeRangeType =
   | 'all'          // 全部时间
@@ -143,6 +168,7 @@ export type TimeRangeType =
 export type TimeRangeMode =
   | 'fixed'    // 固定时间范围
   | 'dynamic'  // 动态时间范围（相对当前时间）
+
 export interface TimeFilter {
   type: TimeRangeType           // 时间范围类型
   mode?: TimeRangeMode          // 时间范围模式（type 为 recent_days 时有效）
@@ -150,6 +176,7 @@ export interface TimeFilter {
   startDate?: number            // 自定义开始日期
   endDate?: number              // 自定义结束日期
 }
+
 // 数据配置（图表组件和指标组件使用）
 export interface DataConfig {
   dimensions: DimensionField[]  // 维度字段列表（对应 echarts xAxis）
@@ -166,6 +193,7 @@ export interface DataConfig {
     limit?: number                // 具体条数（limitType 为 limited 时有效）
   }
 }
+
 // 查询组件配置 
 export interface QueryConfig {
   linkedComponentIds: string[]    // 关联的图表组件ID列表（查询时会更新这些组件）
@@ -179,6 +207,7 @@ export interface QueryConfig {
     defaultValue?: TimeFilter // 默认值配置
   }[] // 查询条件列表
 }
+
 // 组件配置联合类型
 export type ComponentConfig = DataConfig | QueryConfig
 export const createDefaultDataConfig = (chartType: ChartType = 'bar'): DataConfig => ({

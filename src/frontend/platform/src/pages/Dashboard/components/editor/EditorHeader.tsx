@@ -283,6 +283,10 @@ export function EditorHeader({
                     )}
                     <span className={cn("text-xs", getSaveStatusColor())}>{getSaveStatus()}</span>
                 </div>
+            </div>
+
+            {/* Middle section */}
+            <div className="flex items-center gap-2">
                 {/* Add Component */}
                 <ComponentPicker onSelect={handleAddComponent} >
                     <Button variant="outline" size="sm" className="gap-1">
@@ -300,10 +304,6 @@ export function EditorHeader({
                 {/* Theme */}
                 <ThemePicker onSelect={handleThemeChange} />
             </div>
-
-            {/* Middle section */}
-            {/* <div className="flex items-center gap-2">
-            </div> */}
 
             {/* Right section */}
             <div className="flex items-center gap-2">

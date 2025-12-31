@@ -6,9 +6,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, D
 import { Input } from "@/components/bs-ui/input"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { copyComponentTo, getDashboards } from "@/controllers/API/dashboard"
-import { useEditorDashboardStore } from "@/store/dashboardStore"
+import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
 import { Copy, Edit3, MoreHorizontal, Trash2 } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import ReactGridLayout, { Layout, verticalCompactor } from "react-grid-layout"
 import "react-grid-layout/css/styles.css"
 import { useMutation, useQuery, useQueryClient } from "react-query"
@@ -40,14 +40,16 @@ interface ComponentWrapperProps {
 }
 
 function ComponentWrapper({
-    dashboards, queryTrigger, component, isSelected, isPreviewMode,
-    onClick, onRename, onDuplicate, onCopyTo, onDelete
+    dashboards, queryTrigger, component, isPreviewMode,
+    onRename, onDuplicate, onCopyTo, onDelete
 }: ComponentWrapperProps) {
     const [isHovered, setIsHovered] = useState(false)
     const [isEditing, setIsEditing] = useState(false)
     const [title, setTitle] = useState(component.title)
     const inputRef = useRef<HTMLInputElement>(null)
     const { toast } = useToast()
+    const { copyFromDashboard, editingComponent, updateEditingComponent } = useComponentEditorStore();
+    const isSelected = editingComponent?.id === component.id
 
     useEffect(() => {
         if (isEditing && inputRef.current) {
@@ -58,7 +60,9 @@ function ComponentWrapper({
 
     const handleClick = (e: React.MouseEvent) => {
         e.stopPropagation()
-        onClick()
+        if (isPreviewMode) return
+        if (editingComponent?.id === component.id) return
+        copyFromDashboard(component.id)
     }
 
     const handleRenameBlur = () => {
@@ -110,7 +114,7 @@ function ComponentWrapper({
             {/* More button - top right corner */}
             {!isPreviewMode && (isSelected || isHovered) && (
                 <div className="absolute top-2 right-2 z-10">
-                    <DropdownMenu onOpenChange={() => onClick()}>
+                    <DropdownMenu>
                         <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                             <Button
                                 variant="ghost"
@@ -241,13 +245,12 @@ export function EditorCanvas({ isPreviewMode, dashboard }: EditorCanvasProps) {
         setCurrentDashboard,
         layouts,
         setLayouts,
-        selectedComponentId,
-        setSelectedComponentId,
         queryTrigger,
         updateComponent: updateComponentInStore,
         duplicateComponent: duplicateComponentInStore,
         deleteComponent: deleteComponentInStore,
     } = useEditorDashboardStore()
+    const { clear: clearComponentEditorStore } = useComponentEditorStore();
     console.log('currentDashboard :>> ', currentDashboard);
 
     const { toast } = useToast()
@@ -309,16 +312,10 @@ export function EditorCanvas({ isPreviewMode, dashboard }: EditorCanvasProps) {
         setLayouts(updatedLayouts)
     }
 
-    // 处理组件点击
-    const handleComponentClick = (componentId: string) => {
-        if (isPreviewMode) return // 预览模式下不选中
-        setSelectedComponentId(componentId)
-    }
-
     // 处理画布点击（取消选中）
     const handleCanvasClick = (e: React.MouseEvent) => {
         if (e.target === e.currentTarget || (e.target as HTMLElement).id === 'edit-charts-panne') {
-            setSelectedComponentId(null)
+            clearComponentEditorStore()
         }
     }
 
@@ -352,6 +349,52 @@ export function EditorCanvas({ isPreviewMode, dashboard }: EditorCanvasProps) {
         })
     }
 
+    const gridBackgroundStyle = useMemo(() => {
+        if (isPreviewMode || !width || !mounted) return {};
+
+        const cols = 24;
+        const rowHeight = 30;
+        const [marginX, marginY] = [16, 12];
+        const [padX, padY] = [8, 10];
+
+        const availableWidth = width - (padX * 2);
+        const totalMarginWidth = (cols - 1) * marginX;
+        const cellWidth = (availableWidth - totalMarginWidth) / cols;
+
+        const patternWidth = cellWidth + marginX;
+        const patternHeight = rowHeight + marginY;
+
+        const strokeColor = "rgba(0, 0, 0, 0.08)"; // 虚线颜色
+        const dashArray = "4, 2"; // 虚线步长
+        const borderRadius = 4; // 圆角
+
+        const svgString = `
+            <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <pattern id="grid" x="${padX}" y="${padY}" width="${patternWidth}" height="${patternHeight}" patternUnits="userSpaceOnUse">
+                        <rect 
+                            x="0" y="0" 
+                            width="${cellWidth}" height="${rowHeight}" 
+                            fill="transparent" 
+                            stroke="${strokeColor}"
+                            stroke-width="1"
+                            stroke-dasharray="${dashArray}"
+                            rx="${borderRadius}" ry="${borderRadius}"
+                        />
+                    </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#grid)" />
+            </svg>
+        `;
+
+        return {
+            backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(svgString)}")`,
+            backgroundRepeat: 'repeat',
+            backgroundAttachment: 'local',
+            backgroundPosition: `${0}px ${0}px`
+        };
+    }, [width, isPreviewMode, mounted]);
+
     // 如果没有dashboard，显示空状态
     if (!currentDashboard) {
         return (
@@ -382,11 +425,6 @@ export function EditorCanvas({ isPreviewMode, dashboard }: EditorCanvasProps) {
     // 应用主题
     const currentTheme = currentDashboard.style_config.themes[currentDashboard.style_config.theme]
 
-    // 获取选中的组件
-    const selectedComponent = selectedComponentId
-        ? currentDashboard.components.find(c => c.id === selectedComponentId)
-        : null
-
     return (
         <>
             <div
@@ -394,11 +432,13 @@ export function EditorCanvas({ isPreviewMode, dashboard }: EditorCanvasProps) {
                 ref={containerRef}
                 className="flex-1 p-2 overflow-auto"
                 style={{
-                    backgroundColor: currentTheme.backgroundColor,
+                    backgroundColor: currentTheme.backgroundColor
                 }}
                 onClick={handleCanvasClick}
             >
-                <div className="mx-auto">
+                <div className="mx-auto relative" style={{
+                    ...gridBackgroundStyle, // 应用动态生成的网格背景
+                }}>
                     {mounted && (
                         <ReactGridLayout
                             className="layout"
@@ -425,10 +465,8 @@ export function EditorCanvas({ isPreviewMode, dashboard }: EditorCanvasProps) {
                                     <ComponentWrapper
                                         dashboards={dashboards}
                                         component={component}
-                                        isSelected={selectedComponentId === component.id}
                                         isPreviewMode={isPreviewMode}
                                         queryTrigger={queryTrigger}
-                                        onClick={() => handleComponentClick(component.id)}
                                         onRename={handleRename}
                                         onDuplicate={handleDuplicate}
                                         onCopyTo={handleCopyTo}
@@ -441,16 +479,7 @@ export function EditorCanvas({ isPreviewMode, dashboard }: EditorCanvasProps) {
                 </div>
             </div>
             {/* 配置抽屉 */}
-            <ComponentConfigDrawer
-                open={!!selectedComponentId && !isPreviewMode}
-                onOpenChange={(open) => {
-                    if (!open) {
-                        setSelectedComponentId(null)
-                    }
-                }}
-                component={selectedComponent || null}
-                onComponentUpdate={updateComponentInStore}
-            />
+            <ComponentConfigDrawer />
         </>
     )
 }

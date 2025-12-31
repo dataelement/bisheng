@@ -48,7 +48,7 @@ let mockDashboards: Dashboard[] = [
         layout_config: {
             layouts: [
                 // 第一行：查询组件
-                { i: "query-filter", x: 0, y: 0, w: 6, h: 6, minW: 4, minH: 4 },
+                { i: "query-filter", x: 0, y: 0, w: 8, h: 4, minW: 4, minH: 4 },
 
                 // 第二行：柱状图
                 { i: "bar-basic", x: 0, y: 6, w: 8, h: 8, minW: 4, minH: 4 },

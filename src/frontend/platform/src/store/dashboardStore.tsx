@@ -9,8 +9,6 @@ interface EditorState {
     isSaving: boolean;
     // Currently edited dashboard
     currentDashboard: Dashboard | null;
-    // Selected component ID
-    selectedComponentId: string | null;
     // Layout configuration
     layouts: LayoutItem[];
     // Query trigger (triggers re-query for all charts when changed)
@@ -22,8 +20,6 @@ interface EditorState {
     setIsSaving: (value: boolean) => void;
     // Set current dashboard
     setCurrentDashboard: (dashboard: Dashboard | null) => void;
-    // Set selected component ID
-    setSelectedComponentId: (id: string | null) => void;
     // Update layout configuration
     setLayouts: (layouts: LayoutItem[]) => void;
     // Add component to layout
@@ -46,7 +42,6 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     hasUnsavedChanges: false,
     isSaving: false,
     currentDashboard: null,
-    selectedComponentId: null,
     layouts: [],
     queryTrigger: 0,
 
@@ -58,7 +53,6 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             layouts: dashboard?.layout_config?.layouts || []
         })
     },
-    setSelectedComponentId: (id) => set({ selectedComponentId: id }),
     setLayouts: (layouts) => {
         set({ layouts, hasUnsavedChanges: true })
     },
@@ -162,8 +156,7 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
                 components: currentDashboard.components.filter(c => c.id !== componentId)
             },
             layouts: layouts.filter(l => l.i !== componentId),
-            hasUnsavedChanges: true,
-            selectedComponentId: null
+            hasUnsavedChanges: true
         })
     },
     // Trigger query for all charts
@@ -174,8 +167,88 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
         hasUnsavedChanges: false,
         isSaving: false,
         currentDashboard: null,
-        selectedComponentId: null,
         layouts: [],
         queryTrigger: 0
     }),
 }))
+
+
+// Shadow Component Editor Store
+interface ComponentEditorState {
+    // The "Shadow" state: stores a copy of the component currently being edited
+    editingComponent: DashboardComponent | null;
+
+    // Internal helper to push changes to the main store
+    _internalSync: () => void;
+
+    // Public methods
+    updateEditingComponent: (data: Partial<DashboardComponent>) => void;
+
+    /**
+     * Entry Point: Triggered when clicking a chart.
+     * Checks if a previous draft exists, saves it if necessary, 
+     * then clones the new component.
+     */
+    copyFromDashboard: (componentId: string) => void;
+
+    /**
+     * Exit Point: Saves any remaining changes and resets the shadow state.
+     */
+    clear: () => void;
+}
+export const useComponentEditorStore = create<ComponentEditorState>((set, get) => ({
+    editingComponent: null,
+
+    /**
+     * Private-style helper to synchronize the shadow state 
+     * back to the primary Dashboard store.
+     */
+    _internalSync: () => {
+        const { editingComponent } = get();
+        if (editingComponent) {
+            const dashboardStore = useEditorDashboardStore.getState();
+            dashboardStore.updateComponent(editingComponent.id, editingComponent);
+        }
+    },
+
+    updateEditingComponent: (data) => {
+        const { editingComponent } = get();
+        if (editingComponent) {
+            set({
+                editingComponent: { ...editingComponent, ...data }
+            });
+        }
+    },
+
+    copyFromDashboard: (componentId: string) => {
+        const { editingComponent, _internalSync } = get();
+        const dashboardStore = useEditorDashboardStore.getState();
+
+        // 1. If there is an existing draft, save it first
+        if (editingComponent) {
+            _internalSync();
+        }
+
+        // 2. Find the new component to edit
+        const nextComponent = dashboardStore.currentDashboard?.components.find(
+            (c) => c.id === componentId
+        );
+
+        if (nextComponent) {
+            // 3. Create a deep copy for the shadow state
+            const deepCopy = JSON.parse(JSON.stringify(nextComponent)) as DashboardComponent;
+            set({ editingComponent: deepCopy });
+        }
+    },
+
+    clear: () => {
+        const { editingComponent, _internalSync } = get();
+
+        // Save pending changes before closing
+        if (editingComponent) {
+            _internalSync();
+        }
+
+        set({ editingComponent: null });
+    },
+}));

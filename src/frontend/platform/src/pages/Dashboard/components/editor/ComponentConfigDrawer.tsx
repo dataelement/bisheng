@@ -1,47 +1,40 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
-import { ChevronLeft, ChevronRight, GripVertical, Plus, X, ChevronDown } from "lucide-react"
 import { Button } from "@/components/bs-ui/button"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
 import { Input } from "@/components/bs-ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/bs-ui/dialog"
+import { ChevronDown, ChevronLeft, ChevronRight, GripVertical, Plus, X } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
 
-import { ChartType, ComponentStyleConfig, DashboardComponent, DataConfig } from "../../types/dataConfig"
+import { useComponentEditorStore } from "@/store/dashboardStore"
+import { ChartType, ComponentStyleConfig, DataConfig } from "../../types/dataConfig"
 import { DatasetSelector } from "./DatasetSelector"
-import { StyleConfigPanel } from "./StyleConfigPanel"
-import { useEditorDashboardStore } from "@/store/dashboardStore"
 import { DimensionBlock } from "./DimensionBlock"
+import { StyleConfigPanel } from "./StyleConfigPanel"
 
 // 图表类型选项
-const CHART_TYPES = [
-  { label: "基础柱状图", value: "bar" },
-  { label: "堆叠柱状图", value: "stacked-bar" },
-  { label: "分组柱状图", value: "grouped-bar" },
-  { label: "基础条形图", value: "horizontal-bar" },
-  { label: "堆叠条形图", value: "stacked-horizontal-bar" },
-  { label: "分组条形图", value: "grouped-horizontal-bar" },
-  { label: "基础折线图", value: "line" },
-  { label: "面积图", value: "area" },
-  { label: "堆叠折线图", value: "stacked-line" },
-  { label: "饼状图", value: "pie" },
-  { label: "环状图", value: "donut" },
-  { label: "指标卡", value: "metric" },
-  { label: "查询组件", value: "query" }
-]
+export const CHART_TYPES: {
+  label: string;
+  value: ChartType;
+}[] = [
+    { label: "基础柱状图", value: ChartType.Bar },
+    { label: "堆叠柱状图", value: ChartType.StackedBar },
+    { label: "分组柱状图", value: ChartType.GroupedBar },
+    { label: "基础条形图", value: ChartType.HorizontalBar },
+    { label: "堆叠条形图", value: ChartType.StackedHorizontalBar },
+    { label: "分组条形图", value: ChartType.GroupedHorizontalBar },
+    { label: "基础折线图", value: ChartType.Line },
+    { label: "面积图", value: ChartType.Area },
+    { label: "堆叠折线图", value: ChartType.StackedLine },
+    { label: "饼状图", value: ChartType.Pie },
+    { label: "环状图", value: ChartType.Donut },
+    { label: "指标卡", value: ChartType.Metric },
+    { label: "查询组件", value: ChartType.Query }
+  ];
 
-interface ComponentConfigDrawerProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  component: DashboardComponent | null
-}
-
-export function ComponentConfigDrawer({
-  open,
-  onOpenChange,  
-  component
-}: ComponentConfigDrawerProps) {
-  if (!open || !component) return null
+export function ComponentConfigDrawer() {
+  const { editingComponent, updateEditingComponent } = useComponentEditorStore();
 
   // 折叠状态
   const [configCollapsed, setConfigCollapsed] = useState({
@@ -51,7 +44,7 @@ export function ComponentConfigDrawer({
     stack: false,
     value: false
   })
-  
+
   // 样式配置
   const [styleConfig, setStyleConfig] = useState<ComponentStyleConfig>({
     themeColor: "#4ac5ff",
@@ -82,13 +75,12 @@ export function ComponentConfigDrawer({
 
   const [configTab, setConfigTab] = useState<"basic" | "style">("basic")
   const [draggingId, setDraggingId] = useState<string | null>(null)
-  const [chartType, setChartType] = useState<ChartType>(component.type || 'bar')
-  const [title, setTitle] = useState(component.title || '')
+  const [chartType, setChartType] = useState<ChartType>(editingComponent?.type || 'bar')
+  const [title, setTitle] = useState(editingComponent?.title || '')
   const [limitType, setLimitType] = useState<"all" | "limit">("limit")
   const [limitValue, setLimitValue] = useState("1000")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
-  const updateComponent = useEditorDashboardStore(state => state.updateComponent)
 
   // 维度数据状态
   const [categoryDimensions, setCategoryDimensions] = useState<any[]>([])
@@ -105,16 +97,16 @@ export function ComponentConfigDrawer({
 
   // 初始化
   useEffect(() => {
-    if (component) {
-      setChartType(component.type)
-      setStyleConfig(component.style_config)
+    if (editingComponent) {
+      setChartType(editingComponent.type)
+      setStyleConfig(editingComponent.style_config)
     }
-  }, [component.type])
+  }, [editingComponent?.type])
 
   // 数据集改变
   const handleDatasetChange = (datasetCode: string) => {
-    if (component) {
-      updateComponent(component.id, { dataset_code: datasetCode })
+    if (editingComponent) {
+      updateEditingComponent({ dataset_code: datasetCode })
     }
   }
 
@@ -135,31 +127,31 @@ export function ComponentConfigDrawer({
   const handleDrop = (e: React.DragEvent, section: 'category' | 'stack' | 'value') => {
     e.preventDefault()
     e.stopPropagation()
-    
+
     const dataStr = e.dataTransfer.getData('application/json')
     if (!dataStr) return
-    
+
     try {
       const data = JSON.parse(dataStr)
-      
+
       // 添加维度逻辑
       const addDimension = (section: 'category' | 'stack' | 'value', data: any) => {
         const fieldId = data.id || data.name || `field_${Date.now()}`
         const name = data.name || data.displayName || fieldId
-        
+
         // 检查是否已存在
         let currentDimensions: any[] = []
         if (section === 'category') currentDimensions = categoryDimensions
         if (section === 'stack') currentDimensions = stackDimensions
         if (section === 'value') currentDimensions = valueDimensions
-        
+
         const alreadyExists = currentDimensions.some(dim => dim.fieldId === fieldId)
         if (alreadyExists) return
-        
+
         const displayName = data.displayName || name
         const originalName = data.name || name
         const fieldType = data.fieldType || 'dimension'
-        
+
         const newDimension = {
           id: `${section}_${Date.now()}`,
           fieldId,
@@ -180,7 +172,7 @@ export function ComponentConfigDrawer({
           setValueDimensions(prev => [...prev, newDimension])
         }
       }
-      
+
       addDimension(section, data)
       setDragOverSection(null)
     } catch (error) {
@@ -219,7 +211,7 @@ export function ComponentConfigDrawer({
       if (editingDimension.section === 'category') setCategoryDimensions(updateDimensions)
       if (editingDimension.section === 'stack') setStackDimensions(updateDimensions)
       if (editingDimension.section === 'value') setValueDimensions(updateDimensions)
-      
+
       setEditDialogOpen(false)
       setEditingDimension(null)
     }
@@ -268,7 +260,7 @@ export function ComponentConfigDrawer({
 
   // 更新图表
   const handleUpdateChart = () => {
-    if (!component) return
+    if (!editingComponent) return
 
     const dataConfig: DataConfig = {
       dimensions: categoryDimensions.map(dim => ({
@@ -307,7 +299,7 @@ export function ComponentConfigDrawer({
       }
     }
 
-    updateComponent(component.id, {
+    updateEditingComponent({
       data_config: dataConfig,
       type: chartType,
       title: title,
@@ -361,6 +353,8 @@ export function ComponentConfigDrawer({
     </div>
   )
 
+  if (!editingComponent) return null
+
   return (
     <div className="fixed right-0 top-14 bottom-0 flex bg-background border-l border-border">
       {/* 左侧基础配置模块 */}
@@ -394,8 +388,8 @@ export function ComponentConfigDrawer({
                 <>
                   {/* 图表类型 */}
                   <FormBlock label="图表类型" required>
-                    <Select 
-                      value={chartType} 
+                    <Select
+                      value={chartType}
                       onValueChange={(value: ChartType) => {
                         setChartType(value)
                         const selectedChart = CHART_TYPES.find(item => item.value === value)
@@ -434,7 +428,7 @@ export function ComponentConfigDrawer({
                       onDrop={(e) => handleDrop(e, 'category')}
                       onDelete={(dimensionId) => handleDeleteDimension('category', dimensionId)}
                       onSortChange={(dimensionId, sortValue) => handleSortChange('category', dimensionId, sortValue)}
-                      onEditDisplayName={(dimensionId, originalName, displayName) => 
+                      onEditDisplayName={(dimensionId, originalName, displayName) =>
                         openEditDialog('category', dimensionId, originalName, displayName)
                       }
                     />
@@ -455,7 +449,7 @@ export function ComponentConfigDrawer({
                       onDrop={(e) => handleDrop(e, 'stack')}
                       onDelete={(dimensionId) => handleDeleteDimension('stack', dimensionId)}
                       onSortChange={(dimensionId, sortValue) => handleSortChange('stack', dimensionId, sortValue)}
-                      onEditDisplayName={(dimensionId, originalName, displayName) => 
+                      onEditDisplayName={(dimensionId, originalName, displayName) =>
                         openEditDialog('stack', dimensionId, originalName, displayName)
                       }
                     />
@@ -477,12 +471,12 @@ export function ComponentConfigDrawer({
                       onDrop={(e) => handleDrop(e, 'value')}
                       onDelete={(dimensionId) => handleDeleteDimension('value', dimensionId)}
                       onSortChange={(dimensionId, sortValue) => handleSortChange('value', dimensionId, sortValue)}
-                      onEditDisplayName={(dimensionId, originalName, displayName) => 
+                      onEditDisplayName={(dimensionId, originalName, displayName) =>
                         openEditDialog('value', dimensionId, originalName, displayName)
                       }
                     />
                   </CollapsibleBlock>
-   
+
                   {/* 排序优先级 */}
                   <CollapsibleBlock title="排序优先级">
                     <div className="space-y-2">
@@ -532,7 +526,7 @@ export function ComponentConfigDrawer({
                     <div className="flex items-center justify-between">
                       <label className="text-sm font-medium">筛选</label>
                     </div>
-                    
+
                     {filters.length === 0 ? (
                       <div className="text-sm text-muted-foreground text-center py-1 border rounded bg-muted/20">
                         <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleAddFilter}>
@@ -603,7 +597,7 @@ export function ComponentConfigDrawer({
             <PanelHeader title="数据集配置" onCollapse={() => toggleCollapse('data')} icon={<ChevronRight />} />
             <div className="flex-1 overflow-auto">
               <DatasetSelector
-                selectedDatasetCode={component.dataset_code}
+                selectedDatasetCode={editingComponent.dataset_code}
                 onDatasetChange={handleDatasetChange}
                 onDragStart={handleDragStart}
               />
