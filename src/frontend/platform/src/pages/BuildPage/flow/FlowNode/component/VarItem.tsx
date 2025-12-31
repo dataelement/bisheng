@@ -3,8 +3,8 @@ import { Label } from "@/components/bs-ui/label";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { ChevronUp } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useUpdateVariableState } from "../flowNodeStore";
 import { useTranslation } from "react-i18next";
+import { useUpdateVariableState } from "../flowNodeStore";
 
 export default function VarItem({ data: paramItem, i18nPrefix }) {
     const [open, setOpen] = useState(true)
@@ -45,7 +45,7 @@ export default function VarItem({ data: paramItem, i18nPrefix }) {
         <div className={open ? 'block' : 'hidden'}>
             {
                 paramItem.value.map((item, index) =>
-                    <Badge key={item.key} variant="outline" className="bg-[#E6ECF6] text-[#2B53A0] ml-1 mt-1 max-w-full truncate block">{item.label}</Badge>
+                    <Badge key={item.key} variant="outline" className="bg-[#E6ECF6] text-[#2B53A0] ml-1 mt-1 max-w-full truncate inline-block">{item.label}</Badge>
                 )
             }
         </div>

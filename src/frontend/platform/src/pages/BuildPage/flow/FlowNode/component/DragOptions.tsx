@@ -25,7 +25,7 @@ interface Iprops {
 const itemNames = {
     'select': i18next.t('dropdown', { ns: 'flow' }),
     'file': i18next.t('file', { ns: 'flow' }),
-    'text': i18next.t('text', { ns: 'flow' })
+    'text': i18next.t('textInput', { ns: 'flow' })
 }
 
 const DragOptions = forwardRef(({ edges = false, edit = false, scroll = false, options, onEditClick, onChange }: Iprops, ref) => {
