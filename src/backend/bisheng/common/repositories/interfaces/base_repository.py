@@ -14,8 +14,18 @@ class BaseRepository(ABC, Generic[T, ID]):
         pass
 
     @abstractmethod
+    async def bulk_save(self, entities: List[T]) -> List[T]:
+        """批量保存实体"""
+        pass
+
+    @abstractmethod
     def save_sync(self, entity: T) -> T:
         """同步保存实体"""
+        pass
+
+    @abstractmethod
+    def bulk_save_sync(self, entities: List[T]) -> List[T]:
+        """同步批量保存实体"""
         pass
 
     @abstractmethod

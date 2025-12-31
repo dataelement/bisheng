@@ -24,12 +24,28 @@ class BaseRepositoryImpl(BaseRepository[T, ID]):
         await self.session.refresh(entity)
         return entity
 
+    async def bulk_save(self, entities: List[T]) -> List[T]:
+        """批量保存实体"""
+        self.session.add_all(entities)
+        await self.session.commit()
+        for entity in entities:
+            await self.session.refresh(entity)
+        return entities
+
     def save_sync(self, entity: T) -> T:
         """同步保存实体"""
         self.session.add(entity)
         self.session.commit()
         self.session.refresh(entity)
         return entity
+
+    def bulk_save_sync(self, entities: List[T]) -> List[T]:
+        """同步批量保存实体"""
+        self.session.add_all(entities)
+        self.session.commit()
+        for entity in entities:
+            self.session.refresh(entity)
+        return entities
 
     async def find_by_id(self, entity_id: ID) -> Optional[T]:
         """根据ID查找实体"""

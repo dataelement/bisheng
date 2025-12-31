@@ -51,8 +51,8 @@ async def get_es_connection() -> AsyncElasticsearch:
         try:
             from bisheng.common.services.config_service import settings
             app_context.register_context(
-                EsConnManager(es_hosts=settings.get_search_conf().elasticsearch_url
-                                       ** settings.get_search_conf().ssl_verify
+                EsConnManager(es_hosts=settings.get_telemetry_conf().elasticsearch_url,
+                              **settings.get_telemetry_conf().ssl_verify
                               ))
             return (await app_context.async_get_instance(EsConnManager.name)).es_connection
         except Exception as e:
@@ -91,8 +91,8 @@ def get_es_connection_sync() -> Elasticsearch:
         try:
             from bisheng.common.services.config_service import settings
             app_context.register_context(
-                EsConnManager(es_hosts=settings.get_search_conf().elasticsearch_url,
-                              **settings.get_search_conf().ssl_verify
+                EsConnManager(es_hosts=settings.get_telemetry_conf().elasticsearch_url,
+                              **settings.get_telemetry_conf().ssl_verify
                               ))
             return app_context.sync_get_instance(EsConnManager.name).sync_es_connection
         except Exception as e:
