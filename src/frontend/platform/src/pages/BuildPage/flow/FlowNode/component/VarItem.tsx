@@ -35,7 +35,7 @@ export default function VarItem({ data: paramItem, i18nPrefix }) {
     }, [updateVariable])
 
     if (Array.isArray(paramItem.value) && paramItem.value.length > 0) return <div className="mb-2">
-        <div className="flex justify-between items-center">
+        <div className="outputs flex justify-between items-center">
             <Label className="bisheng-label">
                 {t(`${i18nPrefix}label`)}
                 {paramItem.help && <QuestionTooltip content={t(`${i18nPrefix}help`)} />}
@@ -45,7 +45,7 @@ export default function VarItem({ data: paramItem, i18nPrefix }) {
         <div className={open ? 'block' : 'hidden'}>
             {
                 paramItem.value.map((item, index) =>
-                    <Badge key={item.key} variant="outline" className="bg-[#E6ECF6] text-[#2B53A0] ml-1 mt-1">{item.label}</Badge>
+                    <Badge key={item.key} variant="outline" className="bg-[#E6ECF6] text-[#2B53A0] ml-1 mt-1 max-w-full truncate block">{item.label}</Badge>
                 )
             }
         </div>

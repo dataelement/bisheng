@@ -166,7 +166,7 @@
   "storeFilesSentInCurrentSession": "Store files sent in the current session",
   "displayNameTooltip": "Displayed on the user conversation page",
   "variableNameTooltipFile": "Used to store content entered on the user conversation page; can be selected from the temporary session file list",
-  "variableNameTooltipOther": "Used to store content entered on the user conversation page; can be referenced in other nodes",
+  "variableNameTooltip": "Used to store content entered on the user conversation page; can be referenced in other nodes",
   "allowMultipleSelect": "Allow multiple selection",
   "allowUploadMultipleFiles": "Allow uploading multiple files",
   "uploadFileTypes": "Upload file types",

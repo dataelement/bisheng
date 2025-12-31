@@ -167,7 +167,7 @@
   "storeFilesSentInCurrentSession": "存储当前会话中发送的文件",
   "displayNameTooltip": "用户会话页面展示此名称",
   "variableNameTooltipFile": "用于存储用户会话页面填写的内容，可在临时会话文件列表中选择此变量",
-  "variableNameTooltipOther": "用于存储用户会话页面填写的内容，可在其他节点中引用此变量",
+  "variableNameTooltip": "用于存储用户会话页面填写的内容，可在其他节点中引用此变量",
   "allowMultipleSelect": "允许多选",
   "allowUploadMultipleFiles": "允许上传多个文件",
   "uploadFileTypes": "上传文件类型",

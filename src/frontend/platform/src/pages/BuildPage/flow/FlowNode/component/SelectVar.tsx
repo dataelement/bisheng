@@ -276,7 +276,7 @@ const SelectVar = forwardRef(({
             itemL1.data.forEach((itemL2) => {
                 const keyL2 = `${itemL1.id}.${itemL2.value}`;
 
-                if (itemL2.value === 'preset_question') {
+                if (['preset_question', 'custom_variables'].includes(itemL2.value)) {
                     // 处理三级菜单
                     const { keys: nestedKeys, checkedCount: checkedCountL2 } = handleNestedItems(
                         keyL2,
@@ -313,7 +313,7 @@ const SelectVar = forwardRef(({
                 .map((item) => {
                     item.label && tasks.push({
                         node: currentNode,
-                        variable: { ...item, value: `${data.value}#${item.value}` },
+                        variable: { ...item, value: `${data.label || data.value}#${item.value}` },
                     })
                 });
         };
@@ -325,12 +325,25 @@ const SelectVar = forwardRef(({
 
         // 生成任务列表
         const tasks = [];
-        if (variable && variable.value !== 'preset_question') {
-            tasks.push(handleNormalVariable(variable))
+        // 全选
+        if (!variable) {
+            currentNode.data.forEach((item) => {
+                if (item.param) {
+                    handlePresetQuestion(item, tasks);
+                } else {
+                    tasks.push(handleNormalVariable(item));
+                }
+            });
+        } else if (variable.param) {
+            // 全选二级
+            currentNode.data.some((item) => {
+                if (item.param && variable.value === item.value) {
+                    handlePresetQuestion(item, tasks);
+                    return true
+                }
+            });
         } else {
-            currentNode.data?.map((item) =>
-                item.param ? handlePresetQuestion(item, tasks) : variable?.value !== 'preset_question' && tasks.push(handleNormalVariable(item))
-            ) || []
+            tasks.push(handleNormalVariable(variable));
         }
 
         // 回调父组件

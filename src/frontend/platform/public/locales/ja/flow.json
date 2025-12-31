@@ -167,7 +167,7 @@
   "storeFilesSentInCurrentSession": "現在のセッションで送信されたファイルを保存",
   "displayNameTooltip": "ユーザーセッションページにこの名前が表示されます",
   "variableNameTooltipFile": "ユーザーセッションページに入力した内容を保存するために使用されます。これを一時セッションファイルリストで選択できます",
-  "variableNameTooltipOther": "ユーザーセッションページに入力した内容を保存するために使用され、他のノードでも参照できます",
+  "variableNameTooltip": "ユーザーセッションページに入力した内容を保存するために使用され、他のノードでも参照できます",
   "allowMultipleSelect": "複数選択を許可",
   "allowUploadMultipleFiles": "複数ファイルのアップロードを許可",
   "uploadFileTypes": "アップロード可能なファイルタイプ",
