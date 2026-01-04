@@ -1,6 +1,12 @@
 import { create } from "zustand"
 import { generateUUID } from "@/components/bs-ui/utils"
-import { Dashboard, DashboardComponent, LayoutItem } from "@/pages/Dashboard/types/dataConfig"
+import { Dashboard, DashboardComponent, LayoutItem, QueryConfig } from "@/pages/Dashboard/types/dataConfig"
+
+// Chart refresh information
+interface ChartRefreshInfo {
+    trigger: number;           // Refresh trigger counter
+    queryParams: any[];        // Array of associated query component parameters
+}
 
 interface EditorState {
     // Whether there are unsaved changes
@@ -11,8 +17,8 @@ interface EditorState {
     currentDashboard: Dashboard | null;
     // Layout configuration
     layouts: LayoutItem[];
-    // Query trigger (triggers re-query for all charts when changed)
-    queryTrigger: number;
+    // Chart refresh triggers: each chart has its own trigger counter and query params
+    chartRefreshTriggers: Record<string, ChartRefreshInfo>;
 
     // Set modification state
     setHasUnsavedChanges: (value: boolean) => void;
@@ -32,8 +38,14 @@ interface EditorState {
     duplicateComponent: (componentId: string) => void;
     // Delete component
     deleteComponent: (componentId: string) => void;
-    // Trigger query
-    triggerQuery: () => void;
+    // Refresh a single chart
+    refreshChart: (chartId: string) => void;
+    // Refresh charts linked to a query component
+    refreshChartsByQuery: (queryComponentId: string) => void;
+    // Refresh all charts
+    refreshAllCharts: () => void;
+    // Initialize auto-refresh on load
+    initializeAutoRefresh: () => void;
     // Reset state
     reset: () => void;
 }
@@ -43,14 +55,15 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     isSaving: false,
     currentDashboard: null,
     layouts: [],
-    queryTrigger: 0,
+    chartRefreshTriggers: {},
 
     setHasUnsavedChanges: (value) => set({ hasUnsavedChanges: value }),
     setIsSaving: (value) => set({ isSaving: value }),
     setCurrentDashboard: (dashboard) => {
         set({
             currentDashboard: dashboard,
-            layouts: dashboard?.layout_config?.layouts || []
+            layouts: dashboard?.layout_config?.layouts || [],
+            chartRefreshTriggers: {} // Reset triggers when dashboard changes
         })
     },
     setLayouts: (layouts) => {
@@ -159,16 +172,175 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             hasUnsavedChanges: true
         })
     },
-    // Trigger query for all charts
-    triggerQuery: () => {
-        set((state) => ({ queryTrigger: state.queryTrigger + 1 }))
+
+    // Refresh a single chart by incrementing its trigger counter
+    refreshChart: (chartId: string) => {
+        const { currentDashboard, chartRefreshTriggers } = get()
+        if (!currentDashboard) return
+
+        // Find all query components associated with this chart 
+        const linkedQueryComponents = currentDashboard.components.filter(component => {
+            if (component.type === 'query') {
+                const queryConfig = component.data_config as QueryConfig
+                return queryConfig.linkedComponentIds?.includes(chartId)
+            }
+            return false
+        })
+
+        // Extract query parameters
+        const queryParams = linkedQueryComponents.map(queryComponent => {
+            const queryConfig = queryComponent.data_config as QueryConfig
+            return {
+                queryComponentId: queryComponent.id,
+                queryConditions: queryConfig.queryConditions
+            }
+        })
+
+        const currentInfo = chartRefreshTriggers[chartId] || { trigger: 0, queryParams: [] }
+        set({
+            chartRefreshTriggers: {
+                ...chartRefreshTriggers,
+                [chartId]: {
+                    trigger: currentInfo.trigger + 1,
+                    queryParams
+                }
+            }
+        })
     },
+
+    // Refresh all charts linked to a query component
+    refreshChartsByQuery: (queryComponentId: string) => {
+        const { currentDashboard, chartRefreshTriggers } = get()
+        if (!currentDashboard) return
+
+        // Find the query component
+        const queryComponent = currentDashboard.components.find(c => c.id === queryComponentId)
+        if (!queryComponent || queryComponent.type !== 'query') return
+
+        const queryConfig = queryComponent.data_config as QueryConfig
+        const linkedChartIds = queryConfig.linkedComponentIds || []
+
+        // Prepare query parameters (from the current query component)
+        const currentQueryParams = [{
+            queryComponentId: queryComponent.id,
+            queryConditions: queryConfig.queryConditions
+        }]
+
+        // Increment trigger for each linked chart and attach query params
+        const updatedTriggers = { ...chartRefreshTriggers }
+        linkedChartIds.forEach(chartId => {
+            // Get other query components that are also associated with this chart
+            const otherLinkedQueries = currentDashboard.components.filter(component => {
+                if (component.type === 'query' && component.id !== queryComponentId) {
+                    const config = component.data_config as QueryConfig
+                    return config.linkedComponentIds?.includes(chartId)
+                }
+                return false
+            })
+
+            // Combine all query parameters 
+            const allQueryParams = [
+                ...currentQueryParams,
+                ...otherLinkedQueries.map(qc => ({
+                    queryComponentId: qc.id,
+                    queryConditions: (qc.data_config as QueryConfig).queryConditions
+                }))
+            ]
+
+            const currentInfo = updatedTriggers[chartId] || { trigger: 0, queryParams: [] }
+            updatedTriggers[chartId] = {
+                trigger: currentInfo.trigger + 1,
+                queryParams: allQueryParams
+            }
+        })
+
+        set({ chartRefreshTriggers: updatedTriggers })
+    },
+
+    // Refresh all chart components (excluding query components)
+    refreshAllCharts: () => {
+        const { currentDashboard, chartRefreshTriggers } = get()
+        if (!currentDashboard) return
+
+        const updatedTriggers = { ...chartRefreshTriggers }
+        currentDashboard.components.forEach(component => {
+            // Refresh all non-query components
+            if (component.type !== 'query') {
+                // Find all query components associated with this chart 
+                const linkedQueryComponents = currentDashboard.components.filter(qc => {
+                    if (qc.type === 'query') {
+                        const queryConfig = qc.data_config as QueryConfig
+                        return queryConfig.linkedComponentIds?.includes(component.id)
+                    }
+                    return false
+                })
+
+                // Extract query parameters
+                const queryParams = linkedQueryComponents.map(qc => ({
+                    queryComponentId: qc.id,
+                    queryConditions: (qc.data_config as QueryConfig).queryConditions
+                }))
+
+                const currentInfo = updatedTriggers[component.id] || { trigger: 0, queryParams: [] }
+                updatedTriggers[component.id] = {
+                    trigger: currentInfo.trigger + 1,
+                    queryParams
+                }
+            }
+        })
+
+        set({ chartRefreshTriggers: updatedTriggers })
+    },
+
+    // Initialize auto-refresh based on query component configuration
+    initializeAutoRefresh: () => {
+        const { currentDashboard, chartRefreshTriggers } = get()
+        if (!currentDashboard) return
+
+        const updatedTriggers = { ...chartRefreshTriggers }
+
+        // Build a mapping from chart ID to query component 
+        const chartToQueriesMap: Record<string, any[]> = {}
+
+        // Find all query components
+        currentDashboard.components.forEach(component => {
+            if (component.type === 'query') {
+                const queryConfig = component.data_config as QueryConfig
+                if (queryConfig.linkedComponentIds) {
+                    const queryParam = {
+                        queryComponentId: component.id,
+                        queryConditions: queryConfig.queryConditions
+                    }
+
+                    // Add query parameters to each associated chart
+                    queryConfig.linkedComponentIds.forEach(chartId => {
+                        if (!chartToQueriesMap[chartId]) {
+                            chartToQueriesMap[chartId] = []
+                        }
+                        chartToQueriesMap[chartId].push(queryParam)
+                    })
+                }
+            }
+        })
+
+        // Set refresh information for each chart 
+        Object.entries(chartToQueriesMap).forEach(([chartId, queryParams]) => {
+            const currentInfo = updatedTriggers[chartId] || { trigger: 0, queryParams: [] }
+            updatedTriggers[chartId] = {
+                trigger: currentInfo.trigger + 1,
+                queryParams
+            }
+        })
+
+        set({ chartRefreshTriggers: updatedTriggers })
+    },
+
     reset: () => set({
         hasUnsavedChanges: false,
         isSaving: false,
         currentDashboard: null,
         layouts: [],
-        queryTrigger: 0
+        chartRefreshTriggers: {}
     }),
 }))
 
@@ -194,7 +366,7 @@ interface ComponentEditorState {
     /**
      * Exit Point: Saves any remaining changes and resets the shadow state.
      */
-    clear: () => void;
+    clear: (force?: boolean) => void;
 }
 export const useComponentEditorStore = create<ComponentEditorState>((set, get) => ({
     editingComponent: null,
@@ -241,11 +413,11 @@ export const useComponentEditorStore = create<ComponentEditorState>((set, get) =
         }
     },
 
-    clear: () => {
+    clear: (force) => {
         const { editingComponent, _internalSync } = get();
 
         // Save pending changes before closing
-        if (editingComponent) {
+        if (!force && editingComponent) {
             _internalSync();
         }
 

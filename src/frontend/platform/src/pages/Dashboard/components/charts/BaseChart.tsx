@@ -1,9 +1,10 @@
 "use client"
 
-import { ChartType, ComponentConfig } from '@/pages/Dashboard/types/dataConfig'
+import { ChartType, ComponentConfig, ComponentStyleConfig } from '@/pages/Dashboard/types/dataConfig'
 import { useEffect, useRef, useState } from 'react'
 import { ChartDataResponse } from '../../types/chartData'
 import { colorSchemes, convertToEChartsTheme } from '../../colorSchemes'
+import { useEditorDashboardStore } from '@/store/dashboardStore'
 
 // Dynamic loading of ECharts.
 const loadECharts = async () => {
@@ -32,10 +33,12 @@ const loadECharts = async () => {
 interface BaseChartProps {
   data: ChartDataResponse
   chartType: ChartType
+  isDark: boolean
   dataConfig?: ComponentConfig // Chart component configuration.
+  styleConfig: ComponentStyleConfig
 }
 
-export function BaseChart({ data, chartType, dataConfig }: BaseChartProps) {
+export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: BaseChartProps) {
   const chartRef = useRef<any>(null)
   const domRef = useRef<HTMLDivElement>(null)
   const echartsLibRef = useRef(null)
@@ -64,11 +67,11 @@ export function BaseChart({ data, chartType, dataConfig }: BaseChartProps) {
       chartRef.current = null
     }
 
+    console.log('render echarts :>> ');
 
     try {
       // theme
       const theme = 'professional-blue'
-      const isDark = false
       const activeScheme = colorSchemes.find(s => s.id === theme);
       const themeName = `${activeScheme.id}${isDark ? '-dark' : ''}`;
       const themeConfig = convertToEChartsTheme(activeScheme, isDark ? 'dark' : 'light');
@@ -76,7 +79,7 @@ export function BaseChart({ data, chartType, dataConfig }: BaseChartProps) {
       echartsLibRef.current.registerTheme(themeName, themeConfig);
       // init echarts
       chartRef.current = echartsLibRef.current.init(domRef.current, themeName)
-      const option = generateChartOption(data, chartType, dataConfig)
+      const option = generateChartOption({ data, chartType, dataConfig, styleConfig })
       chartRef.current.setOption(option, true)
     } catch (err) {
       console.error('Failed to initialize chart:', err)
@@ -88,7 +91,7 @@ export function BaseChart({ data, chartType, dataConfig }: BaseChartProps) {
         chartRef.current = null
       }
     }
-  }, [echartsLibRef.current, data, chartType, dataConfig, isLoading])
+  }, [echartsLibRef.current, data, chartType, dataConfig, styleConfig, isLoading, isDark])
 
   // resize
   useEffect(() => {
@@ -127,8 +130,14 @@ export function BaseChart({ data, chartType, dataConfig }: BaseChartProps) {
 /**
  * Generate ECharts configuration based on chart type and data.
  */
-function generateChartOption(data: ChartDataResponse, chartType: ChartType, dataConfig?: ComponentConfig): any {
+function generateChartOption({ data, chartType, dataConfig, styleConfig }
+  : { data: ChartDataResponse, chartType: ChartType, dataConfig?: ComponentConfig, styleConfig: ComponentStyleConfig }): any {
   const { dimensions, series } = data
+
+  const computedUnit = (value) => {
+    // console.log('dataConfig :>> ', dataConfig);
+    return value + '元'
+  }
 
   // Determine whether it is a stacked chart (judged by chartType).
   const isStacked = chartType.includes('stacked')
@@ -143,7 +152,7 @@ function generateChartOption(data: ChartDataResponse, chartType: ChartType, data
         trigger: 'item',
         // formatter: '{a} <br/>{b}: {c} ({d}%)'
         formatter: function (params) {
-          return `${params.seriesName}<br/>${params.name}: ${params.value} (${params.percent}%)`;
+          return `${params.name.replaceAll('\n', '<br/>')}: ${params.value} (${params.percent}%)`;
         }
       },
       legend: {
@@ -187,13 +196,13 @@ function generateChartOption(data: ChartDataResponse, chartType: ChartType, data
       },
       formatter: function (params) {
         // params 是一个数组，包含当前轴点上的所有系列数据
-        let res = params[0].name + '<br/>'; // 第一行显示 X 轴的值（如：周一）
+        let res = params[0].name.replaceAll('\n', '<br/>') + '<br/>'; // 第一行显示 X 轴的值（如：周一）
 
         params.forEach(item => {
           // item.marker 是对应系列颜色的小圆点
           // item.seriesName 是系列名称
           // item.value 是当前数值
-          res += `${item.marker} ${item.seriesName}: <b>${item.value} formatter</b><br/>`;
+          res += `${item.marker} ${item.seriesName}: <b>${computedUnit(item.value)}</b><br/>`;
         });
 
         return res;
@@ -220,7 +229,7 @@ function generateChartOption(data: ChartDataResponse, chartType: ChartType, data
       type: 'value',
       axisLabel: {
         formatter: function (value) {
-          return value + 'formatter'
+          return computedUnit(value)
         }
       }
     };
@@ -234,14 +243,14 @@ function generateChartOption(data: ChartDataResponse, chartType: ChartType, data
       type: 'category',
       data: dimensions,
       axisLabel: {
-        rotate: dimensions.length > 10 ? 45 : 0,  // 多维度拼\n
+        rotate: dimensions.length > 10 ? 45 : 0  // 多维度拼\n
       }
     };
     option.yAxis = {
       type: 'value',
       axisLabel: {
         formatter: function (value) {
-          return value + 'formatter'
+          return computedUnit(value)
         }
       }
     };
@@ -285,3 +294,4 @@ function generateChartOption(data: ChartDataResponse, chartType: ChartType, data
 
   return option
 }
+

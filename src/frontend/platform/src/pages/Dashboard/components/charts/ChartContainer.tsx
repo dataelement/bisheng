@@ -1,43 +1,44 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useQuery } from 'react-query'
 import { queryChartData } from '@/controllers/API/dashboard'
 import { DashboardComponent } from '@/pages/Dashboard/types/dataConfig'
 import { ChartDataResponse, MetricDataResponse } from '@/pages/Dashboard/types/chartData'
 import { BaseChart } from './BaseChart'
 import { MetricCard } from './MetricCard'
-import { Button } from '@/components/bs-ui/button'
 import { RefreshCw } from 'lucide-react'
+import { useEditorDashboardStore } from '@/store/dashboardStore'
 
 interface ChartContainerProps {
+  isDark: boolean;
   component: DashboardComponent;
-  queryTrigger?: number; // Query trigger, re-query when changed
 }
 
-export function ChartContainer({ component, queryTrigger = 0 }: ChartContainerProps) {
-  console.log('component :>> ', component);
-  const [localTrigger, setLocalTrigger] = useState(0);
-
-  // Combine external trigger and local trigger
-  const finalTrigger = queryTrigger + localTrigger;
+export function ChartContainer({ isDark, component }: ChartContainerProps) {
+  const chartRefreshTriggers = useEditorDashboardStore(state => state.chartRefreshTriggers)
+  const refreshInfo = chartRefreshTriggers[component.id]
+  const refreshTrigger = refreshInfo?.trigger || 0
+  const queryParams = refreshInfo?.queryParams || []
 
   // Query chart data
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['chartData', component.id, finalTrigger],
+    queryKey: ['chartData', component.id, refreshTrigger],
     queryFn: () => queryChartData({
       componentId: component.id,
       chartType: component.type,
       dataConfig: component.data_config,
-      queryParams: [] // Traverse query components to check if current component exists, add to queryParams if present
+      queryParams: queryParams  //  Pass parameters for the query component 
     }),
     enabled: !!component.id
   });
 
-  // Manual trigger for query
-  const handleRefresh = () => {
-    setLocalTrigger(prev => prev + 1);
-  };
+  // Refetch when refresh trigger changes
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      refetch()
+    }
+  }, [refreshTrigger, refetch])
 
   // Loading state
   if (isLoading) {
@@ -57,9 +58,6 @@ export function ChartContainer({ component, queryTrigger = 0 }: ChartContainerPr
       <div className="flex items-center justify-center h-full">
         <div className="flex flex-col items-center gap-2">
           <span className="text-sm text-destructive">加载失败</span>
-          <Button size="sm" variant="outline" onClick={handleRefresh}>
-            重试
-          </Button>
         </div>
       </div>
     );
@@ -76,25 +74,22 @@ export function ChartContainer({ component, queryTrigger = 0 }: ChartContainerPr
 
   // Render metric card
   if (component.type === 'metric') {
-    return <MetricCard data={data as MetricDataResponse} />;
+    return <MetricCard
+      isDark={isDark}
+      data={data as MetricDataResponse}
+      dataConfig={component.data_config}
+      styleConfig={component.style_config} />;
   }
 
   // Render chart
   return (
     <div className="relative h-full">
-      {/* Refresh button (temporary, for testing) */}
-      <Button
-        size="icon"
-        variant="ghost"
-        className="absolute top-2 right-2 z-10 h-6 w-6"
-        onClick={handleRefresh}
-      >
-        <RefreshCw className="h-3 w-3" />
-      </Button>
       <BaseChart
+        isDark={isDark}
         data={data as ChartDataResponse}
         chartType={component.type}
         dataConfig={component.data_config}
+        styleConfig={component.style_config}
       />
     </div>
   );

@@ -27,13 +27,7 @@ export interface ThemeConfig {
 
 // 看板样式配置
 export interface StyleConfig {
-  theme: 'light' | 'dark' | 'blue' | 'green' // 当前主题
-  themes: {
-    light: ThemeConfig
-    dark: ThemeConfig
-    blue: ThemeConfig
-    green: ThemeConfig
-  }
+  theme: 'light' | 'dark'// 当前主题
 }
 
 // 组件样式配置
@@ -194,24 +188,23 @@ export interface DataConfig {
   }
 }
 
-// 查询组件配置 
+// 查询组件配置
 export interface QueryConfig {
   linkedComponentIds: string[]    // 关联的图表组件ID列表（查询时会更新这些组件）
   queryConditions: {
     id: string                      // 条件唯一ID
     fieldId: string                 // 字段ID
     fieldName: string               // 字段名称
-    displayType: 'time_range' | 'single_time'        // 展示类型：时间范围 或 单个时间
+    displayType: 'range' | 'single'        // 展示类型：时间范围 或 单个时间
     timeGranularity: 'year_month' | 'year_month_day' | 'year_month_day_hour'// 时间粒度
     hasDefaultValue: boolean        // 是否设置默认值
     defaultValue?: TimeFilter // 默认值配置
-  }[] // 查询条件列表
+  }// 查询条件列表
 }
 
 // 组件配置联合类型
 export type ComponentConfig = DataConfig | QueryConfig
-export const createDefaultDataConfig = (chartType: ChartType = 'bar'): DataConfig => ({
-  chartType,
+export const createDefaultDataConfig = (): DataConfig => ({
   dimensions: [],
   metrics: [],
   fieldOrder: [],

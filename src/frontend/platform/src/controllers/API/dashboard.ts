@@ -8,33 +8,7 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 // 默认主题配置
 const defaultStyleConfig: StyleConfig = {
-    theme: 'light',
-    themes: {
-        light: {
-            backgroundColor: '#ffffff',
-            textColor: '#000000',
-            borderColor: '#e5e7eb',
-            chartColors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
-        },
-        dark: {
-            backgroundColor: '#1f2937',
-            textColor: '#f9fafb',
-            borderColor: '#374151',
-            chartColors: ['#60a5fa', '#34d399', '#fbbf24', '#f87171', '#a78bfa', '#f472b6']
-        },
-        blue: {
-            backgroundColor: '#dbeafe',
-            textColor: '#1e3a8a',
-            borderColor: '#93c5fd',
-            chartColors: ['#2563eb', '#0ea5e9', '#06b6d4', '#14b8a6', '#10b981', '#84cc16']
-        },
-        green: {
-            backgroundColor: '#dcfce7',
-            textColor: '#14532d',
-            borderColor: '#86efac',
-            chartColors: ['#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1']
-        }
-    }
+    theme: 'light'
 }
 
 // Mock data
@@ -48,7 +22,7 @@ let mockDashboards: Dashboard[] = [
         layout_config: {
             layouts: [
                 // 第一行：查询组件
-                { i: "query-filter", x: 0, y: 0, w: 8, h: 4, minW: 4, minH: 4 },
+                { i: "query-filter", x: 0, y: 0, w: 8, h: 3, minW: 6, minH: 3 },
 
                 // 第二行：柱状图
                 { i: "bar-basic", x: 0, y: 6, w: 8, h: 8, minW: 4, minH: 4 },
@@ -68,7 +42,7 @@ let mockDashboards: Dashboard[] = [
                 // 第五行：饼图、环形图、指标卡
                 { i: "pie-chart", x: 0, y: 30, w: 8, h: 8, minW: 4, minH: 4 },
                 { i: "donut-chart", x: 8, y: 30, w: 8, h: 8, minW: 4, minH: 4 },
-                { i: "metric-card", x: 16, y: 30, w: 6, h: 6, minW: 4, minH: 4 },
+                { i: "metric-card", x: 16, y: 30, w: 3, h: 3, minW: 3, minH: 3 },
             ]
         },
         style_config: defaultStyleConfig,
@@ -520,18 +494,7 @@ export async function getDatasets(params?: {
 
 // 查询图表数据
 import {
-    QueryDataResponse,
-    ChartDataResponse,
-    MetricDataResponse,
-    createBarChartMockData,
-    createStackedBarChartMockData,
-    createGroupedBarChartMockData,
-    createLineChartMockData,
-    createAreaChartMockData,
-    createStackedLineChartMockData,
-    createPieChartMockData,
-    createDonutChartMockData,
-    createMetricMockData
+    QueryDataResponse
 } from '@/pages/Dashboard/types/chartData'
 
 export async function queryChartData(params: {
@@ -542,36 +505,78 @@ export async function queryChartData(params: {
 }): Promise<QueryDataResponse> {
     await delay(500)
 
+    // console.log('dataConfig :>> ', params.dataConfig);
+    // mock
+    // 双指标
+    const zhibiaoData = ['销售额', '订单数'] // 使用display名
+
+    const resData = {
+        value: [[1, 2, 3, 4, 5], [2, 2, 3, 4, 5], [9, 6, 7, 8, 9]],
+        dimensions: [["朝阳店", "2025-10-01", "奶茶"], ["望京店", "2025-10-01", "咖啡"], ["朝阳店", "2025-10-02", "奶茶"]]
+    }
+    const hasDuidie = false
+    let duidieweidu = [] // 表字段去重值
+    const nameSet = new Set()
+    resData.dimensions = resData.dimensions.map((name) => {
+        hasDuidie && nameSet.add(name.pop())
+        return name.join('\n')
+    })
+
+    if (hasDuidie) {
+        duidieweidu = Array.from(nameSet)
+    }
+
+    console.log('query params :>> ', params);
+
     const { chartType } = params
 
     // 根据图表类型返回对应的 mock 数据
     switch (chartType) {
         case 'bar':
-            return createBarChartMockData()
         case 'stacked-bar':
-            return createStackedBarChartMockData()
         case 'grouped-bar':
-            return createGroupedBarChartMockData()
         case 'horizontal-bar':
-            return createBarChartMockData() // 条形图使用相同数据，只是方向不同
         case 'stacked-horizontal-bar':
-            return createStackedBarChartMockData()
         case 'grouped-horizontal-bar':
-            return createGroupedBarChartMockData()
         case 'line':
-            return createLineChartMockData()
         case 'area':
-            return createAreaChartMockData()
         case 'stacked-line':
-            return createStackedLineChartMockData()
+            return {
+                dimensions: resData.dimensions,
+                series: (hasDuidie ? duidieweidu : zhibiaoData).map((name, index) => ({
+                    name: name,
+                    data: resData.value.map(el => el[index])
+                }))
+            }
         case 'pie':
-            return createPieChartMockData()
         case 'donut':
-            return createDonutChartMockData()
+            return {
+                dimensions: [],
+                series: [
+                    {
+                        name: '',
+                        data: resData.dimensions.map((name, index) => ({
+                            name: name,
+                            value: resData.value[index][0]
+                        }))
+                    }
+                ]
+            }
         case 'metric':
-            return createMetricMockData()
-        default:
-            return createBarChartMockData()
+            return {
+                value: resData.value[0][0],
+                title: zhibiaoData[0],
+                unit: '元',
+                trend: {
+                    value: 12.5,
+                    direction: 'up',
+                    label: '较上月'
+                },
+                format: {
+                    decimalPlaces: 2,
+                    thousandSeparator: true
+                }
+            }
     }
 }
 
