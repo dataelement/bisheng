@@ -72,12 +72,11 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
     const handleDragStart = (e: React.DragEvent, data: any, fieldType: 'dimension' | 'metric') => {
         e.dataTransfer.effectAllowed = 'copy'
         const dragData = {
-            ...data,
-            fieldType,
-            id: data.name || `field_${Date.now()}`,
-            displayName: data.name || data.aggregation_name || '字段'
+            id: data.name,
+            name: data.name,
+            displayName: data.name,
+            fieldType
         }
-        
         // 设置数据到 dataTransfer
         e.dataTransfer.setData('application/json', JSON.stringify(dragData))
         

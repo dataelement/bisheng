@@ -43,7 +43,8 @@ export function DimensionBlock({
   onSortChange,
   onEditDisplayName,
   onAggregationChange,
-  onFormatChange
+  onFormatChange,
+  invalidIds
 }: DimensionBlockProps) {
   const [hoveredDimension, setHoveredDimension] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
@@ -125,9 +126,15 @@ export function DimensionBlock({
               onMouseEnter={() => setHoveredDimension(dimension.id)}
               onMouseLeave={() => setHoveredDimension(null)}
             >
-              <div 
-                className={`flex items-center justify-between gap-2 p-1 rounded-md border ${getFieldTypeStyle(dimension.fieldType || 'dimension')} hover:bg-opacity-80 transition-colors`}
-              >
+       <div 
+  className={`
+    flex items-center justify-between gap-2 p-1 rounded-md border
+    ${getFieldTypeStyle(dimension.fieldType || 'dimension')}
+    ${invalidIds?.has(dimension.id) ? 'border-red-500 bg-red-50' : ''}
+    hover:bg-opacity-80 transition-colors
+  `}
+>
+
                 {/* 字段名称 */}
                 <div className="min-w-0 flex-1">
                   <span className="text-sm font-medium truncate">{dimension.displayName}</span>
