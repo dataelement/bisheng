@@ -257,6 +257,8 @@ class Settings(BaseModel):
     cookie_conf: CookieConf = CookieConf()
     telemetry_elasticsearch: ElasticsearchConf = ElasticsearchConf()
 
+    license_str: Optional[str] = None  # license 内容
+
     @field_validator('database_url')
     @classmethod
     def set_database_url(cls, value):
