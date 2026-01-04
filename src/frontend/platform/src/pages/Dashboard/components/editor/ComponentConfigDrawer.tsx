@@ -8,10 +8,13 @@ import { ChevronDown, ChevronLeft, ChevronRight, GripVertical, Plus, X } from "l
 import { useEffect, useMemo, useState } from "react"
 
 import { useComponentEditorStore } from "@/store/dashboardStore"
-import { ChartType, ComponentStyleConfig, DataConfig } from "../../types/dataConfig"
-import { DatasetSelector } from "./DatasetSelector"
-import { DimensionBlock } from "./DimensionBlock"
+import { ChartType, ComponentStyleConfig, DashboardComponent, DataConfig } from "../../types/dataConfig"
+import { DatasetField, DatasetSelector } from "./DatasetSelector"
 import { StyleConfigPanel } from "./StyleConfigPanel"
+import { useEditorDashboardStore } from "@/store/dashboardStore"
+import { DimensionBlock } from "./DimensionBlock"
+import { FilterConditionDialog } from "./FilterConditionDialog"
+import ChartSelector from "./ChartSelector"
 
 // 图表类型选项
 export const CHART_TYPES: {
@@ -88,18 +91,40 @@ export function ComponentConfigDrawer() {
   const [valueDimensions, setValueDimensions] = useState<any[]>([])
   const [filters, setFilters] = useState<any[]>([])
   const [dragOverSection, setDragOverSection] = useState<string | null>(null)
+   const [filterGroup, setFilterGroup] = useState(null)
 
   // 对话框状态
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [filterDialogOpen, setFilterDialogOpen] = useState(false)
   const [editingDimension, setEditingDimension] = useState<any>(null)
   const [editingFilter, setEditingFilter] = useState<any>({ fieldName: '', operator: 'eq', value: '' })
+  const [datasetFields, setDatasetFields] = useState<DatasetField[]>([])
 
   // 初始化
   useEffect(() => {
-    if (editingComponent) {
+ if (editingComponent) {
       setChartType(editingComponent.type)
       setStyleConfig(editingComponent.style_config)
+      
+      // 初始化筛选条件
+      if (editingComponent.data_config?.filters) {
+        // 将旧的 filters 数组转换为 FilterGroup
+        const filtersArray = editingComponent.data_config.filters
+        if (Array.isArray(filtersArray) && filtersArray.length > 0) {
+          const conditions = filtersArray.map(filter => ({
+            id: filter.id || crypto.randomUUID(),
+            fieldCode: filter.fieldName || filter.fieldId,
+            operator: filter.operator || 'eq',
+            value: filter.value,
+            fieldType: filter.fieldType || 'string'
+          }))
+          
+          setFilterGroup({
+            logic: 'and',
+            conditions
+          })
+        }
+      }
     }
   }, [editingComponent?.type])
 
@@ -218,30 +243,28 @@ export function ComponentConfigDrawer() {
   }
 
   // 筛选条件
-  const handleAddFilter = () => {
-    setEditingFilter({ fieldName: '', operator: 'eq', value: '' })
+ const handleAddFilter = () => {
+    setFilterGroup({
+      logic: 'and',
+      conditions: [{ id: crypto.randomUUID() }]
+    })
     setFilterDialogOpen(true)
   }
-
-  const handleEditFilter = (filter: any) => {
-    setEditingFilter(filter)
-    setFilterDialogOpen(true)
-  }
-
-  const handleDeleteFilter = (filterId: string) => {
-    setFilters(prev => prev.filter(f => f.id !== filterId))
-  }
-
-  const handleSaveFilter = () => {
-    if (!editingFilter.fieldName || !editingFilter.value) return
-
-    if (editingFilter.id) {
-      setFilters(prev => prev.map(f => f.id === editingFilter.id ? editingFilter : f))
+ const handleEditFilter = () => {
+    if (filterGroup) {
+      setFilterDialogOpen(true)
     } else {
-      setFilters(prev => [...prev, { ...editingFilter, id: `filter_${Date.now()}` }])
+      handleAddFilter()
     }
+  }
+
+  const handleDeleteFilter = () => {
+    setFilterGroup(null)
+  }
+
+  const handleSaveFilter = (newFilterGroup: any) => {
+    setFilterGroup(newFilterGroup)
     setFilterDialogOpen(false)
-    setEditingFilter({ fieldName: '', operator: 'eq', value: '' })
   }
 
   // 切换折叠
@@ -285,14 +308,14 @@ export function ComponentConfigDrawer() {
         ...categoryDimensions.map(d => ({ fieldId: d.fieldId, fieldType: 'dimension' as const })),
         ...valueDimensions.map(m => ({ fieldId: m.fieldId, fieldType: 'metric' as const }))
       ],
-      filters: filters.map(filter => ({
-        id: filter.id,
-        fieldId: filter.fieldName,
-        fieldName: filter.fieldName,
-        filterType: 'string',
-        operator: filter.operator,
-        value: filter.value
-      })),
+      filters: filterGroup ? filterGroup.conditions.map((condition, index) => ({
+        id: condition.id || `filter_${Date.now()}_${index}`,
+        fieldId: condition.fieldCode || '',
+        fieldName: condition.fieldCode || '',
+        filterType: condition.fieldType || 'string',
+        operator: condition.operator || 'eq',
+        value: condition.value || ''
+      })) : [],
       resultLimit: {
         limitType: limitType === "limit" ? "limited" as const : "all" as const,
         ...(limitType === "limit" && { limit: Number(limitValue) })
@@ -357,7 +380,19 @@ export function ComponentConfigDrawer() {
 
   return (
     <div className="fixed right-0 top-14 bottom-0 flex bg-background border-l border-border">
-      {/* 左侧基础配置模块 */}
+   
+   { false ? (
+    <ChartSelector
+      charts={[
+        { id: '1', name: '堆叠条形图-图表名称', dataset: '会话500-数据集' },
+        { id: '2', name: '堆叠条形图-图表名称', dataset: '会话500-数据集' },
+        { id: '3', name: '堆叠条形图-图表名称', dataset: '会话500-数据集' },
+      ]}
+      onSave={(selected, start, end) => console.log(selected, start, end)}
+      onCancel={() => console.log('取消')}
+    />
+) : (
+<>
       <div className={`border-r flex flex-col h-full transition-all duration-300 ${configCollapsed.basic ? "w-12" : "w-[400px]"} shrink-0`}>
         {configCollapsed.basic ? (
           <CollapseLabel
@@ -526,30 +561,33 @@ export function ComponentConfigDrawer() {
                     <div className="flex items-center justify-between">
                       <label className="text-sm font-medium">筛选</label>
                     </div>
-
-                    {filters.length === 0 ? (
+                    
+                     {!filterGroup || filterGroup.conditions.length === 0 ? (
                       <div className="text-sm text-muted-foreground text-center py-1 border rounded bg-muted/20">
                         <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleAddFilter}>
                           <Plus className="h-3 w-3 mr-1" />添加筛选条件
                         </Button>
                       </div>
                     ) : (
-                      <div className="space-y-2 bg-blue-100 rounded-md border-blue-300">
-                        {filters.map((filter) => (
-                          <div key={filter.id} className="flex items-center justify-between p-2 border rounded-md bg-muted/20 hover:bg-muted/40">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-blue-700">已添加筛选条件</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleEditFilter(filter)}>
-                                <ChevronDown className="h-3 w-3" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDeleteFilter(filter.id)}>
-                                <X className="h-3 w-3" />
-                              </Button>
+  <div className="space-y-2 bg-blue-100 rounded-md border-blue-300">
+      {/* 修改这里：移除 filters?.map，改用 filterGroup */}
+      <div className="flex items-center justify-between p-2 border rounded-md bg-muted/20 hover:bg-muted/40">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-blue-700">
+            已添加 {filterGroup.conditions.length} 个筛选条件
+            {filterGroup.conditions.length > 1 && ` (${filterGroup.logic?.toUpperCase() || 'AND'})`}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleEditFilter}>
+            <ChevronDown className="h-3 w-3" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleDeleteFilter}>
+            <X className="h-3 w-3" />
+          </Button>
                             </div>
                           </div>
-                        ))}
+                      
                       </div>
                     )}
                   </div>
@@ -587,8 +625,6 @@ export function ComponentConfigDrawer() {
           </div>
         )}
       </div>
-
-      {/* 右侧数据集配置模块 */}
       <div className={`flex flex-col h-full transition-all duration-300 ${configCollapsed.data ? "w-12 shrink-0" : "w-[400px]"}`}>
         {configCollapsed.data ? (
           <CollapseLabel label="数据集配置" onClick={() => toggleCollapse('data')} icon={<ChevronLeft />} />
@@ -596,15 +632,19 @@ export function ComponentConfigDrawer() {
           <div className="flex-1 flex flex-col overflow-hidden">
             <PanelHeader title="数据集配置" onCollapse={() => toggleCollapse('data')} icon={<ChevronRight />} />
             <div className="flex-1 overflow-auto">
-              <DatasetSelector
-                selectedDatasetCode={editingComponent.dataset_code}
-                onDatasetChange={handleDatasetChange}
-                onDragStart={handleDragStart}
-              />
+          <DatasetSelector
+              selectedDatasetCode={editingComponent.dataset_code}
+              onDatasetChange={handleDatasetChange}
+              onDragStart={handleDragStart}
+              onFieldsLoaded={setDatasetFields}
+            />
+
             </div>
           </div>
         )}
       </div>
+      </>
+)}
 
       {/* 编辑显示名称弹窗 */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
@@ -632,45 +672,17 @@ export function ComponentConfigDrawer() {
       </Dialog>
 
       {/* 筛选条件弹窗 */}
-      <Dialog open={filterDialogOpen} onOpenChange={setFilterDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>{editingFilter.id ? '编辑筛选条件' : '添加筛选条件'}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">字段名称</label>
-              <Input value={editingFilter.fieldName} onChange={(e) => setEditingFilter(prev => ({ ...prev, fieldName: e.target.value }))} placeholder="请输入字段名称" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">操作符</label>
-              <Select value={editingFilter.operator} onValueChange={(value) => setEditingFilter(prev => ({ ...prev, operator: value }))}>
-                <SelectTrigger><SelectValue placeholder="选择操作符" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="eq">等于 (=)</SelectItem>
-                  <SelectItem value="neq">不等于 (!=)</SelectItem>
-                  <SelectItem value="gt">大于 ({">"})</SelectItem>
-                  <SelectItem value="gte">大于等于 ({">"}=)</SelectItem>
-                  <SelectItem value="lt">小于 ({"<"})</SelectItem>
-                  <SelectItem value="lte">小于等于 ({"<="})</SelectItem>
-                  <SelectItem value="contains">包含</SelectItem>
-                  <SelectItem value="not_contains">不包含</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">值</label>
-              <Input value={editingFilter.value} onChange={(e) => setEditingFilter(prev => ({ ...prev, value: e.target.value }))} placeholder="请输入值" />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFilterDialogOpen(false)}>取消</Button>
-            <Button onClick={handleSaveFilter} disabled={!editingFilter.fieldName || !editingFilter.value}>
-              {editingFilter.id ? '更新' : '添加'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
+<FilterConditionDialog
+  open={filterDialogOpen}
+  onOpenChange={setFilterDialogOpen}
+  fields={datasetFields}
+  onChange={setFilters}
+  fieldOptions={datasetFields.map(f => ({
+    label: f.displayName,
+    value: f.fieldCode
+  }))}
+/>
     </div>
   )
 }

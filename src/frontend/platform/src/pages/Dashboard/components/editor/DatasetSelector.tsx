@@ -5,14 +5,23 @@ import { Label } from "@/components/bs-ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select"
 import { getDatasets, MetricConfig } from "@/controllers/API/dashboard"
 import { Calendar, ChevronDown, ChevronRight, Hash, Search, Type } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "react-query"
+export interface DatasetField {
+  fieldCode: string          // 真正用来过滤 / SQL
+  displayName: string        // UI 显示
+  fieldType: "string" | "number" | "date"
+  role: "dimension" | "metric"
+  enumValues?: string[]  
+}
 
 interface DatasetSelectorProps {
-    selectedDatasetCode?: string
-    onDatasetChange?: (datasetCode: string) => void
-    onDragStart?: (e: React.DragEvent, data: any) => void
+  selectedDatasetCode?: string
+  onDatasetChange?: (datasetCode: string) => void
+  onDragStart?: (e: React.DragEvent, data: any) => void
+  onFieldsLoaded?: (fields: DatasetField[]) => void
 }
+
 
 // 根据字段类型返回对应的图标
 const getFieldTypeIcon = (type: 'integer' | 'keyword' | 'date') => {
@@ -32,7 +41,7 @@ const isVirtualMetric = (metric: MetricConfig): boolean => {
     return metric.bucket_path !== undefined && metric.bucket_path !== metric.aggregation_name
 }
 
-export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragStart }: DatasetSelectorProps) {
+export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragStart,onFieldsLoaded }: DatasetSelectorProps) {
     const [searchTerm, setSearchTerm] = useState("")
     const [dimensionsExpanded, setDimensionsExpanded] = useState(true)
     const [metricsExpanded, setMetricsExpanded] = useState(true)
@@ -77,6 +86,35 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
             onDragStart(e, dragData)
         }
     }
+const datasetFields = useMemo<DatasetField[]>(() => {
+  if (!selectedDataset) return []
+
+  const dimensions = selectedDataset.schema_config.dimensions.map(d => ({
+    fieldCode: d.name,
+    displayName: d.name,
+    fieldType:
+      d.type === "date"
+        ? "date"
+        : d.type === "integer"
+        ? "number"
+        : "string",
+    role: "dimension" as const
+  }))
+
+  const metrics = selectedDataset.schema_config.metrics.map(m => ({
+    fieldCode: m.name,
+    displayName: m.name,
+    fieldType: "number",
+    role: "metric" as const
+  }))
+
+  return [...dimensions, ...metrics]
+}, [selectedDataset])
+useEffect(() => {
+  if (selectedDataset && onFieldsLoaded) {
+    onFieldsLoaded(datasetFields)
+  }
+}, [datasetFields])
 
     return (
         <div className="flex flex-col h-full">
