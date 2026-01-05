@@ -63,7 +63,7 @@ class CustomChatOllamaWithReasoning(ChatOllama):
                 continue
 
             generation_info = self._build_generation_info(stream_resp)
-            additional_kwargs = self._build_additional_kwargs(reasoning, content)
+            additional_kwargs = self._build_additional_kwargs(reasoning, content, in_think)
 
             # Clear content when inside think tags
             if in_think and content:
@@ -102,7 +102,7 @@ class CustomChatOllamaWithReasoning(ChatOllama):
                 continue
 
             generation_info = self._build_generation_info(stream_resp)
-            additional_kwargs = self._build_additional_kwargs(reasoning, content)
+            additional_kwargs = self._build_additional_kwargs(reasoning, content, in_think)
 
             # Clear content when inside think tags
             if in_think and content:
@@ -151,10 +151,10 @@ class CustomChatOllamaWithReasoning(ChatOllama):
         generation_info.pop("message", None)
         return generation_info
 
-    def _build_additional_kwargs(self, reasoning: bool, content: str) -> dict:
+    def _build_additional_kwargs(self, reasoning: bool, content: str, in_think: bool) -> dict:
         """Build additional kwargs for chunk."""
         additional_kwargs = {}
-        if reasoning and self.in_think and content:
+        if reasoning and in_think and content:
             additional_kwargs["reasoning_content"] = content
         return additional_kwargs
 
