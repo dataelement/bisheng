@@ -1,0 +1,43 @@
+name: Build Linux Binaries (x86_64 & ARM)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'build.*'
+
+jobs:
+  build_x86_64:
+    name: Build for x86_64
+    runs-on: ubuntu-latest
+    # 使用 Manylinux 镜像构建 Python wheel
+    container:
+      image: quay.io/pypa/manylinux2014_x86_64:latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          repository: dataelement/bisheng-telemetry-search
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+          path: bisheng-telemetry-search
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install build dependencies
+        run: |
+          # gcc 安装
+          yum install -y gcc gcc-c++
+          pip install --upgrade pip setuptools wheel
+          pip install cython
+
+      - name: Build the project
+        working-directory: ./bisheng-telemetry-search
+        run: |
+          python build_all.py --delete-source
+          ls -lh
+          
+        
+          
