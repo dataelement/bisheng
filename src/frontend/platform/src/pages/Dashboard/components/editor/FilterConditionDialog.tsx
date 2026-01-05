@@ -430,47 +430,44 @@ export function FilterConditionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[900px] max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-[900px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>筛选条件配置</DialogTitle>
         </DialogHeader>
 
-        <div className="relative space-y-4">
-          {/* 全局 AND / OR + 竖虚线 */}
-{draft.conditions.length > 1 && (
-    <>
-      {/* 顶部竖线 + 拐角 */}
-      <div className="absolute left-3 top-0 h-4 w-[1px] border-l border-dashed border-gray-300"></div>
-      <div className="absolute left-3 top-3 w-3 h-[1px] border-t border-dashed border-gray-300"></div>
+      <div className="relative">
+        {/* 全局 AND / OR + 竖虚线 */}
+        {draft.conditions.length > 1 && (
+          <>
+            {/* 完整的垂直虚线 - 从顶部横线到底部横线 */}
+            <div className="absolute left-3 top-6 bottom-6 w-[1px] border-l border-dashed border-gray-300"></div>
+            
+            {/* 顶部横线 */}
+            <div className="absolute left-3 top-6 w-3 h-[1px] border-t border-dashed border-gray-300"></div>
+            
+            {/* 底部横线 */}
+            <div className="absolute left-3 bottom-6 w-3 h-[1px] border-t border-dashed border-gray-300"></div>
 
-      {/* 底部竖线 + 拐角 */}
-      <div className="absolute left-3 bottom-0 h-4 w-[1px] border-l border-dashed border-gray-300"></div>
-      <div className="absolute left-3 bottom-3 w-3 h-[1px] border-t border-dashed border-gray-300"></div>
+            {/* AND / OR徽章 */}
+            <div className="absolute -left-4 top-1/2 -translate-y-1/2 z-10">
+              <Badge
+                variant="outline"
+                className="px-2 py-1 text-xs cursor-pointer bg-[#E6ECF6] border-primary/30 text-primary"
+                onClick={handleToggleLogic}
+              >
+                {draft.logic}
+                <RefreshCcw size={10} className="ml-1" />
+              </Badge>
+            </div>
+          </>
+        )}
 
-      {/* AND / OR徽章 */}
-      <div className="absolute left-0 top-1/2 -translate-y-1/2 z-10">
-        <Badge
-          variant="outline"
-          className="px-2 py-1 text-xs cursor-pointer bg-[#E6ECF6] border-primary/30 text-primary"
-          onClick={handleToggleLogic}
-        >
-          {draft.logic}
-          <RefreshCcw size={10} className="ml-1" />
-        </Badge>
-      </div>
-    </>
-  )}
-
-
+        <div className="space-y-4 pl-8">
           {/* 条件列表 */}
           {draft.conditions.map((c, index) => {
-            const field = filteredFields.find(f => f.fieldCode === c.fieldCode)
-            const isEnum = c.filterType === "enum"
-
             return (
-               <div key={c.id} className="relative group pl-10">
-
-                <div className="flex items-center gap-2 p-2 pl-10 relative">
+              <div key={c.id} className="relative group">
+                <div className="flex items-center gap-2 p-2">
                   {/* 第一个下拉框：选择字段 */}
                   <Select
                     value={c.fieldCode}
@@ -602,8 +599,11 @@ export function FilterConditionDialog({
             )
           })}
 
-          {/* 添加条件按钮 */}
-          <div className="pl-10">
+        
+        </div>
+      </div>
+            {/* 添加条件按钮 */}
+          <div>
             <Button 
               variant="outline" 
               className="border-primary text-primary hover:bg-primary/10 h-8"
@@ -616,8 +616,6 @@ export function FilterConditionDialog({
 
           {/* 错误提示 */}
           {error && <div className="text-sm text-destructive">{error}</div>}
-        </div>
-
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             取消

@@ -1,3 +1,4 @@
+// ComponentConfigDrawer.tsx
 "use client"
 
 import { Button } from "@/components/bs-ui/button"
@@ -5,36 +6,38 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/bs-ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select"
 import { ChevronDown, ChevronLeft, ChevronRight, GripVertical, Plus, X } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
 import { ChartType, ComponentStyleConfig, DataConfig } from "../../types/dataConfig"
-import ChartSelector from "./ChartSelector"
-import { DashboardConfigPanel } from "./DashboardConfigPanel"
 import { DatasetField, DatasetSelector } from "./DatasetSelector"
+import { StyleConfigPanel } from "./StyleConfigPanel"
 import { DimensionBlock } from "./DimensionBlock"
 import { FilterConditionDialog } from "./FilterConditionDialog"
-import { StyleConfigPanel } from "./StyleConfigPanel"
-import { TimeRangePicker } from "./TimeRangePicker"
+import ChartSelector from "./ChartSelector"
+import { DashboardConfigPanel } from "./DashboardConfigPanel"
+import { AdvancedDatePicker } from "../AdvancedDatePicker"
+import { useChartState } from "./useChartState"
 
 // 图表类型选项
 export const CHART_TYPES: {
   label: string;
   value: ChartType;
+  hasStack: boolean; // 是否有堆叠项维度
 }[] = [
-    { label: "基础柱状图", value: ChartType.Bar },
-    { label: "堆叠柱状图", value: ChartType.StackedBar },
-    { label: "分组柱状图", value: ChartType.GroupedBar },
-    { label: "基础条形图", value: ChartType.HorizontalBar },
-    { label: "堆叠条形图", value: ChartType.StackedHorizontalBar },
-    { label: "分组条形图", value: ChartType.GroupedHorizontalBar },
-    { label: "基础折线图", value: ChartType.Line },
-    { label: "面积图", value: ChartType.Area },
-    { label: "堆叠折线图", value: ChartType.StackedLine },
-    { label: "饼状图", value: ChartType.Pie },
-    { label: "环状图", value: ChartType.Donut },
-    { label: "指标卡", value: ChartType.Metric },
-    { label: "查询组件", value: ChartType.Query }
+    { label: "基础柱状图", value: ChartType.Bar, hasStack: false },
+    { label: "堆叠柱状图", value: ChartType.StackedBar, hasStack: true },
+    { label: "分组柱状图", value: ChartType.GroupedBar, hasStack: false },
+    { label: "基础条形图", value: ChartType.HorizontalBar, hasStack: false },
+    { label: "堆叠条形图", value: ChartType.StackedHorizontalBar, hasStack: true },
+    { label: "分组条形图", value: ChartType.GroupedHorizontalBar, hasStack: false },
+    { label: "基础折线图", value: ChartType.Line, hasStack: false },
+    { label: "面积图", value: ChartType.Area, hasStack: false },
+    { label: "堆叠折线图", value: ChartType.StackedLine, hasStack: true },
+    { label: "饼状图", value: ChartType.Pie, hasStack: false },
+    { label: "环状图", value: ChartType.Donut, hasStack: false },
+    { label: "指标卡", value: ChartType.Metric, hasStack: false },
+    { label: "查询组件", value: ChartType.Query, hasStack: false }
   ];
 
 export function ComponentConfigDrawer() {
@@ -50,324 +53,52 @@ export function ComponentConfigDrawer() {
     value: false
   })
 
-  // 样式配置
-  const [styleConfig, setStyleConfig] = useState<ComponentStyleConfig>({
-    themeColor: "#4ac5ff",
-    bgColor: "#ffffff",
-    titleFontSize: 14,
-    titleBold: false,
-    titleItalic: false,
-    titleUnderline: false,
-    titleAlign: "left",
-    axis: "x",
-    axisTitle: "",
-    axisFontSize: 14,
-    axisBold: false,
-    axisItalic: false,
-    axisUnderline: false,
-    axisAlign: "left",
-    legendPosition: "bottom",
-    legendFontSize: 14,
-    legendBold: false,
-    legendItalic: false,
-    legendUnderline: false,
-    legendAlign: "left",
-    showLegend: true,
-    showAxis: true,
-    showDataLabel: true,
-    showGrid: true,
-  })
-
+  // Tab状态
   const [configTab, setConfigTab] = useState<"basic" | "style">("basic")
-  const [draggingId, setDraggingId] = useState<string | null>(null)
-  const [chartType, setChartType] = useState<ChartType>(editingComponent?.type || 'bar')
-  const [title, setTitle] = useState(editingComponent?.title || '')
+  
+  // 限制结果状态
   const [limitType, setLimitType] = useState<"all" | "limit">("limit")
   const [limitValue, setLimitValue] = useState("1000")
-  const [startDate, setStartDate] = useState("")
-  const [endDate, setEndDate] = useState("")
 
-  // 维度数据状态
-  const [categoryDimensions, setCategoryDimensions] = useState<any[]>([])
-  const [stackDimensions, setStackDimensions] = useState<any[]>([])
-  const [valueDimensions, setValueDimensions] = useState<any[]>([])
-  const [filters, setFilters] = useState<any[]>([])
-  const [dragOverSection, setDragOverSection] = useState<string | null>(null)
-  const [filterGroup, setFilterGroup] = useState(null)
+  // 数据集字段
+  const [datasetFields, setDatasetFields] = useState<DatasetField[]>([])
 
   // 对话框状态
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [filterDialogOpen, setFilterDialogOpen] = useState(false)
   const [editingDimension, setEditingDimension] = useState<any>(null)
-  const [editingFilter, setEditingFilter] = useState<any>({ fieldName: '', operator: 'eq', value: '' })
-  const [datasetFields, setDatasetFields] = useState<DatasetField[]>([])
 
-  const [sortPriorityOrder, setSortPriorityOrder] = useState<string[]>([])
-  useEffect(() => {
-    const allFields = [
-      ...categoryDimensions.map(d => ({ ...d, section: 'category' as const })),
-      ...stackDimensions.map(d => ({ ...d, section: 'stack' as const })),
-      ...valueDimensions.map(d => ({ ...d, section: 'value' as const }))
-    ]
+  // 使用自定义Hook管理所有图表状态
+  const chartState = useChartState(editingComponent)
 
-    const newOrder = allFields.map(field => field.id)
-    setSortPriorityOrder(newOrder)
-  }, [categoryDimensions.length, stackDimensions.length, valueDimensions.length])
-  // 初始化
-  useEffect(() => {
-    if (editingComponent) {
-      console.log('初始化组件配置:', editingComponent)
-      setChartType(editingComponent.type)
-      setStyleConfig(editingComponent.style_config || {})
-      setTitle(editingComponent.title || '')
+  // 从Hook中解构状态和方法
+  const {
+    chartType,
+    title,
+    styleConfig,
+    categoryDimensions,
+    stackDimensions,
+    valueDimensions,
+    dragOverSection,
+    filterGroup,
+    draggingId,
+    sortPriorityFields,
+    currentChartHasStack,
+    handleChartTypeChange,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+    handleDeleteDimension,
+    handleSortChange,
+    handleDropSortPriority,
+    handleAddFilter,
+    handleDeleteFilter,
+    setDraggingId,
+    setFilterGroup,
+    getDataConfig
+  } = chartState
 
-      // 清空之前的维度数据
-      setCategoryDimensions([])
-      setStackDimensions([])
-      setValueDimensions([])
-
-      // 初始化维度数据
-      if (editingComponent.data_config) {
-        // 初始化维度（category）
-        if (editingComponent.data_config.dimensions) {
-          const categoryDims = editingComponent.data_config.dimensions.map((dim, index) => ({
-            id: `category_${index}_${Date.now()}`,
-            fieldId: dim.fieldId,
-            name: dim.fieldCode,
-            displayName: dim.displayName || dim.fieldName,
-            originalName: dim.fieldName,
-            sort: dim.sort || 'none',
-            sortPriority: 0,
-            fieldType: 'dimension'
-          }))
-          setCategoryDimensions(categoryDims)
-        }
-
-        // 初始化指标（value）
-        if (editingComponent.data_config.metrics) {
-          const valueDims = editingComponent.data_config.metrics.map((metric, index) => ({
-            id: `value_${index}_${Date.now()}`,
-            fieldId: metric.fieldId,
-            name: metric.fieldCode,
-            displayName: metric.displayName || metric.fieldName,
-            originalName: metric.fieldName,
-            sort: metric.sort || 'none',
-            sortPriority: 0,
-            fieldType: 'metric',
-            aggregation: metric.aggregation || 'sum'
-          }))
-          setValueDimensions(valueDims)
-        }
-
-        // 初始化筛选条件
-        if (editingComponent.data_config.filters) {
-          const conditions = editingComponent.data_config.filters.map(filter => ({
-            id: filter.id || crypto.randomUUID(),
-            fieldCode: filter.fieldCode || filter.fieldId,
-            operator: filter.operator || 'eq',
-            value: filter.value,
-            fieldType: filter.filterType || 'string'
-          }))
-
-          setFilterGroup({
-            logic: 'and',
-            conditions
-          })
-        }
-      }
-    } else {
-      // 清空所有状态
-      setCategoryDimensions([])
-      setStackDimensions([])
-      setValueDimensions([])
-      setFilterGroup(null)
-    }
-  }, [editingComponent])
-
-  // 数据集改变
-  const handleDatasetChange = (datasetCode: string) => {
-    if (editingComponent) {
-      updateEditingComponent({ dataset_code: datasetCode })
-    }
-  }
-
-  // 拖拽处理函数
-  const handleDragStart = (e: React.DragEvent, data: any) => {
-    e.dataTransfer.setData('application/json', JSON.stringify(data))
-  }
-
-  const handleDragOver = (e: React.DragEvent, section: 'category' | 'stack' | 'value') => {
-    e.preventDefault()
-    setDragOverSection(section)
-  }
-
-  const handleDragLeave = () => {
-    setDragOverSection(null)
-  }
-
-  const handleDrop = (e: React.DragEvent, section: 'category' | 'stack' | 'value') => {
-    e.preventDefault()
-    e.stopPropagation()
-
-    const dataStr = e.dataTransfer.getData('application/json')
-    if (!dataStr) return
-
-    try {
-      const data = JSON.parse(dataStr)
-      const fieldType = data.fieldType || 'dimension' // 获取字段类型
-
-      if (
-        (fieldType === 'metric' && (section === 'category' || section === 'stack')) ||
-        (fieldType === 'dimension' && section === 'value')
-      ) {
-        console.warn(`字段类型 ${fieldType} 不能拖拽到 ${section} 区域`)
-        setDragOverSection(null)
-        return
-      }
-      // 添加维度逻辑
-      const addDimension = (section: 'category' | 'stack' | 'value', data: any) => {
-        const fieldId = data.id || data.name || `field_${Date.now()}`
-        const name = data.name || data.displayName || fieldId
-
-        // 检查是否已存在
-        let currentDimensions: any[] = []
-        if (section === 'category') currentDimensions = categoryDimensions
-        if (section === 'stack') currentDimensions = stackDimensions
-        if (section === 'value') currentDimensions = valueDimensions
-
-        const alreadyExists = currentDimensions.some(dim => dim.fieldId === fieldId)
-        if (alreadyExists) return
-
-        const displayName = data.displayName || name
-        const originalName = data.name || name
-
-        const newDimension = {
-          id: `${section}_${Date.now()}`,
-          fieldId,
-          name,
-          displayName,
-          originalName,
-          sort: 'none' as const,
-          sortPriority: 0,
-          fieldType
-        }
-
-        if (section === 'category') {
-          if (categoryDimensions.length >= 2) return
-          setCategoryDimensions(prev => [...prev, newDimension])
-        } else if (section === 'stack') {
-          setStackDimensions(prev => [...prev, newDimension])
-        } else if (section === 'value') {
-          setValueDimensions(prev => [...prev, newDimension])
-        }
-      }
-
-      addDimension(section, data)
-      setDragOverSection(null)
-    } catch (error) {
-      console.error('拖拽数据解析失败:', error)
-    }
-  }
-
-  // 删除维度
-  const handleDeleteDimension = (section: 'category' | 'stack' | 'value', dimensionId: string) => {
-    if (section === 'category') setCategoryDimensions(prev => prev.filter(d => d.id !== dimensionId))
-    if (section === 'stack') setStackDimensions(prev => prev.filter(d => d.id !== dimensionId))
-    if (section === 'value') setValueDimensions(prev => prev.filter(d => d.id !== dimensionId))
-  }
-
-  // 排序改变
-  const handleSortChange = (section: 'category' | 'stack' | 'value', dimensionId: string, sortValue: 'none' | 'asc' | 'desc') => {
-    const updateDimensions = (prev: any[]) =>
-      prev.map(d => d.id === dimensionId ? { ...d, sort: sortValue } : d)
-
-    if (section === 'category') setCategoryDimensions(updateDimensions)
-    if (section === 'stack') setStackDimensions(updateDimensions)
-    if (section === 'value') setValueDimensions(updateDimensions)
-  }
-
-  // 编辑显示名称
-  const openEditDialog = (section: 'category' | 'stack' | 'value', dimensionId: string, originalName: string, displayName: string) => {
-    setEditingDimension({ id: dimensionId, section, originalName, displayName })
-    setEditDialogOpen(true)
-  }
-
-  const saveDisplayName = () => {
-    if (editingDimension) {
-      const updateDimensions = (prev: any[]) =>
-        prev.map(d => d.id === editingDimension.id ? { ...d, displayName: editingDimension.displayName } : d)
-
-      if (editingDimension.section === 'category') setCategoryDimensions(updateDimensions)
-      if (editingDimension.section === 'stack') setStackDimensions(updateDimensions)
-      if (editingDimension.section === 'value') setValueDimensions(updateDimensions)
-
-      setEditDialogOpen(false)
-      setEditingDimension(null)
-    }
-  }
-
-  // 筛选条件
-  const handleAddFilter = () => {
-    setFilterGroup({
-      logic: 'and',
-      conditions: [{ id: crypto.randomUUID() }]
-    })
-    setFilterDialogOpen(true)
-  }
-  const handleEditFilter = () => {
-    if (filterGroup) {
-      setFilterDialogOpen(true)
-    } else {
-      handleAddFilter()
-    }
-  }
-
-  const handleDeleteFilter = () => {
-    setFilterGroup(null)
-  }
-
-  const handleSaveFilter = (newFilterGroup: any) => {
-    setFilterGroup(newFilterGroup)
-    setFilterDialogOpen(false)
-  }
-
-  // 切换折叠
-  const toggleCollapse = (section: keyof typeof configCollapsed) => {
-    setConfigCollapsed(prev => ({ ...prev, [section]: !prev[section] }))
-  }
-  // 修改 sortPriorityFields 的计算逻辑
-  const sortPriorityFields = useMemo(() => {
-    // 收集所有字段
-    const allFields = [
-      ...categoryDimensions.map(d => ({ ...d, section: 'category' as const })),
-      ...stackDimensions.map(d => ({ ...d, section: 'stack' as const })),
-      ...valueDimensions.map(d => ({ ...d, section: 'value' as const }))
-    ]
-
-    // 去重
-    const uniqueFields = new Map()
-    allFields.forEach(field => {
-      if (!uniqueFields.has(field.fieldId)) {
-        uniqueFields.set(field.fieldId, field)
-      }
-    })
-
-    const uniqueFieldsArray = Array.from(uniqueFields.values())
-
-    // 按照 sortPriorityOrder 排序
-    return uniqueFieldsArray.sort((a, b) => {
-      const indexA = sortPriorityOrder.indexOf(a.id)
-      const indexB = sortPriorityOrder.indexOf(b.id)
-
-      // 如果都不在排序列表中，保持原顺序
-      if (indexA === -1 && indexB === -1) return 0
-      if (indexA === -1) return 1  // a不在列表中，放到后面
-      if (indexB === -1) return -1 // b不在列表中，a放到前面
-
-      return indexA - indexB  // 按照排序列表的顺序
-    })
-  }, [categoryDimensions, stackDimensions, valueDimensions, sortPriorityOrder]) // 添加 sortPriorityOrder 依赖
-
+  // 无效字段ID计算
   const invalidFieldIds = useMemo(() => {
     const validSet = new Set(datasetFields.map(f => f.fieldCode))
     return new Set(
@@ -377,67 +108,68 @@ export function ComponentConfigDrawer() {
     )
   }, [datasetFields, categoryDimensions, stackDimensions, valueDimensions])
 
-  const handleDropSortPriority = (targetField: any) => {
-    if (!draggingId || draggingId === targetField.id) return
+  // 数据集改变
+  const handleDatasetChange = useCallback((datasetCode: string) => {
+    if (editingComponent) {
+      updateEditingComponent({ dataset_code: datasetCode })
+    }
+  }, [editingComponent, updateEditingComponent])
 
-    const sourceIndex = sortPriorityOrder.indexOf(draggingId)
-    const targetIndex = sortPriorityOrder.indexOf(targetField.id)
+  // 拖拽开始
+  const handleDragStart = useCallback((e: React.DragEvent, data: any) => {
+    e.dataTransfer.setData('application/json', JSON.stringify(data))
+  }, [])
 
-    if (sourceIndex === -1 || targetIndex === -1) return
+  // 编辑显示名称
+  const openEditDialog = useCallback((section: 'category' | 'stack' | 'value', dimensionId: string, originalName: string, displayName: string) => {
+    setEditingDimension({ id: dimensionId, section, originalName, displayName })
+    setEditDialogOpen(true)
+  }, [])
 
-    // 重新排序 sortPriorityOrder
-    const newOrder = [...sortPriorityOrder]
-    const [moved] = newOrder.splice(sourceIndex, 1)
-    newOrder.splice(targetIndex, 0, moved)
+  const saveDisplayName = useCallback(() => {
+    if (editingDimension) {
+      // 更新对应的维度显示名称
+      const updateDimensions = (prev: any[]) =>
+        prev.map(d => d.id === editingDimension.id ? { ...d, displayName: editingDimension.displayName } : d)
 
-    setSortPriorityOrder(newOrder)
-    setDraggingId(null)
-  }
+      if (editingDimension.section === 'category') {
+        chartState.setCategoryDimensions(updateDimensions(chartState.categoryDimensions))
+      } else if (editingDimension.section === 'stack') {
+        chartState.setStackDimensions(updateDimensions(chartState.stackDimensions))
+      } else if (editingDimension.section === 'value') {
+        chartState.setValueDimensions(updateDimensions(chartState.valueDimensions))
+      }
+
+      setEditDialogOpen(false)
+      setEditingDimension(null)
+    }
+  }, [editingDimension, chartState])
+
+  // 筛选条件
+  const handleEditFilter = useCallback(() => {
+    if (filterGroup) {
+      setFilterDialogOpen(true)
+    } else {
+      handleAddFilter()
+      setFilterDialogOpen(true)
+    }
+  }, [filterGroup, handleAddFilter])
+
+  const handleSaveFilter = useCallback((newFilterGroup: any) => {
+    setFilterGroup(newFilterGroup)
+    setFilterDialogOpen(false)
+  }, [])
+
+  // 切换折叠
+  const toggleCollapse = useCallback((section: keyof typeof configCollapsed) => {
+    setConfigCollapsed(prev => ({ ...prev, [section]: !prev[section] }))
+  }, [])
+
   // 更新图表
-  const handleUpdateChart = () => {
+  const handleUpdateChart = useCallback(() => {
     if (!editingComponent) return
 
-    const dataConfig: DataConfig = {
-      dimensions: categoryDimensions.map(dim => ({
-        fieldId: dim.fieldId,
-        fieldName: dim.originalName,
-        fieldCode: dim.name,
-        displayName: dim.displayName,
-        sort: dim.sort === 'none' ? null : dim.sort,
-        timeGranularity: ''
-      })),
-      metrics: valueDimensions.map(metric => ({
-        fieldId: metric.fieldId,
-        fieldName: metric.originalName,
-        fieldCode: metric.name,
-        displayName: metric.displayName,
-        sort: metric.sort === 'none' ? null : metric.sort,
-        isVirtual: false,
-        aggregation: metric.aggregation || 'sum',
-        numberFormat: { type: 'number' as const, decimalPlaces: 2, unit: undefined, suffix: undefined, thousandSeparator: true }
-      })),
-      fieldOrder: [
-        ...categoryDimensions.map(d => ({ fieldId: d.fieldId, fieldType: 'dimension' as const })),
-        ...valueDimensions.map(m => ({ fieldId: m.fieldId, fieldType: 'metric' as const }))
-      ],
-      filters: filterGroup ? filterGroup.conditions.map((condition, index) => ({
-        id: condition.id || `filter_${Date.now()}_${index}`,
-        fieldId: condition.fieldCode || '',
-        fieldName: condition.fieldCode || '',
-        filterType: condition.fieldType || 'string',
-        operator: condition.operator || 'eq',
-        value: condition.value || ''
-      })) : [],
-      timeFilter: startDate || endDate ? {
-        type: 'custom' as const,
-        startDate: startDate ? new Date(startDate).getTime() : undefined,
-        endDate: endDate ? new Date(endDate).getTime() : undefined
-      } : undefined,
-      resultLimit: {
-        limitType: limitType === "limit" ? "limited" as const : "all" as const,
-        ...(limitType === "limit" && { limit: Number(limitValue) })
-      }
-    }
+    const dataConfig = getDataConfig(limitType, limitValue, editingComponent.data_config?.timeFilter)
 
     updateEditingComponent({
       data_config: dataConfig,
@@ -450,32 +182,51 @@ export function ComponentConfigDrawer() {
 
     // 刷新当前图表数据
     refreshChart(editingComponent.id)
-  }
+  }, [editingComponent, chartType, title, styleConfig, limitType, limitValue, getDataConfig, updateEditingComponent, refreshChart])
+
+  // 时间范围改变
+  const handleTimeFilterChange = useCallback((val: any) => {
+    console.log("Day Range Change:", val);
+    if (editingComponent) {
+      // 只更新 timeFilter，避免触发整个组件的重新初始化
+      updateEditingComponent({
+        ...editingComponent, // 保持原有组件对象
+        data_config: {
+          ...editingComponent.data_config,
+          timeFilter: val ? {
+            type: 'custom' as const,
+            startDate: val.startTime * 1000,
+            endDate: val.endTime * 1000
+          } : undefined
+        }
+      });
+    }
+  }, [editingComponent, updateEditingComponent])
 
   // 公共组件函数
-  const PanelHeader = ({ title, onCollapse, icon }: any) => (
+  const PanelHeader = useCallback(({ title: panelTitle, onCollapse, icon }: any) => (
     <div className="px-4 py-3 border-b flex items-center justify-between bg-muted/20">
-      <h3 className="text-base font-semibold">{title}</h3>
+      <h3 className="text-base font-semibold">{panelTitle}</h3>
       <Button variant="ghost" size="icon" onClick={onCollapse} className="h-8 w-8">
         {icon}
       </Button>
     </div>
-  )
+  ), [])
 
-  const CollapseLabel = ({ label, onClick, icon }: any) => (
+  const CollapseLabel = useCallback(({ label, onClick, icon }: any) => (
     <div className="h-full flex flex-col items-center justify-center cursor-pointer hover:bg-accent/50 transition-colors" onClick={onClick}>
       <div className="writing-mode-vertical text-sm font-medium py-4">{label}</div>
       <div className="mt-2">{icon}</div>
     </div>
-  )
+  ), [])
 
-  const Tab = ({ active, children, onClick }: any) => (
+  const Tab = useCallback(({ active, children, onClick }: any) => (
     <div className={`pb-2 cursor-pointer transition-colors ${active ? "border-b-2 border-primary text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`} onClick={onClick}>
       {children}
     </div>
-  )
+  ), [])
 
-  const FormBlock = ({ label, required, children }: any) => (
+  const FormBlock = useCallback(({ label, required, children }: any) => (
     <div className="space-y-2">
       <label className="text-sm font-medium flex items-center gap-1">
         {required && <span className="text-red-500">*</span>}
@@ -483,19 +234,19 @@ export function ComponentConfigDrawer() {
       </label>
       {children}
     </div>
-  )
+  ), [])
 
-  const CollapsibleBlock = ({ title, required, collapsed, onCollapse, children }: any) => (
+  const CollapsibleBlock = useCallback(({ title: blockTitle, required, collapsed, onCollapse, children }: any) => (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <label className="text-sm font-medium flex items-center gap-1 text-black">
           {required && <span className="text-red-500">*</span>}
-          {title}
+          {blockTitle}
         </label>
       </div>
       {!collapsed && children}
     </div>
-  )
+  ), [])
 
   if (!editingComponent) {
     return (
@@ -553,11 +304,7 @@ export function ComponentConfigDrawer() {
                       <FormBlock label="图表类型" required>
                         <Select
                           value={chartType}
-                          onValueChange={(value: ChartType) => {
-                            setChartType(value)
-                            const selectedChart = CHART_TYPES.find(item => item.value === value)
-                            setTitle(selectedChart?.label || '')
-                          }}
+                          onValueChange={handleChartTypeChange}
                         >
                           <SelectTrigger className="w-full h-9">
                             <SelectValue placeholder="选择图表类型">
@@ -599,26 +346,28 @@ export function ComponentConfigDrawer() {
                       </CollapsibleBlock>
 
                       {/* 堆叠项 / 维度 */}
-                      <CollapsibleBlock
-                        title="堆叠项 / 维度"
-                        collapsed={configCollapsed.stack}
-                        onCollapse={() => toggleCollapse('stack')}
-                      >
-                        <DimensionBlock
-                          invalidIds={invalidFieldIds}
-                          isDimension={true}
-                          dimensions={stackDimensions}
-                          isDragOver={dragOverSection === 'stack'}
-                          onDragOver={(e) => handleDragOver(e, 'stack')}
-                          onDragLeave={handleDragLeave}
-                          onDrop={(e) => handleDrop(e, 'stack')}
-                          onDelete={(dimensionId) => handleDeleteDimension('stack', dimensionId)}
-                          onSortChange={(dimensionId, sortValue) => handleSortChange('stack', dimensionId, sortValue)}
-                          onEditDisplayName={(dimensionId, originalName, displayName) =>
-                            openEditDialog('stack', dimensionId, originalName, displayName)
-                          }
-                        />
-                      </CollapsibleBlock>
+                      {currentChartHasStack && (
+                        <CollapsibleBlock
+                          title="堆叠项 / 维度"
+                          collapsed={configCollapsed.stack}
+                          onCollapse={() => toggleCollapse('stack')}
+                        >
+                          <DimensionBlock
+                            invalidIds={invalidFieldIds}
+                            isDimension={true}
+                            dimensions={stackDimensions}
+                            isDragOver={dragOverSection === 'stack'}
+                            onDragOver={(e) => handleDragOver(e, 'stack')}
+                            onDragLeave={handleDragLeave}
+                            onDrop={(e) => handleDrop(e, 'stack')}
+                            onDelete={(dimensionId) => handleDeleteDimension('stack', dimensionId)}
+                            onSortChange={(dimensionId, sortValue) => handleSortChange('stack', dimensionId, sortValue)}
+                            onEditDisplayName={(dimensionId, originalName, displayName) =>
+                              openEditDialog('stack', dimensionId, originalName, displayName)
+                            }
+                          />
+                        </CollapsibleBlock>
+                      )}
 
                       {/* 值轴 / 指标 */}
                       <CollapsibleBlock
@@ -688,7 +437,7 @@ export function ComponentConfigDrawer() {
 
                         {!filterGroup || filterGroup.conditions.length === 0 ? (
                           <div className="text-sm text-muted-foreground text-center py-1 border rounded bg-muted/20">
-                            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleAddFilter}>
+                            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleEditFilter}>
                               <Plus className="h-3 w-3 mr-1" />添加筛选条件
                             </Button>
                           </div>
@@ -715,15 +464,18 @@ export function ComponentConfigDrawer() {
                         )}
                       </div>
 
-                      {/* 时间范围 */}
                       <FormBlock label="时间范围">
-                        <TimeRangePicker
-                          startDate={startDate}
-                          endDate={endDate}
-                          onChange={(range) => {
-                            setStartDate(range.startDate || '')
-                            setEndDate(range.endDate || '')
-                          }}
+                        <AdvancedDatePicker
+                          granularity={'day'}
+                          mode={'range'}
+                          value={editingComponent?.data_config?.timeFilter ? {
+                            startTime: Math.floor(editingComponent.data_config.timeFilter.startDate! / 1000),
+                            endTime: Math.floor(editingComponent.data_config.timeFilter.endDate! / 1000),
+                            shortcutKey: undefined,
+                            isDynamic: false
+                          } : undefined}
+                          onChange={handleTimeFilterChange}
+                          placeholder="选择时间范围"
                         />
                       </FormBlock>
 
@@ -745,7 +497,7 @@ export function ComponentConfigDrawer() {
                       <Button className="w-full h-10 mt-4" onClick={handleUpdateChart}>更新图表数据</Button>
                     </>
                   ) : (
-                    <StyleConfigPanel config={styleConfig} onChange={setStyleConfig} />
+                    <StyleConfigPanel config={styleConfig} onChange={chartState.setStyleConfig} />
                   )}
                 </div>
               </div>
@@ -764,7 +516,6 @@ export function ComponentConfigDrawer() {
                     onDragStart={handleDragStart}
                     onFieldsLoaded={setDatasetFields}
                   />
-
                 </div>
               </div>
             )}
@@ -798,7 +549,6 @@ export function ComponentConfigDrawer() {
       </Dialog>
 
       {/* 筛选条件弹窗 */}
-
       <FilterConditionDialog
         open={filterDialogOpen}
         onOpenChange={setFilterDialogOpen}
