@@ -1,8 +1,8 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from elasticsearch import Elasticsearch, AsyncElasticsearch, exceptions as es_exceptions, helpers
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from bisheng.common.schemas.telemetry.base_telemetry_schema import UserContext
 from bisheng.common.services import telemetry_service
@@ -32,6 +32,7 @@ common_properties = {
 
 class BaseRecord(UserContext):
     timestamp: int
+    es_id: Optional[str] = Field(default=None)
 
 
 class BaseMidTable(BaseModel):
@@ -96,14 +97,16 @@ class BaseMidTable(BaseModel):
             return latest_time
         return None
 
-    def insert_records_sync(self, records: List[BaseModel]) -> None:
+    def insert_records_sync(self, records: List[BaseRecord]) -> None:
         """ 批量插入记录 """
         actions = []
         for rec in records:
             action = {
                 "_index": self._index_name,
-                "_source": rec.model_dump()
+                "_source": rec.model_dump(exclude={"es_id"}),
             }
+            if rec.es_id is not None:
+                action["_id"] = rec.es_id
             actions.append(action)
         helpers.bulk(self._es_client_sync, actions)
 

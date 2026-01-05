@@ -25,7 +25,7 @@ class UserInteract(BaseMidTable):
             "bool": {
                 "filter": [
                     {"term": {"event_type": {"value": BaseTelemetryTypeEnum.MESSAGE_FEEDBACK.value}}},
-                    {"range": {"timestamp": {"gte": start_time, "lt": end_time}}}
+                    {"range": {"timestamp": {"gte": start_time * 1000, "lt": end_time * 1000}}}
                 ]
             }
         }
