@@ -10,9 +10,6 @@ jobs:
   build_x86_64:
     name: Build for x86_64
     runs-on: ubuntu-latest
-    # 使用 Manylinux 镜像构建 Python wheel
-    container:
-      image: quay.io/pypa/manylinux2014_x86_64:latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
