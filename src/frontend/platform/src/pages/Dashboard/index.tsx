@@ -3,9 +3,12 @@
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { locationContext } from "@/contexts/locationContext"
 import {
+    getDashboard,
     getDashboards,
     getShareLink,
-    updateDashboard
+    setDefaultDashboard,
+    updateDashboard,
+    updateDashboardTitle
 } from "@/controllers/API/dashboard"
 import { copyText } from "@/utils"
 import { useContext, useState } from "react"
@@ -13,7 +16,7 @@ import { useMutation, useQuery, useQueryClient } from "react-query"
 import { useNavigate } from "react-router-dom"
 import { DashboardDetail } from "./components/dashboard/DashboardDetail"
 import { DashboardSidebar } from "./components/dashboard/DashboardSidebar"
-import { DashboardsQueryKey } from "./hook"
+import { DashboardQueryKey, DashboardsQueryKey } from "./hook"
 
 
 export default function DashboardPage() {
@@ -28,7 +31,7 @@ export default function DashboardPage() {
     })
 
     const updateMutation = useMutation({
-        mutationFn: ({ id, data }: { id: string; data: any }) => updateDashboard(id, data),
+        mutationFn: ({ id, title }: { id: string; title: string }) => updateDashboardTitle(id, title),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
             toast({
@@ -44,28 +47,19 @@ export default function DashboardPage() {
         },
     })
 
+    const setDefaultMutation = useMutation({
+        mutationFn: (id: string) => setDefaultDashboard(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
+        },
+        onError: () => {
+        }
+    })
+
 
 
     const handleRename = (id: string, newTitle: string) => {
-        const trimmed = newTitle.trim()
-
-        if (!trimmed) {
-            toast({
-                description: "名称不能为空",
-                variant: "error",
-            })
-            return
-        }
-
-        if (trimmed.length < 1 || trimmed.length > 200) {
-            toast({
-                description: "字数范围 1-200 字",
-                variant: "error",
-            })
-            return
-        }
-
-        updateMutation.mutate({ id, data: { title: trimmed } })
+        updateMutation.mutate({ id, title: newTitle })
     }
 
 
@@ -101,26 +95,33 @@ export default function DashboardPage() {
         navigator(`/dashboard/${id}`)
     }
 
-    const selectedDashboard = dashboards.find((d) => d.id === selectedId) || null
+    const { data: selectedDashboard, isLoading } = useQuery({
+        queryKey: [DashboardQueryKey, selectedId],
+        queryFn: () => getDashboard(selectedId),
+    })
 
     // Auto-select first dashboard if none selected
     if (!selectedId && dashboards.length > 0) {
-        setSelectedId(dashboards[0].id)
+        const defaultDashboard = dashboards.find((d) => d.is_default)
+        setSelectedId(defaultDashboard?.id || dashboards[0].id)
     }
 
     return (
-        <div className="h-screen flex">
+        <div className="h-full flex">
             {appConfig.isPro && <DashboardSidebar
                 dashboards={dashboards}
                 selectedId={selectedId}
                 onSelect={setSelectedId}
                 onRename={handleRename}
+                onDefault={(id) => setDefaultMutation.mutate(id)}
                 onShare={handleShare}
             />
             }
             <DashboardDetail
                 dashboard={selectedDashboard}
+                isLoading={isLoading}
                 onRename={handleRename}
+                onDefault={(id) => setDefaultMutation.mutate(id)}
                 onShare={handleShare}
                 onEdit={handleEdit}
             />

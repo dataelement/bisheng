@@ -1,3 +1,5 @@
+import { generateUUID } from "@/components/bs-ui/utils"
+
 // React-Grid-Layout 布局项
 export interface LayoutItem {
   i: string // 组件ID
@@ -66,9 +68,11 @@ export interface Dashboard {
   dashboard_type: 'custom',
   layout_config: LayoutConfig,
   style_config: StyleConfig,
-  created_by: string
-  created_at: string
-  updated_at: string
+  create_time: string
+  update_time: string
+  is_default: boolean
+  user_name: string
+  write: boolean
   components: DashboardComponent[]
 }
 
@@ -80,8 +84,8 @@ export interface DashboardComponent {
   dataset_code: string
   data_config: ComponentConfig // 图表/指标组件使用 DataConfig，查询组件使用 QueryConfig
   style_config: ComponentStyleConfig
-  created_at: string
-  updated_at: string
+  create_time: string
+  update_time: string
 }
 
 /**
@@ -155,10 +159,12 @@ export interface FilterCondition {
 }
 
 // 时间筛选 
-export type TimeRangeType =
-  | 'all'          // 全部时间
-  | 'recent_days'  // 最近n天
-  | 'custom'       // 自定义时间范围
+export const enum TimeRangeType {
+  ALL = 'all', // 全部时间
+  RECENT_DAYS = 'recent_days', // 最近n天
+  CUSTOM = 'custom' // 自定义时间范围
+}
+
 export type TimeRangeMode =
   | 'fixed'    // 固定时间范围
   | 'dynamic'  // 动态时间范围（相对当前时间）
@@ -193,8 +199,6 @@ export interface QueryConfig {
   linkedComponentIds: string[]    // 关联的图表组件ID列表（查询时会更新这些组件）
   queryConditions: {
     id: string                      // 条件唯一ID
-    fieldId: string                 // 字段ID
-    fieldName: string               // 字段名称
     displayType: 'range' | 'single'        // 展示类型：时间范围 或 单个时间
     timeGranularity: 'year_month' | 'year_month_day' | 'year_month_day_hour'// 时间粒度
     hasDefaultValue: boolean        // 是否设置默认值
@@ -204,10 +208,23 @@ export interface QueryConfig {
 
 // 组件配置联合类型
 export type ComponentConfig = DataConfig | QueryConfig
-export const createDefaultDataConfig = (): DataConfig => ({
-  dimensions: [],
-  metrics: [],
-  fieldOrder: [],
-  filters: [],
-  resultDisplay: { limitType: 'all' }
-})
+export const createDefaultDataConfig = (type: ChartType): ComponentConfig => (
+  type === 'query'
+    ? {
+      linkedComponentIds: [], queryConditions: {
+        id: generateUUID(4),
+        displayType: 'range',
+        timeGranularity: 'year_month_day',
+        hasDefaultValue: false,
+        defaultValue: {
+          type: TimeRangeType.ALL
+        }
+      }
+    }
+    : {
+      dimensions: [],
+      metrics: [],
+      fieldOrder: [],
+      filters: [],
+      resultLimit: { limitType: 'all' }
+    })

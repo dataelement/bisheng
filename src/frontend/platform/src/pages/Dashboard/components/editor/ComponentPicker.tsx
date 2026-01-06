@@ -1,29 +1,53 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/bs-ui/popover';
 import { cn } from '@/utils';
-import { BarChart3, Filter, LineChart, PieChart, Ratio } from "lucide-react";
 import React, { useState } from 'react';
+import { ChartType } from '../../types/dataConfig';
+import { useEditorDashboardStore } from '@/store/dashboardStore';
 
-export const items = [
-    // 图表类
-    { id: 'indicator', label: '指标卡', category: 'chart', icon: <span className="font-bold text-blue-500 text-sm">123</span> },
-    { id: 'bar', label: '柱状图', category: 'chart', icon: <BarChart3 className="w-5 h-5 text-blue-500" /> },
-    { id: 'bar-h', label: '条形图', category: 'chart', icon: <div className="flex flex-col gap-1 w-5"><div className="h-1.5 bg-blue-500 w-full rounded-sm" /><div className="h-1.5 bg-blue-300 w-2/3 rounded-sm" /></div> },
-    { id: 'line', label: '折线图', category: 'chart', icon: <LineChart className="w-5 h-5 text-blue-500" /> },
-    { id: 'pie', label: '饼状图', category: 'chart', icon: <PieChart className="w-5 h-5 text-blue-500" /> },
-    { id: 'ring', label: '环形图', category: 'chart', icon: <Ratio className="w-5 h-5 text-blue-500" /> },
-
-    // 其他类
-    { id: 'query', label: '查询组件', category: 'other', icon: <Filter className="w-5 h-5 text-slate-500" /> },
-    // { id: 'text', label: '文本', category: 'other', icon: <Type className="w-5 h-5 text-slate-500" /> },
-    // { id: 'layout', label: '组合布局', category: 'other', icon: <LayoutGrid className="w-5 h-5 text-slate-500" /> },
+export const ChartItems = [
+    {
+        label: '柱状图',
+        data: [
+            { type: ChartType.Bar, label: '基础柱状图' },
+            { type: ChartType.StackedBar, label: '堆叠柱状图' },
+            { type: ChartType.GroupedBar, label: '分组柱状图' }
+        ]
+    },
+    {
+        label: '条形图',
+        data: [
+            { type: ChartType.HorizontalBar, label: '基础条形图' },
+            { type: ChartType.StackedHorizontalBar, label: '堆叠条形图' },
+            { type: ChartType.GroupedHorizontalBar, label: '分组条形图' }
+        ]
+    },
+    {
+        label: '折线图',
+        data: [
+            { type: ChartType.Line, label: '基础折线图' },
+            { type: ChartType.Area, label: '面积图' },
+            { type: ChartType.StackedLine, label: '堆叠折线图' }
+        ]
+    },
+    {
+        label: '饼图',
+        data: [
+            { type: ChartType.Pie, label: '饼图' },
+            { type: ChartType.Donut, label: '环形图' }
+        ]
+    },
+    {
+        label: '其他',
+        data: [
+            { type: ChartType.Metric, label: '指标卡' }
+        ]
+    }
 ];
 
 // 定义数据项结构
 export interface PickerItem {
-    id: string;
+    type: string;
     label: string;
-    icon: React.ReactNode;
-    category: 'chart' | 'other';
 }
 
 interface ComponentPickerProps {
@@ -33,33 +57,33 @@ interface ComponentPickerProps {
     className?: string;
 }
 
-const ComponentPicker = ({ onSelect, children, className }: ComponentPickerProps) => {
+const ComponentPicker = ({ children, className }: ComponentPickerProps) => {
     const [open, setOpen] = useState(false);
-    const charts = items.filter(i => i.category === 'chart');
-    const others = items.filter(i => i.category === 'other');
+    const { addComponentToLayout } = useEditorDashboardStore()
 
-    const handleItemClick = (id: string) => {
-        onSelect(id);
+    const handleItemClick = (item) => {
+        addComponentToLayout({
+            title: item.label,
+            type: item.type
+        });
         setOpen(false);
     };
 
     const ItemGrid = ({ list }: { list: PickerItem[] }) => (
-        <div className="grid grid-cols-5 gap-y-4 gap-x-2">
+        <div className="flex flex-wrap gap-4">
             {list.map((item) => (
-                <button
-                    key={item.id}
-                    onClick={() => handleItemClick(item.id)}
-                    className="flex flex-col items-center group gap-2 outline-none"
+                <div
+                    key={item.type}
+                    onClick={() => handleItemClick(item)}
+                    className="flex flex-col items-center group gap-2 outline-none cursor-pointer"
                 >
-                    {/* 图标容器 */}
-                    <div className="w-12 h-12 flex items-center justify-center rounded-lg bg-slate-50 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors border border-transparent group-hover:border-blue-100">
-                        {item.icon}
+                    <div className="w-[88px] h-[86px] flex flex-col items-center justify-center border rounded-md group-hover:bg-blue-50 transition-colors group-hover:border-primary">
+                        <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/${item.type}.png`} className="w-8 h-8 mb-2" />
+                        <span className="text-[12px] text-gray-600 whitespace-nowrap">
+                            {item.label}
+                        </span>
                     </div>
-                    {/* 文字说明 */}
-                    <span className="text-[12px] text-gray-600 group-hover:text-blue-600 whitespace-nowrap">
-                        {item.label}
-                    </span>
-                </button>
+                </div>
             ))}
         </div>
     );
@@ -69,19 +93,16 @@ const ComponentPicker = ({ onSelect, children, className }: ComponentPickerProps
             <PopoverTrigger asChild>
                 {children}
             </PopoverTrigger>
-            <PopoverContent align="start" className={cn("w-[320px] p-4 shadow-xl", className)}>
-                <div className="space-y-6">
-                    {/* 图表区域 */}
-                    <div>
-                        <h4 className="text-sm font-medium text-gray-400 mb-4 px-1">图表</h4>
-                        <ItemGrid list={charts} />
-                    </div>
-
-                    {/* 其他区域 */}
-                    <div>
-                        <h4 className="text-sm font-medium text-gray-400 mb-4 px-1">其他</h4>
-                        <ItemGrid list={others} />
-                    </div>
+            <PopoverContent align="start" className={cn("w-[332px] p-4 shadow-xl", className)}>
+                <div className="space-y-2">
+                    {
+                        ChartItems.map(item => (
+                            <div>
+                                <h4 className="text-sm font-medium mb-2 px-1">{item.label}</h4>
+                                <ItemGrid list={item.data} />
+                            </div>
+                        ))
+                    }
                 </div>
             </PopoverContent>
         </Popover>

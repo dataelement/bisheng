@@ -196,6 +196,7 @@ export function AdvancedDatePicker({
   // --- 显示格式化 ---
   const getDisplayValue = () => {
     if (!value?.startTime) return "";
+    if (selectedShortcut) return shortcuts.find((s) => s.key === selectedShortcut)?.label;
     const start = new Date(value.startTime * 1000);
     const end = new Date(value.endTime * 1000);
 

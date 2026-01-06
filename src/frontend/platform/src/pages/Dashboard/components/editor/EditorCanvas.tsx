@@ -14,13 +14,16 @@ import { Dashboard } from "../../types/dataConfig"
 import { ComponentConfigDrawer } from "./ComponentConfigDrawer"
 import "./index.css"
 import { ComponentWrapper } from "./ComponentWrapper"
+import { LoadingIcon } from "@/components/bs-icons/loading"
+import Home from "./Home"
 
 interface EditorCanvasProps {
     isPreviewMode?: boolean
+    isLoading: boolean
     dashboard: Dashboard | null
 }
 
-export function EditorCanvas({ isPreviewMode, dashboard }: EditorCanvasProps) {
+export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanvasProps) {
     const { width, containerRef, mounted } = useContainerWidth()
     const {
         currentDashboard,
@@ -184,31 +187,20 @@ export function EditorCanvas({ isPreviewMode, dashboard }: EditorCanvasProps) {
         };
     }, [width, isPreviewMode, mounted]);
 
+
     // 如果没有dashboard，显示空状态
-    if (!currentDashboard) {
-        return (
-            <div id="edit-charts-panne" className="flex-1 p-2 bg-muted/30 overflow-auto">
-                <div className="max-w-7xl mx-auto">
-                    <div className="bg-background rounded-lg border-2 border-dashed p-12 text-center">
-                        <p className="text-muted-foreground">加载中...</p>
-                    </div>
-                </div>
-            </div>
-        )
+    if (isLoading || !currentDashboard) {
+        return <div className="w-full h-full flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+            <LoadingIcon />
+        </div>
     }
 
     // 如果没有组件，显示空状态
     if (!currentDashboard.components || currentDashboard.components.length === 0) {
-        return (
-            <div id="edit-charts-panne" className="flex-1 p-2 bg-muted/30 overflow-auto" onClick={handleCanvasClick}>
-                <div className="max-w-7xl mx-auto">
-                    <div className="bg-background rounded-lg border-2 border-dashed p-12 text-center">
-                        <p className="text-muted-foreground">画布区域</p>
-                        <p className="text-sm text-muted-foreground mt-2">点击"添加组件"开始设计你的看板</p>
-                    </div>
-                </div>
-            </div>
-        )
+        if (isPreviewMode) {
+            return
+        }
+        return <Home />
     }
 
     return (

@@ -48,7 +48,7 @@ export function QueryFilter({ component, isPreviewMode = false }: QueryFilterPro
             </div>
 
             {/* 查询按钮 - 固定在右下角 */}
-            <div className="absolute bottom-4 right-4">
+            <div className="absolute bottom-5 right-4">
                 <Button onClick={handleQuery} size="sm" className="gap-1">
                     <Search className="h-4 w-4" />
                     查询

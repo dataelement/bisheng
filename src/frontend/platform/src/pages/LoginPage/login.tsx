@@ -76,7 +76,8 @@ export const LoginPage = () => {
                     localStorage.removeItem('LOGIN_PATHNAME')
                     location.href = pathname
                 } else {
-                    location.href = location.pathname === '/' ? location.origin + '/workspace/' : location.href
+                    const path = import.meta.env.DEV ? '/build/apps' : '/workspace'
+                    location.href = location.pathname === '/' ? location.origin + path : location.href
                 }
                 // location.href = __APP_ENV__.BASE_URL + '/'
             }), (error) => {

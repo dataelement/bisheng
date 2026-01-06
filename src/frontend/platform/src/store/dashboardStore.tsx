@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { generateUUID } from "@/components/bs-ui/utils"
-import { Dashboard, DashboardComponent, LayoutItem, QueryConfig } from "@/pages/Dashboard/types/dataConfig"
+import { ChartType, createDefaultDataConfig, Dashboard, DashboardComponent, LayoutItem, QueryConfig } from "@/pages/Dashboard/types/dataConfig"
 
 // Chart refresh information
 interface ChartRefreshInfo {
@@ -29,7 +29,7 @@ interface EditorState {
     // Update layout configuration
     setLayouts: (layouts: LayoutItem[]) => void;
     // Add component to layout
-    addComponentToLayout: (componentId: string) => void;
+    addComponentToLayout: (component: { title: string, type: ChartType }) => void;
     // Remove component from layout
     removeComponentFromLayout: (componentId: string) => void;
     // Update component
@@ -69,7 +69,8 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     setLayouts: (layouts) => {
         set({ layouts, hasUnsavedChanges: true })
     },
-    addComponentToLayout: (componentId) => {
+    addComponentToLayout: (component) => {
+        const componentId = generateUUID(6);
         const { layouts } = get()
         // 计算新组件的位置
         const maxY = layouts.length > 0 ? Math.max(...layouts.map(l => l.y + l.h)) : 0
@@ -78,11 +79,28 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             x: 0,
             y: maxY,
             w: 6,
-            h: 4,
+            h: 6,
             minW: 2,
             minH: 2
         }
-        set({ layouts: [...layouts, newLayout], hasUnsavedChanges: true })
+        set({
+            layouts: [...layouts, newLayout],
+            hasUnsavedChanges: true,
+            currentDashboard: {
+                ...get().currentDashboard!,
+                components: [...get().currentDashboard!.components, {
+                    ...component,
+                    id: componentId,
+                    dashboard_id: get().currentDashboard?.id || '',
+                    dataset_code: '',
+                    data_config: createDefaultDataConfig(component.type),
+                    style_config: {},
+                    create_time: '',
+                    update_time: ''
+                }]
+            }
+        })
+        useComponentEditorStore.getState().copyFromDashboard(componentId)
     },
     removeComponentFromLayout: (componentId) => {
         const { layouts } = get()
@@ -209,7 +227,7 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     },
 
     // Refresh all charts linked to a query component
-    refreshChartsByQuery: (queryComponentId: string) => {
+    refreshChartsByQuery: (queryComponentId: string, filter: any) => {
         const { currentDashboard, chartRefreshTriggers } = get()
         if (!currentDashboard) return
 
@@ -223,7 +241,7 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
         // Prepare query parameters (from the current query component)
         const currentQueryParams = [{
             queryComponentId: queryComponent.id,
-            queryConditions: queryConfig.queryConditions
+            queryConditions: queryConfig.queryConditions // todo merge filter
         }]
 
         // Increment trigger for each linked chart and attach query params

@@ -9,7 +9,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { getShareLink, updateDashboard } from "@/controllers/API/dashboard"
 import { useEditorDashboardStore } from "@/store/dashboardStore"
 import { cn, copyText } from "@/utils"
-import { ArrowLeft, Eye, Maximize, Pencil, Plus, Share2 } from "lucide-react"
+import { ArrowLeft, Eye, FunnelIcon, Grid2X2PlusIcon, Maximize, Pencil, Plus, Share2 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQueryClient } from "react-query"
@@ -18,6 +18,8 @@ import { usePublishDashboard } from "../../hook"
 import ComponentPicker from "./ComponentPicker"
 import ThemePicker from "./ThemePicker"
 import { Dashboard } from "../../types/dataConfig"
+import { Separator } from "@/components/bs-ui/separator"
+import { Badge } from "@/components/bs-ui/badge"
 
 
 interface EditorHeaderProps {
@@ -223,30 +225,6 @@ export function EditorHeader({
         navigator(`/dashboard?selected=${dashboardId}`)
     }
 
-    const handleShare = async () => {
-        if (dashboard?.status === "draft") {
-            toast({
-                description: "该看板尚未发布",
-                variant: "warning",
-            })
-            return
-        }
-
-        try {
-            const link = await getShareLink(dashboard.id)
-            await copyText(link)
-            toast({
-                description: "分享链接已复制",
-                variant: "success",
-            })
-        } catch (error) {
-            toast({
-                description: "复制失败",
-                variant: "error",
-            })
-        }
-    }
-
     // Reset store on unmount
     useEffect(() => {
         return () => {
@@ -255,77 +233,62 @@ export function EditorHeader({
     }, [reset])
 
     return (
-        <header className="h-14 border-b bg-background flex items-center justify-between px-4 gap-4">
+        <header className="h-16 border-b bg-background flex items-center justify-between px-4 py-3.5">
             {/* Left section */}
-            <div className="flex items-center gap-3">
-                <Button variant="ghost" size="icon" onClick={handleExit}>
+            <div className="flex items-center gap-4">
+                <Button variant="outline" size="icon" onClick={handleExit}>
                     <ArrowLeft className="h-4 w-4" />
                 </Button>
-
-                <div className="flex flex-col min-w-[40px]">
-                    {isEditingTitle ? (
-                        <Input
-                            ref={inputRef}
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
-                            onBlur={handleTitleBlur}
-                            onKeyDown={handleTitleKeyDown}
-                            className="text-sm font-medium h-6 px-2 py-0"
-                        />
-                    ) : (
-                        <h1
-                            className="text-sm font-medium truncate cursor-pointer transition-colors"
-                            title={dashboard?.title}
-                        // onDoubleClick={handleTitleDoubleClick}
-                        >
-                            {dashboard?.title || "未命名看板"}
-                        </h1>
-                    )}
-                    <span className={cn("text-xs", getSaveStatusColor())}>{getSaveStatus()}</span>
-                </div>
+                <Separator orientation="vertical" className="bg-slate-300 h-4"></Separator>
+                {isEditingTitle ? (
+                    <Input
+                        ref={inputRef}
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        onBlur={handleTitleBlur}
+                        onKeyDown={handleTitleKeyDown}
+                        className="text-sm font-medium h-6 px-2 py-0"
+                    />
+                ) : (
+                    <h1
+                        className="font-medium truncate cursor-pointer transition-colors"
+                        title={dashboard?.title}
+                    // onDoubleClick={handleTitleDoubleClick}
+                    >
+                        {dashboard?.title || "未命名看板"}
+                    </h1>
+                )}
+                <Badge variant="outline" className=" font-normal bg-gray-100">{getSaveStatus()}</Badge>
             </div>
 
             {/* Middle section */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
                 {/* Add Component */}
-                <ComponentPicker onSelect={handleAddComponent} >
-                    <Button variant="outline" size="sm" className="gap-1">
-                        <Plus className="h-4 w-4" />
-                        添加组件
+                <ComponentPicker >
+                    <Button variant="outline" size="sm" className="gap-2">
+                        <Grid2X2PlusIcon size="14" />
+                        添加图表
                     </Button>
                 </ComponentPicker>
-                {/* <ComponentPicker items={componentData} onSelect={handleSelect}>
-                    <div className="flex items-center justify-between w-40 px-3 py-2 text-sm border rounded-md cursor-pointer hover:bg-slate-50 bg-white">
-                        <span>选择组件</span>
-                        <ChevronDown className="h-4 w-4 text-gray-400" />
-                    </div>
-                </ComponentPicker> */}
-
-                {/* Theme */}
-                <ThemePicker onSelect={handleThemeChange} />
+                <Button variant="outline" size="sm" className="gap-2">
+                    <FunnelIcon size="14" />
+                    添加查询组件
+                </Button>
             </div>
 
             {/* Right section */}
             <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={() => {
+                <Button variant="outline" onClick={() => {
                     const element = document.getElementById('edit-charts-panne');
                     element.requestFullscreen();
                 }}>
-                    <Maximize className="h-4 w-4 mr-1" />
                     全屏
                 </Button>
-
-                <Button variant="outline" size="sm" onClick={handleSave} disabled={isSaving}>
+                <Button variant="outline" disabled={isPublishing} onClick={handlePublish}>
+                    保存并发布
+                </Button>
+                <Button onClick={handleSave} disabled={isSaving}>
                     保存
-                </Button>
-
-                <Button variant="outline" size="sm" disabled={isPublishing} onClick={handlePublish}>
-                    发布
-                </Button>
-
-                <Button variant="default" size="sm" onClick={handleShare}>
-                    <Share2 className="h-4 w-4 mr-1" />
-                    分享
                 </Button>
             </div>
 

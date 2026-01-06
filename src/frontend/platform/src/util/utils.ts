@@ -264,3 +264,64 @@ export function truncateString(str, maxLength) {
     // 截取字符串并添加省略号
     return str.substring(0, maxLength) + '...';
 }
+
+
+/**
+ * Generates an auto-incrementing unique name based on a pattern.
+ * * @param {Array} list - The source data array.
+ * @param {string} key - The property name to check in the array elements (e.g., 'title').
+ * @param {string} baseName - The base name (e.g., 'Untitled Board').
+ * @param {string} pattern - The numbering pattern (e.g., '(x)' or '|x|', where 'x' is the placeholder for the number).
+ * @returns {string} The generated unique name.
+ */
+export function generateUniqueName(list, key, baseName, pattern) {
+    // 1. Safety check: ensure list is an array
+    if (!Array.isArray(list)) return baseName;
+
+    // 2. Construct Regex to extract existing numbers
+    // Split the pattern by 'x' to get prefix and suffix. 
+    // e.g., if pattern is "|x|", prefix is "|" and suffix is "|"
+    const parts = pattern.split('x');
+    const prefix = parts[0];
+    const suffix = parts[1];
+
+    // Helper function: Escape special characters for Regex (e.g., '|', '(', '[', etc.)
+    const escapeReg = (str) => str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+
+    // Build the full Regex: ^BaseName + EscapedPrefix + (Captured Number) + EscapedSuffix$
+    const regexStr = `^${escapeReg(baseName)}${escapeReg(prefix)}(\\d+)${escapeReg(suffix)}$`;
+    const regex = new RegExp(regexStr);
+
+    let maxNum = 0;
+
+    // 3. Iterate through the list to find the maximum existing number
+    list.forEach(item => {
+        const name = item?.[key];
+        if (!name) return;
+
+        // Case A: The name exactly equals the base name (treat as number 1)
+        // e.g., "Untitled Board" exists -> next should be 2
+        if (name === baseName) {
+            maxNum = Math.max(maxNum, 1);
+        }
+        // Case B: The name matches the numbering pattern
+        // e.g., "Untitled Board|2|" -> extract 2
+        else {
+            const match = name.match(regex);
+            if (match) {
+                // match[1] is the captured digits (\d+)
+                const num = parseInt(match[1], 10);
+                maxNum = Math.max(maxNum, num);
+            }
+        }
+    });
+
+    // 4. Generate the result
+    // If maxNum is 0, it means the baseName is not taken, so return baseName directly.
+    if (maxNum === 0) {
+        return baseName;
+    } else {
+        // Otherwise, increment maxNum by 1 and replace 'x' in the pattern
+        return baseName + pattern.replace('x', String(maxNum + 1));
+    }
+}

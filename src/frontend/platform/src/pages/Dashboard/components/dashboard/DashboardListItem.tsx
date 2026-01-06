@@ -8,8 +8,10 @@ import { Input } from "@/components/bs-ui/input"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { cn } from "@/utils"
 import { MoreHorizontal } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useContext, useEffect, useRef, useState } from "react"
 import { Dashboard } from "../../types/dataConfig"
+import { Badge } from "@/components/bs-ui/badge"
+import { locationContext } from "@/contexts/locationContext"
 
 
 interface DashboardListItemProps {
@@ -17,7 +19,8 @@ interface DashboardListItemProps {
     selected: boolean
     onSelect: () => void
     onRename: (id: string, newTitle: string) => void
-    onDuplicate: (id: string) => void
+    onDuplicate: (dashboard: Dashboard) => void
+    onDefault: (id: string) => void
     onShare: (id: string) => void
     onDelete: (id: string) => void
 }
@@ -29,12 +32,14 @@ export function DashboardListItem({
     onRename,
     onDuplicate,
     onShare,
+    onDefault,
     onDelete,
 }: DashboardListItemProps) {
     const [isEditing, setIsEditing] = useState(false)
     const [title, setTitle] = useState(dashboard.title)
     const inputRef = useRef<HTMLInputElement>(null)
     const { toast } = useToast()
+    const { appConfig } = useContext(locationContext)
 
     useEffect(() => {
         if (isEditing && inputRef.current) {
@@ -49,18 +54,19 @@ export function DashboardListItem({
 
     const handleBlur = () => {
         setIsEditing(false)
-        const trimmedTitle = title.trim()
+        let trimmedTitle = title.trim()
 
         if (!trimmedTitle) {
-            setTitle(dashboard.title)
-            toast({
-                description: "名称不能为空",
-                variant: "error",
-            })
-            return
+            trimmedTitle = '未命名看板'
+            // setTitle(dashboard.title)
+            // toast({
+            //     description: "名称不能为空",
+            //     variant: "error",
+            // })
+            // return
         }
 
-        if (trimmedTitle.length < 1 || trimmedTitle.length > 200) {
+        if (trimmedTitle.length > 200) {
             setTitle(dashboard.title)
             toast({
                 description: "字数范围 1-200 字",
@@ -87,8 +93,8 @@ export function DashboardListItem({
     return (
         <div
             className={cn(
-                "group flex items-center justify-between px-3 py-2 rounded-md cursor-pointer hover:bg-accent transition-colors",
-                selected && "bg-accent",
+                "group flex items-center justify-between px-2 py-[6px] rounded-md cursor-pointer hover:bg-[#002FFF]/10 transition-colors",
+                selected && "bg-[#002FFF]/10",
             )}
             onClick={onSelect}
         >
@@ -100,27 +106,29 @@ export function DashboardListItem({
                         onChange={(e) => setTitle(e.target.value)}
                         onBlur={handleBlur}
                         onKeyDown={handleKeyDown}
-                        className="h-7 px-2"
+                        className="h-5 px-2 border-primary"
                         onClick={(e) => e.stopPropagation()}
                     />
                 ) : (
-                    <div className="truncate text-sm" title={dashboard.title} onDoubleClick={handleDoubleClick}>
+                    <div className={cn("truncate text-sm", selected && "text-primary")} title={dashboard.title} onDoubleClick={handleDoubleClick}>
                         {dashboard.title}
                     </div>
                 )}
             </div>
+            {dashboard.is_default && <Badge variant="outline" className="border border-primary text-primary scale-75">默认</Badge>}
 
             <DropdownMenu>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button variant="ghost" size="icon" className="h-5 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
                         <MoreHorizontal className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                    {!dashboard.mange && <DropdownMenuItem onClick={() => setIsEditing(true)}>重命名</DropdownMenuItem>}
-                    {!dashboard.mange && <DropdownMenuItem onClick={() => onDuplicate(dashboard.id)}>复制</DropdownMenuItem>}
-                    {!dashboard.view && <DropdownMenuItem onClick={() => onShare(dashboard.id)}>分享</DropdownMenuItem>}
-                    {!dashboard.mange && <DropdownMenuItem className="text-destructive" onClick={() => onDelete(dashboard.id)}>
+                    {dashboard.write && appConfig.isPro && <DropdownMenuItem onClick={() => setIsEditing(true)}>重命名</DropdownMenuItem>}
+                    {appConfig.isPro && <DropdownMenuItem disabled={dashboard.is_default} onClick={() => onDefault(dashboard.id)}>{dashboard.is_default ? '已设为默认' : '设为默认'}</DropdownMenuItem>}
+                    {dashboard.write && appConfig.isPro && <DropdownMenuItem onClick={() => onDuplicate(dashboard)}>复制</DropdownMenuItem>}
+                    <DropdownMenuItem onClick={() => onShare(dashboard.id)}>分享</DropdownMenuItem>
+                    {dashboard.write && appConfig.isPro && <DropdownMenuItem className="text-destructive" onClick={() => onDelete(dashboard.id)}>
                         删除
                     </DropdownMenuItem>}
                 </DropdownMenuContent>

@@ -5,10 +5,10 @@ import { Button } from "@/components/bs-ui/button"
 import { SearchInput } from "@/components/bs-ui/input"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { userContext } from "@/contexts/userContext"
-import { createDashboard, deleteDashboard, duplicateDashboard } from "@/controllers/API/dashboard"
+import { copyDashboard, createDashboard, deleteDashboard, duplicateDashboard } from "@/controllers/API/dashboard"
 import { useMiniDebounce } from "@/util/hook"
 import { cn } from "@/utils"
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react"
+import { ChevronLeft, ChevronRight, ListIndentDecrease, ListIndentIncrease, Plus, SquarePlusIcon } from "lucide-react"
 import type React from "react"
 import { useContext, useMemo, useState } from "react"
 import { useMutation, useQueryClient } from "react-query"
@@ -16,12 +16,15 @@ import { useNavigate } from "react-router-dom"
 import { DashboardsQueryKey } from "../../hook"
 import { Dashboard } from "../../types/dataConfig"
 import { DashboardListItem } from "./DashboardListItem"
+import Tip from "@/components/bs-ui/tooltip/tip"
+import { generateUniqueName } from "@/util/utils"
 
 interface DashboardSidebarProps {
     dashboards: Dashboard[]
     selectedId: string | null
     onSelect: (id: string) => void
     onRename: (id: string, newTitle: string) => void
+    onDefault: (id: string) => void
     onShare: (id: string) => void
 }
 
@@ -30,6 +33,7 @@ export function DashboardSidebar({
     selectedId,
     onSelect,
     onRename,
+    onDefault,
     onShare
 }: DashboardSidebarProps) {
     const [searchQuery, setSearchQuery] = useState("")
@@ -78,14 +82,12 @@ export function DashboardSidebar({
             return
         }
 
-        createMutation.mutate({
-            title: `未命名看板`,
-        })
+        createMutation.mutate(generateUniqueName(dashboards, 'title', `未命名看板`, '(x)'))
     }
 
 
     const duplicateMutation = useMutation({
-        mutationFn: duplicateDashboard,
+        mutationFn: copyDashboard,
         onSuccess: (newDashboard) => {
             queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
             onSelect(newDashboard.id)
@@ -98,7 +100,7 @@ export function DashboardSidebar({
             })
         },
     })
-    const handleDuplicate = (id: string) => {
+    const handleDuplicate = (dashboard: Dashboard) => {
         if (dashboards.length >= 20) {
             toast({
                 description: "最多允许创建 20 个看板",
@@ -107,7 +109,15 @@ export function DashboardSidebar({
             return
         }
 
-        duplicateMutation.mutate(id)
+        const newTitle = generateUniqueName(dashboards, 'title', `${dashboard.title}-副本`, '(x)')
+        if (newTitle.length > 200) {
+            return toast({
+                description: "名称不能超过 200 字",
+                variant: "error",
+            })
+        }
+
+        duplicateMutation.mutate({ id: dashboard.id, title: newTitle })
     }
 
 
@@ -125,10 +135,6 @@ export function DashboardSidebar({
             } else {
                 onSelect(null)
             }
-            toast({
-                description: "已删除",
-                variant: "success"
-            })
         },
         onError: () => {
             toast({
@@ -154,36 +160,42 @@ export function DashboardSidebar({
     return (
         <div
             className={cn(
-                "relative h-full border-r bg-background transition-all duration-300",
-                isCollapsed ? "w-0" : "w-52",
+                "relative h-full bg-background transition-all duration-300 rounded-tl-md",
+                isCollapsed ? "w-0" : "w-44  border-r",
             )}
         >
-            <Button
-                variant="ghost"
-                size="icon"
-                className="absolute -right-3 top-4 z-10 h-6 w-6 rounded-full border bg-background"
-                onClick={() => setIsCollapsed(!isCollapsed)}
-            >
-                {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-            </Button>
+            {
+                !isCollapsed && <div className="header relative flex items-center justify-between h-[52px] px-2 pr-11 border-b">
+                    <p className="text-base font-bold">看板列表</p>
+                    {
+                        user.web_menu && <Tip content={"添加看板"} >
+                            <Button variant="ghost" size="icon" onClick={handleCreate}><SquarePlusIcon size={16} /></Button>
+                        </Tip>
+                    }
+                </div>
+            }
+            <Tip content={isCollapsed ? "展开列表" : "收起列表"} >
+                <Button
+                    variant={isCollapsed ? "outline" : "ghost"}
+                    size="icon"
+                    className={"absolute top-2 z-10 bg-background" + (isCollapsed ? " -right-4 size-8" : " right-2")}
+                    onClick={() => setIsCollapsed(!isCollapsed)}
+                >
+                    {isCollapsed ? <ListIndentIncrease className="h-4 w-4" /> : <ListIndentDecrease className="h-4 w-4" />}
+                </Button>
+            </Tip>
+
 
             {!isCollapsed && (
-                <div className="flex flex-col h-full p-4 gap-4">
+                <div className="flex flex-col p-2 gap-2">
                     <div className="relative">
                         <SearchInput
-                            placeholder="看板名称"
+                            placeholder="Search..."
                             value={searchQuery}
                             onChange={handleSearch}
                             onKeyDown={handleKeyDown}
                         />
                     </div>
-
-                    {
-                        user.web_menu && <Button onClick={handleCreate} className="w-full" disabled={dashboards.length >= 20}>
-                            <Plus className="h-4 w-4 mr-2" />
-                            添加看板
-                        </Button>
-                    }
 
                     <div className="flex-1 overflow-y-auto space-y-1">
                         {filteredDashboards.length === 0 ? (
@@ -199,6 +211,7 @@ export function DashboardSidebar({
                                     onSelect={() => onSelect(dashboard.id)}
                                     onRename={onRename}
                                     onDuplicate={handleDuplicate}
+                                    onDefault={onDefault}
                                     onShare={onShare}
                                     onDelete={handleDelete}
                                 />

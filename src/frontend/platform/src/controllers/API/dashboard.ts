@@ -1,7 +1,8 @@
 // Mock API functions for dashboard operations
 
-import { generateUUID } from "@/components/bs-ui/utils"
-import { createDefaultDataConfig, Dashboard, DashboardComponent, LayoutItem, StyleConfig } from "@/pages/Dashboard/types/dataConfig"
+import { generateUUID } from "@/components/bs-ui/utils";
+import { createDefaultDataConfig, Dashboard, DashboardComponent, LayoutItem, StyleConfig } from "@/pages/Dashboard/types/dataConfig";
+import axios from "../request";
 
 // Simulate API delay
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -222,27 +223,42 @@ let mockDashboards: Dashboard[] = [
 ]
 
 export async function getDashboards(): Promise<Dashboard[]> {
-    await delay(500)
-    return mockDashboards
+    // has administrative privileges or can view published dashboards
+    return await axios.get(`/api/v1/telemetry/dashboard`).then(res =>
+        res.data.filter(dashboard => (dashboard.write || dashboard.status === 'published')));
 }
 
-export async function createDashboard(data: Partial<Dashboard>): Promise<Dashboard> {
-    await delay(300)
-    const newDashboard: Dashboard = {
-        id: Date.now().toString(),
-        title: data.title || "新看板",
+// 获取看板详情
+export async function getDashboard(id: string, fromShare: boolean = false): Promise<Dashboard> {
+    const query = fromShare ? `?from_share=true` : ''
+    return await axios.get(`/api/v1/telemetry/dashboard/${id}${query}`);
+}
+
+export async function createDashboard(title: string): Promise<Dashboard> {
+    return await axios.post(`/api/v1/telemetry/dashboard`, {
+        title,
         description: "",
-        status: 'draft',
-        dashboard_type: 'custom',
         layout_config: { layouts: [] },
-        style_config: defaultStyleConfig,
-        created_by: "admin",
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        components: []
-    }
-    mockDashboards.push(newDashboard)
-    return newDashboard
+        style_config: { theme: 'light' }
+    })
+}
+
+export async function updateDashboardTitle(id: string, title: string): Promise<Dashboard> {
+    return await axios.post(`/api/v1/telemetry/dashboard/${id}/title`, {
+        title
+    })
+}
+
+export async function setDefaultDashboard(id: string): Promise<Dashboard> {
+    return await axios.post(`/api/v1/telemetry/dashboard/${id}/default`, {
+        dashboard_id: id
+    })
+}
+
+export async function copyDashboard({ id, title }: { id: string, title: string }): Promise<Dashboard> {
+    return await axios.post(`/api/v1/telemetry/dashboard/${id}/copy`, {
+        new_title: title
+    })
 }
 
 export async function updateDashboard(id: string, data: Partial<Dashboard>): Promise<Dashboard> {
@@ -259,25 +275,9 @@ export async function updateDashboard(id: string, data: Partial<Dashboard>): Pro
 }
 
 export async function deleteDashboard(id: string): Promise<void> {
-    await delay(300)
-    mockDashboards = mockDashboards.filter((d) => d.id !== id)
+    return await axios.delete(`/api/v1/telemetry/dashboard/${id}`)
 }
 
-export async function duplicateDashboard(id: string): Promise<Dashboard> {
-    await delay(300)
-    const dashboard = mockDashboards.find((d) => d.id === id)
-    if (!dashboard) throw new Error("Dashboard not found")
-
-    const newDashboard: Dashboard = {
-        ...dashboard,
-        id: Date.now().toString(),
-        title: `${dashboard.title} (副本)`,
-        created_at: Date.now(),
-        updated_at: Date.now()
-    }
-    mockDashboards.push(newDashboard)
-    return newDashboard
-}
 
 export async function getShareLink(id: string): Promise<string> {
     await delay(300)
@@ -285,8 +285,9 @@ export async function getShareLink(id: string): Promise<string> {
 }
 
 export async function publishDashboard(id: string, status: any): Promise<Dashboard> {
-    await delay(300)
-    return updateDashboard(id, { status })
+    return await axios.post(`/api/v1/telemetry/dashboard/${id}/status`, {
+        status
+    })
 }
 
 export async function getDashboardDetail(id: string): Promise<Dashboard> {
@@ -495,7 +496,7 @@ export async function getDatasets(params?: {
 // 查询图表数据
 import {
     QueryDataResponse
-} from '@/pages/Dashboard/types/chartData'
+} from '@/pages/Dashboard/types/chartData';
 
 export async function queryChartData(params: {
     componentId: string
