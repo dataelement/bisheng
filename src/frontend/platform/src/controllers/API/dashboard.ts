@@ -228,7 +228,6 @@ export async function getDashboards(): Promise<Dashboard[]> {
         res.data.filter(dashboard => (dashboard.write || dashboard.status === 'published')));
 }
 
-// 获取看板详情
 export async function getDashboard(id: string, fromShare: boolean = false): Promise<Dashboard> {
     const query = fromShare ? `?from_share=true` : ''
     return await axios.get(`/api/v1/telemetry/dashboard/${id}${query}`);
@@ -465,32 +464,9 @@ const mockDatasets: DashboardDataset[] = [
     }
 ]
 
-// 获取数据集列表（支持搜索和分页）
-export async function getDatasets(params?: {
-    search?: string
-    limit?: number
-    offset?: number
-}): Promise<DashboardDataset[]> {
-    await delay(300)
-
-    let filteredDatasets = [...mockDatasets]
-
-    // 搜索过滤
-    if (params?.search) {
-        const searchLower = params.search.toLowerCase()
-        filteredDatasets = filteredDatasets.filter(d =>
-            d.dataset_name.toLowerCase().includes(searchLower) ||
-            d.dataset_code.toLowerCase().includes(searchLower) ||
-            d.description.toLowerCase().includes(searchLower)
-        )
-    }
-
-    // 分页
-    const offset = params?.offset || 0
-    const limit = params?.limit || 11
-    filteredDatasets = filteredDatasets.slice(offset, offset + limit)
-
-    return filteredDatasets
+// 获取数据集列表
+export async function getDatasets(): Promise<DashboardDataset[]> {
+    return await axios.get(`/api/v1/telemetry/dashboard/dataset/list`);
 }
 
 // 查询图表数据
