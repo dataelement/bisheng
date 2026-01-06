@@ -15,8 +15,8 @@ interface ComponentWrapperProps {
     isPreviewMode: boolean
     dashboards: Dashboard[]
     isDark: boolean
-    onDuplicate: (componentId: string) => void
-    onCopyTo: (componentId: string, targetDashboardId: string) => void
+    onDuplicate: (component: DashboardComponent) => void
+    onCopyTo: (component: DashboardComponent, targetDashboardId: string) => void
     onDelete: (componentId: string) => void
 }
 
@@ -41,8 +41,8 @@ export function ComponentWrapper({
         }
     }, [isEditing])
 
-    const handleClick = (e: React.MouseEvent) => {
-        e.stopPropagation()
+    const handleClick = (e?: React.MouseEvent) => {
+        e?.stopPropagation()
         if (isPreviewMode) return
         if (editingComponent?.id === component.id) return
         copyFromDashboard(component.id)
@@ -71,6 +71,7 @@ export function ComponentWrapper({
         }
 
         if (trimmedTitle !== component.title) {
+            setTitle(trimmedTitle)
             updateEditingComponent({ title: trimmedTitle })
         }
     }
@@ -80,7 +81,7 @@ export function ComponentWrapper({
             inputRef.current?.blur()
         }
         if (e.key === "Escape") {
-            setTitle(component.title)
+            // setTitle(component.title)
             setIsEditing(false)
         }
     }
@@ -97,8 +98,8 @@ export function ComponentWrapper({
             {/* More button - top right corner */}
             {!isPreviewMode && (isSelected || isHovered) && componentData.type !== ChartType.Metric && (
                 <div className="absolute top-2 right-2 z-10">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu onOpenChange={(b) => b && handleClick()}>
+                        <DropdownMenuTrigger asChild>
                             <Button
                                 variant="ghost"
                                 size="icon"
@@ -107,13 +108,13 @@ export function ComponentWrapper({
                                 <MoreHorizontal className="h-4 w-4" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenuContent align="end" >
                             {component.type === 'query' ? (
                                 // Query component: only duplicate and delete
                                 <>
                                     <DropdownMenuItem onClick={(e) => {
                                         e.stopPropagation()
-                                        onDuplicate(component.id)
+                                        onDuplicate(componentData)
                                     }}>
                                         <Copy className="h-4 w-4 mr-2" />
                                         复制
@@ -141,7 +142,7 @@ export function ComponentWrapper({
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={(e) => {
                                         e.stopPropagation()
-                                        onDuplicate(component.id)
+                                        onDuplicate(componentData)
                                     }}>
                                         <Copy className="h-4 w-4 mr-2" />
                                         复制
@@ -156,13 +157,13 @@ export function ComponentWrapper({
                                                 <div className="px-2 py-1.5 text-sm text-muted-foreground">暂无其他看板</div>
                                             ) : (
                                                 dashboards
-                                                    .filter(d => d.id !== component.dashboard_id)
+                                                    .filter(d => d.id !== component.dashboard_id && d.status === 'draft' && d.write)
                                                     .map(dashboard => (
                                                         <DropdownMenuItem
                                                             key={dashboard.id}
                                                             onClick={(e) => {
                                                                 e.stopPropagation()
-                                                                onCopyTo(component.id, dashboard.id)
+                                                                onCopyTo(componentData, dashboard.id)
                                                             }}
                                                         >
                                                             {dashboard.title}
@@ -203,7 +204,7 @@ export function ComponentWrapper({
                                 onClick={(e) => e.stopPropagation()}
                             />
                         ) : (
-                            <h3 className="text-sm font-medium truncate">{component.title}</h3>
+                            <h3 className="text-sm font-medium truncate">{title}</h3>
                         )}
                     </div>
                 )}

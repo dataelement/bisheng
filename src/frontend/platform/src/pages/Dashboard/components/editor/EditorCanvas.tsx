@@ -1,5 +1,6 @@
 "use client"
 
+import { LoadingIcon } from "@/components/bs-icons/loading"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { copyComponentTo, getDashboards } from "@/controllers/API/dashboard"
@@ -10,12 +11,11 @@ import "react-grid-layout/css/styles.css"
 import { useMutation, useQuery, useQueryClient } from "react-query"
 import "react-resizable/css/styles.css"
 import { DashboardsQueryKey } from "../../hook"
-import { Dashboard } from "../../types/dataConfig"
+import { Dashboard, DashboardComponent } from "../../types/dataConfig"
 import { ComponentConfigDrawer } from "./ComponentConfigDrawer"
-import "./index.css"
 import { ComponentWrapper } from "./ComponentWrapper"
-import { LoadingIcon } from "@/components/bs-icons/loading"
 import Home from "./Home"
+import "./index.css"
 
 interface EditorCanvasProps {
     isPreviewMode?: boolean
@@ -35,6 +35,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
         deleteComponent: deleteComponentInStore,
         initializeAutoRefresh,
     } = useEditorDashboardStore()
+
     const { clear: clearComponentEditorStore } = useComponentEditorStore();
     console.log('currentDashboard :>> ', currentDashboard);
 
@@ -49,12 +50,8 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
 
     // Mutation for copying component to another dashboard
     const copyToMutation = useMutation({
-        mutationFn: ({ componentId, targetId }: { componentId: string; targetId: string }) =>
-            copyComponentTo(
-                dashboards.find(el => el.id === targetId),
-                currentDashboard.components.find(el => el.id === componentId),
-                currentDashboard.layout_config.layouts.find(el => el.i === componentId)
-            ),
+        mutationFn: ({ component, targetId }: { component: DashboardComponent; targetId: string, }) =>
+            copyComponentTo(component, targetId, layouts.find(e => e.i === component.id)),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
             toast({
@@ -109,20 +106,30 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
     }
 
     // 处理画布点击（取消选中）
-    const handleCanvasClick = (e: React.MouseEvent) => {
-        if (e.target === e.currentTarget || (e.target as HTMLElement).id === 'edit-charts-panne') {
-            clearComponentEditorStore()
-        }
-    }
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            const isInsideContainer = containerRef.current?.contains(target);
+            const isDragHandle = target.closest('.drag-handle');
+            if (isInsideContainer && !isDragHandle) {
+                clearComponentEditorStore();
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, []);
 
     // Handle component duplicate
-    const handleDuplicate = (componentId: string) => {
-        duplicateComponentInStore(componentId)
+    const handleDuplicate = (component: DashboardComponent) => {
+        duplicateComponentInStore(component)
     }
 
     // Handle copy to another dashboard
-    const handleCopyTo = (componentId: string, targetDashboardId: string) => {
-        copyToMutation.mutate({ componentId, targetId: targetDashboardId })
+    const handleCopyTo = (component: DashboardComponent, targetDashboardId: string) => {
+        copyToMutation.mutate({ component, targetId: targetDashboardId })
     }
 
     // Handle component delete
@@ -214,7 +221,6 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
                     style={{
                         backgroundColor: currentDashboard.style_config.theme === 'dark' ? '#1a1a1a' : '#f5f5f5',
                     }}
-                    onClick={handleCanvasClick}
                 >
                     <div className="mx-auto relative" style={{
                         ...gridBackgroundStyle,

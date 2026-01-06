@@ -260,7 +260,19 @@ export async function copyDashboard({ id, title }: { id: string, title: string }
     })
 }
 
+export async function updateDashboard2(id: string, data: Partial<Dashboard>): Promise<Dashboard> {
+    return await axios.put(`/api/v1/telemetry/dashboard/${id}`, data)
+}
+
 export async function updateDashboard(id: string, data: Partial<Dashboard>): Promise<Dashboard> {
+    // return await axios.put(`/api/v1/telemetry/dashboard/${id}`, {
+    //     "title": "22224333",
+    //     "description": "test2-2",
+    //     "layout_config": {},
+    //     "style_config": {},
+    //     "id": 1,
+    //     "components": []
+    // })
     await delay(300)
     const index = mockDashboards.findIndex((d) => d.id === id)
     if (index === -1) throw new Error("Dashboard not found")
@@ -289,38 +301,28 @@ export async function publishDashboard(id: string, status: any): Promise<Dashboa
     })
 }
 
-export async function getDashboardDetail(id: string): Promise<Dashboard> {
-    await delay(500)
-    const dashboard = mockDashboards.find((d) => d.id === id)
-    if (!dashboard) throw new Error("Dashboard not found")
-    return dashboard
-}
-
-export async function copyComponentTo(dashboard: Dashboard, component: DashboardComponent, layoutItem: LayoutItem): Promise<{ component: DashboardComponent, layoutItem: LayoutItem }> {
-    const newComponentId = `${component.type}-${generateUUID(8)}`
-    const newComponent: DashboardComponent = {
+export async function copyComponentTo(component: DashboardComponent, targetId: string, layout: LayoutItem): Promise<any> {
+    const targetDashboard = await getDashboard(targetId)
+    console.log('targetDashboard :>> ', targetDashboard, layout);
+    const copyComponentId = generateUUID(6)
+    targetDashboard.components.push({
         ...component,
-        id: newComponentId,
-        dashboard_id: dashboard.id,
-        created_at: Date.now(),
-        updated_at: Date.now()
-    }
-    // Calculate position at bottom left of target dashboard
-    const maxY = dashboard.layout_config.layouts.length > 0
-        ? Math.max(...dashboard.layout_config.layouts.map(l => l.y + l.h))
+        id: copyComponentId
+    })
+
+    // // Calculate position at bottom left of target dashboard
+    const maxY = targetDashboard.layout_config.layouts.length > 0
+        ? Math.max(...targetDashboard.layout_config.layouts.map(l => l.y + l.h))
         : 0
     const newLayoutItem: LayoutItem = {
-        ...layoutItem,
-        i: newComponentId,
+        ...layout,
+        i: copyComponentId,
         x: 0,
         y: maxY
     }
 
-    dashboard.components.push(newComponent)
-    dashboard.layout_config.layouts.push(newLayoutItem)
-    // todo  save api
-    await delay(300)
-    return { component: newComponent, layoutItem: newLayoutItem }
+    targetDashboard.layout_config.layouts.push(newLayoutItem)
+    return await updateDashboard2(targetId, targetDashboard)
 }
 
 // Dataset related types and APIs
@@ -368,102 +370,6 @@ export interface DashboardDataset {
     schema_config: SchemaConfig
 }
 
-// Mock datasets
-const mockDatasets: DashboardDataset[] = [
-    {
-        id: 1,
-        dataset_name: "条区原料费用",
-        dataset_code: "raw_material_cost",
-        es_index_name: "raw_material_cost_index",
-        description: "原料费用数据集",
-        is_commercial_only: false,
-        schema_config: {
-            dimensions: [
-                {
-                    name: "店铺",
-                    type: "keyword",
-                    field: "shop",
-                    aggregation_name: "shop_agg",
-                    bucket_path: "shop_agg"
-                },
-                {
-                    name: "日期",
-                    type: "date",
-                    field: "date",
-                    time_granularity: [
-                        { name: "天", aggregation: { date_histogram: { field: "date", calendar_interval: "day" } } },
-                        { name: "月", aggregation: { date_histogram: { field: "date", calendar_interval: "month" } } },
-                        { name: "年", aggregation: { date_histogram: { field: "date", calendar_interval: "year" } } }
-                    ],
-                    aggregation_name: "date_agg",
-                    bucket_path: "date_agg"
-                },
-                {
-                    name: "用途",
-                    type: "keyword",
-                    field: "purpose",
-                    aggregation_name: "purpose_agg",
-                    bucket_path: "purpose_agg"
-                }
-            ],
-            metrics: [
-                {
-                    name: "金额",
-                    aggregation: { sum: { field: "amount" } },
-                    aggregation_name: "amount_sum",
-                    bucket_path: "amount_sum"
-                },
-                {
-                    name: "记录数",
-                    aggregation: { value_count: { field: "_id" } },
-                    aggregation_name: "record_count",
-                    bucket_path: "record_count"
-                }
-            ]
-        }
-    },
-    {
-        id: 2,
-        dataset_name: "销售数据",
-        dataset_code: "sales_data",
-        es_index_name: "sales_data_index",
-        description: "销售数据集",
-        is_commercial_only: false,
-        schema_config: {
-            dimensions: [
-                {
-                    name: "区域",
-                    type: "keyword",
-                    field: "region",
-                    aggregation_name: "region_agg",
-                    bucket_path: "region_agg"
-                },
-                {
-                    name: "产品类别",
-                    type: "keyword",
-                    field: "category",
-                    aggregation_name: "category_agg",
-                    bucket_path: "category_agg"
-                }
-            ],
-            metrics: [
-                {
-                    name: "销售额",
-                    aggregation: { sum: { field: "sales_amount" } },
-                    aggregation_name: "sales_sum",
-                    bucket_path: "sales_sum"
-                },
-                {
-                    name: "订单数",
-                    aggregation: { value_count: { field: "_id" } },
-                    aggregation_name: "order_count",
-                    bucket_path: "order_count"
-                }
-            ]
-        }
-    }
-]
-
 // 获取数据集列表
 export async function getDatasets(): Promise<DashboardDataset[]> {
     return await axios.get(`/api/v1/telemetry/dashboard/dataset/list`);
@@ -475,11 +381,20 @@ import {
 } from '@/pages/Dashboard/types/chartData';
 
 export async function queryChartData(params: {
-    componentId: string
-    chartType: string
-    dataConfig: any
+    dashboardId: string,
+    componentData: DashboardComponent,
+    componentId: string,
     queryParams?: any
 }): Promise<QueryDataResponse> {
+    const res = await axios.post(`/api/v1/telemetry/dashboard/component/query`, {
+        dashboard_id: params.dashboardId,
+        component_data: params.componentData,
+        component_id: params.componentId,
+        time_filters: params.queryParams
+    });
+
+    console.log('res :>> ', res);
+
     await delay(500)
 
     // console.log('dataConfig :>> ', params.dataConfig);
@@ -557,3 +472,19 @@ export async function queryChartData(params: {
     }
 }
 
+// 获取字段枚举列表
+export async function getFieldEnums({ dataset_code, field, page, pageSize = 20 }: {
+    dataset_code: string
+    field: string
+    page: number
+    pageSize?: number
+}): Promise<any> {
+    return await axios.get(`/api/v1/telemetry/dashboard/dataset/field/enums`, {
+        params: {
+            index_name: dataset_code,
+            field,
+            page,
+            size: pageSize
+        }
+    });
+}

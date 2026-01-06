@@ -193,7 +193,8 @@ export interface DataConfig {
   resultLimit: {                  // 结果展示配置
     limitType: 'all' | 'limited'  // 限制类型
     limit?: number                // 具体条数（limitType 为 limited 时有效）
-  }
+  },
+  isConfigured: boolean // 配置完成
 }
 
 // 查询组件配置
@@ -228,5 +229,6 @@ export const createDefaultDataConfig = (type: ChartType): ComponentConfig => (
       metrics: [],
       fieldOrder: [],
       filters: [],
-      resultLimit: { limitType: 'all' }
+      resultLimit: { limitType: 'all' },
+      isConfigured: false
     })

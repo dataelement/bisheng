@@ -35,7 +35,7 @@ interface EditorState {
     // Update component
     updateComponent: (componentId: string, data: Partial<DashboardComponent>) => void;
     // Duplicate component
-    duplicateComponent: (componentId: string) => void;
+    duplicateComponent: (component: DashboardComponent) => void;
     // Delete component
     deleteComponent: (componentId: string) => void;
     // Refresh a single chart
@@ -148,18 +148,17 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
         console.log('store 更新验证:', updatedComponent)
     },
     // Duplicate component
-    duplicateComponent: (componentId: string) => {
+    duplicateComponent: (component: DashboardComponent) => {
         const { currentDashboard, layouts } = get()
 
-        const component = currentDashboard.components.find((c) => c.id === componentId)
-        const layoutItem = currentDashboard.layout_config.layouts.find((l) => l.i === componentId)
+        const layoutItem = layouts.find((l) => l.i === component.id)
         // Create new component
-        const newComponentId = `${component.type}-${generateUUID(8)}`
+        const newComponentId = generateUUID(6)
         const newComponent: DashboardComponent = {
             ...component,
             id: newComponentId,
-            created_at: Date.now(),
-            updated_at: Date.now()
+            create_time: '',
+            update_time: ''
         }
         // Calculate position below the original component
         const newLayoutItem: LayoutItem = {

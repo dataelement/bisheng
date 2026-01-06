@@ -17,20 +17,22 @@ interface ChartContainerProps {
 
 export function ChartContainer({ isDark, component }: ChartContainerProps) {
   const chartRefreshTriggers = useEditorDashboardStore(state => state.chartRefreshTriggers)
+  const currentDashboard = useEditorDashboardStore(state => state.currentDashboard)
   const refreshInfo = chartRefreshTriggers[component.id]
   const refreshTrigger = refreshInfo?.trigger || 0
   const queryParams = refreshInfo?.queryParams || []
+  console.log('refreshInfo :>> ', component, refreshInfo);
 
   // Query chart data
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['chartData', component.id, refreshTrigger],
     queryFn: () => queryChartData({
+      dashboardId: currentDashboard.id,
+      componentData: component,
       componentId: component.id,
-      chartType: component.type,
-      dataConfig: component.data_config,
-      queryParams: queryParams  //  Pass parameters for the query component 
+      queryParams
     }),
-    enabled: !!component.id
+    enabled: !!component.id && component.data_config.isConfigured
   });
 
   // Refetch when refresh trigger changes
@@ -64,10 +66,11 @@ export function ChartContainer({ isDark, component }: ChartContainerProps) {
   }
 
   // No data
-  if (!data) {
+  if (!component.data_config.isConfigured) {
     return (
       <div className="flex items-center justify-center h-full">
-        <span className="text-sm text-muted-foreground">暂无数据</span>
+        <img />
+        <span className="text-sm text-muted-foreground">当前图表无数据</span>
       </div>
     );
   }

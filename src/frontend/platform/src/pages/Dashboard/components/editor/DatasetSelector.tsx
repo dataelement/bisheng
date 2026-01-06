@@ -49,7 +49,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
     // 获取数据集列表
     const { data: allDatasets = [], isLoading: datasetsLoading } = useQuery({
         queryKey: ['datasets'],
-        queryFn: () => getDatasets({ limit: 11 }),
+        queryFn: () => getDatasets()
     })
 
     // 前端搜索过滤
