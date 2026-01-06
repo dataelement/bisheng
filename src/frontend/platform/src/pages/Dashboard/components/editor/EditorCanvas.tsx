@@ -43,7 +43,7 @@ export function EditorCanvas({ isPreviewMode, dashboard }: EditorCanvasProps) {
         queryFn: getDashboards,
         // enabled: isHovered // Only fetch when hovered
     })
-    const [showChartSelector, setShowChartSelector] = useState<boolean>(false)
+
     // Mutation for copying component to another dashboard
     const copyToMutation = useMutation({
         mutationFn: ({ componentId, targetId }: { componentId: string; targetId: string }) =>
@@ -137,10 +137,7 @@ export function EditorCanvas({ isPreviewMode, dashboard }: EditorCanvasProps) {
             },
         })
     }
- const handleQuery = (componentId: string, filter: any, shouldShow: boolean) => {
-        console.log(`组件 ${componentId} 触发了查询:`, filter, shouldShow)
-         setShowChartSelector(shouldShow)
-    }
+
     const gridBackgroundStyle = useMemo(() => {
         if (isPreviewMode || !width || !mounted) return {};
 
@@ -260,7 +257,6 @@ export function EditorCanvas({ isPreviewMode, dashboard }: EditorCanvasProps) {
                                         onDuplicate={handleDuplicate}
                                         onCopyTo={handleCopyTo}
                                         onDelete={handleDelete}
-                                        onQuery={handleQuery}
                                     />
                                 </div>
                             ))}
@@ -269,7 +265,7 @@ export function EditorCanvas({ isPreviewMode, dashboard }: EditorCanvasProps) {
                 </div>
             </div>
             {/* 配置抽屉 */}
-            <ComponentConfigDrawer showChartSelector={showChartSelector}/>
+            <ComponentConfigDrawer />
             </div>
         </>
     )

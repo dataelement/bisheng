@@ -20,13 +20,12 @@ interface ComponentWrapperProps {
     onDuplicate: (componentId: string) => void
     onCopyTo: (componentId: string, targetDashboardId: string) => void
     onDelete: (componentId: string) => void
-    onQuery?: (componentId: string, filter: any, hasQuery: boolean) => void
 }
 
 // 组件包装器，用于处理选中状态
 export function ComponentWrapper({
     dashboards, component, isPreviewMode, isDark,
-    onDuplicate, onCopyTo, onDelete,onQuery
+    onDuplicate, onCopyTo, onDelete
 }: ComponentWrapperProps) {
     const [isHovered, setIsHovered] = useState(false)
     const [isEditing, setIsEditing] = useState(false)
@@ -46,7 +45,6 @@ export function ComponentWrapper({
 
     const handleClick = (e: React.MouseEvent) => {
         e.stopPropagation()
-        onQuery(component.id, null, false) 
         if (isPreviewMode) return
         if (editingComponent?.id === component.id) return
         copyFromDashboard(component.id)
@@ -215,10 +213,7 @@ export function ComponentWrapper({
                 {/* Component content */}
                 <div className={['query', 'metric'].includes(component.type) ? 'h-full overflow-hidden' : 'h-[calc(100%-2.5rem)] overflow-hidden'}>
                     {component.type === 'query' ? (
-                        <QueryFilter isDark={isDark} component={componentData} isPreviewMode={isPreviewMode} onQuery={(filter, hasQuery) => {
-                                onQuery?.(component.id, filter, hasQuery)
-                            }}
-                        />
+                        <QueryFilter isDark={isDark} component={componentData} isPreviewMode={isPreviewMode} />
                     ) : (
                         <ChartContainer isDark={isDark} component={componentData} />
                     )}

@@ -40,10 +40,11 @@ export const CHART_TYPES: {
     { label: "查询组件", value: ChartType.Query, hasStack: false }
   ];
 
-export function ComponentConfigDrawer({showChartSelector}: {showChartSelector:boolean}) {
+export function ComponentConfigDrawer() {
   const { editingComponent, updateEditingComponent } = useComponentEditorStore();
   const { refreshChart } = useEditorDashboardStore();
-
+  console.log(editingComponent,789);
+  
   // 折叠状态
   const [configCollapsed, setConfigCollapsed] = useState({
     basic: false,
@@ -190,7 +191,7 @@ export function ComponentConfigDrawer({showChartSelector}: {showChartSelector:bo
     if (editingComponent) {
       // 只更新 timeFilter，避免触发整个组件的重新初始化
       updateEditingComponent({
-        ...editingComponent, // 保持原有组件对象
+        ...editingComponent,
         data_config: {
           ...editingComponent.data_config,
           timeFilter: val ? {
@@ -259,7 +260,7 @@ export function ComponentConfigDrawer({showChartSelector}: {showChartSelector:bo
 
   return (
    <div className="h-full flex bg-background border-l border-border">
-      {showChartSelector? (
+      {editingComponent.type === 'query' ? (
         <ChartSelector
           charts={[
             { id: '1', name: '堆叠条形图-图表名称', dataset: '会话500-数据集' },
@@ -299,7 +300,10 @@ export function ComponentConfigDrawer({showChartSelector}: {showChartSelector:bo
 
                   {configTab === "basic" ? (
                     <>
-                      {/* 图表类型 */}
+                    {
+                      editingComponent.type !== 'metric' && (
+                        <>
+                            {/* 图表类型 */}
                       <FormBlock label="图表类型" required>
                         <Select
                           value={chartType}
@@ -367,6 +371,10 @@ export function ComponentConfigDrawer({showChartSelector}: {showChartSelector:bo
                           />
                         </CollapsibleBlock>
                       )}
+                        </>
+                      )
+                    }
+                  
 
                       {/* 值轴 / 指标 */}
                       <CollapsibleBlock
@@ -392,7 +400,7 @@ export function ComponentConfigDrawer({showChartSelector}: {showChartSelector:bo
                       </CollapsibleBlock>
 
                       {/* 排序优先级 */}
-                      <CollapsibleBlock title="排序优先级">
+                      { editingComponent.type !== 'metric' && <CollapsibleBlock title="排序优先级">
                         <div className="space-y-2">
                           {sortPriorityFields.length === 0 ? (
                             <div className="text-xs text-muted-foreground text-center py-2">
@@ -426,7 +434,7 @@ export function ComponentConfigDrawer({showChartSelector}: {showChartSelector:bo
                           )}
                         </div>
 
-                      </CollapsibleBlock>
+                      </CollapsibleBlock>}
 
                       {/* 筛选 */}
                       <div className="space-y-3">
@@ -479,7 +487,7 @@ export function ComponentConfigDrawer({showChartSelector}: {showChartSelector:bo
                       </FormBlock>
 
                       {/* 结果显示 */}
-                      <FormBlock label="结果显示">
+                      { editingComponent.type !== 'metric' &&<FormBlock label="结果显示">
                         <div className="flex items-center gap-4">
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input type="radio" checked={limitType === "all"} onChange={() => setLimitType("all")} className="h-4 w-4" />
@@ -491,7 +499,7 @@ export function ComponentConfigDrawer({showChartSelector}: {showChartSelector:bo
                             <span className="text-sm text-muted-foreground">条</span>
                           </label>
                         </div>
-                      </FormBlock>
+                      </FormBlock>}
 
                       <Button className="w-full h-10 mt-4" onClick={handleUpdateChart}>更新图表数据</Button>
                     </>

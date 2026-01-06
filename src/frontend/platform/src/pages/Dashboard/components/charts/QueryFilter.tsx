@@ -11,10 +11,9 @@ import { DashboardComponent, QueryConfig } from "../../types/dataConfig"
 interface QueryFilterProps {
     component: DashboardComponent  // Query the ID of the component, which is used to trigger the refresh of the associated chart
     isPreviewMode?: boolean
-    onQuery?: (filter: any, hasQuery: boolean) => void
 }
 
-export function QueryFilter({ component, isPreviewMode = false, onQuery }: QueryFilterProps) {
+export function QueryFilter({ component, isPreviewMode = false }: QueryFilterProps) {
     const { refreshChartsByQuery } = useEditorDashboardStore()
     const [date, setDate] = useState<Date | undefined>(undefined)
 
@@ -24,7 +23,6 @@ export function QueryFilter({ component, isPreviewMode = false, onQuery }: Query
 
     const handleQuery = () => {
         console.log("查询日期:", date)
-        onQuery?.(filter, true)
         // Refresh the associated chart based on the query component ID 
         refreshChartsByQuery(component.id, filter)
     }
@@ -51,11 +49,7 @@ export function QueryFilter({ component, isPreviewMode = false, onQuery }: Query
 
             {/* 查询按钮 - 固定在右下角 */}
             <div className="absolute bottom-4 right-4">
-                <Button onClick={(e) => {
-                    e.stopPropagation()
-                    e.preventDefault()
-                    handleQuery()
-                }} size="sm" className="gap-1">
+                <Button onClick={handleQuery} size="sm" className="gap-1">
                     <Search className="h-4 w-4" />
                     查询
                 </Button>
