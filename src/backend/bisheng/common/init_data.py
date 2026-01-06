@@ -4,7 +4,7 @@ import os
 from typing import List
 
 from loguru import logger
-from sqlmodel import select, update, text
+from sqlmodel import select, update
 
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
@@ -12,12 +12,10 @@ from bisheng.core.database import get_async_db_session, get_database_connection
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.component import Component
-from bisheng.database.models.flow_version import FlowVersion
 from bisheng.database.models.group import Group, DefaultGroup
 from bisheng.database.models.role import Role
 from bisheng.database.models.role_access import RoleAccess, AccessType, WebMenuResource
 from bisheng.database.models.template import Template
-from bisheng.finetune.domain.models.sft_model import SftModel
 from bisheng.tool.domain.models.gpts_tools import GptsTools
 from bisheng.tool.domain.models.gpts_tools import GptsToolsType
 from bisheng.user.domain.models.user import User
@@ -131,36 +129,16 @@ async def init_default_data():
                     await session.exec(
                         update(GptsTools).where(GptsTools.id.in_(jr_types)).values(type=8))
                     await session.commit()
-                # 初始化配置可用于微调的基准模型
-                preset_models = await session.exec(select(SftModel).limit(1))
-                preset_models = preset_models.all()
-                if not preset_models:
-                    preset_models = []
-                    json_items = json.loads(read_from_conf('../database/data/sft_model.json'))
-                    for item in json_items:
-                        preset_model = SftModel(**item)
-                        preset_models.append(preset_model)
-                    session.add_all(preset_models)
-                    await session.commit()
 
-                # 初始化补充默认的技能版本表
-                flow_version = await session.exec(select(FlowVersion).limit(1))
-                flow_version = flow_version.all()
-                if not flow_version:
-                    sql_query = text(
-                        "INSERT INTO `flowversion` (`name`, `flow_id`, `data`, `user_id`, `is_current`, `is_delete`) \
-                     select 'v0', `id` as flow_id, `data`, `user_id`, 1, 0 from `flow`;")
-                    await session.execute(sql_query)
-                    await session.commit()
-                    # 修改表单数据表
-                    sql_query = text(
-                        'UPDATE `t_variable_value` a SET a.version_id=(SELECT `id` from `flowversion` '
-                        'WHERE flow_id=a.flow_id and is_current=1)'
-                    )
-                    await session.execute(sql_query)
-                    await session.commit()
             # 初始化数据库config
             await settings.init_config()
+            try:
+                from bisheng.telemetry_search.domain.init_dataset import init_dashboard_datasets
+
+                # init dashboard data
+                await init_dashboard_datasets()
+            except Exception as e:
+                logger.error(f"dashboard data init error: {e}")
         except Exception as exc:
             # if the exception involves tables already existing
             # we can ignore it

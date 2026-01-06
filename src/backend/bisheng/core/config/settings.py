@@ -57,7 +57,7 @@ class PasswordConf(BaseModel):
 
 class SystemLoginMethod(BaseModel):
     """ System Login Method Config """
-    bisheng_pro: bool = Field(default=False, description='是否是商业版, 从环境变量获取')
+    bisheng_pro: bool = Field(default=False, description='是否是商业版, 校验配置的license')
     admin_username: Optional[str] = Field(default=None, description='通过网关注册的系统管理员用户名')
     allow_multi_login: bool = Field(default=True, description='是否允许多点登录')
 
