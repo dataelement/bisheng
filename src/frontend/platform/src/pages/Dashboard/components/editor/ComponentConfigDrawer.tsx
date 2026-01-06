@@ -40,7 +40,7 @@ export const CHART_TYPES: {
     { label: "查询组件", value: ChartType.Query, hasStack: false }
   ];
 
-export function ComponentConfigDrawer() {
+export function ComponentConfigDrawer({showChartSelector}: {showChartSelector:boolean}) {
   const { editingComponent, updateEditingComponent } = useComponentEditorStore();
   const { refreshChart } = useEditorDashboardStore();
 
@@ -258,9 +258,8 @@ export function ComponentConfigDrawer() {
   }
 
   return (
-    <div className="fixed right-0 top-14 bottom-0 flex bg-background border-l border-border">
-
-      {false ? (
+   <div className="h-full flex bg-background border-l border-border">
+      {showChartSelector? (
         <ChartSelector
           charts={[
             { id: '1', name: '堆叠条形图-图表名称', dataset: '会话500-数据集' },
@@ -272,7 +271,7 @@ export function ComponentConfigDrawer() {
         />
       ) : (
         <>
-          <div className={`border-r flex flex-col h-full transition-all duration-300 ${configCollapsed.basic ? "w-12" : "w-[400px]"} shrink-0`}>
+          <div className={`border-r flex flex-col h-full transition-all duration-300 ${configCollapsed.basic ? "w-12" : "w-[300px]"} shrink-0`}>
             {configCollapsed.basic ? (
               <CollapseLabel
                 label="基础配置"
@@ -503,7 +502,7 @@ export function ComponentConfigDrawer() {
               </div>
             )}
           </div>
-          <div className={`flex flex-col h-full transition-all duration-300 ${configCollapsed.data ? "w-12 shrink-0" : "w-[400px]"}`}>
+          <div className={`flex flex-col h-full transition-all duration-300 ${configCollapsed.data ? "w-12 shrink-0" : "w-[300px]"}`}>
             {configCollapsed.data ? (
               <CollapseLabel label="数据集配置" onClick={() => toggleCollapse('data')} icon={<ChevronLeft />} />
             ) : (

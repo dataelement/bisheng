@@ -58,7 +58,7 @@ export function DashboardConfigPanel({ collapsed = false, onCollapse }: Dashboar
   )
 
   return (
-    <div className="fixed right-0 top-14 bottom-0 flex bg-background border-l border-border">
+    <div className="h-full flex bg-background border-l border-border">
       <div className={`border-r flex flex-col h-full transition-all duration-300 ${collapsed ? "w-12" : "w-[400px]"} shrink-0`}>
         {collapsed ? (
           <CollapseLabel
