@@ -7,8 +7,8 @@ on:
       - "build.*"
 
 jobs:
-  build_x86_64:
-    name: Build for x86_64
+  build_pyc:
+    name: Build for pyc files only
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -23,26 +23,16 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential
-          pip install --upgrade pip setuptools wheel
-          pip install cython
-
       - name: Build and Clean Artifacts
         working-directory: ./bisheng-telemetry-search/telemetry_search
         run: |
           # 执行构建
-          python build_all.py --delete-source
+          python -m compileall -b .
           
           # 在上传前彻底清理源代码和中间文件
           # 即使 build_all.py 做了清理，这里再次强制清理，防止 .c 文件泄露
-          find . -name "*.c" -delete
-          find . -name "*.cpp" -delete
+          find . -name "*.py" -delete
           find . -name "__pycache__" -exec rm -rf {} +
-          rm -rf ./build
-          rm -f build_all.py setup.py # 删除构建脚本本身
           
           # 准备输出
           mkdir ../../build_output
@@ -51,64 +41,15 @@ jobs:
           echo "Listing artifacts to be uploaded:"
           ls -R ../../build_output/
 
-      - name: Upload x86_64 build artifacts
+      - name: Upload PYC Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: telemetry_search-x86_64
-          path: ./build_output/*
-
-  build_arm:
-    name: Build for ARM
-    runs-on: ubuntu-22.04-arm
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          repository: dataelement/bisheng-telemetry-search
-          token: ${{ secrets.CROSS_REPO_TOKEN }}
-          path: bisheng-telemetry-search
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential
-          pip install --upgrade pip setuptools wheel
-          pip install cython
-
-      - name: Build and Clean Artifacts
-        working-directory: ./bisheng-telemetry-search/telemetry_search
-        run: |
-          # 1. 执行构建
-          python build_all.py --delete-source
-          
-          # 2. [关键] 强制清理 .c / .cpp / __pycache__
-          find . -name "*.c" -delete
-          find . -name "*.cpp" -delete
-          find . -name "__pycache__" -exec rm -rf {} +
-          rm -rf ./build
-          rm -f build_all.py setup.py
-          
-          # 3. 准备输出
-          mkdir ../../build_output
-          cp -r ./* ../../build_output/
-          
-          echo "Listing artifacts to be uploaded:"
-          ls -R ../../build_output/
-
-      - name: Upload ARM build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: telemetry_search-arm
+          name: telemetry_search
           path: ./build_output/*
 
   deploy_to_sso_project:
     name: Deploy Artifacts to SSO Project
-    needs: [ build_x86_64, build_arm ]
+    needs: [ build_pyc ]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout SSO Project
@@ -122,30 +63,16 @@ jobs:
           # 确保拉取完整的历史以便正确提交
           fetch-depth: 0
 
-      - name: Download x86_64 build artifacts
+      - name: Download PYC Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: telemetry_search-x86_64
-          path: ./telemetry_search_x86_64
-
-      - name: Download ARM build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: telemetry_search-arm
-          path: ./telemetry_search_arm
+          name: telemetry_search
+          path: ./telemetry_search
 
       - name: Merge and Place Files
         run: |
-          # 创建临时合并目录
-          mkdir -p ./telemetry_search
           
-          # 先复制 x86_64 文件
-          cp -r ./telemetry_search_x86_64/* ./telemetry_search/
-          
-          # 再复制 ARM 文件 (不会覆盖 .so，因为文件名包含架构信息；会覆盖 .py，但应该是一样的)
-          cp -r ./telemetry_search_arm/* ./telemetry_search/
-          
-          find ./telemetry_search -name "*.c" -delete
+          find ./telemetry_search -name "*.py" -delete
           
           # 移动到目标仓库目录
           cp -r ./telemetry_search ./bisheng/src/backend/bisheng/
