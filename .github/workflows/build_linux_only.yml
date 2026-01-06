@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - 'build.*'
+      - "build.*"
 
 jobs:
   build_x86_64:
@@ -12,29 +12,159 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           repository: dataelement/bisheng-telemetry-search
           token: ${{ secrets.CROSS_REPO_TOKEN }}
           path: bisheng-telemetry-search
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
       - name: Install build dependencies
         run: |
-          apt-get update
-          apt-get install -y build-essential
+          sudo apt-get update
+          sudo apt-get install -y build-essential
           pip install --upgrade pip setuptools wheel
           pip install cython
 
-      - name: Build the project
-        working-directory: ./bisheng-telemetry-search
+      - name: Build and Clean Artifacts
+        working-directory: ./bisheng-telemetry-search/telemetry_search
         run: |
+          # 执行构建
           python build_all.py --delete-source
-          ls -lh
           
-        
+          # 在上传前彻底清理源代码和中间文件
+          # 即使 build_all.py 做了清理，这里再次强制清理，防止 .c 文件泄露
+          find . -name "*.c" -delete
+          find . -name "*.cpp" -delete
+          find . -name "__pycache__" -exec rm -rf {} +
+          rm -rf ./build
+          rm -f build_all.py setup.py # 删除构建脚本本身
           
+          # 准备输出
+          mkdir ../../build_output
+          cp -r ./* ../../build_output/
+          
+          echo "Listing artifacts to be uploaded:"
+          ls -R ../../build_output/
+
+      - name: Upload x86_64 build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: telemetry_search-x86_64
+          path: ./build_output/*
+
+  build_arm:
+    name: Build for ARM
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          repository: dataelement/bisheng-telemetry-search
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+          path: bisheng-telemetry-search
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+          pip install --upgrade pip setuptools wheel
+          pip install cython
+
+      - name: Build and Clean Artifacts
+        working-directory: ./bisheng-telemetry-search/telemetry_search
+        run: |
+          # 1. 执行构建
+          python build_all.py --delete-source
+          
+          # 2. [关键] 强制清理 .c / .cpp / __pycache__
+          find . -name "*.c" -delete
+          find . -name "*.cpp" -delete
+          find . -name "__pycache__" -exec rm -rf {} +
+          rm -rf ./build
+          rm -f build_all.py setup.py
+          
+          # 3. 准备输出
+          mkdir ../../build_output
+          cp -r ./* ../../build_output/
+          
+          echo "Listing artifacts to be uploaded:"
+          ls -R ../../build_output/
+
+      - name: Upload ARM build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: telemetry_search-arm
+          path: ./build_output/*
+
+  deploy_to_sso_project:
+    name: Deploy Artifacts to SSO Project
+    needs: [ build_x86_64, build_arm ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout SSO Project
+        uses: actions/checkout@v4
+        with:
+          repository: dataelement/bisheng
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+          # 使用 ref 指定分支，而不是 base
+          ref: feat/2.3.0
+          path: bisheng
+          # 确保拉取完整的历史以便正确提交
+          fetch-depth: 0
+
+      - name: Download x86_64 build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: telemetry_search-x86_64
+          path: ./telemetry_search_x86_64
+
+      - name: Download ARM build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: telemetry_search-arm
+          path: ./telemetry_search_arm
+
+      - name: Merge and Place Files
+        run: |
+          # 创建临时合并目录
+          mkdir -p ./telemetry_search
+          
+          # 先复制 x86_64 文件
+          cp -r ./telemetry_search_x86_64/* ./telemetry_search/
+          
+          # 再复制 ARM 文件 (不会覆盖 .so，因为文件名包含架构信息；会覆盖 .py，但应该是一样的)
+          cp -r ./telemetry_search_arm/* ./telemetry_search/
+          
+          find ./telemetry_search -name "*.c" -delete
+          
+          # 移动到目标仓库目录
+          cp -r ./telemetry_search ./bisheng/src/backend/bisheng/
+          
+          echo "Final content of target directory:"
+          ls -lh ./bisheng/src/backend/bisheng/telemetry_search
+
+      - name: Commit and Push changes
+        working-directory: ./bisheng
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add .
+          
+          # 检查是否有变更，有才提交
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update telemetry_search build artifacts [skip ci]"
+            git push origin feat/2.3.0
+          fi
