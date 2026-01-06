@@ -16,6 +16,7 @@ from bisheng.database.models.group import Group, DefaultGroup
 from bisheng.database.models.role import Role
 from bisheng.database.models.role_access import RoleAccess, AccessType, WebMenuResource
 from bisheng.database.models.template import Template
+from bisheng.telemetry_search.domain.init_dataset import init_dashboard_datasets
 from bisheng.tool.domain.models.gpts_tools import GptsTools
 from bisheng.tool.domain.models.gpts_tools import GptsToolsType
 from bisheng.user.domain.models.user import User
@@ -132,13 +133,9 @@ async def init_default_data():
 
             # 初始化数据库config
             await settings.init_config()
-            try:
-                from bisheng.telemetry_search.domain.init_dataset import init_dashboard_datasets
 
-                # init dashboard data
-                await init_dashboard_datasets()
-            except Exception as e:
-                logger.error(f"dashboard data init error: {e}")
+            # init dashboard data
+            await init_dashboard_datasets()
         except Exception as exc:
             # if the exception involves tables already existing
             # we can ignore it

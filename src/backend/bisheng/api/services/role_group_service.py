@@ -22,6 +22,7 @@ from bisheng.database.models.group_resource import GroupResourceDao, ResourceTyp
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.telemetry_search.domain.services.dashboard import DashboardService
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
@@ -348,7 +349,6 @@ class RoleGroupService():
 
     async def get_group_dashboards(self, group_id: int, keyword: str, page_size: int, page_num: int) -> (List[Any],
                                                                                                          int):
-        from bisheng.telemetry_search.domain.services.dashboard import DashboardService
 
         """ 获取用户组下的仪表盘列表 """
         # 查询用户组下的仪表盘ID列表
