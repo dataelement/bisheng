@@ -10,16 +10,14 @@ from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Request, Up
 from fastapi.responses import StreamingResponse
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.runnables import RunnableConfig
 from loguru import logger
 from sse_starlette import EventSourceResponse
 
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.workflow import WorkFlowService
-from bisheng.api.services.workstation import (SSECallbackClient, WorkstationConversation,
+from bisheng.api.services.workstation import (WorkstationConversation,
                                               WorkstationMessage, WorkStationService)
-from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import FrequentlyUsedChat
 from bisheng.api.v1.schemas import WorkstationConfig, resp_200, ExcelRule, UnifiedResponseModel
@@ -319,7 +317,8 @@ def getFileContent(filepath: str, invoke_user_id: int):
         ['after', 'after'],
         1000,
         0,
-        excel_rule=ExcelRule()
+        excel_rule=ExcelRule(),
+        no_summary=True
     )
     return knowledge_imp.KnowledgeUtils.chunk2promt(''.join(raw_texts), {'source': file_name})
 

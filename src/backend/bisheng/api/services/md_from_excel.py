@@ -84,10 +84,10 @@ def unmerge_and_read_sheet(sheet_obj):
                 row_empty = False
         if row_empty:
             empty_row_num += 1
-            empty_row_end = r_idx
         else:
             empty_row_num = 0
-            empty_row_end = 0
+    if empty_row_num > 0:
+        data_grid = data_grid[:-empty_row_num]
 
     merged_cell_ranges = list(sheet_obj.merged_cells.ranges)
     for merged_range in merged_cell_ranges:
@@ -96,8 +96,7 @@ def unmerge_and_read_sheet(sheet_obj):
         for r in range(min_row, max_row + 1):
             for c in range(min_col, max_col + 1):
                 data_grid[r - 1][c - 1] = top_left_cell_value
-    if empty_row_end and empty_row_end - max_empty_rows > 0:
-        data_grid = data_grid[:empty_row_end - max_empty_rows]
+
     return data_grid
 
 
