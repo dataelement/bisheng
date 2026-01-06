@@ -116,7 +116,11 @@ export function isVarInFlow(nodeId, nodes, varName, varNameCn) {
     const res = nodes.some(node =>
         varNodeId === node.id ? node.data.group_params.some(group =>
             group.params.some(param => {
-                if (param.type === 'input_list' && varName.indexOf('preset_question') !== -1) {
+                if (param.key === 'custom_variables') {
+                    const questionId = varName.split('#')[1]
+                    const quwstionStr = varNameCn?.split('/')[1] || ''
+                    return param.value.some(item => item.key === questionId && item.label === quwstionStr)
+                } else if (param.type === 'input_list' && varName.indexOf('preset_question') !== -1) {
                     const questionId = varName.split('#')[1]
                     const quwstionStr = varNameCn?.split('/')[1] || ''
                     return param.value.some(item => item.key === questionId && item.value === quwstionStr) // id and name 必须一致

@@ -1067,6 +1067,7 @@
     "delete_chat": "Delete Chat",
     "create_build": "Create Build",
     "update_build": "Update build",
+    "delete_build": "Delete Build",
     "create_knowledge": "Create Knowledge Base",
     "delete_knowledge": "Delete Knowledge Base",
     "upload_file": "Upload File to Knowledge Base",
