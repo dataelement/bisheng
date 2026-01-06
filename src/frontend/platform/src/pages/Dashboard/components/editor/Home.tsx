@@ -23,7 +23,7 @@ export default function Home() {
 
                 {/* Chart Grid */}
                 <div className="flex justify-center flex-wrap gap-4">
-                    {ChartItems.flatMap(e => e.data).map((item) => (
+                    {ChartItems.map((item) => (
                         <div
                             key={item.type}
                             onClick={() => handleItemClick(item)}

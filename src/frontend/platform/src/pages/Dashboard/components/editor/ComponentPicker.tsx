@@ -3,7 +3,7 @@ import { cn } from '@/utils';
 import React, { useState } from 'react';
 import { ChartType } from '../../types/dataConfig';
 
-export const ChartItems = [
+export const ChartGroupItems = [
     {
         label: '柱状图',
         data: [
@@ -43,6 +43,7 @@ export const ChartItems = [
         ]
     }
 ];
+export const ChartItems = ChartGroupItems.flatMap(item => item.data);
 
 // 定义数据项结构
 export interface PickerItem {
@@ -91,7 +92,7 @@ const ComponentPicker = ({ children, className, onSelect }: ComponentPickerProps
             <PopoverContent align="start" className={cn("w-[332px] p-4 shadow-xl", className)}>
                 <div className="space-y-2">
                     {
-                        ChartItems.map(item => (
+                        ChartGroupItems.map(item => (
                             <div>
                                 <h4 className="text-sm font-medium mb-2 px-1">{item.label}</h4>
                                 <ItemGrid list={item.data} />

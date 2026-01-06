@@ -17,7 +17,7 @@ import { useNavigate } from "react-router-dom"
 import { usePublishDashboard } from "../../hook"
 import ComponentPicker from "./ComponentPicker"
 import ThemePicker from "./ThemePicker"
-import { Dashboard } from "../../types/dataConfig"
+import { ChartType, Dashboard } from "../../types/dataConfig"
 import { Separator } from "@/components/bs-ui/separator"
 import { Badge } from "@/components/bs-ui/badge"
 
@@ -270,7 +270,10 @@ export function EditorHeader({
                         添加图表
                     </Button>
                 </ComponentPicker>
-                <Button variant="outline" size="sm" className="gap-2">
+                <Button variant="outline" size="sm" className="gap-2" onClick={() => addComponentToLayout({
+                    title: "",
+                    type: ChartType.Query
+                })}>
                     <FunnelIcon size="14" />
                     添加查询组件
                 </Button>

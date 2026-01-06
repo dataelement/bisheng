@@ -206,59 +206,59 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
 
     return (
         <>
-        <div className="flex h-full">
-            <div
-                id="edit-charts-panne"
-                ref={containerRef}
-                className="flex-1 p-2 overflow-auto"
-                style={{
-                    backgroundColor: currentDashboard.style_config.theme === 'dark' ? '#1a1a1a' : '#f5f5f5',
-                }}
-                onClick={handleCanvasClick}
-            >
-                <div className="mx-auto relative" style={{
-                    ...gridBackgroundStyle,
-                }}>
-                    {mounted && (
-                        <ReactGridLayout
-                            className="layout"
-                            layout={layouts}
-                            width={width}
-                            gridConfig={{
-                                cols: 24,
-                                rowHeight: 32
-                            }}
-                            dragConfig={{ enabled: !isPreviewMode }}
-                            resizeConfig={
-                                {
-                                    enabled: !isPreviewMode,
-                                    handles: ["sw", "nw", "se", "ne"]
+            <div className="flex h-full">
+                <div
+                    id="edit-charts-panne"
+                    ref={containerRef}
+                    className="flex-1 p-2 overflow-auto"
+                    style={{
+                        backgroundColor: currentDashboard.style_config.theme === 'dark' ? '#1a1a1a' : '#f5f5f5',
+                    }}
+                    onClick={handleCanvasClick}
+                >
+                    <div className="mx-auto relative" style={{
+                        ...gridBackgroundStyle,
+                    }}>
+                        {mounted && (
+                            <ReactGridLayout
+                                className="layout"
+                                layout={layouts}
+                                width={width}
+                                gridConfig={{
+                                    cols: 24,
+                                    rowHeight: 32
                                 }}
-                            onLayoutChange={handleLayoutChange}
-                            draggableHandle=".drag-handle"
-                            margin={[16, 16]}
-                            containerPadding={[0, 0]}
-                            compactor={verticalCompactor}
-                        >
-                            {currentDashboard.components.map((component) => (
-                                <div key={component.id} className="drag-handle">
-                                    <ComponentWrapper
-                                        dashboards={dashboards}
-                                        component={component}
-                                        isDark={currentDashboard.style_config.theme === 'dark'}
-                                        isPreviewMode={isPreviewMode}
-                                        onDuplicate={handleDuplicate}
-                                        onCopyTo={handleCopyTo}
-                                        onDelete={handleDelete}
-                                    />
-                                </div>
-                            ))}
-                        </ReactGridLayout>
-                    )}
+                                dragConfig={{ enabled: !isPreviewMode }}
+                                resizeConfig={
+                                    {
+                                        enabled: !isPreviewMode,
+                                        handles: ["sw", "nw", "se", "ne"]
+                                    }}
+                                onLayoutChange={handleLayoutChange}
+                                draggableHandle=".drag-handle"
+                                margin={[16, 16]}
+                                containerPadding={[0, 0]}
+                                compactor={verticalCompactor}
+                            >
+                                {currentDashboard.components.map((component) => (
+                                    <div key={component.id} className="drag-handle">
+                                        <ComponentWrapper
+                                            dashboards={dashboards}
+                                            component={component}
+                                            isDark={currentDashboard.style_config.theme === 'dark'}
+                                            isPreviewMode={isPreviewMode}
+                                            onDuplicate={handleDuplicate}
+                                            onCopyTo={handleCopyTo}
+                                            onDelete={handleDelete}
+                                        />
+                                    </div>
+                                ))}
+                            </ReactGridLayout>
+                        )}
+                    </div>
                 </div>
-            </div>
-            {/* 配置抽屉 */}
-            <ComponentConfigDrawer />
+                {/* 配置抽屉 */}
+                {!isPreviewMode && <ComponentConfigDrawer />}
             </div>
         </>
     )

@@ -12,11 +12,9 @@ import "./index.css"
 
 interface ComponentWrapperProps {
     component: DashboardComponent
-    isSelected: boolean
     isPreviewMode: boolean
-    dashboards: Dashboard[],
+    dashboards: Dashboard[]
     isDark: boolean
-    onClick: () => void
     onDuplicate: (componentId: string) => void
     onCopyTo: (componentId: string, targetDashboardId: string) => void
     onDelete: (componentId: string) => void
