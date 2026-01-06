@@ -31,7 +31,7 @@ export function EditorHeader({
     dashboard,
     dashboardId,
 }: EditorHeaderProps) {
-    const { hasUnsavedChanges, isSaving, reset, setIsSaving, setHasUnsavedChanges } = useEditorDashboardStore()
+    const { hasUnsavedChanges, isSaving, reset, setIsSaving, setHasUnsavedChanges, addComponentToLayout } = useEditorDashboardStore()
     const [isEditingTitle, setIsEditingTitle] = useState(false)
     const [title, setTitle] = useState(dashboard?.title || "")
     const inputRef = useRef<HTMLInputElement>(null)
@@ -251,11 +251,11 @@ export function EditorHeader({
                     />
                 ) : (
                     <h1
-                        className="font-medium truncate cursor-pointer transition-colors"
+                        className="max-w-96 font-medium truncate cursor-pointer transition-colors"
                         title={dashboard?.title}
                     // onDoubleClick={handleTitleDoubleClick}
                     >
-                        {dashboard?.title || "未命名看板"}
+                        {dashboard?.title}
                     </h1>
                 )}
                 <Badge variant="outline" className=" font-normal bg-gray-100">{getSaveStatus()}</Badge>
@@ -264,7 +264,7 @@ export function EditorHeader({
             {/* Middle section */}
             <div className="flex items-center gap-4">
                 {/* Add Component */}
-                <ComponentPicker >
+                <ComponentPicker onSelect={addComponentToLayout}>
                     <Button variant="outline" size="sm" className="gap-2">
                         <Grid2X2PlusIcon size="14" />
                         添加图表

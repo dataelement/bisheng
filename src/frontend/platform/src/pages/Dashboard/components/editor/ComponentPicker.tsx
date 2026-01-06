@@ -2,7 +2,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/bs-ui/popo
 import { cn } from '@/utils';
 import React, { useState } from 'react';
 import { ChartType } from '../../types/dataConfig';
-import { useEditorDashboardStore } from '@/store/dashboardStore';
 
 export const ChartItems = [
     {
@@ -25,8 +24,9 @@ export const ChartItems = [
         label: '折线图',
         data: [
             { type: ChartType.Line, label: '基础折线图' },
+            { type: ChartType.StackedLine, label: '堆叠折线图' },
             { type: ChartType.Area, label: '面积图' },
-            { type: ChartType.StackedLine, label: '堆叠折线图' }
+            { type: ChartType.StackedArea, label: '堆叠面积图' }
         ]
     },
     {
@@ -51,21 +51,16 @@ export interface PickerItem {
 }
 
 interface ComponentPickerProps {
-    items: PickerItem[];
-    onSelect: (id: string) => void;
+    onSelect: (data: { title: string, type: ChartType }) => void;
     children: React.ReactNode;
     className?: string;
 }
 
-const ComponentPicker = ({ children, className }: ComponentPickerProps) => {
+const ComponentPicker = ({ children, className, onSelect }: ComponentPickerProps) => {
     const [open, setOpen] = useState(false);
-    const { addComponentToLayout } = useEditorDashboardStore()
 
     const handleItemClick = (item) => {
-        addComponentToLayout({
-            title: item.label,
-            type: item.type
-        });
+        onSelect(item)
         setOpen(false);
     };
 
@@ -75,7 +70,7 @@ const ComponentPicker = ({ children, className }: ComponentPickerProps) => {
                 <div
                     key={item.type}
                     onClick={() => handleItemClick(item)}
-                    className="flex flex-col items-center group gap-2 outline-none cursor-pointer"
+                    className={`flex flex-col items-center group gap-2 outline-none cursor-pointer ${item.type === ChartType.StackedLine && 'mr-2'}`}
                 >
                     <div className="w-[88px] h-[86px] flex flex-col items-center justify-center border rounded-md group-hover:bg-blue-50 transition-colors group-hover:border-primary">
                         <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/${item.type}.png`} className="w-8 h-8 mb-2" />

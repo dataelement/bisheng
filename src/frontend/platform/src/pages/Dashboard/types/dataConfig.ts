@@ -109,6 +109,8 @@ export enum ChartType {
   Line = 'line',
   /** 面积图 */
   Area = 'area',
+  /** 堆叠面积图 */
+  StackedArea = 'stacked-area',
   /** 堆叠折线图 */
   StackedLine = 'stacked-line',
   /** 饼状图 */

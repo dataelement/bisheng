@@ -183,7 +183,8 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
             backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(svgString)}")`,
             backgroundRepeat: 'repeat',
             backgroundAttachment: 'local',
-            backgroundPosition: `${0}px ${0}px`
+            backgroundPosition: `${0}px ${0}px`,
+            height: '100%'
         };
     }, [width, isPreviewMode, mounted]);
 
