@@ -13,13 +13,14 @@ interface MetricCardProps {
 }
 
 export function MetricCard({ data, dataConfig, styleConfig, isDark }: MetricCardProps) {
-  const { value, title, trend, format } = data
   console.log('data :>> ', data);
   const indicatorName = '指标名称'
   const subTitle = '副标题' // style中获取
 
   // format
   const [formatValue, displayUnit] = useMemo(() => {
+    if (!data) return ['', '']
+    const { value } = data
     if (!dataConfig.metrics?.length || value === undefined || value === null) {
       return [value, ''];
     }
@@ -76,14 +77,14 @@ export function MetricCard({ data, dataConfig, styleConfig, isDark }: MetricCard
     const finalUnit = suffix || unitLabel;
 
     return [result, finalUnit];
-  }, [dataConfig, value]);
+  }, [dataConfig, data]);
 
   // 获取趋势图标
   const getTrendIcon = () => {
-    if (!trend) return null
+    if (!data.trend) return null
 
     const iconClass = "h-4 w-4"
-    switch (trend.direction) {
+    switch (data.trend.direction) {
       case 'up':
         return <ArrowUp className={`${iconClass} text-green-500`} />
       case 'down':
@@ -95,9 +96,9 @@ export function MetricCard({ data, dataConfig, styleConfig, isDark }: MetricCard
 
   // 获取趋势颜色
   const getTrendColor = () => {
-    if (!trend) return ''
+    if (!data.trend) return ''
 
-    switch (trend.direction) {
+    switch (data.trend.direction) {
       case 'up':
         return 'text-green-500'
       case 'down':

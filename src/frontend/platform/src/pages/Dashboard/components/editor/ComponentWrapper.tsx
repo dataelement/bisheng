@@ -88,12 +88,12 @@ export function ComponentWrapper({
 
     return (
         <div
-            className={`group relative w-full h-full bg-background rounded-lg overflow-visible transition-all ${!isPreviewMode && isSelected ? 'ring-2 ring-primary ring-offset-2' : 'border border-border'
+            className={`group relative w-full h-full bg-background rounded-md overflow-visible transition-all hover:border hover:border-primary ${!isPreviewMode && isSelected ? 'border border-primary' : ''
                 }`}
             onClick={handleClick}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
-            style={{ cursor: isPreviewMode ? 'default' : 'pointer' }}
+            style={{ cursor: isPreviewMode ? 'default' : 'grab' }}
         >
             {/* More button - top right corner */}
             {!isPreviewMode && (isSelected || isHovered) && componentData.type !== ChartType.Metric && (
