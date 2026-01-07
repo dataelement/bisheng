@@ -22,6 +22,7 @@ from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.message import ChatMessageDao, ChatMessage
 from bisheng.database.models.session import MessageSessionDao, MessageSession
+from bisheng.utils.threadpool import thread_pool
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeStartData, NodeEndData, UserInputData, GuideWordData, GuideQuestionData, \
     OutputMsgData, StreamMsgData, StreamMsgOverData, OutputMsgChooseData, OutputMsgInputData
@@ -387,7 +388,9 @@ class RedisCallback(BaseCallback):
 
         # 如果是文档溯源，处理召回的chunk
         if chat_response.source not in [0, 4]:
-            sync_process_source_document(source_documents, self.chat_id, message.id, chat_response.message.get('msg'))
+            thread_pool.submit(f"workflow_source_document_{self.chat_id}",
+                               sync_process_source_document,
+                               source_documents, self.chat_id, message.id, chat_response.message.get('msg'))
 
         # 判断是否需要新建会话
         if not self.create_session and chat_response.category != WorkflowEventType.UserInput.value:

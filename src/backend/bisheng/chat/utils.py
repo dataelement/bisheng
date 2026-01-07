@@ -91,7 +91,7 @@ def extract_answer_keys(answer, llm):
         keywords = ast.literal_eval(keywords_str[9:])
     except Exception:
         import jieba.analyse
-        logger.warning(f'llm {llm} extract_not_support, change to jieba')
+        logger.warning(f'llm extract_not_support, change to jieba')
         keywords = jieba.analyse.extract_tags(answer, topK=100, withWeight=False)
 
     return keywords
@@ -110,7 +110,7 @@ async def extract_answer_keys_async(answer, llm):
         keywords = ast.literal_eval(keywords_str[9:])
     except Exception:
         import jieba.analyse
-        logger.warning(f'llm {llm} extract_not_support, change to jieba')
+        logger.warning(f'llm extract_not_support, change to jieba')
         keywords = jieba.analyse.extract_tags(answer, topK=100, withWeight=False)
 
     return keywords
