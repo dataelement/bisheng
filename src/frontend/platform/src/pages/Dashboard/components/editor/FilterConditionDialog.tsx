@@ -20,6 +20,7 @@ import {
 } from "@/components/bs-ui/dialog"
 import { Checkbox } from "@/components/bs-ui/checkbox"
 import { Badge } from "@/components/bs-ui/badge"
+import { generateUUID } from "@/components/bs-ui/utils"
 
 /* ================== 类型定义 ================== */
 export type LogicOperator = "and" | "or"
@@ -52,6 +53,8 @@ export interface DatasetField {
 export interface FilterCondition {
   id: string
   fieldCode?: string
+  fieldId?: string
+  fieldName?: string
   fieldType?: FieldType
   operator?: FilterOperator
   value?: string | number | string[]
@@ -73,7 +76,7 @@ interface Props {
 
 /* ================== 工具函数 ================== */
 const createEmptyCondition = (): FilterCondition => ({
-  id: crypto.randomUUID()
+  id: generateUUID(6),
 })
 
 const operatorNeedsValue = (op?: FilterOperator) =>
@@ -297,7 +300,7 @@ export function FilterConditionDialog({
       else operator = "equals"
 
       return {
-        id: c.id ?? crypto.randomUUID(),
+        id: c.id ?? generateUUID(6),
         fieldCode: c.fieldCode ?? "",
         fieldType: field?.fieldType,
         operator,
@@ -375,7 +378,7 @@ export function FilterConditionDialog({
   }
 
   const handleFieldChange = (id: string, fieldCode: string) => {
-    const field = filteredFields.find(f => f.fieldCode === fieldCode)
+    const field = filteredFields.find(f => f.fieldCode === fieldCode)    
     const isEnum = isEnumField(fieldCode)
 
     let defaultOperator: FilterOperator
@@ -387,6 +390,8 @@ export function FilterConditionDialog({
     updateCondition(id, {
       fieldCode,
       fieldType: field?.fieldType,
+      fieldId: field?.fieldId || fieldCode, 
+      fieldName: field?.displayName,
       filterType: isEnum ? "enum" : "conditional",
       operator: draft.conditions.find(c => c.id === id)?.operator ?? defaultOperator,
       value: draft.conditions.find(c => c.id === id)?.value ?? (isEnum ? [] : "")
@@ -442,11 +447,13 @@ export function FilterConditionDialog({
       conditions: draft.conditions
         .filter(c => c.fieldCode && c.value !== undefined)
         .map(c => ({
-          id: c.id,
-          fieldCode: c.fieldCode,
-          operator: c.operator,
-          value: c.value,
-          filterType: c.filterType
+        id: c.id,
+        fieldId: c.fieldId,
+        fieldCode: c.fieldCode,
+        fieldName: c.fieldName,
+        operator: c.operator,
+        value: c.value,
+        filterType: c.filterType
         }))
     })
 

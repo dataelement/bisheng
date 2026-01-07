@@ -130,11 +130,12 @@ export function ComponentConfigDrawer() {
           return
         }
         const newDimension = {
-          id: `${safeFieldId}-${Date.now()}`, // ⚠ 保留原 id 也可用
+          id: `${safeFieldId}-${Date.now()}`,
           fieldId: safeFieldId,
           displayName: field.displayName || field.fieldName,
           originalName: field.displayName || field.fieldName,
-          sort: 'default' as const
+          fieldType: field.role,
+          sort: null
         }
         chartState.setCategoryDimensions(prev => [...prev, newDimension])
       } else if (currentChartHasStack && stackDimensions.length === 0) {
@@ -147,7 +148,8 @@ export function ComponentConfigDrawer() {
           fieldId: safeFieldId,
           displayName: field.displayName || field.fieldName,
           originalName: field.displayName || field.fieldName,
-          sort: 'default' as const
+          fieldType: field.role,
+          sort: null
         }
         chartState.setStackDimensions(prev => [...prev, newDimension])
       } else {
@@ -163,7 +165,8 @@ export function ComponentConfigDrawer() {
         fieldId: safeFieldId,
         displayName: field.displayName || field.fieldName,
         originalName: field.displayName || field.fieldName,
-        sort: 'default' as const,
+        fieldType: field.role,
+        sort: null,
         aggregation: 'sum' as const
       }
       chartState.setValueDimensions(prev => [...prev, newMetric])
@@ -575,7 +578,7 @@ export function ComponentConfigDrawer() {
                       <Button className="w-full h-10 mt-4" onClick={handleUpdateChart}>更新图表数据</Button>
                     </>
                   ) : (
-                    <StyleConfigPanel config={styleConfig} onChange={chartState.setStyleConfig} />
+                    <StyleConfigPanel config={styleConfig} type={editingComponent.type} onChange={chartState.setStyleConfig} />
                   )}
                 </div>
               </div>

@@ -8,7 +8,7 @@ interface DimensionItem {
   id: string
   name: string
   displayName: string
-  sort: 'none' | 'asc' | 'desc'
+  sort: null | 'asc' | 'desc'
   fieldType: 'dimension' | 'metric'
   originalName: string
   aggregation?: string
@@ -25,7 +25,7 @@ interface DimensionBlockProps {
   onDragLeave?: () => void
   onDrop?: (e: React.DragEvent) => void
   onDelete: (dimensionId: string) => void
-  onSortChange?: (dimensionId: string, sortValue: 'none' | 'asc' | 'desc') => void
+  onSortChange?: (dimensionId: string, sortValue: null | 'asc' | 'desc') => void
   onEditDisplayName: (dimensionId: string, originalName: string, displayName: string) => void
   onAggregationChange?: (dimensionId: string, aggregation: string) => void
   onFormatChange?: (dimensionId: string, format: string) => void
@@ -52,15 +52,26 @@ export function DimensionBlock({
     dimensionId: string
     menuType: 'sort' | 'aggregation' | 'format'
   } | null>(null)
-
+  const [selectedDimensionId, setSelectedDimensionId] = useState<string | null>(null)
   // 获取字段样式
-  const getFieldTypeStyle = (fieldType: 'dimension' | 'metric') => {
-    if (fieldType === 'dimension') {
-      return 'bg-blue-100 text-blue-800 border-blue-200'
-    } else {
-      return 'bg-orange-100 text-orange-800 border-orange-200'
-    }
-  }
+const getFieldTypeStyle = (dimension: DimensionItem) => {
+  const isSelected = selectedDimensionId === dimension.id
+
+  const bgColor = isSelected
+    ? dimension.fieldType === 'dimension'
+      ? 'bg-blue-100'
+      : 'bg-[#E7F8FA]'
+    : dimension.fieldType === 'dimension'
+      ? 'bg-blue-50'
+      : 'bg-[#E7F8FA]'
+
+  const borderColor = dimension.fieldType === 'dimension' ? 'border-blue-300' : 'border-[#88E1EB]'
+
+  const invalidStyle = invalidIds?.has(dimension.id) ? 'border-red-500 bg-red-50' : ''
+
+  return `${bgColor} border ${borderColor} ${invalidStyle} hover:bg-opacity-80 transition-colors`
+}
+
 
   // 选项配置
   const aggregationOptions = [
@@ -72,7 +83,7 @@ export function DimensionBlock({
   ]
 
   const sortOptions = [
-    { label: '无', value: 'none' },
+    { label: '无', value: null },
     { label: '升序', value: 'asc' },
     { label: '降序', value: 'desc' }
   ]
@@ -126,14 +137,16 @@ export function DimensionBlock({
               onMouseEnter={() => setHoveredDimension(dimension.id)}
               onMouseLeave={() => setHoveredDimension(null)}
             >
-       <div 
-  className={`
-    flex items-center justify-between gap-2 p-1 rounded-md border
-    ${getFieldTypeStyle(dimension.fieldType || 'dimension')}
-    ${invalidIds?.has(dimension.id) ? 'border-red-500 bg-red-50' : ''}
-    hover:bg-opacity-80 transition-colors
-  `}
->
+          <div
+            className={`
+              flex items-center justify-between gap-2 p-1 rounded-md border
+              ${getFieldTypeStyle(dimension)}
+              ${selectedDimensionId === dimension.id ? (dimension.fieldType === 'dimension' ? 'bg-blue-100' : 'bg-[#E7F8FA]') : ''}
+              ${invalidIds?.has(dimension.id) ? 'border-red-500 bg-red-50' : ''}
+              hover:bg-opacity-80 transition-colors
+            `}
+            onClick={() => setSelectedDimensionId(dimension.id)}
+          >
 
                 {/* 字段名称 */}
                 <div className="min-w-0 flex-1">
@@ -185,7 +198,7 @@ export function DimensionBlock({
                                       key={option.value}
                                       className={`flex items-center justify-between w-full px-2 py-1 text-xs rounded ${dimension.sort === option.value ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'}`}
                                       onClick={() => {
-                                        onSortChange?.(dimension.id, option.value as 'none' | 'asc' | 'desc')
+                                        onSortChange?.(dimension.id, option.value as null | 'asc' | 'desc')
                                         setOpenMenuId(null)
                                         setHoveredMenuItem(null)
                                       }}

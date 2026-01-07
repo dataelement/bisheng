@@ -36,30 +36,60 @@ export interface StyleConfig {
 export interface ComponentStyleConfig {
   themeColor: string        // 主体颜色
   bgColor: string           // 背景颜色
+  
+  // 图表主标题
+  title?: string           // 标题内容
   titleFontSize: number     // 主标题字体大小
   titleBold: boolean        // 主标题加粗
   titleItalic: boolean      // 主标题斜体
   titleUnderline: boolean   // 主标题下划线
   titleAlign: "left" | "center" | "right" // 主标题对齐方式
-  axis: "x" | "y"           // 轴选择
-  axisTitle: string         // 轴标题文字
-  axisFontSize: number      // 轴标题字体大小
-  axisBold: boolean         // 轴标题加粗
-  axisItalic: boolean       // 轴标题斜体
-  axisUnderline: boolean    // 轴标题下划线
-  axisAlign: "left" | "center" | "right" // 轴标题对齐方式
+  
+  // X轴标题 - 新增
+  xAxisTitle?: string         // X轴标题文字
+  xAxisFontSize?: number      // X轴标题字体大小
+  xAxisBold?: boolean         // X轴标题加粗
+  xAxisItalic?: boolean       // X轴标题斜体
+  xAxisUnderline?: boolean    // X轴标题下划线
+  xAxisAlign?: "left" | "center" | "right" // X轴标题对齐方式
+  
+  // Y轴标题 - 新增
+  yAxisTitle?: string         // Y轴标题文字
+  yAxisFontSize?: number      // Y轴标题字体大小
+  yAxisBold?: boolean         // Y轴标题加粗
+  yAxisItalic?: boolean       // Y轴标题斜体
+  yAxisUnderline?: boolean    // Y轴标题下划线
+  yAxisAlign?: "left" | "center" | "right" // Y轴标题对齐方式
+  
+  // 图例
   legendPosition: "top" | "bottom" | "left" | "right" // 图例位置
   legendFontSize: number    // 图例字体大小
   legendBold: boolean       // 图例加粗
   legendItalic: boolean     // 图例斜体
   legendUnderline: boolean  // 图例下划线
   legendAlign: "left" | "center" | "right" // 图例对齐
+  
+  // 图表选项
   showLegend: boolean       // 是否显示图例
   showAxis: boolean         // 是否显示坐标轴
   showDataLabel: boolean    // 是否显示数据标签
   showGrid: boolean         // 是否显示网格线
+  
+   // 指标卡特有字段
+  metricFontSize?: number
+  metricBold?: boolean
+  metricItalic?: boolean
+  metricUnderline?: boolean
+  metricAlign?: "left" | "center" | "right"
+  
+  showSubtitle?: boolean
+  subtitle?: string
+  subtitleFontSize?: number
+  subtitleBold?: boolean
+  subtitleItalic?: boolean
+  subtitleUnderline?: boolean
+  subtitleAlign?: "left" | "center" | "right"
 }
-
 export interface Dashboard {
   id: string
   title: string
