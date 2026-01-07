@@ -21,8 +21,9 @@ export default function EditorPage() {
                 dashboard={dashboard || null}
                 dashboardId={dashboardId}
             />
-
-            <EditorCanvas isLoading={isLoading} dashboard={dashboard || null} />
+            <div className="h-[calc(100vh-64px)]">
+                <EditorCanvas isLoading={isLoading} dashboard={dashboard || null} />
+            </div>
         </div>
     )
 }

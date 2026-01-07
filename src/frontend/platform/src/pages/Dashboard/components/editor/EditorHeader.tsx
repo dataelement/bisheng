@@ -2,24 +2,22 @@
 
 import type React from "react"
 
+import { Badge } from "@/components/bs-ui/badge"
 import { Button } from "@/components/bs-ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
 import { Input } from "@/components/bs-ui/input"
+import { Separator } from "@/components/bs-ui/separator"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { getShareLink, updateDashboard } from "@/controllers/API/dashboard"
+import { updateDashboard } from "@/controllers/API/dashboard"
 import { useEditorDashboardStore } from "@/store/dashboardStore"
-import { cn, copyText } from "@/utils"
-import { ArrowLeft, Eye, FunnelIcon, Grid2X2PlusIcon, Maximize, Pencil, Plus, Share2 } from "lucide-react"
+import { ArrowLeft, FunnelIcon, Grid2X2PlusIcon } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQueryClient } from "react-query"
 import { useNavigate } from "react-router-dom"
 import { usePublishDashboard } from "../../hook"
-import ComponentPicker from "./ComponentPicker"
-import ThemePicker from "./ThemePicker"
 import { ChartType, Dashboard } from "../../types/dataConfig"
-import { Separator } from "@/components/bs-ui/separator"
-import { Badge } from "@/components/bs-ui/badge"
+import ComponentPicker from "./ComponentPicker"
 
 
 interface EditorHeaderProps {
@@ -31,7 +29,8 @@ export function EditorHeader({
     dashboard,
     dashboardId,
 }: EditorHeaderProps) {
-    const { hasUnsavedChanges, isSaving, reset, setIsSaving, setHasUnsavedChanges, addComponentToLayout } = useEditorDashboardStore()
+    const { currentDashboard, hasUnsavedChanges, isSaving, layouts,
+        reset, setIsSaving, setHasUnsavedChanges, addComponentToLayout } = useEditorDashboardStore()
     const [isEditingTitle, setIsEditingTitle] = useState(false)
     const [title, setTitle] = useState(dashboard?.title || "")
     const inputRef = useRef<HTMLInputElement>(null)
@@ -54,7 +53,7 @@ export function EditorHeader({
 
     // Save mutation
     const saveMutation = useMutation({
-        mutationFn: (data: any) => updateDashboard(dashboardId, data),
+        mutationFn: (data: any) => updateDashboard(data.id, { ...data.dashboard, layout_config: { layouts } }),
         onMutate: () => {
             setIsSaving(true)
         },
@@ -90,8 +89,9 @@ export function EditorHeader({
                 if (hasUnsavedChanges && !isSaving) {
                     console.log("[v0] Auto-saving dashboard...")
                     saveMutation.mutate({
-                        autoSave: true
-                        // data
+                        autoSave: true,
+                        id: currentDashboard?.id,
+                        dashboard: currentDashboard
                     })
                 }
             }, 10000)
@@ -179,7 +179,8 @@ export function EditorHeader({
     }
     const handleSaveAndClose = async () => {
         await saveMutation.mutateAsync({
-            // TODO 需要保存的数据
+            id: currentDashboard?.id,
+            dashboard: currentDashboard
         })
         reset()
         navigator(-1)
@@ -205,12 +206,13 @@ export function EditorHeader({
 
     // Handle save
     const handleSave = () => {
-        // if (!hasUnsavedChanges) {
-        //     return
-        // }
+        if (!hasUnsavedChanges) {
+            return
+        }
 
         saveMutation.mutate({
-            // todo data
+            id: currentDashboard?.id,
+            dashboard: currentDashboard
         })
     }
 
@@ -218,7 +220,10 @@ export function EditorHeader({
     const handlePublish = async () => {
         // If has unsaved changes, save first
         if (hasUnsavedChanges) {
-            await saveMutation.mutateAsync({})
+            await saveMutation.mutateAsync({
+                id: currentDashboard?.id,
+                dashboard: currentDashboard
+            })
         }
 
         publish(dashboard.id, false)

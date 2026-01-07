@@ -242,13 +242,16 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
                                     margin: [8, 8],
                                     containerPadding: [16, 16]
                                 }}
-                                dragConfig={{ enabled: !isPreviewMode }}
+                                dragConfig={{
+                                    enabled: !isPreviewMode,
+                                    // handle: ".drag-handle",
+                                    cancel: ".no-drag,input"
+                                }}
                                 resizeConfig={
                                     {
                                         enabled: !isPreviewMode,
                                         handles: ["sw", "nw", "se", "ne"]
                                     }}
-                                draggableHandle=".drag-handle"
                                 onLayoutChange={handleLayoutChange}
                                 compactor={verticalCompactor}
                             >

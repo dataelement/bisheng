@@ -3,7 +3,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, D
 import { Input } from "@/components/bs-ui/input"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useComponentEditorStore } from "@/store/dashboardStore"
-import { Copy, Edit3, MoreHorizontal, Trash2 } from "lucide-react"
+import { Copy, Edit3, MoreHorizontal, MoreVerticalIcon, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { ChartType, Dashboard, DashboardComponent } from "../../types/dataConfig"
 import { ChartContainer } from "../charts/ChartContainer"
@@ -27,12 +27,13 @@ export function ComponentWrapper({
 }: ComponentWrapperProps) {
     const [isHovered, setIsHovered] = useState(false)
     const [isEditing, setIsEditing] = useState(false)
-    const [title, setTitle] = useState(component.title)
     const inputRef = useRef<HTMLInputElement>(null)
     const { toast } = useToast()
+    const [title, setTitle] = useState(component.title)
     const { copyFromDashboard, editingComponent, updateEditingComponent } = useComponentEditorStore();
     const isSelected = editingComponent?.id === component.id
     const componentData = isSelected ? editingComponent : component
+    console.log('componentData :>> ', componentData);
 
     useEffect(() => {
         if (isEditing && inputRef.current) {
@@ -88,7 +89,7 @@ export function ComponentWrapper({
 
     return (
         <div
-            className={`group relative w-full h-full bg-background rounded-md overflow-visible transition-all hover:border hover:border-primary ${!isPreviewMode && isSelected ? 'border border-primary' : ''
+            className={`group relative w-full h-full bg-background rounded-md overflow-visible transition-all hover:border hover:border-primary hover:shadow-md ${!isPreviewMode && isSelected ? 'border border-primary' : ''
                 }`}
             onClick={handleClick}
             onMouseEnter={() => setIsHovered(true)}
@@ -103,9 +104,9 @@ export function ComponentWrapper({
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-7 w-7 bg-background/80 backdrop-blur-sm border border-border shadow-sm hover:bg-accent"
+                                className="h-6 w-6 bg-background/80 backdrop-blur-sm border border-border shadow-sm hover:bg-accent"
                             >
-                                <MoreHorizontal className="h-4 w-4" />
+                                <MoreVerticalIcon className="h-4 w-4" />
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" >
@@ -200,17 +201,17 @@ export function ComponentWrapper({
                                 onChange={(e) => setTitle(e.target.value)}
                                 onBlur={handleRenameBlur}
                                 onKeyDown={handleKeyDown}
-                                className="h-7 px-2 text-sm font-medium"
+                                className="max-w-40 h-5 px-2 text-sm font-medium border-primary"
                                 onClick={(e) => e.stopPropagation()}
                             />
                         ) : (
-                            <h3 className="text-sm font-medium truncate">{title}</h3>
+                            <h3 className="no-drag text-sm font-medium truncate cursor-pointer inline-block" onDoubleClick={() => setIsEditing(true)}>{title}</h3>
                         )}
                     </div>
                 )}
 
                 {/* Component content */}
-                <div className={['query', 'metric'].includes(component.type) ? 'h-full overflow-hidden' : 'h-[calc(100%-2.5rem)] overflow-hidden'}>
+                <div className={['query', 'metric'].includes(component.type) ? 'h-full overflow-hidden' : 'h-[calc(100%-2.5rem)] overflow-hidden no-drag cursor-default'}>
                     {component.type === 'query' ? (
                         <QueryFilter isDark={isDark} component={componentData} isPreviewMode={isPreviewMode} />
                     ) : (

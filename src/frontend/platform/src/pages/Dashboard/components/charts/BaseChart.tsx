@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ChartDataResponse } from '../../types/chartData'
 import { colorSchemes, convertToEChartsTheme } from '../../colorSchemes'
 import { useEditorDashboardStore } from '@/store/dashboardStore'
+import { unitConversion } from './MetricCard'
 
 // Dynamic loading of ECharts.
 const loadECharts = async () => {
@@ -135,8 +136,8 @@ function generateChartOption({ data, chartType, dataConfig, styleConfig }
   const { dimensions, series } = data
 
   const computedUnit = (value) => {
-    // console.log('dataConfig :>> ', dataConfig);
-    return value + '元'
+    const [formatValue, displayUnit] = unitConversion(value, dataConfig)
+    return formatValue || value
   }
 
   // Determine whether it is a stacked chart (judged by chartType).

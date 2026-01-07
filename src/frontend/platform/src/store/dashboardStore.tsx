@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { generateUUID } from "@/components/bs-ui/utils"
 import { ChartType, createDefaultDataConfig, Dashboard, DashboardComponent, LayoutItem, QueryConfig } from "@/pages/Dashboard/types/dataConfig"
+import { DatePickerValue } from "@/pages/Dashboard/components/AdvancedDatePicker";
 
 // Chart refresh information
 interface ChartRefreshInfo {
@@ -19,13 +20,14 @@ interface EditorState {
     layouts: LayoutItem[];
     // Chart refresh triggers: each chart has its own trigger counter and query params
     chartRefreshTriggers: Record<string, ChartRefreshInfo>;
-
+    queryComponentParams: Record<string, DatePickerValue>;
     // Set modification state
     setHasUnsavedChanges: (value: boolean) => void;
     // Set saving state
     setIsSaving: (value: boolean) => void;
     // Set current dashboard
     setCurrentDashboard: (dashboard: Dashboard | null) => void;
+    updateCurrentDashboard: (dashboard: Dashboard) => void;
     // Update layout configuration
     setLayouts: (layouts: LayoutItem[]) => void;
     // Add component to layout
@@ -41,13 +43,14 @@ interface EditorState {
     // Refresh a single chart
     refreshChart: (chartId: string) => void;
     // Refresh charts linked to a query component
-    refreshChartsByQuery: (queryComponentId: string) => void;
+    refreshChartsByQuery: (queryComponent: DashboardComponent, filter: DatePickerValue) => void;
     // Refresh all charts
     refreshAllCharts: () => void;
     // Initialize auto-refresh on load
     initializeAutoRefresh: () => void;
     // Reset state
     reset: () => void;
+    setQueryComponentParams: (id: string, params: DatePickerValue) => void;
 }
 
 export const useEditorDashboardStore = create<EditorState>((set, get) => ({
@@ -56,6 +59,7 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     currentDashboard: null,
     layouts: [],
     chartRefreshTriggers: {},
+    queryComponentParams: {},
 
     setHasUnsavedChanges: (value) => set({ hasUnsavedChanges: value }),
     setIsSaving: (value) => set({ isSaving: value }),
@@ -65,6 +69,9 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             layouts: dashboard?.layout_config?.layouts || [],
             chartRefreshTriggers: {} // Reset triggers when dashboard changes
         })
+    },
+    updateCurrentDashboard: (dashboard) => {
+        set({ currentDashboard: dashboard })
     },
     setLayouts: (layouts) => {
         set({ layouts, hasUnsavedChanges: true })
@@ -225,22 +232,29 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
         })
     },
 
+    setQueryComponentParams: (id, params) => set((state) => ({
+        queryComponentParams: {
+            ...state.queryComponentParams,
+            [id]: params
+        }
+    })),
     // Refresh all charts linked to a query component
-    refreshChartsByQuery: (queryComponentId: string, filter: any) => {
-        const { currentDashboard, chartRefreshTriggers } = get()
+    refreshChartsByQuery: (queryComponent: DashboardComponent, filter: DatePickerValue) => {
+        const { currentDashboard, chartRefreshTriggers, queryComponentParams } = get()
         if (!currentDashboard) return
 
         // Find the query component
-        const queryComponent = currentDashboard.components.find(c => c.id === queryComponentId)
         if (!queryComponent || queryComponent.type !== 'query') return
 
         const queryConfig = queryComponent.data_config as QueryConfig
         const linkedChartIds = queryConfig.linkedComponentIds || []
+        // test all components
+        // const linkedChartIds = currentDashboard.components.map(e => e.id)
 
         // Prepare query parameters (from the current query component)
         const currentQueryParams = [{
             queryComponentId: queryComponent.id,
-            queryConditions: queryConfig.queryConditions // todo merge filter
+            queryComponentParams: filter
         }]
 
         // Increment trigger for each linked chart and attach query params
@@ -248,7 +262,7 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
         linkedChartIds.forEach(chartId => {
             // Get other query components that are also associated with this chart
             const otherLinkedQueries = currentDashboard.components.filter(component => {
-                if (component.type === 'query' && component.id !== queryComponentId) {
+                if (component.type === 'query' && component.id !== queryComponent.id) {
                     const config = component.data_config as QueryConfig
                     return config.linkedComponentIds?.includes(chartId)
                 }
@@ -258,10 +272,7 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             // Combine all query parameters 
             const allQueryParams = [
                 ...currentQueryParams,
-                ...otherLinkedQueries.map(qc => ({
-                    queryComponentId: qc.id,
-                    queryConditions: (qc.data_config as QueryConfig).queryConditions
-                }))
+                ...otherLinkedQueries.map(qc => (queryComponentParams[qc.id] || {}))
             ]
 
             const currentInfo = updatedTriggers[chartId] || { trigger: 0, queryParams: [] }

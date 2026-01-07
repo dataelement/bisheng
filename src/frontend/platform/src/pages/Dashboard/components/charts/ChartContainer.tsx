@@ -1,14 +1,13 @@
 "use client"
 
+import { queryChartData } from '@/controllers/API/dashboard'
+import { ChartDataResponse, MetricDataResponse } from '@/pages/Dashboard/types/chartData'
+import { DashboardComponent } from '@/pages/Dashboard/types/dataConfig'
+import { useEditorDashboardStore } from '@/store/dashboardStore'
 import { useEffect } from 'react'
 import { useQuery } from 'react-query'
-import { queryChartData } from '@/controllers/API/dashboard'
-import { DashboardComponent } from '@/pages/Dashboard/types/dataConfig'
-import { ChartDataResponse, MetricDataResponse } from '@/pages/Dashboard/types/chartData'
 import { BaseChart } from './BaseChart'
 import { MetricCard } from './MetricCard'
-import { RefreshCw } from 'lucide-react'
-import { useEditorDashboardStore } from '@/store/dashboardStore'
 
 interface ChartContainerProps {
   isDark: boolean;
@@ -28,10 +27,9 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['chartData', component.id, refreshTrigger],
     queryFn: () => queryChartData({
-      chartType: component.type,
-      dashboardId: currentDashboard.id,
-      componentData: isPreviewMode ? undefined : component,
-      componentId: isPreviewMode ? component.id : undefined,
+      useId: isPreviewMode,
+      dashboardId: currentDashboard?.id,
+      component,
       queryParams
     }),
     enabled: !!component.id && component.data_config.isConfigured
@@ -47,35 +45,48 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
   // Loading state
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="flex flex-col items-center gap-2">
-          <RefreshCw className="h-8 w-8 animate-spin text-primary" />
-          <span className="text-sm text-muted-foreground">加载中...</span>
-        </div>
-      </div>
-    );
-  }
+      <div className="relative w-full h-64 flex items-center justify-center overflow-hidden rounded-xl border border-[#f0f7ff] bg-[#f8fbff]">
+        <div
+          className="absolute inset-0 animate-shimmer"
+          style={{
+            background: 'linear-gradient(90deg, rgba(191, 219, 253, 0.2) 30%,  #fff 50%, rgba(191, 219, 253, 0.2) 70%)',
+            backgroundSize: '200% 100%',
+          }}
+        />
 
-  // Error state
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="flex flex-col items-center gap-2">
-          <span className="text-sm text-destructive">加载失败</span>
+        <div className="relative z-10 bg-white px-6 py-2 rounded-md backdrop-blur-sm">
+          <div className="flex items-center gap-3">
+            <span className="text-[#8da9ff] font-medium text-lg tracking-wider animate-pulse">
+              图表更新中
+            </span>
+          </div>
         </div>
+
+        <style>{`
+        @keyframes shimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+        .animate-shimmer {
+          animation: shimmer 3s infinite linear;
+        }
+      `}</style>
       </div>
     );
   }
 
   // No data
-  // if (!component.data_config.isConfigured) {
-  //   return (
-  //     <div className="flex items-center justify-center h-full">
-  //       <img />
-  //       <span className="text-sm text-muted-foreground">当前图表无数据</span>
-  //     </div>
-  //   );
-  // }
+  // if (error || !component.data_config.isConfigured) {
+  if (error || component.data_config.isConfigured) {
+    return (
+      <div className="flex items-center justify-center h-full relative">
+        <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/ept-${component.type}.png`} className="w-full max-w-60" />
+        <div className='flex size-full absolute justify-center items-center'>
+          <span className="text-sm bg-gray-50/80 px-2 py-1 text-primary">当前图表无数据</span>
+        </div>
+      </div>
+    );
+  }
 
   // Render metric card
   if (component.type === 'metric') {

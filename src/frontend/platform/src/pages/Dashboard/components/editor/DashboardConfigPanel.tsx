@@ -12,7 +12,7 @@ interface DashboardConfigPanelProps {
 }
 
 export function DashboardConfigPanel({ collapsed = false, onCollapse }: DashboardConfigPanelProps) {
-  const { currentDashboard, setCurrentDashboard } = useEditorDashboardStore()
+  const { currentDashboard, updateCurrentDashboard } = useEditorDashboardStore()
   const [dashboardTheme, setDashboardTheme] = useState<'light' | 'dark'>(() => {
     // 从当前仪表盘获取主题
     return currentDashboard?.style_config?.theme as 'light' | 'dark' || 'light'
@@ -27,7 +27,7 @@ export function DashboardConfigPanel({ collapsed = false, onCollapse }: Dashboar
 
   const handleThemeChange = (theme: 'light' | 'dark') => {
     setDashboardTheme(theme)
-    
+
     // 更新仪表盘主题
     if (currentDashboard) {
       const updatedDashboard = {
@@ -37,7 +37,7 @@ export function DashboardConfigPanel({ collapsed = false, onCollapse }: Dashboar
           theme: theme
         }
       }
-      setCurrentDashboard(updatedDashboard)
+      updateCurrentDashboard(updatedDashboard)
     }
   }
 
@@ -80,11 +80,13 @@ export function DashboardConfigPanel({ collapsed = false, onCollapse }: Dashboar
                 <label className="text-sm font-medium">仪表盘风格</label>
                 <div className="grid grid-cols-2 gap-3">
                   {/* 浅色主题 */}
-                  <div 
+                  <div
                     className={`border rounded-lg p-3 cursor-pointer transition-all ${dashboardTheme === 'light' ? 'border-primary ring-2 ring-primary/20 bg-primary/5' : 'border-gray-200 hover:border-gray-300'}`}
                     onClick={() => handleThemeChange('light')}
                   >
-                    <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 rounded border mb-2"></div>
+                    <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 rounded border mb-2">
+                      <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/light.png`} alt="" />
+                    </div>
                     <div className="flex items-center justify-center">
                       <span className="text-sm">浅色主题</span>
                       {dashboardTheme === 'light' && (
@@ -92,13 +94,15 @@ export function DashboardConfigPanel({ collapsed = false, onCollapse }: Dashboar
                       )}
                     </div>
                   </div>
-                  
+
                   {/* 深色主题 */}
-                  <div 
+                  <div
                     className={`border rounded-lg p-3 cursor-pointer transition-all ${dashboardTheme === 'dark' ? 'border-primary ring-2 ring-primary/20 bg-primary/5' : 'border-gray-200 hover:border-gray-300'}`}
                     onClick={() => handleThemeChange('dark')}
                   >
-                    <div className="aspect-square bg-gradient-to-br from-gray-800 to-gray-900 rounded border mb-2"></div>
+                    <div className="aspect-square bg-gradient-to-br from-gray-800 to-gray-900 rounded border mb-2">
+                      <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/dark.png`} alt="" />
+                    </div>
                     <div className="flex items-center justify-center">
                       <span className="text-sm">深色主题</span>
                       {dashboardTheme === 'dark' && (

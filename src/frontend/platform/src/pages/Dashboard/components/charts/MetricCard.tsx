@@ -1,9 +1,9 @@
 "use client"
 
 import { MetricDataResponse } from '@/pages/Dashboard/types/chartData'
-import { ArrowUp, ArrowDown, Minus } from 'lucide-react'
-import { ComponentConfig, ComponentStyleConfig, DataConfig } from '../../types/dataConfig'
+import { ArrowDown, ArrowUp, Minus } from 'lucide-react'
 import { useMemo } from 'react'
+import { ComponentStyleConfig, DataConfig } from '../../types/dataConfig'
 
 interface MetricCardProps {
   data: MetricDataResponse
@@ -12,72 +12,74 @@ interface MetricCardProps {
   styleConfig: ComponentStyleConfig
 }
 
+export const unitConversion = (data, dataConfig) => {
+  if (!data) return ['', '']
+  const { value } = data
+  if (!dataConfig.metrics?.length || value === undefined || value === null) {
+    return [value, ''];
+  }
+
+  const { type, decimalPlaces = 0, unit, suffix, thousandSeparator } = dataConfig.metrics[0].numberFormat;
+  let formattedNumber = Number(value);
+  let unitLabel = '';
+  let divisor = 1;
+
+  switch (type) {
+    case 'number': {
+      const numberMap = { 'None': 1, 'Thousand': 1e3, 'Million': 1e6, 'Billion': 1e9 };
+      const labels = { 'None': '', 'Thousand': 'K', 'Million': 'M', 'Billion': 'B' };
+      divisor = numberMap[unit] || 1;
+      unitLabel = labels[unit] || '';
+      break;
+    }
+    case 'percent': {
+      formattedNumber = formattedNumber * 100;
+      unitLabel = '%';
+      break;
+    }
+    case 'duration': {
+      const durationMap = { 'ms': 1, 's': 1000, 'min': 60000, 'hour': 3600000 };
+      divisor = durationMap[unit] || 1;
+      unitLabel = unit || 'ms';
+      break;
+    }
+    case 'storage': {
+      const storageMap = { 'B': 1, 'KB': 1024, 'MB': 1024 ** 2, 'GB': 1024 ** 3, 'TB': 1024 ** 4 };
+      divisor = storageMap[unit] || 1;
+      unitLabel = unit || 'B';
+      break;
+    }
+    default:
+      divisor = 1;
+  }
+
+  // 换算
+  formattedNumber = formattedNumber / divisor;
+
+  // 应用小数位数 (限制 0-5 位)
+  const safeDecimals = Math.min(Math.max(decimalPlaces, 0), 5);
+  let result = formattedNumber.toFixed(safeDecimals);
+
+  // 应用千分位符
+  if (thousandSeparator) {
+    const parts = result.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    result = parts.join('.');
+  }
+
+  // 处理后缀
+  const finalUnit = suffix || unitLabel;
+
+  return [result, finalUnit];
+}
+
 export function MetricCard({ data, dataConfig, styleConfig, isDark }: MetricCardProps) {
   console.log('data :>> ', data);
   const indicatorName = '指标名称'
   const subTitle = '副标题' // style中获取
 
   // format
-  const [formatValue, displayUnit] = useMemo(() => {
-    if (!data) return ['', '']
-    const { value } = data
-    if (!dataConfig.metrics?.length || value === undefined || value === null) {
-      return [value, ''];
-    }
-
-    const { type, decimalPlaces = 0, unit, suffix, thousandSeparator } = dataConfig.metrics[0].numberFormat;
-    let formattedNumber = Number(value);
-    let unitLabel = '';
-    let divisor = 1;
-
-    switch (type) {
-      case 'number': {
-        const numberMap = { 'None': 1, 'Thousand': 1e3, 'Million': 1e6, 'Billion': 1e9 };
-        const labels = { 'None': '', 'Thousand': 'K', 'Million': 'M', 'Billion': 'B' };
-        divisor = numberMap[unit] || 1;
-        unitLabel = labels[unit] || '';
-        break;
-      }
-      case 'percent': {
-        formattedNumber = formattedNumber * 100;
-        unitLabel = '%';
-        break;
-      }
-      case 'duration': {
-        const durationMap = { 'ms': 1, 's': 1000, 'min': 60000, 'hour': 3600000 };
-        divisor = durationMap[unit] || 1;
-        unitLabel = unit || 'ms';
-        break;
-      }
-      case 'storage': {
-        const storageMap = { 'B': 1, 'KB': 1024, 'MB': 1024 ** 2, 'GB': 1024 ** 3, 'TB': 1024 ** 4 };
-        divisor = storageMap[unit] || 1;
-        unitLabel = unit || 'B';
-        break;
-      }
-      default:
-        divisor = 1;
-    }
-
-    // 换算
-    formattedNumber = formattedNumber / divisor;
-
-    // 应用小数位数 (限制 0-5 位)
-    const safeDecimals = Math.min(Math.max(decimalPlaces, 0), 5);
-    let result = formattedNumber.toFixed(safeDecimals);
-
-    // 应用千分位符
-    if (thousandSeparator) {
-      const parts = result.split('.');
-      parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-      result = parts.join('.');
-    }
-
-    // 处理后缀
-    const finalUnit = suffix || unitLabel;
-
-    return [result, finalUnit];
-  }, [dataConfig, data]);
+  const [formatValue, displayUnit] = useMemo(() => unitConversion(dataConfig, data), [dataConfig, data]);
 
   // 获取趋势图标
   const getTrendIcon = () => {

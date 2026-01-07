@@ -61,17 +61,3 @@ export interface QueryParams {
 
 // ==================== 统一的查询响应 ====================
 export type QueryDataResponse = ChartDataResponse | MetricDataResponse
-
-
-
-/**
- * 创建指标卡示例数据（无趋势）
- */
-export const createSimpleMetricMockData = (): MetricDataResponse => ({
-  value: 8523,
-  title: '活跃用户',
-  format: {
-    decimalPlaces: 0,
-    thousandSeparator: true
-  }
-})

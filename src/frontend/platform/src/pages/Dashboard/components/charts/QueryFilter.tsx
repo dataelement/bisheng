@@ -4,9 +4,9 @@ import { Button } from "@/components/bs-ui/button"
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker"
 import { useEditorDashboardStore } from "@/store/dashboardStore"
 import { Search } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { AdvancedDatePicker, DatePickerValue } from "../AdvancedDatePicker"
-import { DashboardComponent, QueryConfig } from "../../types/dataConfig"
+import { DashboardComponent, QueryConfig, TimeRangeMode, TimeRangeType } from "../../types/dataConfig"
 
 interface QueryFilterProps {
     component: DashboardComponent  // Query the ID of the component, which is used to trigger the refresh of the associated chart
@@ -14,7 +14,7 @@ interface QueryFilterProps {
 }
 
 export function QueryFilter({ component, isPreviewMode = false }: QueryFilterProps) {
-    const { refreshChartsByQuery } = useEditorDashboardStore()
+    const { refreshChartsByQuery, setQueryComponentParams } = useEditorDashboardStore()
     const [date, setDate] = useState<Date | undefined>(undefined)
 
     const handleDateChange = (newDate: Date) => {
@@ -24,12 +24,31 @@ export function QueryFilter({ component, isPreviewMode = false }: QueryFilterPro
     const handleQuery = () => {
         console.log("查询日期:", date)
         // Refresh the associated chart based on the query component ID 
-        refreshChartsByQuery(component.id, filter)
+        refreshChartsByQuery(component, filter)
     }
 
     const { queryConditions } = component.data_config as QueryConfig
     const map = { 'year_month': 'month', 'year_month_day': 'day', 'year_month_day_hour': 'hour' }
+
     const [filter, setFilter] = useState<DatePickerValue | undefined>();
+    console.log('filter :>> ', filter);
+    useEffect(() => {
+        const { type, mode, recentDays, startDate, endDate } = queryConditions.defaultValue
+        if (queryConditions.defaultValue) {
+            if (type === TimeRangeType.ALL) {
+                setQueryComponentParams(component.id, undefined)
+                return setFilter(undefined)
+            }
+            const datePickerVal = {
+                isDynamic: mode === TimeRangeMode.Dynamic,
+                shortcutKey: recentDays ? `last_${recentDays}` : undefined,
+                startTime: startDate,
+                endTime: endDate
+            }
+            setFilter(datePickerVal)
+            setQueryComponentParams(component.id, datePickerVal)
+        }
+    }, [queryConditions.defaultValue, queryConditions.defaultValue])
 
     return (
         <div className="w-full h-full p-4 flex flex-col gap-3 relative">
@@ -37,8 +56,8 @@ export function QueryFilter({ component, isPreviewMode = false }: QueryFilterPro
             <div className="flex flex-col gap-2 pr-24">
                 <label className="text-sm font-medium">选择日期</label>
                 <AdvancedDatePicker
-                    granularity={'hour'}
-                    mode={'range'}
+                    granularity={map[queryConditions.timeGranularity]}
+                    mode={queryConditions.displayType}
                     value={filter}
                     onChange={(val) => {
                         console.log("Day Range Change:", val);
@@ -48,7 +67,7 @@ export function QueryFilter({ component, isPreviewMode = false }: QueryFilterPro
             </div>
 
             {/* 查询按钮 - 固定在右下角 */}
-            <div className="absolute bottom-5 right-4">
+            <div className="absolute bottom-4 right-4">
                 <Button onClick={handleQuery} size="sm" className="gap-1">
                     <Search className="h-4 w-4" />
                     查询

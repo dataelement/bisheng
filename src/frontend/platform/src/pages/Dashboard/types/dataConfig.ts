@@ -197,9 +197,10 @@ export const enum TimeRangeType {
   CUSTOM = 'custom' // 自定义时间范围
 }
 
-export type TimeRangeMode =
-  | 'fixed'    // 固定时间范围
-  | 'dynamic'  // 动态时间范围（相对当前时间）
+export const enum TimeRangeMode {
+  Fixed = 'fixed',     // 固定时间范围
+  Dynamic = 'dynamic' // 动态时间范围（相对当前时间）
+}
 
 export interface TimeFilter {
   type: TimeRangeType           // 时间范围类型

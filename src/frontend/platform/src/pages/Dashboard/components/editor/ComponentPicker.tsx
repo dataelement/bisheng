@@ -49,20 +49,20 @@ export const ChartItems = ChartGroupItems.flatMap(item => item.data);
 export interface PickerItem {
     type: string;
     label: string;
-    maxHeight?: number;
 }
 
 interface ComponentPickerProps {
     onSelect: (data: { title: string, type: ChartType }) => void;
     children: React.ReactNode;
+    maxHeight?: number;
     className?: string;
 }
 
-const ComponentPicker = ({ children, className, onSelect,maxHeight }: ComponentPickerProps) => {
+const ComponentPicker = ({ children, className, onSelect, maxHeight = 500 }: ComponentPickerProps) => {
     const [open, setOpen] = useState(false);
 
     const handleItemClick = (item) => {
-        onSelect(item)
+        onSelect({ ...item, title: item.label });
         setOpen(false);
     };
 
@@ -85,14 +85,14 @@ const ComponentPicker = ({ children, className, onSelect,maxHeight }: ComponentP
         </div>
     );
 
-return (
+    return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
                 {children}
             </PopoverTrigger>
-            <PopoverContent 
-                align="start" 
-                className={cn("w-[332px] p-4 shadow-xl", className)}
+            <PopoverContent
+                align="start"
+                className={cn("w-[342px] p-4 shadow-xl", className)}
                 style={{ maxHeight: `${maxHeight}px`, overflowY: 'auto' }}
             >
                 <div className="space-y-2">

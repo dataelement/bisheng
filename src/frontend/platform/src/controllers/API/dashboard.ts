@@ -1,226 +1,11 @@
 // Mock API functions for dashboard operations
 
 import { generateUUID } from "@/components/bs-ui/utils";
-import { ChartType, createDefaultDataConfig, Dashboard, DashboardComponent, LayoutItem, StyleConfig } from "@/pages/Dashboard/types/dataConfig";
+import { ChartType, Dashboard, DashboardComponent, LayoutItem, TimeRangeMode } from "@/pages/Dashboard/types/dataConfig";
 import axios from "../request";
 
 // Simulate API delay
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-// 默认主题配置
-const defaultStyleConfig: StyleConfig = {
-    theme: 'light'
-}
-
-// Mock data
-let mockDashboards: Dashboard[] = [
-    {
-        id: "1",
-        title: "图表展示看板",
-        description: "展示所有图表类型",
-        status: 'draft',
-        dashboard_type: 'custom',
-        layout_config: {
-            layouts: [
-                // 第一行：查询组件
-                { i: "query-filter", x: 0, y: 0, w: 8, h: 3, minW: 6, minH: 3 },
-
-                // 第二行：柱状图
-                { i: "bar-basic", x: 0, y: 6, w: 8, h: 8, minW: 4, minH: 4 },
-                { i: "bar-stacked", x: 8, y: 6, w: 8, h: 8, minW: 4, minH: 4 },
-                { i: "bar-grouped", x: 16, y: 6, w: 8, h: 8, minW: 4, minH: 4 },
-
-                // 第三行：条形图
-                { i: "horizontal-bar-basic", x: 0, y: 14, w: 8, h: 8, minW: 4, minH: 4 },
-                { i: "horizontal-bar-stacked", x: 8, y: 14, w: 8, h: 8, minW: 4, minH: 4 },
-                { i: "horizontal-bar-grouped", x: 16, y: 14, w: 8, h: 8, minW: 4, minH: 4 },
-
-                // 第四行：折线图
-                { i: "line-basic", x: 0, y: 22, w: 8, h: 8, minW: 4, minH: 4 },
-                { i: "area-chart", x: 8, y: 22, w: 8, h: 8, minW: 4, minH: 4 },
-                { i: "line-stacked", x: 16, y: 22, w: 8, h: 8, minW: 4, minH: 4 },
-
-                // 第五行：饼图、环形图、指标卡
-                { i: "pie-chart", x: 0, y: 30, w: 8, h: 8, minW: 4, minH: 4 },
-                { i: "donut-chart", x: 8, y: 30, w: 8, h: 8, minW: 4, minH: 4 },
-                { i: "metric-card", x: 16, y: 30, w: 3, h: 3, minW: 3, minH: 3 },
-            ]
-        },
-        style_config: defaultStyleConfig,
-        created_by: "admin",
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        components: [
-            // 查询组件
-            {
-                id: "query-filter",
-                dashboard_id: "1",
-                title: "时间查询",
-                type: 'query',
-                dataset_code: "",
-                data_config: {},
-                style_config: {},
-                created_at: Date.now(),
-                updated_at: Date.now(),
-            },
-
-            // 柱状图系列
-            {
-                id: "bar-basic",
-                dashboard_id: "1",
-                title: "基础柱状图",
-                type: 'bar',
-                dataset_code: "sales_data",
-                data_config: createDefaultDataConfig('bar'),
-                style_config: {},
-                created_at: Date.now(),
-                updated_at: Date.now(),
-            },
-            {
-                id: "bar-stacked",
-                dashboard_id: "1",
-                title: "堆叠柱状图",
-                type: 'stacked-bar',
-                dataset_code: "sales_data",
-                data_config: createDefaultDataConfig('stacked-bar'),
-                style_config: {},
-                created_at: Date.now(),
-                updated_at: Date.now(),
-            },
-            {
-                id: "bar-grouped",
-                dashboard_id: "1",
-                title: "分组柱状图",
-                type: 'grouped-bar',
-                dataset_code: "sales_data",
-                data_config: createDefaultDataConfig('grouped-bar'),
-                style_config: {},
-                created_at: Date.now(),
-                updated_at: Date.now(),
-            },
-
-            // 条形图系列
-            {
-                id: "horizontal-bar-basic",
-                dashboard_id: "1",
-                title: "基础条形图",
-                type: 'horizontal-bar',
-                dataset_code: "sales_data",
-                data_config: createDefaultDataConfig('horizontal-bar'),
-                style_config: {},
-                created_at: Date.now(),
-                updated_at: Date.now(),
-            },
-            {
-                id: "horizontal-bar-stacked",
-                dashboard_id: "1",
-                title: "堆叠条形图",
-                type: 'stacked-horizontal-bar',
-                dataset_code: "sales_data",
-                data_config: createDefaultDataConfig('stacked-horizontal-bar'),
-                style_config: {},
-                created_at: Date.now(),
-                updated_at: Date.now(),
-            },
-            {
-                id: "horizontal-bar-grouped",
-                dashboard_id: "1",
-                title: "分组条形图",
-                type: 'grouped-horizontal-bar',
-                dataset_code: "sales_data",
-                data_config: createDefaultDataConfig('grouped-horizontal-bar'),
-                style_config: {},
-                created_at: Date.now(),
-                updated_at: Date.now(),
-            },
-
-            // 折线图系列
-            {
-                id: "line-basic",
-                dashboard_id: "1",
-                title: "基础折线图",
-                type: 'line',
-                dataset_code: "sales_data",
-                data_config: createDefaultDataConfig('line'),
-                style_config: {},
-                created_at: Date.now(),
-                updated_at: Date.now(),
-            },
-            {
-                id: "area-chart",
-                dashboard_id: "1",
-                title: "面积图",
-                type: 'area',
-                dataset_code: "sales_data",
-                data_config: createDefaultDataConfig('area'),
-                style_config: {},
-                created_at: Date.now(),
-                updated_at: Date.now(),
-            },
-            {
-                id: "line-stacked",
-                dashboard_id: "1",
-                title: "堆叠折线图",
-                type: 'stacked-line',
-                dataset_code: "sales_data",
-                data_config: createDefaultDataConfig('stacked-line'),
-                style_config: {},
-                created_at: Date.now(),
-                updated_at: Date.now(),
-            },
-
-            // 饼图和环形图
-            {
-                id: "pie-chart",
-                dashboard_id: "1",
-                title: "饼图",
-                type: 'pie',
-                dataset_code: "sales_data",
-                data_config: createDefaultDataConfig('pie'),
-                style_config: {},
-                created_at: Date.now(),
-                updated_at: Date.now(),
-            },
-            {
-                id: "donut-chart",
-                dashboard_id: "1",
-                title: "环形图",
-                type: 'donut',
-                dataset_code: "sales_data",
-                data_config: createDefaultDataConfig('donut'),
-                style_config: {},
-                created_at: Date.now(),
-                updated_at: Date.now(),
-            },
-
-            // 指标卡
-            {
-                id: "metric-card",
-                dashboard_id: "1",
-                title: "总销售额",
-                type: 'metric',
-                dataset_code: "sales_data",
-                data_config: createDefaultDataConfig('metric'),
-                style_config: {},
-                created_at: Date.now(),
-                updated_at: Date.now(),
-            },
-        ]
-    },
-    {
-        id: "2",
-        title: "看板 2",
-        description: "這是一個測試用的看板",
-        status: 'published',
-        dashboard_type: 'custom',
-        layout_config: { layouts: [] },
-        style_config: defaultStyleConfig,
-        created_by: "admin",
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        components: []
-    },
-]
 
 export async function getDashboards(): Promise<Dashboard[]> {
     // has administrative privileges or can view published dashboards
@@ -260,7 +45,7 @@ export async function copyDashboard({ id, title }: { id: string, title: string }
     })
 }
 
-export async function updateDashboard2(id: string, data: Partial<Dashboard>): Promise<Dashboard> {
+export async function updateDashboard(id: string, data: Partial<Dashboard>): Promise<Dashboard> {
     const payload = cloneDeep(data);
     // delete time
     delete payload.create_time;
@@ -270,27 +55,6 @@ export async function updateDashboard2(id: string, data: Partial<Dashboard>): Pr
         delete component.update_time;
     })
     return await axios.put(`/api/v1/telemetry/dashboard/${id}`, payload)
-}
-
-export async function updateDashboard(id: string, data: Partial<Dashboard>): Promise<Dashboard> {
-    // return await axios.put(`/api/v1/telemetry/dashboard/${id}`, {
-    //     "title": "22224333",
-    //     "description": "test2-2",
-    //     "layout_config": {},
-    //     "style_config": {},
-    //     "id": 1,
-    //     "components": []
-    // })
-    await delay(300)
-    const index = mockDashboards.findIndex((d) => d.id === id)
-    if (index === -1) throw new Error("Dashboard not found")
-
-    mockDashboards[index] = {
-        ...mockDashboards[index],
-        ...data,
-        updated_at: Date.now(),
-    }
-    return mockDashboards[index]
 }
 
 export async function deleteDashboard(id: string): Promise<void> {
@@ -334,7 +98,6 @@ export async function copyComponentTo(component: DashboardComponent, targetId: s
 }
 
 // Dataset related types and APIs
-
 // 时间粒度
 export interface TimeGranularity {
     name: string
@@ -390,24 +153,25 @@ import {
 import { cloneDeep } from "lodash-es";
 
 export async function queryChartData(params: {
-    chartType: ChartType
+    useId: boolean,
+    component: DashboardComponent,
     dashboardId: string
-    componentId?: string
-    componentData?: DashboardComponent
     queryParams?: any
 }): Promise<QueryDataResponse> {
     const resData = await axios.post(`/api/v1/telemetry/dashboard/component/query`, {
         dashboard_id: params.dashboardId,
-        component_data: params.componentData,
-        component_id: params.componentId,
-        time_filters: params.queryParams
+        component_data: params.useId ? undefined : params.component,
+        component_id: params.useId ? params.component.id : undefined,
+        time_filters: params.queryParams.filter(p => p.queryComponentParams).map(({ queryComponentParams: p }) => ({
+            type: p.type,
+            mode: p.isDynamic ? TimeRangeMode.Dynamic : TimeRangeMode.Fixed,
+            recentDays: p.shortcutKey ? Number(p.shortcutKey.replace('last_', '')) : undefined,
+            startDate: p.startTime,
+            endDate: p.endTime,
+        }))
     });
 
-
-    // console.log('dataConfig :>> ', params.dataConfig);
-    // mock
-    // 双指标
-    const zhibiaoData = params.componentData.data_config.metrics.map(e => e.displayName)
+    const metricsData = params.component.data_config.metrics.map(e => e.displayName)
 
     const hasDuidie = false
     let duidieweidu = [] // 表字段去重值
@@ -423,28 +187,29 @@ export async function queryChartData(params: {
 
     console.log('query params :>> ', params);
 
-    const { chartType } = params
+    const chartType = params.component.type
 
     // 根据图表类型返回对应的 mock 数据
     switch (chartType) {
-        case 'bar':
-        case 'stacked-bar':
-        case 'grouped-bar':
-        case 'horizontal-bar':
-        case 'stacked-horizontal-bar':
-        case 'grouped-horizontal-bar':
-        case 'line':
-        case 'area':
-        case 'stacked-line':
+        case ChartType.Bar:
+        case ChartType.StackedBar:
+        case ChartType.GroupedBar:
+        case ChartType.HorizontalBar:
+        case ChartType.StackedHorizontalBar:
+        case ChartType.GroupedHorizontalBar:
+        case ChartType.Line:
+        case ChartType.Area:
+        case ChartType.StackedLine:
+        case ChartType.StackedArea:
             return {
                 dimensions: resData.dimensions,
-                series: (hasDuidie ? duidieweidu : zhibiaoData).map((name, index) => ({
+                series: (hasDuidie ? duidieweidu : metricsData).map((name, index) => ({
                     name: name,
                     data: resData.value.map(el => el[index])
                 }))
             }
-        case 'pie':
-        case 'donut':
+        case ChartType.Pie:
+        case ChartType.Donut:
             return {
                 dimensions: [],
                 series: [
@@ -457,10 +222,10 @@ export async function queryChartData(params: {
                     }
                 ]
             }
-        case 'metric':
+        case ChartType.Metric:
             return {
                 value: resData.value[0][0],
-                title: zhibiaoData[0],
+                title: metricsData[0],
                 unit: '元',
                 trend: {
                     value: 12.5,
