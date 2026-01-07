@@ -376,13 +376,6 @@ export function DimensionBlock({
           </div>
         </div>
       )}
-
-      {/* 达到最大维度数提示 */}
-      {maxDimensions && dimensions.length >= maxDimensions && (
-        <div className="text-xs text-red-500 text-center mt-1">
-          最多允许添加{maxDimensions}个字段
-        </div>
-      )}
     </div>
   )
 }

@@ -49,6 +49,7 @@ export const ChartItems = ChartGroupItems.flatMap(item => item.data);
 export interface PickerItem {
     type: string;
     label: string;
+    maxHeight?: number;
 }
 
 interface ComponentPickerProps {
@@ -57,7 +58,7 @@ interface ComponentPickerProps {
     className?: string;
 }
 
-const ComponentPicker = ({ children, className, onSelect }: ComponentPickerProps) => {
+const ComponentPicker = ({ children, className, onSelect,maxHeight }: ComponentPickerProps) => {
     const [open, setOpen] = useState(false);
 
     const handleItemClick = (item) => {
@@ -84,16 +85,20 @@ const ComponentPicker = ({ children, className, onSelect }: ComponentPickerProps
         </div>
     );
 
-    return (
+return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
                 {children}
             </PopoverTrigger>
-            <PopoverContent align="start" className={cn("w-[332px] p-4 shadow-xl", className)}>
+            <PopoverContent 
+                align="start" 
+                className={cn("w-[332px] p-4 shadow-xl", className)}
+                style={{ maxHeight: `${maxHeight}px`, overflowY: 'auto' }}
+            >
                 <div className="space-y-2">
                     {
-                        ChartGroupItems.map(item => (
-                            <div>
+                        ChartGroupItems.map((item, index) => (
+                            <div key={index}>
                                 <h4 className="text-sm font-medium mb-2 px-1">{item.label}</h4>
                                 <ItemGrid list={item.data} />
                             </div>

@@ -5,6 +5,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { ChartType, ComponentStyleConfig, DataConfig } from "../../types/dataConfig"
 import { CHART_TYPES } from "./ComponentConfigDrawer"
 import { generateUUID } from "@/components/bs-ui/utils"
+import { useToast } from "@/components/bs-ui/toast/use-toast"
 
 // 默认样式配置常量
 const DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
@@ -47,6 +48,7 @@ export function useChartState(initialComponent: any) {
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [sortPriorityOrder, setSortPriorityOrder] = useState<string[]>([])
   const [filterGroup, setFilterGroup] = useState<any>(null)
+  const { toast } = useToast()
 
   // 初始化逻辑
   useEffect(() => {
@@ -140,7 +142,7 @@ export function useChartState(initialComponent: any) {
             logic: 'and',
             conditions: dc.filters.map(filter => ({
               id: filter.id || generateUUID(6),
-              fieldCode: filter.fieldCode,
+              fieldId: filter.fieldId,
               fieldType: filter.fieldType || 'string',
               filterType: filter.filterType || 'conditional',
               operator: filter.operator || 'eq',
@@ -251,6 +253,10 @@ export function useChartState(initialComponent: any) {
         (fieldType === 'dimension' && section === 'value')
       ) {
         console.warn(`字段类型 ${fieldType} 不能拖拽到 ${section} 区域`)
+              toast({
+          description: `字段类型 ${fieldType} 不能拖拽到 ${section} 区域`,
+          variant: "warning",
+        })
         setDragOverSection(null)
         return
       }
@@ -353,9 +359,10 @@ export function useChartState(initialComponent: any) {
     setFilterGroup(null)
   }, [])
 
-  // 获取数据配置 - 关键修复：根据接口定义正确生成
+  // 获取数据配置
   const getDataConfig = useCallback((limitType: "all" | "limit", limitValue: string, timeFilter?: any): DataConfig => {
  const dimensions = categoryDimensions.slice(0, 2).map(dim => ({
+
     fieldId: dim.fieldId,
     fieldName: dim.originalName,
     fieldCode: dim.name,
@@ -384,22 +391,11 @@ export function useChartState(initialComponent: any) {
     numberFormat: { type: 'number' as const, decimalPlaces: 2, unit: undefined, suffix: undefined, thousandSeparator: true }
   }))
     // 4. 构建字段顺序 - 注意字段类型
-   const fieldOrder = [
-    ...categoryDimensions.slice(0, 2).map(d => ({ 
-      fieldId: d.fieldId, 
-      fieldType: 'dimension' as const 
-    })),
-    ...stackDimensions.slice(0, 1).map(d => ({ 
-      fieldId: d.fieldId, 
-      fieldType: 'stack_dimension' as const 
-    })),
-    ...valueDimensions.map(m => ({ 
-      fieldId: m.fieldId, 
-      fieldType: 'metric' as const 
-    }))
+  const fieldOrder = [
+    ...categoryDimensions.slice(0, 2).map(d => ({ fieldId: d.fieldId, fieldType: 'dimension' })),
+    ...stackDimensions.slice(0, 1).map(d => ({ fieldId: d.fieldId, fieldType: 'stack_dimension' })),
+    ...valueDimensions.map(m => ({ fieldId: m.fieldId, fieldType: 'metric' })),
   ]
-
-
     // 5. 构建筛选条件
     const filters = filterGroup ? filterGroup.conditions.map((condition, index) => ({
       id: condition.id || `filter_${Date.now()}_${index}`,

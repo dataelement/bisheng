@@ -26,7 +26,7 @@ function CollapsibleBlock({
   title, 
   children,
   collapsed,
-  onCollapse 
+  onCollapse
 }: {
   title: string
   children: React.ReactNode

@@ -8,18 +8,19 @@ import { Calendar, ChevronDown, ChevronRight, Hash, Search, Type } from "lucide-
 import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "react-query"
 export interface DatasetField {
-  fieldCode: string          // 真正用来过滤 / SQL
-  displayName: string        // UI 显示
-  fieldType: "string" | "number" | "date"
-  role: "dimension" | "metric"
-  enumValues?: string[]  
+    fieldCode: string          // 真正用来过滤 / SQL
+    displayName: string        // UI 显示
+    fieldType: "string" | "number" | "date"
+    role: "dimension" | "metric"
+    enumValues?: string[]
 }
 
 interface DatasetSelectorProps {
-  selectedDatasetCode?: string
-  onDatasetChange?: (datasetCode: string) => void
-  onDragStart?: (e: React.DragEvent, data: any) => void
-  onFieldsLoaded?: (fields: DatasetField[]) => void
+    selectedDatasetCode?: string
+    onDatasetChange?: (datasetCode: string) => void
+    onDragStart?: (e: React.DragEvent, data: any) => void
+    onFieldsLoaded?: (fields: DatasetField[]) => void
+    onFieldClick?: (field: DatasetField) => void
 }
 
 
@@ -41,7 +42,7 @@ const isVirtualMetric = (metric: MetricConfig): boolean => {
     return metric.bucket_path !== undefined && metric.bucket_path !== metric.aggregation_name
 }
 
-export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragStart,onFieldsLoaded }: DatasetSelectorProps) {
+export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragStart, onFieldsLoaded, onFieldClick }: DatasetSelectorProps) {
     const [searchTerm, setSearchTerm] = useState("")
     const [dimensionsExpanded, setDimensionsExpanded] = useState(true)
     const [metricsExpanded, setMetricsExpanded] = useState(true)
@@ -70,16 +71,19 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
 
     // 处理拖拽开始
     const handleDragStart = (e: React.DragEvent, data: any, fieldType: 'dimension' | 'metric') => {
+        console.log(selectedDataset,909090,data);
+        
         e.dataTransfer.effectAllowed = 'copy'
         const dragData = {
-            id: data.name,
+            id: data.field, 
             name: data.name,
             displayName: data.name,
+            fieldId: data.field,
+            fieldCode: data.field,  
             fieldType
         }
         // 设置数据到 dataTransfer
         e.dataTransfer.setData('application/json', JSON.stringify(dragData))
-        
         // 如果有父组件传递的 onDragStart 回调，也调用它
         if (onDragStart) {
             onDragStart(e, dragData)
@@ -89,7 +93,8 @@ const datasetFields = useMemo<DatasetField[]>(() => {
   if (!selectedDataset) return []
 
   const dimensions = selectedDataset.schema_config.dimensions.map(d => ({
-    fieldCode: d.name,
+   fieldCode: d.field,
+    fieldId: d.field,   
     displayName: d.name,
     fieldType:
       d.type === "date"
@@ -101,7 +106,8 @@ const datasetFields = useMemo<DatasetField[]>(() => {
   }))
 
   const metrics = selectedDataset.schema_config.metrics.map(m => ({
-    fieldCode: m.name,
+    fieldCode: m.field,
+    fieldId: m.field,    
     displayName: m.name,
     fieldType: "number",
     role: "metric" as const
@@ -176,19 +182,37 @@ useEffect(() => {
                         </button>
                         {dimensionsExpanded && (
                             <div className="px-4 pb-3 space-y-2">
-                                {selectedDataset.schema_config.dimensions.map((dimension, index) => (
-                                    <div
-                                        key={index}
-                                        className="flex items-center gap-2 p-2 rounded hover:bg-accent/30 cursor-move transition-colors"
-                                        draggable
-                                        onDragStart={(e) => handleDragStart(e, dimension, 'dimension')}
-                                    >
-                                        <div className="text-blue-500">
-                                            {getFieldTypeIcon(dimension.type)}
+                                {selectedDataset.schema_config.dimensions.map((dimension, index) => {
+                                    const field: DatasetField = {
+                                        fieldCode: dimension.field,
+                                        displayName: dimension.name,
+                                        fieldType:
+                                            dimension.type === "date"
+                                                ? "date"
+                                                : dimension.type === "integer"
+                                                    ? "number"
+                                                    : "string",
+                                        role: "dimension" as const
+                                    }
+
+                                    return (
+                                        <div
+                                            key={index}
+                                            className="flex items-center gap-2 p-2 rounded hover:bg-accent/30 cursor-move transition-colors"
+                                            draggable
+                                            onDragStart={(e) => handleDragStart(e, dimension, 'dimension')}
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                onFieldClick?.(field)
+                                            }}
+                                        >
+                                            <div className="text-blue-500">
+                                                {getFieldTypeIcon(dimension.type)}
+                                            </div>
+                                            <span className="text-sm flex-1">{dimension.name}</span>
                                         </div>
-                                        <span className="text-sm flex-1">{dimension.name}</span>
-                                    </div>
-                                ))}
+                                    )
+                                })}
                             </div>
                         )}
                     </div>
@@ -210,12 +234,22 @@ useEffect(() => {
                             <div className="px-4 pb-3 space-y-2">
                                 {selectedDataset.schema_config.metrics.map((metric, index) => {
                                     const isVirtual = isVirtualMetric(metric)
+                                    const field: DatasetField = {
+                                        fieldCode: metric.field,
+                                        displayName: metric.name,
+                                        fieldType: "number",
+                                        role: "metric" as const
+                                    }
                                     return (
                                         <div
                                             key={index}
                                             className="flex items-center gap-2 p-2 rounded hover:bg-accent/30 cursor-move transition-colors"
                                             draggable
                                             onDragStart={(e) => handleDragStart(e, metric, 'metric')}
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                onFieldClick?.(field)
+                                            }}
                                         >
                                             <div className="text-green-500">
                                                 <Hash className="h-4 w-4" />

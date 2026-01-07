@@ -18,6 +18,8 @@ import ChartSelector from "./ChartSelector"
 import { DashboardConfigPanel } from "./DashboardConfigPanel"
 import { AdvancedDatePicker } from "../AdvancedDatePicker"
 import { useChartState } from "./useChartState"
+import { useToast } from "@/components/bs-ui/toast/use-toast"
+import ComponentPicker, { ChartGroupItems, ChartItems } from "./ComponentPicker"
 
 // 图表类型选项
 export const CHART_TYPES: {
@@ -27,24 +29,28 @@ export const CHART_TYPES: {
 }[] = [
     { label: "基础柱状图", value: ChartType.Bar, hasStack: false },
     { label: "堆叠柱状图", value: ChartType.StackedBar, hasStack: true },
-    { label: "分组柱状图", value: ChartType.GroupedBar, hasStack: false },
+    { label: "组合柱状图", value: ChartType.GroupedBar, hasStack: false },
+
     { label: "基础条形图", value: ChartType.HorizontalBar, hasStack: false },
     { label: "堆叠条形图", value: ChartType.StackedHorizontalBar, hasStack: true },
+    { label: "组合条形图", value: ChartType.GroupedHorizontalBar, hasStack: false },
+
     { label: "分组条形图", value: ChartType.GroupedHorizontalBar, hasStack: false },
+
     { label: "基础折线图", value: ChartType.Line, hasStack: false },
-    { label: "面积图", value: ChartType.Area, hasStack: false },
     { label: "堆叠折线图", value: ChartType.StackedLine, hasStack: true },
+    { label: "基础面积图", value: ChartType.Area, hasStack: false },
+    { label: "堆叠面积图", value: ChartType.StackedArea, hasStack: true },
+
     { label: "饼状图", value: ChartType.Pie, hasStack: false },
     { label: "环状图", value: ChartType.Donut, hasStack: false },
-    { label: "指标卡", value: ChartType.Metric, hasStack: false },
-    { label: "查询组件", value: ChartType.Query, hasStack: false }
-  ];
 
+    { label: "指标卡", value: ChartType.Metric, hasStack: false },
+  ];
 export function ComponentConfigDrawer() {
   const { editingComponent, updateEditingComponent } = useComponentEditorStore();
   const { refreshChart } = useEditorDashboardStore();
-  console.log(editingComponent,789);
-  
+
   // 折叠状态
   const [configCollapsed, setConfigCollapsed] = useState({
     basic: false,
@@ -53,10 +59,11 @@ export function ComponentConfigDrawer() {
     stack: false,
     value: false
   })
+  const { toast } = useToast()
 
   // Tab状态
   const [configTab, setConfigTab] = useState<"basic" | "style">("basic")
-  
+
   // 限制结果状态
   const [limitType, setLimitType] = useState<"all" | "limit">("limit")
   const [limitValue, setLimitValue] = useState("1000")
@@ -98,16 +105,83 @@ export function ComponentConfigDrawer() {
     setFilterGroup,
     getDataConfig
   } = chartState
+  const handleFieldClick = useCallback((field: DatasetField) => {
+    if (!editingComponent) return
 
-  // 无效字段ID计算
+    const safeFieldId = field.fieldId || field.fieldCode || field.fieldName;
+
+    const isFieldAlreadyAdded = (fieldId: string, section: 'category' | 'stack' | 'value'): boolean => {
+      switch (section) {
+        case 'category':
+          return categoryDimensions.some(dim => dim.fieldId === fieldId)
+        case 'stack':
+          return stackDimensions.some(dim => dim.fieldId === fieldId)
+        case 'value':
+          return valueDimensions.some(dim => dim.fieldId === fieldId)
+        default:
+          return false
+      }
+    }
+
+    if (field.role === 'dimension') {
+      if (categoryDimensions.length < 2) {
+        if (isFieldAlreadyAdded(safeFieldId, 'category')) {
+          toast({ description: "字段已存在于类别轴中", variant: "warning" })
+          return
+        }
+        const newDimension = {
+          id: `${safeFieldId}-${Date.now()}`, // ⚠ 保留原 id 也可用
+          fieldId: safeFieldId,
+          displayName: field.displayName || field.fieldName,
+          originalName: field.displayName || field.fieldName,
+          sort: 'default' as const
+        }
+        chartState.setCategoryDimensions(prev => [...prev, newDimension])
+      } else if (currentChartHasStack && stackDimensions.length === 0) {
+        if (isFieldAlreadyAdded(safeFieldId, 'stack')) {
+          toast({ description: "字段已存在于堆叠项中", variant: "warning" })
+          return
+        }
+        const newDimension = {
+          id: `${safeFieldId}-${Date.now()}`,
+          fieldId: safeFieldId,
+          displayName: field.displayName || field.fieldName,
+          originalName: field.displayName || field.fieldName,
+          sort: 'default' as const
+        }
+        chartState.setStackDimensions(prev => [...prev, newDimension])
+      } else {
+        toast({ description: "当前维度数量已达到上限", variant: "warning" })
+      }
+    } else if (field.role === 'metric') {
+      if (isFieldAlreadyAdded(safeFieldId, 'value')) {
+        toast({ description: "字段已存在于指标区域中", variant: "warning" })
+        return
+      }
+      const newMetric = {
+        id: `${safeFieldId}-${Date.now()}`,
+        fieldId: safeFieldId,
+        displayName: field.displayName || field.fieldName,
+        originalName: field.displayName || field.fieldName,
+        sort: 'default' as const,
+        aggregation: 'sum' as const
+      }
+      chartState.setValueDimensions(prev => [...prev, newMetric])
+    }
+  }, [editingComponent, categoryDimensions, stackDimensions, valueDimensions, currentChartHasStack, chartState, toast])
   const invalidFieldIds = useMemo(() => {
-    const validSet = new Set(datasetFields.map(f => f.fieldCode))
+    const validSet = new Set(
+      datasetFields.map(f => f.fieldId || f.fieldCode || f.fieldName).filter(Boolean)
+    )
+
     return new Set(
       [...categoryDimensions, ...stackDimensions, ...valueDimensions]
         .filter(d => !validSet.has(d.fieldId))
         .map(d => d.id)
     )
   }, [datasetFields, categoryDimensions, stackDimensions, valueDimensions])
+
+
 
   // 数据集改变
   const handleDatasetChange = useCallback((datasetCode: string) => {
@@ -259,7 +333,7 @@ export function ComponentConfigDrawer() {
   }
 
   return (
-   <div className="h-full flex bg-background border-l border-border">
+    <div className="h-full flex bg-background border-l border-border">
       {editingComponent.type === 'query' ? (
         <ChartSelector
           charts={[
@@ -300,81 +374,79 @@ export function ComponentConfigDrawer() {
 
                   {configTab === "basic" ? (
                     <>
-                    {
-                      editingComponent.type !== 'metric' && (
-                        <>
+                      {
+                        editingComponent.type !== 'metric' && (
+                          <>
                             {/* 图表类型 */}
-                      <FormBlock label="图表类型" required>
-                        <Select
-                          value={chartType}
-                          onValueChange={handleChartTypeChange}
-                        >
-                          <SelectTrigger className="w-full h-9">
-                            <SelectValue placeholder="选择图表类型">
-                              {CHART_TYPES.find(item => item.value === chartType)?.label || '选择图表类型'}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {CHART_TYPES.map((item) => (
-                              <SelectItem key={item.value} value={item.value}>
-                                {item.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FormBlock>
+                            <FormBlock label="图表类型" required>
+                              <ComponentPicker onSelect={(data) => handleChartTypeChange(data.type)} maxHeight={500}>
+                                <div className="relative w-full group">
+                                  <div className="flex h-9 w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm transition-colors hover:border-gray-400 cursor-pointer">
+                                    {/* 文本区域 */}
+                                    <div className="flex-1">
+                                      <span className="truncate text-gray-700">
+                                        {ChartGroupItems
+                                          .flatMap(item => item.data)
+                                          .find(item => item.type === chartType)?.label || '选择图表类型'}
+                                      </span>
+                                    </div>
+                                    {/* ChevronDown 图标 */}
+                                    <ChevronDown className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                                  </div>
+                                </div>
+                              </ComponentPicker>
+                            </FormBlock>
+                            {/* 类别轴 / 维度 */}
+                            <CollapsibleBlock
+                              title="类别轴 / 维度"
+                              required
+                              collapsed={configCollapsed.category}
+                              onCollapse={() => toggleCollapse('category')}
+                            >
+                              <DimensionBlock
+                                invalidIds={invalidFieldIds}
+                                isDimension={true}
+                                dimensions={categoryDimensions}
+                                maxDimensions={2}
+                                isDragOver={dragOverSection === 'category'}
+                                onDragOver={(e) => handleDragOver(e, 'category')}
+                                onDragLeave={handleDragLeave}
+                                onDrop={(e) => handleDrop(e, 'category')}
+                                onDelete={(dimensionId) => handleDeleteDimension('category', dimensionId)}
+                                onSortChange={(dimensionId, sortValue) => handleSortChange('category', dimensionId, sortValue)}
+                                onEditDisplayName={(dimensionId, originalName, displayName) =>
+                                  openEditDialog('category', dimensionId, originalName, displayName)
+                                }
+                              />
+                            </CollapsibleBlock>
 
-                      {/* 类别轴 / 维度 */}
-                      <CollapsibleBlock
-                        title="类别轴 / 维度"
-                        required
-                        collapsed={configCollapsed.category}
-                        onCollapse={() => toggleCollapse('category')}
-                      >
-                        <DimensionBlock
-                          invalidIds={invalidFieldIds}
-                          isDimension={true}
-                          dimensions={categoryDimensions}
-                          maxDimensions={2}
-                          isDragOver={dragOverSection === 'category'}
-                          onDragOver={(e) => handleDragOver(e, 'category')}
-                          onDragLeave={handleDragLeave}
-                          onDrop={(e) => handleDrop(e, 'category')}
-                          onDelete={(dimensionId) => handleDeleteDimension('category', dimensionId)}
-                          onSortChange={(dimensionId, sortValue) => handleSortChange('category', dimensionId, sortValue)}
-                          onEditDisplayName={(dimensionId, originalName, displayName) =>
-                            openEditDialog('category', dimensionId, originalName, displayName)
-                          }
-                        />
-                      </CollapsibleBlock>
+                            {/* 堆叠项 / 维度 */}
+                            {currentChartHasStack && (
+                              <CollapsibleBlock
+                                title="堆叠项 / 维度"
+                                collapsed={configCollapsed.stack}
+                                onCollapse={() => toggleCollapse('stack')}
+                              >
+                                <DimensionBlock
+                                  invalidIds={invalidFieldIds}
+                                  isDimension={true}
+                                  dimensions={stackDimensions}
+                                  isDragOver={dragOverSection === 'stack'}
+                                  onDragOver={(e) => handleDragOver(e, 'stack')}
+                                  onDragLeave={handleDragLeave}
+                                  onDrop={(e) => handleDrop(e, 'stack')}
+                                  onDelete={(dimensionId) => handleDeleteDimension('stack', dimensionId)}
+                                  onSortChange={(dimensionId, sortValue) => handleSortChange('stack', dimensionId, sortValue)}
+                                  onEditDisplayName={(dimensionId, originalName, displayName) =>
+                                    openEditDialog('stack', dimensionId, originalName, displayName)
+                                  }
+                                />
+                              </CollapsibleBlock>
+                            )}
+                          </>
+                        )
+                      }
 
-                      {/* 堆叠项 / 维度 */}
-                      {currentChartHasStack && (
-                        <CollapsibleBlock
-                          title="堆叠项 / 维度"
-                          collapsed={configCollapsed.stack}
-                          onCollapse={() => toggleCollapse('stack')}
-                        >
-                          <DimensionBlock
-                            invalidIds={invalidFieldIds}
-                            isDimension={true}
-                            dimensions={stackDimensions}
-                            isDragOver={dragOverSection === 'stack'}
-                            onDragOver={(e) => handleDragOver(e, 'stack')}
-                            onDragLeave={handleDragLeave}
-                            onDrop={(e) => handleDrop(e, 'stack')}
-                            onDelete={(dimensionId) => handleDeleteDimension('stack', dimensionId)}
-                            onSortChange={(dimensionId, sortValue) => handleSortChange('stack', dimensionId, sortValue)}
-                            onEditDisplayName={(dimensionId, originalName, displayName) =>
-                              openEditDialog('stack', dimensionId, originalName, displayName)
-                            }
-                          />
-                        </CollapsibleBlock>
-                      )}
-                        </>
-                      )
-                    }
-                  
 
                       {/* 值轴 / 指标 */}
                       <CollapsibleBlock
@@ -400,7 +472,7 @@ export function ComponentConfigDrawer() {
                       </CollapsibleBlock>
 
                       {/* 排序优先级 */}
-                      { editingComponent.type !== 'metric' && <CollapsibleBlock title="排序优先级">
+                      {editingComponent.type !== 'metric' && <CollapsibleBlock title="排序优先级">
                         <div className="space-y-2">
                           {sortPriorityFields.length === 0 ? (
                             <div className="text-xs text-muted-foreground text-center py-2">
@@ -487,7 +559,7 @@ export function ComponentConfigDrawer() {
                       </FormBlock>
 
                       {/* 结果显示 */}
-                      { editingComponent.type !== 'metric' &&<FormBlock label="结果显示">
+                      {editingComponent.type !== 'metric' && <FormBlock label="结果显示">
                         <div className="flex items-center gap-4">
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input type="radio" checked={limitType === "all"} onChange={() => setLimitType("all")} className="h-4 w-4" />
@@ -522,6 +594,7 @@ export function ComponentConfigDrawer() {
                     onDatasetChange={handleDatasetChange}
                     onDragStart={handleDragStart}
                     onFieldsLoaded={setDatasetFields}
+                    onFieldClick={handleFieldClick}
                   />
                 </div>
               </div>
