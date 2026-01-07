@@ -251,8 +251,7 @@ export function ComponentConfigDrawer() {
       type: chartType,
       title: title,
       style_config: styleConfig,
-      dataset_code: editingComponent.dataset_code,
-      updated_at: Date.now().toString()
+      dataset_code: editingComponent.dataset_code
     })
 
     // 刷新当前图表数据

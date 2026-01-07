@@ -214,7 +214,7 @@ export function ComponentWrapper({
                     {component.type === 'query' ? (
                         <QueryFilter isDark={isDark} component={componentData} isPreviewMode={isPreviewMode} />
                     ) : (
-                        <ChartContainer isDark={isDark} component={componentData} />
+                        <ChartContainer isDark={isDark} component={componentData} isPreviewMode={isPreviewMode} />
                     )}
                 </div>
             </div>

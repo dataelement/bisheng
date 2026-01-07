@@ -152,9 +152,9 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
         if (isPreviewMode || !width || !mounted) return {};
 
         const cols = 24;
-        const rowHeight = 30;
-        const [marginX, marginY] = [16, 12];
-        const [padX, padY] = [8, 10];
+        const rowHeight = 32;
+        const [marginX, marginY] = [8, 8];
+        const [padX, padY] = [16, 16];
 
         const availableWidth = width - (padX * 2);
         const totalMarginWidth = (cols - 1) * marginX;
@@ -164,8 +164,8 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
         const patternHeight = rowHeight + marginY;
 
         const strokeColor = "rgba(0, 0, 0, 0.08)"; // 虚线颜色
-        const dashArray = "4, 2"; // 虚线步长
-        const borderRadius = 4; // 圆角
+        const dashArray = "4, 3"; // 虚线步长
+        const borderRadius = 10; // 圆角
 
         const svgString = `
             <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
@@ -182,7 +182,13 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
                         />
                     </pattern>
                 </defs>
-                <rect width="100%" height="100%" fill="url(#grid)" />
+               <rect 
+                    x="${padX}" 
+                    y="${padY}" 
+                    width="calc(100% - ${padX * 2}px)" 
+                    height="calc(100% - ${padY * 2}px)" 
+                    fill="url(#grid)" 
+                />
             </svg>
         `;
 
@@ -217,7 +223,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
                 <div
                     id="edit-charts-panne"
                     ref={containerRef}
-                    className="flex-1 p-2 overflow-auto"
+                    className="flex-1 overflow-auto"
                     style={{
                         backgroundColor: currentDashboard.style_config.theme === 'dark' ? '#1a1a1a' : '#f5f5f5',
                     }}
@@ -232,7 +238,9 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
                                 width={width}
                                 gridConfig={{
                                     cols: 24,
-                                    rowHeight: 32
+                                    rowHeight: 32,
+                                    margin: [8, 8],
+                                    containerPadding: [16, 16]
                                 }}
                                 dragConfig={{ enabled: !isPreviewMode }}
                                 resizeConfig={
@@ -240,10 +248,8 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
                                         enabled: !isPreviewMode,
                                         handles: ["sw", "nw", "se", "ne"]
                                     }}
-                                onLayoutChange={handleLayoutChange}
                                 draggableHandle=".drag-handle"
-                                margin={[16, 16]}
-                                containerPadding={[0, 0]}
+                                onLayoutChange={handleLayoutChange}
                                 compactor={verticalCompactor}
                             >
                                 {currentDashboard.components.map((component) => (

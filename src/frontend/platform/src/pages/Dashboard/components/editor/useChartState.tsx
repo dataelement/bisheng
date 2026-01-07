@@ -368,7 +368,7 @@ export function useChartState(initialComponent: any) {
     fieldCode: dim.name,
     displayName: dim.displayName,
     sort: dim.sort === 'none' ? null : dim.sort,
-    timeGranularity: ''
+    timeGranularity: null
   }))
 
   const stackDimension = stackDimensions.length > 0 ? {
@@ -377,7 +377,7 @@ export function useChartState(initialComponent: any) {
     fieldCode: stackDimensions[0].name,
     displayName: stackDimensions[0].displayName,
     sort: stackDimensions[0].sort === 'none' ? null : stackDimensions[0].sort,
-    timeGranularity: ''
+    timeGranularity: null
   } : undefined
 
   const metrics = valueDimensions.map(metric => ({

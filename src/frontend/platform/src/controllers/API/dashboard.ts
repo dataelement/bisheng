@@ -1,7 +1,7 @@
 // Mock API functions for dashboard operations
 
 import { generateUUID } from "@/components/bs-ui/utils";
-import { createDefaultDataConfig, Dashboard, DashboardComponent, LayoutItem, StyleConfig } from "@/pages/Dashboard/types/dataConfig";
+import { ChartType, createDefaultDataConfig, Dashboard, DashboardComponent, LayoutItem, StyleConfig } from "@/pages/Dashboard/types/dataConfig";
 import axios from "../request";
 
 // Simulate API delay
@@ -261,7 +261,15 @@ export async function copyDashboard({ id, title }: { id: string, title: string }
 }
 
 export async function updateDashboard2(id: string, data: Partial<Dashboard>): Promise<Dashboard> {
-    return await axios.put(`/api/v1/telemetry/dashboard/${id}`, data)
+    const payload = cloneDeep(data);
+    // delete time
+    delete payload.create_time;
+    delete payload.update_time;
+    payload.components.forEach(component => {
+        delete component.create_time;
+        delete component.update_time;
+    })
+    return await axios.put(`/api/v1/telemetry/dashboard/${id}`, payload)
 }
 
 export async function updateDashboard(id: string, data: Partial<Dashboard>): Promise<Dashboard> {
@@ -379,33 +387,28 @@ export async function getDatasets(): Promise<DashboardDataset[]> {
 import {
     QueryDataResponse
 } from '@/pages/Dashboard/types/chartData';
+import { cloneDeep } from "lodash-es";
 
 export async function queryChartData(params: {
-    dashboardId: string,
-    componentData: DashboardComponent,
-    componentId: string,
+    chartType: ChartType
+    dashboardId: string
+    componentId?: string
+    componentData?: DashboardComponent
     queryParams?: any
 }): Promise<QueryDataResponse> {
-    const res = await axios.post(`/api/v1/telemetry/dashboard/component/query`, {
+    const resData = await axios.post(`/api/v1/telemetry/dashboard/component/query`, {
         dashboard_id: params.dashboardId,
         component_data: params.componentData,
         component_id: params.componentId,
         time_filters: params.queryParams
     });
 
-    console.log('res :>> ', res);
-
-    await delay(500)
 
     // console.log('dataConfig :>> ', params.dataConfig);
     // mock
     // 双指标
-    const zhibiaoData = ['销售额', '订单数'] // 使用display名
+    const zhibiaoData = params.componentData.data_config.metrics.map(e => e.displayName)
 
-    const resData = {
-        value: [[1, 2, 3, 4, 5], [2, 2, 3, 4, 5], [9, 6, 7, 8, 9]],
-        dimensions: [["朝阳店", "2025-10-01", "奶茶"], ["望京店", "2025-10-01", "咖啡"], ["朝阳店", "2025-10-02", "奶茶"]]
-    }
     const hasDuidie = false
     let duidieweidu = [] // 表字段去重值
     const nameSet = new Set()

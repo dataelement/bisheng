@@ -130,7 +130,7 @@ export interface DimensionField {
   fieldCode: string             // 字段编码
   displayName?: string          // 展示名称（不填则使用 fieldName）
   sort: null | 'asc' | 'desc' // 排序方式
-  timeGranularity: string // 时间子维度（仅时间字段有效）
+  timeGranularity: string | null // 时间子维度（仅时间字段有效）
 }
 
 //  指标配置 

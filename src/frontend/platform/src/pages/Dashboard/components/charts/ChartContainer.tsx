@@ -12,10 +12,11 @@ import { useEditorDashboardStore } from '@/store/dashboardStore'
 
 interface ChartContainerProps {
   isDark: boolean;
+  isPreviewMode: boolean;
   component: DashboardComponent;
 }
 
-export function ChartContainer({ isDark, component }: ChartContainerProps) {
+export function ChartContainer({ isPreviewMode, isDark, component }: ChartContainerProps) {
   const chartRefreshTriggers = useEditorDashboardStore(state => state.chartRefreshTriggers)
   const currentDashboard = useEditorDashboardStore(state => state.currentDashboard)
   const refreshInfo = chartRefreshTriggers[component.id]
@@ -27,9 +28,10 @@ export function ChartContainer({ isDark, component }: ChartContainerProps) {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['chartData', component.id, refreshTrigger],
     queryFn: () => queryChartData({
+      chartType: component.type,
       dashboardId: currentDashboard.id,
-      componentData: component,
-      componentId: component.id,
+      componentData: isPreviewMode ? undefined : component,
+      componentId: isPreviewMode ? component.id : undefined,
       queryParams
     }),
     enabled: !!component.id && component.data_config.isConfigured
@@ -66,14 +68,14 @@ export function ChartContainer({ isDark, component }: ChartContainerProps) {
   }
 
   // No data
-  if (!component.data_config.isConfigured) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <img />
-        <span className="text-sm text-muted-foreground">当前图表无数据</span>
-      </div>
-    );
-  }
+  // if (!component.data_config.isConfigured) {
+  //   return (
+  //     <div className="flex items-center justify-center h-full">
+  //       <img />
+  //       <span className="text-sm text-muted-foreground">当前图表无数据</span>
+  //     </div>
+  //   );
+  // }
 
   // Render metric card
   if (component.type === 'metric') {
