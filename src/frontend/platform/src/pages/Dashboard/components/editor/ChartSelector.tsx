@@ -12,6 +12,8 @@ import {
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
 import { AdvancedDatePicker } from "../AdvancedDatePicker"
+import { ChevronRight, ChevronLeft } from "lucide-react"
+import { toast } from "@/components/bs-ui/toast/use-toast"
 
 /* ================== 类型 ================== */
 export interface ChartLinkConfig {
@@ -40,43 +42,80 @@ export default function ChartSelector({
   const [timeGranularity, setTimeGranularity] = useState("年月日")
   const [isDefault, setIsDefault] = useState(false)
   const [timeFilter, setTimeFilter] = useState<any>(null)
+  const [collapsed, setCollapsed] = useState(false) // 控制整体收起
 
-  const [collapsed, setCollapsed] = useState(false)
   // 从 store 获取当前 dashboard 和组件
   const { currentDashboard } = useEditorDashboardStore()
   const { editingComponent } = useComponentEditorStore()
-    useEffect(() => {
-    if (editingComponent?.query_config) {
-      const config = editingComponent.query_config
+  
+useEffect(() => {
 
-      if (config.linkedComponentIds) {
-        setSelectedCharts(config.linkedComponentIds)
-      }
-      if (config.displayType) {
-        setDisplayType(config.displayType)
+  const config = editingComponent?.data_config
+  
+  if (config && 'linkedComponentIds' in config) {
+    
+    setSelectedCharts(config.linkedComponentIds || [])
+    
+    // 检查 queryConditions
+    if (config.queryConditions) {
+      const queryCond = config.queryConditions
+      
+      if (queryCond.displayType) {
+        const displayTypeValue = queryCond.displayType === "single" ? "时间" : "时间范围"
+        setDisplayType(displayTypeValue)
       }
       
-      if (config.timeGranularity) {
-        setTimeGranularity(config.timeGranularity)
-      }
-      
-      if (config.isDefault !== undefined) {
-        setIsDefault(config.isDefault)
-      }
-      
-      if (config.defaultDateRange?.start) {
-        const startDate = new Date(config.defaultDateRange.start)
-        const endDate = new Date(config.defaultDateRange.end)
-        
-        if (!isNaN(startDate.getTime())) {
-          setTimeFilter({
-            startTime: Math.floor(startDate.getTime() / 1000),
-            endTime: Math.floor(endDate.getTime() / 1000)
-          })
+      // 映射时间粒度
+      if (queryCond.timeGranularity) {
+        let timeGranularityValue = "年月日"
+        if (queryCond.timeGranularity === "year_month") {
+          timeGranularityValue = "年月"
+        } else if (queryCond.timeGranularity === "year_month_day_hour") {
+          timeGranularityValue = "年月日时"
         }
+        setTimeGranularity(timeGranularityValue)
+      }
+      
+      // 设置默认值
+      if (queryCond.hasDefaultValue !== undefined) {
+        setIsDefault(queryCond.hasDefaultValue)
+      }
+      
+      // 处理时间范围
+      if (queryCond.hasDefaultValue && queryCond.defaultValue?.type === 'custom') {
+        try {
+          const startTime = queryCond.defaultValue.startDate
+          const endTime = queryCond.defaultValue.endDate
+          
+          if (startTime && endTime) {
+            console.log('设置时间范围:', {
+              startTime: Math.floor(startTime / 1000),
+              endTime: Math.floor(endTime / 1000)
+            })
+            setTimeFilter({
+              startTime: Math.floor(startTime / 1000),
+              endTime: Math.floor(endTime / 1000)
+            })
+          } else {
+            setTimeFilter(null)
+          }
+        } catch (error) {
+          setTimeFilter(null)
+        }
+      } else {
+        setTimeFilter(null)
       }
     }
-  }, [editingComponent])
+  } else {
+    // 重置为默认值
+    setSelectedCharts([])
+    setDisplayType("时间范围")
+    setTimeGranularity("年月日")
+    setIsDefault(false)
+    setTimeFilter(null)
+  }
+}, [editingComponent])
+  
   // 获取所有非查询类型的图表组件
   const charts = currentDashboard 
     ? currentDashboard.components
@@ -90,6 +129,9 @@ export default function ChartSelector({
           dataset: component.dataset_code || '未设置数据集'
         }))
     : []
+
+  // 获取当前编辑的组件名称
+  const componentName = editingComponent?.title || '未命名组件'
 
   /* 单选 */
   const toggleChart = (id: string) => {
@@ -108,7 +150,7 @@ export default function ChartSelector({
       setSelectedCharts(allChartIds)
     }
   }
-  const toggleCollapse = () => setCollapsed(prev => !prev)
+  
   /* 保存 */
   const handleSave = () => {
     let finalStartDate = ""
@@ -173,6 +215,10 @@ export default function ChartSelector({
     }
     
     console.log('保存的配置:', config)
+    toast({
+      variant: 'success',
+      description: '关联图表配置已保存',
+    })
     onSave?.(config)
   }
 
@@ -193,106 +239,134 @@ export default function ChartSelector({
     return displayType === "时间范围" ? "range" : "single"
   }
 
-  return (
-    <div className="w-[420px] bg-background border rounded-lg shadow-lg p-4 space-y-4">
-      <h3 className="text-lg font-medium">选择关联图表</h3>
-
-      {/* 图表列表 */}
-      <div className="border rounded-md p-2 max-h-64 overflow-y-auto space-y-2">
-        {/* 全选 */}
-        <div className="flex items-center gap-2">
-          <Checkbox
-            checked={isAllSelected}
-            onCheckedChange={toggleSelectAll}
-          />
-          <span className="font-medium">全选</span>
-        </div>
-
-        {/* 单个图表 */}
-        {charts.map(chart => (
-          <div
-            key={chart.id}
-            className="flex items-center gap-2 pl-4"
-          >
-            <Checkbox
-              checked={selectedCharts.includes(chart.id)}
-              onCheckedChange={() => toggleChart(chart.id)}
-            />
-            <span className="text-sm">
-              {chart.name}
-              {chart.dataset && (
-                <span className="text-muted-foreground ml-1">
-                  ({chart.dataset})
-                </span>
-              )}
-            </span>
+  // 收起状态显示
+  if (collapsed) {
+    return (
+      <div className="border-r flex flex-col h-full w-12 shrink-0">
+        <div className="h-full flex flex-col items-center justify-center cursor-pointer hover:bg-accent/50 transition-colors" 
+             onClick={() => setCollapsed(false)}>
+          <div className="writing-mode-vertical text-sm font-medium py-4">关联图表配置</div>
+          <div className="mt-2">
+            <ChevronRight className="h-4 w-4" />
           </div>
-        ))}
-      </div>
-
-      {/* 配置区 */}
-      <div className="space-y-3">
-        {/* 展示类型 */}
-        <div className="space-y-1">
-          <label className="text-sm">展示类型</label>
-          <Select value={displayType} onValueChange={setDisplayType}>
-            <SelectTrigger className="h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="时间范围">时间范围</SelectItem>
-              <SelectItem value="时间">时间</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* 时间粒度 */}
-        <div className="space-y-1">
-          <label className="text-sm">时间粒度</label>
-          <Select value={timeGranularity} onValueChange={setTimeGranularity}>
-            <SelectTrigger className="h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="年月">年月</SelectItem>
-              <SelectItem value="年月日">年月日</SelectItem>
-              <SelectItem value="年月日时">年月日时</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* 默认值 */}
-        <div className="flex items-center gap-2">
-          <Checkbox
-            checked={isDefault}
-            onCheckedChange={() => setIsDefault(prev => !prev)}
-          />
-          <span className="text-sm">设置为默认值</span>
-        </div>
-
-        {/* 时间范围 - 始终使用AdvancedDatePicker */}
-        <div className="space-y-1">
-          <AdvancedDatePicker
-            granularity={getGranularity()}
-            mode={getMode()}
-            value={timeFilter}
-            onChange={(val) => {
-              console.log("时间选择变化:", val)
-              setTimeFilter(val)
-            }}
-            placeholder={`选择${displayType}`}
-          />
         </div>
       </div>
+    )
+  }
 
-      {/* 底部按钮 */}
-      <div className="flex justify-end gap-2 pt-2">
-        <Button variant="outline" onClick={onCancel}>
-          取消
+  return (
+    <div className="border-r flex flex-col h-full w-[420px] shrink-0 bg-background">
+      {/* 标题区域 */}
+      <div className="px-4 py-3 border-b flex items-center justify-between bg-muted/20">
+        <div>
+          <h3 className="text-base font-semibold">关联图表配置</h3>
+          {/* <p className="text-sm text-muted-foreground">组件：{componentName}</p> */}
+        </div>
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCollapsed(true)}>
+          <ChevronLeft className="h-4 w-4" />
         </Button>
-        <Button onClick={handleSave}>
-          保存
-        </Button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* 图表列表 */}
+        <div className=" max-h-64 overflow-y-auto space-y-2">
+          <div>选择关联图表</div>
+          {/* 全选 */}
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={isAllSelected}
+              onCheckedChange={toggleSelectAll}
+            />
+            <span className="font-medium">全选</span>
+          </div>
+
+          {/* 单个图表 */}
+          {charts.map(chart => (
+            <div
+              key={chart.id}
+              className="flex items-center gap-2 pl-4"
+            >
+              <Checkbox
+                checked={selectedCharts.includes(chart.id)}
+                onCheckedChange={() => toggleChart(chart.id)}
+              />
+              <span className="text-sm">
+                {chart.name}
+                {chart.dataset && (
+                  <span className="text-muted-foreground ml-1">
+                    ({chart.dataset})
+                  </span>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="h-px bg-muted"></div>
+        {/* 配置区 */}
+        <div className="space-y-3">
+          <div className="text-md font-medium">查询条件配置</div>
+          {/* 展示类型 */}
+          <div className="space-y-1">
+            <label className="text-sm">展示类型</label>
+            <Select value={displayType} onValueChange={setDisplayType}>
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="时间范围">时间范围</SelectItem>
+                <SelectItem value="时间">时间</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* 时间粒度 */}
+          <div className="space-y-1">
+            <label className="text-sm">时间粒度</label>
+            <Select value={timeGranularity} onValueChange={setTimeGranularity}>
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="年月">年月</SelectItem>
+                <SelectItem value="年月日">年月日</SelectItem>
+                <SelectItem value="年月日时">年月日时</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* 默认值 */}
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={isDefault}
+              onCheckedChange={() => setIsDefault(prev => !prev)}
+            />
+            <span className="text-sm">设置为默认值</span>
+          </div>
+
+          {/* 时间范围 - 始终使用AdvancedDatePicker */}
+          <div className="space-y-1">
+            <AdvancedDatePicker
+              granularity={getGranularity()}
+              mode={getMode()}
+              value={timeFilter}
+              onChange={(val) => {
+                console.log("时间选择变化:", val)
+                setTimeFilter(val)
+              }}
+              placeholder={`选择${displayType}`}
+            />
+          </div>
+        </div>
+
+        {/* 底部按钮 */}
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="outline" onClick={onCancel}>
+            取消
+          </Button>
+          <Button onClick={handleSave}>
+            保存
+          </Button>
+        </div>
       </div>
     </div>
   )

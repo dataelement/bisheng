@@ -383,6 +383,11 @@ const handleMetricFormatChange = useCallback(
       data_config: queryConfig
     })
     
+   const dashboardStore = useEditorDashboardStore.getState();
+    dashboardStore.updateComponent(editingComponent.id, {
+      data_config: queryConfig
+    })
+    
     // 刷新查询组件
     refreshChart(editingComponent.id)
   }}
