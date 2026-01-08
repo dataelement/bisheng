@@ -8,6 +8,7 @@ import Page404 from "../pages/Page404";
 import { AppNumType } from "../types/app";
 import RouteErrorBoundary from "./RouteErrorBoundary";
 import EditorPage from "@/pages/Dashboard/editor";
+import SharePage from "@/pages/Dashboard/share";
 
 // 异步加载页面组件
 const Templates = lazy(() => import("@/pages/BuildPage/appTemps"));
@@ -96,6 +97,7 @@ const privateRouter = [
     ],
   },
   { path: "dashboard/:id", element: <EditorPage />, errorElement: <RouteErrorBoundary />, permission: 'dashboard', },
+  { path: "dashboard/share/:boardId", element: <SharePage />, errorElement: <RouteErrorBoundary /> },
   { path: "model/doc", element: <Doc />, errorElement: <RouteErrorBoundary /> },
   {
     path: "/skill/:id/",

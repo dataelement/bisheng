@@ -23,7 +23,7 @@ export const usePublishDashboard = () => {
                 published ? DashboardStatus.Draft : DashboardStatus.Published
             ),
         onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] });
+            queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, variables.id] });
             toast({
                 description: variables.published ? "已取消发布" : "已发布",
                 variant: "success"

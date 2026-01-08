@@ -116,6 +116,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
             setUser(res.user_id ? res : null)
             localStorage.setItem('UUR_INFO', res.user_id ? String(res.user_id) : '')
             if (res.user_id) loadComponents()
+            // 是否有访问后台权限
+            if (res.role !== 'admin' && !res.web_menu.includes('backend')) {
+                location.href = `${location.origin}/workspace/c/new?error=90001`  // workspace useErrorPrompt
+            }
         }).catch(e => {
             setUser(null)
         })

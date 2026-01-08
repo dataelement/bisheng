@@ -40,9 +40,9 @@ customAxios.interceptors.response.use(function (response) {
         }
         return Promise.reject(errorMessage);
     }
-    // 应用无编辑权限
-    if (response.data.status_code === 10599) {
-        location.href = __APP_ENV__.BASE_URL + '/build/apps?error=10599'
+    // 应用无编辑权限 (TODO业务状态码放行到具体业务中)
+    if ([10599, 17005].includes(response.data.status_code)) {
+        location.href = `${__APP_ENV__.BASE_URL}/build/apps?error=${response.data.status_code}`
         return Promise.reject(errorMessage);
     }
     // 异地登录

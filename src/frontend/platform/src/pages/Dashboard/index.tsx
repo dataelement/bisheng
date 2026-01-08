@@ -49,8 +49,9 @@ export default function DashboardPage() {
 
     const setDefaultMutation = useMutation({
         mutationFn: (id: string) => setDefaultDashboard(id),
-        onSuccess: () => {
+        onSuccess: (a, id) => {
             queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
+            queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, id] })
         },
         onError: () => {
         }
@@ -64,9 +65,7 @@ export default function DashboardPage() {
 
 
     const handleShare = async (id: string) => {
-        const dashboard = dashboards.find((d) => d.id === id)
-
-        if (dashboard?.status === "draft") {
+        if (selectedDashboard?.status === "draft") {
             toast({
                 description: "该看板尚未发布",
                 variant: "error",
@@ -75,7 +74,7 @@ export default function DashboardPage() {
         }
 
         try {
-            const link = await getShareLink(id)
+            const link = `${location.origin}${__APP_ENV__.BASE_URL}/dashboard/share/${btoa(selectedDashboard.id)}`
             await copyText(link)
             toast({
                 description: "分享链接已复制",

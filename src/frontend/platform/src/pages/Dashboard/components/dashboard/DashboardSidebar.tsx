@@ -39,7 +39,10 @@ export function DashboardSidebar({
     const [searchQuery, setSearchQuery] = useState("")
     const [isCollapsed, setIsCollapsed] = useState(false)
     const { user } = useContext(userContext);
-    console.log('user :>> ', user.web_menu);
+
+    const canCreate = useMemo(() => {
+        return user.web_menu?.includes('create_dashboard') || user.role === 'admin'
+    }, [user])
 
     const filteredDashboards = useMemo(() => {
         if (!searchQuery.trim()) return dashboards
@@ -168,7 +171,7 @@ export function DashboardSidebar({
                 !isCollapsed && <div className="header relative flex items-center justify-between h-[52px] px-2 pr-11 border-b">
                     <p className="text-base font-bold">看板列表</p>
                     {
-                        user.web_menu && <Tip content={"添加看板"} >
+                        canCreate && <Tip content={"添加看板"} >
                             <Button variant="ghost" size="icon" onClick={handleCreate}><SquarePlusIcon size={16} /></Button>
                         </Tip>
                     }
