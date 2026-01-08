@@ -1,5 +1,5 @@
 # 默认：自动识别文本，统一用 LF 存库
-* text=auto eol=lf
+#* text=auto eol=lf
 
 # 明确常见文本文件用 LF
 *.py   text eol=lf
