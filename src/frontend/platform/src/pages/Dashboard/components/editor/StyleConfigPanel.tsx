@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { ChevronDown, AlignLeft, AlignCenter, AlignRight, ChevronUp } from "lucide-react"
+import { ChevronDown, AlignLeft, AlignCenter, AlignRight, ChevronUp, Bold, Italic, Underline, Strikethrough } from "lucide-react"
 import { Button } from "@/components/bs-ui/button"
 import { Input } from "@/components/bs-ui/input"
 import {
@@ -19,38 +19,192 @@ const themeColors = ["#4ac5ff", "#3dd598", "#f7ba0b", "#ff7d4d", "#5c6bc0"]
 interface StyleConfigPanelProps {
   config: ComponentStyleConfig
   onChange: (newConfig: ComponentStyleConfig) => void
+  type?: string
 }
+
+// 文本格式组件
+interface TextFormatProps {
+  fontSize: number
+  setFontSize: (size: number) => void
+  bold: boolean
+  setBold: (bold: boolean) => void
+  italic: boolean
+  setItalic: (italic: boolean) => void
+  strikethrough: boolean
+  setStrikethrough: (strikethrough: boolean) => void
+  align: "left" | "center" | "right"
+  setAlign: (align: "left" | "center" | "right") => void
+  color?: string
+  setColor?: (color: string) => void
+}
+
+function TextFormat({
+  fontSize,
+  setFontSize,
+  bold,
+  setBold,
+  italic,
+  setItalic,
+  strikethrough,
+  setStrikethrough,
+  align,
+  setAlign,
+  color = "#000000",
+  setColor
+}: TextFormatProps) {
+  const alignIcon =
+  align === "left" ? (
+    <AlignLeft className="w-3.5 h-3.5" />
+  ) : align === "center" ? (
+    <AlignCenter className="w-3.5 h-3.5" />
+  ) : (
+    <AlignRight className="w-3.5 h-3.5" />
+  )
+return (
+  <div
+    className="
+      flex items-center gap-1
+      w-[244px] h-8
+      px-1
+      border rounded-md
+      overflow-hidden
+    "
+  >
+    {/* 字号 */}
+    <Select
+      value={String(fontSize)}
+      onValueChange={(v) => setFontSize(Number(v))}
+    >
+      <SelectTrigger className="w-[56px] h-7 px-2 text-xs border-0 ">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {[10, 12, 14, 16, 18, 20, 24].map((v) => (
+          <SelectItem key={v} value={String(v)} className="text-xs">
+            {v}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+
+    {/* 颜色 */}
+    {setColor && (
+      <div className="relative shrink-0 mr-2">
+        <Input
+          type="color"
+          className="absolute inset-0 opacity-0 cursor-pointer"
+          value={color}
+          onChange={(e) => setColor(e.target.value)}
+        />
+        <div
+          className="w-6 h-6 rounded"
+          style={{ backgroundColor: color }}
+        />
+      </div>
+    )}
+
+    {/* 对齐 */}
+    <Select
+      value={align}
+      onValueChange={(v) => setAlign(v as "left" | "center" | "right")}
+    >
+      <SelectTrigger className="w-10 h-7 px-1 border-0 shadow-none">
+        <SelectValue asChild>{alignIcon}</SelectValue>
+      </SelectTrigger>
+
+      <SelectContent>
+        <SelectItem value="left" className="flex justify-center">
+          <AlignLeft className="w-4 h-4" />
+        </SelectItem>
+        <SelectItem value="center" className="flex justify-center">
+          <AlignCenter className="w-4 h-4" />
+        </SelectItem>
+        <SelectItem value="right" className="flex justify-center">
+          <AlignRight className="w-4 h-4" />
+        </SelectItem>
+      </SelectContent>
+    </Select>
+
+    {/* 样式 */}
+    <div className="flex">
+      <IconBtn active={bold} onClick={() => setBold(!bold)}>
+        <Bold className="w-3.5 h-3.5" />
+      </IconBtn>
+      <IconBtn active={italic} onClick={() => setItalic(!italic)}>
+        <Italic className="w-3.5 h-3.5" />
+      </IconBtn>
+      <IconBtn
+        active={strikethrough}
+        onClick={() => setStrikethrough(!strikethrough)}
+      >
+        <Strikethrough className="w-3.5 h-3.5" />
+      </IconBtn>
+    </div>
+  </div>
+)
+
+}
+
+/** 小按钮统一组件 */
+function IconBtn({
+  active,
+  children,
+  onClick
+}: {
+  active?: boolean
+  children: React.ReactNode
+  onClick: () => void
+}) {
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={onClick}
+      className={`w-7 h-7 px-0 rounded-none ${
+        active ? "bg-gray-200" : ""
+      }`}
+    >
+      {children}
+    </Button>
+  )
+}
+
 const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   themeColor: "#4ac5ff",
   bgColor: "#ffffff",
+
+  title: "",
   titleFontSize: 14,
   titleBold: false,
   titleItalic: false,
   titleUnderline: false,
   titleAlign: "left",
-  axis: "x",
-  axisTitle: "",
-  axisFontSize: 14,
-  axisBold: false,
-  axisItalic: false,
-  axisUnderline: false,
-  axisAlign: "left",
+  titleColor: "#000000",
+
+  xAxisTitle: "",
+  xAxisFontSize: 14,
+  xAxisBold: false,
+  xAxisItalic: false,
+  xAxisUnderline: false,
+  xAxisAlign: "center",
+  xAxisColor: "#000000",
+
+  yAxisTitle: "",
+  yAxisFontSize: 14,
+  yAxisBold: false,
+  yAxisItalic: false,
+  yAxisUnderline: false,
+  yAxisAlign: "center",
+  yAxisColor: "#000000",
+
   legendPosition: "bottom",
   legendFontSize: 14,
   legendBold: false,
   legendItalic: false,
   legendUnderline: false,
   legendAlign: "left",
-  showLegend: true,
-  showAxis: true,
-  showDataLabel: true,
-  showGrid: true,
-  // 指标卡相关字段
-  metricFontSize: 14,
-  metricBold: false,
-  metricItalic: false,
-  metricUnderline: false,
-  metricAlign: "center",
+  legendColor: "#000000",
+
   showSubtitle: false,
   subtitle: "",
   subtitleFontSize: 14,
@@ -58,20 +212,22 @@ const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   subtitleItalic: false,
   subtitleUnderline: false,
   subtitleAlign: "center",
-  // X轴和Y轴标题相关
-  xAxisTitle: "",
-  xAxisFontSize: 14,
-  xAxisBold: false,
-  xAxisItalic: false,
-  xAxisUnderline: false,
-  xAxisAlign: "center",
-  yAxisTitle: "",
-  yAxisFontSize: 14,
-  yAxisBold: false,
-  yAxisItalic: false,
-  yAxisUnderline: false,
-  yAxisAlign: "center"
+  subtitleColor: "#000000",
+
+  metricFontSize: 14,
+  metricBold: false,
+  metricItalic: false,
+  metricUnderline: false,
+  metricAlign: "center",
+  metricColor: "#000000",
+
+  showLegend: true,
+  showAxis: true,
+  showDataLabel: true,
+  showGrid: true,
 }
+
+
 // 内联的折叠区块组件
 function CollapsibleBlock({
   title,
@@ -90,9 +246,12 @@ function CollapsibleBlock({
 }) {
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <label className="text-sm font-medium text-black">{title}</label>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between bg-gray-50 rounded-md h-[28px] w-[244px]">
+        <div className="flex items-center">
+          <div className="h-3 w-[3px] bg-blue-500 ml-2 rounded-[2px]"></div>
+          <label className="text-sm font-medium text-black ml-2">{title}</label>
+        </div>
+        <div className="flex items-center gap-2 mr-2">
           {rightContent}
           {!isOpen && (
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onCollapse}>
@@ -101,7 +260,11 @@ function CollapsibleBlock({
           )}
         </div>
       </div>
-      {(isOpen || !collapsed) && children}
+      {(isOpen || !collapsed) && (
+        <div className="w-[244px]">
+          {children}
+        </div>
+      )}
     </div>
   )
 }
@@ -114,7 +277,9 @@ function FormBlock({ label, children }: {
   return (
     <div className="space-y-2">
       <label className="text-sm font-medium">{label}</label>
-      {children}
+      <div className="w-[244px]">
+        {children}
+      </div>
     </div>
   )
 }
@@ -132,7 +297,7 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
     ...config
   }))
 
-const debounceTimer = useRef<NodeJS.Timeout>()
+  const debounceTimer = useRef<NodeJS.Timeout>()
 
   useEffect(() => {
     if (JSON.stringify(config) !== JSON.stringify(localConfig)) {
@@ -150,23 +315,14 @@ const debounceTimer = useRef<NodeJS.Timeout>()
     }))
   }
 
-const handleChange = (key: keyof ComponentStyleConfig, value: any) => {
-  const newConfig = {
-    ...localConfig,
-    [key]: value
+  const handleChange = (key: keyof ComponentStyleConfig, value: any) => {
+    const newConfig = {
+      ...localConfig,
+      [key]: value
+    };
+    setLocalConfig(newConfig);
+ onChange(newConfig) 
   };
-  setLocalConfig(newConfig);
-  
-  // 防抖处理
-  if (debounceTimer.current) {
-    clearTimeout(debounceTimer.current);
-  }
-  
-  debounceTimer.current = setTimeout(() => {
-    onChange(newConfig);
-  }, 300);
-};
-
   return (
     <div className="space-y-6">
       {/* 颜色 */}
@@ -216,75 +372,23 @@ const handleChange = (key: keyof ComponentStyleConfig, value: any) => {
           />
         </FormBlock>
         <FormBlock label="文本格式">
-          <div className="flex items-center gap-2">
-            <Select
-              value={String(localConfig.titleFontSize)}
-              onValueChange={(v) => handleChange("titleFontSize", Number(v))}
-            >
-              <SelectTrigger className="w-20 h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[12, 14, 16, 18, 20].map((v) => (
-                  <SelectItem key={v} value={String(v)}>
-                    {v}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Button
-              variant="outline"
-              size="sm"
-              className={localConfig.titleBold ? "bg-gray-200" : ""}
-              onClick={() => handleChange("titleBold", !localConfig.titleBold)}
-            >
-              B
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className={localConfig.titleItalic ? "bg-gray-200" : ""}
-              onClick={() => handleChange("titleItalic", !localConfig.titleItalic)}
-            >
-              I
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className={localConfig.titleUnderline ? "bg-gray-200" : ""}
-              onClick={() => handleChange("titleUnderline", !localConfig.titleUnderline)}
-            >
-              U
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              className={localConfig.titleAlign === "left" ? "bg-gray-200" : ""}
-              onClick={() => handleChange("titleAlign", "left")}
-            >
-              <AlignLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className={localConfig.titleAlign === "center" ? "bg-gray-200" : ""}
-              onClick={() => handleChange("titleAlign", "center")}
-            >
-              <AlignCenter className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className={localConfig.titleAlign === "right" ? "bg-gray-200" : ""}
-              onClick={() => handleChange("titleAlign", "right")}
-            >
-              <AlignRight className="h-4 w-4" />
-            </Button>
-          </div>
+          <TextFormat
+            fontSize={localConfig.titleFontSize}
+            setFontSize={(v) => handleChange("titleFontSize", v)}
+            bold={localConfig.titleBold}
+            setBold={(v) => handleChange("titleBold", v)}
+            italic={localConfig.titleItalic}
+            setItalic={(v) => handleChange("titleItalic", v)}
+            strikethrough={localConfig.titleUnderline} // 使用 strikethrough 代替 underline
+            setStrikethrough={(v) => handleChange("titleUnderline", v)}
+            align={localConfig.titleAlign}
+            setAlign={(v) => handleChange("titleAlign", v)}
+            color={localConfig.titleColor || localConfig.themeColor} 
+            setColor={(v) => handleChange("titleColor", v)}
+          />
         </FormBlock>
       </CollapsibleBlock>
+      
       {
         type === 'metric' ?
           <>
@@ -295,74 +399,20 @@ const handleChange = (key: keyof ComponentStyleConfig, value: any) => {
               onCollapse={() => { }}
             >
               <FormBlock label="文本格式">
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={String(localConfig.metricFontSize)}
-                    onValueChange={(v) => handleChange("metricFontSize", Number(v))}
-                  >
-                    <SelectTrigger className="w-20 h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    
-                    <SelectContent>
-                      {[12, 14, 16, 18, 20].map((v) => (
-                        <SelectItem key={v} value={String(v)}>
-                          {v}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={localConfig.metricBold ? "bg-gray-200" : ""}
-                    onClick={() => handleChange("metricBold", !localConfig.metricBold)}
-                  >
-                    B
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={localConfig.metricItalic ? "bg-gray-200" : ""}
-                    onClick={() => handleChange("metricItalic", !localConfig.metricItalic)}
-                  >
-                    I
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={localConfig.metricUnderline ? "bg-gray-200" : ""}
-                    onClick={() => handleChange("metricUnderline", !localConfig.metricUnderline)}
-                  >
-                    U
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={localConfig.metricAlign === "left" ? "bg-gray-200" : ""}
-                    onClick={() => handleChange("metricAlign", "left")}
-                  >
-                    <AlignLeft className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={localConfig.metricAlign === "center" ? "bg-gray-200" : ""}
-                    onClick={() => handleChange("metricAlign", "center")}
-                  >
-                    <AlignCenter className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={localConfig.metricAlign === "right" ? "bg-gray-200" : ""}
-                    onClick={() => handleChange("metricAlign", "right")}
-                  >
-                    <AlignRight className="h-4 w-4" />
-                  </Button>
-                </div>
+                <TextFormat
+                  fontSize={localConfig.metricFontSize || 14}
+                  setFontSize={(v) => handleChange("metricFontSize", v)}
+                  bold={localConfig.metricBold || false}
+                  setBold={(v) => handleChange("metricBold", v)}
+                  italic={localConfig.metricItalic || false}
+                  setItalic={(v) => handleChange("metricItalic", v)}
+                  strikethrough={localConfig.metricUnderline || false}
+                  setStrikethrough={(v) => handleChange("metricUnderline", v)}
+                  align={localConfig.metricAlign || "center"}
+                  setAlign={(v) => handleChange("metricAlign", v)}
+                   color={localConfig.metricColor || localConfig.themeColor}
+  setColor={(v) => handleChange("metricColor", v)}
+                />
               </FormBlock>
             </CollapsibleBlock>
             <CollapsibleBlock
@@ -376,11 +426,10 @@ const handleChange = (key: keyof ComponentStyleConfig, value: any) => {
                     checked={localConfig.showSubtitle || false}
                     onCheckedChange={(v) => handleChange("showSubtitle", v)}
                   />
-                  <span className="text-xs text-gray-500">显示该项</span>
+                  <span className="text-xs text-gray-500">显示</span>
                 </div>
               }
             >
-
               {localConfig.showSubtitle && (
                 <>
                   <FormBlock label="文本内容">
@@ -391,85 +440,32 @@ const handleChange = (key: keyof ComponentStyleConfig, value: any) => {
                     />
                   </FormBlock>
                   <FormBlock label="文本格式">
-                    <div className="flex items-center gap-2">
-                      <Select
-                        value={String(localConfig.subtitleFontSize)}
-                        onValueChange={(v) => handleChange("subtitleFontSize", Number(v))}
-                      >
-                        <SelectTrigger className="w-20 h-9">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[12, 14, 16, 18, 20].map((v) => (
-                            <SelectItem key={v} value={String(v)}>
-                              {v}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={localConfig.subtitleBold ? "bg-gray-200" : ""}
-                        onClick={() => handleChange("subtitleBold", !localConfig.subtitleBold)}
-                      >
-                        B
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={localConfig.subtitleItalic ? "bg-gray-200" : ""}
-                        onClick={() => handleChange("subtitleItalic", !localConfig.subtitleItalic)}
-                      >
-                        I
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={localConfig.subtitleUnderline ? "bg-gray-200" : ""}
-                        onClick={() => handleChange("subtitleUnderline", !localConfig.subtitleUnderline)}
-                      >
-                        U
-                      </Button>
-
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={localConfig.subtitleAlign === "left" ? "bg-gray-200" : ""}
-                        onClick={() => handleChange("subtitleAlign", "left")}
-                      >
-                        <AlignLeft className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={localConfig.subtitleAlign === "center" ? "bg-gray-200" : ""}
-                        onClick={() => handleChange("subtitleAlign", "center")}
-                      >
-                        <AlignCenter className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={localConfig.subtitleAlign === "right" ? "bg-gray-200" : ""}
-                        onClick={() => handleChange("subtitleAlign", "right")}
-                      >
-                        <AlignRight className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    <TextFormat
+                      fontSize={localConfig.subtitleFontSize || 14}
+                      setFontSize={(v) => handleChange("subtitleFontSize", v)}
+                      bold={localConfig.subtitleBold || false}
+                      setBold={(v) => handleChange("subtitleBold", v)}
+                      italic={localConfig.subtitleItalic || false}
+                      setItalic={(v) => handleChange("subtitleItalic", v)}
+                      strikethrough={localConfig.subtitleUnderline || false}
+                      setStrikethrough={(v) => handleChange("subtitleUnderline", v)}
+                      align={localConfig.subtitleAlign || "center"}
+                      setAlign={(v) => handleChange("subtitleAlign", v)}
+                      color={localConfig.subtitleColor || localConfig.themeColor}
+                      setColor={(v) => handleChange("subtitleColor", v)}
+                    />
                   </FormBlock>
                 </>
               )}
             </CollapsibleBlock>
           </> : <>
+            {/* 轴标题 */}
             <CollapsibleBlock
               title="轴标题"
               collapsed={collapsedSections.axis}
               onCollapse={() => toggleSection('axis')}
             >
-              <div className="space-y-3 rounded-md">
-
+              <div className="space-y-3">
                 <FormBlock label="X 轴标题内容">
                   <Input
                     placeholder="请输入X轴标题"
@@ -478,156 +474,49 @@ const handleChange = (key: keyof ComponentStyleConfig, value: any) => {
                   />
                 </FormBlock>
 
-                <FormBlock label="X 轴标题文本格式">
-                  <div className="flex items-center gap-2">
-                    <Select
-                      value={String(localConfig.xAxisFontSize || 14)}
-                      onValueChange={(v) => handleChange("xAxisFontSize", Number(v))}
-                    >
-                      <SelectTrigger className="w-20 h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[12, 14, 16, 18].map((v) => (
-                          <SelectItem key={v} value={String(v)}>
-                            {v}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={localConfig.xAxisBold ? "bg-gray-200" : ""}
-                      onClick={() => handleChange("xAxisBold", !localConfig.xAxisBold)}
-                    >
-                      B
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={localConfig.xAxisItalic ? "bg-gray-200" : ""}
-                      onClick={() => handleChange("xAxisItalic", !localConfig.xAxisItalic)}
-                    >
-                      I
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={localConfig.xAxisUnderline ? "bg-gray-200" : ""}
-                      onClick={() => handleChange("xAxisUnderline", !localConfig.xAxisUnderline)}
-                    >
-                      U
-                    </Button>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={localConfig.xAxisAlign === "left" ? "bg-gray-200" : ""}
-                      onClick={() => handleChange("xAxisAlign", "left")}
-                    >
-                      <AlignLeft className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={localConfig.xAxisAlign === "center" ? "bg-gray-200" : ""}
-                      onClick={() => handleChange("xAxisAlign", "center")}
-                    >
-                      <AlignCenter className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={localConfig.xAxisAlign === "right" ? "bg-gray-200" : ""}
-                      onClick={() => handleChange("xAxisAlign", "right")}
-                    >
-                      <AlignRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </FormBlock>
-              </div>
-
-              {/* Y轴标题区块 */}
-              <div className="space-y-3 rounded-md mt-4">
-                <FormBlock label="Y 轴标题内容">
-                  <Input
-                    placeholder="请输入Y轴标题"
-                    value={localConfig.yAxisTitle || ""}
-                    onChange={(e) => handleChange("yAxisTitle", e.target.value)}
+                <FormBlock label="X 轴文本格式">
+                  <TextFormat
+                    fontSize={localConfig.xAxisFontSize || 14}
+                    setFontSize={(v) => handleChange("xAxisFontSize", v)}
+                    bold={localConfig.xAxisBold || false}
+                    setBold={(v) => handleChange("xAxisBold", v)}
+                    italic={localConfig.xAxisItalic || false}
+                    setItalic={(v) => handleChange("xAxisItalic", v)}
+                    strikethrough={localConfig.xAxisUnderline || false}
+                    setStrikethrough={(v) => handleChange("xAxisUnderline", v)}
+                    align={localConfig.xAxisAlign || "center"}
+                    setAlign={(v) => handleChange("xAxisAlign", v)}
+                   color={localConfig.xAxisColor || localConfig.themeColor}
+                    setColor={(v) => handleChange("xAxisColor", v)}
                   />
                 </FormBlock>
 
-                <FormBlock label="Y 轴标题文本格式">
-                  <div className="flex items-center gap-2">
-                    <Select
-                      value={String(localConfig.yAxisFontSize || 14)}
-                      onValueChange={(v) => handleChange("yAxisFontSize", Number(v))}
-                    >
-                      <SelectTrigger className="w-20 h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[12, 14, 16, 18].map((v) => (
-                          <SelectItem key={v} value={String(v)}>
-                            {v}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                <div className="pt-2 border-t">
+                  <FormBlock label="Y 轴标题内容">
+                    <Input
+                      placeholder="请输入Y轴标题"
+                      value={localConfig.yAxisTitle || ""}
+                      onChange={(e) => handleChange("yAxisTitle", e.target.value)}
+                    />
+                  </FormBlock>
 
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={localConfig.yAxisBold ? "bg-gray-200" : ""}
-                      onClick={() => handleChange("yAxisBold", !localConfig.yAxisBold)}
-                    >
-                      B
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={localConfig.yAxisItalic ? "bg-gray-200" : ""}
-                      onClick={() => handleChange("yAxisItalic", !localConfig.yAxisItalic)}
-                    >
-                      I
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={localConfig.yAxisUnderline ? "bg-gray-200" : ""}
-                      onClick={() => handleChange("yAxisUnderline", !localConfig.yAxisUnderline)}
-                    >
-                      U
-                    </Button>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={localConfig.yAxisAlign === "left" ? "bg-gray-200" : ""}
-                      onClick={() => handleChange("yAxisAlign", "left")}
-                    >
-                      <AlignLeft className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={localConfig.yAxisAlign === "center" ? "bg-gray-200" : ""}
-                      onClick={() => handleChange("yAxisAlign", "center")}
-                    >
-                      <AlignCenter className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={localConfig.yAxisAlign === "right" ? "bg-gray-200" : ""}
-                      onClick={() => handleChange("yAxisAlign", "right")}
-                    >
-                      <AlignRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </FormBlock>
+                  <FormBlock label="Y 轴文本格式">
+                    <TextFormat
+                      fontSize={localConfig.yAxisFontSize || 14}
+                      setFontSize={(v) => handleChange("yAxisFontSize", v)}
+                      bold={localConfig.yAxisBold || false}
+                      setBold={(v) => handleChange("yAxisBold", v)}
+                      italic={localConfig.yAxisItalic || false}
+                      setItalic={(v) => handleChange("yAxisItalic", v)}
+                      strikethrough={localConfig.yAxisUnderline || false}
+                      setStrikethrough={(v) => handleChange("yAxisUnderline", v)}
+                      align={localConfig.yAxisAlign || "center"}
+                      setAlign={(v) => handleChange("yAxisAlign", v)}
+                  color={localConfig.yAxisColor || localConfig.themeColor}
+                    setColor={(v) => handleChange("yAxisColor", v)}
+                    />
+                  </FormBlock>
+                </div>
               </div>
             </CollapsibleBlock>
 
@@ -656,74 +545,21 @@ const handleChange = (key: keyof ComponentStyleConfig, value: any) => {
                 </Select>
               </FormBlock>
 
-              <FormBlock label="文本格式">
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={String(localConfig.legendFontSize)}
-                    onValueChange={(v) => handleChange("legendFontSize", Number(v))}
-                  >
-                    <SelectTrigger className="w-20 h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[12, 14, 16].map((v) => (
-                        <SelectItem key={v} value={String(v)}>
-                          {v}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={localConfig.legendBold ? "bg-gray-200" : ""}
-                    onClick={() => handleChange("legendBold", !localConfig.legendBold)}
-                  >
-                    B
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={localConfig.legendItalic ? "bg-gray-200" : ""}
-                    onClick={() => handleChange("legendItalic", !localConfig.legendItalic)}
-                  >
-                    I
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={localConfig.legendUnderline ? "bg-gray-200" : ""}
-                    onClick={() => handleChange("legendUnderline", !localConfig.legendUnderline)}
-                  >
-                    U
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={localConfig.legendAlign === "left" ? "bg-gray-200" : ""}
-                    onClick={() => handleChange("legendAlign", "left")}
-                  >
-                    <AlignLeft className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={localConfig.legendAlign === "center" ? "bg-gray-200" : ""}
-                    onClick={() => handleChange("legendAlign", "center")}
-                  >
-                    <AlignCenter className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={localConfig.legendAlign === "right" ? "bg-gray-200" : ""}
-                    onClick={() => handleChange("legendAlign", "right")}
-                  >
-                    <AlignRight className="h-4 w-4" />
-                  </Button>
-                </div>
+              <FormBlock label="图例文本格式">
+                <TextFormat
+                  fontSize={localConfig.legendFontSize}
+                  setFontSize={(v) => handleChange("legendFontSize", v)}
+                  bold={localConfig.legendBold}
+                  setBold={(v) => handleChange("legendBold", v)}
+                  italic={localConfig.legendItalic}
+                  setItalic={(v) => handleChange("legendItalic", v)}
+                  strikethrough={localConfig.legendUnderline}
+                  setStrikethrough={(v) => handleChange("legendUnderline", v)}
+                  align={localConfig.legendAlign}
+                  setAlign={(v) => handleChange("legendAlign", v)}
+                 color={localConfig.legendColor || localConfig.themeColor}
+  setColor={(v) => handleChange("legendColor", v)}
+                />
               </FormBlock>
             </CollapsibleBlock>
 
@@ -732,7 +568,7 @@ const handleChange = (key: keyof ComponentStyleConfig, value: any) => {
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-black">图表选项</label>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 w-[244px]">
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox
                     checked={localConfig.showLegend}
@@ -763,10 +599,8 @@ const handleChange = (key: keyof ComponentStyleConfig, value: any) => {
                 </label>
               </div>
             </div>
-
           </>
       }
-
     </div>
   )
 }

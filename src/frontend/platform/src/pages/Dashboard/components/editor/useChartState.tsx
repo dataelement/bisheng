@@ -109,7 +109,12 @@ export function useChartState(initialComponent: any) {
             sort: metric.sort || null,
             sortPriority: 0,
             fieldType: 'metric',
-            aggregation: metric.aggregation || 'sum'
+            aggregation: metric.aggregation || 'sum',
+            numberFormat: metric.numberFormat || {
+              type: 'number',
+              decimalPlaces: 2,
+              thousandSeparator: true
+            }
           }))
           setValueDimensions(valueDims)
           console.log('设置指标维度:', valueDims)
@@ -267,7 +272,7 @@ export function useChartState(initialComponent: any) {
         name,
         displayName,
         originalName,
-        sort: 'none' as const,
+        sort: null,
         sortPriority: 0,
         fieldType
       }
@@ -375,14 +380,53 @@ const handleAddFilter = useCallback(() => {
       sort: metric.sort,
       isVirtual: false,
       aggregation: metric.aggregation || 'sum',
-      numberFormat: { type: 'number' as const, decimalPlaces: 2, unit: undefined, suffix: undefined, thousandSeparator: true }
+      numberFormat: metric.numberFormat || {
+          type: 'number' as const, 
+          decimalPlaces: 2, 
+          unit: undefined, 
+          suffix: undefined, 
+          thousandSeparator: true 
+        }
     }))
-    // 4. 构建字段顺序 - 注意字段类型
-    const fieldOrder = [
-      ...categoryDimensions.slice(0, 2).map(d => ({ fieldId: d.fieldId, fieldType: 'dimension' })),
-      ...stackDimensions.slice(0, 1).map(d => ({ fieldId: d.fieldId, fieldType: 'stack_dimension' })),
-      ...valueDimensions.map(m => ({ fieldId: m.fieldId, fieldType: 'metric' })),
-    ]
+  // 4. 构建字段顺序 - 按照 sortPriorityOrder 排序
+  const allFields = [
+    ...categoryDimensions.map(d => ({ 
+      ...d, 
+      type: 'dimension' as const 
+    })),
+    ...stackDimensions.map(d => ({ 
+      ...d, 
+      type: 'stack_dimension' as const 
+    })),
+    ...valueDimensions.map(m => ({ 
+      ...m, 
+      type: 'metric' as const 
+    }))
+  ]
+
+  // 按照 sortPriorityOrder 排序
+  const sortedFields = [...allFields].sort((a, b) => {
+    const indexA = sortPriorityOrder.indexOf(a.id)
+    const indexB = sortPriorityOrder.indexOf(b.id)
+    
+    // 如果都在排序列表中，按照列表顺序排序
+    if (indexA !== -1 && indexB !== -1) {
+      return indexA - indexB
+    }
+    
+    // 如果有一个不在列表中，不在列表的排在后面
+    if (indexA === -1 && indexB !== -1) return 1
+    if (indexA !== -1 && indexB === -1) return -1
+    
+    // 都不在列表中，保持原有顺序
+    return 0
+  })
+
+  // 构建 fieldOrder
+  const fieldOrder = sortedFields.map(field => ({
+    fieldId: field.fieldId,
+    fieldType: field.type
+  }))
     // 5. 构建筛选条件
     const filters = filterGroup ? filterGroup.conditions.map((condition, index) => {
       {console.log(condition,8989999)}

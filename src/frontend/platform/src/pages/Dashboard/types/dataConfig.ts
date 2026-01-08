@@ -34,62 +34,70 @@ export interface StyleConfig {
 
 // 组件样式配置
 export interface ComponentStyleConfig {
-  themeColor: string        // 主体颜色
-  bgColor: string           // 背景颜色
-  
-  // 图表主标题
-  title?: string           // 标题内容
-  titleFontSize: number     // 主标题字体大小
-  titleBold: boolean        // 主标题加粗
-  titleItalic: boolean      // 主标题斜体
-  titleUnderline: boolean   // 主标题下划线
-  titleAlign: "left" | "center" | "right" // 主标题对齐方式
-  
-  // X轴标题 - 新增
-  xAxisTitle?: string         // X轴标题文字
-  xAxisFontSize?: number      // X轴标题字体大小
-  xAxisBold?: boolean         // X轴标题加粗
-  xAxisItalic?: boolean       // X轴标题斜体
-  xAxisUnderline?: boolean    // X轴标题下划线
-  xAxisAlign?: "left" | "center" | "right" // X轴标题对齐方式
-  
-  // Y轴标题 - 新增
-  yAxisTitle?: string         // Y轴标题文字
-  yAxisFontSize?: number      // Y轴标题字体大小
-  yAxisBold?: boolean         // Y轴标题加粗
-  yAxisItalic?: boolean       // Y轴标题斜体
-  yAxisUnderline?: boolean    // Y轴标题下划线
-  yAxisAlign?: "left" | "center" | "right" // Y轴标题对齐方式
-  
+  themeColor: string
+  bgColor: string
+
+  // 主标题
+  title: string
+  titleFontSize: number
+  titleBold: boolean
+  titleItalic: boolean
+  titleUnderline: boolean
+  titleAlign: "left" | "center" | "right"
+  titleColor?: string
+
+  // X 轴
+  xAxisTitle: string
+  xAxisFontSize: number
+  xAxisBold: boolean
+  xAxisItalic: boolean
+  xAxisUnderline: boolean
+  xAxisAlign: "left" | "center" | "right"
+  xAxisColor?: string 
+
+  // Y 轴
+  yAxisTitle: string
+  yAxisFontSize: number
+  yAxisBold: boolean
+  yAxisItalic: boolean
+  yAxisUnderline: boolean
+  yAxisAlign: "left" | "center" | "right"
+  yAxisColor?: string 
+
   // 图例
-  legendPosition: "top" | "bottom" | "left" | "right" // 图例位置
-  legendFontSize: number    // 图例字体大小
-  legendBold: boolean       // 图例加粗
-  legendItalic: boolean     // 图例斜体
-  legendUnderline: boolean  // 图例下划线
-  legendAlign: "left" | "center" | "right" // 图例对齐
-  
+  legendPosition: "top" | "bottom" | "left" | "right"
+  legendFontSize: number
+  legendBold: boolean
+  legendItalic: boolean
+  legendUnderline: boolean
+  legendAlign: "left" | "center" | "right"
+  legendColor?: string 
+
+  // 副标题
+  showSubtitle: boolean
+  subtitle: string
+  subtitleFontSize: number
+  subtitleBold: boolean
+  subtitleItalic: boolean
+  subtitleUnderline: boolean
+  subtitleAlign: "left" | "center" | "right"
+  subtitleColor?: string 
+
+  // 指标卡
+  metricFontSize: number
+  metricBold: boolean
+  metricItalic: boolean
+  metricUnderline: boolean
+  metricAlign: "left" | "center" | "right"
+  metricColor?: string 
+
   // 图表选项
-  showLegend: boolean       // 是否显示图例
-  showAxis: boolean         // 是否显示坐标轴
-  showDataLabel: boolean    // 是否显示数据标签
-  showGrid: boolean         // 是否显示网格线
-  
-   // 指标卡特有字段
-  metricFontSize?: number
-  metricBold?: boolean
-  metricItalic?: boolean
-  metricUnderline?: boolean
-  metricAlign?: "left" | "center" | "right"
-  
-  showSubtitle?: boolean
-  subtitle?: string
-  subtitleFontSize?: number
-  subtitleBold?: boolean
-  subtitleItalic?: boolean
-  subtitleUnderline?: boolean
-  subtitleAlign?: "left" | "center" | "right"
+  showLegend: boolean
+  showAxis: boolean
+  showDataLabel: boolean
+  showGrid: boolean
 }
+
 export interface Dashboard {
   id: string
   title: string

@@ -21,6 +21,8 @@ import {
 import { Checkbox } from "@/components/bs-ui/checkbox"
 import { Badge } from "@/components/bs-ui/badge"
 import { generateUUID } from "@/components/bs-ui/utils"
+import { getFieldEnums } from "@/controllers/API/dashboard"
+import { toast } from "@/components/bs-ui/toast/use-toast"
 
 /* ================== 类型定义 ================== */
 export type LogicOperator = "and" | "or"
@@ -91,44 +93,68 @@ interface EnumMultiSelectProps {
   selected: string[]
   onChange: (selected: string[]) => void
   placeholder?: string
+  dataset_code: string
 }
 
 function EnumMultiSelect({
   fieldCode,
   selected,
   onChange,
-  placeholder = "请选择"
+  placeholder = "请选择",
+  dataset_code
 }: EnumMultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [values, setValues] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(true)
+  const pageSize = 100
 
-  const fetchEnumValues = async (code: string) => {
+  const fetchEnumValues = async (code: string,pageNum = 1) => {
     setLoading(true)
     try {
-      await new Promise(resolve => setTimeout(resolve, 300))
-      const mockData: Record<string, string[]> = {
-        "category": ["电子产品", "服装", "食品", "图书", "家居"],
-        "status": ["进行中", "已完成", "已取消", "待处理"],
-        "priority": ["高", "中", "低"],
-        "region": ["华北", "华东", "华南", "华中", "西北", "西南", "东北"]
+     const response = await getFieldEnums({
+        dataset_code,
+        field: code,
+        page: pageNum,
+        pageSize
+      })
+     const result = response.data?.data || []
+      if (pageNum === 1) {
+        setValues(result)
+      } else {
+        setValues(prev => [...prev, ...result])
       }
-      setValues(mockData[code] || ["选项1", "选项2", "选项3"])
+
+      setHasMore(result.length === pageSize)
     } catch (error) {
       console.error("获取枚举值失败:", error)
+       toast({
+        description: "获取枚举值失败，请稍后重试",
+        variant: "error"
+      })
       setValues([])
     } finally {
       setLoading(false)
     }
   }
-
   useEffect(() => {
-    if (isOpen && fieldCode) {
-      fetchEnumValues(fieldCode)
+    if (isOpen && fieldCode && dataset_code) {
+      setPage(1)
+      fetchEnumValues(fieldCode, 1)
     }
-  }, [isOpen, fieldCode])
-
+  }, [isOpen, fieldCode, dataset_code])
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const element = e.currentTarget
+    const isAtBottom = element.scrollHeight - element.scrollTop === element.clientHeight
+    
+    if (isAtBottom && hasMore && !loading) {
+      const nextPage = page + 1
+      setPage(nextPage)
+      fetchEnumValues(fieldCode, nextPage)
+    }
+  }, [hasMore, loading, page, fieldCode, dataset_code])
   const filteredValues = useMemo(() => {
     if (!search.trim()) return values
     return values.filter(value =>
@@ -156,8 +182,10 @@ function EnumMultiSelect({
     e.stopPropagation()
     onChange(selected.filter(v => v !== value))
   }
-
-  return (
+  const handleClearSearch = () => {
+    setSearch("")
+  }
+ return (
     <div className="relative flex-1">
       <Button
         type="button"
@@ -190,43 +218,63 @@ function EnumMultiSelect({
       {isOpen && (
         <div className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg">
           <div className="p-2 border-b">
-            <Input
-              placeholder="搜索..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="h-8"
-              onClick={e => e.stopPropagation()}
-            />
+            <div className="relative">
+              <Input
+                placeholder="搜索..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="h-8 pr-8"
+                onClick={e => e.stopPropagation()}
+              />
+              {search && (
+                <X
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 cursor-pointer text-muted-foreground"
+                  onClick={handleClearSearch}
+                />
+              )}
+            </div>
           </div>
 
-          {loading ? (
+          {loading && page === 1 ? (
             <div className="px-3 py-4 text-sm text-muted-foreground text-center">
               加载中...
             </div>
           ) : (
             <>
-              <div className="px-3 py-2 border-b">
-                <div className="flex items-center space-x-2 cursor-pointer" onClick={handleToggleAll}>
-                  <Checkbox checked={allSelected} />
-                  <span className="text-sm">全选</span>
+              {values.length > 0 && (
+                <div className="px-3 py-2 border-b">
+                  <div className="flex items-center space-x-2 cursor-pointer" onClick={handleToggleAll}>
+                    <Checkbox checked={allSelected} />
+                    <span className="text-sm">全选</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div className="max-h-60 overflow-auto">
+              <div 
+                className="max-h-60 overflow-auto"
+                onScroll={handleScroll}
+              >
                 {filteredValues.length > 0 ? (
-                  filteredValues.map(value => (
-                    <div
-                      key={value}
-                      className="flex items-center space-x-2 px-3 py-2 hover:bg-muted cursor-pointer"
-                      onClick={() => handleToggleValue(value)}
-                    >
-                      <Checkbox checked={selected.includes(value)} />
-                      <span className="text-sm">{value}</span>
-                    </div>
-                  ))
+                  <>
+                    {filteredValues.map(value => (
+                      <div
+                        key={value}
+                        className="flex items-center space-x-2 px-3 py-2 hover:bg-muted cursor-pointer"
+                        onClick={() => handleToggleValue(value)}
+                      >
+                        <Checkbox checked={selected.includes(value)} />
+                        <span className="text-sm">{value}</span>
+                      </div>
+                    ))}
+                    {loading && page > 1 && (
+                      <div className="px-3 py-2 text-sm text-muted-foreground text-center">
+                        加载更多...
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div className="px-3 py-2 text-sm text-muted-foreground text-center">
-                    暂无数据
+                    {search ? "未找到匹配的选项" : "暂无数据"}
                   </div>
                 )}
               </div>
@@ -251,7 +299,8 @@ export function FilterConditionDialog({
   onOpenChange,
   value,
   onChange,
-  fields
+  fields,
+  dataset_code = ""
 }: Props) {
   const [draft, setDraft] = useState<FilterGroup>({
     logic: "and",
@@ -607,6 +656,7 @@ export function FilterConditionDialog({
                     {c.fieldCode && c.filterType === "enum" && (
                       <div className="flex-1">
                         <EnumMultiSelect
+                          dataset_code={dataset_code} 
                           fieldCode={c.fieldCode}
                           selected={(c.value as string[]) || []}
                           onChange={selected => updateCondition(c.id, { value: selected })}

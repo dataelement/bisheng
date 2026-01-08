@@ -4,12 +4,11 @@
 import { Button } from "@/components/bs-ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
 import { Input } from "@/components/bs-ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select"
 import { ChevronDown, ChevronLeft, ChevronRight, GripVertical, Plus, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
-import { ChartType, ComponentStyleConfig, DataConfig } from "../../types/dataConfig"
+import { ChartType, ComponentStyleConfig, DataConfig, QueryConfig } from "../../types/dataConfig"
 import { DatasetField, DatasetSelector } from "./DatasetSelector"
 import { StyleConfigPanel } from "./StyleConfigPanel"
 import { DimensionBlock } from "./DimensionBlock"
@@ -20,12 +19,14 @@ import { AdvancedDatePicker } from "../AdvancedDatePicker"
 import { useChartState } from "./useChartState"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import ComponentPicker, { ChartGroupItems, ChartItems } from "./ComponentPicker"
+import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio"
+import { Label } from "@/components/bs-ui/label"
 
 // 图表类型选项
 export const CHART_TYPES: {
   label: string;
   value: ChartType;
-  hasStack: boolean; // 是否有堆叠项维度
+  hasStack: boolean;
 }[] = [
     { label: "基础柱状图", value: ChartType.Bar, hasStack: false },
     { label: "堆叠柱状图", value: ChartType.StackedBar, hasStack: true },
@@ -76,6 +77,7 @@ export function ComponentConfigDrawer() {
   const [filterDialogOpen, setFilterDialogOpen] = useState(false)
   const [editingDimension, setEditingDimension] = useState<any>(null)
 
+  const [filter, setFilter] = useState<any>([])
   // 使用自定义Hook管理所有图表状态
   const chartState = useChartState(editingComponent)
 
@@ -203,7 +205,18 @@ export function ComponentConfigDrawer() {
     setEditingDimension({ id: dimensionId, section, originalName, displayName })
     setEditDialogOpen(true)
   }, [])
-
+const handleMetricFormatChange = useCallback(
+  (dimensionId: string, format: any) => {
+    chartState.setValueDimensions(prev =>
+      prev.map(d =>
+        d.id === dimensionId
+          ? { ...d, numberFormat: format }
+          : d
+      )
+    )
+  },
+  [chartState]
+)
   const saveDisplayName = useCallback(() => {
     if (editingDimension) {
       // 更新对应的维度显示名称
@@ -264,6 +277,7 @@ export function ComponentConfigDrawer() {
   // 时间范围改变
   const handleTimeFilterChange = useCallback((val: any) => {
     console.log("Day Range Change:", val);
+    
     if (editingComponent) {
       // 只更新 timeFilter，避免触发整个组件的重新初始化
       updateEditingComponent({
@@ -334,18 +348,46 @@ export function ComponentConfigDrawer() {
     )
   }
 
+
   return (
     <div className="h-full flex bg-background border-l border-border">
       {editingComponent.type === 'query' ? (
-        <ChartSelector
-          charts={[
-            { id: '1', name: '堆叠条形图-图表名称', dataset: '会话500-数据集' },
-            { id: '2', name: '堆叠条形图-图表名称', dataset: '会话500-数据集' },
-            { id: '3', name: '堆叠条形图-图表名称', dataset: '会话500-数据集' },
-          ]}
-          onSave={(selected, start, end) => console.log(selected, start, end)}
-          onCancel={() => console.log('取消')}
-        />
+<ChartSelector
+  onSave={(chartLinkConfig) => {
+    console.log('保存查询配置:', chartLinkConfig)
+    
+    // 构建 QueryConfig
+    const queryConfig: QueryConfig = {
+      linkedComponentIds: chartLinkConfig.chartIds || [],
+      queryConditions: {
+        id: editingComponent?.data_config?.queryConditions?.id || generateUUID(4),
+        displayType: chartLinkConfig.displayType === "时间" ? "single" : "range",
+        timeGranularity: chartLinkConfig.timeGranularity === "年月" ? "year_month" : 
+                        chartLinkConfig.timeGranularity === "年月日时" ? "year_month_day_hour" : "year_month_day",
+        hasDefaultValue: chartLinkConfig.isDefault,
+        defaultValue: chartLinkConfig.isDefault ? {
+          type: 'custom' as const,  // TimeRangeType.CUSTOM 的值是 'custom'
+          startDate: new Date(chartLinkConfig.dateRange.start).getTime(), // 毫秒时间戳
+          endDate: new Date(chartLinkConfig.dateRange.end).getTime()      // 毫秒时间戳
+        } : {
+          type: 'all' as const      // TimeRangeType.ALL 的值是 'all'
+        }
+      }
+    }
+    
+    console.log('生成的 QueryConfig:', queryConfig)
+    
+    // 更新组件配置
+    updateEditingComponent({
+      // 保持其他字段不变，只更新 data_config
+      data_config: queryConfig
+    })
+    
+    // 刷新查询组件
+    refreshChart(editingComponent.id)
+  }}
+  onCancel={() => console.log('取消')}
+/>
       ) : (
         <>
           <div className={`border-r flex flex-col h-full transition-all duration-300 ${configCollapsed.basic ? "w-12" : "w-[300px]"} shrink-0`}>
@@ -363,7 +405,7 @@ export function ComponentConfigDrawer() {
                   icon={<ChevronLeft />}
                 />
 
-                <div className="flex-1 overflow-y-auto px-4 pb-6 pt-4 space-y-6">
+                <div className="flex-1 overflow-y-auto pl-4 pr-8 pb-6 pt-4 space-y-6">
                   {/* Tabs */}
                   <div className="flex gap-6 border-b text-sm">
                     <Tab active={configTab === "basic"} onClick={() => setConfigTab("basic")}>
@@ -383,7 +425,7 @@ export function ComponentConfigDrawer() {
                             <FormBlock label="图表类型" required>
                               <ComponentPicker onSelect={(data) => handleChartTypeChange(data.type)} maxHeight={500}>
                                 <div className="relative w-full group">
-                                  <div className="flex h-9 w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm transition-colors hover:border-gray-400 cursor-pointer">
+                                  <div className="flex h-[28px] w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm transition-colors hover:border-gray-400 cursor-pointer">
                                     {/* 文本区域 */}
                                     <div className="flex-1">
                                       <span className="truncate text-gray-700">
@@ -470,12 +512,13 @@ export function ComponentConfigDrawer() {
                           onEditDisplayName={(dimensionId, originalName, displayName) =>
                             openEditDialog('value', dimensionId, originalName, displayName)
                           }
+                          onFormatChange={handleMetricFormatChange}
                         />
                       </CollapsibleBlock>
 
                       {/* 排序优先级 */}
                       {editingComponent.type !== 'metric' && <CollapsibleBlock title="排序优先级">
-                        <div className="space-y-2">
+                        <div className="space-y-1 border rounded-md p-[2px]">
                           {sortPriorityFields.length === 0 ? (
                             <div className="text-xs text-muted-foreground text-center py-2">
                               添加维度或指标后可调整排序优先级
@@ -491,15 +534,15 @@ export function ComponentConfigDrawer() {
                                   e.dataTransfer.effectAllowed = 'move'
                                   e.dataTransfer.setData('text/plain', field.id)
                                 }}
+                                onDragEnd={() => setDraggingId(null)}
                                 onDragOver={(e) => e.preventDefault()}
                                 onDrop={(e) => {
                                   e.preventDefault()
                                   const sourceId = e.dataTransfer.getData('text/plain')
                                   if (!sourceId) return
-                                  setDraggingId(sourceId)
-                                  handleDropSortPriority(field)
+                                 chartState.handleDropSortPriority(field)
                                 }}
-                                className={`flex items-center gap-2 px-3 py-2 border rounded-md bg-muted/20 ${draggingId === field.id ? 'opacity-50' : ''}`}
+                                className={`flex items-center gap-2 px-3 py-2 h-[28px] border rounded-md bg-muted/20 ${draggingId === field.id ? 'opacity-50' : ''}`}
                               >
                                 <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
                                 <span className="text-sm truncate">{field.displayName}</span>
@@ -516,11 +559,14 @@ export function ComponentConfigDrawer() {
                           <label className="text-sm font-medium">筛选</label>
                         </div>
 
-                        {!filterGroup || filterGroup.conditions.length === 0 ? (
-                          <div className="text-sm text-muted-foreground text-center py-1 border rounded bg-muted/20">
-                            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleEditFilter}>
-                              <Plus className="h-3 w-3 mr-1" />添加筛选条件
-                            </Button>
+                      {!filterGroup || filterGroup.conditions.length === 0 ? (
+                          <div 
+                            className="text-sm text-muted-foreground text-center w-[244px] h-[36px] py-2 border rounded-md bg-muted/20 cursor-pointer hover:bg-muted/30 transition-colors" 
+                            onClick={handleEditFilter}
+                          >
+                            <div className="inline-flex items-center h-[20px] px-2 text-xs">
+                              添加筛选条件
+                            </div>
                           </div>
                         ) : (
                           <div className="space-y-2 bg-blue-100 rounded-md border-blue-300">
@@ -545,36 +591,43 @@ export function ComponentConfigDrawer() {
                         )}
                       </div>
 
-                      <FormBlock label="时间范围">
-                        <AdvancedDatePicker
-                          granularity={'day'}
-                          mode={'range'}
-                          value={editingComponent?.data_config?.timeFilter ? {
-                            startTime: Math.floor(editingComponent.data_config.timeFilter.startDate! / 1000),
-                            endTime: Math.floor(editingComponent.data_config.timeFilter.endDate! / 1000),
-                            shortcutKey: undefined,
-                            isDynamic: false
-                          } : undefined}
-                          onChange={handleTimeFilterChange}
-                          placeholder="选择时间范围"
-                        />
-                      </FormBlock>
-
+                    <FormBlock label="时间范围">
+                      <AdvancedDatePicker
+                        granularity={'day'}
+                        mode={'range'}
+                        value={filter}
+                         onChange={(val) => {
+                          handleTimeFilterChange
+                          setFilter(val);
+                    }}
+                        placeholder="选择时间范围"
+                      />
+                    </FormBlock>
                       {/* 结果显示 */}
                       {editingComponent.type !== 'metric' && <FormBlock label="结果显示">
-                        <div className="flex items-center gap-4">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="radio" checked={limitType === "all"} onChange={() => setLimitType("all")} className="h-4 w-4" />
-                            <span className="text-sm">全部</span>
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="radio" checked={limitType === "limit"} onChange={() => setLimitType("limit")} className="h-4 w-4" />
-                            <Input className="w-20 h-8" value={limitValue} disabled={limitType !== "limit"} onChange={(e) => setLimitValue(e.target.value)} />
-                            <span className="text-sm text-muted-foreground">条</span>
-                          </label>
-                        </div>
+                        <RadioGroup
+                          value={limitType}
+                          onValueChange={(value: "all" | "limit") => setLimitType(value)}
+                          className="flex gap-6"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="all" id="limit-all" />
+                            <Label htmlFor="limit-all" className="text-sm cursor-pointer">全部</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="limit" id="limit-limit" />
+                            <div className="flex items-center gap-2">
+                              <Input 
+                                className="w-20 h-8" 
+                                value={limitValue} 
+                                disabled={limitType !== "limit"} 
+                                onChange={(e) => setLimitValue(e.target.value)} 
+                              />
+                              <Label htmlFor="limit-limit" className="text-sm text-muted-foreground cursor-pointer">条</Label>
+                            </div>
+                          </div>
+                        </RadioGroup>
                       </FormBlock>}
-
                       <Button className="w-full h-10 mt-4" onClick={handleUpdateChart}>更新图表数据</Button>
                     </>
                   ) : (
@@ -586,10 +639,10 @@ export function ComponentConfigDrawer() {
           </div>
           <div className={`flex flex-col h-full transition-all duration-300 ${configCollapsed.data ? "w-12 shrink-0" : "w-[300px]"}`}>
             {configCollapsed.data ? (
-              <CollapseLabel label="数据集配置" onClick={() => toggleCollapse('data')} icon={<ChevronLeft />} />
+              <CollapseLabel label="数据选择" onClick={() => toggleCollapse('data')} icon={<ChevronLeft />} />
             ) : (
               <div className="flex-1 flex flex-col overflow-hidden">
-                <PanelHeader title="数据集配置" onCollapse={() => toggleCollapse('data')} icon={<ChevronRight />} />
+                <PanelHeader title="数据选择" onCollapse={() => toggleCollapse('data')} icon={<ChevronRight />} />
                 <div className="flex-1 overflow-auto">
                   <DatasetSelector
                     selectedDatasetCode={editingComponent.dataset_code}
@@ -637,6 +690,7 @@ export function ComponentConfigDrawer() {
         value={filterGroup}
         onChange={handleSaveFilter}
         fields={datasetFields}
+        dataset_code={editingComponent?.dataset_code}
       />
     </div>
   )

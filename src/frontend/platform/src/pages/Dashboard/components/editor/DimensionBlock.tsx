@@ -3,6 +3,12 @@
 import { useState } from "react"
 import { Button } from "@/components/bs-ui/button"
 import { Settings, X, ChevronRight, Check } from "lucide-react"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
+import { Input } from "@/components/bs-ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select"
+import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio"
+import { Label } from "@/components/bs-ui/label"
+import { Checkbox } from "@/components/bs-ui/checkbox"
 
 interface DimensionItem {
   id: string
@@ -13,6 +19,7 @@ interface DimensionItem {
   originalName: string
   aggregation?: string
   format?: string
+  numberFormat?: MetricFormat
   sortPriority?: number
 }
 
@@ -28,9 +35,15 @@ interface DimensionBlockProps {
   onSortChange?: (dimensionId: string, sortValue: null | 'asc' | 'desc') => void
   onEditDisplayName: (dimensionId: string, originalName: string, displayName: string) => void
   onAggregationChange?: (dimensionId: string, aggregation: string) => void
-  onFormatChange?: (dimensionId: string, format: string) => void
+  onFormatChange?: (dimensionId: string, format: MetricFormat) => void
 }
-
+type MetricFormat = {
+  type: 'number' | 'percent' | 'duration' | 'storage'
+  decimalPlaces: number
+  unit?: string
+  suffix?: string
+  thousandSeparator: boolean
+}
 export function DimensionBlock({ 
   isDimension,
   dimensions = [],
@@ -53,6 +66,10 @@ export function DimensionBlock({
     menuType: 'sort' | 'aggregation' | 'format'
   } | null>(null)
   const [selectedDimensionId, setSelectedDimensionId] = useState<string | null>(null)
+const [editingMetric, setEditingMetric] = useState<DimensionItem | null>(null)
+const [formatDialogOpen, setFormatDialogOpen] = useState(false)
+const [localFormat, setLocalFormat] = useState<MetricFormat | null>(null)
+
   // 获取字段样式
 const getFieldTypeStyle = (dimension: DimensionItem) => {
   const isSelected = selectedDimensionId === dimension.id
@@ -129,7 +146,7 @@ const getFieldTypeStyle = (dimension: DimensionItem) => {
     >
       {/* 维度/指标列表 */}
       {dimensions.length > 0 ? (
-        <div className="space-y-2">
+        <div className="space-y-2 border rounded-md p-[2px]">
           {dimensions.map((dimension) => (
             <div
               key={dimension.id}
@@ -139,7 +156,7 @@ const getFieldTypeStyle = (dimension: DimensionItem) => {
             >
           <div
             className={`
-              flex items-center justify-between gap-2 p-1 rounded-md border
+              flex items-center justify-between gap-2 p-1 rounded-md border h-[28px]
               ${getFieldTypeStyle(dimension)}
               ${selectedDimensionId === dimension.id ? (dimension.fieldType === 'dimension' ? 'bg-blue-100' : 'bg-[#E7F8FA]') : ''}
               ${invalidIds?.has(dimension.id) ? 'border-red-500 bg-red-50' : ''}
@@ -298,39 +315,26 @@ const getFieldTypeStyle = (dimension: DimensionItem) => {
                             </div>
                             
                             {/* 数值格式 */}
-                            <div className="relative mt-1">
-                              <div 
-                                className={`flex items-center justify-between px-2 py-1 text-xs rounded cursor-pointer ${hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'format' ? 'bg-gray-100' : 'hover:bg-gray-100'}`}
-                                onMouseEnter={() => handleMenuItemHover(dimension.id, 'format')}
-                              >
-                                <span>数值格式</span>
-                                <ChevronRight className="h-3 w-3" />
-                              </div>
-                              
-                              {/* 数值格式子菜单 */}
-                              {hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'format' && (
-                                <div 
-                                  className="absolute left-full top-0 ml-1 bg-white border rounded-md shadow-lg z-30 p-2 min-w-[90px]"
-                                  onMouseEnter={() => handleMenuItemHover(dimension.id, 'format')}
-                                  onMouseLeave={() => setHoveredMenuItem(null)}
-                                >
-                                  {formatOptions.map((option) => (
-                                    <button
-                                      key={option.value}
-                                      className={`flex items-center justify-between w-full px-2 py-1 text-xs rounded ${dimension.format === option.value ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'}`}
-                                      onClick={() => {
-                                        onFormatChange?.(dimension.id, option.value)
-                                        setOpenMenuId(null)
-                                        setHoveredMenuItem(null)
-                                      }}
-                                    >
-                                      <span>{option.label}</span>
-                                      {dimension.format === option.value && <Check className="h-3 w-3" />}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
+                            <button
+                              className="flex items-center justify-between w-full px-2 py-1 text-xs rounded hover:bg-gray-100"
+                              onClick={() => {
+                                setEditingMetric(dimension)
+                                 setLocalFormat(
+                                  dimension.numberFormat || {
+                                    type: 'number',
+                                    decimalPlaces: 0,
+                                    unit: '',
+                                    suffix: '',
+                                    thousandSeparator: false
+                                  }
+                                )
+                                setFormatDialogOpen(true)
+                                setOpenMenuId(null)
+                              }}
+                            >
+                              <span>数值格式</span>
+                            </button>
+
                             
                             <div className="h-px bg-gray-200 my-1"></div>
                             
@@ -389,6 +393,166 @@ const getFieldTypeStyle = (dimension: DimensionItem) => {
           </div>
         </div>
       )}
+{editingMetric && localFormat && (
+<Dialog
+  open={formatDialogOpen}
+  onOpenChange={(open) => {
+    setFormatDialogOpen(open)
+    if (!open) {
+      setEditingMetric(null)
+      setLocalFormat(null)
+    }
+  }}
+>
+  <DialogContent className="sm:max-w-[520px]">
+    <DialogHeader>
+      <DialogTitle>数值格式</DialogTitle>
+    </DialogHeader>
+    
+    <div className="space-y-6 py-4">
+      {/* 格式类型 */}
+      <div>
+        <div className="text-sm font-medium mb-2">格式类型</div>
+        <RadioGroup
+          value={localFormat.type}
+          onValueChange={(value) => 
+            setLocalFormat({ ...localFormat, type: value as any })
+          }
+          className="flex gap-6"
+        >
+          {[
+            { label: '数值', value: 'number' },
+            { label: '百分比', value: 'percent' },
+            { label: '时长', value: 'duration' },
+            { label: '存储大小', value: 'storage' }
+          ].map(item => (
+            <div key={item.value} className="flex items-center space-x-2">
+              <RadioGroupItem value={item.value} id={`format-${item.value}`} />
+              <Label htmlFor={`format-${item.value}`} className="text-sm cursor-pointer">
+                {item.label}
+              </Label>
+            </div>
+          ))}
+        </RadioGroup>
+      </div>
+
+      {/* 小数位数 */}
+      <div>
+        <div className="text-sm font-medium mb-2">小数位数</div>
+        <Input
+          type="number"
+          min={0}
+          max={6}
+          value={localFormat.decimalPlaces}
+          onChange={(e) =>
+            setLocalFormat({
+              ...localFormat,
+              decimalPlaces: Number(e.target.value)
+            })
+          }
+          className="w-full"
+        />
+      </div>
+
+      {/* 单位 */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="text-sm font-medium mb-2">数量单位</div>
+          <Select
+            value={localFormat.unit || "none"}
+            onValueChange={(value) =>
+              setLocalFormat({ 
+                ...localFormat, 
+                unit: value === "none" ? "" : value 
+              })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="请选择" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">无</SelectItem>
+              <SelectItem value="K">K</SelectItem>
+              <SelectItem value="M">M</SelectItem>
+              <SelectItem value="B">B</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <div className="text-sm font-medium mb-2">单位后缀</div>
+          <Input
+            placeholder="请输入内容"
+            value={localFormat.suffix || ""}
+            onChange={(e) =>
+              setLocalFormat({ ...localFormat, suffix: e.target.value })
+            }
+            className="w-full"
+          />
+        </div>
+      </div>
+
+      {/* 千分符 */}
+    <div className="flex items-center gap-2">
+      <Checkbox
+        checked={localFormat.thousandSeparator}
+        onCheckedChange={(checked) =>
+          setLocalFormat({
+            ...localFormat,
+            thousandSeparator: checked as boolean
+          })
+        }
+        id="thousand-separator"
+      />
+      <label htmlFor="thousand-separator" className="text-sm cursor-pointer">
+        千分符
+      </label>
+    </div>
+
+      {/* 示例 */}
+      <div className="text-sm text-muted-foreground">
+        示例：20000000.0
+      </div>
+    </div>
+
+    {/* Footer */}
+    <DialogFooter>
+      <Button
+        variant="outline"
+        onClick={() => {
+          setFormatDialogOpen(false)
+          setEditingMetric(null)
+          setLocalFormat(null)
+        }}
+      >
+        取消
+      </Button>
+      <Button
+        onClick={() => {
+          if (!editingMetric || !localFormat) return
+
+          const formatToSave: MetricFormat = {
+            type: localFormat.type,
+            decimalPlaces: localFormat.decimalPlaces,
+            thousandSeparator: localFormat.thousandSeparator,
+            unit: localFormat.unit === "" ? undefined : localFormat.unit,
+            suffix: localFormat.suffix === "" ? undefined : localFormat.suffix
+          }
+          
+          onFormatChange?.(editingMetric.id, formatToSave)
+          setFormatDialogOpen(false)
+          setEditingMetric(null)
+          setLocalFormat(null)
+        }}
+      >
+        确认
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+)}
+
+
     </div>
   )
 }
