@@ -4,7 +4,7 @@ import { useQuery } from "react-query"
 import { useParams } from "react-router-dom"
 import { EditorCanvas } from "./components/editor/EditorCanvas"
 import { EditorHeader } from "./components/editor/EditorHeader"
-import { DashboardQueryKey } from "./hook"
+import { DashboardQueryKey, useEditorShortcuts } from "./hook"
 
 export default function EditorPage() {
     const params = useParams()
@@ -14,6 +14,9 @@ export default function EditorPage() {
         queryKey: [DashboardQueryKey, dashboardId],
         queryFn: () => getDashboard(dashboardId),
     })
+
+    // undo redo
+    useEditorShortcuts()
 
     return (
         <div className="h-screen flex flex-col">

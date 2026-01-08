@@ -21,7 +21,6 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
   const refreshInfo = chartRefreshTriggers[component.id]
   const refreshTrigger = refreshInfo?.trigger || 0
   const queryParams = refreshInfo?.queryParams || []
-  console.log('refreshInfo :>> ', component, refreshInfo);
 
   // Query chart data
   const { data, isLoading, error, refetch } = useQuery({
@@ -38,6 +37,7 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
   // Refetch when refresh trigger changes
   useEffect(() => {
     if (refreshTrigger > 0) {
+      console.log('refreshInfo :>> ', component, refreshInfo);
       refetch()
     }
   }, [refreshTrigger, refetch])
@@ -77,7 +77,7 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
 
   // No data
   // if (error || !component.data_config.isConfigured) {
-  if (error || component.data_config.isConfigured) {
+  if (error || component.data_config.isConfigured || !data) {
     return (
       <div className="flex items-center justify-center h-full relative">
         <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/ept-${component.type}.png`} className="w-full max-w-60" />

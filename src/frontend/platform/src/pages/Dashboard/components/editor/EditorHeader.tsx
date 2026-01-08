@@ -87,7 +87,7 @@ export function EditorHeader({
         const startAutoSave = () => {
             autoSaveTimerRef.current = setInterval(() => {
                 if (hasUnsavedChanges && !isSaving) {
-                    console.log("[v0] Auto-saving dashboard...")
+                    console.log("Auto-saving dashboard...")
                     saveMutation.mutate({
                         autoSave: true,
                         id: currentDashboard?.id,
@@ -110,18 +110,6 @@ export function EditorHeader({
         if (isSaving) return "保存中..."
         if (hasUnsavedChanges) return "未保存"
         return "已保存"
-    }
-
-    const getSaveStatusColor = () => {
-        if (isSaving) return "text-blue-600"
-        if (hasUnsavedChanges) return "text-amber-600"
-        return "text-green-600"
-    }
-
-    const handleTitleDoubleClick = () => {
-        if (dashboard) {
-            setIsEditingTitle(true)
-        }
     }
 
     const handleTitleBlur = () => {
@@ -184,24 +172,6 @@ export function EditorHeader({
         })
         reset()
         navigator(-1)
-    }
-
-    // Handle add component
-    const handleAddComponent = (type: string) => {
-        console.log("[v0] Adding component:", type)
-        setHasUnsavedChanges(true)
-        toast({
-            description: `添加${type}组件功能开发中...`,
-        })
-    }
-
-    // Handle theme change
-    const handleThemeChange = (theme: string) => {
-        console.log("[v0] Changing theme:", theme)
-        setHasUnsavedChanges(true)
-        toast({
-            description: `切换主题功能开发中...`,
-        })
     }
 
     // Handle save

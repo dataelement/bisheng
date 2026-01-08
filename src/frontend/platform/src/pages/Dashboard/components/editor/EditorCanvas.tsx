@@ -37,7 +37,6 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
     } = useEditorDashboardStore()
 
     const { clear: clearComponentEditorStore } = useComponentEditorStore();
-    console.log('currentDashboard :>> ', currentDashboard);
 
     const { toast } = useToast()
     const queryClient = useQueryClient()
@@ -76,6 +75,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
 
     // When the page loads, it automatically refreshes according to the query component configuration 
     useEffect(() => {
+        console.log('currentDashboard :>> ', currentDashboard);
         if (currentDashboard && currentDashboard.components.length > 0) {
             // Delay execution to ensure all components are mounted
             const timer = setTimeout(() => {
@@ -86,9 +86,14 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
     }, [currentDashboard?.id, initializeAutoRefresh])
 
     // 处理布局变化
+    const isInitialMount = useRef(true);
     const handleLayoutChange = (newLayout: Layout[]) => {
-        console.log('newLayout :>> ', newLayout);
         if (isPreviewMode) return // 预览模式下不更新布局
+        if (isInitialMount.current) {
+            isInitialMount.current = false;
+            return;
+        }
+        console.log('newLayout :>> ', newLayout);
 
         const updatedLayouts = newLayout.map(item => ({
             i: item.i,

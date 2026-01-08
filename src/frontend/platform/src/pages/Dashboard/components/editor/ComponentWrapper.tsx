@@ -33,7 +33,10 @@ export function ComponentWrapper({
     const { copyFromDashboard, editingComponent, updateEditingComponent } = useComponentEditorStore();
     const isSelected = editingComponent?.id === component.id
     const componentData = isSelected ? editingComponent : component
-    console.log('componentData :>> ', componentData);
+
+    useEffect(() => {
+        console.log('componentData :>> ', componentData);
+    }, [editingComponent, component])
 
     useEffect(() => {
         if (isEditing && inputRef.current) {

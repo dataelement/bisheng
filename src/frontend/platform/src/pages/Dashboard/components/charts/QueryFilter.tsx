@@ -31,7 +31,9 @@ export function QueryFilter({ component, isPreviewMode = false }: QueryFilterPro
     const map = { 'year_month': 'month', 'year_month_day': 'day', 'year_month_day_hour': 'hour' }
 
     const [filter, setFilter] = useState<DatePickerValue | undefined>();
-    console.log('filter :>> ', filter);
+    useEffect(() => {
+        console.log('filter :>> ', filter);
+    }, [filter])
     useEffect(() => {
         const { type, mode, recentDays, startDate, endDate } = queryConditions.defaultValue
         if (queryConditions.defaultValue) {

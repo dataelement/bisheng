@@ -1,6 +1,8 @@
 
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { publishDashboard } from "@/controllers/API/dashboard";
+import { useEditorDashboardStore } from "@/store/dashboardStore";
+import { useEffect } from "react";
 import { useMutation, useQueryClient } from "react-query";
 
 export const DashboardsQueryKey = "DashboardsQueryKey"
@@ -46,4 +48,32 @@ export const usePublishDashboard = () => {
         isPublishing: mutation.isLoading,
         mutation,
     };
+};
+
+export const useEditorShortcuts = () => {
+    const { undo, redo, history } = useEditorDashboardStore();
+
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            const isCtrlOrCmd = event.ctrlKey || event.metaKey;
+
+            // Undo: Ctrl + Z
+            if (isCtrlOrCmd && !event.shiftKey && event.key.toLowerCase() === 'z') {
+                event.preventDefault();
+                if (history.past.length > 0) undo();
+            }
+
+            // Redo: Ctrl + Shift + Z or Ctrl + Y
+            if (
+                (isCtrlOrCmd && event.shiftKey && event.key.toLowerCase() === 'z') ||
+                (isCtrlOrCmd && event.key.toLowerCase() === 'y')
+            ) {
+                event.preventDefault();
+                if (history.future.length > 0) redo();
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [undo, redo, history.past.length, history.future.length]);
 };

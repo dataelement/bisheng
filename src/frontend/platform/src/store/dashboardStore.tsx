@@ -2,11 +2,16 @@ import { create } from "zustand"
 import { generateUUID } from "@/components/bs-ui/utils"
 import { ChartType, createDefaultDataConfig, Dashboard, DashboardComponent, LayoutItem, QueryConfig } from "@/pages/Dashboard/types/dataConfig"
 import { DatePickerValue } from "@/pages/Dashboard/components/AdvancedDatePicker";
+import { cloneDeep, isEqual } from "lodash-es";
 
 // Chart refresh information
 interface ChartRefreshInfo {
     trigger: number;           // Refresh trigger counter
     queryParams: any[];        // Array of associated query component parameters
+}
+interface HistoryState {
+    past: Array<{ currentDashboard: any, layouts: any[] }>;
+    future: Array<{ currentDashboard: any, layouts: any[] }>;
 }
 
 interface EditorState {
@@ -21,6 +26,12 @@ interface EditorState {
     // Chart refresh triggers: each chart has its own trigger counter and query params
     chartRefreshTriggers: Record<string, ChartRefreshInfo>;
     queryComponentParams: Record<string, DatePickerValue>;
+    // history
+    history: HistoryState;
+
+    undo: () => void;
+    redo: () => void;
+    saveSnapshot: () => void;
     // Set modification state
     setHasUnsavedChanges: (value: boolean) => void;
     // Set saving state
@@ -53,6 +64,7 @@ interface EditorState {
     setQueryComponentParams: (id: string, params: DatePickerValue) => void;
 }
 
+let isInternalOperation = false; // Flag to prevent snapshot loops
 export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     hasUnsavedChanges: false,
     isSaving: false,
@@ -60,6 +72,11 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     layouts: [],
     chartRefreshTriggers: {},
     queryComponentParams: {},
+    // Initialize history stacks
+    history: {
+        past: [],
+        future: []
+    },
 
     setHasUnsavedChanges: (value) => set({ hasUnsavedChanges: value }),
     setIsSaving: (value) => set({ isSaving: value }),
@@ -73,12 +90,23 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     updateCurrentDashboard: (dashboard) => {
         set({ currentDashboard: dashboard })
     },
-    setLayouts: (layouts) => {
-        set({ layouts, hasUnsavedChanges: true })
+    setLayouts: (newLayouts) => {
+        const { layouts, saveSnapshot } = get()
+        // This prevents double snapshots from ReactGridLayout callbacks
+        if (isInternalOperation || isEqual(layouts, newLayouts)) {
+            set({ layouts: newLayouts })
+            return
+        }
+
+        debugLog('layouts')
+
+        saveSnapshot();
+        set({ layouts: newLayouts, hasUnsavedChanges: true })
     },
     addComponentToLayout: (component) => {
+        const { layouts, saveSnapshot } = get()
+        saveSnapshot()
         const componentId = generateUUID(6);
-        const { layouts } = get()
         // 计算新组件的位置
         const maxY = layouts.length > 0 ? Math.max(...layouts.map(l => l.y + l.h)) : 0
         const newLayout: LayoutItem = {
@@ -88,8 +116,12 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             w: 6,
             h: 6,
             minW: 2,
-            minH: 2
+            minH: 2,
+            maxH: 24,
+            maxW: 24
         }
+
+        debugLog('addComponent')
         set({
             layouts: [...layouts, newLayout],
             hasUnsavedChanges: true,
@@ -108,13 +140,22 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             }
         })
         useComponentEditorStore.getState().copyFromDashboard(componentId)
+
+        isInternalOperation = true
+        setTimeout(() => isInternalOperation = false, 100)
     },
     removeComponentFromLayout: (componentId) => {
-        const { layouts } = get()
+        const { layouts, saveSnapshot } = get()
+        saveSnapshot()
+
+        debugLog('removeComponent')
         set({
             layouts: layouts.filter(l => l.i !== componentId),
             hasUnsavedChanges: true
         })
+
+        isInternalOperation = true
+        setTimeout(() => isInternalOperation = false, 100)
     },
     // Update component in the current dashboard
     updateComponent: (componentId: string, data: Partial<DashboardComponent>) => {
@@ -124,22 +165,15 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             return
         }
 
-        console.log('=== updateComponent 被调用 ===')
-        console.log('组件ID:', componentId)
-        console.log('更新数据:', data)
-        console.log('更新前的组件:', currentDashboard.components.find(c => c.id === componentId))
-        console.log('所有组件数量:', currentDashboard.components.length)
-
         const updatedComponents = currentDashboard.components.map(c => {
             if (c.id === componentId) {
                 const updated = { ...c, ...data }
-                console.log('更新后的组件:', updated)
                 return updated
             }
             return c
         })
 
-        console.log('更新后的组件列表:', updatedComponents)
+        console.log('【savechange】 :>> updateComponent');
 
         set({
             currentDashboard: {
@@ -148,14 +182,11 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             },
             hasUnsavedChanges: true
         })
-
-        // 验证更新是否成功
-        const updatedState = get()
-        const updatedComponent = updatedState.currentDashboard?.components.find(c => c.id === componentId)
-        console.log('store 更新验证:', updatedComponent)
     },
     // Duplicate component
     duplicateComponent: (component: DashboardComponent) => {
+        get().saveSnapshot();
+
         const { currentDashboard, layouts } = get()
 
         const layoutItem = layouts.find((l) => l.i === component.id)
@@ -173,6 +204,8 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             i: newComponentId,
             y: layoutItem.y + layoutItem.h
         }
+
+        debugLog('copyComponent')
         set({
             currentDashboard: {
                 ...currentDashboard,
@@ -181,12 +214,17 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             layouts: [...layouts, newLayoutItem],
             hasUnsavedChanges: true
         })
+
+        isInternalOperation = true
+        setTimeout(() => isInternalOperation = false, 100)
     },
     // Delete component
     deleteComponent: (componentId: string) => {
         const { currentDashboard, layouts } = get()
         if (!currentDashboard) return
+        get().saveSnapshot();
 
+        debugLog('deleteComponent')
         set({
             currentDashboard: {
                 ...currentDashboard,
@@ -195,6 +233,9 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             layouts: layouts.filter(l => l.i !== componentId),
             hasUnsavedChanges: true
         })
+
+        isInternalOperation = true
+        setTimeout(() => isInternalOperation = false, 100)
     },
 
     // Refresh a single chart by incrementing its trigger counter
@@ -368,8 +409,82 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
         isSaving: false,
         currentDashboard: null,
         layouts: [],
-        chartRefreshTriggers: {}
+        chartRefreshTriggers: {},
+        history: { past: [], future: [] }
     }),
+
+    // Save a snapshot of the current state before an action occurs
+    saveSnapshot: () => {
+        const { currentDashboard, layouts, history } = get()
+        // Prevent recording if the change was triggered by Undo/Redo
+        if (isInternalOperation || !currentDashboard) return
+
+        // Use structuredClone for deep copy to prevent reference sharing
+        const snapshot = {
+            currentDashboard: cloneDeep(currentDashboard),
+            layouts: cloneDeep(layouts)
+        }
+
+        set({
+            history: {
+                // Keep the last 50 steps to prevent memory issues
+                past: [...history.past, snapshot].slice(-50),
+                future: [] // Clear future when a new action is performed
+            }
+        })
+    },
+
+    undo: () => {
+        const { history, currentDashboard, layouts } = get()
+        if (history.past.length === 0) return
+
+        const previous = history.past[history.past.length - 1]
+        const newPast = history.past.slice(0, -1)
+
+        isInternalOperation = true
+        // Store current state in future stack for redo
+        const currentSnapshot = {
+            currentDashboard: cloneDeep(currentDashboard),
+            layouts: cloneDeep(layouts)
+        }
+
+        set({
+            currentDashboard: previous.currentDashboard,
+            layouts: previous.layouts,
+            history: {
+                past: newPast,
+                future: [currentSnapshot, ...history.future]
+            },
+            hasUnsavedChanges: true
+        })
+        setTimeout(() => isInternalOperation = false, 100)
+    },
+
+    redo: () => {
+        const { history, currentDashboard, layouts } = get()
+        if (history.future.length === 0) return
+
+        const next = history.future[0]
+        const newFuture = history.future.slice(1)
+
+        isInternalOperation = true
+        // Store current state in past stack for undo
+        const currentSnapshot = {
+            currentDashboard: cloneDeep(currentDashboard),
+            layouts: cloneDeep(layouts)
+        }
+
+        set({
+            currentDashboard: next.currentDashboard,
+            layouts: next.layouts,
+            history: {
+                past: [...history.past, currentSnapshot],
+                future: newFuture
+            },
+            hasUnsavedChanges: true
+        })
+        setTimeout(() => isInternalOperation = false, 100)
+    }
 }))
 
 
@@ -452,3 +567,8 @@ export const useComponentEditorStore = create<ComponentEditorState>((set, get) =
         set({ editingComponent: null });
     },
 }));
+
+
+const debugLog = (msg: string) => {
+    console.log('【savechange】 :>> ', msg);
+}
