@@ -20,7 +20,7 @@ router = APIRouter(prefix='/tool', tags=['Tool'])
 async def get_tool_list(*,
                         is_preset: Optional[int] = None,
                         login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """查询所有可见的tool 列表"""
+    """Query all visibletool Vertical"""
     res = await ToolServices(login_user=login_user).get_tool_list(is_preset)
     return resp_200(data=res)
 
@@ -28,7 +28,7 @@ async def get_tool_list(*,
 @router.post('')
 async def add_tool_type(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
                         req: Dict = Body(default={})):
-    """ 新增自定义tool """
+    """ Add customizationtool """
     req = GptsToolsTypeRead(**req)
     services = ToolServices(request=request, login_user=login_user)
 
@@ -38,7 +38,7 @@ async def add_tool_type(request: Request, login_user: UserPayload = Depends(User
 @router.put('')
 async def update_tool_type(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
                            req: Dict = Body(default={})):
-    """ 更新自定义tool """
+    """ Custom field updated.tool """
     req = GptsToolsTypeRead(**req)
     services = ToolServices(request=request, login_user=login_user)
 
@@ -48,7 +48,7 @@ async def update_tool_type(request: Request, login_user: UserPayload = Depends(U
 @router.delete('')
 async def delete_tool_type(*, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
                            tool_type_id: int = Body(..., embed=True)):
-    """ 删除自定义工具 """
+    """ Remove Customizer """
     services = ToolServices(request=request, login_user=login_user)
 
     await services.delete_tools(tool_type_id)
@@ -58,9 +58,9 @@ async def delete_tool_type(*, request: Request, login_user: UserPayload = Depend
 @router.post('/config')
 async def update_tool_config(*,
                              login_user: UserPayload = Depends(UserPayload.get_admin_user),
-                             tool_id: int = Body(description='工具类别唯一ID'),
-                             extra: Dict = Body(..., description='工具的配置信息')):
-    """ 更新工具的配置 """
+                             tool_id: int = Body(description='Tool Category UniqueID'),
+                             extra: Dict = Body(..., description='Configuration information for the tool')):
+    """ Update the configuration of the tool """
     data = await ToolServices(login_user=login_user).update_tool_config(tool_id, extra)
     return resp_200(data=data)
 
@@ -68,9 +68,9 @@ async def update_tool_config(*,
 @router.post('/schema')
 async def get_tool_schema(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
                           download_url: Optional[str] = Body(default=None,
-                                                             description='下载url不为空的话优先用下载url'),
-                          file_content: Optional[str] = Body(default=None, description='上传的文件')):
-    """ 下载或者解析openapi schema的内容 转为助手自定义工具的格式 """
+                                                             description='MengunduhurlIf it is not empty, download it firsturl'),
+                          file_content: Optional[str] = Body(default=None, description='files uploaded')):
+    """ Download or parseopenapi schemaThe contents of the Convert to Assistant Customizer Format """
     services = ToolServices(request=request, login_user=login_user)
     tool_type = await services.parse_openapi_schema(download_url, file_content)
     return resp_200(data=tool_type)
@@ -79,8 +79,8 @@ async def get_tool_schema(request: Request, login_user: UserPayload = Depends(Us
 @router.post('/mcp/schema')
 async def get_mcp_tool_schema(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
                               file_content: Optional[str] = Body(default=None, embed=True,
-                                                                 description='mcp服务配置内容')):
-    """ 解析mcp的工具配置文件 """
+                                                                 description='mcpService Configuration Content')):
+    """ analyzingmcpTool Profile """
     services = ToolServices(request=request, login_user=login_user)
     tool_type = await services.parse_mcp_schema(file_content)
     return resp_200(data=tool_type)
@@ -88,7 +88,7 @@ async def get_mcp_tool_schema(request: Request, login_user: UserPayload = Depend
 
 @router.post('/test')
 async def tool_run(*, login_user: UserPayload = Depends(UserPayload.get_login_user), req: TestToolReq):
-    """ 测试自定义工具 """
+    """ Test custom tool """
     extra = json.loads(req.extra)
     extra.update({'api_location': req.api_location, 'parameter_name': req.parameter_name})
     tool_params = OpenApiSchema.parse_openapi_tool_params('test', 'test', json.dumps(extra),
@@ -103,8 +103,8 @@ async def tool_run(*, login_user: UserPayload = Depends(UserPayload.get_login_us
 @router.post('/mcp/test')
 async def mcp_tool_run(login_user: UserPayload = Depends(UserPayload.get_login_user),
                        req: TestToolReq = None):
-    """ 测试mcp服务的工具 """
-    # 实例化mcp服务对象，获取工具列表
+    """ TestmcpTools for Services """
+    # Instantiatemcpservice object, getting a list of tools
     client = await ClientManager.connect_mcp_from_json(req.openapi_schema)
     extra = json.loads(req.extra)
     tool_name = extra.get('name')
@@ -116,16 +116,16 @@ async def mcp_tool_run(login_user: UserPayload = Depends(UserPayload.get_login_u
 
 @router.post('/mcp/refresh')
 async def refresh_all_mcp_tools(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ 刷新用户当前所有的mcp工具列表 """
+    """ Refresh all of the user's currentmcpTools List """
     services = ToolServices(request=request, login_user=login_user)
     error_name = await services.refresh_all_mcp()
     return resp_200(data=error_name)
 
 
-@router.get("/linsight/preset", summary="获取灵思预置工具列表", response_model=UnifiedResponseModel)
+@router.get("/linsight/preset", summary="Get a list of Ideas presets", response_model=UnifiedResponseModel)
 async def get_linsight_tools():
     """
-    获取灵思预置工具列表
+    Get a list of Ideas presets
     """
     tools = await ToolServices.get_linsight_tools()
     return resp_200(data=tools)

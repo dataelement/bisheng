@@ -11,11 +11,11 @@ router = APIRouter(prefix='/invite', tags=['InviteCode'])
 
 @router.post('/code')
 async def create_invite_code(request: Request, login_user: UserPayload = Depends(UserPayload.get_admin_user),
-                             name: str = Body(..., description='批次名称'),
-                             num: int = Body(..., description='当前批次的邀请码数量'),
-                             limit: int = Body(..., description='当前批次邀请码的使用次数限制')):
+                             name: str = Body(..., description='Batch'),
+                             num: int = Body(..., description='Number of invitation codes in the current batch'),
+                             limit: int = Body(..., description='Current batch invite code usage limit')):
     """
-    创建邀请码
+    Create an invite code
     """
     logger.debug(
         f"create invite code user_id: {login_user.user_id}, ip: {get_request_ip(request)}, name: {name}, num: {num}, limit: {limit}")
@@ -29,9 +29,9 @@ async def create_invite_code(request: Request, login_user: UserPayload = Depends
 
 @router.post('/bind')
 async def bind_invite_code(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
-                           code: str = Body(..., embed=True, description='邀请码')):
+                           code: str = Body(..., embed=True, description='Invitation Code')):
     """
-    绑定邀请码
+    Binding Invitation Code
     """
     result = await InviteCodeService.bind_invite_code(login_user, code)
     logger.debug(f"bind_invite_code user_id:{login_user.user_id}, code:{code}, flag:{result}")
@@ -41,7 +41,7 @@ async def bind_invite_code(request: Request, login_user: UserPayload = Depends(U
 @router.get('/code')
 async def get_bind_code_num(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    获取用户绑定的有效的邀请码的可使用次数
+    Get the number of times a valid invitation code bound by a user can be used
     """
     num = await InviteCodeService.get_invite_code_num(login_user)
     return resp_200(data=num)

@@ -4,11 +4,11 @@ from ..base import BaseTTSClient
 
 
 class AzureOpenAITTSClient(BaseTTSClient):
-    """OpenAI TTS客户端"""
+    """OpenAI TTSClient"""
 
     def __init__(self, api_key: str, **kwargs):
         """
-        初始化OpenAI TTS客户端
+        InisialisasiOpenAI TTSClient
         :param api_key:
         :param kwargs:
         """
@@ -24,7 +24,7 @@ class AzureOpenAITTSClient(BaseTTSClient):
             format: Literal["mp3", "opus", "aac", "flac", "wav", "pcm"] = "mp3"
     ) -> bytes:
         """
-        使用OpenAI TTS API进行文本到语音的合成
+        UseOpenAI TTS APIText-to-speech synthesis
         :param text:
         :param voice:
         :param language:
@@ -41,6 +41,6 @@ class AzureOpenAITTSClient(BaseTTSClient):
 
         if response.response.status_code != 200:
             raise Exception(
-                f"OpenAI TTS API请求失败，状态码：{response.response.status_code}，错误信息：{response.response.text}")
+                f"OpenAI TTS APIRequest failed, status code:{response.response.status_code}Error Msg{response.response.text}")
 
         return response.content

@@ -9,7 +9,7 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository impor
 
 
 class KnowledgeRepositoryImpl(BaseRepositoryImpl[Knowledge, int], KnowledgeRepository):
-    """知识库仓库实现类"""
+    """Knowledge Base Repository Implementation Class"""
 
     def __init__(self, session: Union[AsyncSession, Session]):
         super().__init__(session, Knowledge)

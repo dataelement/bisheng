@@ -7,10 +7,10 @@ logger = logging.getLogger(__name__)
 
 
 class HttpClientManager(BaseContextManager[AsyncHttpClient]):
-    """HTTP 客户端管理器
+    """HTTP Client Manager
 
-    继承自 BaseContextManager，提供 HTTP 客户端的生命周期管理
-    支持懒加载和缓存
+    Inherited From BaseContextManagerProvided by HTTP Client lifecycle management
+    Supports lazy loading and caching
     """
 
     name = 'http_client'
@@ -19,7 +19,7 @@ class HttpClientManager(BaseContextManager[AsyncHttpClient]):
         super().__init__()
 
     async def _async_initialize(self) -> AsyncHttpClient:
-        """异步初始化 HTTP 客户端"""
+        """Async Initialization HTTP Client"""
         http_client = AsyncHttpClient()
         await http_client.get_aiohttp_client()
         return http_client
@@ -28,17 +28,17 @@ class HttpClientManager(BaseContextManager[AsyncHttpClient]):
         pass
 
     async def _async_cleanup(self) -> None:
-        """异步清理 HTTP 客户端"""
+        """Asynchronous Cleanup HTTP Client"""
         if self._instance:
             await self._instance.close_aiohttp_client()
 
     def _sync_cleanup(self) -> None:
-        """同步清理 HTTP 客户端"""
+        """Synchronous Cleanup HTTP Client"""
         pass
 
 
 async def get_http_client() -> AsyncHttpClient:
-    """获取 HTTP 客户端实例"""
+    """Dapatkan HTTP Client Instance"""
     from bisheng.core.context.manager import app_context
     try:
         return await app_context.async_get_instance(HttpClientManager.name)

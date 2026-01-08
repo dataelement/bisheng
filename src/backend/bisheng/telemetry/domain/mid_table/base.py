@@ -54,11 +54,11 @@ class BaseMidTable(BaseModel):
         try:
             exists = await self._es_client.indices.exists(index=self._index_name)
             if not exists:
-                # 传入 body 应用 Mapping
+                # Incoming body Applications Mapping
                 await self._es_client.indices.create(index=self._index_name,
                                                      body={"mappings": {"properties": mappings}})
         except es_exceptions.RequestError as e:
-            # 并发创建时忽略 "resource_already_exists_exception"
+            # Ignore on concurrency creation "resource_already_exists_exception"
             if "resource_already_exists_exception" not in str(e):
                 logger.error(f"Failed to create ES index: {e}")
                 raise e
@@ -73,18 +73,18 @@ class BaseMidTable(BaseModel):
         try:
             exists = self._es_client_sync.indices.exists(index=self._index_name)
             if not exists:
-                # 传入 body 应用 Mapping
+                # Incoming body Applications Mapping
                 self._es_client_sync.indices.create(index=self._index_name,
                                                     body={"mappings": {"properties": mappings}})
         except es_exceptions.RequestError as e:
-            # 并发创建时忽略 "resource_already_exists_exception"
+            # Ignore on concurrency creation "resource_already_exists_exception"
             if "resource_already_exists_exception" not in str(e):
                 logger.error(f"Failed to create ES index: {e}")
                 raise e
         return None
 
     def get_latest_record_time_sync(self) -> int | None:
-        """ 获取最新一条记录的时间 """
+        """ Time to fetch the last record """
         query = {
             "size": 1,
             "sort": [{"timestamp": {"order": "desc"}}],
@@ -98,7 +98,7 @@ class BaseMidTable(BaseModel):
         return None
 
     def insert_records_sync(self, records: List[BaseRecord]) -> None:
-        """ 批量插入记录 """
+        """ Batch Insert Record """
         actions = []
         for rec in records:
             action = {
@@ -111,6 +111,6 @@ class BaseMidTable(BaseModel):
         helpers.bulk(self._es_client_sync, actions)
 
     def search_from_base_sync(self, **kwargs) -> List[Dict[str, Any]]:
-        """ 同步搜索方法 """
+        """ Synchronize search methods """
         response = self._es_client_sync.search(index=telemetry_service.index_name, **kwargs)
         return response.get('hits', {}).get('hits', [])

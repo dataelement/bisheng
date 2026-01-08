@@ -10,7 +10,7 @@ from bisheng.utils import get_request_ip
 
 
 class CustomMiddleware(BaseHTTPMiddleware):
-    """切面程序"""
+    """Cutting Procedure"""
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint):
         # You can modify the request before passing it to the next middleware or endpoint
@@ -18,7 +18,7 @@ class CustomMiddleware(BaseHTTPMiddleware):
             trace_id = request.headers.get('x-trace-id')
         else:
             trace_id = trace_id_generator()
-        # 有Nginx  二选一 得看NGINX 的配置
+        # WithNginx  choose one of two Gotta see.NGINX Configuration of
         ip = get_request_ip(request)
         path = request.url
         trace_id_var.set(trace_id)
@@ -34,7 +34,7 @@ class CustomMiddleware(BaseHTTPMiddleware):
 
 
 class WebSocketLoggingMiddleware:
-    """WebSocket 日志中间件"""
+    """WebSocket Log middleware"""
 
     def __init__(self, app):
         self.app = app

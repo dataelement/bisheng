@@ -17,7 +17,7 @@ class DatasetService(BaseService):
                            page: int,
                            limit: int,
                            keyword: Optional[str] = None) -> (List[Dict], int):
-        """补全list 数据"""
+        """completelist DATA"""
 
         dataset_list = DatasetDao.filter_dataset_by_ids(dataset_ids=[],
                                                         keyword=keyword,
@@ -41,14 +41,14 @@ class DatasetService(BaseService):
 
     @classmethod
     def create_dataset(cls, user_id: int, data: CreateDatasetParam):
-        """创建数据集"""
+        """Create Dataset"""
         dataset_insert = DatasetCreate.validate(data)
         dataset_insert.user_id = user_id
         isExist = DatasetDao.get_dataset_by_name(data.name)
         if isExist:
             raise DatasetNameExistsError()
         dataset = DatasetDao.insert(dataset_insert)
-        # 处理文件
+        # Conditioning Documentation
         object_name = f'/dataset/{dataset.id}/{dataset.name}'
         if data.file_url:
             # MinioClient().upload_minio()
@@ -66,7 +66,7 @@ class DatasetService(BaseService):
         dataset = DatasetDao.get_dataset_by_id(dataset_id)
         if not dataset:
             raise HTTPException(status_code=404, detail='Dataset not found')
-        # 处理minio
+        # <g id="Bold">Medical Treatment:</g>minio
         object_name = dataset.object_name
         if object_name:
             minio_client = get_minio_storage_sync()

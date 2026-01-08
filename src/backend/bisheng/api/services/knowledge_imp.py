@@ -82,7 +82,7 @@ filetype_load_map = {
 
 
 class KnowledgeUtils:
-    # 用来区分chunk和自动生产的总结内容  格式如：文件名\n文档总结\n--------\n chunk内容
+    # Used to distinguishchunkand automated production summary content  Format e.g. Filename\nDocument Summary\n--------\n chunkContents
     chunk_split = "\n----------\n"
 
     @classmethod
@@ -93,7 +93,7 @@ class KnowledgeUtils:
 
     @classmethod
     def aggregate_chunk_metadata(cls, chunk: str, metadata: dict) -> str:
-        # 拼接chunk和metadata中的数据，获取新的chunk
+        # Video Wall ProcessingchunkAndmetadatadata in to get a newchunk
         res = f"{{<file_title>{metadata.get('document_name', '')}</file_title>\n"
         if metadata.get("abstract", ""):
             res += f"<file_abstract>{metadata.get('abstract', '')}</file_abstract>\n"
@@ -102,15 +102,15 @@ class KnowledgeUtils:
 
     @classmethod
     def chunk2promt(cls, chunk: str, metadata: dict) -> str:
-        # 拼接chunk和metadata中的数据，获取新的chunk
+        # Video Wall ProcessingchunkAndmetadatadata in to get a newchunk
         res = f"[file name]:{metadata.get('source', '')}\n[file content begin]\n{chunk}[file content end]\n"
         return res
 
     @classmethod
     def split_chunk_metadata(cls, chunk: str) -> str:
-        # 从拼接后的chunk中分离出原始chunk
+        # After stitching fromchunkis isolated from the originalchunk
 
-        # 说明是旧的拼接规则
+        # Instructions are old stitching rules
         if not chunk.startswith("{<file_title>"):
             return chunk.split(cls.chunk_split)[-1]
 
@@ -173,7 +173,7 @@ class KnowledgeUtils:
 
     @classmethod
     def get_knowledge_file_image_dir(cls, doc_id: str, knowledge_id: int = None) -> str:
-        """获取文件图片在minio的存储目录"""
+        """Get file image atminioStorage directory for"""
         if knowledge_id:
             return f"knowledge/images/{knowledge_id}/{doc_id}"
         else:
@@ -181,38 +181,38 @@ class KnowledgeUtils:
 
     @classmethod
     def get_knowledge_file_object_name(cls, file_id: int, file_name: str) -> str:
-        """获取知识库源文件在minio的存储路径"""
+        """Get Knowledge Base Source Files atminioStorage Path for"""
         file_ext = file_name.split(".")[-1]
         return f"original/{file_id}.{file_ext}"
 
     @classmethod
     def get_knowledge_bbox_file_object_name(cls, file_id: int) -> str:
-        """获取知识库文件对应的bbox文件在minio的存储路径"""
+        """Get the corresponding knowledge base filebboxFiles inminioStorage Path for"""
         return f"partitions/{file_id}.json"
 
     @classmethod
     def get_knowledge_preview_file_object_name(
             cls, file_id: int, file_name: str
     ) -> Optional[str]:
-        """获取知识库文件对应的预览文件在minio的存储路径 这个路径是存储在正式bucket内"""
+        """Get the preview file corresponding to the knowledge base file atminioStorage Path for This path is stored in the officialbucketand within"""
         file_ext = file_name.split(".")[-1]
         if file_ext == "doc":
             return f"preview/{file_id}.docx"
         elif file_ext in ["ppt", "pptx"]:
             return f"preview/{file_id}.pdf"
-        # 其他类型的文件不需要预览文件
+        # No preview required for other file types
         return None
 
     @classmethod
     def get_tmp_preview_file_object_name(cls, file_path: str) -> Optional[str]:
-        """获取临时预览文件在minio的存储路径 这个路径是存储在临时bucket"""
+        """Get a temporary preview file atminioStorage Path for This path is stored in a temporarybucket"""
         file_name = os.path.basename(file_path)
         file_name_no_ext, file_ext = file_name.rsplit(".", 1)
         if file_ext == "doc":
             return f"preview/{file_name_no_ext}.docx"
         elif file_ext in ["ppt", "pptx"]:
             return f"preview/{file_name_no_ext}.pdf"
-        # 其他类型的文件不需要预览文件
+        # No preview required for other file types
         return None
 
 
@@ -263,7 +263,7 @@ def process_file_task(
         force_ocr: int = 0,
         filter_page_header_footer: int = 0,
 ):
-    """处理知识文件任务"""
+    """Working with Knowledge Files Tasks"""
     try:
         index_name = knowledge.index_name or knowledge.collection_name
         addEmbedding(
@@ -298,7 +298,7 @@ def process_file_task(
 
 
 def delete_vector_files(file_ids: List[int], knowledge: Knowledge) -> bool:
-    """ 删除知识文件的向量数据和es数据 """
+    """ Delete vector data andesDATA """
     if not file_ids:
         return True
     logger.info(f"delete_files file_ids={file_ids} knowledge_id={knowledge.id}")
@@ -308,7 +308,7 @@ def delete_vector_files(file_ids: List[int], knowledge: Knowledge) -> bool:
     logger.info("start init ES")
     es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge,
                                                                 metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
-    # 如果collection不存在则不处理
+    # Automatically close purchase order aftercollectionIf it does not exist, it will not
     if vector_client.col:
         vector_client.col.delete(expr=f"document_id in {file_ids}", timeout=10)
     logger.info(f"delete_milvus file_ids={file_ids}")
@@ -324,22 +324,22 @@ def delete_vector_files(file_ids: List[int], knowledge: Knowledge) -> bool:
 
 
 def delete_minio_files(file: KnowledgeFile):
-    """删除知识库文件在minio上的存储"""
+    """Delete Knowledge Base Files inminioStorage on"""
 
     minio_client = get_minio_storage_sync()
 
-    # 删除源文件
+    # Delete source file
     if file.object_name:
         minio_client.remove_object_sync(bucket_name=minio_client.bucket, object_name=file.object_name)
 
-    # 删除bbox文件
+    # DeletebboxDoc.
     if file.bbox_object_name:
         minio_client.remove_object_sync(bucket_name=minio_client.bucket, object_name=file.bbox_object_name)
 
-    # 删除转换后的pdf文件
+    # Delete ConvertedpdfDoc.
     minio_client.remove_object_sync(bucket_name=minio_client.bucket, object_name=f"{file.id}")
 
-    # 删除预览文件
+    # Delete preview file
     preview_object_name = KnowledgeUtils.get_knowledge_preview_file_object_name(
         file.id, file.file_name
     )
@@ -349,7 +349,7 @@ def delete_minio_files(file: KnowledgeFile):
 
 
 def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True):
-    """删除知识文件信息"""
+    """Delete Knowledge File Information"""
     knowledge_files = KnowledgeFileDao.select_list(file_ids=file_ids)
 
     knowledge_ids = [file.knowledge_id for file in knowledge_files]
@@ -374,7 +374,7 @@ def decide_vectorstores(
     if vector_store == "ElasticKeywordsSearch":
         vector_config = settings.get_vectors_conf().elasticsearch.model_dump()
         if not vector_config:
-            # 无相关配置
+            # No related configurations
             raise RuntimeError("vector_stores.elasticsearch not find in config.yaml")
         param["index_name"] = collection_name
         if isinstance(vector_config["ssl_verify"], str):
@@ -385,7 +385,7 @@ def decide_vectorstores(
             param["partition_key"] = knowledge_id
         vector_config = settings.get_vectors_conf().milvus.model_dump()
         if not vector_config:
-            # 无相关配置
+            # No related configurations
             raise RuntimeError("vector_stores.milvus not find in config.yaml")
         param["collection_name"] = collection_name
         vector_config.pop("partition_suffix", "")
@@ -399,14 +399,14 @@ def decide_vectorstores(
 
 
 def decide_knowledge_llm(invoke_user_id: int) -> Any:
-    """获取用来总结知识库chunk的 llm对象"""
-    # 获取llm配置
+    """Get a summary of the knowledge basechunkright of privacy llmObjects"""
+    # DapatkanllmConfigure
     knowledge_llm = LLMService.get_knowledge_llm()
     if not knowledge_llm.extract_title_model_id:
-        # 无相关配置
+        # No related configurations
         return None
 
-    # 获取llm对象
+    # DapatkanllmObjects
     return LLMService.get_bisheng_llm_sync(
         model_id=knowledge_llm.extract_title_model_id,
 
@@ -417,14 +417,14 @@ def decide_knowledge_llm(invoke_user_id: int) -> Any:
 
 
 async def async_decide_knowledge_llm(invoke_user_id: int) -> Any:
-    """获取用来总结知识库chunk的 llm对象"""
-    # 获取llm配置
+    """Get a summary of the knowledge basechunkright of privacy llmObjects"""
+    # DapatkanllmConfigure
     knowledge_llm = await LLMService.aget_knowledge_llm()
     if not knowledge_llm.extract_title_model_id:
-        # 无相关配置
+        # No related configurations
         return None
 
-    # 获取llm对象
+    # DapatkanllmObjects
     return await LLMService.get_bisheng_llm(
         model_id=knowledge_llm.extract_title_model_id,
 
@@ -452,7 +452,7 @@ def addEmbedding(
         force_ocr: int = 0,
         filter_page_header_footer: int = 0,
 ):
-    """将文件加入到向量和es库内"""
+    """Adding Files to Vector SumsesCunene"""
 
     logger.info("start init Milvus")
     vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge_files[0].updater_id,
@@ -463,7 +463,7 @@ def addEmbedding(
                                                                 metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
     minio_client = get_minio_storage_sync()
     for index, db_file in enumerate(knowledge_files):
-        # 尝试从缓存中获取文件的分块
+        # Try to get chunks of a file from the cache
         preview_cache_key = None
         if preview_cache_keys:
             preview_cache_key = (
@@ -485,7 +485,7 @@ def addEmbedding(
                 chunk_overlap,
                 extra_meta=extra_meta,
                 preview_cache_key=preview_cache_key,
-                # 增加的参数
+                # Added parameters
                 retain_images=retain_images,
                 knowledge_id=knowledge_id,
                 enable_formula=enable_formula,
@@ -598,7 +598,7 @@ def add_file_embedding(
 
     if len(texts) == 0:
         raise KnowledgeFileEmptyError()
-    # 缓存中有数据则用缓存中的数据去入库，因为是用户在界面编辑过的
+    # If there is data in the cache, the data in the cache is used to go to the warehouse because the user edited it in the interface.
     if preview_cache_key:
         all_chunk_info = KnowledgeUtils.get_preview_cache(preview_cache_key)
         if all_chunk_info:
@@ -614,11 +614,11 @@ def add_file_embedding(
             if file_ext in (".xlsx", ".xls", ".csv"):
                 raise KnowledgeExcelChunkMaxError()
             raise KnowledgeFileChunkMaxError()
-        # 入库时 拼接文件名和文档摘要
+        # On Inbound Stitching file names and document summaries
         texts[index] = KnowledgeUtils.aggregate_chunk_metadata(one, metadatas[index].model_dump())
 
     db_file.parse_type = parse_type
-    # 存储ocr识别后的partitions结果
+    # StorageocrIdentifiedpartitions<g id="Bold">Result</g>
     if partitions:
         partition_data = json.dumps(partitions, ensure_ascii=False).encode("utf-8")
         db_file.bbox_object_name = KnowledgeUtils.get_knowledge_bbox_file_object_name(
@@ -650,11 +650,11 @@ def add_file_embedding(
 
     metadatas = [metadata.model_dump() for metadata in metadatas]
     logger.info(f"add_vectordb file={db_file.id} file_name={db_file.file_name}")
-    # 存入milvus
+    # Depositmilvus
     vector_client.add_texts(texts=texts, metadatas=metadatas)
 
     logger.info(f"add_es file={db_file.id} file_name={db_file.file_name}")
-    # 存入es
+    # Deposites
     es_client.add_texts(texts=texts, metadatas=metadatas)
 
     logger.info(f"add_complete file={db_file.id} file_name={db_file.file_name}")
@@ -691,16 +691,16 @@ def add_text_into_vector(
         metadatas: List[dict],
 ):
     logger.info(f"add_vectordb file={db_file.id} file_name={db_file.file_name}")
-    # 存入milvus
+    # Depositmilvus
     vector_client.add_texts(texts=texts, metadatas=metadatas)
 
     logger.info(f"add_es file={db_file.id} file_name={db_file.file_name}")
-    # 存入es
+    # Deposites
     es_client.add_texts(texts=texts, metadatas=metadatas)
 
 
 def parse_partitions(partitions: List[Any]) -> Dict:
-    """解析生成bbox和文本的对应关系"""
+    """Resolve BuildbboxCorrespondence with text"""
     if not partitions:
         return {}
     res = {}
@@ -725,13 +725,13 @@ def upload_preview_file_to_minio(original_file_path: str, preview_file_path: str
             != os.path.basename(preview_file_path).split(".")[0]
     ):
         logger.error(
-            f"原始文件和预览文件路径不匹配: {original_file_path} vs {preview_file_path}"
+            f"Original and preview file paths do not match: {original_file_path} vs {preview_file_path}"
         )
 
     minio_client = get_minio_storage_sync()
     object_name = KnowledgeUtils.get_tmp_preview_file_object_name(original_file_path)
     with open(preview_file_path, "rb") as file_obj:
-        # 上传预览文件到minio
+        # Upload preview file tominio
         minio_client.put_object_tmp_sync(
             object_name=object_name, file=file_obj.read()
         )
@@ -746,13 +746,13 @@ async def async_upload_preview_file_to_minio(
             != os.path.basename(preview_file_path).split(".")[0]
     ):
         logger.error(
-            f"原始文件和预览文件路径不匹配: {original_file_path} vs {preview_file_path}"
+            f"Original and preview file paths do not match: {original_file_path} vs {preview_file_path}"
         )
 
     minio_client = await get_minio_storage()
     object_name = KnowledgeUtils.get_tmp_preview_file_object_name(original_file_path)
     async with aiofiles.open(preview_file_path, "rb") as file_obj:
-        # 上传预览文件到minio
+        # Upload preview file tominio
         await minio_client.put_object_tmp(
             object_name=object_name, file=await file_obj.read()
         )
@@ -761,14 +761,14 @@ async def async_upload_preview_file_to_minio(
 
 def parse_document_title(title: str) -> str:
     """
-    解析文档标题，去除特殊字符和多余空格
-    :param title: 文档标题
-    :return: 处理后的标题
+    Parse document titles, removing special characters and extra spaces
+    :param title: Original title
+    :return: Post-processing title
     """
-    # 去除思考模型的think标签内容
+    # Removing the Thinking Model'sthinkChange Content
     title = re.sub("<think>.*</think>", "", title, flags=re.S).strip()
 
-    # 如果有符合md 代码快的标记则去除代码块标记
+    # If there is amd The code fast marker removes the code block marker
     if final_title := extract_code_blocks(title):
         title = "\n".join(final_title)
     return title
@@ -796,7 +796,7 @@ def read_chunk_text(
     2：parse_type: etl4lm or un_etl4lm
     3: ocr bbox data: maybe None
     """
-    # 获取文档总结标题的llm
+    # Gets the title of the document summaryllm
     llm = None
     if not no_summary:
         try:
@@ -813,10 +813,10 @@ def read_chunk_text(
         chunk_overlap=chunk_overlap,
         is_separator_regex=True,
     )
-    # 加载文档内容
+    # Load document content
     logger.info(f"start_file_loader file_name={file_name}")
     parse_type = ParseType.UN_ETL4LM.value
-    # excel 文件的处理单独出来
+    # excel File processing comes out separately
     partitions = []
     texts = []
     etl_for_lm_url = settings.get_knowledge().etl4lm.url
@@ -874,7 +874,7 @@ def read_chunk_text(
                 knowledge_id=knowledge_id,
                 doc_id=doc_id,
             )
-        # 将pptx转为预览文件存到
+        # will bepptxSave as preview file to
         if file_extension_name in ["ppt", "pptx"]:
             ppt_pdf_path = convert_ppt_to_pdf(input_path=input_file)
             if ppt_pdf_path:
@@ -884,7 +884,7 @@ def read_chunk_text(
                 input_file.replace(".docx", ".doc"), input_file
             )
 
-        # 沿用原来的方法处理md文件
+        # Handle it the same way you didmdDoc.
         loader = filetype_load_map["md"](file_path=md_file_name, autodetect_encoding=True)
         documents = loader.load()
 
@@ -894,7 +894,7 @@ def read_chunk_text(
     else:
         if etl_for_lm_url:
             if file_extension_name in ["pdf"]:
-                # 判断文件是否损坏
+                # Determine if the document is damaged
                 if is_pdf_damaged(input_file):
                     raise KnowledgeFileDamagedError()
             etl4lm_settings = settings.get_knowledge().etl4lm
@@ -933,7 +933,7 @@ def read_chunk_text(
                         knowledge_id=knowledge_id,
                         doc_id=doc_id,
                     )
-                    # 沿用原来的方法处理md文件
+                    # Handle it the same way you didmdDoc.
                 loader = filetype_load_map["md"](file_path=md_file_name)
                 documents = loader.load()
             else:
@@ -946,7 +946,7 @@ def read_chunk_text(
     if llm:
         t = time.time()
         for one in documents:
-            # 配置了相关llm的话，就对文档做总结
+            # Configured correlationllmIf so, summarize the document
             title = extract_title(
                 llm=llm,
                 text=one.page_content,
@@ -1001,7 +1001,7 @@ async def async_read_chunk_text(
         excel_rule: ExcelRule = None,
         no_summary: bool = False,
 ) -> (List[str], List[Metadata], str, Any):  # type: ignore
-    """异步版本的 read_chunk_text"""
+    """Asynchronous version of read_chunk_text"""
     llm = None
     if not no_summary:
         try:
@@ -1010,7 +1010,7 @@ async def async_read_chunk_text(
         except Exception as e:
             logger.exception("knowledge_llm_error:")
             raise Exception(
-                f"文档知识库总结模型已失效，请前往模型管理-系统模型设置中进行配置。{str(e)}"
+                f"Documentation Knowledge Base Summary Model is no longer valid, please go to Model Management-Configure in System Model Settings.{str(e)}"
             )
 
     text_splitter = ElemCharacterTextSplitter(
@@ -1020,10 +1020,10 @@ async def async_read_chunk_text(
         chunk_overlap=chunk_overlap,
         is_separator_regex=True,
     )
-    # 加载文档内容
+    # Load document content
     logger.info(f"start_file_loader file_name={file_name}")
     parse_type = ParseType.UN_ETL4LM.value
-    # excel 文件的处理单独出来
+    # excel File processing comes out separately
     partitions = []
     texts = []
     etl_for_lm_url = (await settings.async_get_knowledge()).etl4lm.url
@@ -1080,7 +1080,7 @@ async def async_read_chunk_text(
                 knowledge_id=knowledge_id,
                 doc_id=doc_id,
             )
-        # 将pptx转为预览文件存到
+        # will bepptxSave as preview file to
         if file_extension_name in ["ppt", "pptx"]:
             ppt_pdf_path = await util.sync_func_to_async(convert_ppt_to_pdf)(input_path=input_file)
             if ppt_pdf_path:
@@ -1090,7 +1090,7 @@ async def async_read_chunk_text(
                 input_file.replace(".docx", ".doc"), input_file
             )
 
-        # 沿用原来的方法处理md文件
+        # Handle it the same way you didmdDoc.
         loader = filetype_load_map["md"](file_path=md_file_name, autodetect_encoding=True)
         documents = await loader.aload()
 
@@ -1100,7 +1100,7 @@ async def async_read_chunk_text(
     else:
         if etl_for_lm_url:
             if file_extension_name in ["pdf"]:
-                # 判断文件是否损坏
+                # Determine if the document is damaged
                 if is_pdf_damaged(input_file):
                     raise Exception('The file is damaged.')
             etl4lm_settings = (await settings.async_get_knowledge()).etl4lm
@@ -1136,12 +1136,12 @@ async def async_read_chunk_text(
                         knowledge_id=knowledge_id,
                         doc_id=doc_id,
                     )
-                    # 沿用原来的方法处理md文件
+                    # Handle it the same way you didmdDoc.
                 loader = filetype_load_map["md"](file_path=md_file_name)
                 documents = await loader.aload()
             else:
                 if file_extension_name not in filetype_load_map:
-                    raise Exception("类型不支持")
+                    raise Exception("Type not supported")
                 loader = filetype_load_map[file_extension_name](file_path=input_file)
                 documents = await loader.aload()
 
@@ -1149,7 +1149,7 @@ async def async_read_chunk_text(
     if llm:
         t = time.time()
         for one in documents:
-            # 配置了相关llm的话，就对文档做总结
+            # Configured correlationllmIf so, summarize the document
             title = await async_extract_title(
                 llm=llm,
                 text=one.page_content,
@@ -1191,7 +1191,7 @@ async def async_read_chunk_text(
 def text_knowledge(
         db_knowledge: Knowledge, db_file: KnowledgeFile, documents: List[Document]
 ):
-    """使用text 导入knowledge"""
+    """Usetext Importknowledge"""
     embeddings = LLMService.get_bisheng_knowledge_embedding_sync(model_id=int(db_knowledge.model),
                                                                  invoke_user_id=db_file.user_id)
     vectore_client = decide_vectorstores(
@@ -1216,7 +1216,7 @@ def text_knowledge(
 
     logger.info(f"chunk_split knowledge_id={db_knowledge.id} size={len(texts)}")
 
-    # 存储 mysql
+    # Storage mysql
     file_name = documents[0].metadata.get("source")
     db_file.file_name = file_name
     with get_sync_db_session() as session:
@@ -1242,7 +1242,7 @@ def text_knowledge(
             texts=[t.page_content for t in texts], metadatas=metadata
         )
 
-        # 存储es
+        # Storagees
         if es_client:
             es_client.add_texts(
                 texts=[t.page_content for t in texts], metadatas=metadata
@@ -1275,9 +1275,9 @@ def delete_vector(collection_name: str, partition_key: str):
                 res = vectore_client.col.drop(timeout=1)
                 logger.info('act=delete_milvus col={} res={}', collection_name, res)
     except Exception as e:
-        # 处理集合不存在或其他错误的情况
+        # Handle situations where a collection does not exist or where there are other errors
         logger.warning(f'act=delete_milvus_failed col={collection_name} error={str(e)}')
-        # 即使出错也视为成功删除，因为目标是确保没有脏数据
+        # Even an error is considered a successful deletion as the goal is to ensure that there is no dirty data
 
 
 def delete_es(index_name: str):
@@ -1289,13 +1289,13 @@ def delete_es(index_name: str):
             res = esvectore_client.client.indices.delete(index=index_name, ignore=[400, 404])
             logger.info(f'act=delete_es index={index_name} res={res}')
     except Exception as e:
-        # 处理索引不存在或其他错误的情况
+        # Dealing with non-existent indexes or other errors
         logger.warning(f'act=delete_es_failed index={index_name} error={str(e)}')
-        # 即使出错也视为成功删除，因为目标是确保没有脏数据
+        # Even an error is considered a successful deletion as the goal is to ensure that there is no dirty data
 
 
 def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
-    """使用text 导入knowledge"""
+    """Usetext Importknowledge"""
 
     questions = QA.questions
     answer = json.loads(QA.answers)[0]
@@ -1316,7 +1316,7 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
         logger.info(
             f"vector_init_conn_done col={db_knowledge.collection_name} index={db_knowledge.index_name}"
         )
-        # 统一document
+        # Unificationdocument
         metadata = [
             {
                 "file_id": QA.id,
@@ -1349,11 +1349,11 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
 
 
 def add_qa(db_knowledge: Knowledge, data: QAKnowledgeUpsert) -> QAKnowledge:
-    """使用text 导入QAknowledge"""
+    """Usetext ImportQAknowledge"""
     if db_knowledge.type != 1:
         raise Exception("knowledge type error")
     try:
-        # 相似问统一插入
+        # Similar question unified insertion
         questions = data.questions
         if questions:
             if data.id:
@@ -1361,7 +1361,7 @@ def add_qa(db_knowledge: Knowledge, data: QAKnowledgeUpsert) -> QAKnowledge:
                 qa_db.questions = questions
                 qa_db.answers = data.answers
                 qa = QAKnoweldgeDao.update(qa_db)
-                # 需要先删除再插入
+                # Needs to be deleted before insertion
                 delete_vector_data(db_knowledge, [data.id])
             else:
                 qa = QAKnoweldgeDao.insert_qa(data)
@@ -1371,7 +1371,7 @@ def add_qa(db_knowledge: Knowledge, data: QAKnowledgeUpsert) -> QAKnowledge:
                     trace_id=trace_id_var.get()
                 )
 
-            # 对question进行embedding，然后录入知识库
+            # Right.questionTo be performedembedding, and then enter the Knowledge Base
             qa = QA_save_knowledge(db_knowledge, qa)
             return qa
     except Exception as e:
@@ -1380,7 +1380,7 @@ def add_qa(db_knowledge: Knowledge, data: QAKnowledgeUpsert) -> QAKnowledge:
 
 
 def qa_status_change(qa_db: QAKnowledge, target_status: int, db_knowledge: Knowledge):
-    """QA 状态切换"""
+    """QA State toggle"""
 
     if qa_db.status == target_status:
         logger.info("qa status is same, skip")
@@ -1405,7 +1405,7 @@ async def list_qa_by_knowledge_id(
         keyword: Optional[str] = None,
         status: Optional[int] = None,
 ) -> list[Any] | tuple[Any, Any]:
-    """获取知识库下的所有qa"""
+    """Get all under knowledge baseqa"""
     if not knowledge_id:
         return []
 
@@ -1452,11 +1452,11 @@ async def list_qa_by_knowledge_id(
 
 
 def delete_vector_data(knowledge: Knowledge, file_ids: List[int]):
-    """删除向量数据, 想做一个通用的，可以对接langchain的vectorDB"""
+    """Delete vector data, Want to make a general purpose that can be dockedlangchainright of privacyvectorDB"""
     # embeddings = FakeEmbedding()
     # vectore_config_dict: dict = settings.get_knowledge().get('vectorstores')
     # if not vectore_config_dict:
-    #     raise Exception('向量数据库必须配置')
+    #     raise Exception('Vector database must be configured')
     # elastic_index = knowledge.index_name or knowledge.collection_name
     # vectore_client_list = [
     #     decide_vectorstores(elastic_index, db, embeddings) if db == 'ElasticKeywordsSearch' else
@@ -1467,10 +1467,10 @@ def delete_vector_data(knowledge: Knowledge, file_ids: List[int]):
     #             vectore_config_dict.keys())
 
     # for vectore_client in vectore_client_list:
-    # 查询vector primary key
+    # Inquiryvector primary key
     embeddings = FakeEmbedding()
     collection_name = knowledge.collection_name
-    # 处理vectordb
+    # <g id="Bold">Medical Treatment:</g>vectordb
     vectore_client = decide_vectorstores(collection_name, "Milvus", embeddings)
     try:
         if isinstance(vectore_client.col, Collection):
@@ -1480,7 +1480,7 @@ def delete_vector_data(knowledge: Knowledge, file_ids: List[int]):
         else:
             pk = []
     except Exception:
-        # 重试一次
+        # Want to try that again?
         logger.error("timeout_except")
         vectore_client.close_connection(vectore_client.alias)
         vectore_client = decide_vectorstores(collection_name, "Milvus", embeddings)
@@ -1511,30 +1511,30 @@ def recommend_question(invoke_user_id: int, question: str, answer: str, number: 
     from langchain.chains.llm import LLMChain
     from langchain_core.prompts.prompt import PromptTemplate
 
-    prompt = """- Role: 问题生成专家
-        - Background: 用户希望通过人工智能模型根据给定的问题和答案生成相似的问题，以便于扩展知识库或用于教育和测试目的。
-        - Profile: 你是一位专业的数据分析师和语言模型专家，擅长从现有数据中提取模式，并生成新的相关问题。
-        - Constrains: 确保生成的问题在语义上与原始问题相似，同时保持多样性，避免重复。
+    prompt = """- Role: Problem Generation Specialist
+        - Background: Users want to generate similar questions based on given questions and answers through artificial intelligence models in order to expand the knowledge base or for educational and testing purposes.
+        - Profile: You are a professional data analyst and language modeler who specializes in extracting patterns from existing data and generating new relevant questions.
+        - Constrains: Ensure that the generated questions are semantically similar to the original questions, while maintaining diversity and avoiding duplication.
         - Workflow:
-        1. 分析用户输入的问题和答案，提取关键词和主题。
-        2. 根据提取的关键词和主题创建相似问题。
-        3. 验证生成的问题与原始问题在语义上的相似性，并确保多样性。
+        1. Analyze questions and answers entered by users and extract keywords and topics.
+        2. Create similar questions based on extracted keywords and topics.
+        3. Verify that the generated questions are semantically similar to the original questions and ensure diversity.
         - Examples:
-        问题："法国的首都是哪里？"
-        答案："巴黎"
-        生成3个相似问题：
-        - "法国的首都叫什么名字？"
-        - "哪个城市是法国的首都？"
-        - "巴黎是哪个国家的首都？"
+        Question:"What is the capital of France?"
+        Answers:"Paris"
+        Buat3similar questions:
+        - "What is the name of the capital of France?"
+        - "Which city is the capital of France?"
+        - "What country's capital is Paris?"
 
-        请使用json 返回
-        {{"questions": 生成的问题列表}}
+        Please usejson Return
+        {{"questions": Generated Question List}}
 
-        以下是用户提供的问题和答案：
-        问题：{question}
-        答案：{answer}
+        Here are the questions and answers provided by the user:
+        Question:{question}
+        Answers:{answer}
 
-        你生成的{number}个相似问题：
+        You generated{number}similar questions:
     """
     llm = LLMService.get_knowledge_similar_llm(invoke_user_id)
     if not llm:
@@ -1559,11 +1559,11 @@ def recommend_question(invoke_user_id: int, question: str, answer: str, number: 
 
 
 def extract_code_blocks(markdown_code_block: str):
-    # 定义正则表达式模式
+    # Define regular expression patterns
     pattern = r"```\w*\s*(.*?)```"
 
-    # 使用 re.DOTALL 使 . 能够匹配换行符
+    # Use re.DOTALL letting . Ability to match line breaks
     matches = re.findall(pattern, markdown_code_block, re.DOTALL)
 
-    # 去除每段代码块两端的空白字符
+    # Remove whitespace at both ends of each code block
     return [match.strip() for match in matches]

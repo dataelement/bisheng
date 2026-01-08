@@ -3,49 +3,49 @@ from bisheng.common.errcode import BaseErrorCode
 
 class ToolTypeRepeatError(BaseErrorCode):
     Code: int = 15000
-    Msg: str = '工具名称已存在'
+    Msg: str = 'Tool name already exists'
 
 
 class ToolTypeEmptyError(BaseErrorCode):
     Code: int = 15001
-    Msg: str = '工具下的API不能为空'
+    Msg: str = 'Under the toolAPITidak boleh kosong.'
 
 
 class ToolTypeNotExistsError(BaseErrorCode):
     Code: int = 15002
-    Msg: str = '工具不存在'
+    Msg: str = 'Tool does not exist.'
 
 
 class ToolTypeNameError(BaseErrorCode):
     Code: int = 15003
-    Msg: str = '名字不符合规范：至少1个字符，不能超过1000个字符'
+    Msg: str = 'Name does not meet specification: at least1characters, cannot exceed1000characters'
 
 
 class ToolTypeIsPresetError(BaseErrorCode):
     Code: int = 15010
-    Msg: str = '预置工具类别不可删除'
+    Msg: str = 'Preset tool category cannot be deleted'
 
 
 class ToolSchemaDownloadError(BaseErrorCode):
     Code: int = 15020
-    Msg: str = '工具Schema的url下载失败'
+    Msg: str = 'ToolsSchemaright of privacyurlDownload failed'
 
 
 class ToolSchemaEmptyError(BaseErrorCode):
     Code: int = 15021
-    Msg: str = '工具Schema不能为空'
+    Msg: str = 'ToolsSchemaTidak boleh kosong.'
 
 
 class ToolSchemaParseError(BaseErrorCode):
     Code: int = 15022
-    Msg: str = 'openapi schema解析报错，请检查内容是否符合json或者yaml格式: {exception}'
+    Msg: str = 'openapi schemaError parsing, please check if the content matchesjsonoryamlFormat: {exception}'
 
 
 class ToolSchemaServerError(BaseErrorCode):
     Code: int = 15023
-    Msg: str = 'server中的url必须以http或者https开头: {url}'
+    Msg: str = 'serverhitting the nail on the headurlMust start withhttporhttpsWhat/the beginning?: {url}'
 
 
 class ToolMcpSchemaError(BaseErrorCode):
     Code: int = 15024
-    Msg: str = 'mcp工具配置解析失败，请检查内容是否符合mcp配置格式: {exception}'
+    Msg: str = 'mcpTool configuration parsing failed, please check if the content matchesmcpConfigure Format: {exception}'

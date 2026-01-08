@@ -16,26 +16,26 @@ from bisheng.user.domain.models.user_role import UserRoleDao
 
 
 class KnowledgeTypeEnum(Enum):
-    QA = 1  # QA知识库
-    NORMAL = 0  # 文档知识库
-    PRIVATE = 2  # 工作台的个人知识库
+    QA = 1  # QAThe knowledge base upon
+    NORMAL = 0  # Docly Knowledge Base
+    PRIVATE = 2  # Workbench Personal Knowledge Base
 
 
 class KnowledgeState(Enum):
     UNPUBLISHED = 0
-    PUBLISHED = 1  # 文档知识库成功的状态
+    PUBLISHED = 1  # Document Knowledge Base Success Status
     COPYING = 2
-    REBUILDING = 3  # 文档知识库重建中的状态
-    FAILED = 4  # 文档知识库重建失败的状态
+    REBUILDING = 3  # Status in Document Knowledge Base Reconstruction
+    FAILED = 4  # Status of Documentation Knowledge Base Reconstruction Failure
 
 
 class MetadataFieldType(str, Enum):
-    """ 元数据字段类型"""
+    """ Metadata field type"""
     STRING = "string"
     NUMBER = "number"
     TIME = "time"
 
-    # 大小写不敏感的枚举匹配
+    # Case-insensitive enumeration matching
     @classmethod
     def _missing_(cls, value: Any) -> Optional["MetadataFieldType"]:
         if isinstance(value, str):
@@ -47,17 +47,17 @@ class MetadataFieldType(str, Enum):
 
 class KnowledgeBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
-    name: str = Field(index=True, min_length=1, max_length=200, description='知识库名, 最少一个字符，最多30个字符')
-    type: int = Field(index=False, default=0, description='0 为普通知识库，1 为QA知识库')
+    name: str = Field(index=True, min_length=1, max_length=200, description='Knowledge Base Name, Minimum one character, maximum30characters')
+    type: int = Field(index=False, default=0, description='0 is a general knowledge base,1 areQAThe knowledge base upon')
     description: Optional[str] = Field(default=None, index=True)
     model: Optional[str] = Field(default=None, index=False)
     collection_name: Optional[str] = Field(default=None, index=False)
     index_name: Optional[str] = Field(default=None, index=False)
     state: Optional[int] = Field(index=False, default=KnowledgeState.PUBLISHED.value,
-                                 description='0 为未发布，1 为已发布, 2 为复制中')
+                                 description='0 is unpublished,1 Is Published, 2 Is copying')
 
     metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON, nullable=True),
-                                                  description="知识库的元数据字段配置")
+                                                  description="Metadata Field Configuration for Knowledge Base")
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -199,10 +199,10 @@ class KnowledgeDao(KnowledgeBase):
         if knowledge_type:
             statement = statement.where(Knowledge.type == knowledge_type.value)
         elif knowledge_type is False:
-            # 当显式传入False时，不过滤个人知识库
+            # When explicitly passed inFalse, do not filter personal knowledge base
             pass
         else:
-            # 默认情况下过滤掉个人知识库
+            # Filter personal knowledge base by default
             statement = statement.where(Knowledge.type != KnowledgeTypeEnum.PRIVATE.value)
         if name:
 
@@ -296,17 +296,17 @@ class KnowledgeDao(KnowledgeBase):
     def judge_knowledge_permission(cls, user_name: str,
                                    knowledge_ids: List[int]) -> List[Knowledge]:
         """
-        根据用户名和知识库ID列表，获取用户有权限查看的知识库列表
-        :param user_name: 用户名
-        :param knowledge_ids: 知识库ID列表
-        :return: 返回用户有权限的知识库列表
+        Based on username and knowledge baseIDList to get a list of knowledge bases that the user has permission to view
+        :param user_name: Username
+        :param knowledge_ids: The knowledge base uponIDVertical
+        :return: Returns a list of knowledge bases that the user has permissions
         """
-        # 获取用户信息
+        # get user info
         user_info = UserDao.get_user_by_username(user_name)
         if not user_info:
             return []
 
-        # 查询用户所属于的角色
+        # Query the role the user belongs to
         role_list = UserRoleDao.get_user_roles(user_info.user_id)
         if not role_list:
             return []
@@ -317,11 +317,11 @@ class KnowledgeDao(KnowledgeBase):
             role_id_list.append(role.role_id)
             if role.role_id == 1:
                 is_admin = True
-        # admin 用户拥有所有知识库权限
+        # admin User has all knowledge base permissions
         if is_admin:
             return KnowledgeDao.get_list_by_ids(knowledge_ids)
 
-        # 查询角色 有使用权限的知识库列表
+        # query role List of knowledge bases with permissions
         role_access_list = RoleAccessDao.find_role_access(role_id_list, [str(one) for one in knowledge_ids],
                                                           AccessType.KNOWLEDGE)
 
@@ -335,7 +335,7 @@ class KnowledgeDao(KnowledgeBase):
     async def ajudge_knowledge_permission(cls, user_name: str,
                                           knowledge_ids: List[int]) -> List[Knowledge]:
         """
-        依据用户名和知识库ID列表，异步获取用户有权限查看的知识库列表
+        By Username and Knowledge BaseIDlist, asynchronously get a list of knowledge bases that the user has permission to view
         Args:
             user_name:
             knowledge_ids:
@@ -343,11 +343,11 @@ class KnowledgeDao(KnowledgeBase):
         Returns:
 
         """
-        # 获取用户信息
+        # get user info
         user_info = await UserDao.aget_user_by_username(user_name)
         if not user_info:
             return []
-        # 查询用户所属于的角色
+        # Query the role the user belongs to
         role_list = await UserRoleDao.aget_user_roles(user_info.user_id)
         if not role_list:
             return []
@@ -357,13 +357,13 @@ class KnowledgeDao(KnowledgeBase):
             role_id_list.append(role.role_id)
             if role.role_id == 1:
                 is_admin = True
-        # admin 用户拥有所有知识库权限
+        # admin User has all knowledge base permissions
         if is_admin:
             return await cls.aget_list_by_ids(knowledge_ids)
-        # 查询角色 有使用权限的知识库列表
+        # query role List of knowledge bases with permissions
         role_access_list = await RoleAccessDao.afind_role_access(role_id_list, [str(one) for one in knowledge_ids],
                                                                  AccessType.KNOWLEDGE)
-        # 查询是否包含了用户自己创建的知识库
+        # Query whether the knowledge base created by the user is included
         user_knowledge_list = await cls.aget_user_knowledge(user_info.user_id,
                                                             knowledge_id_extra=[int(access.third_id) for access in
                                                                                 role_access_list],
@@ -377,7 +377,7 @@ class KnowledgeDao(KnowledgeBase):
                                 page: int = 0,
                                 limit: int = 0) -> (List[Knowledge], int):
         """
-        根据关键字和知识库id过滤出对应的知识库
+        Based on keywords and knowledge baseidFilter out the corresponding knowledge base
 
         """
         statement = select(Knowledge)
@@ -489,7 +489,7 @@ class KnowledgeDao(KnowledgeBase):
 
     @classmethod
     def get_knowledge_by_name(cls, name: str, user_id: int = 0) -> Knowledge:
-        """ 通过知识库名称获取知识库详情 """
+        """ Get Knowledge Base Details by Knowledge Base Name """
         statement = select(Knowledge).where(Knowledge.name == name)
         if user_id:
             statement = statement.where(Knowledge.user_id == user_id)
@@ -499,12 +499,12 @@ class KnowledgeDao(KnowledgeBase):
     @classmethod
     def delete_knowledge(cls, knowledge_id: int, only_clear: bool = False):
         """
-        删除或者清空知识库
+        Delete or empty the knowledge base
         """
-        # 处理knowledge file
+        # <g id="Bold">Medical Treatment:</g>knowledge file
         with get_sync_db_session() as session:
             session.exec(delete(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id))
-            # 清空知识库时，不删除知识库记录
+            # Do not delete knowledge base records when clearing the knowledge base
             if not only_clear:
                 session.exec(delete(Knowledge).where(Knowledge.id == knowledge_id))
             session.commit()
@@ -512,7 +512,7 @@ class KnowledgeDao(KnowledgeBase):
     @classmethod
     def get_knowledge_by_time_range(cls, start_time: datetime, end_time: datetime, page: int = 0,
                                     page_size: int = 0) -> List[Knowledge]:
-        """ 根据创建时间范围获取知识库列表 """
+        """ Get a list of knowledge bases based on the creation timeframe """
         statement = select(Knowledge).where(
             Knowledge.create_time >= start_time,
             Knowledge.create_time < end_time
@@ -525,7 +525,7 @@ class KnowledgeDao(KnowledgeBase):
 
     @classmethod
     def get_first_knowledge(cls) -> Optional[Knowledge]:
-        """ 获取第一个知识库 """
+        """ Get the first knowledge base """
         statement = select(Knowledge).order_by(col(Knowledge.id).asc()).limit(1)
         with get_sync_db_session() as session:
             return session.exec(statement).first()

@@ -19,8 +19,8 @@ class BaseClient(ABC):
     def __init__(self, request: Request, client_key: str, client_id: str, chat_id: str, user_id: int,
                  login_user: UserPayload, work_type: WorkType, websocket: WebSocket, **kwargs):
         self.request = request
-        self.client_key = client_key  # 客户端唯一标识
-        self.client_id = client_id  # 业务的唯一标识，如助手或者技能ID
+        self.client_key = client_key  # Client Unique Identity
+        self.client_id = client_id  # Unique identification of the business, such as assistants or skillsID
         self.chat_id = chat_id
         self.user_id = user_id
         self.login_user = login_user
@@ -28,9 +28,9 @@ class BaseClient(ABC):
         self.websocket = websocket
         self.kwargs = kwargs
 
-        # 异步任务列表
+        # Asynchronous Task List
         self.task_ids = []
-        # ws消息队列, 用于存储发送给客户端的websocket消息
+        # wsMessage Queues, Used to store thewebsocketMessages sent by the client
 
     async def close(self):
         pass
@@ -45,7 +45,7 @@ class BaseClient(ABC):
         await self.websocket.send_json(message.model_dump())
 
     async def handle_message(self, message: Dict[any, any]):
-        """ 处理客户端发过来的信息, 提交到线程池内执行 """
+        """ Handling messages from clients, Submit to Thread Pool for Execution """
         trace_id = trace_id_var.get()
         logger.info(f'client_id={self.client_key} trace_id={trace_id} message={message}')
 
@@ -65,21 +65,21 @@ class BaseClient(ABC):
 
     async def wrapper_task(self, task_id: str, fn: Callable, *args, **kwargs):
         logger.debug("wrapper_task task_id=%s", task_id)
-        # 包装处理函数为异步任务
+        # The wrapper handler function is an asynchronous task
         self.task_ids.append(task_id)
         try:
-            # 执行处理函数
+            # Execute Handling Functions
             await fn(*args, **kwargs)
         except Exception as e:
             logger.exception("handle message error")
         finally:
-            # 执行完成后将任务id从列表移除
+            # When the execution is complete, the task will beidRemove from list
             self.task_ids.remove(task_id)
 
     async def add_message(self, msg_type: str, message: str, category: str, remark: str = ''):
-        """ 保存历史消息到数据库 """
+        """ Save Historical Messages to Database """
         if not self.chat_id:
-            # debug模式无需保存历史
+            # debugMode does not need to save history
             return
         is_bot = 0 if msg_type == 'human' else 1
         msg = ChatMessageDao.insert_one(ChatMessageModel(
@@ -98,7 +98,7 @@ class BaseClient(ABC):
 
     async def send_response(self, category: str, msg_type: str, message: str | dict, intermediate_steps: str = '',
                             message_id: int = None):
-        """ 给客户端发送响应消息 """
+        """ Send a response message to the client """
         is_bot = 0 if msg_type == 'human' else 1
         await self.send_json(ChatResponse(
             message_id=message_id,
@@ -114,10 +114,10 @@ class BaseClient(ABC):
         ))
 
     async def stop_handle_message(self, message: Dict[any, any]):
-        # 中止消息处理逻辑
+        # Abort message processing logic
         logger.info(f'need stop agent, client_key: {self.client_key}, task_ids: {self.task_ids}')
 
-        # 中止之前的处理函数 因为最新的任务id是中止任务的id，不能取消自己
+        # Processing function before abort Because the latest taskidis to abort the task.id, you can't cancel yourself
         thread_pool.cancel_task(self.task_ids)
         logger.info(f'need stop over, client_key: {self.client_key}, task_ids: {self.task_ids}')
 

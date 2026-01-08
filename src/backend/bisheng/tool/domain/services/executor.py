@@ -54,7 +54,7 @@ def wrapper_tool_sync(func):
             status = StatusEnum.FAILED
             raise e
         finally:
-            # 记录Telemetry日志
+            # RecordTelemetryJournal
             telemetry_service.log_event_sync(**self.get_invoke_log_data(status))
 
     return inner
@@ -288,7 +288,7 @@ class ToolExecutor(BaseTool):
         return getattr(self.tool_instance, item)
 
     def get_invoke_log_data(self, status: StatusEnum):
-        # 记录Telemetry日志
+        # RecordTelemetryJournal
         return {
             "user_id": self.user_id,
             "event_type": BaseTelemetryTypeEnum.TOOL_INVOKE,

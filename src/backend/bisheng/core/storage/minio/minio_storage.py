@@ -334,17 +334,17 @@ class MinioStorage(BaseStorage, ABC):
 
     async def get_share_link(self, object_name, bucket=None, clear_host: bool = True, expire_days: int = 7) -> str:
         """
-        获取minio文件分享链接
+        DapatkanminioFile sharing link
         :param object_name:
         :param bucket:
-        :param clear_host:  是否去除host地址， url通过前端nginx代理访问
-        :param expire_days:  链接过期时间， 天
+        :param clear_host:  Do you want to removehost<g id="Bold">Address:</g> urlVia FrontendnginxProxy Access
+        :param expire_days:  Link expiration time,  days
         :return:
         """
 
         if bucket is None:
             bucket = self.bucket
-        # filepath "/" 开头会有nginx问题
+        # filepath "/" There will be at the beginningnginxQuestions
         if object_name[0] == '/':
             object_name = object_name[1:]
 
@@ -356,17 +356,17 @@ class MinioStorage(BaseStorage, ABC):
 
     def get_share_link_sync(self, object_name, bucket=None, clear_host: bool = True, expire_days: int = 7) -> str:
         """
-        同步获取minio文件分享链接, 默认去除host地址 url会通过前端nginx代理访问
+        Synchronous fetchminioFile sharing link, Default Removalhost<g id="Bold">Address:</g> urlwill go through the front endnginxProxy Access
         :param object_name:
         :param bucket:
-        :param clear_host:  是否去除host地址， url通过前端nginx代理访问
-        :param expire_days:  链接过期时间， 天
+        :param clear_host:  Do you want to removehost<g id="Bold">Address:</g> urlVia FrontendnginxProxy Access
+        :param expire_days:  Link expiration time,  days
         :return:
         """
 
         if bucket is None:
             bucket = self.bucket
-        # filepath "/" 开头会有nginx问题
+        # filepath "/" There will be at the beginningnginxQuestions
         if object_name[0] == '/':
             object_name = object_name[1:]
 
@@ -378,7 +378,7 @@ class MinioStorage(BaseStorage, ABC):
 
     def get_minio_share_host(self) -> str:
         """
-        获取minio share host
+        Dapatkanminio share host
         """
         minio_share = self.minio_config.sharepoint
         if self.minio_config.share_schema:
@@ -387,17 +387,17 @@ class MinioStorage(BaseStorage, ABC):
 
     def clear_minio_share_host(self, file_url: str):
         """
-         TODO 合理方案是部署一个https的minio配合前端使用
-         抹去url中的minio share地址， 让前端通过nginx代理去访问资源
+         TODO The logical solution is to deploy ahttpsright of privacyminioUse with front-end
+         to be erasedurlhitting the nail on the headminio share<g id="Bold">Address:</g> Let the front end throughnginxProxy to access resources
         """
         share_host = self.get_minio_share_host()
 
         return file_url.replace(share_host, '')
 
     async def close(self) -> None:
-        """关闭 Minio 客户端连接"""
+        """Close Minio Client link"""
         await self.minio_client.close_session()
 
     def close_sync(self) -> None:
-        """同步关闭 Minio 客户端连接"""
+        """Sync off Minio Client link"""
         del self.minio_client_sync

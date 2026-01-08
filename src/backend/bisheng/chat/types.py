@@ -1,13 +1,13 @@
 from enum import Enum
 
 
-# client的业务类型
+# clientBusiness Type
 class WorkType(Enum):
-    # 技能会话业务
+    # Skills Conversation Business
     FLOW = 'flow'
-    # 助手会话业务
+    # Assistant Conversation Business
     GPTS = 'assistant'
-    # workflow 业务
+    # workflow in terms of business,
     WORKFLOW = 'workflow'
 
 

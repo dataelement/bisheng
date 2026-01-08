@@ -1,22 +1,22 @@
-#  参数解释。注意冒号或短横线后必须接一个空格，不能省略。
+#  Parameter explanation. Note that colon or dash must be followed by a space and cannot be omitted.
 #
 #  font:
-#    default: 西文字体，默认 [Times New Roman]
-#    east-asia: 中文字体，默认 [宋体]
-#    size: 字体大小，默认 [12]，单位：pt
-#    color: RGB颜色的 16 进制值，必须为字符串，默认 ["000000"] 纯黑色
-#    extra: 额外的样式，默认不添加这些样式。支持下列样式，有则生效，无则忽略
-#    - bold 加粗
-#    - italic 斜体
-#    - underline 下划线
-#    - strike 删除线
-#  first-line-indent: 首行缩进，默认 [0]，单位：倍
-#  line-spacing: 行距，默认 [1.2] 单位：倍，表示行距设置为 1.2 倍行高，
+#    default: Western fonts, default [Times New Roman]
+#    east-asia: Chinese font, default [Song Ti]
+#    size: Font Size (Default) [12]<g id="Bold">Employer: </g>pt
+#    color: RGBColorful 16 Metric value, must be a string, default ["000000"] pure black
+#    extra: Extra styles, do not add these styles by default. The following styles are supported, effective if there is, ignored if there is none
+#    - bold bolded
+#    - italic Italic
+#    - underline LOW LINE
+#    - strike Strikethrough
+#  first-line-indent: First line indent, default [0], unit: times
+#  line-spacing: Line spacing, default [1.2] Unit: times, indicates line spacing is set to 1.2 Double row height,
 #  space:
-#    before 段前空格，默认 [0] pt
-#    after: 段后空格，默认 [0] pt
+#    before Space before paragraph, default [0] pt
+#    after: Space after paragraph, default [0] pt
 
-# h1~h4表示1到4级标题
+# h1~h4Show1to4Level Title
 style_conf = {
     "h1":
         {

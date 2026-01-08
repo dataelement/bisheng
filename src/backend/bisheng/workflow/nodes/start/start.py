@@ -19,9 +19,9 @@ class StartNode(BaseNode):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # 初始化当前时间
+        # Initialize Current Time
         self.node_params['current_time'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        # 初始化聊天历史记录
+        # Initialize chat history
         self.graph_state.history_memory = ConversationBufferWindowMemory(
             k=self.node_params.get('chat_history', 10))
         self._user_info = None
@@ -57,7 +57,7 @@ class StartNode(BaseNode):
         if not self.node_data.v:
             raise IgnoreException(f'{self.name} -- workflow node is update')
 
-        # 预处理preset_question数据为dict
+        # Pre-processingpreset_questionData isdict
         new_preset_question = {}
         for one in self.node_params['preset_question']:
             new_preset_question[one['key']] = one['value']

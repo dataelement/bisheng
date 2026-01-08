@@ -15,7 +15,7 @@ class ThreadPoolManager:
         self.thread_group = thread_name_prefix
         self.executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=max_workers, thread_name_prefix=thread_name_prefix)
-        # 设计每个同步线程配备一个协程
+        # Design one syndication per sync thread
         self.future_dict: Dict[str, List[concurrent.futures.Future]] = {}
         self.async_task: Dict[str, List[concurrent.futures.Future]] = {}
         self.lock = threading.Lock()
@@ -72,7 +72,7 @@ class ThreadPoolManager:
             for k, lf in list(self.async_task.items()):
                 for f in lf:
                     if f.done():
-                        # 获取task
+                        # Dapatkantask
                         if k in key_list:
                             completed_futures.append((k, f))
                             self.async_task[k].remove(f)
@@ -108,7 +108,7 @@ class ThreadPoolManager:
         self.executor.shutdown(cancel_futures=True)
 
 
-# 创建一个线程池管理器
+# Create a thread pool manager
 thread_pool = ThreadPoolManager(5)
 
 if __name__ == '__main__':

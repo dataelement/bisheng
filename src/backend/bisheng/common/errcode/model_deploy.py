@@ -1,7 +1,7 @@
 from .base import BaseErrorCode
 
 
-# RT模型部署模块 返回错误码，业务代码102
+# RTModel Deployment Module Return error code, business code102
 class NotFoundModelError(BaseErrorCode):
     Code: int = 10200
-    Msg: str = '模型不存在'
+    Msg: str = 'Model does not exist'

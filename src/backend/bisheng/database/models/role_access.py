@@ -33,36 +33,36 @@ class RoleAccessCreate(RoleAccessBase):
 
 
 class WebMenuResource(Enum):
-    """前端菜单栏资源"""
+    """Front-end menu bar resources"""
 
-    BUILD = 'build'  # 构建菜单
-    KNOWLEDGE = 'knowledge'  # 知识菜单
-    MODEL = 'model'  # 模型菜单
-    EVALUATION = 'evaluation'  # 评测菜单
+    BUILD = 'build'  # Build Menu
+    KNOWLEDGE = 'knowledge'  # Knowledge Menu
+    MODEL = 'model'  # Model Menu
+    EVALUATION = 'evaluation'  # Evaluation Menu
 
-    FRONTEND = 'frontend'  # 前台权限
-    BACKEND = 'backend'  # 后台权限
+    FRONTEND = 'frontend'  # Front-end permissions
+    BACKEND = 'backend'  # Backend Access
 
-    CREATE_DASHBOARD = 'create_dashboard'  # 创建看板权限
+    CREATE_DASHBOARD = 'create_dashboard'  # Create board permissions
 
 
 class AccessType(Enum):
     """Type of the role_access"""
 
-    KNOWLEDGE = 1  # 知识库读权限
-    FLOW = 2  # 技能读权限
-    KNOWLEDGE_WRITE = 3  # 知识库写权限
-    FLOW_WRITE = 4  # 技能写权限
-    ASSISTANT_READ = 5  # 助手读权限
-    ASSISTANT_WRITE = 6  # 助手写权限
-    GPTS_TOOL_READ = 7  # 工具读权限
-    GPTS_TOOL_WRITE = 8  # 工具写权限
-    WORKFLOW = 9  # 工作流读权限
-    WORKFLOW_WRITE = 10  # 工作流写权限
-    DASHBOARD = 11  # 看板读权限
-    DASHBOARD_WRITE = 12  # 看板写权限
+    KNOWLEDGE = 1  # Knowledge Base Reading Permissions
+    FLOW = 2  # Skill Read Permissions
+    KNOWLEDGE_WRITE = 3  # Knowledge Base Write Permissions
+    FLOW_WRITE = 4  # Skill Write Permissions
+    ASSISTANT_READ = 5  # Assistant Read Permissions
+    ASSISTANT_WRITE = 6  # Assistant Write Permissions
+    GPTS_TOOL_READ = 7  # Tool Read Permissions
+    GPTS_TOOL_WRITE = 8  # Tool Write Permissions
+    WORKFLOW = 9  # Workflow Read Permissions
+    WORKFLOW_WRITE = 10  # Workflow write permissions
+    DASHBOARD = 11  # Kanban Reading Permissions
+    DASHBOARD_WRITE = 12  # Kanban writing permissions
 
-    WEB_MENU = 99  # 前端菜单栏权限限制
+    WEB_MENU = 99  # Frontend Menu Bar Permission Restrictions
 
 
 class RoleRefresh(BaseModel):
@@ -154,14 +154,14 @@ class RoleAccessDao(RoleAccessBase):
     async def update_role_access_all(cls, role_id: int, access_type: AccessType,
                                      access_ids: List[Union[str, int]]) -> None:
         """
-        更新角色的权限，先删除后添加
+        Update the role's permissions, delete it first and add it later
         """
         async with get_async_db_session() as session:
-            # 先把旧的权限全部清空
+            # Clear all old permissions first
             statement = delete(RoleAccess).where(col(RoleAccess.role_id) == str(role_id),
                                                  col(RoleAccess.type) == access_type.value)
             await session.exec(statement)
-            # 添加新的权限
+            # Add New Permission
             for access_id in access_ids:
                 role_access = RoleAccess(role_id=role_id, third_id=str(access_id), type=access_type.value)
                 session.add(role_access)

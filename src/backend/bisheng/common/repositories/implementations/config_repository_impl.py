@@ -6,7 +6,7 @@ from bisheng.common.repositories.interfaces.config_repository import ConfigRepos
 
 
 class ConfigRepositoryImpl(BaseRepositoryImpl[Config, str], ConfigRepository):
-    """共享链接仓库实现"""
+    """Shared link repository implementation"""
 
     def __init__(self, session: AsyncSession):
         super().__init__(session, Config)

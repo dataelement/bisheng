@@ -143,7 +143,7 @@ class KnowledgeService(KnowledgeUtils):
         if not login_user.is_admin():
             filter_knowledge = []
             for one in db_knowledge:
-                # 判断用户是否有权限
+                # Determine if the user has permission
                 if login_user.access_check(
                         one.user_id, str(one.id), AccessType.KNOWLEDGE
                 ):
@@ -158,7 +158,7 @@ class KnowledgeService(KnowledgeUtils):
             cls, request: Request, login_user: UserPayload, knowledge: KnowledgeCreate
     ) -> Knowledge:
 
-        # 判断知识库是否重名
+        # Determine if the Knowledge Base is Renamed
         repeat_knowledge = KnowledgeDao.get_knowledge_by_name(
             knowledge.name, login_user.user_id
         )
@@ -167,7 +167,7 @@ class KnowledgeService(KnowledgeUtils):
 
         db_knowledge = Knowledge.model_validate(knowledge)
 
-        # 校验embedding模型
+        # CorrectionembeddingModels
         if not db_knowledge.model:
             raise KnowledgeNoEmbeddingError.http_exception()
         embed_info = LLMDao.get_model_by_id(int(db_knowledge.model))
@@ -180,7 +180,7 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge.index_name = generate_knowledge_index_name()
         db_knowledge.collection_name = db_knowledge.index_name
 
-        # 插入到数据库
+        # Insert into Database
         db_knowledge.user_id = login_user.user_id
         db_knowledge = KnowledgeDao.insert_one(db_knowledge)
 
@@ -194,7 +194,7 @@ class KnowledgeService(KnowledgeUtils):
         except Exception as e:
             logger.exception("create knowledge index name error")
 
-        # 处理创建知识库的后续操作
+        # Handling the next steps in creating a Knowledge Base
         cls.create_knowledge_hook(request, login_user, db_knowledge)
         return db_knowledge
 
@@ -202,10 +202,10 @@ class KnowledgeService(KnowledgeUtils):
     def create_knowledge_hook(
             cls, request: Request, login_user: UserPayload, knowledge: Knowledge
     ):
-        # 查询下用户所在的用户组
+        # Query the user group the user belongs to under
         user_group = UserGroupDao.get_user_group(login_user.user_id)
         if user_group:
-            # 批量将知识库资源插入到关联表里
+            # Batch Insert Knowledge Base Resources into Associated Tables
             batch_resource = []
             for one in user_group:
                 batch_resource.append(
@@ -217,7 +217,7 @@ class KnowledgeService(KnowledgeUtils):
                 )
             GroupResourceDao.insert_group_batch(batch_resource)
 
-        # 记录审计日志
+        # Log Audit Logs
         AuditLogService.create_knowledge(
             login_user, get_request_ip(request), knowledge.id
         )
@@ -280,13 +280,13 @@ class KnowledgeService(KnowledgeUtils):
         ):
             raise UnAuthorizedError.http_exception()
 
-        # 清理 vector中的数据
+        # Cleaned vectorData in
         cls.delete_knowledge_file_in_vector(knowledge)
 
-        # 清理minio的数据
+        # CleanedminioData
         cls.delete_knowledge_file_in_minio(knowledge_id)
 
-        # 删除mysql数据
+        # DeletemysqlDATA
         KnowledgeDao.delete_knowledge(knowledge_id, only_clear)
 
         telemetry_service.log_event_sync(user_id=login_user.user_id,
@@ -299,7 +299,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def delete_knowledge_file_in_vector(cls, knowledge: Knowledge, del_es: bool = True):
-        # 处理vector
+        # <g id="Bold">Medical Treatment:</g>vector
         embeddings = FakeEmbedding()
         vector_client = decide_vectorstores(
             knowledge.collection_name, "Milvus", embeddings
@@ -309,20 +309,20 @@ class KnowledgeService(KnowledgeUtils):
                 f"delete_vector col={knowledge.collection_name} knowledge_id={knowledge.id}"
             )
             if knowledge.collection_name.startswith("col"):
-                # 单独的collection，直接删除即可
+                # Singularcollection, simply delete it
                 vector_client.col.drop()
             else:
-                # partition模式需要使用分区键删除
+                # partitionMode requires partition key deletion
                 pk = vector_client.col.query(
                     expr=f'knowledge_id=="{knowledge.id}"', output_fields=["pk"]
                 )
                 vector_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
-                # 判断milvus 是否还有entity
+                # Judgingmilvus Are there any moreentity
                 if vector_client.col.is_empty:
                     vector_client.col.drop()
         if del_es:
-            # 处理 es
-            index_name = knowledge.index_name or knowledge.collection_name  # 兼容老版本
+            # <g id="Bold">Medical Treatment:</g> es
+            index_name = knowledge.index_name or knowledge.collection_name  # Compatible with older versions
             es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
             res = es_client.client.indices.delete(index=index_name, ignore=[400, 404])
             logger.info(f"act=delete_es index={index_name} res={res}")
@@ -335,17 +335,17 @@ class KnowledgeService(KnowledgeUtils):
             f"delete_knowledge_hook id={knowledge.id}, user: {login_user.user_id}"
         )
 
-        # 删除知识库的审计日志
+        # Delete Knowledge Base Audit Log
         AuditLogService.delete_knowledge(login_user, get_request_ip(request), knowledge)
 
-        # 清理用户组下的资源
+        # Purge resources under user groups
         GroupResourceDao.delete_group_resource_by_third_id(
             str(knowledge.id), ResourceTypeEnum.KNOWLEDGE
         )
 
     @classmethod
     def delete_knowledge_file_in_minio(cls, knowledge_id: int):
-        # 每1000条记录去删除minio文件
+        # <g id="Bold">Qn,</g>1000records to deleteminioDoc.
         count = KnowledgeFileDao.count_file_by_knowledge_id(knowledge_id)
         if count == 0:
             return
@@ -366,11 +366,11 @@ class KnowledgeService(KnowledgeUtils):
     @classmethod
     def get_upload_file_original_name(cls, file_name: str) -> str:
         """
-        通过uuid的文件名，获取上传文件的原始名称
+        SetujuuuidFile name, get the original name of the uploaded file
         """
         if not file_name:
             raise ServerError.http_exception("file_name is empty")
-        # 从redis内获取
+        # FROMredisGet within
         uuid_file_name = file_name.split(".")[0]
         original_file_name = get_redis_client_sync().get(f"file_name:{uuid_file_name}") or file_name
         return original_file_name
@@ -378,12 +378,12 @@ class KnowledgeService(KnowledgeUtils):
     @classmethod
     async def save_upload_file_original_name(cls, original_file_name: str) -> str:
         """
-        保存上传文件的原始名称到redis，生成一个uuid的文件名
+        Save the original name of the uploaded file toredisGenerate oneuuidFile name
         """
         if not original_file_name:
             raise ServerError.http_exception("original_file_name is empty")
         file_ext = original_file_name.split(".")[-1]
-        # 生成一个唯一的uuid作为key
+        # Generate a uniqueuuidas akey
         uuid_file_name = generate_uuid()
         redis_client = await get_redis_client()
         await redis_client.aset(f"file_name:{uuid_file_name}", original_file_name, expiration=86400)
@@ -394,10 +394,10 @@ class KnowledgeService(KnowledgeUtils):
             cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileProcess
     ) -> (str, str, List[FileChunk], Any):
         """
-        0：解析模式，uns 或者 local
-        1：转换后的文件路径
-        2：切分后的chunk列表
-        3: ocr识别后的bbox
+        0Parse Mode: uns or local
+        1: Converted file path
+        2: After dicingchunkVertical
+        3: ocrIdentifiedbbox
         """
         knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
         if not await login_user.async_access_check(
@@ -411,7 +411,7 @@ class KnowledgeService(KnowledgeUtils):
 
         redis_client = await get_redis_client()
 
-        # 尝试从缓存获取
+        # Attempt to fetch from cache
         if req_data.cache:
             if cache_value := await cls.async_get_preview_cache(cache_key):
                 parse_type = await redis_client.aget(f"{cache_key}_parse_type")
@@ -419,7 +419,7 @@ class KnowledgeService(KnowledgeUtils):
                 partitions = await redis_client.aget(f"{cache_key}_partitions")
                 res = []
 
-                # 根据分段顺序排序
+                # Sort by segment order
                 cache_value = dict(sorted(cache_value.items(), key=lambda x: int(x[0])))
 
                 for key, val in cache_value.items():
@@ -430,7 +430,7 @@ class KnowledgeService(KnowledgeUtils):
         file_ext = file_name.split(".")[-1].lower()
         file_name = cls.get_upload_file_original_name(file_name)
 
-        # 切分文本
+        # Split text
         texts, metadatas, parse_type, partitions = await async_read_chunk_text(
             login_user.user_id,
             filepath,
@@ -448,7 +448,7 @@ class KnowledgeService(KnowledgeUtils):
             no_summary=True,
         )
         if len(texts) == 0:
-            raise ValueError("文件解析为空")
+            raise ValueError("File resolution is empty")
         res = []
         cache_map = {}
         for index, val in enumerate(texts):
@@ -456,7 +456,7 @@ class KnowledgeService(KnowledgeUtils):
             cache_map[index] = {"text": val, "metadata": metadata_dict}
             res.append(FileChunk(text=val, metadata=metadata_dict))
 
-        # 默认是源文件的地址
+        # Default is the address of the source file
         file_share_url = file_path
         if file_ext in ['doc', 'ppt', 'pptx']:
             file_share_url = ''
@@ -467,7 +467,7 @@ class KnowledgeService(KnowledgeUtils):
                     new_file_name, minio_client.tmp_bucket
                 )
 
-        # 存入缓存
+        # Deposit Cache
         await cls.async_save_preview_cache(cache_key, mapping=cache_map)
         await redis_client.aset(f"{cache_key}_parse_type", parse_type)
         await redis_client.aset(f"{cache_key}_file_path", file_share_url)
@@ -511,7 +511,7 @@ class KnowledgeService(KnowledgeUtils):
     def save_knowledge_file(
             cls, login_user: UserPayload, req_data: KnowledgeFileProcess
     ):
-        """处理上传的文件, 只上传到minio和mysql"""
+        """Process uploaded files, Uploaded to onlyminioAndmysql"""
         knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
         if not knowledge:
             raise NotFoundError.http_exception()
@@ -520,16 +520,16 @@ class KnowledgeService(KnowledgeUtils):
         ):
             raise UnAuthorizedError.http_exception()
         failed_files = []
-        # 处理每个文件
+        # Process each file
         process_files = []
         preview_cache_keys = []
         split_rule_dict = req_data.model_dump(include=set(list(FileProcessBase.model_fields.keys())))
         for one in req_data.file_list:
-            # 上传源文件，创建数据记录
+            # Upload source files, create data records
             db_file = cls.process_one_file(login_user, knowledge, one, split_rule_dict)
-            # 不重复的文件数据使用异步任务去执行
+            # Duplicate file data using asynchronous tasks to execute
             if db_file.status != KnowledgeFileStatus.FAILED.value:
-                # 获取此文件的预览缓存key
+                # Get a preview cache of this filekey
                 cache_key = cls.get_preview_cache_key(
                     req_data.knowledge_id, one.file_path
                 )
@@ -551,12 +551,12 @@ class KnowledgeService(KnowledgeUtils):
     ) -> List[KnowledgeFile]:
         from bisheng.worker.knowledge import file_worker
 
-        """处理上传的文件"""
+        """Process uploaded files"""
         knowledge, failed_files, process_files, preview_cache_keys = (
             cls.save_knowledge_file(login_user, req_data)
         )
 
-        # 异步处理文件解析和入库, 如果通过cache_key可以获取到数据，则使用cache中的数据来进行入库操作
+        # Asynchronous processing of file parsing and warehousing, To voters if approvedcache_keyIf data can be obtained, use thecachefor inbound operations
         for index, one in enumerate(process_files):
             file_worker.parse_knowledge_file_celery.delay(one.id, preview_cache_keys[index], req_data.callback_url)
 
@@ -567,7 +567,7 @@ class KnowledgeService(KnowledgeUtils):
     def sync_process_knowledge_file(
             cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileProcess
     ) -> List[KnowledgeFile]:
-        """同步处理上传的文件"""
+        """Sync uploaded files"""
         knowledge, failed_files, process_files, preview_cache_keys = (
             cls.save_knowledge_file(login_user, req_data)
         )
@@ -595,7 +595,7 @@ class KnowledgeService(KnowledgeUtils):
                                      login_user: UserPayload,
                                      req_data: KnowledgeFileReProcess):
         """
-        重建知识库文件
+        Rebuild Knowledge Base Files
         :param request:
         :param login_user:
         :param req_data:
@@ -620,7 +620,7 @@ class KnowledgeService(KnowledgeUtils):
         if req_data.excel_rule is not None:
             split_rule_dict["excel_rule"] = req_data.excel_rule.model_dump()
         db_file.split_rule = json.dumps(split_rule_dict)
-        db_file.status = KnowledgeFileStatus.WAITING.value  # 解析中
+        db_file.status = KnowledgeFileStatus.WAITING.value  # Parsing
         db_file.updater_id = login_user.user_id
         db_file.updater_name = login_user.user_name
         db_file = await KnowledgeFileDao.async_update(db_file)
@@ -671,7 +671,7 @@ class KnowledgeService(KnowledgeUtils):
             )
 
             if file.object_name.startswith('tmp'):
-                # 把临时文件移动到正式目录
+                # Moving Temporary Files to the Official Directory
                 new_object_name = KnowledgeUtils.get_knowledge_file_object_name(file.id, file.object_name)
                 minio_client.copy_object_sync(source_object=file.object_name, dest_object=new_object_name,
                                               source_bucket=minio_client.tmp_bucket,
@@ -680,7 +680,7 @@ class KnowledgeService(KnowledgeUtils):
             file.file_name = input_file.get("file_name", None) or file.file_name
             file.remark = ""
             file.split_rule = input_file["split_rule"]
-            file.status = KnowledgeFileStatus.WAITING.value  # 解析中
+            file.status = KnowledgeFileStatus.WAITING.value  # Parsing
             file.updater_id = login_user.user_id
             file.updater_name = login_user.user_name
 
@@ -706,7 +706,7 @@ class KnowledgeService(KnowledgeUtils):
         )
         if file_list:
             KnowledgeDao.update_knowledge_update_time(knowledge)
-        # 记录审计日志
+        # Log Audit Logs
         file_name = ""
         for one in file_list:
             file_name += "\n\n" + one.file_name
@@ -722,17 +722,17 @@ class KnowledgeService(KnowledgeUtils):
             file_info: KnowledgeFileOne,
             split_rule: Dict,
     ) -> KnowledgeFile:
-        """处理上传的文件"""
+        """Process uploaded files"""
         # download original file
         filepath, file_name = file_download(file_info.file_path)
         md5_ = os.path.splitext(os.path.basename(filepath))[0].split("_")[0]
 
-        # 获取文件大小（单位为bytes）
+        # Get file size inbytes）
         file_size = os.path.getsize(filepath)
 
         file_extension_name = file_name.split(".")[-1]
         original_file_name = cls.get_upload_file_original_name(file_name)
-        # 是否包含重复文件
+        # Does it contain duplicate files?
         content_repeat = KnowledgeFileDao.get_file_by_condition(
             md5_=md5_, knowledge_id=knowledge.id
         )
@@ -755,16 +755,16 @@ class KnowledgeService(KnowledgeUtils):
             db_file.remark = json.dumps({
                 "new_name": original_file_name,
                 "old_name": old_name}, ensure_ascii=False)
-            # 上传到minio，不修改数据库，由前端决定是否覆盖，覆盖的话调用重试接口
+            # Uploaded tominio, do not modify the database, it is up to the front-end to decide whether to overwrite or not. If it is overwritten, the retry interface
             with open(filepath, "rb") as file:
                 minio_client.put_object_tmp_sync(db_file.object_name, file.read())
             db_file.status = KnowledgeFileStatus.FAILED.value
             db_file.split_rule = str_split_rule
-            # 更新文件大小信息
+            # Update file size information
             db_file.file_size = file_size
             return db_file
 
-        # 插入新的数据，把原始文件上传到minio
+        # Insert new data, upload the original file tominio
         db_file = KnowledgeFile(
             knowledge_id=knowledge.id,
             file_name=original_file_name,
@@ -782,7 +782,7 @@ class KnowledgeService(KnowledgeUtils):
             event_type=BaseTelemetryTypeEnum.NEW_KNOWLEDGE_FILE,
             trace_id=trace_id_var.get(),
         )
-        # 原始文件保存
+        # Saving original files
         db_file.object_name = KnowledgeUtils.get_knowledge_file_object_name(db_file.id, db_file.file_name)
         minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=db_file.object_name,
                                      file=filepath)
@@ -792,7 +792,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def get_knowledge_files_title(cls, db_knowledge: Knowledge, files: List[KnowledgeFile]) -> Dict[str, str]:
-        """通过文件id获取文件标题"""
+        """Adoption of documentsidGet file title"""
         if not files:
             return {}
         files = [one for one in files if one.status == KnowledgeFileStatus.SUCCESS.value]
@@ -863,7 +863,7 @@ class KnowledgeService(KnowledgeUtils):
         timeout_files = []
         for index, one in enumerate(res):
             finally_res.append(KnowledgeFileResp(**one.model_dump()))
-            # 超过一天还在解析中的，将状态置为失败
+            # Parsing more than one day, setting status to failed
             if one.status in [KnowledgeFileStatus.PROCESSING.value, KnowledgeFileStatus.WAITING.value] and (
                     datetime.now() - one.update_time).total_seconds() > 86400:
                 timeout_files.append(one.id)
@@ -897,19 +897,19 @@ class KnowledgeService(KnowledgeUtils):
         ):
             raise UnAuthorizedError.http_exception()
 
-        # 处理vectordb
+        # <g id="Bold">Medical Treatment:</g>vectordb
         delete_knowledge_file_vectors(file_ids)
         KnowledgeFileDao.delete_batch(file_ids)
         telemetry_service.log_event_sync(user_id=login_user.user_id,
                                          event_type=BaseTelemetryTypeEnum.DELETE_KNOWLEDGE_FILE,
                                          trace_id=trace_id_var.get())
 
-        # 删除知识库文件的审计日志
+        # Delete Audit Log for Knowledge Base Files
         cls.delete_knowledge_file_hook(
             request, login_user, db_knowledge.id, knowledge_file
         )
 
-        # 5分钟检查下文件是否真的被删除
+        # 5Minutes to check if the file was actually deleted
         file_worker.delete_knowledge_file_celery.apply_async(args=(file_ids, knowledge_file[0].knowledge_id, True),
                                                              countdown=300)
 
@@ -926,8 +926,8 @@ class KnowledgeService(KnowledgeUtils):
         logger.info(
             f"act=delete_knowledge_file_hook user={login_user.user_name} knowledge_id={knowledge_id}"
         )
-        # 记录审计日志
-        # 记录审计日志
+        # Log Audit Logs
+        # Log Audit Logs
         file_name = ""
         for one in file_list:
             file_name += "\n\n" + one.file_name
@@ -992,7 +992,7 @@ class KnowledgeService(KnowledgeUtils):
             logger.warning(f"act=get_knowledge_chunks error={str(e)}")
             raise KnowledgeChunkError.http_exception()
 
-        # 查询下分块对应的文件信息
+        # Query the file information corresponding to the next block
         file_ids = set()
         result = []
         for one in res["hits"]["hits"]:
@@ -1004,7 +1004,7 @@ class KnowledgeService(KnowledgeUtils):
         for one in res["hits"]["hits"]:
             file_id = one["_source"]["metadata"]["document_id"]
             file_info = file_map.get(file_id, None)
-            # 过滤文件名和总结的文档摘要内容
+            # Filter document summary contents of file names and summaries
             result.append(
                 FileChunk(
                     text=KnowledgeUtils.split_chunk_metadata(one["_source"]["text"]),
@@ -1169,20 +1169,20 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def get_file_share_url(cls, file_id: int) -> (str, str):
-        """ 获取文件原始下载地址 和 对应的预览文件下载地址 """
+        """ Get the original download address of the file And Corresponding preview file download address """
         file = KnowledgeFileDao.get_file_by_ids([file_id])
         if not file:
             raise NotFoundError()
         file = file[0]
         minio_client = get_minio_storage_sync()
-        # 130版本以前的文件解析
+        # 130File parsing prior to version
         if file.parse_type in [ParseType.LOCAL.value, ParseType.UNS.value]:
             original_url = minio_client.get_share_link_sync(cls.get_knowledge_file_object_name(file.id, file.file_name))
             preview_url = minio_client.get_share_link_sync(str(file.id))
         else:
             original_url = cls.get_file_share_url_with_empty(file.object_name)
             preview_url = ""
-            # 130版本以后的文件解析逻辑，只有源文件和预览文件，不再都转pdf了
+            # 130After the version of the file parsing logic, only the source file and preview file are no longer transferredpdfSettings Updated. what double check raws pls
             if file.file_name.endswith(('.doc', '.ppt', '.pptx')):
                 preview_object_name = KnowledgeUtils.get_knowledge_preview_file_object_name(file.id, file.file_name)
                 preview_url = cls.get_file_share_url_with_empty(preview_object_name)
@@ -1191,9 +1191,9 @@ class KnowledgeService(KnowledgeUtils):
     @classmethod
     def get_file_share_url_with_empty(cls, object_name: str) -> str:
         """
-        获取文件的分享链接
-        :param object_name: 文件在minio中的对象名称
-        :return: 文件的分享链接
+        Get a shared link to a file
+        :param object_name: Files inminioObject name in
+        :return: File sharing link
         """
         minio_client = get_minio_storage_sync()
         if minio_client.object_exists_sync(minio_client.bucket, object_name):
@@ -1239,7 +1239,7 @@ class KnowledgeService(KnowledgeUtils):
         knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
         knowledge_new = Knowledge(**knowldge_dict)
         target_knowlege = await KnowledgeDao.async_insert_one(knowledge_new)
-        # celery 还没ok
+        # celery not yetok
         params = {
             "source_knowledge_id": knowledge.id,
             "target_id": target_knowlege.id,
@@ -1284,7 +1284,7 @@ class KnowledgeService(KnowledgeUtils):
             cls, login_user: UserPayload, qa_knowledge_id: int
     ) -> Knowledge:
         db_knowledge = KnowledgeDao.query_by_id(qa_knowledge_id)
-        # 查询当前知识库，是否有写入权限
+        # Query the current knowledge base, whether there are write permissions
         if not db_knowledge:
             raise NotFoundError()
         if not login_user.access_check(

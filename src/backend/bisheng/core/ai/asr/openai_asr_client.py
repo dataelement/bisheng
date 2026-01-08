@@ -6,7 +6,7 @@ from ..base import BaseASRClient
 
 
 class OpenAIASRClient(BaseASRClient):
-    """OpenAI ASR客户端"""
+    """OpenAI ASRClient"""
 
     def __init__(self, api_key: str, **kwargs):
         self.model = kwargs.pop("model", "whisper-1")
@@ -20,15 +20,15 @@ class OpenAIASRClient(BaseASRClient):
             **kwargs
     ) -> str:
         """
-        使用OpenAI Whisper API进行语音识别
+        UseOpenAI Whisper APISpeech Recognition
 
         Args:
-            audio: 音频文件路径、
-            language: 语言代码，如 'zh', 'en'
-            model: 模型名称，默认为 'whisper-1'
+            audio: Audio File Host
+            language: Language code, e.g. 'zh', 'en'
+            model: Model name, defaults to 'whisper-1'
 
         Returns:
-            识别的文本内容
+            Recognized text content
         """
 
         with open(audio, "rb") as f:

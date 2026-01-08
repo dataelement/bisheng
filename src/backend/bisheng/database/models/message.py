@@ -12,34 +12,34 @@ from bisheng.core.database import get_sync_db_session, get_async_db_session
 
 
 class LikedType(Enum):
-    UNRATED = 0  # 未评价
-    LIKED = 1  # 喜欢
-    DISLIKED = 2  # 不喜欢
+    UNRATED = 0  # Not assessed
+    LIKED = 1  # Love
+    DISLIKED = 2  # don't like}
 
 
 class MessageBase(SQLModelSerializable):
-    is_bot: bool = Field(index=False, description='聊天角色')
-    source: Optional[int] = Field(default=None, index=False, description='是否支持溯源')
-    mark_status: Optional[int] = Field(index=False, default=1, description='标记状态')
-    mark_user: Optional[int] = Field(default=None, index=False, description='标记用户')
-    mark_user_name: Optional[str] = Field(default=None, index=False, description='标记用户')
-    message: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT), description='聊天消息')
-    extra: Optional[str] = Field(default=None, sa_column=Column(Text), description='连接信息等')
-    type: str = Field(index=False, description='消息类型')
-    category: str = Field(index=False, max_length=32, description='消息类别， question等')
-    flow_id: str = Field(index=True, description='对应的技能id')
-    chat_id: Optional[str] = Field(default=None, index=True, description='chat_id, 前端生成')
-    user_id: Optional[int] = Field(default=None, index=True, description='用户id')
-    liked: Optional[int] = Field(index=False, default=0, description='用户是否喜欢 0未评价/1 喜欢/2 不喜欢')
-    solved: Optional[int] = Field(index=False, default=0, description='用户是否喜欢 0未评价/1 解决/2 未解决')
-    copied: Optional[int] = Field(index=False, default=0, description='用户是否复制 0：未复制 1：已复制')
-    sensitive_status: Optional[int] = Field(index=False, default=1, description='敏感词状态 1：通过 2：违规')
-    sender: Optional[str] = Field(index=False, default='', description='autogen 的发送方')
-    receiver: Optional[Dict] = Field(index=False, default=None, description='autogen 的发送方')
-    intermediate_steps: Optional[str] = Field(default=None, sa_column=Column(Text), description='过程日志')
-    files: Optional[str] = Field(default=None, sa_column=Column(String(length=4096)), description='上传的文件等')
+    is_bot: bool = Field(index=False, description='Chat Role')
+    source: Optional[int] = Field(default=None, index=False, description='Whether traceability is supported')
+    mark_status: Optional[int] = Field(index=False, default=1, description='Tag status')
+    mark_user: Optional[int] = Field(default=None, index=False, description='Flagging User')
+    mark_user_name: Optional[str] = Field(default=None, index=False, description='Flagging User')
+    message: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT), description='Chat Message')
+    extra: Optional[str] = Field(default=None, sa_column=Column(Text), description='Connection information, etc.')
+    type: str = Field(index=False, description='Type of Message')
+    category: str = Field(index=False, max_length=32, description='Message category, questionetc.')
+    flow_id: str = Field(index=True, description='Corresponding Skillsid')
+    chat_id: Optional[str] = Field(default=None, index=True, description='chat_id, Frontend Generation')
+    user_id: Optional[int] = Field(default=None, index=True, description='Usersid')
+    liked: Optional[int] = Field(index=False, default=0, description="Whether the user likes it or 0Not assessed/1 Love/2 don't like}")
+    solved: Optional[int] = Field(index=False, default=0, description='Whether the user likes it or 0Not assessed/1 Solution/2 Unresolve')
+    copied: Optional[int] = Field(index=False, default=0, description='Is the user copying 0: Not copied 1Copied: ')
+    sensitive_status: Optional[int] = Field(index=False, default=1, description='Sensitive Word Status 1Pass 2violates regulation')
+    sender: Optional[str] = Field(index=False, default='', description='autogen Sender')
+    receiver: Optional[Dict] = Field(index=False, default=None, description='autogen Sender')
+    intermediate_steps: Optional[str] = Field(default=None, sa_column=Column(Text), description='Process Log')
+    files: Optional[str] = Field(default=None, sa_column=Column(String(length=4096)), description='Uploaded documents, etc.')
     remark: Optional[str] = Field(default=None, sa_column=Column(String(length=4096)),
-                                  description='备注。break_answer: 中断的回复不作为history传给模型')
+                                  description='Note. break_answer: Interrupted response inactionhistoryPass to Model')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -50,7 +50,7 @@ class ChatMessage(MessageBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     receiver: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
 
-    # 关键：设置表级别字符集为 utf8mb4
+    # Key: Set table level character set to utf8mb4
     __table_args__ = {
         "mysql_charset": "utf8mb4",
         "mysql_collate": "utf8mb4_unicode_ci"
@@ -171,7 +171,7 @@ class ChatMessageDao(MessageBase):
                                        category: str = None,
                                        exclude_category: str = None):
         """
-        获取每个会话最近的一次消息内容
+        Get the most recent message content for each session
         """
         statement = select(ChatMessage.chat_id,
                            func.max(ChatMessage.id)).where(ChatMessage.chat_id.in_(chat_ids))
@@ -181,10 +181,10 @@ class ChatMessageDao(MessageBase):
             statement = statement.where(ChatMessage.category != exclude_category)
         statement = statement.group_by(ChatMessage.chat_id)
         with get_sync_db_session() as session:
-            # 获取最新的id列表
+            # Get the latestidVertical
             res = session.exec(statement).all()
             ids = [one[1] for one in res]
-            # 获取消息的具体内容
+            # Get the details of your message
             statement = select(ChatMessage).where(ChatMessage.id.in_(ids))
             return session.exec(statement).all()
 

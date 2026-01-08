@@ -14,23 +14,23 @@ from bisheng.common.models.base import SQLModelSerializable
 
 class LinsightSOPBase(SQLModelSerializable):
     """
-    Inspiration SOP模型基类
+    Inspiration SOPModel Base Class
     """
-    name: str = Field(..., description='SOP名称', sa_column=Column(Text, nullable=False))
-    description: Optional[str] = Field(default=None, description='SOP描述', sa_column=Column(Text))
-    user_id: int = Field(..., description='用户ID', foreign_key="user.user_id", nullable=False)
-    content: str = Field(..., description='SOP内容',
-                         sa_column=Column(LONGTEXT, nullable=False, comment="SOP内容"))
+    name: str = Field(..., description='SOPPart Name', sa_column=Column(Text, nullable=False))
+    description: Optional[str] = Field(default=None, description='SOPDescription', sa_column=Column(Text))
+    user_id: int = Field(..., description='UsersID', foreign_key="user.user_id", nullable=False)
+    content: str = Field(..., description='SOPContents',
+                         sa_column=Column(LONGTEXT, nullable=False, comment="SOPContents"))
 
-    rating: Optional[int] = Field(default=0, ge=0, le=5, description='SOP评分，范围0-5')
-    showcase: Optional[bool] = Field(default=False, index=True, description='是否作为精选案例在首页展示')
-    vector_store_id: Optional[str] = Field(..., description='向量存储ID',
-                                           sa_column=Column(CHAR(36), nullable=False, comment="向量存储ID"))
+    rating: Optional[int] = Field(default=0, ge=0, le=5, description='SOPScore, Range0-5')
+    showcase: Optional[bool] = Field(default=False, index=True, description='Whether to display it on the homepage as a featured case')
+    vector_store_id: Optional[str] = Field(..., description='Vector StorageID',
+                                           sa_column=Column(CHAR(36), nullable=False, comment="Vector StorageID"))
 
     linsight_version_id: Optional[str] = Field(default=None,
-                                               description='灵思会话版本ID，用来查询精选案例的运行结果',
+                                               description='Inspiration Conversation VersionID, used to query the running results of a featured case',
                                                sa_column=Column(CHAR(36), nullable=True))
-    create_time: datetime = Field(default_factory=datetime.now, description='创建时间',
+    create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
@@ -38,28 +38,28 @@ class LinsightSOPBase(SQLModelSerializable):
 
 class LinsightSOP(LinsightSOPBase, table=True):
     """
-    Inspiration SOP模型
+    Inspiration SOPModels
     """
     __tablename__ = "linsight_sop"
-    id: Optional[int] = Field(default=None, primary_key=True, description='SOP唯一ID')
+    id: Optional[int] = Field(default=None, primary_key=True, description='SOPUniqueness quantificationID')
 
 
 class LinsightSOPRecord(SQLModelSerializable, table=True):
     """
-    灵思SOP运行记录表，记录灵思执行过程中产生的sop
+    InspirationSOPRun the record sheet to record the results generated during the execution of the Ideasop
     """
     __tablename__ = "linsight_sop_record"
-    id: Optional[int] = Field(default=None, primary_key=True, description='SOP记录唯一ID')
-    name: str = Field(..., description='SOP名称', sa_column=Column(Text, nullable=False))
-    description: Optional[str] = Field(default=None, description='SOP描述', sa_column=Column(Text))
-    user_id: int = Field(..., description='用户ID', foreign_key="user.user_id", nullable=False)
-    content: str = Field(..., description='SOP内容',
-                         sa_column=Column(LONGTEXT, nullable=False, comment="SOP内容"))
+    id: Optional[int] = Field(default=None, primary_key=True, description='SOPRecord UniqueID')
+    name: str = Field(..., description='SOPPart Name', sa_column=Column(Text, nullable=False))
+    description: Optional[str] = Field(default=None, description='SOPDescription', sa_column=Column(Text))
+    user_id: int = Field(..., description='UsersID', foreign_key="user.user_id", nullable=False)
+    content: str = Field(..., description='SOPContents',
+                         sa_column=Column(LONGTEXT, nullable=False, comment="SOPContents"))
 
-    rating: Optional[int] = Field(default=0, ge=0, le=5, description='SOP评分，范围0-5')
-    execute_feedback: Optional[str] = Field(None, description='执行结果反馈信息', sa_type=Text, nullable=True)
-    linsight_version_id: Optional[str] = Field(default=None, description='灵思会话版本id，同步评分')
-    create_time: datetime = Field(default_factory=datetime.now, description='创建时间',
+    rating: Optional[int] = Field(default=0, ge=0, le=5, description='SOPScore, Range0-5')
+    execute_feedback: Optional[str] = Field(None, description='Execution Result Feedback Information', sa_type=Text, nullable=True)
+    linsight_version_id: Optional[str] = Field(default=None, description='Inspiration Conversation Versionid, sync ratings')
+    create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
@@ -67,7 +67,7 @@ class LinsightSOPRecord(SQLModelSerializable, table=True):
 
 class LinsightSOPDao(LinsightSOPBase):
     """
-    Inspiration SOP数据访问对象
+    Inspiration SOPData Access Objects
     """
 
     @classmethod
@@ -81,19 +81,19 @@ class LinsightSOPDao(LinsightSOPBase):
     @classmethod
     async def update_sop(cls, sop_obj: SOPManagementUpdateSchema) -> LinsightSOP:
         async with get_async_db_session() as session:
-            # 使用Update语句更新SOP
+            # UseUpdateStatement UpdatesSOP
             statement = select(LinsightSOP).where(LinsightSOP.id == sop_obj.id)
             result = await session.exec(statement)
             sop = result.first()
             if not sop:
                 raise ValueError("SOP not found")
 
-            # 将sop_obj的字段值更新到sop实例中
+            # will besop_objField values for were updated tosopin the example
             for key, value in sop_obj.model_dump().items():
                 if hasattr(sop, key) and value is not None:
                     setattr(sop, key, value)
 
-            sop.update_time = datetime.now()  # 更新修改时间
+            sop.update_time = datetime.now()  # Update modification time
             session.add(sop)
             await session.commit()
             await session.refresh(sop)
@@ -104,7 +104,7 @@ class LinsightSOPDao(LinsightSOPBase):
                            sort: Literal["asc", "desc"] = "desc", page: int = 1,
                            page_size: int = 10) -> Dict[str, Any]:
         """
-        获取SOP分页列表
+        DapatkanSOPPagination List
         """
 
         statement = select(LinsightSOP)
@@ -115,7 +115,7 @@ class LinsightSOPDao(LinsightSOPBase):
                 LinsightSOP.content.ilike(f'%{keywords}%')
             )
 
-        # 根据 rating 和 create_time 排序
+        # according rating And create_time Sort
         if sort == "asc":
             statement = statement.order_by(col(LinsightSOP.rating).asc(), col(LinsightSOP.update_time).asc())
         else:
@@ -139,7 +139,7 @@ class LinsightSOPDao(LinsightSOPBase):
     @classmethod
     async def get_sops_by_ids(cls, sop_ids: List[int]) -> List[LinsightSOP]:
         """
-        根据SOP ID列表获取SOP对象
+        accordingSOP IDGet listSOPObjects
         """
         async with get_async_db_session() as session:
             statement = select(LinsightSOP).where(col(LinsightSOP.id).in_(sop_ids))
@@ -150,7 +150,7 @@ class LinsightSOPDao(LinsightSOPBase):
     @classmethod
     async def get_sops_by_names(cls, names: list[str]) -> List[LinsightSOP]:
         """
-        根据SOP名称列表获取SOP对象
+        accordingSOPGet Name ListSOPObjects
         """
         statement = select(LinsightSOP).where(col(LinsightSOP.name).in_(names))
         async with get_async_db_session() as session:
@@ -161,7 +161,7 @@ class LinsightSOPDao(LinsightSOPBase):
     @classmethod
     async def remove_sop(cls, sop_ids: List[int]) -> bool:
         """
-        删除SOP
+        DeleteSOP
         """
         async with get_async_db_session() as session:
             delete_statement = delete(LinsightSOP).where(col(LinsightSOP.id).in_(sop_ids))
@@ -173,7 +173,7 @@ class LinsightSOPDao(LinsightSOPBase):
     @classmethod
     async def get_sop_by_session_id(cls, session_id: str) -> Optional[LinsightSOP]:
         """
-        根据灵思会话ID获取SOP
+        According to the Inspiration ConversationID Dapatkan OP
         """
         async with get_async_db_session() as session:
             statement = select(LinsightSOP).where(LinsightSOP.linsight_session_id == session_id)
@@ -184,7 +184,7 @@ class LinsightSOPDao(LinsightSOPBase):
     @classmethod
     async def get_sop_by_vector_store_ids(cls, vector_store_ids: List[str]) -> List[LinsightSOP]:
         """
-        根据向量存储ID列表获取SOP对象
+        According to vector storageIDGet listSOPObjects
         """
         async with get_async_db_session() as session:
             statement = select(LinsightSOP).where(col(LinsightSOP.vector_store_id).in_(vector_store_ids))
@@ -195,7 +195,7 @@ class LinsightSOPDao(LinsightSOPBase):
     @classmethod
     async def get_all_sops(cls) -> List[LinsightSOP]:
         """
-        获取所有SOP
+        Fetch allSOP
         """
         async with get_async_db_session() as session:
             statement = select(LinsightSOP)
@@ -206,7 +206,7 @@ class LinsightSOPDao(LinsightSOPBase):
     @classmethod
     async def create_sop_record(cls, sop_record: LinsightSOPRecord) -> LinsightSOPRecord:
         """
-        插入一条SOP记录
+        Insert an entrySOPRecord
         """
         async with get_async_db_session() as session:
             session.add(sop_record)
@@ -217,7 +217,7 @@ class LinsightSOPDao(LinsightSOPBase):
     @classmethod
     async def _filter_sop_record_statement(cls, statement, keywords: str = None, user_ids: list[int] = None) -> select:
         """
-        构建SOP记录的查询语句
+        Build.SOPRecorded Query Statements
         """
         or_params = []
         if keywords:
@@ -236,7 +236,7 @@ class LinsightSOPDao(LinsightSOPBase):
     async def filter_sop_record(cls, keywords: str = None, user_ids: list[int] = None, page: int = None,
                                 page_size: int = None, sort: str = None) -> List[LinsightSOPRecord]:
         """
-        获取所有SOP记录, 关键字匹配name、description、content。user_ids为用户ID列表。筛选条件之间是or的关系
+        Fetch allSOPRecord, Key Matchname、description、content。user_idsIs UserIDList. Between filters areorRelationship
         """
         statement = select(LinsightSOPRecord)
         statement = await cls._filter_sop_record_statement(statement, keywords, user_ids)
@@ -254,7 +254,7 @@ class LinsightSOPDao(LinsightSOPBase):
     @classmethod
     async def count_sop_record(cls, keywords: str = None, user_ids: list[int] = None) -> int:
         """
-        统计SOP记录数量
+        StatisticsSOPNumber of Records
         """
         statement = select(func.count(LinsightSOPRecord.id))
         statement = await cls._filter_sop_record_statement(statement, keywords, user_ids)
@@ -264,7 +264,7 @@ class LinsightSOPDao(LinsightSOPBase):
     @classmethod
     async def get_sop_record_by_ids(cls, ids: list[int]) -> List[LinsightSOPRecord]:
         """
-        根据SOP记录ID列表获取SOP记录对象
+        accordingSOPRecordIDGet listSOPRecord Objects
         """
         statement = select(LinsightSOPRecord).where(col(LinsightSOPRecord.id).in_(ids))
 
@@ -276,7 +276,7 @@ class LinsightSOPDao(LinsightSOPBase):
     @classmethod
     async def update_sop_record_score(cls, linsight_version_id: str, rating: int) -> bool:
         """
-        更新SOP记录的评分
+        UpdateSOPRecord Score
         """
         statement = update(LinsightSOPRecord).where(
             col(LinsightSOPRecord.linsight_version_id) == linsight_version_id).values(rating=rating)
@@ -288,7 +288,7 @@ class LinsightSOPDao(LinsightSOPBase):
     @classmethod
     async def update_sop_record_feedback(cls, linsight_version_id: str, execute_feedback: str) -> bool:
         """
-        更新SOP记录的执行反馈
+        UpdateSOPRecord Execution Result Feedback Information
         """
         statement = update(LinsightSOPRecord).where(
             col(LinsightSOPRecord.linsight_version_id) == linsight_version_id).values(execute_feedback=execute_feedback)
@@ -300,7 +300,7 @@ class LinsightSOPDao(LinsightSOPBase):
     @classmethod
     async def set_sop_showcase(cls, sop_id: int, showcase: bool) -> bool:
         """
-        设置SOP是否作为精选案例在首页展示
+        PengaturanSOPWhether to display it on the homepage as a featured case
         """
         statement = update(LinsightSOP).where(
             col(LinsightSOP.id) == sop_id).values(showcase=showcase)

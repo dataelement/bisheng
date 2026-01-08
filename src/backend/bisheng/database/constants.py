@@ -1,12 +1,12 @@
 from enum import Enum
 
-# 默认普通用户角色的ID
+# Default Normal User Role'sID
 DefaultRole = 2
-# 超级管理员角色ID
+# Super Admin RoleID
 AdminRole = 1
 
 
-# 消息表里一些基础的category类型
+# Some of the basiccategoryType
 class MessageCategory(Enum):
-    QUESTION = 'question'  # 用户问题
-    ANSWER = 'answer'  # 答案
+    QUESTION = 'question'  # User Questions
+    ANSWER = 'answer'  # Answers

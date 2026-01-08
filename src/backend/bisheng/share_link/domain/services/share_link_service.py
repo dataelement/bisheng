@@ -13,7 +13,7 @@ class ShareLinkService:
 
     async def generate_share_link(self, generate_share_link: GenerateShareLinkRequest,
                                   login_user: UserPayload) -> ShareLink:
-        """生成共享链接"""
+        """Generate sharable link"""
 
         share_token = common_util.generate_short_high_entropy_string()
 
@@ -31,7 +31,7 @@ class ShareLinkService:
 
     async def get_share_link_by_token(self, share_token: str) -> ShareLink:
         """
-        根据share_token获取共享链接信息
+        accordingshare_tokenGet shared link info
         :param share_token:
         :return:
         """

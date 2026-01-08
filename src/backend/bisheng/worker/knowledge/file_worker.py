@@ -24,10 +24,10 @@ from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
 
 @bisheng_celery.task(acks_late=True)
 def file_copy_celery(param: json) -> str:
-    """将某个知识库的文件复制到另外一个知识库
-    1. mysql的复制
-    2. 文件的复制
-    3. 向量的复制
+    """Copy a Knowledge Base file to another Knowledge Base
+    1. mysqlCopy of
+    2. Copying Files
+    3. Replication of vectors
     """
 
     source_knowledge_id = param.get("source_knowledge_id")
@@ -45,7 +45,7 @@ def file_copy_celery(param: json) -> str:
 
     target_list: List[KnowledgeFile] = KnowledgeFileDao.get_file_by_condition(
         target_id
-    )  # 所有的文件
+    )  # All files
     if target_list:
         target_list = [t.md5 for t in target_list]
     while True:
@@ -55,13 +55,13 @@ def file_copy_celery(param: json) -> str:
             )
 
             if not files:
-                # 没有文件了 创建milvus collection 和 es index
+                # No more documents Buatmilvus collection And es index
                 create_milvus_col_and_es_index(source_knowledge, target_knowledge)
                 break
 
             for one in files:
                 if target_list and one.md5 in target_list:
-                    # 重复任务防止重复写入
+                    # Duplicate Tasks Prevent Duplicate Writes
                     continue
                 try:
                     copy_normal(
@@ -75,7 +75,7 @@ def file_copy_celery(param: json) -> str:
         page_num += 1
         if not files or len(files) < page_size:
             break
-    # 恢复状态
+    # Recovery status
     logger.info("file_copy_celery end")
     target_knowledge.state = 1
     KnowledgeDao.update_state(knowledge_id=source_knowledge.id, state=KnowledgeState.PUBLISHED,
@@ -105,24 +105,24 @@ def copy_normal(
     knowledge_new = KnowledgeFile(**one_dict)
     knowledge_new = KnowledgeFileDao.add_file(knowledge_new)
 
-    # 迁移 file
+    # migrate file
     try:
         target_source_file = KnowledgeUtils.get_knowledge_file_object_name(knowledge_new.id, knowledge_new.file_name)
 
         minio_client = get_minio_storage_sync()
 
-        # 拷贝源文件
+        # Copy source file
         if minio_client.object_exists_sync(minio_client.bucket, source_file):
             minio_client.copy_object_sync(source_bucket=minio_client.bucket, source_object=source_file,
                                           dest_object=target_source_file, dest_bucket=minio_client.bucket)
         knowledge_new.object_name = target_source_file
 
-        # 拷贝生成的pdf文件
+        # Copy GeneratedpdfDoc.
         if minio_client.object_exists_sync(minio_client.bucket, f"{source_file_pdf}"):
             minio_client.copy_object_sync(source_bucket=minio_client.bucket, source_object=f"{source_file_pdf}",
                                           dest_object=f"{knowledge_new.id}", dest_bucket=minio_client.bucket)
 
-        # 拷贝bbox文件
+        # Copies:bboxDoc.
         if minio_client.object_exists_sync(object_name=bbox_file):
             target_bbox_file = KnowledgeUtils.get_knowledge_bbox_file_object_name(knowledge_new.id)
             minio_client.copy_object_sync(source_bucket=minio_client.bucket, source_object=bbox_file,
@@ -131,7 +131,7 @@ def copy_normal(
 
         preview_file = None
         target_preview_file = None
-        # 拷贝预览文件
+        # Copy preview file
         if source_file_ext in ['doc', 'ppt', 'pptx']:
             preview_file = KnowledgeUtils.get_knowledge_preview_file_object_name(one.id, one.file_name)
             target_preview_file = KnowledgeUtils.get_knowledge_preview_file_object_name(knowledge_new.id,
@@ -170,11 +170,11 @@ def copy_vector(
         source_file_id: int,
         target_file_id: int,
 ):
-    # 迁移 vectordb
+    # migrate vectordb
     embedding = FakeEmbedding()
     source_col = source_konwledge.collection_name
     source_milvus: Milvus = decide_vectorstores(source_col, "Milvus", embedding)
-    # 当前es 不包含vector
+    # Saat Inies Exclusion:vector
     fields = [s.name for s in source_milvus.col.schema.fields if s.name != "pk"]
     source_data = source_milvus.col.query(
         expr=f"document_id=={source_file_id} && knowledge_id=={source_konwledge.id}",
@@ -186,7 +186,7 @@ def copy_vector(
     milvus_db: Milvus = decide_vectorstores(
         target_knowledge.collection_name, "Milvus", embedding
     )
-    # 首次新建一个 collection
+    # Create a new one for the first time collection
     if milvus_db.col is None:
         new_col = Collection(name=target_knowledge.collection_name, schema=source_milvus.col.schema,
                              using=source_milvus.alias,
@@ -217,7 +217,7 @@ def create_milvus_col_and_es_index(source_konwledge: Knowledge, target_knowledge
                              consistency_level=source_milvus.consistency_level)
         new_col.load()
 
-    # 创建es index
+    # Buates index
     es_db = decide_vectorstores(
         target_knowledge.index_name, "ElasticKeywordsSearch", embedding
     )
@@ -255,7 +255,7 @@ def insert_es(li: List, target: ElasticKeywordsSearch):
     requests = []
     for i, data in enumerate(li):
         text = data.pop("text")
-        data.pop("vector", "")  # es 不包含vector
+        data.pop("vector", "")  # es Exclusion:vector
         metadata = data
         request = {
             "_op_type": "index",
@@ -273,12 +273,12 @@ def insert_es(li: List, target: ElasticKeywordsSearch):
 
 @bisheng_celery.task(acks_late=True)
 def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
-    """ 异步解析一个入库成功的文件 """
+    """ Asynchronously parse one incoming successful file """
     trace_id_var.set(f'parse_file_{file_id}')
     logger.info(
         f"parse_knowledge_file_celery start preview_cache_key={preview_cache_key}, callback_url={callback_url}")
     try:
-        # 入库成功后，再此判断文件信息是否还存在，不存在则删除
+        # After the warehousing is successful, it is judged whether the file information still exists, and if not, it is deleted.
         _, knowledge = _parse_knowledge_file(file_id, preview_cache_key, callback_url)
     except Exception as e:
         logger.error("parse_knowledge_file_celery error: {}", str(e))
@@ -286,7 +286,7 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
         logger.debug(f"delete_knowledge_file_celery start file_id={file_id}")
         db_file = KnowledgeFileDao.get_file_by_ids([file_id])
         if not db_file:
-            # 不存在则可能在解析过程中被删除了，需要删掉向量库的数据
+            # If it does not exist, it may have been deleted during the parsing process, and the data of the vector database needs to be deleted.
             delete_vector_files([db_file.id], knowledge)
 
 
@@ -311,7 +311,7 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
         db_file.status = KnowledgeFileStatus.PROCESSING.value
         KnowledgeFileDao.update_file_status([db_file.id], KnowledgeFileStatus.PROCESSING)
 
-    # 获取切分规则
+    # Get Splitting Rules
     file_rule = FileProcessBase(**json.loads(db_file.split_rule))
     logger.debug("parse_knowledge_file_celery_start", file_id)
     process_file_task(db_knowledge,
@@ -333,7 +333,7 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
 
 @bisheng_celery.task(acks_late=True)
 def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
-    """ 重试解析一个入库失败或者重名的文件 """
+    """ Retry parsing a file that failed to enter the repository or has a different name """
     trace_id_var.set(f'retry_knowledge_file_{file_id}')
     logger.info("retry_knowledge_file_celery start file_id={}", file_id)
     try:
@@ -353,7 +353,7 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
 
 @bisheng_celery.task()
 def delete_knowledge_file_celery(file_ids: List[int], knowledge_id: int, clear_minio: bool = True):
-    """ 异步删除知识文件及其向量 """
+    """ Asynchronous deletion of knowledge files and their vectors """
     trace_id_var.set(f'delete_knowledge_file_{file_ids}')
     logger.info("delete_knowledge_file_celery start file_ids={}", file_ids)
     try:

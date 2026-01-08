@@ -3,32 +3,32 @@ import docx
 from docx.enum.style import WD_STYLE_TYPE
 
 
-# 中文的字号转 pt 方法
+# Chinese Font Size Conversion pt THE METHOD
 def _zihao_to_pt(chn_name: str):
     chn_name = chn_name.strip()
     pt_mapping = {
-        "初号": 42,
-        "小初": 36,
-        "一号": 26,
-        "小一": 24,
-        "二号": 22,
-        "小二": 18,
-        "三号": 16,
-        "小三": 15,
-        "四号": 14,
-        "小四": 12,
-        "五号": 10.5,
-        "小五": 9,
-        "六号": 7.5,
-        "小六": 6.5,
-        "七号": 5.5,
-        "八号": 5,
+        "No. 1": 42,
+        "Little Primary": 36,
+        "No. 1": 26,
+        "Little Yi": 24,
+        "No. 2": 22,
+        "Second": 18,
+        "Number three": 16,
+        "Little San": 15,
+        "No. 4": 14,
+        "Shikama": 12,
+        "No. 5": 10.5,
+        "Xiao Wu": 9,
+        "No. 6": 7.5,
+        "Little Six": 6.5,
+        "No. 7": 5.5,
+        "No. 8": 5,
     }
     if pt_mapping.get(chn_name):
         return pt_mapping[chn_name]
     else:
         print("[YAML ERROR]:", chn_name,
-              "不是一种规范的字号称呼。(中文语境下，字号最大是'初号'，最小是'八号')。")
+              "Not a canonical title.(In the Chinese context, the largest font size is'No. 1', the minimum is'No. 8')。")
 
 
 class SimpleStyle:
@@ -37,7 +37,7 @@ class SimpleStyle:
     style_type: WD_STYLE_TYPE = WD_STYLE_TYPE.PARAGRAPH
 
     font_default: str = "Times New Roman"
-    font_east_asia: str = "宋体"
+    font_east_asia: str = "Song Ti"
     font_size: float = 14
     font_color: str = "000000"
 
@@ -52,10 +52,10 @@ class SimpleStyle:
     space_after: int = 0
 
     def __init__(self,
-                 style_name: str,  # 样式名称
-                 base_style_name: str,  # 基于的样式
-                 conf: dict,  # 具体的样式数据，从yaml反序列化而来
-                 style_type: docx.enum.style = WD_STYLE_TYPE.PARAGRAPH  # 是段落还是列表或是其他类型
+                 style_name: str,  # Style name
+                 base_style_name: str,  # Styles based on
+                 conf: dict,  # Specific style data fromyamlDeserialized
+                 style_type: docx.enum.style = WD_STYLE_TYPE.PARAGRAPH  # Is it a paragraph or a list or some other type
                  ):
         self.style_name = style_name
         self.base_style_name = base_style_name
@@ -67,20 +67,20 @@ class SimpleStyle:
 
             if str(conf["font"]["size"]).isdigit():
                 self.font_size = conf["font"]["size"]
-            else:  # 如果是以中文形式给出的字号，进行转换
+            else:  # If the font size is given in Chinese, convert it
                 self.font_size = _zihao_to_pt(conf["font"]["size"])
         except KeyError:
             print("[YAML ERROR]:", style_name,
                   "| Error occurred in setting font style. Set to:",
                   self.font_default, self.font_east_asia, str(self.font_size) + "pt")
 
-        # 颜色有指定时检查，不指定默认黑色
+        # Check when color is specified, do not specify default black
         if conf["font"].get("color") is not None:
             try:
                 if type(conf["font"]["color"]) != str \
                         or len(conf["font"]["color"]) != 6:
                     raise TypeError
-                # 尝试进行转换为16进制数，并且是否符合RGB大小
+                # Try to convert to16binary number and whether it matchesRGBsize
                 hex_num = int(conf["font"]["color"], 16)
                 if 0 <= hex_num <= 0xFFFFFF:
                     self.font_color = str(conf["font"]["color"])
@@ -94,7 +94,7 @@ class SimpleStyle:
                 print("[YAML ERROR]:", style_name, "| Value of color must be string with 6 characters.",
                       "Default to black(000000).")
 
-        # 加粗、斜体、下划线、删除线
+        # Bold, Italic, Underline, Strikeout
         if conf.get("font").get("extra"):
             # print(conf["font"]["extra"])
             self.font_bold = "bold" in (conf["font"]["extra"])

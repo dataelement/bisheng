@@ -22,7 +22,7 @@ async def callback(data: dict):
     key = data.get('key')
     logger.debug(f'calback={data}')
     if status in {2, 6}:
-        # 保存回掉
+        # Save Back
         logger.info(f'office_callback url={file_url}')
         file = Requests().get(url=file_url)
         object_name = mino_prefix + key + '.docx'
@@ -30,7 +30,7 @@ async def callback(data: dict):
         await minio_client.put_object(bucket_name=minio_client.bucket,
                                       object_name=object_name, file=file._content,
                                       content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')  # noqa
-        # 重复保存，key 不更新
+        # Duplicate save,key Data Update Error
         with get_sync_db_session() as session:
             db_report = session.exec(
                 select(Report).where(or_(Report.version_key == key,

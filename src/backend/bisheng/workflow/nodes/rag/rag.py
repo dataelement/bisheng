@@ -24,7 +24,7 @@ class RagNode(RagUtils):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # 解析prompt
+        # analyzingprompt
         self._system_prompt = PromptTemplateParser(template=self.node_params['system_prompt'])
         self._system_variables = self._system_prompt.extract()
         self._user_prompt = PromptTemplateParser(template=self.node_params['user_prompt'])
@@ -40,11 +40,11 @@ class RagNode(RagUtils):
                                                     user_id=self.user_id)
         self._minio_client = get_minio_storage_sync()
 
-        # 是否输出结果给用户
+        # Whether to output the results to the user
         self._output_user = self.node_params.get('output_user', False)
         self._output_keys = [one.get("key") for one in self.node_params.get('output_user_input', [])]
 
-        # 运行日志数据
+        # Run Log Data
         self._log_source_documents = {}
         self._log_system_prompt = []
         self._log_user_prompt = []
@@ -88,7 +88,7 @@ class RagNode(RagUtils):
         if "question" in self._qa_prompt.input_variables:
             inputs["question"] = question
 
-        # 因为rag需要溯源所以不能用通用llm callback来返回消息。需要拿到source_document之后在返回消息内容
+        # and one of the reasons thatragIt needs to be traced, so it can't be used universally.llm callbackto return the message. Need to getsource_documentReturn message content after
         llm_callback = LLMNodeCallbackHandler(callback=self.callback_manager,
                                               unique_id=unique_id,
                                               node_id=self.id,
@@ -109,7 +109,7 @@ class RagNode(RagUtils):
                                   output_key=output_key,
                                   source_documents=source_documents))
             else:
-                # 说明有流式输出，则触发流式结束事件, 因为需要source_document所以在此执行流式结束事件
+                # If there is a streaming output, the streaming end event is triggered, Because of the need tosource_documentSo do a streaming end event here
                 self.callback_manager.on_stream_over(StreamMsgOverData(
                     node_id=self.id,
                     name=self.name,
@@ -128,11 +128,11 @@ class RagNode(RagUtils):
         ret = []
         index = 0
         user_question_list = self.init_user_question()
-        # 判断检索结果是否超出一定的长度, 原因是ws发送的消息超过一定的长度会报错
+        # Determine if the search results exceed a certain length, The reason iswsSending a message that exceeds a certain length will result in an error
         source_documents = [[d.page_content for d in one] for one in self._log_source_documents.values()]
         tmp_retrieved_type = 'variable'
         tmp_retrieved_result = json.dumps(source_documents, indent=2, ensure_ascii=False)
-        if len(tmp_retrieved_result.encode('utf-8')) >= 50 * 1024:  # 大于50kb的日志数据存文件
+        if len(tmp_retrieved_result.encode('utf-8')) >= 50 * 1024:  # Lebih dari50kbLog data storage file
             tmp_retrieved_type = 'file'
             tmp_object_name = f'/workflow/source_document/{time.time()}.txt'
             self._minio_client.put_object_tmp_sync(tmp_object_name, tmp_retrieved_result.encode('utf-8'))
@@ -150,7 +150,7 @@ class RagNode(RagUtils):
                 {'key': 'user_prompt', 'value': self._log_user_prompt[0], "type": "params"},
             ]
             if self._log_reasoning_content[key]:
-                one_ret.append({'key': '思考内容', 'value': self._log_reasoning_content[key], "type": "params"})
+                one_ret.append({'key': 'Thinking about content', 'value': self._log_reasoning_content[key], "type": "params"})
             one_ret.append({'key': f'{self.id}.{key}', 'value': val, 'type': 'variable'})
 
             index += 1
@@ -158,7 +158,7 @@ class RagNode(RagUtils):
         return ret
 
     def init_user_question(self) -> List[str]:
-        # 默认把用户问题都转为字符串
+        # Convert all user questions to strings by default
         ret = []
         for one in self.node_params['user_question']:
             ret.append(f"{self.get_other_node_variable(one)}")
@@ -174,7 +174,7 @@ class RagNode(RagUtils):
             else:
                 variable_map[one] = self.get_other_node_variable(one)
         if variable_map.get(f'{self.id}.retrieved_result') is None:
-            raise IgnoreException('用户提示词必须包含 retrieved_result 变量')
+            raise IgnoreException('User prompts must contain retrieved_result Variables')
         user_prompt = self._user_prompt.format(variable_map)
         log_user_prompt = user_prompt.replace('$$question$$', '{user_question}').replace('$$context$$',
                                                                                          '{retrieved_result}')

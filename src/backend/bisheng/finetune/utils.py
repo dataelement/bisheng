@@ -2,7 +2,7 @@ import xml.dom.minidom
 from typing import List, Dict
 
 
-# 将 nvidia-smi -q  -x 的输出解析为可视化数据
+# will be nvidia-smi -q  -x 's output is parsed as visual data
 def parse_gpus(gpu_str: str) -> List[Dict]:
     dom_tree = xml.dom.minidom.parseString(gpu_str)
     collections = dom_tree.documentElement
@@ -32,6 +32,6 @@ def parse_gpus(gpu_str: str) -> List[Dict]:
 
 
 def parse_server_host(endpoint: str):
-    """ 将数据库中的endpoints解析为http请求的host """
+    """ Put the data in the databaseendpointsResolve tohttpRequestedhost """
     endpoint = endpoint.replace('http://', '').split('/')[0]
     return f'http://{endpoint}'

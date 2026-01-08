@@ -16,7 +16,7 @@ class MarkDocx:
 
         html_text = md2html(md_input)
 
-        # 生成docx文件
+        # BuatdocxDoc.
         docx_file_byte, title_text = self.docx_processor.html2docx(html_text)
 
         return docx_file_byte, title_text

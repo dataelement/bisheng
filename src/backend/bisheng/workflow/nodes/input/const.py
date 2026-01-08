@@ -1,6 +1,6 @@
 from bisheng.common.schemas.rag_schema import RagMetadataFieldSchema
 
-# 输入节点临时上传文件的元数据定义
+# Enter the metadata definition for the temporary upload file of the node
 InputFileMetadata = [
     RagMetadataFieldSchema(field_name="document_id", field_type="text", kwargs={"nullable": False, "max_length": 1024}),
     RagMetadataFieldSchema(field_name="document_name", field_type="text",

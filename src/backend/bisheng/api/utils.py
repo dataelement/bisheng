@@ -91,7 +91,7 @@ async def build_flow(graph_data: dict,
                 'log': f'Building node {vertex.vertex_type}',
             }
             yield str(StreamData(event='log', data=log_dict))
-            # # 如果存在文件，当前不操作文件，避免重复操作
+            # # If the file exists, do not operate the file at this time to avoid duplication of operations
             if not process_file and (vertex.base_type == 'documentloaders'
                                      or vertex.base_type == 'input_output'):
                 template_dict = {
@@ -101,20 +101,20 @@ async def build_flow(graph_data: dict,
                 }
                 for key, value in template_dict.items():
                     if value.get('type') == 'fileNode':
-                        # 过滤掉文件
+                        # Filter Files
                         vertex.params[key] = ''
 
-            # vectore store 引入自动建库逻辑
-            # 聊天窗口等flow 主动生成的vector 需要新建临时collection
+            # vectore store Introduce automatic library building logic
+            # Chat window, etc.flow Proactively Generatedvector Need to create a new temporarycollection
             # tmp_{chat_id}
             if vertex.base_type == 'vectorstores':
-                # 知识库通过参数传参
+                # Knowledge Base Transmits Parameters via Parameters
                 if 'collection_name' in kwargs and 'collection_name' in vertex.params:
                     vertex.params['collection_name'] = kwargs['collection_name']
                 if 'collection_name' in kwargs and 'index_name' in vertex.params:
                     vertex.params['index_name'] = kwargs['collection_name']
 
-                # 临时目录处理 tmp_{embeding}_{loader}_{chat_id}
+                # Temporary directory processing tmp_{embeding}_{loader}_{chat_id}
                 if 'collection_name' in vertex.params and not vertex.params.get('collection_name'):
                     vertex.params['collection_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
                 elif 'index_name' in vertex.params and not vertex.params.get('index_name'):
@@ -170,7 +170,7 @@ async def build_flow_no_yield(graph_data: dict,
     sorted_vertices = graph.topological_sort()
     for vertex in sorted_vertices:
         try:
-            # 如果存在文件，当前不操作文件，避免重复操作
+            # If the file exists, do not operate the file at this time to avoid duplication of operations
             if not process_file and (vertex.base_type == 'documentloaders'
                                      or vertex.base_type == 'input_output'):
                 template_dict = {
@@ -180,19 +180,19 @@ async def build_flow_no_yield(graph_data: dict,
                 }
                 for key, value in template_dict.items():
                     if value.get('type') == 'fileNode':
-                        # 过滤掉文件
+                        # Filter Files
                         vertex.params[key] = ''
 
-            # vectore store 引入自动建库逻辑
-            # 聊天窗口等flow 主动生成的vector 需要新建临时collection
+            # vectore store Introduce automatic library building logic
+            # Chat window, etc.flow Proactively Generatedvector Need to create a new temporarycollection
             # tmp_{chat_id}
             if vertex.base_type == 'vectorstores':
-                # 注入user_name
+                # Infuseuser_name
                 vertex.params['user_name'] = kwargs.get('user_name') if kwargs else ''
                 if vertex.vertex_type not in [
                     'MilvusWithPermissionCheck', 'ElasticsearchWithPermissionCheck'
                 ]:
-                    # 知识库通过参数传参
+                    # Knowledge Base Transmits Parameters via Parameters
                     if 'collection_name' in kwargs and 'collection_name' in vertex.params:
                         vertex.params['collection_name'] = kwargs['collection_name']
                     if 'collection_name' in kwargs and 'index_name' in vertex.params:
@@ -204,7 +204,7 @@ async def build_flow_no_yield(graph_data: dict,
                             'collection_name'] = f'tmp_{flow_id}_{chat_id if chat_id else 1}'
                         logger.info(f"rename_vector_col col={vertex.params['collection_name']}")
                         if process_file:
-                            # L1 清除Milvus历史记录
+                            # L1 RemoveMilvusBattle Log
                             vertex.params['drop_old'] = True
                     elif 'index_name' in vertex.params and not vertex.params.get('index_name'):
                         # es
@@ -366,7 +366,7 @@ def update_frontend_node_with_template_values(frontend_node, raw_frontend_node):
 
 
 async def get_url_content(url: str) -> str:
-    """ 获取接口的返回的body内容 """
+    """ Get the returned of the interfacebodyContents """
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
             if response.status != 200:

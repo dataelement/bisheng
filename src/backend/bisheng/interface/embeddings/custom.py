@@ -6,7 +6,7 @@ from pydantic import Field
 
 from bisheng.llm.domain.llm.embedding import BishengEmbedding
 
-BATCH_SIZE["text-embedding-v4"] = 10  # 设置DashScope的批处理大小为1
+BATCH_SIZE["text-embedding-v4"] = 10  # PengaturanDashScopeThe batch size for is1
 
 
 class OpenAIProxyEmbedding(Embeddings):
@@ -31,7 +31,7 @@ class OpenAIProxyEmbedding(Embeddings):
 
 
 class FakeEmbedding(Embeddings):
-    """为了保证milvus等，在模型下线还能继续用"""
+    """To ensure amilvusWait, you can continue to use it when the model is offline"""
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """embedding"""

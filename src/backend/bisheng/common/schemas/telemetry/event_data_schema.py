@@ -27,13 +27,13 @@ class NewMessageSessionEventData(BaseEventData):
     _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION
 
     session_id: str
-    # 应用类型
+    # Apply type
     app_type: ApplicationTypeEnum
-    # 应用名称
+    # Application name
     app_name: str
-    # 应用id
+    # Applicationsid
     app_id: str
-    # 会话来源 平台、API
+    # Conversation Source                PlatformsAPI
     source: Literal["platform", "api"]
 
 
@@ -45,7 +45,7 @@ class ToolInvocationEventData(BaseEventData):
     app_type: ApplicationTypeEnum
     tool_id: int
     tool_name: str
-    tool_type: int  # 什么类型的工具，比如：API、MCP、预置.
+    tool_type: int  # What type of tools, such as:API、MCPPreset.
     status: StatusEnum
 
 
@@ -121,10 +121,10 @@ class ModelInvokeEventData(BaseEventData):
 
     status: StatusEnum
     is_stream: bool
-    input_token: int  # 输入token数
-    output_token: int  # 输出token数
-    cache_token: int  # 缓存token数
-    total_token: int  # 总token数
+    input_token: int  # MasukkantokenQuantity
+    output_token: int  # OutputtokenQuantity
+    cache_token: int  # CeacletokenQuantity
+    total_token: int  # TotaltokenQuantity
 
 
 class ApplicationAliveEventData(BaseEventData):

@@ -20,7 +20,7 @@ from bisheng.user.domain.models.user import UserDao
 
 
 class KnowledgeFileService:
-    """知识文件服务类"""
+    """Knowledge File Service Class"""
 
     def __init__(self, knowledge_file_repository: 'KnowledgeFileRepository',
                  knowledge_repository: 'KnowledgeRepository'):
@@ -28,7 +28,7 @@ class KnowledgeFileService:
         self.knowledge_repository = knowledge_repository
 
     async def get_knowledge_file_info(self, login_user: 'UserPayload', knowledge_file_id: int):
-        """获取知识文件信息"""
+        """Get Knowledge File Information"""
         knowledge_file_model = await self.knowledge_file_repository.find_by_id(
             entity_id=knowledge_file_id)
 
@@ -65,29 +65,29 @@ class KnowledgeFileService:
     @staticmethod
     async def modify_milvus_file_user_metadata(invoke_user_id: int, knowledge_model, knowledge_file_id,
                                                user_metadata: dict):
-        """修改 Milvus 中文件的用户元数据"""
+        """Change Milvus User metadata for files in"""
         vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(invoke_user_id, knowledge=knowledge_model,
                                                                              metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
 
-        # 先查出所有数据
+        # Find all the data first
         search_result = await vector_client.aclient.query(collection_name=knowledge_model.collection_name,
                                                           filter=f"document_id == {knowledge_file_id}", limit=10000)
 
-        # 修改用户元数据
+        # Modify User Metadata
         for item in search_result:
             item["user_metadata"] = user_metadata
 
-        # 批量更新数据
+        # Bulk Update Data
         await vector_client.aclient.upsert(collection_name=vector_client.collection_name,
                                            data=search_result)
 
     @staticmethod
     async def modify_elasticsearch_file_user_metadata(knowledge_model, knowledge_file_id, user_metadata: dict):
-        """修改 Elasticsearch 中文件的用户元数据"""
+        """Change Elasticsearch User metadata for files in"""
         es_client = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=knowledge_model,
                                                                      metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
 
-        # 使用 update_by_query 来更新符合条件的文档
+        # Use update_by_query to update eligible documents
         res = await es_client.client.update_by_query(
             index=knowledge_model.index_name,
             body={
@@ -106,7 +106,7 @@ class KnowledgeFileService:
 
     async def modify_file_user_metadata(self, login_user: 'UserPayload',
                                         modify_file_metadata_req: 'ModifyKnowledgeFileMetaDataReq'):
-        """添加知识文件元数据"""
+        """Add Knowledge File Metadata"""
         knowledge_file_model = await self.knowledge_file_repository.find_by_id(
             entity_id=modify_file_metadata_req.knowledge_file_id)
 
@@ -129,13 +129,13 @@ class KnowledgeFileService:
         if knowledge_file_model.user_metadata is None:
             knowledge_file_model.user_metadata = {}
 
-        # 新建一个字典来存储更新后的元数据
+        # Create a new dictionary to store updated metadata
         new_current_user_metadata = {}
 
         for item in modify_file_metadata_req.user_metadata_list:
             if item.field_name in metadata_field_dict.keys():
                 item_dict = item.model_dump()
-                # 数据类型转换
+                # Data type conversion
                 try:
                     field_type = metadata_field_dict[item.field_name].field_type
                     field_value = utils.metadata_value_type_convert(
@@ -148,7 +148,7 @@ class KnowledgeFileService:
                 item_dict.pop('field_name')
                 new_current_user_metadata[item.field_name] = item_dict
 
-        # 更新知识文件的用户元数据
+        # Update user metadata for knowledge files
         knowledge_file_model.user_metadata = new_current_user_metadata
         knowledge_file_model.updater_id = login_user.user_id
 
@@ -156,7 +156,7 @@ class KnowledgeFileService:
 
         user_metadata = {key: value.get('field_value') for key, value in knowledge_file_model.user_metadata.items()}
 
-        # 修改 Milvus, Elasticsearch 中的对应元数据
+        # Change Milvus, Elasticsearch Corresponding metadata in
         await self.modify_milvus_file_user_metadata(
             login_user.user_id,
             knowledge_model=knowledge_model,
@@ -174,7 +174,7 @@ class KnowledgeFileService:
 
     async def add_file_user_metadata(self, login_user: 'UserPayload', knowledge_id: int,
                                      add_file_metadata_req: 'List[ModifyKnowledgeFileMetaDataReq]'):
-        """添加知识文件元数据"""
+        """Add Knowledge File Metadata"""
 
         knowledge_model = await self.knowledge_repository.find_by_id(
             entity_id=knowledge_id)
@@ -204,7 +204,7 @@ class KnowledgeFileService:
             # Check if knowledge file exists
             if not knowledge_file_model:
                 raise KnowledgeFileNotExistError(
-                    msg=f"知识库文件ID:{modify_file_metadata_req.knowledge_file_id} 不存在")
+                    msg=f"Knowledge Base FilesID:{modify_file_metadata_req.knowledge_file_id} Does not exist")
 
             # Initialize metadata if it's None
             if knowledge_file_model.user_metadata is None:
@@ -219,11 +219,11 @@ class KnowledgeFileService:
                 elif item.field_name in current_user_metadata.keys():
                     raise KnowledgeMetadataFieldExistError(
                         field_name=item.field_name,
-                        msg=f"知识库文件ID:{modify_file_metadata_req.knowledge_file_id} 已存在元数据字段:{item.field_name}"
+                        msg=f"Knowledge Base FilesID:{modify_file_metadata_req.knowledge_file_id} Metadata field already exists:{item.field_name}"
                     )
 
                 item_dict = item.model_dump()
-                # 数据类型转换
+                # Data type conversion
                 try:
                     field_type = metadata_field_dict[item.field_name].field_type
                     field_value = utils.metadata_value_type_convert(
@@ -231,25 +231,25 @@ class KnowledgeFileService:
                     item_dict['field_value'] = field_value
                 except Exception as e:
                     raise KnowledgeMetadataValueTypeConvertError(
-                        msg=f"元数据字段 {item.field_name} 值类型转换错误: {e}")
+                        msg=f"Meta data fields {item.field_name} Value type conversion error: {e}")
 
                 item_dict['field_type'] = metadata_field_dict[item.field_name].field_type
                 item_dict.pop('field_name')
                 current_user_metadata[item.field_name] = item_dict
 
-            # 更新知识文件的用户元数据
+            # Update user metadata for knowledge files
             knowledge_file_model.user_metadata = current_user_metadata
             knowledge_file_model.updater_id = login_user.user_id
 
             updated_knowledge_files.append(knowledge_file_model)
 
-        # 批量更新知识文件
+        # Bulk Update Knowledge Files
         for knowledge_file_model in updated_knowledge_files:
             knowledge_file_model = await self.knowledge_file_repository.update(knowledge_file_model)
 
             user_metadata = {key: value.get('field_value') for key, value in knowledge_file_model.user_metadata.items()}
 
-            # 修改 Milvus, Elasticsearch 中的对应元数据
+            # Change Milvus, Elasticsearch Corresponding metadata in
             await self.modify_milvus_file_user_metadata(
                 login_user.user_id,
                 knowledge_model=knowledge_model,
@@ -269,7 +269,7 @@ class KnowledgeFileService:
     async def batch_modify_file_user_metadata(self, login_user: 'UserPayload',
                                               knowledge_id: int,
                                               modify_file_metadata_reqs: 'List[ModifyKnowledgeFileMetaDataReq]'):
-        """批量修改知识文件元数据"""
+        """Batch Modify Knowledge File Metadata"""
         knowledge_model = await self.knowledge_repository.find_by_id(
             entity_id=knowledge_id)
 
@@ -297,7 +297,7 @@ class KnowledgeFileService:
 
             if not knowledge_file_model:
                 raise KnowledgeFileNotExistError(
-                    msg=f"知识库文件ID:{modify_file_metadata_req.knowledge_file_id} 不存在")
+                    msg=f"Knowledge Base FilesID:{modify_file_metadata_req.knowledge_file_id} Does not exist")
 
             # Initialize metadata if it's None
             if knowledge_file_model.user_metadata is None:
@@ -305,7 +305,7 @@ class KnowledgeFileService:
 
             current_user_metadata = copy.deepcopy(knowledge_file_model.user_metadata)
 
-            # 更新知识文件的用户元数据
+            # Update user metadata for knowledge files
             for item in modify_file_metadata_req.user_metadata_list:
 
                 if item.field_name not in metadata_field_dict.keys():
@@ -314,33 +314,33 @@ class KnowledgeFileService:
                 if item.field_name not in current_user_metadata.keys():
                     raise KnowledgeMetadataFieldNotExistError(
                         field_name=item.field_name,
-                        msg=f"知识库文件ID:{modify_file_metadata_req.knowledge_file_id} 不存在元数据字段:{item.field_name}"
+                        msg=f"Knowledge Base FilesID:{modify_file_metadata_req.knowledge_file_id} No metadata fields exist:{item.field_name}"
                     )
 
                 existing_item = current_user_metadata.get(item.field_name)
                 try:
-                    # 数据类型
+                    # Data Type
                     field_type = metadata_field_dict[item.field_name].field_type
-                    # 更新已有字段的值和更新时间
+                    # Update values and update time for existing fields
                     field_value = utils.metadata_value_type_convert(
                         value=item.field_value, target_type=field_type)
                     existing_item['field_value'] = field_value
                     current_user_metadata[item.field_name] = existing_item
                 except Exception as e:
                     raise KnowledgeMetadataValueTypeConvertError(
-                        msg=f"元数据字段 {item.field_name} 值类型转换错误: {e}")
+                        msg=f"Meta data fields {item.field_name} Value type conversion error: {e}")
 
             knowledge_file_model.user_metadata = current_user_metadata
             knowledge_file_model.updater_id = login_user.user_id
 
             updated_knowledge_files.append(knowledge_file_model)
 
-        # 批量更新知识文件
+        # Bulk Update Knowledge Files
         for knowledge_file_model in updated_knowledge_files:
             knowledge_file_model = await self.knowledge_file_repository.update(knowledge_file_model)
 
             user_metadata = {key: value.get('field_value') for key, value in knowledge_file_model.user_metadata.items()}
-            # 修改 Milvus, Elasticsearch 中的对应元数据
+            # Change Milvus, Elasticsearch Corresponding metadata in
             await self.modify_milvus_file_user_metadata(
                 login_user.user_id,
                 knowledge_model=knowledge_model,
@@ -360,7 +360,7 @@ class KnowledgeFileService:
                                               knowledge_id: int,
                                               delete_user_metadata_req: 'List[DeleteUserMetadataReq]'):
         """
-        批量删除知识文件元数据
+        Bulk Delete Knowledge File Metadata
         Args:
             login_user:
             knowledge_id:
@@ -393,17 +393,17 @@ class KnowledgeFileService:
 
             if not knowledge_file_model:
                 raise KnowledgeFileNotExistError(
-                    msg=f"知识库文件ID:{delete_metadata_req.knowledge_file_id} 不存在")
+                    msg=f"Knowledge Base FilesID:{delete_metadata_req.knowledge_file_id} Does not exist")
 
             current_user_metadata = copy.deepcopy(knowledge_file_model.user_metadata) or {}
 
-            # 删除指定的元数据字段
+            # Delete the specified metadata field
             for field_name in delete_metadata_req.field_names:
 
                 if field_name not in current_user_metadata.keys():
                     raise KnowledgeMetadataFieldNotExistError(
                         field_name=field_name,
-                        msg=f"知识库文件ID:{delete_metadata_req.knowledge_file_id} 不存在元数据字段:{field_name}"
+                        msg=f"Knowledge Base FilesID:{delete_metadata_req.knowledge_file_id} No metadata fields exist:{field_name}"
                     )
 
                 current_user_metadata.pop(field_name)
@@ -413,13 +413,13 @@ class KnowledgeFileService:
 
             updated_knowledge_files.append(knowledge_file_model)
 
-        # 批量更新知识文件
+        # Bulk Update Knowledge Files
         for knowledge_file_model in updated_knowledge_files:
             knowledge_file_model = await self.knowledge_file_repository.update(knowledge_file_model)
 
             user_metadata = {key: value.get('field_value') for key, value in knowledge_file_model.user_metadata.items()}
 
-            # 修改 Milvus, Elasticsearch 中的对应元数据
+            # Change Milvus, Elasticsearch Corresponding metadata in
             await self.modify_milvus_file_user_metadata(
                 login_user.user_id,
                 knowledge_model=knowledge_model,
@@ -439,7 +439,7 @@ class KnowledgeFileService:
                                                 knowledge_id: int,
                                                 knowledge_file_ids: List[int]):
         """
-        列出知识文件的用户元数据
+        List user metadata for knowledge files
         Args:
             login_user:
             knowledge_id:

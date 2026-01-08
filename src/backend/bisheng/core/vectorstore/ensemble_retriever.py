@@ -14,28 +14,28 @@ from langchain_core.runnables import RunnableConfig
 from bisheng.core.ai.rerank.rrf_rerank import RRFRerank
 
 
-# 输入检索器参数模型
+# Input Retriever Parameter Model
 class VectorRetrieverParams(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    vector_store: VectorStore = Field(..., description="向量库实例")
-    search_kwargs: Dict = Field(default_factory=dict, description="检索参数")
-    weight: float = Field(default=1.0, description="检索器权重")
+    vector_store: VectorStore = Field(..., description="Vector Library Instance")
+    search_kwargs: Dict = Field(default_factory=dict, description="Retrieve Parameters")
+    weight: float = Field(default=1.0, description="Retriever Weight")
 
 
 class RRFMultiVectorRetriever(BaseRetriever):
     """
-    基于 RRF (Reciprocal Rank Fusion) 的多路向量检索器。
-    支持同步/异步调用，支持基于字符长度的上下文截断。
+    predicated upon RRF (Reciprocal Rank Fusion) Multiple vector retriever.
+    Sync enabled/Asynchronous calls that support character-length-based context truncation.
     """
 
     vector_store_params: List[VectorRetrieverParams] = Field(
-        ..., description="多个向量库及其检索参数和权重"
+        ..., description="Multiple vector libraries and their retrieval parameters and weights"
     )
-    top_k: int = Field(default=5, description="最终返回的文档数量。注意：建议设置 >0 的值")
-    rrf_c: int = Field(default=60, description="RRF 常数 c，平滑排名权重")
-    remove_zero_score: bool = Field(default=True, description="是否移除 RRF 分数为 0 的文档")
-    max_context_length: int = Field(default=0, description="返回文档的最大字符总长度，0表示不限制")
+    top_k: int = Field(default=5, description="The final number of documents returned. Note: Recommended settings >0 Value of")
+    rrf_c: int = Field(default=60, description="RRF constant c, smooth ranking weights")
+    remove_zero_score: bool = Field(default=True, description="Remove or not RRF Score is 0 Documents")
+    max_context_length: int = Field(default=0, description="Returns the maximum total character length of a document,0Indicates unlimited")
 
     _rrf_rerank: RRFRerank = PrivateAttr()
     _retrievers: List[BaseRetriever] = PrivateAttr(default_factory=list)
@@ -48,12 +48,12 @@ class RRFMultiVectorRetriever(BaseRetriever):
 
         for param in self.vector_store_params:
             weights.append(param.weight)
-            # 转换为 retriever
+            # Convert To retriever
             self._retrievers.append(
                 param.vector_store.as_retriever(search_kwargs=param.search_kwargs)
             )
 
-        # 初始化 RRF 重排序器
+        # Inisialisasi RRF Reorder
         self._rrf_rerank = RRFRerank(
             retrievers=self._retrievers,
             weights=weights,
@@ -65,7 +65,7 @@ class RRFMultiVectorRetriever(BaseRetriever):
             self, query: str, *, run_manager: CallbackManagerForRetrieverRun, **kwargs
     ) -> Sequence[Document]:
         docs_lists = []
-        # 传递回调配置
+        # Pass-through callback configuration
         run_config: RunnableConfig = {"callbacks": run_manager.get_child()}
 
         for retriever in self._retrievers:
@@ -73,11 +73,11 @@ class RRFMultiVectorRetriever(BaseRetriever):
                 tmp_docs = retriever.invoke(query, config=run_config, **kwargs)
                 docs_lists.append(tmp_docs)
             except Exception as e:
-                # 记录异常但继续执行其他检索器
+                # Log exceptions but continue to execute other retrievers
                 run_manager.on_text(f"Retriever {retriever} failed with error: {e}", end="\n")
                 docs_lists.append([])
 
-        # 调用 RRF 进行重排序
+        # Recall RRF Reorder
         reranked_docs = self._rrf_rerank.compress_documents(query=query, documents=docs_lists)
 
         return self._post_process_documents(reranked_docs)
@@ -93,35 +93,35 @@ class RRFMultiVectorRetriever(BaseRetriever):
                 retriever.ainvoke(query, config=run_config, **kwargs)
             )
 
-        # 并发执行
+        # Concurrent execution
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
 
         docs_lists = []
         for idx, result in enumerate(results):
             if isinstance(result, Exception):
-                # 记录异常但继续执行其他检索器
+                # Log exceptions but continue to execute other retrievers
                 await run_manager.on_text(f"Retriever {self._retrievers[idx]} failed with error: {result}", end="\n")
                 docs_lists.append([])
             else:
                 docs_lists.append(result)
 
-        # RRF 重排
+        # RRF Rearrangements
         reranked_docs = self._rrf_rerank.compress_documents(query=query, documents=docs_lists)
 
         return self._post_process_documents(reranked_docs)
 
     def _post_process_documents(self, documents: Sequence[Document]) -> List[Document]:
-        """截断 TopK 和 长度过滤"""
-        # Top K 截断
+        """cut off TopK And Length filtering"""
+        # Top K cut off
         if self.top_k > 0:
             documents = documents[:self.top_k]
 
-        # 长度过滤
+        # Length filtering
         return self._filter_by_context_length(list(documents))
 
     def _filter_by_context_length(self, documents: List[Document]) -> List[Document]:
-        """根据 max_context_length 过滤文档列表"""
+        """according max_context_length Filter Documents List"""
         if self.max_context_length <= 0:
             return documents
 
@@ -129,7 +129,7 @@ class RRFMultiVectorRetriever(BaseRetriever):
         filtered_docs = []
         for doc in documents:
             doc_size = len(doc.page_content)
-            # 判断加入该文档后是否超出限制
+            # Determine if the limit has been exceeded after joining the document
             if curr_size + doc_size <= self.max_context_length:
                 filtered_docs.append(doc)
                 curr_size += doc_size

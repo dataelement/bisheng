@@ -49,7 +49,7 @@ class KnowledgeService:
         # Built field names
         built_field_names = [item.field_name for item in KNOWLEDGE_RAG_METADATA_SCHEMA]
 
-        # 判断新增字段是否和已有字段冲突
+        # Determine if the added field conflicts with an existing field
         for field in add_metadata_fields.metadata_fields:
             if field.field_name in existing_field_names:
                 raise KnowledgeMetadataFieldExistError(field_name=field.field_name)
@@ -87,13 +87,13 @@ class KnowledgeService:
         es_client = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=knowledge_model,
                                                                      metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
 
-        # 请求milvus
+        # Requestmilvus
         @retry_async(delay=3)
         async def request_milvus(new_data):
-            # 批量更新数据
+            # Bulk Update Data
             await vector_client.aclient.upsert(collection_name=vector_client.collection_name, data=new_data)
 
-        # 请求es
+        # Requestes
         @retry_async(delay=3)
         async def request_es(request_body):
             await es_client.client.update_by_query(
@@ -109,19 +109,19 @@ class KnowledgeService:
             search_result = await vector_client.aclient.query(collection_name=knowledge_model.collection_name,
                                                               filter=f"document_id == {knowledge_file.id}", limit=10000)
 
-            # 修改用户元数据字段名
+            # Modify User Metadata Field Name
             for item in search_result:
                 for old_field_name, new_field_name in field_name_map.items():
                     if old_field_name in item["user_metadata"]:
                         item["user_metadata"][new_field_name] = item["user_metadata"].pop(old_field_name)
 
-            # 批量更新数据
+            # Bulk Update Data
             await request_milvus(search_result)
 
             # Update Elasticsearch metadata
             # Implement Elasticsearch metadata field name update logic for each knowledge file here
 
-            # 使用 update_by_query 来更新符合条件的文档
+            # Use update_by_query to update eligible documents
             script_lines = []
             for old_field_name, new_field_name in field_name_map.items():
                 script_lines.append(
@@ -139,7 +139,7 @@ class KnowledgeService:
                     "term": {"metadata.document_id": knowledge_file.id}
                 }
             }
-            # 更新es
+            # Update es
             await request_es(body)
 
             # Update knowledge file's user_metadata field
@@ -238,13 +238,13 @@ class KnowledgeService:
         es_client = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=knowledge_model,
                                                                      metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
 
-        # 请求milvus
+        # Requestmilvus
         @retry_async(delay=3)
         async def request_milvus(new_data):
-            # 批量更新数据
+            # Bulk Update Data
             await vector_client.aclient.upsert(collection_name=vector_client.collection_name, data=new_data)
 
-        # 请求es
+        # Requestes
         @retry_async(delay=3)
         async def request_es(request_body):
             await es_client.client.update_by_query(
@@ -260,19 +260,19 @@ class KnowledgeService:
             search_result = await vector_client.aclient.query(collection_name=knowledge_model.collection_name,
                                                               filter=f"document_id == {knowledge_file.id}", limit=10000)
 
-            # 删除指定的元数据字段
+            # Delete the specified metadata field
             for item in search_result:
                 for field_name in field_names:
                     if field_name in item["user_metadata"]:
                         del item["user_metadata"][field_name]
 
-            # 批量更新数据
+            # Bulk Update Data
             await request_milvus(search_result)
 
             # Delete Elasticsearch metadata fields
             # Implement Elasticsearch metadata field deletion logic for each knowledge file here
 
-            # 使用 update_by_query 来更新符合条件的文档
+            # Use update_by_query to update eligible documents
             script_lines = []
             for field_name in field_names:
                 script_lines.append(
@@ -290,7 +290,7 @@ class KnowledgeService:
                 }
             }
 
-            # 更新es
+            # Update es
             await request_es(body)
 
             # Update knowledge file's user_metadata field
@@ -372,7 +372,7 @@ class KnowledgeService:
         if knowledge_model.metadata_fields is None:
             knowledge_model.metadata_fields = []
 
-        # 排序metadata_fields by updated_at desc
+        # Sortmetadata_fields by updated_at desc
         knowledge_model.metadata_fields.sort(key=lambda x: x.get("updated_at", 0), reverse=True)
 
         return {
@@ -383,7 +383,7 @@ class KnowledgeService:
     @classmethod
     def get_all_knowledge_by_time_range(cls, start_data: datetime, end_data: datetime, page: int = 1,
                                         page_size: int = 10):
-        """获取某个时间范围内创建的所有知识库"""
+        """Get all the knowledge bases created in a certain timeframe"""
 
         return KnowledgeDao.get_knowledge_by_time_range(start_data, end_data, page, page_size)
 

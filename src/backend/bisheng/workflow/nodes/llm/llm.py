@@ -15,27 +15,27 @@ class LLMNode(BaseNode):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # 判断是单次还是批量
+        # Determine if it is a single or batch
         self._tab = self.node_data.tab['value']
 
-        # 是否输出结果给用户
+        # Whether to output the results to the user
         self._output_user = self.node_params.get('output_user', False)
 
         self._image_prompt = self.node_params.get('image_prompt', [])
 
-        # 初始化prompt
+        # Inisialisasiprompt
         self._system_prompt = PromptTemplateParser(template=self.node_params['system_prompt'])
         self._system_variables = self._system_prompt.extract()
         self._user_prompt = PromptTemplateParser(template=self.node_params['user_prompt'])
         self._user_variables = self._user_prompt.extract()
 
-        # 存储日志所需数据
+        # Data required to store logs
         self._system_prompt_list = []
         self._user_prompt_list = []
         self._batch_variable_list = []
         self._log_reasoning_content = []
 
-        # 初始化llm对象
+        # InisialisasillmObjects
         self._llm = LLMService.get_bisheng_llm_sync(model_id=self.node_params['model_id'],
                                                     temperature=self.node_params.get('temperature', 0.3),
                                                     app_id=self.workflow_id,
@@ -74,7 +74,7 @@ class LLMNode(BaseNode):
                 {"key": "user_prompt", "value": self._user_prompt_list[index], "type": "params"},
             ]
             if self._log_reasoning_content[index]:
-                one_ret.append({"key": "思考内容", "value": self._log_reasoning_content[index], "type": "params"})
+                one_ret.append({"key": "Thinking about content", "value": self._log_reasoning_content[index], "type": "params"})
             one_ret.append({"key": f'{self.id}.{k}', "value": v, "type": "variable"})
             if self._batch_variable_list:
                 one_ret.insert(0, {"key": f"{self.id}.batch_variable", "value": self._batch_variable_list[index],
@@ -87,7 +87,7 @@ class LLMNode(BaseNode):
                   input_variable: str = None,
                   unique_id: str = None,
                   output_key: str = None) -> (str, str):
-        # 说明是引用了批处理的变量, 需要把变量的值替换为用户选择的变量
+        # Description is a variable that references a batch, The value of the variable needs to be replaced with the variable selected by the user
         special_variable = f'{self.id}.batch_variable'
         variable_map = {}
         for one in self._system_variables:

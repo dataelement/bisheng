@@ -6,7 +6,7 @@ from typing import Dict
 
 class JsonFieldMasker:
     def __init__(self):
-        # 定义敏感字段和对应的脱敏规则
+        # Define sensitive fields and corresponding desensitization rules
         self.sensitive_fields = {
             'phone': self.mask_phone,
             'mobile': self.mask_phone,
@@ -28,7 +28,7 @@ class JsonFieldMasker:
             'app_secret': self.mask_api_key,
         }
 
-        # 记录脱敏模式的正则表达式
+        # Record regular expressions for desensitization mode
         self.mask_patterns = {
             'phone': r'^\d{3}\*{4}\d{4}$',
             'id_card': r'^\d{6}\*{8}\d{4}$|^\d{3}\*{4}\d{3}\*{3}$',
@@ -48,29 +48,29 @@ class JsonFieldMasker:
         }
 
     def mask_api_key(self, api_key: str) -> str:
-        """脱敏API密钥"""
+        """ImmunosuppressionAPIKey"""
         if not api_key:
             return api_key
         return '********'
 
     def mask_phone(self, phone: str) -> str:
-        """脱敏手机号"""
+        """Desensitized phone number"""
         if not phone or len(phone) < 7:
             return phone
         return phone[:3] + '****' + phone[-4:]
 
     def mask_id_card(self, id_card: str) -> str:
-        """脱敏身份证号"""
+        """Desensitization ID number"""
         if not id_card:
             return id_card
-        if len(id_card) == 18:  # 18位身份证
+        if len(id_card) == 18:  # 18bits ID card
             return id_card[:6] + '********' + id_card[-4:]
-        elif len(id_card) == 15:  # 15位身份证
+        elif len(id_card) == 15:  # 15bits ID card
             return id_card[:3] + '****' + id_card[7:10] + '***'
         return '*' * 8
 
     def mask_email(self, email: str) -> str:
-        """脱敏邮箱"""
+        """Desensitization email"""
         if '@' not in email:
             return email
         username, domain = email.split('@', 1)
@@ -81,23 +81,23 @@ class JsonFieldMasker:
         return f'{masked_username}@{domain}'
 
     def mask_password(self, password: str) -> str:
-        """脱敏密码"""
+        """Desensitization password"""
         return '********'
 
     def mask_credit_card(self, card: str) -> str:
-        """脱敏信用卡号"""
+        """Desensitized credit card number"""
         if not card or len(card) < 8:
             return card
         return card[:4] + '*' * (len(card) - 8) + card[-4:]
 
     def mask_bank_card(self, card: str) -> str:
-        """脱敏银行卡号"""
+        """Desensitized bank card number"""
         if not card or len(card) < 8:
             return card
         return card[:4] + '*' * (len(card) - 8) + card[-4:]
 
     def mask_name(self, name: str) -> str:
-        """脱敏姓名"""
+        """Desensitization Name"""
         if not name:
             return name
         if len(name) == 2:
@@ -107,14 +107,14 @@ class JsonFieldMasker:
         return '*'
 
     def mask_address(self, address: str) -> str:
-        """脱敏地址"""
+        """Desensitization Address"""
         if not address or len(address) <= 4:
             return address
         visible_length = min(4, len(address) // 3)
         return address[:visible_length] + '****' + address[-visible_length:]
 
     def is_masked_value(self, value: str, field_type: str) -> bool:
-        """判断值是否已经是脱敏状态"""
+        """Determine if the value is already desensitized"""
         if not isinstance(value, str):
             return False
 
@@ -126,13 +126,13 @@ class JsonFieldMasker:
 
     def mask_json(self, data: Dict) -> Dict:
         """
-        脱敏JSON数据
+        ImmunosuppressionJSONDATA
 
         Args:
-            data: 原始JSON数据
+            data: OriginalJSONDATA
 
         Returns:
-            脱敏后的数据
+            Data after desensitization
         """
         if not isinstance(data, dict):
             return data
@@ -144,33 +144,33 @@ class JsonFieldMasker:
                 if isinstance(value, str):
                     result[key] = mask_func(value)
                 elif isinstance(value, dict):
-                    # 如果值是字典，递归处理
+                    # If the value is a dictionary, recursive processing
                     result[key] = self.mask_json(value)
                 else:
-                    # 其他类型转换为字符串后脱敏
+                    # Desensitization after conversion of other types to strings
                     result[key] = mask_func(str(value))
             elif isinstance(value, dict):
-                # 非敏感字段，递归处理嵌套字典
+                # Insensitive fields, recursive processing of nested dictionaries
                 result[key] = self.mask_json(value)
             else:
-                # 非敏感字段，保持原样
+                # Non-sensitive fields, leave as is
                 result[key] = value
 
         return result
 
     def update_json_with_masked(self, original: Dict, masked: Dict) -> Dict:
         """
-        使用脱敏后的JSON更新原始JSON
+        After desensitizationJSONUpdate originalJSON
 
-        规则：如果脱敏后的字段值仍然是脱敏状态，则不更新；
-             否则，用脱敏后的值更新原始值
+        Rule: If the field value after desensitization is still desensitized, it will not be updated;
+             Otherwise, update the original value with the desensitized value
 
         Args:
-            original: 原始JSON数据
-            masked: 脱敏后的JSON数据
+            original: OriginalJSONDATA
+            masked: After desensitizationJSONDATA
 
         Returns:
-            更新后的数据
+            Updated data
         """
         if not isinstance(original, dict) or not isinstance(masked, dict):
             return masked if isinstance(masked, dict) else original
@@ -182,74 +182,74 @@ class JsonFieldMasker:
                 original_value = result[key]
 
                 if key in self.sensitive_fields:
-                    # 敏感字段：检查是否已脱敏
+                    # Sensitive Fields: Check for desensitization
                     if isinstance(masked_value, str) and isinstance(original_value, str):
                         if self.is_masked_value(masked_value, key):
-                            # 仍然是脱敏状态，不更新
+                            # Still desensitized, don't update
                             result[key] = original_value
                         else:
-                            # 已恢复为未脱敏状态，更新
+                            # Restored to desensitized, updated
                             result[key] = masked_value
                     elif isinstance(masked_value, dict) and isinstance(original_value, dict):
-                        # 嵌套字典，递归处理
+                        # Nested dictionaries, recursive processing
                         result[key] = self.update_json_with_masked(original_value, masked_value)
                     else:
-                        # 类型不匹配，保留原始值
+                        # Type mismatch, keep original value
                         result[key] = original_value
                 else:
-                    # 非敏感字段
+                    # Non-Sensitive Fields
                     if isinstance(masked_value, dict) and isinstance(original_value, dict):
-                        # 嵌套字典，递归处理
+                        # Nested dictionaries, recursive processing
                         result[key] = self.update_json_with_masked(original_value, masked_value)
                     else:
-                        # 非嵌套字段，直接更新
+                        # Non-nested fields, update directly
                         result[key] = masked_value
             else:
-                # 原始数据中没有的键，直接添加
+                # Keys that are not in the original data, add them directly
                 result[key] = masked_value
 
         return result
 
     def safe_update_json(self, original_json: str, masked_json: str) -> str:
         """
-        安全的JSON更新：解析JSON字符串，更新，再序列化
+        SafeJSONUpdate: InsightsJSONString, update, re-serialize
 
         Args:
-            original_json: 原始JSON字符串
-            masked_json: 脱敏后的JSON字符串
+            original_json: OriginalJSONString
+            masked_json: After desensitizationJSONString
 
         Returns:
-            更新后的JSON字符串
+            Post UpdateJSONString
         """
         try:
             original_data = json.loads(original_json)
             masked_data = json.loads(masked_json)
 
             if not isinstance(original_data, dict) or not isinstance(masked_data, dict):
-                raise ValueError("JSON数据必须是对象类型")
+                raise ValueError("JSONData must be of object type")
 
             updated_data = self.update_json_with_masked(original_data, masked_data)
             return json.dumps(updated_data, ensure_ascii=False, indent=2)
         except json.JSONDecodeError as e:
-            raise ValueError(f"无效的JSON数据: {e}")
+            raise ValueError(f"InvalidJSONDATA: {e}")
 
 
-# 示例使用
+# Example Use
 def main():
     masker = JsonFieldMasker()
 
-    # 原始JSON数据
+    # OriginalJSONDATA
     original_data = {
         "user": {
             "id": 1,
-            "name": "张三",
+            "name": "Zhang San",
             "phone": "13800138000",
             "email": "zhangsan@example.com",
             "id_card": "110101199001011234",
             "bank_card": "6228480402564890018",
-            "address": "北京市朝阳区建国门外大街1号",
+            "address": "Jianguomenwai Street, Chaoyang District, Beijing1.",
             "details": {
-                "emergency_contact": "李四",
+                "emergency_contact": "Lisi",
                 "emergency_phone": "13987654321"
             }
         },
@@ -257,38 +257,38 @@ def main():
         "timestamp": "2023-10-01T12:00:00Z"
     }
 
-    print("原始JSON数据:")
+    print("OriginalJSONDATA:")
     print(json.dumps(original_data, ensure_ascii=False, indent=2))
     print("\n" + "=" * 50 + "\n")
 
-    # 1. 执行脱敏
+    # 1. Perform desensitization
     masked_data = masker.mask_json(original_data)
-    print("脱敏后的JSON数据:")
+    print("After desensitizationJSONDATA:")
     print(json.dumps(masked_data, ensure_ascii=False, indent=2))
     print("\n" + "=" * 50 + "\n")
 
-    # 2. 模拟修改后的脱敏数据
+    # 2. Simulated modified desensitization data
     modified_masked_data = deepcopy(masked_data)
-    # 修改一些字段
-    modified_masked_data["user"]["name"] = "张*"  # 保持脱敏
-    modified_masked_data["user"]["phone"] = "13812345678"  # 修改为新手机号
-    modified_masked_data["user"]["email"] = "zhang@newmail.com"  # 修改邮箱
-    modified_masked_data["password"] = "newpassword123"  # 修改密码
-    modified_masked_data["timestamp"] = "2023-10-02T12:00:00Z"  # 修改时间戳
+    # Modify some fields
+    modified_masked_data["user"]["name"] = "Pcs*"  # Keep desensitization
+    modified_masked_data["user"]["phone"] = "13812345678"  # Change to a new phone number
+    modified_masked_data["user"]["email"] = "zhang@newmail.com"  # Modify email
+    modified_masked_data["password"] = "newpassword123"  # Change the password
+    modified_masked_data["timestamp"] = "2023-10-02T12:00:00Z"  # Revision timestamp
 
-    print("修改后的脱敏JSON数据:")
+    print("Modified desensitizationJSONDATA:")
     print(json.dumps(modified_masked_data, ensure_ascii=False, indent=2))
     print("\n" + "=" * 50 + "\n")
 
-    # 3. 使用脱敏数据更新原始数据
+    # 3. Update raw data with desensitized data
     updated_data = masker.update_json_with_masked(original_data, modified_masked_data)
 
-    print("更新后的JSON数据:")
+    print("Post UpdateJSONDATA:")
     print(json.dumps(updated_data, ensure_ascii=False, indent=2))
 
-    # 显示更新结果分析
+    # Show updated results analysis
     print("\n" + "=" * 50)
-    print("字段更新情况分析:")
+    print("Field Update Situation Analysis:")
     print("-" * 30)
 
     def analyze_updates(orig, updated, path=""):
@@ -304,24 +304,24 @@ def main():
                     if is_sensitive:
                         is_masked = masker.is_masked_value(str(updated_val), key) if isinstance(updated_val,
                                                                                                 str) else False
-                        status = "✓ 已更新" if not is_masked else "✗ 未更新（仍为脱敏状态）"
+                        status = "✓ Updated" if not is_masked else "✗ Not updated (still desensitized)"
                     else:
-                        status = "✓ 已更新（非敏感字段）"
+                        status = "✓ Updated (non-sensitive field)"
 
                     print(f"{current_path}: {status}")
-                    print(f"  原始值: {orig_val}")
-                    print(f"  新值: {updated_val}")
+                    print(f"  Original Value: {orig_val}")
+                    print(f"  New Value: {updated_val}")
                 elif isinstance(orig_val, dict) and isinstance(updated_val, dict):
                     analyze_updates(orig_val, updated_val, current_path)
             elif key in updated and key not in orig:
-                print(f"{current_path}: ✓ 已添加（新字段）")
-                print(f"  新值: {updated[key]}")
+                print(f"{current_path}: ✓ Added (new field)")
+                print(f"  New Value: {updated[key]}")
 
     analyze_updates(original_data, updated_data)
 
-    # 测试字符串JSON处理
+    # Test StringJSON<g id="Bold">Medical Treatment:</g>
     print("\n" + "=" * 50)
-    print("测试字符串JSON处理:")
+    print("Test StringJSON<g id='Bold'>Medical Treatment:</g>:")
     print("-" * 30)
 
     original_json_str = json.dumps(original_data, ensure_ascii=False)
@@ -329,10 +329,10 @@ def main():
 
     try:
         updated_json_str = masker.safe_update_json(original_json_str, masked_json_str)
-        print("更新后的JSON字符串:")
+        print("Post UpdateJSONString:")
         print(updated_json_str)
     except ValueError as e:
-        print(f"错误: {e}")
+        print(f"Error-free: {e}")
 
 
 if __name__ == "__main__":

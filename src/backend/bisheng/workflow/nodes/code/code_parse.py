@@ -67,7 +67,7 @@ class CodeParser:
                     self.data["imports"].append(f"{alias.name} as {alias.asname}")
                 else:
                     self.data["imports"].append(alias.name)
-                # 实际导入模块
+                # Actual Import Module
                 try:
                     self.exec_globals[alias.asname or alias.name] = importlib.import_module(alias.name)
                 except ModuleNotFoundError as e:

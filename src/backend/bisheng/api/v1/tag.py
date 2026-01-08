@@ -13,9 +13,9 @@ router = APIRouter(prefix='/tag', tags=['Tag'])
 @router.get('')
 def get_all_tag(request: Request,
                 login_user: UserPayload = Depends(UserPayload.get_login_user),
-                keyword: str = Query(default=None, description='搜索关键字'),
-                page: int = Query(default=0, description='页码'),
-                limit: int = Query(default=10, description='每页条数')):
+                keyword: str = Query(default=None, description='Search keyword ...'),
+                page: int = Query(default=0, description='Page'),
+                limit: int = Query(default=10, description='Listings Per Page')):
     result, total = TagService.get_all_tag(request, login_user, keyword, page, limit)
     return resp_200(data={
         'data': result,
@@ -26,7 +26,7 @@ def get_all_tag(request: Request,
 @router.post('')
 def create_tag(request: Request,
                login_user: UserPayload = Depends(UserPayload.get_admin_user),
-               name: str = Body(..., embed=True, description='标签名称')):
+               name: str = Body(..., embed=True, description='Label Name')):
     result = TagService.create_tag(request, login_user, name)
     return resp_200(result)
 
@@ -34,8 +34,8 @@ def create_tag(request: Request,
 @router.put('')
 def update_tag(request: Request,
                login_user: UserPayload = Depends(UserPayload.get_admin_user),
-               tag_id: int = Body(..., embed=True, description='标签ID'),
-               name: str = Body(..., embed=True, description='标签名称')):
+               tag_id: int = Body(..., embed=True, description='labelID'),
+               name: str = Body(..., embed=True, description='Label Name')):
     result = TagService.update_tag(request, login_user, tag_id, name)
     return resp_200(result)
 
@@ -43,7 +43,7 @@ def update_tag(request: Request,
 @router.delete('')
 def delete_tag(request: Request,
                login_user: UserPayload = Depends(UserPayload.get_admin_user),
-               tag_id: int = Body(..., embed=True, description='标签ID')):
+               tag_id: int = Body(..., embed=True, description='labelID')):
     TagService.delete_tag(request, login_user, tag_id)
     return resp_200()
 
@@ -51,9 +51,9 @@ def delete_tag(request: Request,
 @router.post('/link')
 def create_tag_link(request: Request,
                     login_user: UserPayload = Depends(UserPayload.get_login_user),
-                    tag_id: int = Body(..., embed=True, description='标签ID'),
-                    resource_id: str = Body(..., embed=True, description='资源ID'),
-                    resource_type: ResourceTypeEnum = Body(..., embed=True, description='资源类型')):
+                    tag_id: int = Body(..., embed=True, description='labelID'),
+                    resource_id: str = Body(..., embed=True, description='reasourseID'),
+                    resource_type: ResourceTypeEnum = Body(..., embed=True, description='Resource Type')):
     result = TagService.create_tag_link(request, login_user, tag_id, resource_id, resource_type)
     return resp_200(result)
 
@@ -62,9 +62,9 @@ def create_tag_link(request: Request,
 def delete_tag_link(
         request: Request,
         login_user: UserPayload = Depends(UserPayload.get_login_user),
-        tag_id: int = Body(..., embed=True, description='标签ID'),
-        resource_id: str = Body(..., embed=True, description='资源ID'),
-        resource_type: ResourceTypeEnum = Body(..., embed=True, description='资源类型')):
+        tag_id: int = Body(..., embed=True, description='labelID'),
+        resource_id: str = Body(..., embed=True, description='reasourseID'),
+        resource_type: ResourceTypeEnum = Body(..., embed=True, description='Resource Type')):
     TagService.delete_tag_link(request, login_user, tag_id, resource_id, resource_type)
     return resp_200()
 
@@ -73,7 +73,7 @@ def delete_tag_link(
 def get_home_tag(request: Request,
                  login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    获取首页展示的标签列表
+    Get a list of tags to show on the homepage
     """
 
     result = TagService.get_home_tag(request, login_user)
@@ -83,9 +83,9 @@ def get_home_tag(request: Request,
 @router.post('/home')
 def update_home_tag(request: Request,
                     login_user: UserPayload = Depends(UserPayload.get_admin_user),
-                    tag_ids: List[int] = Body(..., embed=True, description='标签ID列表')):
+                    tag_ids: List[int] = Body(..., embed=True, description='labelIDVertical')):
     """
-    更新首页展示的标签列表
+    Update the list of tags displayed on the homepage
     """
 
     result = TagService.update_home_tag(request, login_user, tag_ids)

@@ -79,13 +79,13 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         chunk = kwargs.get('chunk', None)
-        # azure偶尔会返回一个None
+        # azureOccasionally returns aNone
         if token is None and chunk is None:
             return
         if not self.output or not self.stream:
             return
 
-        self.output_len += len(token)  # 判断是否已经流输出完成
+        self.output_len += len(token)  # Determine if the streaming output has been completed
         self.callback_manager.on_stream_msg(
             StreamMsgData(node_id=self.node_id,
                           name=self.node_name,
@@ -111,7 +111,7 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
             return
 
         if self.stream and self.output_len > 0:
-            # 流式输出结束需要返回一个流式结束事件
+            # Streaming output end needs to return a streaming end event
             self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.node_id,
                                                                    name=self.node_name,
                                                                    msg=msg,
@@ -120,7 +120,7 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
                                                                    output_key=self.output_key))
             return
 
-        # 需要输出，但是没有执行流输出，则补一条。命中缓存的情况下会出现这种情况。需要输出的情况下也这样处理
+        # If the output is required, but the stream output is not performed, a supplement is made. This happens when the cache is hit. This is also the case when output is required
         self.callback_manager.on_output_msg(
             OutputMsgData(node_id=self.node_id,
                           name=self.node_name,

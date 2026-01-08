@@ -1,22 +1,22 @@
 from .base import BaseErrorCode
 
 
-#  模型管理模块相关的返回错误码，功能模块代码：108
+#  Model management module related return error code, function module code:108
 class ServerExistError(BaseErrorCode):
     Code: int = 10800
-    Msg: str = '服务提供方名称重复，请修改'
+    Msg: str = 'Service provider name is duplicated, please modify'
 
 
 class ModelNameRepeatError(BaseErrorCode):
     Code: int = 10801
-    Msg: str = '模型不可重复'
+    Msg: str = 'Model is not repeatable'
 
 
 class ServerAddAllError(BaseErrorCode):
     Code: int = 10802
-    Msg: str = '添加服务提供方失败，模型全部初始化失败'
+    Msg: str = 'Failed to add service provider, failed to initialize all models'
 
 
 class ServerAddError(BaseErrorCode):
     Code: int = 10803
-    Msg: str = '添加服务提供方失败，部分模型初始化失败'
+    Msg: str = 'Failed to add service provider, some models failed to initialize'

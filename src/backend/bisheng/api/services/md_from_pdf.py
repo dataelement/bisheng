@@ -10,17 +10,17 @@ pymu_lock = threading.Lock()
 
 def convert_pdf_to_md(output_dir, pdf_path, doc_id):
     """
-    将指定的 PDF 文件转换为 Markdown 文件，并保持内容的原有顺序。
+    will specify the PDF Convert file to Markdown files and keep the contents in their original order.
 
-    这个函数会提取 PDF 中的文本、表格和图片，并根据它们在页面上的
-    垂直位置进行排序，然后整合到一个 Markdown 文件中。
-    图片会作为独立文件保存在指定的输出目录中。
+    This function extracts PDF Text, tables and pictures in and based on what they are on the page
+    Vertical position to sort and then consolidate to one Markdown in the file.
+    The image is saved as a separate file in the specified output directory.
 
     Args:
-        pdf_path (str): 输入的 PDF 文件路径。
-        output_dir (str): 保存 Markdown 文件和图片的目录。
+        pdf_path (str): Entered PDF FilePath
+        output_dir (str): SAVING Markdown A directory of files and pictures.
     """
-    # 确保输出目录存在
+    # Make sure the output directory exists
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
@@ -121,7 +121,7 @@ def convert_pdf_to_md(output_dir, pdf_path, doc_id):
 
     except Exception as e:
         logger.exception(f"Error processing pdf: {e}")
-        raise Exception(f"文档解析失败: {str(e)[-100:]}")  # 截取最后100个字符以避免过长的错误信息
+        raise Exception(f"Document parsing failed: {str(e)[-100:]}")  # Capture last100characters to avoid overly long error messages
     finally:
         with pymu_lock:
             if doc:
@@ -130,13 +130,13 @@ def convert_pdf_to_md(output_dir, pdf_path, doc_id):
 
 def is_pdf_damaged(pdf_path: str) -> bool:
     """
-    检查 PDF 文件是否损坏。
+    Others PDF Whether the file is corrupt.
 
     Args:
-        pdf_path (str): PDF 文件的路径。
+        pdf_path (str): PDF Path of file
 
     Returns:
-        bool: 如果文件损坏，返回 True；否则返回 False。
+        bool: If the file is damaged, go back True; otherwise go back to False。
     """
     try:
         doc = fitz.open(pdf_path)

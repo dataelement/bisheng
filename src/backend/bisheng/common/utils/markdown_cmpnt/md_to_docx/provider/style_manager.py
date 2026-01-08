@@ -17,19 +17,19 @@ class StyleManager:
         self.style_conf = yaml_conf
 
     def init_styles(self):
-        # 设置heading 1~4
+        # Pengaturanheading 1~4
         for i in range(1, 5):
             s = SimpleStyle("Heading%d" % i, "Heading %d" % i,
                             self.style_conf["h%d" % i])
             self.set_style(s)
-        # TODO 还有什么样式设置呢？
-        #  图片描述Caption、表格样式(?)
+        # TODO What other styling settings are there?
+        #  CaptionsCaptionTable Style(?)
 
         # s = SimpleStyle("Normal", "Normal", self.style_conf["normal"])
         s = SimpleStyle(MDX_STYLE.PLAIN_TEXT, "Normal", self.style_conf["normal"])
         self.set_style(s)
 
-    # 通用的样式设置
+    # General style settings
     def set_style(self, _style: SimpleStyle):
         new_style: _ParagraphStyle
         if _style.style_name not in self.styles:
@@ -40,35 +40,35 @@ class StyleManager:
 
         new_style.quick_style = True
 
-        # ##### 字体相关 #####
-        # 设置字体、颜色、大小
-        new_style.font.name = _style.font_default  # 只设置name是设置西文字体
+        # ##### Font Related #####
+        # Set font, color, size
+        new_style.font.name = _style.font_default  # Set onlynameIs Set Western Font
         new_style.font.size = Pt(_style.font_size)
-        new_style._element.rPr.rFonts.set(qn('w:eastAsia'), _style.font_east_asia)  # 要额外设置中文字体
+        new_style._element.rPr.rFonts.set(qn('w:eastAsia'), _style.font_east_asia)  # To set additional Chinese fonts
         new_style.font.color.rgb = RGBColor.from_string(_style.font_color)
-        # 加粗、斜体、下划线、删除线
+        # Bold, Italic, Underline, Strikeout
         new_style.font.bold = _style.font_bold
         new_style.font.italic = _style.font_italic
         new_style.font.underline = _style.font_underline
         new_style.font.strike = _style.font_strike
 
-        # ##### 段落相关 #####
-        # 设置缩进、段前/段后空格、段内行距
+        # ##### Paragraph Related #####
+        # Set indent, before paragraph/Space after paragraph, line spacing between paragraphs
         new_style.paragraph_format.first_line_indent = (Pt(_style.font_size) * int(_style.first_line_indent))
         new_style.paragraph_format.space_before = Pt(_style.space_before)
         new_style.paragraph_format.space_after = Pt(_style.space_after)
         new_style.paragraph_format.line_spacing = _style.line_spacing
 
-        # ##### 其他 #####
-        # 去除段落前面左上角的黑点
+        # ##### Other _________ #####
+        # Remove the black dot in the top left corner before the paragraph
         new_style.paragraph_format.keep_together = False
-        # 标题样式保持 keep_with_next 为 True，避免标题单独分页
+        # Header Style Retention keep_with_next are True, avoid separate pagination of titles
         if not _style.style_name.startswith("Heading"):
             new_style.paragraph_format.keep_with_next = False
-        # 标题不在前面分页
+        # Title does not precede pagination
         if _style.style_name.startswith("Heading"):
             new_style.paragraph_format.page_break_before = False
-        # 显示在快捷样式窗口上
+        # Show on shortcut style window
         new_style.quick_style = True
         return
 

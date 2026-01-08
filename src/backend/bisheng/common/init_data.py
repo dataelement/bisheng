@@ -24,7 +24,7 @@ from bisheng.user.domain.models.user_role import UserRoleDao
 
 
 async def init_default_data():
-    """初始化数据库"""
+    """Initialize Database"""
     redis_client = await get_redis_client()
     if await redis_client.asetNx('init_default_data', '1'):
         try:
@@ -34,14 +34,14 @@ async def init_default_data():
                 db_role = await session.exec(select(Role).limit(1))
                 db_role = db_role.all()
                 if not db_role:
-                    # 初始化系统配置, 管理员拥有所有权限
+                    # Initialize system configuration, Admin has all permissions
                     db_role = Role(id=AdminRole, role_name='System Admin', remark='System highest privileges',
                                    group_id=DefaultGroup)
                     session.add(db_role)
                     db_role_normal = Role(id=DefaultRole, role_name='Regular users', remark='Regular users',
                                           group_id=DefaultGroup)
                     session.add(db_role_normal)
-                    # 给普通用户赋予 构建、知识、模型菜单栏的查看权限
+                    # Grant to Normal User View access to the Build, Knowledge, Model menu bar
                     session.add_all([
                         RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
                                    third_id=WebMenuResource.BUILD.value),
@@ -51,7 +51,7 @@ async def init_default_data():
                                    third_id=WebMenuResource.MODEL.value),
                     ])
                     await session.commit()
-                # 添加默认用户组
+                # Add Default User Group
                 group = await session.exec(select(Group).limit(1))
                 group = group.all()
                 if not group:
@@ -87,7 +87,7 @@ async def init_default_data():
                     session.add_all(db_components)
                     await session.commit()
 
-                # 初始化预置技能模板
+                # Initialize Preset Skill Template
                 templates = await session.exec(select(Template).limit(1))
                 templates = templates.all()
                 if not templates:
@@ -96,7 +96,7 @@ async def init_default_data():
                         session.add(Template(**item))
                     await session.commit()
 
-                # 初始化预置工具列表
+                # Initialize preset tools list
                 preset_tools = await session.exec(select(GptsTools).limit(1))
                 preset_tools = preset_tools.all()
                 if not preset_tools:
@@ -107,7 +107,7 @@ async def init_default_data():
                         preset_tools.append(preset_tool)
                     session.add_all(preset_tools)
                     await session.commit()
-                # 初始化预置工具类别
+                # Initialize Preset Tool Categories
                 preset_tools_type = await session.exec(select(GptsToolsType).limit(1))
                 preset_tools_type = preset_tools_type.all()
                 if not preset_tools_type:
@@ -118,20 +118,20 @@ async def init_default_data():
                         preset_tools_type.append(preset_tool_type)
                     session.add_all(preset_tools_type)
                     await session.commit()
-                    # 设置预置工具所属的类别, 需要和预置数据一致，所以id是固定的
+                    # Set the category the preset tool belongs to, needs to be consistent with the preset data, soidIs Fixed
                     for i in range(1, 7):
                         await session.exec(update(GptsTools).where(GptsTools.id == i).values(type=i))
-                    # 属于天眼查类别下的工具
+                    # Tools under the category of Sky Eye Examination
                     tyc_types: List[int] = list(range(7, 18))
                     await session.exec(
                         update(GptsTools).where(GptsTools.id.in_(tyc_types)).values(type=7))
-                    # 属于金融类别下的工具
+                    # Instruments belonging to the financial category
                     jr_types: List[int] = list(range(18, 28))
                     await session.exec(
                         update(GptsTools).where(GptsTools.id.in_(jr_types)).values(type=8))
                     await session.commit()
 
-            # 初始化数据库config
+            # Initialize Databaseconfig
             await settings.init_config()
 
             # init dashboard data
@@ -159,9 +159,9 @@ def read_from_conf(file_path: str) -> str:
 
 
 def upload_preset_minio_file():
-    """ 上传预置文件到minio, 为了和工作流模板配合 """
+    """ Upload preset file tominio, To work with workflow templates """
     minio_client = get_minio_storage_sync()
-    # 上传 「多助手并行+串行报告生成」 工作流模板需要的docx文件
+    # Upload it 「Multi-Assistant Parallelism+Serial Report Generation」 Required for workflow templatesdocxDoc.
     template_data = read_from_conf('../database/data/0254d1808a5247d2a3ee0d0011819acb.docx')
     minio_client.put_object_sync(bucket_name=minio_client.bucket,
                                  object_name='workflow/report/0254d1808a5247d2a3ee0d0011819acb.docx',

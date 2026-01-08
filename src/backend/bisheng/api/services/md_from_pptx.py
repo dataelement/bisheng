@@ -38,8 +38,8 @@ def handler(
         md_file=md_file_name,
         image_dir=image_dir,
     )
-    # 上传图片,可以用异步
-    # 替换md文件中的图片路径
+    # Image,Can be used asynchronously
+    # GantimdPicture path in file
     return md_file_name, image_dir, doc_id
 
 

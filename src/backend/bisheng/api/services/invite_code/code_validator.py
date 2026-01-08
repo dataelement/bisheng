@@ -5,10 +5,10 @@ import string
 class VoucherGenerator:
     def __init__(self, length=10):
         self.length = length
-        # 排除相像的字母和数字: 'I', 'l', 'O', '0', '1'
+        # Exclude similar letters and numbers: 'I', 'l', 'O', '0', '1'
         self.characters = ''.join(set(string.ascii_letters + string.digits) - set('IlOo01'))
-        self.weights = [7, 9, 10, 5, 8, 4, 2, 1, 3]  # 加权因子
-        self.check_digits = ['1', '0', 'X', '9', '8', '7', '6', '5', '4', '3', '2']  # 校验码对应表
+        self.weights = [7, 9, 10, 5, 8, 4, 2, 1, 3]  # Weighting Factor
+        self.check_digits = ['1', '0', 'X', '9', '8', '7', '6', '5', '4', '3', '2']  # Checksum Correspondence Form
 
     def generate_voucher(self):
         voucher_base = ''.join(random.choices(self.characters, k=self.length - 1))
@@ -36,17 +36,17 @@ class VoucherGenerator:
             return False, "Invalid voucher"
 
 
-# 示例用法
+# Example Usage
 if __name__ == "__main__":
     generator = VoucherGenerator()
-    voucher_code = generator.generate_voucher()  # 生成一个唯一的兑换码
+    voucher_code = generator.generate_voucher()  # Generate a unique redemption code
     print(f"Generated voucher code: {voucher_code}")
 
-    # 验证兑换码
+    # Verify Redeem Code
     is_valid, info = generator.validate_voucher(voucher_code)
     print(f"Is valid: {is_valid}, Info: {info}")
 
-    # 尝试验证一个无效的兑换码
+    # Try to validate an invalid redemption code
     invalid_voucher_code = 'ABCDEFGHJK967'
     is_valid, info = generator.validate_voucher(invalid_voucher_code)
     print(f"Is valid: {is_valid}, Info: {info}")

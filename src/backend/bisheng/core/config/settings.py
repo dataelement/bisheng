@@ -24,7 +24,7 @@ class LoggerConf(BaseModel):
     """Looger Config"""
     level: str = 'DEBUG'
     format: str = '<level>[{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'  # noqa
-    handlers: List[Dict] = Field(default_factory=list, description='日志处理器')
+    handlers: List[Dict] = Field(default_factory=list, description='Log Processor')
 
     @classmethod
     def parse_logger_sink(cls, sink: str) -> str:
@@ -50,25 +50,25 @@ class LoggerConf(BaseModel):
 
 class PasswordConf(BaseModel):
     """ Password Config """
-    password_valid_period: Optional[int] = Field(default=0, description='密码超过X天必须进行修改, 登录提示重新修改密码')
-    login_error_time_window: Optional[int] = Field(default=0, description='登录错误时间窗口,单位分钟')
-    max_error_times: Optional[int] = Field(default=0, description='最大错误次数，超过后会封禁用户')
+    password_valid_period: Optional[int] = Field(default=0, description='Password overXDays must be modified, Login prompt to change password again')
+    login_error_time_window: Optional[int] = Field(default=0, description='Login error time window,minutes unit')
+    max_error_times: Optional[int] = Field(default=0, description='Maximum number of errors, after which the user will be banned')
 
 
 class SystemLoginMethod(BaseModel):
     """ System Login Method Config """
-    bisheng_pro: bool = Field(default=False, description='是否是商业版, 校验配置的license')
-    admin_username: Optional[str] = Field(default=None, description='通过网关注册的系统管理员用户名')
-    allow_multi_login: bool = Field(default=True, description='是否允许多点登录')
+    bisheng_pro: bool = Field(default=False, description='Whether it is a commercial version, Verify Configuredlicense')
+    admin_username: Optional[str] = Field(default=None, description='Admin username registered via web')
+    allow_multi_login: bool = Field(default=True, description='Whether to allow multi-sign-on')
 
 
 class MilvusConf(BaseModel):
-    """ milvus 配置 """
-    connection_args: Optional[dict] = Field(default=None, description='milvus 配置')
-    is_partition: Optional[bool] = Field(default=True, description='是否是partition模式',
-                                         deprecated="不在支持partition模式")
-    partition_suffix: Optional[str] = Field(default='1', description='partition后缀',
-                                            deprecated="不在支持partition模式")
+    """ milvus Configure """
+    connection_args: Optional[dict] = Field(default=None, description='milvus Configure')
+    is_partition: Optional[bool] = Field(default=True, description='Is itpartitionMode',
+                                         deprecated="Not in SupportpartitionMode")
+    partition_suffix: Optional[str] = Field(default='1', description='partitionSuffix',
+                                            deprecated="Not in SupportpartitionMode")
 
     @field_validator('connection_args', mode='before')
     @classmethod
@@ -79,11 +79,11 @@ class MilvusConf(BaseModel):
 
 
 class ElasticsearchConf(BaseModel):
-    """ elasticsearch 配置 """
+    """ elasticsearch Configure """
     elasticsearch_url: Optional[str] = Field(default=None, alias='url',
-                                             description='elasticsearch访问地址')
+                                             description='elasticsearchAccesses address')
 
-    ssl_verify: Optional[str | dict] = Field(default='{}', description='额外的参数')
+    ssl_verify: Optional[str | dict] = Field(default='{}', description='Additional Arguments')
 
     @model_validator(mode='after')
     def validate(self):
@@ -94,49 +94,49 @@ class ElasticsearchConf(BaseModel):
 
 
 class VectorStores(BaseModel):
-    """ 向量存储配置 """
-    milvus: MilvusConf = Field(default_factory=MilvusConf, description='milvus 配置')
-    elasticsearch: ElasticsearchConf = Field(default_factory=ElasticsearchConf, description='elasticsearch 配置')
+    """ Vector Storage Configuration """
+    milvus: MilvusConf = Field(default_factory=MilvusConf, description='milvus Configure')
+    elasticsearch: ElasticsearchConf = Field(default_factory=ElasticsearchConf, description='elasticsearch Configure')
 
 
 class MinioConf(BaseModel):
-    """ minio 配置 """
-    secure: Optional[bool] = Field(default=False, description="是否使用https", alias="schema")
-    cert_check: Optional[bool] = Field(default=False, description="是否校验证书")
-    endpoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio 地址")
-    sharepoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio 公开访问地址")
-    share_schema: Optional[bool] = Field(default=False, description="minio 公开访问地址是否使用https")
-    share_cert_check: Optional[bool] = Field(default=False, description="minio 公开访问地址是否校验证书")
-    access_key: Optional[str] = Field(default="minioadmin", description="minio 用户名")
-    secret_key: Optional[str] = Field(default="minioadmin", description="minio 密码")
+    """ minio Configure """
+    secure: Optional[bool] = Field(default=False, description="Apakah ingin digunakan?https", alias="schema")
+    cert_check: Optional[bool] = Field(default=False, description="Whether to calibrate the certificate")
+    endpoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio Service address")
+    sharepoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio Public access address")
+    share_schema: Optional[bool] = Field(default=False, description="minio Whether the public access address is usedhttps")
+    share_cert_check: Optional[bool] = Field(default=False, description="minio Whether the public access address verifies the certificate")
+    access_key: Optional[str] = Field(default="minioadmin", description="minio Username")
+    secret_key: Optional[str] = Field(default="minioadmin", description="minio Passwords")
     public_bucket: Optional[str] = Field(default="bisheng",
-                                         description="默认存储永久文件的bucket。文件可被匿名用户永久访问")
-    tmp_bucket: Optional[str] = Field(default="tmp-dir", description="临时bucket，存储的文件会设置有效期")
+                                         description="Store permanent files by defaultbucket. Files can be permanently accessed by anonymous users")
+    tmp_bucket: Optional[str] = Field(default="tmp-dir", description="Ad hocbucket, stored files will have an expiration date")
 
 
 class ObjectStore(BaseModel):
-    """ 对象存储配置 """
-    type: str = Field(default='minio', description="对象存储类型")
-    minio: Optional[MinioConf] = Field(default_factory=MinioConf, description="minio 配置")
+    """ Object Storage Configuration """
+    type: str = Field(default='minio', description="Object Storage Type")
+    minio: Optional[MinioConf] = Field(default_factory=MinioConf, description="minio Configure")
 
 
 class WorkflowConf(BaseModel):
-    """ 工作流配置 """
-    max_steps: int = Field(default=50, description="节点运行最大步数")
-    timeout: int = Field(default=720, description="节点超时时间（min）")
+    """ Workflow Configuration """
+    max_steps: int = Field(default=50, description="Maximum number of steps a node can run")
+    timeout: int = Field(default=720, description="Node timeout (min）")
 
 
 class CeleryConf(BaseModel):
-    """ Celery 配置 """
-    task_routers: Optional[Dict] = Field(default_factory=dict, description='任务路由配置')
-    beat_schedule: Optional[Dict] = Field(default_factory=dict, description='定时任务配置')
+    """ Celery Configure """
+    task_routers: Optional[Dict] = Field(default_factory=dict, description='Task Routing Configuration')
+    beat_schedule: Optional[Dict] = Field(default_factory=dict, description='Timed Task Configuration')
 
     @model_validator(mode='after')
     def validate(self):
         if not self.task_routers:
             self.task_routers = {
-                "bisheng.worker.knowledge.*": {"queue": "knowledge_celery"},  # 知识库相关任务
-                "bisheng.worker.workflow.*": {"queue": "workflow_celery"},  # 工作流执行相关任务
+                "bisheng.worker.knowledge.*": {"queue": "knowledge_celery"},  # Knowledge Base Related Tasks
+                "bisheng.worker.workflow.*": {"queue": "workflow_celery"},  # Workflow Execution Related Tasks
             }
         if 'telemetry_mid_user_increment' not in self.beat_schedule:
             self.beat_schedule['telemetry_mid_user_increment'] = {
@@ -167,43 +167,43 @@ class CeleryConf(BaseModel):
 
 
 class LinsightConf(BaseModel):
-    """ 灵思配置 """
-    debug: bool = Field(default=False, description='是否开启debug模式')
-    tool_buffer: int = Field(default=100000, description='工具执行历史记录的最大token，超过后需要总结下历史记录')
-    max_steps: int = Field(default=200, description='单个任务最大执行步骤数，防止死循环')
-    retry_num: int = Field(default=3, description='灵思任务执行过程中模型调用重试次数')
-    retry_sleep: int = Field(default=5, description='灵思任务执行过程中模型调用重试间隔时间（秒）')
-    max_file_num: int = Field(default=5, description='生成SOP时，prompt里放的用户上传文件信息的数量')
-    max_knowledge_num: int = Field(default=20, description='生成SOP时，prompt里放的知识库信息的数量')
-    waiting_list_url: str = Field(default=None, description='waiting list 跳转链接')
-    default_temperature: float = Field(default=0, description='模型请求时的默认温度')
-    retry_temperature: float = Field(default=1, description='react模式json解析失败后重试时模型温度')
-    file_content_length: int = Field(default=5000, description='拆分子任务时读取文件内容的字符数，超过后会截断')
-    max_file_content_num: int = Field(default=3, description='拆分子任务时读取文件数量，按修改时间倒序')
+    """ Inspiration Configuration """
+    debug: bool = Field(default=False, description='Whether to opendebugMode')
+    tool_buffer: int = Field(default=100000, description='Maximum Tool Execution Historytoken, you need to summarize your history after')
+    max_steps: int = Field(default=200, description='Maximum number of steps per task to prevent infinite loops')
+    retry_num: int = Field(default=3, description='Number of times the model call was retried during the execution of the Ideas task')
+    retry_sleep: int = Field(default=5, description='Interval between retries of model calls during execution of Invisible Tasks (seconds)')
+    max_file_num: int = Field(default=5, description='BuatSOPJampromptThe number of user-uploaded file information placed in the')
+    max_knowledge_num: int = Field(default=20, description='BuatSOPJampromptThe amount of knowledge base information placed in the')
+    waiting_list_url: str = Field(default=None, description='waiting list Jump link')
+    default_temperature: float = Field(default=0, description='Default Temperature at Model Request')
+    retry_temperature: float = Field(default=1, description='reactModejsonModel temperature when retrying after parsing failure')
+    file_content_length: int = Field(default=5000, description='The number of characters to read the contents of the file when splitting subtasks, which will be truncated when exceeded')
+    max_file_content_num: int = Field(default=3, description='Number of files to read when subtasking, in reverse order by modification time')
 
 
 class CookieConf(BaseModel):
-    """ Cookie 配置 """
-    max_age: Optional[int] = Field(default=None, description="Cookie 的最大存活时间，单位为秒")
-    path: str = Field(default='/', description="Cookie 的路径属性")
-    domain: Optional[str] = Field(default=None, description="Cookie 的域属性")
-    secure: bool = Field(default=False, description="是否启用 secure 属性")
-    httponly: bool = Field(default=True, description="是否启用 HttpOnly 属性")
-    samesite: str = Field(default=None, description="SameSite 属性，可选值为 'lax', 'strict', 'none'")
+    """ Cookie Configure """
+    max_age: Optional[int] = Field(default=None, description="Cookie Maximum survival time in seconds")
+    path: str = Field(default='/', description="Cookie Path Properties for")
+    domain: Optional[str] = Field(default=None, description="Cookie Domain Properties for")
+    secure: bool = Field(default=False, description="enabled secure Property")
+    httponly: bool = Field(default=True, description="enabled HttpOnly Property")
+    samesite: str = Field(default=None, description="SameSite property, optional value is 'lax', 'strict', 'none'")
 
-    jwt_token_expire_time: int = Field(default=86400, description="JwtToken的的过期时间，单位为秒")
-    jwt_iss: str = Field(default='bisheng', description="JwtToken的签发者")
+    jwt_token_expire_time: int = Field(default=86400, description="JwtTokenExpiration time in seconds")
+    jwt_iss: str = Field(default='bisheng', description="JwtTokenIssuer of")
 
 
 class Etl4lmConf(BaseModel):
-    """ Etl4lm 配置 """
-    url: str = Field(default='', description='etl4lm服务地址')
-    timeout: int = Field(default=600, description='etl4lm服务请求超时时间（秒）')
-    ocr_sdk_url: str = Field(default='', description='etl4lm ocr sdk服务地址')
+    """ Etl4lm Configure """
+    url: str = Field(default='', description='etl4lmService Address')
+    timeout: int = Field(default=600, description='etl4lmService Request Timeout (sec)')
+    ocr_sdk_url: str = Field(default='', description='etl4lm ocr sdkService Address')
 
 
 class KnowledgeConf(BaseModel):
-    """ Knowledge 配置 """
+    """ Knowledge Configure """
     etl4lm: Etl4lmConf
 
 
@@ -257,7 +257,7 @@ class Settings(BaseModel):
     cookie_conf: CookieConf = CookieConf()
     telemetry_elasticsearch: ElasticsearchConf = ElasticsearchConf()
 
-    license_str: Optional[str] = None  # license 内容
+    license_str: Optional[str] = None  # license Contents
 
     @field_validator('database_url')
     @classmethod
@@ -270,9 +270,9 @@ class Settings(BaseModel):
                 logger.debug('No DATABASE_URL env variable, using sqlite database')
                 value = 'sqlite:///./bisheng.db'
         else:
-            # 对密码进行加密
+            # Encrypt password
             import re
-            pattern = r'(?<=:)[^:]+(?=@)'  # 匹配冒号后面到@符号前面的任意字符
+            pattern = r'(?<=:)[^:]+(?=@)'  # Match colon after to@Any character before the symbol
             match = re.search(pattern, value)
             if match:
                 password = match.group(0)
@@ -293,7 +293,7 @@ class Settings(BaseModel):
                         values['redis_url'][k] = decrypt_token(v)
             else:
                 import re
-                pattern = r'(?<=:)[^:]+(?=@)'  # 匹配冒号后面到@符号前面的任意字符
+                pattern = r'(?<=:)[^:]+(?=@)'  # Match colon after to@Any character before the symbol
                 match = re.search(pattern, values['redis_url'])
                 if match:
                     password = match.group(0)
@@ -313,7 +313,7 @@ class Settings(BaseModel):
                         values['celery_redis_url'][k] = decrypt_token(v)
             else:
                 import re
-                pattern = r'(?<=:)[^:]+(?=@)'  # 匹配冒号后面到@符号前面的任意字符
+                pattern = r'(?<=:)[^:]+(?=@)'  # Match colon after to@Any character before the symbol
                 match = re.search(pattern, values['celery_redis_url'])
                 if match:
                     password = match.group(0)

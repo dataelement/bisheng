@@ -6,7 +6,7 @@ from bisheng.share_link.domain.repositories.interfaces.share_link_repository imp
 
 
 class ShareLinkRepositoryImpl(BaseRepositoryImpl[ShareLink, str], ShareLinkRepository):
-    """共享链接仓库实现"""
+    """Shared link repository implementation"""
 
     def __init__(self, session: AsyncSession):
         super().__init__(session, ShareLink)

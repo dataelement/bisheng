@@ -36,10 +36,10 @@ class AuditLogService:
         groups = group_ids
         if not login_user.is_admin():
             groups = [str(one.group_id) for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
-            # 不是任何用戶组的管理员
+            # Not an administrator of any user groups
             if not groups:
                 return UnAuthorizedError.return_resp()
-            # 将筛选条件的group_id和管理员有权限的groups做交集
+            # Filter bygroup_idand administrator permissionsgroupsDoing Intersections
             if group_ids:
                 groups = list(set(groups) & set(group_ids))
                 if not groups:
@@ -68,7 +68,7 @@ class AuditLogService:
     @classmethod
     def _chat_log(cls, user: UserPayload, ip_address: str, event_type: EventType, object_type: ObjectType,
                   object_id: str, object_name: str, resource_type: ResourceTypeEnum):
-        # 获取资源所属的分组
+        # Get the group to which the resource belongs
         groups = GroupResourceDao.get_resource_group(resource_type, object_id)
         group_ids = [one.group_id for one in groups]
         audit_log = AuditLog(
@@ -87,10 +87,10 @@ class AuditLogService:
     @classmethod
     def create_chat_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
         """
-        新建助手会话的审计日志
+        New Audit Log for Assistant Session
         """
         logger.info(f"act=create_chat_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
-        # 获取助手详情
+        # Getting Assistant Details
         assistant_info = AssistantDao.get_one_assistant(assistant_id)
         cls._chat_log(user, ip_address, EventType.CREATE_CHAT, ObjectType.ASSISTANT,
                       assistant_id, assistant_info.name, ResourceTypeEnum.ASSISTANT)
@@ -98,7 +98,7 @@ class AuditLogService:
     @classmethod
     def create_chat_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_info=None):
         """
-        新建技能会话的审计日志
+        New Skill Session Audit Log
         """
         logger.info(f"act=create_chat_flow user={user.user_name} ip={ip_address} flow={flow_id}")
         if not flow_info:
@@ -109,7 +109,7 @@ class AuditLogService:
     @classmethod
     def create_chat_workflow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_info=None):
         """
-        新建工作流会话的审计日志
+        New Workflow Session Audit Log
         """
         logger.info(f"act=create_chat_workflow user={user.user_name} ip={ip_address} flow={flow_id}")
         if not flow_info:
@@ -120,7 +120,7 @@ class AuditLogService:
     @classmethod
     def delete_chat_flow(cls, user: UserPayload, ip_address: str, flow_info: Flow):
         """
-        删除技能会话的审计日志
+        Delete Audit Log for Skill Session
         """
         logger.info(f"act=delete_chat_flow user={user.user_name} ip={ip_address} flow={flow_info.id}")
         cls._chat_log(user, ip_address, EventType.DELETE_CHAT, ObjectType.FLOW,
@@ -129,7 +129,7 @@ class AuditLogService:
     @classmethod
     def delete_chat_workflow(cls, user: UserPayload, ip_address: str, flow_info: Flow):
         """
-        删除技能会话的审计日志
+        Delete Audit Log for Skill Session
         """
         logger.info(f"act=delete_chat_workflow user={user.user_name} ip={ip_address} flow={flow_info.id}")
         cls._chat_log(user, ip_address, EventType.DELETE_CHAT, ObjectType.WORK_FLOW,
@@ -138,7 +138,7 @@ class AuditLogService:
     @classmethod
     def delete_chat_assistant(cls, user: UserPayload, ip_address: str, assistant_info: Assistant):
         """
-        删除助手会话的审计日志
+        Delete audit log for assistant session
         """
         logger.info(f"act=delete_assistant_flow user={user.user_name} ip={ip_address} assistant={assistant_info.id}")
         cls._chat_log(user, ip_address, EventType.DELETE_CHAT, ObjectType.ASSISTANT,
@@ -149,13 +149,13 @@ class AuditLogService:
                    object_id: str,
                    object_name: str, resource_type: ResourceTypeEnum):
         """
-        构建模块的审计日志
+        Build Module Audit Log
         """
-        # 获取资源属于哪些用户组
+        # Get which user groups the resource belongs to
         groups = GroupResourceDao.get_resource_group(resource_type, object_id)
         group_ids = [one.group_id for one in groups]
 
-        # 插入审计日志
+        # Insert Audit Log
         audit_log = AuditLog(
             operator_id=user.user_id,
             operator_name=user.user_name,
@@ -174,13 +174,13 @@ class AuditLogService:
                                object_id: str,
                                object_name: str, resource_type: ResourceTypeEnum):
         """
-        构建模块的审计日志
+        Build Module Audit Log
         """
-        # 获取资源属于哪些用户组
+        # Get which user groups the resource belongs to
         groups = await GroupResourceDao.aget_resource_group(resource_type, object_id)
         group_ids = [one.group_id for one in groups]
 
-        # 插入审计日志
+        # Insert Audit Log
         audit_log = AuditLog(
             operator_id=user.user_id,
             operator_name=user.user_name,
@@ -197,7 +197,7 @@ class AuditLogService:
     @classmethod
     def create_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_type: Optional[int] = None):
         """
-        新建技能的审计日志
+        New Skill Audit Log
         """
         obj_type = ObjectType.FLOW
         rs_type = ResourceTypeEnum.FLOW
@@ -212,7 +212,7 @@ class AuditLogService:
     @classmethod
     async def update_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_type: Optional[int] = None):
         """
-        更新技能的审计日志
+        Update Skill Audit Log
         """
         obj_type = ObjectType.FLOW
         rs_type = ResourceTypeEnum.FLOW
@@ -227,7 +227,7 @@ class AuditLogService:
     @classmethod
     def delete_build_flow(cls, user: UserPayload, ip_address: str, flow_info: Flow, flow_type: Optional[int] = None):
         """
-        删除技能的审计日志
+        Delete Skill Audit Log
         """
         obj_type = ObjectType.FLOW
         rs_type = ResourceTypeEnum.FLOW
@@ -241,7 +241,7 @@ class AuditLogService:
     @classmethod
     def create_build_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
         """
-        新建助手的审计日志
+        New Assistant Audit Log
         """
         logger.info(f"act=create_build_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
         assistant_info = AssistantDao.get_one_assistant(assistant_id)
@@ -251,7 +251,7 @@ class AuditLogService:
     @classmethod
     def update_build_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
         """
-        更新助手的审计日志
+        Update the assistant's audit log
         """
         logger.info(f"act=update_build_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
         assistant_info = AssistantDao.get_one_assistant(assistant_id)
@@ -262,7 +262,7 @@ class AuditLogService:
     @classmethod
     def delete_build_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
         """
-        删除助手的审计日志
+        Delete Audit Log for Assistant
         """
         logger.info(f"act=delete_build_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
         assistant_info = AssistantDao.get_one_assistant(assistant_id)
@@ -274,13 +274,13 @@ class AuditLogService:
     def _knowledge_log(cls, user: UserPayload, ip_address: str, event_type: EventType, object_type: ObjectType,
                        object_id: str, object_name: str, resource_type: ResourceTypeEnum, resource_id: str):
         """
-        知识库模块的日志
+        Logs of Knowledge Base Modules
         """
-        # 获取资源属于哪些用户组
+        # Get which user groups the resource belongs to
         groups = GroupResourceDao.get_resource_group(resource_type, resource_id)
         group_ids = [one.group_id for one in groups]
 
-        # 插入审计日志
+        # Insert Audit Log
         audit_log = AuditLog(
             operator_id=user.user_id,
             operator_name=user.user_name,
@@ -297,7 +297,7 @@ class AuditLogService:
     @classmethod
     def create_knowledge(cls, user: UserPayload, ip_address: str, knowledge_id: int):
         """
-        新建知识库的审计日志
+        New Knowledge Base Audit Log
         """
         logger.info(f"act=create_knowledge user={user.user_name} ip={ip_address} knowledge={knowledge_id}")
         knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
@@ -307,7 +307,7 @@ class AuditLogService:
     @classmethod
     def delete_knowledge(cls, user: UserPayload, ip_address: str, knowledge: Knowledge):
         """
-        删除知识库的审计日志
+        Delete Knowledge Base Audit Log
         """
         logger.info(f"act=delete_knowledge user={user.user_name} ip={ip_address} knowledge={knowledge.id}")
         cls._knowledge_log(user, ip_address, EventType.DELETE_KNOWLEDGE, ObjectType.KNOWLEDGE,
@@ -316,7 +316,7 @@ class AuditLogService:
     @classmethod
     def upload_knowledge_file(cls, user: UserPayload, ip_address: str, knowledge_id: int, file_name: str):
         """
-        知识库上传文件的审计日志
+        Audit Logs for Knowledge Base Upload Files
         """
         logger.info(f"act=upload_knowledge_file user={user.user_name} ip={ip_address}"
                     f" knowledge={knowledge_id} file={file_name}")
@@ -326,7 +326,7 @@ class AuditLogService:
     @classmethod
     def delete_knowledge_file(cls, user: UserPayload, ip_address: str, knowledge_id: int, file_name: str):
         """
-        知识库删除文件的审计日志
+        Audit Logs for Knowledge Base Deletion Files
         """
         logger.info(f"act=delete_knowledge_file user={user.user_name} ip={ip_address}"
                     f" knowledge={knowledge_id} file={file_name}")
@@ -354,7 +354,7 @@ class AuditLogService:
     @classmethod
     def update_user(cls, user: UserPayload, ip_address: str, user_id: int, group_ids: List[int], note: str):
         """
-        修改用户的用户组和角色
+        Modify a user's user groups and roles
         """
         logger.info(f"act=update_system_user user={user.user_name} ip={ip_address} user_id={user_id} note={note}")
         user_info = UserDao.get_user(user_id)
@@ -364,11 +364,11 @@ class AuditLogService:
     @classmethod
     def forbid_user(cls, user: UserPayload, ip_address: str, user_info: User):
         """
-        user: 操作用户
-        user_info: 被操作用户
+        user: Action User
+        user_info: Operated by user
         """
         logger.info(f"act=forbid_user user={user.user_name} ip={ip_address} user_id={user.user_id}")
-        # 获取用户所属的分组
+        # Get the group to which the user belongs
         user_group = UserGroupDao.get_user_group(user_info.user_id)
         user_group = [one.group_id for one in user_group]
         cls._system_log(user, ip_address, user_group, EventType.FORBID_USER,
@@ -377,7 +377,7 @@ class AuditLogService:
     @classmethod
     def recover_user(cls, user: UserPayload, ip_address: str, user_info: User):
         logger.info(f"act=recover_user user={user.user_name} ip={ip_address} user_id={user_info.user_id}")
-        # 获取用户所属的分组
+        # Get the group to which the user belongs
         user_group = UserGroupDao.get_user_group(user_info.user_id)
         user_group = [one.group_id for one in user_group]
         cls._system_log(user, ip_address, user_group, EventType.RECOVER_USER,
@@ -392,14 +392,14 @@ class AuditLogService:
     @classmethod
     def update_user_group(cls, user: UserPayload, ip_address: str, group_info: Group):
         logger.info(f"act=update_user_group user={user.user_name} ip={ip_address} group_id={group_info.id}")
-        # 获取用户组信息
+        # Get user group information
         cls._system_log(user, ip_address, [group_info.id], EventType.UPDATE_USER_GROUP,
                         ObjectType.USER_GROUP_CONF, str(group_info.id), group_info.group_name)
 
     @classmethod
     def delete_user_group(cls, user: UserPayload, ip_address: str, group_info: Group):
         logger.info(f"act=delete_user_group user={user.user_name} ip={ip_address} group_id={group_info.id}")
-        # 获取用户组信息
+        # Get user group information
         cls._system_log(user, ip_address, [group_info.id], EventType.DELETE_USER_GROUP,
                         ObjectType.USER_GROUP_CONF, str(group_info.id), group_info.group_name)
 
@@ -447,7 +447,7 @@ class AuditLogService:
     @classmethod
     def user_login(cls, user: UserPayload, ip_address: str):
         logger.info(f"act=user_login user={user.user_name} ip={ip_address} user_id={user.user_id}")
-        # 获取用户所属的分组
+        # Get the group to which the user belongs
         user_group = UserGroupDao.get_user_group(user.user_id)
         user_group = [one.group_id for one in user_group]
         cls._system_log(user, ip_address, user_group, EventType.USER_LOGIN,
@@ -490,38 +490,38 @@ class AuditLogService:
 
     @classmethod
     def get_filter_flow_ids(cls, user: UserPayload, flow_ids: List[str], group_ids: List[int]) -> (bool, List):
-        """ 通过flow_ids和group_ids获取最终的 技能id筛选条件 false: 表示返回空列表"""
+        """ Setujuflow_idsAndgroup_idsGet the final SkillidFilters false: Show Back to Empty List"""
         flow_ids = [one for one in flow_ids]
         group_admins = []
         if not user.is_admin():
             user_groups = UserGroupDao.get_user_admin_group(user.user_id)
-            # 不是用户组管理员，没有权限
+            # Not a user group administrator, no permissions
             if not user_groups:
                 raise UnAuthorizedError.http_exception()
             group_admins = [one.group_id for one in user_groups]
-        # 分组id做交集
+        # GroupingidDoing Intersections
         if group_ids:
             if group_admins:
-                # 查询了不属于用户管理的用户组，返回为空
+                # Query user group not belonging to user management, return empty
                 group_admins = list(set(group_admins) & set(group_ids))
                 if len(group_admins) == 0:
                     return False, []
             else:
                 group_admins = group_ids
 
-        # 获取分组下所有的应用ID
+        # Get all apps under groupingID
         group_flows = []
         if group_admins:
             group_flows = GroupResourceDao.get_groups_resource(group_admins,
                                                                resource_types=[ResourceTypeEnum.FLOW,
                                                                                ResourceTypeEnum.WORK_FLOW,
                                                                                ResourceTypeEnum.ASSISTANT])
-            # 用户管理下的用户组没有资源
+            # User group under user management has no resources
             if not group_flows:
                 return False, []
             group_flows = [one.third_id for one in group_flows]
 
-        # 获取最终的技能ID限制列表
+        # Acquire the final skillIDRestrict to list
         filter_flow_ids = []
         if flow_ids and group_flows:
             filter_flow_ids = list(set(group_flows) & set(flow_ids))

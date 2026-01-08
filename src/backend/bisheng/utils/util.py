@@ -357,7 +357,7 @@ def sync_to_async(func):
 
 def run_async(coro, loop=None):
     """
-    运行异步函数
+    Run asynchronous functions
     :param coro:
     :param loop:
     :return:
@@ -384,7 +384,7 @@ def _is_valid_url(url: str) -> bool:
     return bool(parsed.netloc) and bool(parsed.scheme)
 
 
-# 重试装饰器 异步
+# Retry decorator Asynchronous
 def retry_async(num_retries=3, delay=0.5, return_exceptions=False):
     def wrapper(func):
         async def wrapped(*args, **kwargs):
@@ -396,7 +396,7 @@ def retry_async(num_retries=3, delay=0.5, return_exceptions=False):
                         f"Retrying {func.__name__} in {delay} seconds... Attempt {i + 1} of {num_retries}... error: {e}")
                     if i == num_retries - 1:
                         if return_exceptions:
-                            # 返回异常的参数 将e.args拆分成元组
+                            # Return Exception Parameters will bee.argsSplit into tuples
                             return e.args if len(e.args) > 1 else e.args[0]
                         logger.error(f"Failed to execute {func.__name__} after {num_retries} retries")
                         raise e
@@ -408,7 +408,7 @@ def retry_async(num_retries=3, delay=0.5, return_exceptions=False):
     return wrapper
 
 
-# 重试装饰器
+# Retry decorator
 def retry_sync(num_retries=3, delay=0.5, return_exceptions=False):
     def wrapper(func):
         def wrapped(*args, **kwargs):
@@ -420,7 +420,7 @@ def retry_sync(num_retries=3, delay=0.5, return_exceptions=False):
                         f"Retrying {func.__name__} in {delay} seconds... Attempt {i + 1} of {num_retries}... error: {e}")
                     if i == num_retries - 1:
                         if return_exceptions:
-                            # 返回异常的参数 将e.args拆分成元组
+                            # Return Exception Parameters will bee.argsSplit into tuples
                             return e.args if len(e.args) > 1 else e.args[0]
                         logger.error(f"Failed to execute {func.__name__} after {num_retries} retries")
                         raise e
@@ -433,9 +433,9 @@ def retry_sync(num_retries=3, delay=0.5, return_exceptions=False):
 
 
 def calculate_md5(file: Union[str, bytes]):
-    """计算文档的 MD5 值。
+    """Calculating the Document's MD5 .
     Returns:
-        str: 文档的 MD5 值。
+        str: of the document MD5 .
     """
     md5_hash = hashlib.md5()
 
@@ -444,9 +444,9 @@ def calculate_md5(file: Union[str, bytes]):
         return md5_hash.hexdigest()
 
     else:
-        # 以二进制形式读取文件
+        # Reading Files in Binary Form
         with open(file, "rb") as f:
-            # 按块读取文件，避免大文件占用过多内存
+            # Read files by block to avoid large files taking up too much memory
             for chunk in iter(lambda: f.read(4096), b""):
                 md5_hash.update(chunk)
 
@@ -454,9 +454,9 @@ def calculate_md5(file: Union[str, bytes]):
 
 
 async def async_calculate_md5(file: Union[str, bytes]):
-    """异步计算文档的 MD5 值。
+    """of the asynchronous computation document MD5 .
     Returns:
-        str: 文档的 MD5 值。
+        str: of the document MD5 .
     """
     import aiofiles
 
@@ -467,9 +467,9 @@ async def async_calculate_md5(file: Union[str, bytes]):
         return md5_hash.hexdigest()
 
     else:
-        # 以二进制形式异步读取文件
+        # Read files asynchronously in binary form
         async with aiofiles.open(file, "rb") as f:
-            # 按块异步读取文件，避免大文件占用过多内存
+            # Read files asynchronously by block to avoid large files taking up too much memory
             while True:
                 chunk = await f.read(4096)
                 if not chunk:
@@ -479,14 +479,14 @@ async def async_calculate_md5(file: Union[str, bytes]):
         return md5_hash.hexdigest()
 
 
-# 读取目录下的所有文件
+# Read all files in the directory
 def read_files_in_directory(path: str):
     """
-    读取目录下的所有文件，并返回文件名列表。
+    Reads all files in the directory and returns a list of filenames.
     Args:
-        path (str): 目录路径。
+        path (str): Directory Path
     Returns:
-        list: 文件名列表。
+        list: List of filenames.
     """
     import os
 
@@ -516,24 +516,24 @@ def bytes_to_zip(
         compress_level: int = 6
 ) -> bytes:
     """
-    将字节流数据打包成ZIP文件，返回ZIP文件的字节流
+    Package byte stream data intoZIPfiles, back toZIPByte Stream for Files
 
-    参数:
-        files: 包含(文件名, 字节流)元组的列表
-        compress_level: 压缩级别(0-9)，0表示不压缩，9表示最高压缩率
+    Parameters:
+        files: Contains(The file name, Byte Stream)List of tuples
+        compress_level: compression level(0-9)，0Indicates no compression,9Represents the highest compression rate
 
-    返回:
-        生成的ZIP文件字节流
+    Return:
+        Date GeneratedZIPFile Byte Stream
     """
     try:
-        # 验证压缩级别
+        # Verify compression level
         if not 0 <= compress_level <= 9:
-            raise ValueError("压缩级别必须在0到9之间")
+            raise ValueError("The compression level must be0to9Between")
 
-        # 创建内存中的字节流用于存储ZIP数据
+        # Create in-memory byte streams for storageZIPDATA
         zip_buffer = io.BytesIO()
 
-        # 创建ZIP文件并添加字节流数据
+        # BuatZIPFile and add byte stream data
         with zipfile.ZipFile(
                 zip_buffer,
                 'w',
@@ -541,17 +541,17 @@ def bytes_to_zip(
                 compresslevel=compress_level
         ) as zipf:
             for filename, data in files:
-                # 向ZIP文件中添加字节流数据
+                # Enter your messageZIPAdd byte stream data to the file
                 zipf.writestr(filename, data)
-                print(f"已添加: {filename} (大小: {len(data) / 1024:.2f} KB)")
+                print(f"Was added: {filename} (size: {len(data) / 1024:.2f} KB)")
 
-        # 将ZIP数据定位到起始位置并返回字节流
+        # will beZIPData is positioned to the starting position and returns a byte stream
         zip_buffer.seek(0)
         zip_data = zip_buffer.getvalue()
 
-        logger.debug(f"\nZIP文件创建成功，总大小: {len(zip_data) / 1024:.2f} KB")
+        logger.debug(f"\nZIPFile created successfully, total size: {len(zip_data) / 1024:.2f} KB")
         return zip_data
 
     except Exception as e:
-        logger.error(f"打包过程出错: {str(e)}")
+        logger.error(f"Packaging process error: {str(e)}")
         raise e

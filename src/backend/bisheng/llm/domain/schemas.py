@@ -13,9 +13,9 @@ class LLMModelInfo(LLMModelBase):
 
 class LLMServerInfo(LLMServerBase):
     id: Optional[int] = None
-    models: List[LLMModelInfo] = Field(default_factory=list, description='模型列表')
+    models: List[LLMModelInfo] = Field(default_factory=list, description='Model List')
 
-    # 敏感数据脱敏
+    # Sensitive Data Desensitization
     @model_validator(mode='after')
     def mask_sensitive_data(self):
         if not self.config:
@@ -34,62 +34,62 @@ class WSModel(BaseModel):
 
 class WorkbenchModelConfig(BaseModel):
     """
-    灵思模型配置
+    Inspiration Model Configuration
     """
-    # 任务执行模型
-    task_model: Optional[WSModel] = Field(default=None, description='任务执行模型')
-    # 检索embedding模型
-    embedding_model: Optional[WSModel] = Field(default=None, description='embedding模型')
-    # 灵思执行模式
-    linsight_executor_mode: Optional[TaskMode] = Field(default=None, description='灵思执行模式')
-    # 语音转文字模型
-    asr_model: Optional[WSModel] = Field(default=None, description='语音转文字模型')
-    tts_model: Optional[WSModel] = Field(default=None, description='文字转语音模型')
+    # Task execution model
+    task_model: Optional[WSModel] = Field(default=None, description='Task execution model')
+    # RetrieveembeddingModels
+    embedding_model: Optional[WSModel] = Field(default=None, description='embeddingModels')
+    # Inspiration Execution Mode
+    linsight_executor_mode: Optional[TaskMode] = Field(default=None, description='Inspiration Execution Mode')
+    # Speech-to-text model
+    asr_model: Optional[WSModel] = Field(default=None, description='Speech-to-text model')
+    tts_model: Optional[WSModel] = Field(default=None, description='Text-to-speech model')
 
 
 class LLMModelCreateReq(BaseModel):
-    id: Optional[int] = Field(default=None, description='模型唯一ID, 更新时需要传')
-    name: str = Field(..., description='模型展示名称')
-    description: Optional[str] = Field(default='', description='模型描述')
-    model_name: str = Field(..., description='模型名称')
-    model_type: str = Field(..., description='模型类型')
-    online: bool = Field(default=True, description='是否在线')
-    config: Optional[dict] = Field(default=None, description='模型配置')
+    id: Optional[int] = Field(default=None, description='Model UniqueID, Need to pass when updating')
+    name: str = Field(..., description='Model Display Name')
+    description: Optional[str] = Field(default='', description='Model Description')
+    model_name: str = Field(..., description='Model Name')
+    model_type: str = Field(..., description='model type')
+    online: bool = Field(default=True, description='Online')
+    config: Optional[dict] = Field(default=None, description='model config')
 
 
 class LLMServerCreateReq(BaseModel):
-    id: Optional[int] = Field(default=None, description='服务提供方ID, 更新时需要传')
-    name: str = Field(..., description='服务提供方名称')
-    description: Optional[str] = Field(default='', description='服务提供方描述')
-    type: str = Field(..., description='服务提供方类型')
-    limit_flag: Optional[bool] = Field(default=False, description='是否开启每日调用次数限制')
-    limit: Optional[int] = Field(default=0, description='每日调用次数限制')
-    config: Optional[dict] = Field(default=None, description='服务提供方配置')
-    models: Optional[List[LLMModelCreateReq]] = Field(default_factory=list, description='服务提供方下的模型列表')
+    id: Optional[int] = Field(default=None, description='service providerID, Need to pass when updating')
+    name: str = Field(..., description='Support service provider name')
+    description: Optional[str] = Field(default='', description='Service Provider Description')
+    type: str = Field(..., description='Service Provider Type')
+    limit_flag: Optional[bool] = Field(default=False, description='Whether to turn on the daily call limit')
+    limit: Optional[int] = Field(default=0, description='Daily call limit')
+    config: Optional[dict] = Field(default=None, description='Service Provider Configuration')
+    models: Optional[List[LLMModelCreateReq]] = Field(default_factory=list, description='List of models under Service Provider')
 
 
 class KnowledgeLLMConfig(BaseModel):
-    embedding_model_id: Optional[int] = Field(None, description='知识库默认embedding模型的ID')
-    source_model_id: Optional[int] = Field(None, description='知识库溯源模型的ID')
-    extract_title_model_id: Optional[int] = Field(None, description='文档知识库提取标题模型的ID')
-    qa_similar_model_id: Optional[int] = Field(None, description='QA知识库相似问模型的ID')
-    abstract_prompt: Optional[str] = Field(None, description='摘要提示词')
+    embedding_model_id: Optional[int] = Field(None, description="Knowledge Base DefaultembeddingModel'sID")
+    source_model_id: Optional[int] = Field(None, description="the Knowledge Base Traceability Model'sID")
+    extract_title_model_id: Optional[int] = Field(None, description="Documentation Knowledge Base Extraction Header Model'sID")
+    qa_similar_model_id: Optional[int] = Field(None, description="QAThe Knowledge Base Similarity Question Model'sID")
+    abstract_prompt: Optional[str] = Field(None, description='Summary Prompt')
 
 
 class AssistantLLMItem(BaseModel):
-    model_id: Optional[int] = Field(None, description='模型的ID')
+    model_id: Optional[int] = Field(None, description="Model'sID")
     agent_executor_type: Optional[str] = Field(default='ReAct',
-                                               description='执行模式。function call 或者 ReAct')
-    knowledge_max_content: Optional[int] = Field(default=15000, description='知识库检索最大字符串数')
-    knowledge_sort_index: Optional[bool] = Field(default=False, description='知识库检索后是否重排')
-    streaming: Optional[bool] = Field(default=True, description='是否开启流式')
-    default: Optional[bool] = Field(default=False, description='是否为默认模型')
+                                               description='Execution modefunction call or ReAct')
+    knowledge_max_content: Optional[int] = Field(default=15000, description='Maximum number of strings for knowledge base retrieval')
+    knowledge_sort_index: Optional[bool] = Field(default=False, description='Whether to reschedule after knowledge base retrieval')
+    streaming: Optional[bool] = Field(default=True, description='Whether to turn on streaming')
+    default: Optional[bool] = Field(default=False, description='Is default model')
 
 
 class AssistantLLMConfig(BaseModel):
-    llm_list: Optional[List[AssistantLLMItem]] = Field(default_factory=list, description='助手可选的LLM列表')
-    auto_llm: Optional[AssistantLLMItem] = Field(None, description='助手画像自动优化模型的配置')
+    llm_list: Optional[List[AssistantLLMItem]] = Field(default_factory=list, description='Assistant OptionalLLMVertical')
+    auto_llm: Optional[AssistantLLMItem] = Field(None, description='Assistant Portrait Automatic Optimization Model Configuration')
 
 
 class EvaluationLLMConfig(BaseModel):
-    model_id: Optional[int] = Field(None, description='评测功能默认模型的ID')
+    model_id: Optional[int] = Field(None, description='The default model of the evaluation functionID')

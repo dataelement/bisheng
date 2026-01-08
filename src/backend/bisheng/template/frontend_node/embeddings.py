@@ -70,7 +70,7 @@ class EmbeddingFrontendNode(FrontendNode):
 
 class OpenAIProxyEmbedding(FrontendNode):
     name: str = 'OpenAIProxyEmbedding'
-    description: str = """ 使用自建的embedding服务使用openai进行embed """
+    description: str = """ Use self-builtembeddingService UsageopenaiTo be performedembed """
     base_classes: list[str] = ['Embeddings']
     template: Template = Template(type_name='proxy_embedding',
                                   fields=[

@@ -14,7 +14,7 @@ class ToolNode(BaseNode):
         self._tool_key = self.node_data.tool_key
         self._tool_info = GptsToolsDao.get_tool_by_tool_key(tool_key=self._tool_key)
         if not self._tool_info:
-            raise Exception(f"工具{self._tool_key}不存在")
+            raise Exception(f"Tools{self._tool_key}Does not exist")
 
         self._tool = None
 

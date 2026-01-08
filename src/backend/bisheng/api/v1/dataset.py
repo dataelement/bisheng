@@ -12,19 +12,19 @@ from bisheng.database.models.dataset import DatasetRead
 router = APIRouter(prefix='/dataset', tags=['FineTune'])
 
 
-@router.get('/list', summary='获取数据集列表')
+@router.get('/list', summary='Get dataset list')
 def list_dataset(*,
                  keyword: str = None,
                  page: int = 1,
                  limit: int = 10) -> UnifiedResponseModel[List[DatasetRead]]:
     """
-    获取数据集列表
+    Get dataset list
     """
     res, count = DatasetService.build_dataset_list(page, limit, keyword)
     return resp_200(data={'list': res, 'total': count})
 
 
-@router.post('/create', summary='创建数据集')
+@router.post('/create', summary='Create Dataset')
 def create_dataset(
         *,
         request: Request,
@@ -32,13 +32,13 @@ def create_dataset(
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> UnifiedResponseModel:
     """
-    创建数据集
+    Create Dataset
     """
     dataset = DatasetService.create_dataset(login_user.user_id, data)
     return resp_200(data=dataset)
 
 
-@router.delete('/del', summary='删除数据集')
+@router.delete('/del', summary='Delete Dataset')
 def delete_dataset(
         *,
         request: Request,
@@ -46,7 +46,7 @@ def delete_dataset(
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> UnifiedResponseModel:
     """
-    创建数据集
+    Create Dataset
     """
     DatasetService.delete_dataset(dataset_id)
     return resp_200()

@@ -8,9 +8,9 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session
 
 
-# 可用于训练的model列表
+# Available for trainingmodelVertical
 class SftModelBase(SQLModelSerializable):
-    id: int = Field(default=None, nullable=False, primary_key=True, description='唯一ID')
+    id: int = Field(default=None, nullable=False, primary_key=True, description='Uniqueness quantificationID')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -18,7 +18,7 @@ class SftModelBase(SQLModelSerializable):
 
 
 class SftModel(SftModelBase, table=True):
-    model_name: str = Field(index=True, description='可用于微调训练的模型名称')
+    model_name: str = Field(index=True, description='Model name that can be used for fine-tuning training')
 
 
 class SftModelDao(SftModel):

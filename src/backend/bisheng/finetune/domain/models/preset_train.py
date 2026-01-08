@@ -9,14 +9,14 @@ from bisheng.core.database import get_async_db_session
 from bisheng.utils import generate_uuid
 
 
-# Finetune任务的预置训练集
+# FinetunePreset training set for tasks
 class PresetTrainBase(SQLModelSerializable):
-    id: str = Field(default=None, primary_key=True, description='预置训练文件唯一ID')
-    url: str = Field(default='', description='minIo上的文件链接')
-    name: str = Field(default='', index=True, description='上传的文件名字')
-    user_id: str = Field(default='', index=True, description='创建人ID')
-    user_name: str = Field(default='', index=True, description='创建人姓名')
-    type: int = Field(default=0, index=True, description='0 文件 1 QA')
+    id: str = Field(default=None, primary_key=True, description='Preset Training Files UniqueID')
+    url: str = Field(default='', description='minIoFile link on')
+    name: str = Field(default='', index=True, description='Uploaded file name')
+    user_id: str = Field(default='', index=True, description='creatorID')
+    user_name: str = Field(default='', index=True, description='creatorName')
+    type: int = Field(default=0, index=True, description='0 Doc. 1 QA')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

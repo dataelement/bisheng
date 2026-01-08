@@ -1,8 +1,8 @@
-# 模块用的一些常量或枚举
+# Some constants or enums for the module
 from enum import Enum
 
 
-# 服务提供方枚举
+# Service Provider Enumeration
 class LLMServerType(Enum):
     OPENAI = 'openai'
     AZURE_OPENAI = 'azure_openai'
@@ -10,22 +10,22 @@ class LLMServerType(Enum):
     XINFERENCE = 'xinference'
     LLAMACPP = 'llamacpp'
     VLLM = 'vllm'
-    QWEN = 'qwen'  # 阿里通义千问
-    QIAN_FAN = 'qianfan'  # 百度千帆
-    ZHIPU = 'zhipu'  # 智谱清言
+    QWEN = 'qwen'  # Ali Tongyi Qianqian
+    QIAN_FAN = 'qianfan'  # Baidu Qianfan
+    ZHIPU = 'zhipu'  # Zhi Spectrum Qing Yan
     MINIMAX = 'minimax'
     ANTHROPIC = 'anthropic'
     DEEPSEEK = 'deepseek'
-    SPARK = 'spark'  # 讯飞星火大模型
+    SPARK = 'spark'  # Xunfei Starfire Large Model
     BISHENG_RT = 'bisheng_rt'
-    TENCENT = 'tencent'  # 腾讯云
-    MOONSHOT = 'moonshot'  # 月之暗面的kimi
-    VOLCENGINE = 'volcengine'  # 火山引擎的大模型
-    SILICON = 'silicon'  # 硅基流动
-    MIND_IE = 'MindIE'  # 昇腾推理引擎 MindIE
+    TENCENT = 'tencent'  # Tencent Cloud
+    MOONSHOT = 'moonshot'  # Dark Side of the Moonkimi
+    VOLCENGINE = 'volcengine'  # Large model of a volcanic engine
+    SILICON = 'silicon'  # Silicon-based flow
+    MIND_IE = 'MindIE'  # Ascendant Inference Engine MindIE
 
 
-# 模型类型枚举
+# Model Type Enumeration
 class LLMModelType(Enum):
     LLM = 'llm'
     EMBEDDING = 'embedding'
@@ -35,6 +35,6 @@ class LLMModelType(Enum):
 
 
 class LLMModelStatus(Enum):
-    NORMAL = 0  # 正常
-    ERROR = 1  # 异常
-    UNKNOWN = 2  # 未知
+    NORMAL = 0  # Normal
+    ERROR = 1  # Abnormal
+    UNKNOWN = 2  # Unknown

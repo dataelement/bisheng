@@ -118,7 +118,7 @@ class KnowledgeRagTool(BaseTool):
     def init_knowledge_rag_tool(cls, name: str, description: str, **kwargs) -> BaseTool:
         llm = kwargs.pop('llm')
         chat_prompt = kwargs.pop('chat_prompt', CHAT_PROMPT)
-        # cancel 助手 deep callback
+        # cancel assistant deep callback
         kwargs.pop("callbacks", None)
         knowledge_retriever_tool = KnowledgeRetrieverTool(**kwargs)
         return cls(name=name,

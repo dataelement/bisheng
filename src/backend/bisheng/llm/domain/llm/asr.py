@@ -61,7 +61,7 @@ _asr_client_type = {
 
 
 class BishengASR(BishengBase):
-    asr: BaseASRClient = Field(..., description="asr实例")
+    asr: BaseASRClient = Field(..., description="asrInstances")
 
     @classmethod
     async def get_bisheng_asr(cls, **kwargs) -> Self:
@@ -69,7 +69,7 @@ class BishengASR(BishengBase):
         if not model_id:
             raise NoAsrModelConfigError()
         model_info, server_info = await cls.get_model_server_info(model_id)
-        # ignore_online参数用于跳过模型在线状态检查
+        # ignore_onlineParameters are used to skip model presence checks
         ignore_online = kwargs.pop('ignore_online', False)
 
         if not model_info:
@@ -81,7 +81,7 @@ class BishengASR(BishengBase):
         if not ignore_online and not model_info.online:
             raise AsrModelOfflineError(server_name=server_info.name, model_name=model_info.model_name)
 
-        # 初始化asr客户端
+        # InisialisasiasrClient
         asr_client = await cls.init_asr_client(model_info=model_info, server_info=server_info)
 
         return cls(model_id=model_id, asr=asr_client, model_info=model_info, server_info=server_info, **kwargs)
@@ -95,7 +95,7 @@ class BishengASR(BishengBase):
             if model_info.config:
                 params.update(model_info.config)
         if server_info.type not in _asr_client_type:
-            raise Exception(f'asr模型不支持{server_info.type}类型的服务提供方')
+            raise Exception(f'asrModel not supported{server_info.type}Type of service provider')
         params_handler = _asr_client_type[server_info.type]['params_handler']
         new_params = await params_handler(params, server_info, model_info)
         client = _asr_client_type[server_info.type]['client'](**new_params)

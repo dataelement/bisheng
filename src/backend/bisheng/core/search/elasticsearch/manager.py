@@ -23,26 +23,26 @@ class EsConnManager((BaseContextManager[ESConnection])):
         self.kwargs = kwargs
 
     async def _async_initialize(self) -> ESConnection:
-        """初始化 Elasticsearch 连接管理器"""
+        """Inisialisasi Elasticsearch Connection Manager"""
         return ESConnection(self.es_hosts, **self.kwargs)
 
     def _sync_initialize(self) -> ESConnection:
-        """同步初始化"""
+        """Synchronization Initialization"""
         return ESConnection(self.es_hosts, **self.kwargs)
 
     async def _async_cleanup(self) -> None:
-        """清理 Elasticsearch 资源"""
+        """Cleaned Elasticsearch reasourse"""
         if self._instance:
             await self._instance.close()
 
     def _sync_cleanup(self) -> None:
-        """同步清理 Elasticsearch 资源"""
+        """Synchronous Cleanup Elasticsearch reasourse"""
         if self._instance:
             self._instance.sync_close()
 
 
 async def get_es_connection() -> AsyncElasticsearch:
-    """获取 Elasticsearch 连接实例"""
+    """Dapatkan Elasticsearch Connection Instance"""
     from bisheng.core.context.manager import app_context
     try:
         return (await app_context.async_get_instance(EsConnManager.name)).es_connection
@@ -61,7 +61,7 @@ async def get_es_connection() -> AsyncElasticsearch:
 
 
 async def get_statistics_es_connection() -> AsyncElasticsearch:
-    """获取统计 Elasticsearch 连接实例"""
+    """Get statistics Elasticsearch Connection Instance"""
     from bisheng.core.context.manager import app_context
     try:
         return (await app_context.async_get_instance(statistics_es_name)).es_connection
@@ -82,7 +82,7 @@ async def get_statistics_es_connection() -> AsyncElasticsearch:
 
 
 def get_es_connection_sync() -> Elasticsearch:
-    """同步获取 Elasticsearch 连接实例"""
+    """Synchronous fetch Elasticsearch Connection Instance"""
     from bisheng.core.context.manager import app_context
     try:
         return app_context.sync_get_instance(EsConnManager.name).sync_es_connection
@@ -101,7 +101,7 @@ def get_es_connection_sync() -> Elasticsearch:
 
 
 def get_statistics_es_connection_sync() -> Elasticsearch:
-    """同步获取统计 Elasticsearch 连接实例"""
+    """Sync Fetch Stats Elasticsearch Connection Instance"""
     from bisheng.core.context.manager import app_context
     try:
         return app_context.sync_get_instance(statistics_es_name).sync_es_connection

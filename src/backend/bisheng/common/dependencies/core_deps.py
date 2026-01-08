@@ -5,7 +5,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession, Session
 
 # db session
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
-    """获取数据库会话"""
+    """Get database session"""
     from bisheng.core.database import get_database_connection
     db_manager = await get_database_connection()
     async with db_manager.async_session() as session:
@@ -14,7 +14,7 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 
 # sync db session
 def get_sync_db_session() -> Generator[Session, None, None]:
-    """获取同步数据库会话"""
+    """Get a synchronous database session"""
     from bisheng.core.database.manager import sync_get_database_connection
 
     db_manager = sync_get_database_connection()

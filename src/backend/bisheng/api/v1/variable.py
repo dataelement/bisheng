@@ -19,7 +19,7 @@ def post_variable(variable: Variable):
         if not variable.version_id:
             raise HTTPException(status_code=500, detail='version_id is required')
         if variable.id:
-            # 更新，采用全量替换
+            # Update with full replacement
             with get_sync_db_session() as session:
                 db_variable = session.get(Variable, variable.id)
             db_variable.variable_name = variable.variable_name[:50]
@@ -54,7 +54,7 @@ def get_variables(*,
                   variable_name: Optional[str] = None,
                   version_id: Optional[int] = None):
     try:
-        # 没传ID默认获取当前版本的数据
+        # No passingIDGet data for the current version by default
         if version_id is None:
             version_id = FlowVersionDao.get_version_by_flow(flow_id).id
         res = VariableDao.get_variables(flow_id, node_id, variable_name, version_id)

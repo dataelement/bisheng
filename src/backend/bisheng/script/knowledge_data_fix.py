@@ -136,11 +136,11 @@ def _scan_knowledge_error_data(knowledge: Knowledge, all_file_data: List[Knowled
     if knowledge.type != KnowledgeTypeEnum.QA.value:
         judge_qa_chunk = lambda x: x.get("source")
     all_milvus_chunks_map = {
-        item["file_id"]: item for item in all_milvus_chunks if judge_qa_chunk(item)  # source 不存在说明是QA对的数据，否则是文档知识库的数据
+        item["file_id"]: item for item in all_milvus_chunks if judge_qa_chunk(item)  # source Absent Explanation YesQACorrect data, otherwise it is the data of the document knowledge base
     }
     all_es_chunks = _get_es_chunks_data(knowledge, es_obj)
     all_es_chunks_map = {
-        item["file_id"]: item for item in all_es_chunks if judge_qa_chunk(item)  # source 不存在说明是QA对的数据，否则是文档知识库的数据
+        item["file_id"]: item for item in all_es_chunks if judge_qa_chunk(item)  # source Absent Explanation YesQACorrect data, otherwise it is the data of the document knowledge base
     }
     no_data = []
     no_milvus_data = []
@@ -176,44 +176,44 @@ def scan_normal_knowledge_error_data(knowledge: Knowledge, milvus_obj, es_obj):
 
 def _file_status(file: KnowledgeFile):
     if file.status == KnowledgeFileStatus.PROCESSING.value:
-        return "解析中"
+        return "Parsing"
     elif file.status == KnowledgeFileStatus.SUCCESS.value:
-        return "解析成功"
+        return "Parsing Successful"
     elif file.status == KnowledgeFileStatus.FAILED.value:
-        return "解析失败"
+        return "Parse Failure"
     elif file.status == KnowledgeFileStatus.REBUILDING.value:
-        return "重建中"
+        return "Rebuilding"
     elif file.status == KnowledgeFileStatus.WAITING.value:
-        return "排队中"
+        return "In queue:"
     elif file.status == KnowledgeFileStatus.TIMEOUT.value:
-        return "超时"
+        return "Timed out"
     else:
-        return "未知状态"
+        return "Unknown Status"
 
 
 def _qa_status(file: QAKnowledge):
     if file.status == QAStatus.ENABLED.value:
-        return "启用"
+        return "Enable"
     elif file.status == QAStatus.DISABLED.value:
-        return "禁用"
+        return "Disable"
     elif file.status == QAStatus.PROCESSING.value:
-        return "处理中"
+        return "Sedang diproses"
     elif file.status == QAStatus.FAILED.value:
-        return "处理失败"
+        return "Failed to Process"
     else:
-        return "未知状态"
+        return "Unknown Status"
 
 
 def _knowledge_common_row(knowledge: Knowledge, note: str = ""):
     one_common_row = [knowledge.id, knowledge.name, knowledge.collection_name, knowledge.index_name]
     if knowledge.type == KnowledgeTypeEnum.QA.value:
-        one_common_row.append("QA知识库")
+        one_common_row.append("QAThe knowledge base upon")
     elif knowledge.type == KnowledgeTypeEnum.NORMAL.value:
-        one_common_row.append("文档知识库")
+        one_common_row.append("Docly Knowledge Base")
     elif knowledge.type == KnowledgeTypeEnum.PRIVATE.value:
-        one_common_row.append("个人知识库")
+        one_common_row.append("Personal Knowledge Base")
     else:
-        one_common_row.append("未知类型知识库")
+        one_common_row.append("Unknown type knowledge base")
     one_common_row.append(knowledge.create_time.strftime("%Y-%m-%d %H:%M:%S"))
     one_common_row.append(knowledge.update_time.strftime("%Y-%m-%d %H:%M:%S"))
     one_common_row.append(note)
@@ -238,36 +238,36 @@ def _init_knowledge_obj(knowledge: Knowledge):
     except Exception as e:
         print(
             f"!!!! skip knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name} because embedding model error: {e}")
-        raise Exception(f"跳过该知识库，原因：embedding模型错误: {e}")
+        raise Exception(f"Skip this Knowledge Base, Reason:embeddingModel error: {e}")
     try:
         milvus_obj = decide_vectorstores(knowledge.collection_name, "Milvus", embedding)
         if milvus_obj.col is None:
-            raise Exception("跳过该知识库，原因：Milvus collection name not exist")
+            raise Exception("Skip this Knowledge Base, Reason:Milvus collection name not exist")
         collection_info = milvus_obj.col.schema
         fields = collection_info.fields
         fields = {field.name: 1 for field in fields}
         if "extra" not in fields or "source" not in fields or "file_id" not in fields:
-            raise Exception("跳过该知识库，原因：Milvus fields not found file_id or source or extra")
+            raise Exception("Skip this Knowledge Base, Reason:Milvus fields not found file_id or source or extra")
     except Exception as e:
         print(
             f"!!!! skip knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name} because milvus connection error: {e}")
-        raise Exception(f"跳过该知识库，原因：Milvus连接错误: {e}")
+        raise Exception(f"Skip this Knowledge Base, Reason:MilvusConnection Error: {e}")
     try:
         es_obj = decide_vectorstores(knowledge.index_name or knowledge.collection_name, "ElasticKeywordsSearch",
                                      embedding)
     except Exception as e:
         print(
             f"!!!! skip knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name} because es connection error: {e}")
-        raise Exception(f"跳过该知识库，原因：ES连接错误: {e}")
+        raise Exception(f"Skip this Knowledge Base, Reason:ESConnection Error: {e}")
     return milvus_obj, es_obj
 
 
 def _save_knowledge_error_data(rows: List[List[str]], file_name: str):
     header_rows = [
-        ['知识库ID', '知识库名称', 'collection_name', 'index_name', '知识库类型', '知识库创建时间', '知识库更新时间',
-         '知识库备注', '文件ID', '文件名称',
-         '文件状态',
-         '文件创建时间', '文件更新时间', 'Milvus是否存在', 'ES是否存在']
+        ['The knowledge base uponID', 'Library Name', 'collection_name', 'index_name', 'Knowledge Base Post Type', 'Knowledge Base Created Time', 'Knowledge Base Updated Time',
+         'Knowledge Base Notes', 'Doc.ID', 'File Name',
+         'Document Status',
+         'File Created Time', 'File Updated Time', 'Milvuspresence or does it', 'ESpresence or does it']
     ]
     if not rows:
         print("no error data found")
@@ -308,11 +308,11 @@ def scan_one_knowledge(knowledge: Knowledge = None, knowledge_id: int = None) ->
     print(f"!!!! find error data knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name}")
     note = ""
     if milvus_extra and es_extra:
-        note = "Milvus 和 ES 存在冗余数据"
+        note = "Milvus And ES Redundant data present"
     elif milvus_extra:
-        note = "Milvus 存在冗余数据"
+        note = "Milvus Redundant data present"
     elif es_extra:
-        note = "ES 存在冗余数据"
+        note = "ES Redundant data present"
     one_common_row = _knowledge_common_row(knowledge, note)
 
     def _parse_one_row(file, milvus_flag: str, es_flag: str):
@@ -323,11 +323,11 @@ def scan_one_knowledge(knowledge: Knowledge = None, knowledge_id: int = None) ->
 
     rows = []
     for one in no_data:
-        rows.append(_parse_one_row(one, "否", "否"))
+        rows.append(_parse_one_row(one, "No ", "No "))
     for one in no_milvus_data:
-        rows.append(_parse_one_row(one, "否", "是"))
+        rows.append(_parse_one_row(one, "No ", "Yes "))
     for one in no_es_data:
-        rows.append(_parse_one_row(one, "是", "否"))
+        rows.append(_parse_one_row(one, "Yes ", "No "))
     if not rows and note:
         return [one_common_row]
     return rows
@@ -481,12 +481,12 @@ def fix_normal_knowledge_data(knowledge: Knowledge, milvus_obj, es_obj):
     for file in no_data:
         print(f"update file to failed status file_id: {file.id}; file_name: {file.file_name}")
         KnowledgeFileDao.update_file_status([file.id], KnowledgeFileStatus.FAILED,
-                                            "知识库数据修复时发现该文件数据缺失，已将文件状态更新为解析失败，请重新进行解析。")
+                                            "The file data was found to be missing when the knowledge base data was repaired. The file status has been updated to parse failed. Please parse again.")
     for file in no_milvus_data:
         es_chunks = all_es.get(file.id, [])
         if not es_chunks:
             file.status = KnowledgeFileStatus.FAILED.value
-            file.remark = "知识库数据修复时发现该文件数据缺失，已将文件状态更新为解析失败，请重新进行解析。"
+            file.remark = "The file data was found to be missing when the knowledge base data was repaired. The file status has been updated to parse failed. Please parse again."
             KnowledgeFileDao.update(file)
             print(f"!!!!skip file_id: {file.id}; file_name: {file.file_name} because es data not found")
             continue
@@ -556,9 +556,9 @@ def fix_knowledge_error_data():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', type=str, default="scan_all",
-                        help='模式。scan_all: 扫描所有知识库错误数据；fix_all: 修复所有知识库错误数据；fix_one: 修复单个知识库错误数据；scan_one: 扫描单个知识库错误数据')
-    # 单个进程的最大并发数
-    parser.add_argument('--id', type=int, default=0, help='知识库ID，如果是操作单个知识库时，参数必填')
+                        help='modalities.scan_all: Scan all Knowledge Base error data;fix_all: Fix all Knowledge Base error data;fix_one: Fixing single knowledge base error data;scan_one: Scan single KB error data')
+    # Maximum number of concurrency for a single process
+    parser.add_argument('--id', type=int, default=0, help='The knowledge base uponID, parameter is required if operating a single knowledge base')
     args = parser.parse_args()
 
     if args.mode == "scan_all":
@@ -571,4 +571,4 @@ if __name__ == '__main__':
         tmp_rows = scan_one_knowledge(None, args.id)
         _save_knowledge_error_data(tmp_rows, f"{args.id}_knowledge_error_data.xlsx")
     else:
-        print("mode参数错误，只能是scan_all、fix_all、fix_one、scan_one其中之一")
+        print("modeParameter error, can only bescan_all、fix_all、fix_one、scan_oneOne of them,")

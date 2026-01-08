@@ -12,45 +12,45 @@ T = TypeVar('T')
 
 
 class ContextState(Enum):
-    """上下文状态枚举"""
-    UNINITIALIZED = "uninitialized"  # 未初始化
-    INITIALIZING = "initializing"  # 初始化中
-    READY = "ready"  # 已就绪
-    ERROR = "error"  # 错误状态
-    CLOSING = "closing"  # 关闭中
-    CLOSED = "closed"  # 已关闭
+    """Context State Enumeration"""
+    UNINITIALIZED = "uninitialized"  # Not Initialized
+    INITIALIZING = "initializing"  # Initializing
+    READY = "ready"  # Working on it...
+    ERROR = "error"  # Error State
+    CLOSING = "closing"  # closing
+    CLOSED = "closed"  # Closed
 
 
 class ContextError(Exception):
-    """上下文相关异常基类"""
+    """Context-dependent exception base class"""
     pass
 
 
 class ContextInitializationError(ContextError):
-    """上下文初始化异常"""
+    """Context initialization exception"""
     pass
 
 
 class ContextTimeoutError(ContextError):
-    """上下文操作超时异常"""
+    """Context operation timeout exception"""
     pass
 
 
 class ContextStateError(ContextError):
-    """上下文状态异常"""
+    """Context status exception"""
     pass
 
 
 class BaseContextManager(ABC, Generic[T]):
-    """基础上下文管理器抽象类
+    """Underlying Manager Abstract Class
 
-    定义了所有上下文管理器必须实现的接口
-    提供线程安全的懒加载、缓存和生命周期管理
+    Defines the interfaces that all context managers must implement
+    Provides thread-safe lazy loading, caching, and lifecycle management
     """
 
     name: str
-    _default_timeout: float = 30.0  # 默认超时时间
-    _default_retry_count: int = 3  # 默认重试次数
+    _default_timeout: float = 30.0  # Timeout default
+    _default_retry_count: int = 3  # Default number of retries
 
     def __init__(self, name: str = None, timeout: float = None, retry_count: int = None, **kwargs):
         self.name = name or getattr(self.__class__, 'name', self.__class__.__name__.lower())
@@ -61,36 +61,36 @@ class BaseContextManager(ABC, Generic[T]):
         self._instance: Optional[T] = None
         self._error: Optional[Exception] = None
 
-        # 同步和异步锁
+        # Synchronous and asynchronous locks
         self._sync_lock = Lock()
         self._async_lock = asyncio.Lock()
 
-        # 同步等待事件
+        # Synchronization Waiting Event
         self._sync_ready_event = Event()
         self._async_ready_event = asyncio.Event()
 
     @abstractmethod
     async def _async_initialize(self) -> T:
-        """异步初始化资源（抽象方法）"""
+        """Asynchronous initialization resources (abstract methods)"""
         pass
 
     @abstractmethod
     def _sync_initialize(self) -> T:
-        """同步初始化资源（抽象方法）"""
+        """Synchronous initialization resources (abstract methods)"""
         pass
 
     @abstractmethod
     async def _async_cleanup(self) -> None:
-        """异步清理资源（抽象方法）"""
+        """Asynchronous Cleanup Resource (Abstract Method)"""
         pass
 
     @abstractmethod
     def _sync_cleanup(self) -> None:
-        """同步清理资源（抽象方法）"""
+        """Synchronous Cleanup Resource (Abstract Method)"""
         pass
 
     def _validate_state_for_access(self) -> None:
-        """验证状态是否允许访问实例"""
+        """Verify that the status allows access to the instance"""
         if self.state == ContextState.ERROR:
             error_msg = f"Context '{self.name}' is in error state"
             if self._error:
@@ -101,51 +101,51 @@ class BaseContextManager(ABC, Generic[T]):
             raise ContextStateError(f"Context '{self.name}' is closed and cannot be accessed")
 
     async def _wait_for_initialization_async(self) -> None:
-        """异步等待初始化完成"""
+        """Asynchronous waiting for initialization to complete"""
         try:
             await asyncio.wait_for(self._async_ready_event.wait(), timeout=self.timeout)
         except asyncio.TimeoutError:
             raise ContextTimeoutError(f"Context '{self.name}' initialization timeout after {self.timeout}s")
 
     def _wait_for_initialization_sync(self) -> None:
-        """同步等待初始化完成"""
+        """Sync waiting for initialization to complete"""
         if not self._sync_ready_event.wait(timeout=self.timeout):
             raise ContextTimeoutError(f"Context '{self.name}' initialization timeout after {self.timeout}s")
 
     async def async_get_instance(self) -> T:
-        """异步获取上下文实例
+        """Asynchronous Get Context Instance
 
         Returns:
-            T: 初始化后的上下文实例
+            T: Contextual instance after initialization
 
         Raises:
-            ContextStateError: 上下文处于错误状态或已关闭
-            ContextTimeoutError: 初始化超时
-            ContextInitializationError: 初始化失败
+            ContextStateError: Context is in error state or closed
+            ContextTimeoutError: Initialization timeout
+            ContextInitializationError: Initialization failed
         """
-        # 快速路径：实例已就绪
+        # Quick Path: Instance Ready
         if self.state == ContextState.READY and self._instance is not None:
             return self._instance
 
         self._validate_state_for_access()
 
         async with self._async_lock:
-            # 双检锁模式
+            # Dual Lock Check Mode
             if self.state == ContextState.READY and self._instance is not None:
                 return self._instance
 
-            # 如果正在初始化，等待完成
+            # If initializing, wait for completion
             if self.state == ContextState.INITIALIZING:
                 await self._wait_for_initialization_async()
                 self._validate_state_for_access()
                 if self.state == ContextState.READY and self._instance is not None:
                     return self._instance
 
-            # 开始初始化
+            # Start Initialization
             return await self._perform_initialization_async()
 
     async def _perform_initialization_async(self) -> T:
-        """执行异步初始化逻辑"""
+        """Execute asynchronous initialization logic"""
         self.state = ContextState.INITIALIZING
         self._async_ready_event.clear()
 
@@ -162,53 +162,53 @@ class BaseContextManager(ABC, Generic[T]):
             except Exception as e:
                 last_error = e
                 if attempt < self.retry_count - 1:
-                    wait_time = 2 ** attempt  # 指数退避
+                    wait_time = 2 ** attempt  # Exponential withdrawal
                     logger.warning(
                         f"Context '{self.name}' init attempt {attempt + 1} failed: {e}, retrying in {wait_time}s")
                     await asyncio.sleep(wait_time)
                 else:
                     logger.error(f"Context '{self.name}' initialization failed after {self.retry_count} attempts: {e}")
 
-        # 所有重试都失败
+        # All retries failed
         self.state = ContextState.ERROR
         self._error = last_error
-        self._async_ready_event.set()  # 通知等待者失败
+        self._async_ready_event.set()  # Failed to notify waiter
         self._sync_ready_event.set()
         raise ContextInitializationError(f"Failed to initialize context '{self.name}': {last_error}") from last_error
 
     def sync_get_instance(self) -> T:
-        """同步获取上下文实例
+        """Synchronize Get Context Instance
 
         Returns:
-            T: 初始化后的上下文实例
+            T: Contextual instance after initialization
 
         Raises:
-            ContextStateError: 上下文处于错误状态、已关闭或初始化超时
-            ContextInitializationError: 初始化失败
+            ContextStateError: Context is in error state, closed or initialization timed out
+            ContextInitializationError: Initialization failed
         """
-        # 快速路径：实例已就绪
+        # Quick Path: Instance Ready
         if self.state == ContextState.READY and self._instance is not None:
             return self._instance
 
         self._validate_state_for_access()
 
         with self._sync_lock:
-            # 双检锁模式
+            # Dual Lock Check Mode
             if self.state == ContextState.READY and self._instance is not None:
                 return self._instance
 
-            # 如果正在初始化，等待完成
+            # If initializing, wait for completion
             if self.state == ContextState.INITIALIZING:
                 self._wait_for_initialization_sync()
                 self._validate_state_for_access()
                 if self.state == ContextState.READY and self._instance is not None:
                     return self._instance
 
-            # 开始初始化
+            # Start Initialization
             return self._perform_initialization_sync()
 
     def _perform_initialization_sync(self) -> T:
-        """执行同步初始化逻辑"""
+        """Execute Synchronization Initialization Logic"""
         self.state = ContextState.INITIALIZING
         self._sync_ready_event.clear()
         self._async_ready_event.clear()
@@ -226,24 +226,24 @@ class BaseContextManager(ABC, Generic[T]):
             except Exception as e:
                 last_error = e
                 if attempt < self.retry_count - 1:
-                    wait_time = 2 ** attempt  # 指数退避
+                    wait_time = 2 ** attempt  # Exponential withdrawal
                     logger.warning(
                         f"Context '{self.name}' init attempt {attempt + 1} failed: {e}, retrying in {wait_time}s")
                     time.sleep(wait_time)
                 else:
                     logger.error(f"Context '{self.name}' initialization failed after {self.retry_count} attempts: {e}")
 
-        # 所有重试都失败
+        # All retries failed
         self.state = ContextState.ERROR
         self._error = last_error
-        self._sync_ready_event.set()  # 通知等待者失败
+        self._sync_ready_event.set()  # Failed to notify waiter
         self._async_ready_event.set()
         raise ContextInitializationError(f"Failed to initialize context '{self.name}': {last_error}") from last_error
 
     async def async_close(self) -> None:
-        """异步关闭上下文管理器
+        """Shutdown context manager asynchronously
 
-        安全地释放资源并将状态设置为已关闭
+        Safely release resources and set status to off
         """
         if self.state in [ContextState.CLOSING, ContextState.CLOSED]:
             return
@@ -262,18 +262,18 @@ class BaseContextManager(ABC, Generic[T]):
                     logger.debug(f"Context '{self.name}' closed successfully")
             except Exception as e:
                 logger.error(f"Error closing context '{self.name}': {e}")
-                # 即使清理失败，也要标记为已关闭以避免资源泄漏
+                # Mark as closed to avoid resource leakage even if cleanup fails
             finally:
                 self.state = ContextState.CLOSED
                 self._error = None
-                # 确保事件被设置，防止等待者无限等待
+                # Ensure events are set to prevent unlimited wait time for waiters
                 self._async_ready_event.set()
                 self._sync_ready_event.set()
 
     def sync_close(self) -> None:
-        """同步关闭上下文管理器
+        """Sync Close Context Manager
 
-        安全地释放资源并将状态设置为已关闭
+        Safely release resources and set status to off
         """
         if self.state in [ContextState.CLOSING, ContextState.CLOSED]:
             return
@@ -292,18 +292,18 @@ class BaseContextManager(ABC, Generic[T]):
                     logger.debug(f"Context '{self.name}' closed successfully")
             except Exception as e:
                 logger.error(f"Error closing context '{self.name}': {e}")
-                # 即使清理失败，也要标记为已关闭以避免资源泄漏
+                # Mark as closed to avoid resource leakage even if cleanup fails
             finally:
                 self.state = ContextState.CLOSED
                 self._error = None
-                # 确保事件被设置，防止等待者无限等待
+                # Ensure events are set to prevent unlimited wait time for waiters
                 self._async_ready_event.set()
                 self._sync_ready_event.set()
 
     async def async_reset(self) -> None:
-        """重置上下文管理器
+        """Reset Context Manager
 
-        关闭当前实例并重置为未初始化状态，下次访问时会重新初始化
+        Close the current instance and reset it to the uninitialized state, it will be reinitialized on the next visit
         """
         await self.async_close()
         async with self._async_lock:
@@ -313,9 +313,9 @@ class BaseContextManager(ABC, Generic[T]):
             self._sync_ready_event.clear()
 
     def sync_reset(self) -> None:
-        """重置上下文管理器
+        """Reset Context Manager
 
-        关闭当前实例并重置为未初始化状态，下次访问时会重新初始化
+        Close the current instance and reset it to the uninitialized state, it will be reinitialized on the next visit
         """
         self.sync_close()
         with self._sync_lock:
@@ -325,34 +325,34 @@ class BaseContextManager(ABC, Generic[T]):
             self._sync_ready_event.clear()
 
     def is_ready(self) -> bool:
-        """检查是否已就绪
+        """Check to see if it's ready
 
         Returns:
-            bool: True 如果上下文已初始化且可用，False 否则
+            bool: True If the context is initialized and available,False Otherwise, 
         """
         return self.state == ContextState.READY and self._instance is not None
 
     def get_state(self) -> ContextState:
-        """获取当前状态
+        """Fetch the current status
 
         Returns:
-            ContextState: 当前上下文状态
+            ContextState: Current Context State
         """
         return self.state
 
     def get_error(self) -> Optional[Exception]:
-        """获取最后的错误信息
+        """Get the last error message
 
         Returns:
-            Optional[Exception]: 如果处于错误状态，返回错误信息，否则返回 None
+            Optional[Exception]: If in error state, return error message, otherwise return None
         """
         return self._error
 
     def get_info(self) -> Dict[str, Any]:
-        """获取上下文信息
+        """Get Context Information
 
         Returns:
-            Dict[str, Any]: 包含上下文详细信息的字典
+            Dict[str, Any]: Dictionary with contextual details
         """
         return {
             'name': self.name,
@@ -366,38 +366,38 @@ class BaseContextManager(ABC, Generic[T]):
 
     @contextmanager
     def sync_context(self):
-        """同步上下文管理器
+        """Synchronization Context Manager
 
-        使用 with 语句自动获取和释放资源
+        Use with Statements automatically fetch and free resources
 
         Example:
             with my_context.sync_context() as instance:
-                # 使用 instance
+                # Use instance
                 pass
         """
         instance = self.sync_get_instance()
         try:
             yield instance
         finally:
-            # 注意：这里不自动关闭，因为可能被其他地方使用
+            # Note: This does not close automatically as it may be used elsewhere
             pass
 
     @asynccontextmanager
     async def async_context(self):
-        """异步上下文管理器
+        """Asynchronous Context Manager
 
-        使用 async with 语句自动获取和释放资源
+        Use async with Statements automatically fetch and free resources
 
         Example:
             async with my_context.async_context() as instance:
-                # 使用 instance
+                # Use instance
                 pass
         """
         instance = await self.async_get_instance()
         try:
             yield instance
         finally:
-            # 注意：这里不自动关闭，因为可能被其他地方使用
+            # Note: This does not close automatically as it may be used elsewhere
             pass
 
     def __repr__(self) -> str:
@@ -405,9 +405,9 @@ class BaseContextManager(ABC, Generic[T]):
 
 
 class FunctionContextManager(BaseContextManager[T]):
-    """基于函数的上下文管理器
+    """Function-based context manager
 
-    允许通过函数来定义初始化和清理逻辑
+    Allows initialization and cleanup logic to be defined via functions
     """
 
     def __init__(
@@ -423,21 +423,21 @@ class FunctionContextManager(BaseContextManager[T]):
         self._is_async = asyncio.iscoroutinefunction(init_func)
 
     async def _async_initialize(self) -> T:
-        """使用初始化函数初始化实例"""
+        """Initialize the instance using the initialization function"""
         if not self._is_async:
-            # 如果初始化函数不是异步的，在线程池中执行
+            # Execute in thread pool if initialization function is not asynchronous
             loop = asyncio.get_event_loop()
             return await loop.run_in_executor(None, self.init_func)
         return await self.init_func()
 
     def _sync_initialize(self) -> T:
-        """同步初始化"""
+        """Synchronization Initialization"""
         if self._is_async:
             raise TypeError(f"Cannot call async init_func '{self.init_func.__name__}' in sync context")
         return self.init_func()
 
     async def _async_cleanup(self) -> None:
-        """使用清理函数清理实例"""
+        """Clean up instances using the cleanup function"""
         if self.cleanup_func and self._instance:
             if asyncio.iscoroutinefunction(self.cleanup_func):
                 await self.cleanup_func(self._instance)
@@ -446,7 +446,7 @@ class FunctionContextManager(BaseContextManager[T]):
                 await loop.run_in_executor(None, self.cleanup_func, self._instance)
 
     def _sync_cleanup(self) -> None:
-        """同步清理"""
+        """Synchronous Cleanup"""
         if self.cleanup_func and self._instance:
             if asyncio.iscoroutinefunction(self.cleanup_func):
                 raise TypeError(f"Cannot call async cleanup_func '{self.cleanup_func.__name__}' in sync context")
@@ -454,9 +454,9 @@ class FunctionContextManager(BaseContextManager[T]):
 
 
 class ContextRegistry:
-    """上下文注册表
+    """Context Registry
 
-    管理多个上下文管理器的注册和生命周期
+    Manage Enrollment and Lifecycle for Multiple Context Managers
     """
 
     def __init__(self):
@@ -464,13 +464,13 @@ class ContextRegistry:
         self._lock = Lock()
 
     def register(self, context_manager: BaseContextManager) -> None:
-        """注册上下文管理器
+        """Register Context Manager
 
         Args:
-            context_manager: 要注册的上下文管理器
+            context_manager: Context manager to register
 
         Raises:
-            ValueError: 如果同名上下文已存在
+            ValueError: If a context with the same name already exists
         """
         with self._lock:
             if context_manager.name in self._contexts:
@@ -480,15 +480,15 @@ class ContextRegistry:
             logger.debug(f"Registered context: '{context_manager.name}'")
 
     def unregister(self, name: str) -> None:
-        """注销上下文管理器
+        """Log out of the context manager
 
         Args:
-            name: 要注销的上下文名称
+            name: Context name to be logged out
         """
         with self._lock:
             if name in self._contexts:
                 context = self._contexts[name]
-                # 先关闭上下文再删除
+                # Close context before deleting
                 try:
                     context.sync_close()
                 except Exception as e:
@@ -497,57 +497,57 @@ class ContextRegistry:
                 logger.debug(f"Unregistered context: '{name}'")
 
     def get_context(self, name: str) -> BaseContextManager:
-        """获取上下文管理器
+        """Get Context Manager
 
         Args:
-            name: 上下文名称
+            name: Context Name
 
         Returns:
-            BaseContextManager: 对应的上下文管理器
+            BaseContextManager: Corresponding context manager
 
         Raises:
-            KeyError: 如果上下文不存在
+            KeyError: If the context does not exist
         """
         if name not in self._contexts:
             raise KeyError(f"Context '{name}' not found. Available contexts: {list(self._contexts.keys())}")
         return self._contexts[name]
 
     def has_context(self, name: str) -> bool:
-        """检查是否存在指定名称的上下文
+        """Check if there is a context with the specified name
 
         Args:
-            name: 上下文名称
+            name: Context Name
 
         Returns:
-            bool: 如果存在则返回 True，否则返回 False
+            bool: Return if present True, otherwise go back to False
         """
         return name in self._contexts
 
     async def async_get_instance(self, name: str) -> Any:
-        """异步获取上下文实例"""
+        """Asynchronous Get Context Instance"""
         context = self.get_context(name)
         return await context.async_get_instance()
 
     def sync_get_instance(self, name: str) -> Any:
-        """同步获取上下文实例"""
+        """Synchronize Get Context Instance"""
         context = self.get_context(name)
         return context.sync_get_instance()
 
     async def async_close_all(self) -> None:
-        """异步关闭所有上下文管理器"""
+        """Shut down all context managers asynchronously"""
         contexts = list(self._contexts.values())
 
-        # 并行关闭所有上下文以提高性能
+        # Shut down all contexts in parallel to improve performance
         close_tasks = [context.async_close() for context in contexts]
         results = await asyncio.gather(*close_tasks, return_exceptions=True)
 
-        # 记录关闭过程中的错误
+        # Log errors during shutdown
         for context, result in zip(contexts, results):
             if isinstance(result, Exception):
                 logger.error(f"Error closing context '{context.name}': {result}")
 
     def sync_close_all(self) -> None:
-        """同步关闭所有上下文管理器"""
+        """Synchronously close all context managers"""
         for context in self._contexts.values():
             try:
                 context.sync_close()
@@ -555,18 +555,18 @@ class ContextRegistry:
                 logger.error(f"Error closing context '{context.name}': {e}")
 
     def get_all_contexts(self) -> Dict[str, BaseContextManager]:
-        """获取所有上下文管理器的副本
+        """Get a copy of all context managers
 
         Returns:
-            Dict[str, BaseContextManager]: 包含所有上下文管理器的字典副本
+            Dict[str, BaseContextManager]: Contains a dictionary copy of all context managers
         """
         return self._contexts.copy()
 
     def get_ready_contexts(self) -> Dict[str, BaseContextManager]:
-        """获取所有已就绪的上下文管理器
+        """Get all ready context managers
 
         Returns:
-            Dict[str, BaseContextManager]: 包含所有已就绪上下文管理器的字典
+            Dict[str, BaseContextManager]: Dictionary with all ready context managers
         """
         return {
             name: context
@@ -575,10 +575,10 @@ class ContextRegistry:
         }
 
     def get_context_states(self) -> Dict[str, ContextState]:
-        """获取所有上下文的状态
+        """Get the status of all contexts
 
         Returns:
-            Dict[str, ContextState]: 上下文名称到状态的映射
+            Dict[str, ContextState]: Context name to state mapping
         """
         return {
             name: context.get_state()
@@ -586,15 +586,15 @@ class ContextRegistry:
         }
 
     async def health_check(self) -> Dict[str, bool]:
-        """执行所有上下文的健康检查
+        """Perform health checks for all contexts
 
         Returns:
-            Dict[str, bool]: 上下文名称到健康状态的映射
+            Dict[str, bool]: Context name to health state mapping
         """
         results = {}
         for name, context in self._contexts.items():
             try:
-                # 如果上下文有自定义的健康检查方法，优先使用
+                # Prefer to use if there is a custom health check method in context
                 if hasattr(context, 'health_check') and callable(getattr(context, 'health_check')):
                     health_check_func = getattr(context, 'health_check')
                     if asyncio.iscoroutinefunction(health_check_func):
@@ -602,7 +602,7 @@ class ContextRegistry:
                     else:
                         results[name] = health_check_func()
                 else:
-                    # 否则使用基本的就绪状态检查
+                    # Otherwise use basic readiness checks
                     results[name] = context.is_ready()
             except Exception as e:
                 logger.error(f"Health check failed for context '{name}': {e}")
@@ -610,24 +610,24 @@ class ContextRegistry:
         return results
 
     def clear(self) -> None:
-        """清空所有上下文（先关闭再删除）"""
+        """Clear all contexts (close before deleting)"""
         with self._lock:
-            # 先关闭所有上下文
+            # Close all contexts first
             self.sync_close_all()
-            # 清空注册表
+            # Empty registry
             self._contexts.clear()
             logger.debug("All contexts cleared from registry")
 
     def __len__(self) -> int:
-        """返回已注册的上下文数量"""
+        """Returns the number of registered contexts"""
         return len(self._contexts)
 
     def __contains__(self, name: str) -> bool:
-        """支持 'name' in registry 语法"""
+        """Support 'name' in registry Grammar"""
         return name in self._contexts
 
     def __iter__(self):
-        """支持迭代上下文名称"""
+        """Support for iterative context names"""
         return iter(self._contexts.keys())
 
     def __repr__(self) -> str:

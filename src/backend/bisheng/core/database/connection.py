@@ -1,4 +1,4 @@
-"""数据库连接管理模块"""
+"""Database Connection Management Module"""
 import logging
 from typing import Optional, Dict, Any, Generator
 from contextlib import asynccontextmanager, contextmanager
@@ -15,9 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseConnectionManager:
-    """数据库连接管理器
+    """Database Connection Manager
 
-    负责管理数据库引擎的创建、连接池配置和生命周期管理
+    Responsible for managing database engine creation, connection pool configuration and lifecycle management
     """
 
     def __init__(self, database_url: str, **engine_kwargs):
@@ -30,7 +30,7 @@ class DatabaseConnectionManager:
         self._async_session_maker: Optional[async_sessionmaker] = None
 
     def _convert_to_async_url(self, url: str) -> str:
-        """将同步数据库URL转换为异步URL"""
+        """Database will be synchronizedURLConvert to AsynchronousURL"""
         if "pymysql" in url:
             return url.replace("pymysql", "aiomysql")
         elif "psycopg2" in url:
@@ -38,7 +38,7 @@ class DatabaseConnectionManager:
         return url
 
     def _get_default_engine_config(self) -> Dict[str, Any]:
-        """获取默认的引擎配置"""
+        """Get default engine configuration"""
         config = {
             'pool_size': 100,
             'max_overflow': 20,
@@ -47,7 +47,7 @@ class DatabaseConnectionManager:
             'pool_recycle': 3600,  # 1 hour
         }
 
-        # SQLite特殊配置
+        # SQLiteSPECIAL CONFIGURATION
         if self.database_url.startswith("sqlite"):
             config.update({
                 'connect_args': {'check_same_thread': False},
@@ -55,7 +55,7 @@ class DatabaseConnectionManager:
                 'pool_size': 1,
                 'max_overflow': 0,
             })
-        # MySQL特殊配置
+        # MySQLSPECIAL CONFIGURATION
         elif "mysql" in self.database_url:
             if 'connect_args' not in config:
                 config['connect_args'] = {}
@@ -65,7 +65,7 @@ class DatabaseConnectionManager:
 
     @property
     def engine(self) -> Engine:
-        """获取同步数据库引擎"""
+        """Get Synchronization Database Engine"""
         if self._engine is None:
             config = self._get_default_engine_config()
             config.update(self.engine_kwargs)
@@ -80,12 +80,12 @@ class DatabaseConnectionManager:
 
     @property
     def async_engine(self) -> AsyncEngine:
-        """获取异步数据库引擎"""
+        """Get Asynchronous Database Engine"""
         if self._async_engine is None:
             config = self._get_default_engine_config()
             config.update(self.engine_kwargs)
 
-            # 移除同步引擎特有的配置
+            # Remove Synchronization Engine Specific Configuration
             config.pop('poolclass', None)
 
             self._async_engine = create_async_engine(
@@ -98,7 +98,7 @@ class DatabaseConnectionManager:
 
     @contextmanager
     def create_session(self) -> Generator[Session, Any, None]:
-        """创建同步会话"""
+        """Create a sync session"""
         session_maker = sessionmaker(
             bind=self.engine,
             class_=Session,
@@ -119,7 +119,7 @@ class DatabaseConnectionManager:
 
     @asynccontextmanager
     async def async_session(self):
-        """异步会话上下文管理器"""
+        """Asynchronous Session Context Manager"""
 
         session_maker = async_sessionmaker(
             bind=self.async_engine,
@@ -140,7 +140,7 @@ class DatabaseConnectionManager:
                 await session.close()
 
     async def create_db_and_tables(self) -> None:
-        """创建数据库和表"""
+        """Creation of databases and tables"""
 
         async with self.async_engine.begin() as conn:
             try:
@@ -154,19 +154,19 @@ class DatabaseConnectionManager:
         logger.info('Database and tables created successfully')
 
     async def close(self):
-        """关闭数据库连接"""
+        """Close database connection"""
         if self._async_engine:
             await self._async_engine.dispose()
             logger.debug("Async database engine disposed")
 
     def close_sync(self):
-        """同步关闭数据库连接"""
+        """Synchronously close database connections"""
         if self._engine:
             self._engine.dispose()
             logger.debug("Sync database engine disposed")
 
     def __del__(self):
-        """析构函数确保资源释放"""
+        """Destructor ensures release of resources"""
         if self._engine:
             try:
                 self._engine.dispose()

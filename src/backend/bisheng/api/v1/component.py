@@ -42,7 +42,7 @@ def update_component(*, data: CreateComponentReq, login_user: UserPayload = Depe
 
 @router.delete('')
 def delete_component(*,
-                     name: str = Body(..., embed=True, description='组件名'),
+                     name: str = Body(..., embed=True, description='Component Name'),
                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
     return ComponentService.delete_component(login_user.user_id, name)
 

@@ -58,7 +58,7 @@ class UserRoleDao(UserRoleBase):
     @classmethod
     def get_roles_user(cls, role_ids: List[int], page: int = 0, limit: int = 0) -> List[UserRole]:
         """
-        获取角色对应的用户
+        Get the user for the role
         """
         with get_sync_db_session() as session:
             statement = select(UserRole).where(UserRole.role_id.in_(role_ids))
@@ -69,7 +69,7 @@ class UserRoleDao(UserRoleBase):
     @classmethod
     def get_admins_user(cls) -> List[UserRole]:
         """
-        获取所有超级管理的账号
+        Get all super-managed accounts
         """
         with get_sync_db_session() as session:
             statement = select(UserRole).where(UserRole.role_id == AdminRole)
@@ -78,7 +78,7 @@ class UserRoleDao(UserRoleBase):
     @classmethod
     async def set_admin_user(cls, user_id: int) -> UserRole:
         """
-        设置用户为超级管理员
+        Set user as Super Admin
         """
         async with get_async_db_session() as session:
             user_role = UserRole(user_id=user_id, role_id=AdminRole)
@@ -90,7 +90,7 @@ class UserRoleDao(UserRoleBase):
     @classmethod
     def add_user_roles(cls, user_id: int, role_ids: List[int]) -> List[UserRole]:
         """
-        给用户批量添加角色
+        Add roles to users in bulk
         """
         with get_sync_db_session() as session:
             user_roles = [UserRole(user_id=user_id, role_id=role_id) for role_id in role_ids]
@@ -101,7 +101,7 @@ class UserRoleDao(UserRoleBase):
     @classmethod
     def delete_user_roles(cls, user_id: int, role_ids: List[int]) -> None:
         """
-        将用户从某些角色中移除
+        Remove users from certain roles
         """
         with get_sync_db_session() as session:
             statement = delete(UserRole).where(UserRole.user_id == user_id).where(UserRole.role_id.in_(role_ids))

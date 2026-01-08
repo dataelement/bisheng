@@ -143,7 +143,7 @@ class ConditionCases(BaseModel):
         if knowledge.metadata_fields:
             metadata_field_info = {one["field_name"]: one for one in knowledge.metadata_fields}
 
-        # 内置的元数据字段
+        # Built-in metadata fields
         preset_field_info = {
             one.field_name: one.model_dump() for one in KNOWLEDGE_RAG_METADATA_SCHEMA if
             one.field_name != "user_metadata"
@@ -249,7 +249,7 @@ class RagUtils(BaseNode):
         return finally_docs
 
     def init_user_question(self) -> List[str]:
-        # 默认把用户问题都转为字符串
+        # Convert all user questions to strings by default
         ret = []
         for one in self.node_params['user_question']:
             ret.append(f"{self.get_other_node_variable(one)}")
@@ -326,7 +326,7 @@ class RagUtils(BaseNode):
         for one in self._knowledge_value:
             file_metadata = self.get_other_node_variable(one)
             if not file_metadata:
-                # 未找到对应的临时文件数据, 用户未上传文件
+                # No corresponding temporary file data found, User did not upload file
                 continue
             file_ids.append(file_metadata[0]['document_id'])
         if not file_ids:
@@ -335,7 +335,7 @@ class RagUtils(BaseNode):
             return
         embeddings = LLMService.get_knowledge_default_embedding(self.user_id)
         if not embeddings:
-            raise Exception('没有配置知识库默认embedding模型')
+            raise Exception('No knowledge base defaults configuredembeddingModels')
 
         # vectorstore use different collection_name for different embedding model
         tmp_collection_name = self.get_milvus_collection_name(getattr(embeddings, 'model_id'))

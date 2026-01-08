@@ -6,7 +6,7 @@ DataT = TypeVar('DataT')
 
 
 class UnifiedResponseModel(BaseModel, Generic[DataT]):
-    """统一响应模型"""
+    """Unified Response Model"""
     status_code: int
     status_message: str
     data: DataT = None
@@ -14,7 +14,7 @@ class UnifiedResponseModel(BaseModel, Generic[DataT]):
 
 def resp_200(data: Union[list, dict, str, Any] = None,
              message: str = 'SUCCESS') -> UnifiedResponseModel:
-    """成功的代码"""
+    """Success code"""
     return UnifiedResponseModel(status_code=200, status_message=message, data=data)
     # return data
 
@@ -22,17 +22,17 @@ def resp_200(data: Union[list, dict, str, Any] = None,
 def resp_500(code: int = 500,
              data: Union[list, dict, str, Any] = None,
              message: str = 'BAD REQUEST') -> UnifiedResponseModel:
-    """错误的逻辑回复"""
+    """Wrong logical response"""
     return UnifiedResponseModel(status_code=code, status_message=message, data=data)
 
 
-# 废弃的分页数据模型，旧数据兼容保留
+# Obsolete paging data model, old data compatible retention
 class PageList(BaseModel, Generic[DataT]):
     list: List[DataT]
     total: int
 
 
-# 分页数据模型, 后续统一用这个
+# Paging Data Model, Use this uniformly in the future
 class PageData(BaseModel, Generic[DataT]):
     data: List[DataT]
     total: int
@@ -41,12 +41,12 @@ class PageData(BaseModel, Generic[DataT]):
 def resp_501(code: int = 501,
              data: Union[list, dict, str, Any] = None,
              message: str = 'BAD REQUEST') -> UnifiedResponseModel:
-    """错误的逻辑回复"""
+    """Wrong logical response"""
     return UnifiedResponseModel(status_code=code, status_message=message, data=data)
 
 
 def resp_502(code: int = 502,
              data: Union[list, dict, str, Any] = None,
              message: str = 'BAD REQUEST') -> UnifiedResponseModel:
-    """错误的逻辑回复"""
+    """Wrong logical response"""
     return UnifiedResponseModel(status_code=code, status_message=message, data=data)

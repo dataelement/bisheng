@@ -8,10 +8,10 @@ logger = logging.getLogger(__name__)
 
 
 class RedisManager(BaseContextManager[RedisClient]):
-    """Redis 全局管理器
+    """Redis Global Manager
 
-    负责管理 Redis 连接的全局生命周期，提供统一的访问接口
-    支持连接池监控、健康检查和便捷的操作管理
+    Responsible for management Redis Global lifecycle of connectivity, providing a unified access interface
+    Supports connection pool monitoring, health checks, and easy operations management
     """
 
     name: str = "redis"
@@ -27,26 +27,26 @@ class RedisManager(BaseContextManager[RedisClient]):
             raise ValueError("Redis URL is required. Please provide via parameter.")
 
     async def _async_initialize(self) -> RedisClient:
-        """初始化 Redis 连接管理器"""
+        """Inisialisasi Redis Connection Manager"""
         return RedisClient(self.redis_url)
 
     def _sync_initialize(self) -> RedisClient:
-        """同步初始化"""
+        """Synchronization Initialization"""
         return RedisClient(self.redis_url)
 
     def _sync_cleanup(self) -> None:
-        """同步清理 Redis 资源"""
+        """Synchronous Cleanup Redis reasourse"""
         if self._instance:
             self._instance.close()
 
     async def _async_cleanup(self) -> None:
-        """清理 Redis 资源"""
+        """Cleaned Redis reasourse"""
         if self._instance:
             await self._instance.aclose()
 
 
 async def get_redis_client() -> RedisClient:
-    """获取 Redis 客户端实例"""
+    """Dapatkan Redis Client Instance"""
     from bisheng.core.context.manager import app_context
     try:
         return await app_context.async_get_instance(RedisManager.name)
@@ -64,7 +64,7 @@ async def get_redis_client() -> RedisClient:
 
 
 def get_redis_client_sync() -> RedisClient:
-    """同步获取 Redis 客户端实例"""
+    """Synchronous fetch Redis Client Instance"""
     from bisheng.core.context.manager import app_context
     try:
         return app_context.sync_get_instance(RedisManager.name)

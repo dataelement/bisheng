@@ -31,7 +31,7 @@ async def create_job(*, finetune: FinetuneCreateReq, login_user: UserPayload = D
     return resp_200(ret)
 
 
-# 删除训练任务
+# Delete training task
 @router.delete('/job')
 async def delete_job(*, job_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     # get login user
@@ -39,7 +39,7 @@ async def delete_job(*, job_id: str, login_user: UserPayload = Depends(UserPaylo
     return resp_200(None)
 
 
-# 中止训练任务
+# Abort training mission
 @router.post('/job/cancel')
 async def cancel_job(*, job_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     # get login user
@@ -47,7 +47,7 @@ async def cancel_job(*, job_id: str, login_user: UserPayload = Depends(UserPaylo
     return resp_200(ret)
 
 
-# 发布训练任务
+# Publish Training Tasks
 @router.post('/job/publish')
 async def publish_job(*, job_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     # get login user
@@ -62,17 +62,17 @@ async def cancel_publish_job(*, job_id: str, login_user: UserPayload = Depends(U
     return resp_200(ret)
 
 
-# 获取训练任务列表，支持分页
+# Get a list of training tasks, support pagination
 @router.get('/job')
 async def get_job(*,
-                  server: str = Query(default=None, description='关联的RT服务名字'),
+                  server: str = Query(default=None, description='RelatedRTService name'),
                   status: str = Query(
                       default='',
-                      title='多个以英文逗号,分隔',
-                      description='训练任务的状态，1: 训练中 2: 训练失败 3: 任务中止 4: 训练成功 5: 发布完成'),
-                  model_name: Optional[str] = Query(default='', description='模型名称,模糊搜索'),
-                  page: Optional[int] = Query(default=1, description='页码'),
-                  limit: Optional[int] = Query(default=10, description='每页条数'),
+                      title='Multiple commas,separator',
+                      description='the status of the training task,1: Training 2: Training failed 3: Task Aborted 4: Training Successful 5: Publication complete'),
+                  model_name: Optional[str] = Query(default='', description='Model Name,Fuzzy search'),
+                  page: Optional[int] = Query(default=1, description='Page'),
+                  limit: Optional[int] = Query(default=10, description='Listings Per Page'),
                   login_user: UserPayload = Depends(UserPayload.get_login_user)):
     status_list = []
     if status.strip():
@@ -88,7 +88,7 @@ async def get_job(*,
     return resp_200(data=PageData(data=data, total=total))
 
 
-# 获取任务最新详细信息，此接口会同步查询SFT-backend侧将任务状态更新到最新
+# Get the latest details of the task, this interface will synchronize the querySFT-backendThe side updates the task status to the latest
 @router.get('/job/info')
 async def get_job_info(*, job_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     # get login user
@@ -106,7 +106,7 @@ async def update_job(*, req_data: FinetuneChangeModelName,
 
 @router.post('/job/file')
 async def upload_file(*,
-                      files: list[UploadFile] = File(description='训练文件列表'),
+                      files: list[UploadFile] = File(description='Training File List'),
                       login_user: UserPayload = Depends(UserPayload.get_login_user)):
     ret = await FinetuneFileService.upload_file(files, False, login_user)
     return resp_200(ret)
@@ -114,10 +114,10 @@ async def upload_file(*,
 
 @router.post('/job/file/preset')
 async def upload_preset_file(*,
-                             files: Optional[str] = Body(default=None, description='预置训练文件列表'),
-                             name: Optional[str] = Body(description='数据集名字'),
+                             files: Optional[str] = Body(default=None, description='Preset Training File List'),
+                             name: Optional[str] = Body(description='Dataset Name'),
                              qa_list: Optional[list[int]] = Body(default=None,
-                                                                 description='QA知识库'),
+                                                                 description='QAThe knowledge base upon'),
                              login_user: UserPayload = Depends(UserPayload.get_login_user)):
     ret = None
     if files:
@@ -125,7 +125,7 @@ async def upload_preset_file(*,
         logger.info(f'dataset upload_file_name: {file_name}')
         ret = await FinetuneFileService.upload_preset_file(name, 0, filepath, login_user)
     elif qa_list:
-        # 将qa数据按照finetune格式，进行文件存储
+        # will beqaData byfinetuneFormat for file storage
         qa_knowledge_db = await KnowledgeDao.aget_list_by_ids(qa_list)
         qa_knowledge_db_ids = [qa_knowledge.id for qa_knowledge in qa_knowledge_db]
         qa_db_list = await QAKnoweldgeDao.aget_qa_knowledge_by_knowledge_ids(qa_knowledge_db_ids)
@@ -143,7 +143,7 @@ async def upload_preset_file(*,
     return resp_200(ret)
 
 
-# 获取预置训练文件列表
+# Get a list of preset training files
 @router.get('/job/file/preset')
 async def get_preset_file(*,
                           page_size: Optional[int] = None,
@@ -176,8 +176,8 @@ async def get_server_filters(*, login_user: UserPayload = Depends(UserPayload.ge
 
 @router.get('/model/list')
 async def get_model_list(login_user: UserPayload = Depends(UserPayload.get_login_user),
-                         server_id: int = Query(..., description='ft服务唯一ID')):
-    """ 获取ft服务下所有的模型列表 """
+                         server_id: int = Query(..., description='ftService UniqueID')):
+    """ DapatkanftList of all models under the service """
     ret = await FinetuneService.get_model_list(server_id)
     return resp_200(data=ret)
 

@@ -16,7 +16,7 @@ async def test_aliyun_asr():
         audio = f.read()
     text = await client.transcribe(audio)
     print(text)
-    # assert text == "Hello word, 这里是阿里巴巴语音实验室。"
+    # assert text == "Hello word, This is Alibaba Voice Lab."
 
 
 @pytest.mark.asyncio
@@ -24,7 +24,7 @@ async def test_aliyun_tts():
     from ..tts import AliyunTTSClient
     api_key = os.environ.get('ALIYUN_API_KEY')
     client = AliyunTTSClient(api_key=api_key)
-    audio_bytes = await client.synthesize("你好，世界！")
+    audio_bytes = await client.synthesize("Hello World!")
     with open("./data/aliyun_result.mp3", "wb") as f:
         f.write(audio_bytes)
 
@@ -39,7 +39,7 @@ async def test_azure_openai_asr():
     client = AzureOpenAIASRClient(api_key=api_key, model="gpt-4o-transcribe", azure_endpoint=azure_endpoint,
                                   api_version=api_version)
     text = await client.transcribe("./data/asr_example.wav")
-    assert text == "Hello word, 这里是阿里巴巴语音实验室。"
+    assert text == "Hello word, This is Alibaba Voice Lab."
 
 
 @pytest.mark.asyncio

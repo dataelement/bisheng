@@ -34,10 +34,10 @@ class WorkflowClient(BaseClient):
         self.run_lock = asyncio.Lock()
 
     async def close(self, force_stop=False):
-        # 不是用户主动停止的话，设置ws关闭标志，但是不需要中止workflow的执行
+        # If the user is not actively stopping, setwsTurn the flag off, but there is no need to abortworkflowExecution
         if not force_stop:
             self.ws_closed = True
-        # 非会话模式关闭workflow执行, 会话模式判断是否是用户主动关闭的
+        # Non-Session Mode OffworkflowImplementation, Session mode determines if the user took the initiative to close
         if self.workflow:
             if force_stop or not self.chat_id:
                 await self.workflow.async_set_workflow_stop()
@@ -54,7 +54,7 @@ class WorkflowClient(BaseClient):
     async def _handle_message(self, message: Dict[any, any]):
         logger.debug('----------------------------- start handle message -----------------------')
         if message.get('action') == 'init_data':
-            # 初始化workflow数据
+            # InisialisasiworkflowDATA
             await self.init_workflow(message)
         elif message.get('action') == 'check_status':
             await self.check_status(message)
@@ -71,12 +71,12 @@ class WorkflowClient(BaseClient):
             return
         self.latest_history = await ChatMessageDao.aget_latest_message_by_chatid(self.chat_id)
         if not self.latest_history:
-            # 用户点击了新建会话，记录审计日志
+            # The user clicks New Session to log the audit
             AuditLogService.create_chat_workflow(self.login_user, get_request_ip(self.request), self.client_id)
 
     async def check_status(self, message: dict, is_init: bool = False) -> (bool, str):
         """
-        bool: 表示是否需要重新执行workflow
+        bool: Indicates if re-execution is requiredworkflow
         """
         # chat ws connection first handle
         workflow_id = message.get('flow_id', self.client_id)
@@ -87,7 +87,7 @@ class WorkflowClient(BaseClient):
             unique_id = f'{self.chat_id}_async_task_id'
         logger.debug(f'init workflow with unique_id: {unique_id}, workflow_id: {workflow_id}, chat_id: {self.chat_id}')
         self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, str(self.user_id))
-        # 判断workflow是否已上线，未上线的话关闭当前websocket链接
+        # JudgingworkflowWhether it is online, if it is not online, close the currentwebsocketLinks
         workflow_db = FlowDao.get_flow_by_id(workflow_id)
         if workflow_db.status != FlowStatus.ONLINE.value and self.chat_id:
             self.workflow.set_workflow_stop()
@@ -104,15 +104,15 @@ class WorkflowClient(BaseClient):
 
         status_info = self.workflow.get_workflow_status()
         if not status_info:
-            # 说明上一次运行完成了
+            # Indicates that the last run was completed
             self.workflow = None
             if self.latest_history and not is_init:
-                # 让前端终止上一次的运行
+                # Let the front-end terminate the last run
                 await self.send_response('processing', 'close', '')
             return True, unique_id
-        # 说明会话还在运行中
+        # Indicates that the session is still running
         if status_info['status'] == WorkflowStatus.INPUT.value and self.latest_history:
-            # 如果是等待用户输入状态，需要将上一次的输入消息重新发送给前端
+            # If it is a state waiting for user input, you need to resend the last input message to the front-end
             if self.latest_history.category in [WorkflowEventType.UserInput.value,
                                                 WorkflowEventType.OutputWithInput.value,
                                                 WorkflowEventType.OutputWithChoose.value]:
@@ -133,15 +133,15 @@ class WorkflowClient(BaseClient):
             workflow_data = message.get('data')
             workflow_id = message.get('flow_id', self.client_id)
             flag, unique_id = await self.check_status(message, is_init=True)
-            # 说明workflow在运行中或者已下线
+            # DescriptionworkflowIn operation or offline
             if not flag:
                 return
 
-            # 发起新的workflow
+            # Start a newworkflow
             self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, str(self.user_id))
             await self.workflow.async_set_workflow_data(workflow_data)
             await self.workflow.async_set_workflow_status(WorkflowStatus.WAITING.value)
-            # 发起异步任务
+            # Start asynchronous task
             execute_workflow.delay(unique_id, workflow_id, self.chat_id, str(self.user_id))
             await self.send_response('processing', 'begin', '')
             await self.workflow_run()
@@ -161,7 +161,7 @@ class WorkflowClient(BaseClient):
             logger.warning('workflow is over by other task')
             return True
 
-        # 需要不断从redis中获取workflow返回的消息
+        # Needs to constantly evolve fromredisGet inworkflowReturned Message
         async for event in self.workflow.get_response_until_break():
             await self.send_json(event)
 
@@ -173,7 +173,7 @@ class WorkflowClient(BaseClient):
             self.workflow = None
             return True
 
-        # 说明运行到了待输入状态
+        # Description runs to the state to be entered
         elif status_info['status'] != WorkflowStatus.INPUT.value:
             logger.warning(f'workflow status is unknown: {status_info}')
         return False
@@ -190,7 +190,7 @@ class WorkflowClient(BaseClient):
             user_input = {}
             message_id = None
             new_message = None
-            # 目前支持一个输入节点
+            # Currently one input node is supported
             for node_id, node_info in data.items():
                 user_input[node_id] = node_info['data']
                 message_id = node_info.get('message_id')

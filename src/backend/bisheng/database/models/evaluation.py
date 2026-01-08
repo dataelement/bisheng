@@ -23,17 +23,17 @@ class EvaluationTaskStatus(Enum):
 
 class EvaluationBase(SQLModelSerializable):
     user_id: int = Field(default=None, index=True)
-    file_name: str = Field(default='', description='上传的文件名')
-    file_path: str = Field(default='', description='文件 minio 地址')
-    exec_type: str = Field(description='执行主体类别。助手、技能、工作流，参考ExecType枚举')
-    unique_id: str = Field(index=True, description='执行主体的唯一ID')
-    version: Optional[int] = Field(default=None, description='工作流或技能的版本ID')
-    status: int = Field(index=True, default=1, description='任务执行状态。1:执行中 2: 执行失败 3:执行成功')
-    prompt: str = Field(default='', sa_column=Column(Text), description='评测指令文本')
-    result_file_path: str = Field(default='', description='评测结果的 minio 地址')
-    result_score: Optional[Dict | str] = Field(default=None, sa_column=Column(JSON), description='最终评测分数')
-    description: str = Field(default='', sa_column=Column(Text), description='错误描述信息')
-    is_delete: int = Field(default=0, description='是否删除')
+    file_name: str = Field(default='', description='Uploaded filename')
+    file_path: str = Field(default='', description='Doc. minio <g id="Bold">Address:</g>')
+    exec_type: str = Field(description='Execute subject categories. Assistants, Skills, Workflows, ReferenceExecTypeEnum')
+    unique_id: str = Field(index=True, description='Unique to the executing entityID')
+    version: Optional[int] = Field(default=None, description='Version of workflow or skillID')
+    status: int = Field(index=True, default=1, description='Task Execution Status: 1:Executing "{0}" 2: execute fail 3:execute success')
+    prompt: str = Field(default='', sa_column=Column(Text), description='Evaluation Instruction Text')
+    result_file_path: str = Field(default='', description='of the assessment results minio <g id="Bold">Address:</g>')
+    result_score: Optional[Dict | str] = Field(default=None, sa_column=Column(JSON), description='Final Assessment Score')
+    description: str = Field(default='', sa_column=Column(Text), description='Error description information')
+    is_delete: int = Field(default=0, description='whether delete')
     create_time: Optional[datetime] = Field(default=None,
                                             sa_column=Column(DateTime, nullable=False,
                                                              server_default=text('CURRENT_TIMESTAMP')))

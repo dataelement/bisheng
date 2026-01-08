@@ -216,7 +216,7 @@ def initial_milvus(class_object: Type[Milvus], params: dict, search_kwargs: dict
         print(f"milvus before params={params} type={type(params['connection_args'])}")
         params['connection_args'] = json.loads(params.pop('connection_args'))
     if 'embedding' not in params:
-        # 匹配知识库的embedding
+        # Matching Knowledge Base'sembedding
         col = params['collection_name']
         collection_id = params.pop('collection_id', '')
         with get_sync_db_session() as session:
@@ -228,7 +228,7 @@ def initial_milvus(class_object: Type[Milvus], params: dict, search_kwargs: dict
                     select(Knowledge).where(Knowledge.collection_name == col)).first()
 
         if not knowledge:
-            raise ValueError(f'不能找到知识库collection={col} knowledge_id={collection_id}')
+            raise ValueError(f'Unable to find knowledge basecollection={col} knowledge_id={collection_id}')
         params['embedding'] = LLMService.get_bisheng_knowledge_embedding_sync(0, model_id=int(knowledge.model))
         if knowledge.collection_name.startswith('partition'):
             search_kwargs.update({'partition_key': knowledge.id})

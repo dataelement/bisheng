@@ -4,14 +4,14 @@ from markdown.extensions import Extension
 
 class ExtMdSyntax(Extension):
     """
-    扩展格式解析
+    Extended Format Parsing
     """
     def extendMarkdown(self, md):
-        # ==高亮文本==
+        # ==With Highlighted Text==
         md.inlinePatterns.register(SimpleTagInlineProcessor(r'()==(.+?)==', 'highlight'), 'highlight', 175)
-        # ~~删除线~~
+        # ~~Strikethrough~~
         md.inlinePatterns.register(SimpleTagInlineProcessor(r'()~~(.+?)~~', 'strike'), 'strike', 2)
-        # ^上标^
+        # ^Subscript and superscript^
         md.inlinePatterns.register(SimpleTagInlineProcessor(r'()\^(.+?)\^', 'sup'), 'sup', 188)
-        # ~下标~
+        # ~Subscript~
         md.inlinePatterns.register(SimpleTagInlineProcessor(r'()~(.+?)~', 'sub'), 'sub', 1)

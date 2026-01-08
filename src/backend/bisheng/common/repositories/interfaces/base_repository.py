@@ -6,104 +6,104 @@ ID = TypeVar('ID')
 
 
 class BaseRepository(ABC, Generic[T, ID]):
-    """Repository基础接口"""
+    """RepositoryBase Interface"""
 
     @abstractmethod
     async def save(self, entity: T) -> T:
-        """保存实体"""
+        """Save Entity"""
         pass
 
     @abstractmethod
     async def bulk_save(self, entities: List[T]) -> List[T]:
-        """批量保存实体"""
+        """Batch Save Entities"""
         pass
 
     @abstractmethod
     def save_sync(self, entity: T) -> T:
-        """同步保存实体"""
+        """Synchronous Save Entity"""
         pass
 
     @abstractmethod
     def bulk_save_sync(self, entities: List[T]) -> List[T]:
-        """同步批量保存实体"""
+        """Synchronize Batch Save Entities"""
         pass
 
     @abstractmethod
     async def find_by_id(self, entity_id: ID) -> Optional[T]:
-        """根据ID查找实体"""
+        """accordingIDFind Entity"""
         pass
 
     @abstractmethod
     def find_by_id_sync(self, entity_id: ID) -> Optional[T]:
-        """同步根据ID查找实体"""
+        """Sync byIDFind Entity"""
         pass
 
     @abstractmethod
     async def find_one(self, **filters) -> Optional[T]:
-        """查找单个实体"""
+        """Find a single entity"""
         pass
 
     @abstractmethod
     def find_one_sync(self, **filters) -> Optional[T]:
-        """同步查找单个实体"""
+        """Synchronous lookup of a single entity"""
         pass
 
     @abstractmethod
     async def find_by_ids(self, entity_ids: List[ID]) -> List[T]:
-        """根据多个ID查找实体"""
+        """According to multipleIDFind Entity"""
         pass
 
     @abstractmethod
     def find_by_ids_sync(self, entity_ids: List[ID]) -> List[T]:
-        """同步根据多个ID查找实体"""
+        """Sync based on multipleIDFind Entity"""
         pass
 
     @abstractmethod
     async def find_all(self, **filters) -> List[T]:
-        """查找所有实体"""
+        """Find all entities"""
         pass
 
     @abstractmethod
     def find_all_sync(self, **filters) -> List[T]:
-        """同步查找所有实体"""
+        """Sync Find All Entities"""
         pass
 
     @abstractmethod
     async def update(self, entity: T) -> T:
-        """更新实体"""
+        """Update entities"""
         pass
 
     @abstractmethod
     def update_sync(self, entity: T) -> T:
-        """同步更新实体"""
+        """Synchronize Update Entities"""
         pass
 
     @abstractmethod
     async def delete(self, entity_id: ID) -> bool:
-        """删除实体"""
+        """Delete entity role"""
         pass
 
     @abstractmethod
     def delete_sync(self, entity_id: ID) -> bool:
-        """同步删除实体"""
+        """Synchronous deletion of entities"""
         pass
 
     @abstractmethod
     async def exists(self, entity_id: ID) -> bool:
-        """检查实体是否存在"""
+        """Check if the entity exists"""
         pass
 
     @abstractmethod
     def exists_sync(self, entity_id: ID) -> bool:
-        """同步检查实体是否存在"""
+        """Synchronization Check Entity Existence"""
         pass
 
     @abstractmethod
     async def count(self, **filters) -> int:
-        """统计实体数量"""
+        """Number of statistical entities"""
         pass
 
     @abstractmethod
     def count_sync(self, **filters) -> int:
-        """同步统计实体数量"""
+        """Number of entities synchronized"""
         pass

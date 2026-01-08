@@ -12,7 +12,7 @@ from pydantic import ConfigDict
 
 
 class BaseASRClient(ABC):
-    """ASR (Automatic Speech Recognition) 基础接口类"""
+    """ASR (Automatic Speech Recognition) Base Interface Class"""
 
     async def transcribe(
             self,
@@ -22,15 +22,15 @@ class BaseASRClient(ABC):
             **kwargs
     ) -> str:
         """
-        将音频转换为文本
+        Convert Audio to Text
 
         Args:
-            audio: 音频文件路径、音频字节数据或文件对象
-            language: 语言代码，如 'zh', 'en'
-            model: 使用的模型名称
+            audio: Audio file path, audio byte data, or file object
+            language: Language code, e.g. 'zh', 'en'
+            model: Used Model Name
 
         Returns:
-            转录的文本内容
+            Transcribed text content
         """
         if not audio:
             raise ValueError("Audio input is required")
@@ -47,7 +47,7 @@ class BaseASRClient(ABC):
         tmp_dir = tempfile.gettempdir()
 
         tmp_file_path = os.path.join(tmp_dir, uuid.uuid4().hex + '.wav')
-        # ffmpeg 转换为16k采样率单声道wav文件
+        # ffmpeg Convert To16kSampling Rate MonowavDoc.
         converted_file_path = os.path.join(tmp_dir, uuid.uuid4().hex + '_16k_mono.wav')
 
         try:
@@ -74,21 +74,21 @@ class BaseASRClient(ABC):
     async def _transcribe(self, audio: str, language: Optional[str] = None, model: Optional[str] = None,
                           **kwargs) -> str:
         """
-        内部方法：将音频转换为文本
+        Internal Method: Convert Audio to Text
 
         Args:
-            audio: 音频文件路径, 处理完成后会自动删除文件
-            language: 语言代码，如 'zh', 'en'
-            model: 使用的模型名称
+            audio: Audio File Host, Files are automatically deleted when processing is complete
+            language: Language code, e.g. 'zh', 'en'
+            model: Used Model Name
 
         Returns:
-            转录的文本内容
+            Transcribed text content
         """
         raise NotImplementedError
 
 
 class BaseTTSClient(ABC):
-    """TTS (Text To Speech) 基础接口类"""
+    """TTS (Text To Speech) Base Interface Class"""
 
     @abstractmethod
     async def synthesize(
@@ -99,16 +99,16 @@ class BaseTTSClient(ABC):
             format: str = "mp3"
     ) -> bytes:
         """
-        将文本合成为语音
+        Synthesize text into speech
 
         Args:
-            text: 要合成的文本
-            voice: 声音选项
-            language: 语言代码
-            format: 音频格式，如 'mp3', 'wav'
+            text: Text to compose
+            voice: Audio Options
+            language: Language code
+            format: Audio formats, such as 'mp3', 'wav'
 
         Returns:
-            音频字节数据
+            Audio Bytes Data
         """
         pass
 

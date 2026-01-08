@@ -18,11 +18,11 @@ class GptsToolsBase(SQLModelSerializable):
     logo: Optional[str] = Field(default=None, sa_column=Column(String(length=512), index=False))
     desc: Optional[str] = Field(default=None, sa_column=Column(String(length=2048), index=False))
     tool_key: str = Field(sa_column=Column(String(length=125), index=False))
-    type: int = Field(default=0, description='所属类别的ID')
-    is_preset: int = Field(default=ToolPresetType.API.value, description="工具的类别，历史原因字段就不改名了")
-    is_delete: int = Field(default=0, description='1 表示逻辑删除')
-    api_params: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='用来存储api参数等信息')
-    user_id: Optional[int] = Field(default=None, index=True, description='创建用户ID， null表示系统创建')
+    type: int = Field(default=0, description='of the category to which they belongID')
+    is_preset: int = Field(default=ToolPresetType.API.value, description="The category of the tool, the historical reason field is not renamed")
+    is_delete: int = Field(default=0, description='1 Indicates logical deletion')
+    api_params: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='Used to storeapiParameter and other information')
+    user_id: Optional[int] = Field(default=None, index=True, description='Create UserID， nullIndicates system creation')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -31,19 +31,19 @@ class GptsToolsBase(SQLModelSerializable):
 
 class GptsToolsTypeBase(SQLModelSerializable):
     id: Optional[int] = Field(default=None, index=True, primary_key=True)
-    name: str = Field(default='', sa_column=Column(String(length=1024)), description="工具类别名字")
-    logo: Optional[str] = Field(default='', description="工具类别的logo文件地址")
+    name: str = Field(default='', sa_column=Column(String(length=1024)), description="Tool Category Name")
+    logo: Optional[str] = Field(default='', description="of the tool categorylogoFile URL")
     extra: Optional[str] = Field(default='{}', sa_column=Column(Text),
-                                 description="工具类别的配置信息，用来存储工具类别所需的配置信息")
-    description: str = Field(default='', description="工具类别的描述")
-    server_host: Optional[str] = Field(default='', description="自定义工具的访问根地址，必须以http或者https开头")
-    auth_method: Optional[int] = Field(default=0, description="工具类别的鉴权方式")
-    api_key: Optional[str] = Field(default='', description="工具鉴权的api_key", sa_column=Column(String(length=2048)),
+                                 description="Configuration information for the tool category to store the configuration information required for the tool category")
+    description: str = Field(default='', description="Description of the tool category")
+    server_host: Optional[str] = Field(default='', description="The access root address of the custom tool, which must behttporhttpsWhat/the beginning?")
+    auth_method: Optional[int] = Field(default=0, description="Authentication method of tool category")
+    api_key: Optional[str] = Field(default='', description="Tool Authenticationapi_key", sa_column=Column(String(length=2048)),
                                    max_length=1000)
-    auth_type: Optional[str] = Field(default=AuthType.BASIC.value, description="工具鉴权的鉴权方式")
-    is_preset: Optional[int] = Field(default=ToolPresetType.API.value, description="工具的类别，历史原因字段就不改名了")
-    user_id: Optional[int] = Field(default=None, index=True, description='创建用户ID， null表示系统创建')
-    is_delete: int = Field(default=0, description='1 表示逻辑删除')
+    auth_type: Optional[str] = Field(default=AuthType.BASIC.value, description="Authentication method of tool authentication")
+    is_preset: Optional[int] = Field(default=ToolPresetType.API.value, description="The category of the tool, the historical reason field is not renamed")
+    user_id: Optional[int] = Field(default=None, index=True, description='Create UserID， nullIndicates system creation')
+    is_delete: int = Field(default=0, description='1 Indicates logical deletion')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -53,27 +53,27 @@ class GptsToolsTypeBase(SQLModelSerializable):
 class GptsTools(GptsToolsBase, table=True):
     __tablename__ = 't_gpts_tools'
     extra: Optional[str | dict] = Field(default=None, sa_column=Column(Text, index=False),
-                                        description='用来存储额外信息，比如参数需求等，包含 &initdb_conf_key 字段'
-                                                    '表示配置信息从系统配置里获取,多层级用.隔开')
+                                        description='Used to store additional information, such as parameter requirements, including &initdb_conf_key Data field'
+                                                    'Indicates that the configuration information is obtained from the system configuration,For multi-level use.with ')
     id: Optional[int] = Field(default=None, primary_key=True)
 
 
 class GptsToolsType(GptsToolsTypeBase, table=True):
     __tablename__ = 't_gpts_tools_type'
     openapi_schema: str = Field(default="", sa_column=Column(Text),
-                                description="工具类别的schema内容，符合openapi规范的数据")
+                                description="of the tool categoryschemaContent, complies withopenapiSpecified Data")
 
 
 class GptsToolsTypeRead(GptsToolsTypeBase):
-    openapi_schema: Optional[str] = Field(default="", description="工具类别的schema内容，符合openapi规范的数据")
-    children: Optional[List[GptsTools]] = Field(default_factory=list, description="工具类别下的工具列表")
-    parameter_name: Optional[str] = Field(default="", description="自定义请求头参数名")
-    api_location: Optional[str] = Field(default="", description="自定义请求头参数位置 header or query")
-    write: Optional[bool] = Field(default=False, description="是否有写权限")
+    openapi_schema: Optional[str] = Field(default="", description="of the tool categoryschemaContent, complies withopenapiSpecified Data")
+    children: Optional[List[GptsTools]] = Field(default_factory=list, description="List of tools under the Tools category")
+    parameter_name: Optional[str] = Field(default="", description="Custom request header parameter name")
+    api_location: Optional[str] = Field(default="", description="Custom Request Header Parameter Position header or query")
+    write: Optional[bool] = Field(default=False, description="Do you have write access")
 
     @model_validator(mode="after")
     def validate(self):
-        # 回显的时候需要填充api_location和parameter_name字段
+        # Needs to be populated when echoingapi_locationAndparameter_nameData field
         if self.extra and not self.api_location:
             result = json.loads(self.extra)
             self.api_location = result.get('api_location')
@@ -81,7 +81,7 @@ class GptsToolsTypeRead(GptsToolsTypeBase):
 
     def mask_sensitive_data(self):
         json_masker = JsonFieldMasker()
-        # 预置工具需要脱敏extra字段
+        # The provisioning tool needs to be desensitizedextraData field
         if self.extra and self.is_preset == ToolPresetType.PRESET.value:
             extra_json = json.loads(self.extra)
             extra_json = json_masker.mask_json(extra_json)
@@ -166,7 +166,7 @@ class GptsToolsDao(GptsToolsBase):
     @classmethod
     def get_list_by_user(cls, user_id: int, page: int = 0, page_size: int = 0) -> List[GptsTools]:
         """
-        获得用户可用的所有工具
+        Get all the tools available to your users
         """
         with get_sync_db_session() as session:
             statement = select(GptsTools).where(
@@ -181,7 +181,7 @@ class GptsToolsDao(GptsToolsBase):
     @classmethod
     def get_list_by_type(cls, tool_type_ids: List[int]) -> List[GptsTools]:
         """
-        获得工具类别下的所有的工具
+        Get all the tools under the Tools category
         """
         with get_sync_db_session() as session:
             statement = select(GptsTools).where(
@@ -192,7 +192,7 @@ class GptsToolsDao(GptsToolsBase):
     @classmethod
     async def aget_list_by_type(cls, tool_type_ids: List[int]) -> List[GptsTools]:
         """
-        异步获得工具类别下的所有的工具
+        Get all the tools under the Tools category asynchronously
         """
         statement = select(GptsTools).where(
             GptsTools.type.in_(tool_type_ids)).where(
@@ -204,7 +204,7 @@ class GptsToolsDao(GptsToolsBase):
     @classmethod
     def get_all_tool_type(cls, tool_type_ids: List[int]) -> List[GptsToolsType]:
         """
-        获得所有的工具类别
+        Get all tool categories
         """
         with get_sync_db_session() as session:
             statement = select(GptsToolsType).filter(
@@ -227,7 +227,7 @@ class GptsToolsDao(GptsToolsBase):
     @classmethod
     def get_preset_tool_type(cls) -> List[GptsToolsType]:
         """
-        获得所有的预置工具类别
+        Get all preset tool categories
         """
         with get_sync_db_session() as session:
             statement = select(GptsToolsType).where(GptsToolsType.is_preset == ToolPresetType.PRESET.value,
@@ -238,7 +238,7 @@ class GptsToolsDao(GptsToolsBase):
     @classmethod
     async def aget_preset_tool_type(cls) -> List[GptsToolsType]:
         """
-        异步获得所有的预置工具类别
+        Get all preset tool categories asynchronously
         """
         statement = select(GptsToolsType).where(GptsToolsType.is_preset == ToolPresetType.PRESET.value,
                                                 GptsToolsType.is_delete == 0)
@@ -252,7 +252,7 @@ class GptsToolsDao(GptsToolsBase):
                                       include_preset: bool = True,
                                       is_preset: ToolPresetType = None):
         """
-        获取用户可见的所有工具类别的statement
+        Get the value of all tool categories visible to the userstatement
         """
         statement = select(GptsToolsType).where(GptsToolsType.is_delete == 0)
         filters = []
@@ -277,7 +277,7 @@ class GptsToolsDao(GptsToolsBase):
     def get_user_tool_type(cls, user_id: int, extra_tool_type_ids: List[int] = None, include_preset: bool = True,
                            is_preset: ToolPresetType = None) -> List[GptsToolsType]:
         """
-        获取用户可见的所有工具类别
+        Get all tool categories visible to the user
         """
         statement = cls._get_user_tool_type_statement(user_id, extra_tool_type_ids, include_preset, is_preset)
         with get_sync_db_session() as session:
@@ -287,7 +287,7 @@ class GptsToolsDao(GptsToolsBase):
     async def aget_user_tool_type(cls, user_id: int, extra_tool_type_ids: List[int] = None, include_preset: bool = True,
                                   is_preset: ToolPresetType = None) -> List[GptsToolsType]:
         """
-        获取用户可见的所有工具类别
+        Get all tool categories visible to the user
         """
         statement = cls._get_user_tool_type_statement(user_id, extra_tool_type_ids, include_preset, is_preset)
         async with get_async_db_session() as session:
@@ -298,7 +298,7 @@ class GptsToolsDao(GptsToolsBase):
     def filter_tool_types_by_ids(cls, tool_type_ids: List[int], keyword: Optional[str] = None, page: int = 0,
                                  limit: int = 0, include_preset: bool = False) -> (List[GptsToolsType], int):
         """
-        根据工具类别id过滤工具类别
+        By Tool CategoryidFilter Category
         """
         statement = select(GptsToolsType).where(GptsToolsType.is_delete == 0)
         count_statement = select(func.count(GptsToolsType.id)).where(GptsToolsType.is_delete == 0)
@@ -329,7 +329,7 @@ class GptsToolsDao(GptsToolsBase):
     @classmethod
     def get_one_tool_type(cls, tool_type_id: int) -> GptsToolsType:
         """
-        获取某个类别的详情，包含openapi的schema协议内容
+        Get details about a category, includingopenapiright of privacyschemaAgreement Wording
         """
         with get_sync_db_session() as session:
             statement = select(GptsToolsType).where(GptsToolsType.id == tool_type_id)
@@ -338,7 +338,7 @@ class GptsToolsDao(GptsToolsBase):
     @classmethod
     async def aget_one_tool_type(cls, tool_type_id: int) -> GptsToolsType:
         """
-        异步获取某个类别的详情，包含openapi的schema协议内容
+        Get details about a category asynchronously, includingopenapiright of privacyschemaAgreement Wording
         """
         statement = select(GptsToolsType).where(GptsToolsType.id == tool_type_id)
         async with get_async_db_session() as session:
@@ -348,7 +348,7 @@ class GptsToolsDao(GptsToolsBase):
     @classmethod
     async def get_one_tool_type_by_name(cls, user_id: int, tool_type_name: str) -> GptsToolsType:
         """
-        异步获取某个工具类别的详细信息
+        Get the details of a tool category asynchronously
         """
         statement = select(GptsToolsType).filter(
             col(GptsToolsType.name) == tool_type_name,
@@ -362,17 +362,17 @@ class GptsToolsDao(GptsToolsBase):
     @classmethod
     async def insert_tool_type(cls, data: GptsToolsTypeRead) -> GptsToolsTypeRead:
         """
-        新增工具类别 和对应的工具列表
+        Add Tool Category and the corresponding list of tools
         """
         children = data.children
         gpts_tool_type = GptsToolsType(**data.model_dump(exclude={'children'}))
-        # 插入工具类别
+        # Insert Tool Category
         async with get_async_db_session() as session:
             session.add(gpts_tool_type)
             await session.commit()
             await session.refresh(gpts_tool_type)
             if children:
-                # 插入工具列表
+                # Insert Tools List
                 for one in children:
                     one.type = gpts_tool_type.id
                     one.tool_key = cls.get_tool_key(gpts_tool_type.id, one)
@@ -387,26 +387,26 @@ class GptsToolsDao(GptsToolsBase):
                                add_tool_list: List[GptsTools],
                                update_tool_list: List[GptsTools]):
         """
-        更新工具类别的信息
+        Update Tool Category Information
         param data: GptsToolsType
-        param del_tool_ids: 需要删除的工具id
-        param add_tool_list: 需要新增的工具列表
-        param update_tool_list: 需要更新的工具列表
+        param del_tool_ids: Tools to removeid
+        param add_tool_list: List of tools that need to be added
+        param update_tool_list: List of tools that need to be updated
         """
         finally_children = []
         async with get_async_db_session() as session:
-            # 更新工具类别的数据
+            # Update tool category data
             session.add(data)
-            # 删除不存在的工具列表
+            # Delete a list of tools that don't exist
             delete_old_tools = update(GptsTools).where(GptsTools.id.in_(del_tool_ids)).values(is_delete=1)
             await session.exec(delete_old_tools)
-            # 新增工具列表
+            # Add Tool List
             for one in add_tool_list:
                 one.type = data.id
                 one.tool_key = cls.get_tool_key(data.id, one)
                 session.add(one)
                 finally_children.append(one)
-            # 更新工具列表
+            # Update Tool List
             for one in update_tool_list:
                 session.add(one)
                 finally_children.append(one)
@@ -416,7 +416,7 @@ class GptsToolsDao(GptsToolsBase):
     @classmethod
     async def delete_tool_type(cls, tool_type_id: int) -> None:
         """
-        删除工具类别
+        Delete Tool Category
         """
         statement = update(GptsToolsType).where(col(GptsToolsType.id) == tool_type_id,
                                                 col(GptsToolsType.is_preset) != ToolPresetType.PRESET.value).values(
@@ -432,7 +432,7 @@ class GptsToolsDao(GptsToolsBase):
     @classmethod
     def get_tool_key(cls, tool_type_id: int, gpt_tool: GptsTools) -> str:
         """
-        拼接自定义工具的tool_key
+        of stitching custom toolstool_key
         """
         if gpt_tool.is_preset == ToolPresetType.MCP.value:
             return f"{gpt_tool.name}_{generate_uuid()[:8]}"

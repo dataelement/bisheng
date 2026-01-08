@@ -10,10 +10,10 @@ logger = logging.getLogger(__name__)
 
 
 class MinioManager(BaseContextManager[MinioStorage]):
-    """Minio 全局管理器
+    """Minio Global Manager
 
-    负责管理 Minio 存储的全局生命周期，提供统一的访问接口
-    支持连接池监控、健康检查和便捷的存储管理
+    Responsible for management Minio Global lifecycle of storage, providing a unified access interface
+    Supports connection pool monitoring, health checks, and easy storage management
     """
 
     name: str = "minio"
@@ -29,30 +29,30 @@ class MinioManager(BaseContextManager[MinioStorage]):
             self.minio_config = MinioConf(**self.minio_config)
 
     async def _async_initialize(self) -> MinioStorage:
-        """初始化 Minio 存储管理器"""
+        """Inisialisasi Minio Storage Manager"""
         return MinioStorage(
             self.minio_config
         )
 
     def _sync_initialize(self) -> MinioStorage:
-        """同步初始化"""
+        """Synchronization Initialization"""
         return MinioStorage(
             self.minio_config
         )
 
     def _sync_cleanup(self) -> None:
-        """同步清理 Minio 资源"""
+        """Synchronous Cleanup Minio reasourse"""
         if self._instance:
             self._instance.close_sync()
 
     async def _async_cleanup(self) -> None:
-        """清理 Minio 资源"""
+        """Cleaned Minio reasourse"""
         if self._instance:
             await self._instance.close()
 
 
 async def get_minio_storage() -> MinioStorage:
-    """获取 Minio 存储实例"""
+    """Dapatkan Minio Storage Instance"""
     from bisheng.core.context.manager import app_context
     try:
         return await app_context.async_get_instance(MinioManager.name)
@@ -70,7 +70,7 @@ async def get_minio_storage() -> MinioStorage:
 
 
 def get_minio_storage_sync() -> MinioStorage:
-    """同步获取 Minio 存储实例"""
+    """Synchronous fetch Minio Storage Instance"""
     from bisheng.core.context.manager import app_context
     try:
         return app_context.sync_get_instance(MinioManager.name)

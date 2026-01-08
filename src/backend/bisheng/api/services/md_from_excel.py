@@ -19,21 +19,21 @@ def xls_to_xlsx(xls_path):
         xls_file = pd.ExcelFile(xls_path)
         sheets_to_write = {}
 
-        # 2. 遍历所有工作表，检查是否为空，并将非空内容存入字典
+        # 2. Iterate through all worksheets, check if empty, and save non-empty content to the dictionary
         for sheet_name in xls_file.sheet_names:
             df = xls_file.parse(sheet_name)
-            # df.empty 会判断 DataFrame 是否无数据（行数为0）
+            # df.empty will judge DataFrame No data (the number of rows is0）
             if not df.empty:
                 sheets_to_write[sheet_name] = df
             else:
-                #  丢弃空工作表
+                #  Discard Blank Sheet
                 pass
 
-        # 3. 如果没有任何非空工作表，则不创建新文件
+        # 3. Do not create a new file if there are any non-empty worksheets
         if not sheets_to_write:
             return None
 
-        # 4. 如果存在非空工作表，则写入新文件
+        # 4. Write a new file if a non-empty worksheet exists
         xlsx_path = os.path.splitext(xls_path)[0] + ".xlsx"
         with pd.ExcelWriter(xlsx_path, engine="openpyxl") as writer:
             for sheet_name, df in sheets_to_write.items():
@@ -48,7 +48,7 @@ def xls_to_xlsx(xls_path):
 
 def remove_characters(s, chars_to_remove=["\n", "\r"]):
     """
-    从字符串中移除指定的字符。
+    Removes the specified character from the string.
     """
     if not isinstance(s, str):
         return s
@@ -59,8 +59,8 @@ def remove_characters(s, chars_to_remove=["\n", "\r"]):
 
 def unmerge_and_read_sheet(sheet_obj):
     """
-    读取 openpyxl 工作表对象，通过将合并区域左上角的值填充到该区域的所有单元格中来取消合并单元格，
-    并以列表的列表形式返回数据。
+    read out openpyxl Sheet object, unmerge cells by populating the top-left value of the merge range into all cells in the range.
+    and returns the data as a list of lists.
     """
     if sheet_obj.max_row == 0 or sheet_obj.max_column == 0:
         return []
@@ -70,7 +70,7 @@ def unmerge_and_read_sheet(sheet_obj):
         [None for _ in range(max_column)] for _ in range(max_row)
     ]
 
-    # 连续50行空行停止读取内容
+    # Berturut-turut50Row Blank Row Stop Reading Content
     empty_row_num = 0
     max_empty_rows = 50
     empty_row_end = 0
@@ -107,12 +107,12 @@ def generate_markdown_table_string(
         separator_placement_index=1,
 ):
     """
-    根据新规则生成Markdown表格字符串。
-    如果header_rows_list_of_lists为空，则不生成表头和分隔符。
+    Generate from new rulesMarkdownTable String
+    Automatically close purchase order afterheader_rows_list_of_listsIf empty, no headers and delimiters are generated.
     """
     md_lines = []
 
-    # 只有在提供了表头行时，才处理表头和分隔符
+    # Handle headers and delimiters only if a header row is provided
     if header_rows_list_of_lists:
         pre_separator_header = header_rows_list_of_lists[:separator_placement_index]
         for row_values in pre_separator_header:
@@ -125,7 +125,7 @@ def generate_markdown_table_string(
                 + " |"
             )
 
-        # 在第一行表头下方插入Markdown分隔符
+        # Insert below the header in the first rowMarkdownSeparator
         if num_columns > 0:
             md_lines.append("|" + "---|" * num_columns)
 
@@ -140,7 +140,7 @@ def generate_markdown_table_string(
                 + " |"
             )
 
-    # 总是处理数据行
+    # Always process data rows
     for row_values in data_rows_list_of_lists:
         md_lines.append(
             "| "
@@ -162,11 +162,11 @@ def process_dataframe_to_markdown_files(
         append_header=True,
 ):
     """
-    - append_header=True: 按 num_header_rows 分离表头和数据。
-    - append_header=False: 全部内容视为数据，表头为空，忽略 num_header_rows。
+    - append_header=True: Tekan num_header_rows Separate the header and data.
+    - append_header=False: All content is treated as data, table header is empty, ignored num_header_rows。
     """
     if df.empty:
-        logger.warning(f"  源 '{sheet_index}' 的数据DataFrame为空，跳过Markdown生成。")
+        logger.warning(f"  feed '{sheet_index}' DataDataFrameEmpty, skippingMarkdownBuat")
         return
 
     num_columns = df.shape[1]
@@ -180,17 +180,17 @@ def process_dataframe_to_markdown_files(
     if start_header_idx >= rows:
         append_header = False
 
-    # --- 核心逻辑修改：根据 append_header 决定如何切分数据 ---
+    # --- Core Logic Modified: According to append_header Decide how to split the data ---
     if append_header:
-        # 根据用户规则处理表头索引越界问题
+        # Handle header index outliers based on user rules
         if start_header_idx >= rows:
-            logger.warning(f"  表头起始行 {start_header_idx} 超出总行数 {rows}。将使用第一行作为表头。")
+            logger.warning(f"  Table Header Start Row {start_header_idx} Total lines exceeded {rows}. The first row will be used as the table header.")
             start_header_idx, end_header_idx = 0, 0
         elif end_header_idx >= rows:
-            logger.warning(f"  表头结束行 {end_header_idx} 超出总行数 {rows}。将截断至最后一行。")
+            logger.warning(f"  Table Header End Row {end_header_idx} Total lines exceeded {rows}. will be truncated to the last line.")
             end_header_idx = rows - 1
 
-        # 确保索引合法
+        # Make sure the index is legitimate
         if start_header_idx < 0: start_header_idx = 0
         if end_header_idx < start_header_idx: end_header_idx = start_header_idx
 
@@ -201,14 +201,14 @@ def process_dataframe_to_markdown_files(
             header_rows_as_lists = header_block_df.values.tolist()
         except Exception as e:
             logger.error(
-                f"  在源 '{sheet_index}' 中根据表头索引 [{start_header_idx}, {end_header_idx}] 切分数据时出错: {e}。跳过。")
+                f"  At Source '{sheet_index}' Index by header in [{start_header_idx}, {end_header_idx}] Error Splitting Data: {e}Skip")
             return
     else:
-        # 当 append_header 为 False 时，所有内容都视为数据，表头列表为空
+        # when append_header are False , everything is treated as data and the header list is empty
         header_rows_as_lists = []
         data_block_df = df.reset_index(drop=True)
 
-    # --- 后续分页逻辑 ---
+    # --- Subsequent pagination logic ---
     if data_block_df.empty:
         if append_header and not header_block_df.empty:
             markdown_content = generate_markdown_table_string(
@@ -220,9 +220,9 @@ def process_dataframe_to_markdown_files(
             try:
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(markdown_content)
-                logger.debug(f"  已保存仅含表头的文件：'{file_path}'")
+                logger.debug(f"  Header-only files saved:'{file_path}'")
             except Exception as e:
-                logger.debug(f"  保存文件 '{file_path}' 时出错: {e}")
+                logger.debug(f"  Save file '{file_path}' Error during: {e}")
         return
 
     num_data_rows_total = len(data_block_df)
@@ -237,7 +237,7 @@ def process_dataframe_to_markdown_files(
         final_header_for_chunk = header_rows_as_lists
         final_data_for_chunk = current_data_chunk_as_lists
 
-        # 如果不附加真实表头，并且当前数据块不为空，则将数据的第一行用作“伪表头”以生成分隔符
+        # If no real header is attached and the current data block is not empty, the first row of data is used as the “pseudo header” to generate the delimiter
         if not append_header and current_data_chunk_as_lists:
             final_header_for_chunk = [current_data_chunk_as_lists[0]]
             final_data_for_chunk = current_data_chunk_as_lists[1:]
@@ -254,50 +254,50 @@ def process_dataframe_to_markdown_files(
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(markdown_content)
             logger.debug(
-                f"  已保存：'{file_path}' (含 {len(current_data_chunk_as_lists)} 行原始数据)"
+                f"  Sudah disimpan'{file_path}' (incl.  {len(current_data_chunk_as_lists)} Row Raw Data)"
             )
         except Exception as e:
-            logger.debug(f"  保存文件 '{file_path}' 时出错: {e}")
+            logger.debug(f"  Save file '{file_path}' Error during: {e}")
 
 
 def is_list_of_lists_empty(data_list):
     """
-    判断一个二维列表是否为空或只包含空值 (None, '')。
+    Determine if a 2D list is empty or contains only empty values (None, '')。
     """
     if not data_list:
         return True
-    # 使用 any() 和生成器表达式，高效判断
-    # any(row) 检查是否存在非空行
-    # any(cell is not None and cell != '' for cell in row) 检查行内是否有非空单元格
+    # Use any() and generator expressions for efficient judgment
+    # any(row) Check for non-empty lines
+    # any(cell is not None and cell != '' for cell in row) Check if there are non-empty cells in the row
     return not any(any(cell is not None and str(cell).strip() != '' for cell in row) for row in data_list)
 
 
 def excel_file_to_markdown(
         excel_path, num_header_rows, rows_per_markdown, output_dir, append_header=True
 ):
-    logger.debug(f"\n开始处理Excel文件：'{excel_path}'")
+    logger.debug(f"\nStart ProcessingExcelDocumentation:'{excel_path}'")
     try:
         workbook = openpyxl.load_workbook(excel_path, data_only=True, read_only=False)
     except Exception as e:
-        logger.debug(f"错误：无法加载Excel文件 '{excel_path}'。原因: {e}")
+        logger.debug(f"Error: Unable to loadExcelDoc. '{excel_path}'Reason: {e}")
         return
 
     sheet_index = 0
     for sheet_name in workbook.sheetnames:
-        logger.debug(f"\n  正在处理Excel工作表：'{sheet_name}'...")
+        logger.debug(f"\n  (In work)ExcelWorksheet'{sheet_name}'...")
         sheet_obj = workbook[sheet_name]
         unmerged_data_list_of_lists = unmerge_and_read_sheet(sheet_obj)
         logger.debug(f"\n  <read all data>Excel<UNK>'{sheet_name}'...{len(unmerged_data_list_of_lists)}")
 
-        # 使用新的判断函数
+        # Using the new decision function
         if is_list_of_lists_empty(unmerged_data_list_of_lists):
-            logger.debug(f"  工作表 '{sheet_name}' 为空或无有效数据，跳过。")
+            logger.debug(f"  Worksheet '{sheet_name}' Empty or no valid data, skipping.")
             continue
 
         df = pd.DataFrame(unmerged_data_list_of_lists)
         df.fillna("", inplace=True)
         if df.empty:
-            logger.debug(f"  工作表 '{sheet_name}' 处理后为空DataFrame，跳过。")
+            logger.debug(f"  Worksheet '{sheet_name}' Empty after processingDataFrameSkip")
             continue
 
         process_dataframe_to_markdown_files(
@@ -312,7 +312,7 @@ def excel_file_to_markdown(
 
     if workbook:
         workbook.close()
-    logger.debug(f"\nExcel文件 '{excel_path}' 处理完成。")
+    logger.debug(f"\nExcelDoc. '{excel_path}' Process Completed.")
 
 
 def csv_file_to_markdown(
@@ -324,7 +324,7 @@ def csv_file_to_markdown(
         csv_delimiter=",",
         append_header=True,
 ):
-    logger.debug(f"\n开始处理CSV文件：'{csv_path}'")
+    logger.debug(f"\nStart ProcessingCSVDocumentation:'{csv_path}'")
     try:
         df = pd.read_csv(
             csv_path,
@@ -337,17 +337,17 @@ def csv_file_to_markdown(
         df.fillna("", inplace=True)
 
     except pd.errors.EmptyDataError:
-        logger.debug(f"错误：CSV文件 '{csv_path}' 为空。")
+        logger.debug(f"Error: CSVDoc. '{csv_path}' Empty")
         return
     except FileNotFoundError:
-        logger.debug(f"错误：CSV文件 '{csv_path}' 未找到。")
+        logger.debug(f"Error: CSVDoc. '{csv_path}' Nothing found.")
         return
     except Exception as e:
-        logger.debug(f"错误：无法读取CSV文件 '{csv_path}'。原因: {e}")
+        logger.debug(f"Error: UnreadableCSVDoc. '{csv_path}'Reason: {e}")
         return
 
     if df.empty:
-        logger.debug(f"CSV文件 '{csv_path}' 为空或处理后为空，跳过。")
+        logger.debug(f"CSVDoc. '{csv_path}' Empty or empty after processing, skipping.")
         return
 
     process_dataframe_to_markdown_files(
@@ -358,7 +358,7 @@ def csv_file_to_markdown(
         output_dir,
         append_header,
     )
-    logger.debug(f"\nCSV文件 '{csv_path}' 处理完成。")
+    logger.debug(f"\nCSVDoc. '{csv_path}' Process Completed.")
 
 
 def convert_file_to_markdown(
@@ -371,15 +371,15 @@ def convert_file_to_markdown(
         append_header=True,
 ):
     """
-    将 Excel 或 CSV 文件转换为多个 Markdown 文件。
+    will be Excel OR CSV Convert files to multiple Markdown files.
     """
     if not os.path.exists(input_file_path):
-        logger.debug(f"错误：输入文件 '{input_file_path}' 未找到。")
+        logger.debug(f"Error: Input file '{input_file_path}' Nothing found.")
         return
 
     if not os.path.exists(base_output_dir):
         os.makedirs(base_output_dir)
-        logger.debug(f"创建输出目录：'{base_output_dir}'")
+        logger.debug(f"To create an output directory:'{base_output_dir}'")
 
     _, file_extension = os.path.splitext(input_file_path)
     file_extension = file_extension.lower()
@@ -406,7 +406,7 @@ def convert_file_to_markdown(
         )
     else:
         logger.debug(
-            f"错误：不支持的文件类型 '{file_extension}'。请提供 Excel (.xlsx, .xls) 或 CSV (.csv) 文件。"
+            f"Error: Unsupported file type '{file_extension}'Please provide user. Excel (.xlsx, .xls) OR CSV (.csv) files."
         )
 
 
@@ -418,7 +418,7 @@ def handler(
         append_header=True,
 ):
     """
-    处理文件转换的主函数。
+    The main function that handles file conversions.
     """
     doc_id = uuid4()
     md_file_name = f"{cache_dir}/{doc_id}"
@@ -434,16 +434,16 @@ def handler(
 
 
 if __name__ == "__main__":
-    # 定义测试参数
+    # Define test parameters
     test_cache_dir = "/Users/zhangguoqing/Downloads/tmp"
     test_file_name = "/Users/zhangguoqing/Downloads/124327.xlsx"
-    # 测试 append_header=True 且索引越界的情况
-    test_header_rows = [0, 0]  # start_header_index 超出范围
+    # Test append_header=True and the index is out of bounds
+    test_header_rows = [0, 0]  # start_header_index Out of Scope
     test_data_rows = 2
     test_append_header = True
 
-    # 调用 handler 函数
-    print("--- 测试场景: append_header=True, 表头索引越界 ---")
+    # Recall handler Function
+    print("--- Test Scenarios: append_header=True, Table header index out of bounds ---")
     handler(
         cache_dir=test_cache_dir,
         file_name=test_file_name,

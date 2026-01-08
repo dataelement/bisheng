@@ -19,27 +19,27 @@ from bisheng.llm.domain.const import LLMModelStatus
 async def bisheng_model_limit_check(self: 'BishengBase'):
     now = datetime.now().strftime("%Y-%m-%d")
     if self.server_info.limit_flag:
-        # 开启了调用次数检查
+        # Number of calls checked
         cache_key = f"model_limit:{now}:{self.server_info.id}"
         redis_client = await get_redis_client()
         use_num = await redis_client.aincr(cache_key)
         if use_num > self.server_info.limit:
-            raise Exception(f'{self.server_info.name}/{self.model_info.model_name} 额度已用完')
+            raise Exception(f'{self.server_info.name}/{self.model_info.model_name} Quota used up')
 
 
 def sync_bisheng_model_limit_check(self: 'BishengBase'):
     now = datetime.now().strftime("%Y-%m-%d")
     if self.server_info.limit_flag:
-        # 开启了调用次数检查
+        # Number of calls checked
         cache_key = f"model_limit:{now}:{self.server_info.id}"
         use_num = get_redis_client_sync().incr(cache_key)
         if use_num > self.server_info.limit:
-            raise Exception(f'{self.server_info.name}/{self.model_info.model_name} 额度已用完')
+            raise Exception(f'{self.server_info.name}/{self.model_info.model_name} Quota used up')
 
 
 def get_token_from_usage(token_usage: Dict[str, Any]) -> tuple[int, int, int, int]:
     """
-    从token_usage字典中获取token使用情况
+    FROMtoken_usageGet in DictionarytokenUsage
     """
     input_token = token_usage.get('input_tokens', 0) or token_usage.get('prompt_tokens', 0)
     output_token = token_usage.get('output_tokens', 0) or token_usage.get('completion_tokens', 0)
@@ -51,7 +51,7 @@ def get_token_from_usage(token_usage: Dict[str, Any]) -> tuple[int, int, int, in
 
 def parse_token_usage(result: Any) -> tuple[int, int, int, int]:
     """
-    解析token使用情况
+    analyzingtokenUsage
     """
     input_token, output_token, cache_token, total_token = 0, 0, 0, 0
     if isinstance(result, ChatResult):
@@ -67,7 +67,7 @@ def parse_token_usage(result: Any) -> tuple[int, int, int, int]:
 
 class TelemetryCallback(BaseCallbackHandler):
     """
-    Telemetry 回调函数
+    Telemetry Slider Callbacks
     """
 
     def __init__(self, start_time: float):
@@ -90,7 +90,7 @@ class TelemetryCallback(BaseCallbackHandler):
 def upload_telemetry_log(self: 'BishengBase', start_time: float, end_time: float, first_token_cost_time: int,
                          status: StatusEnum, is_stream: bool = False, result: Any = None):
     """
-    上传埋点日志
+    Upload Buried Point Log
     """
     try:
         logger.debug("start upload model invoke telemetry log")
@@ -133,7 +133,7 @@ def upload_telemetry_log(self: 'BishengBase', start_time: float, end_time: float
 
 def wrapper_bisheng_model_limit_check(func):
     """
-    调用次数检查的装饰器
+    Number of calls to check the decorator
     """
 
     @functools.wraps(func)
@@ -161,7 +161,7 @@ def wrapper_bisheng_model_limit_check(func):
             raise e
         finally:
             end_time = time.time()
-            # 使用线程池异步上传日志，避免阻塞主线程
+            # Avoid blocking the main thread by uploading logs asynchronously using the thread pool
             first_token_cost_time = telemetry_callback.first_token_time if telemetry_callback else 0
             upload_telemetry_log(self, start_time, end_time, first_token_cost_time, telemetry_status, result=result)
             self.sync_update_model_status(status, remark)
@@ -171,7 +171,7 @@ def wrapper_bisheng_model_limit_check(func):
 
 def wrapper_bisheng_model_limit_check_async(func):
     """
-    调用次数检查的装饰器
+    Number of calls to check the decorator
     """
 
     @functools.wraps(func)
@@ -207,7 +207,7 @@ def wrapper_bisheng_model_limit_check_async(func):
 
 def wrapper_bisheng_model_generator(func):
     """
-    调用次数检查的装饰器  装饰同步生成器函数
+    Number of calls to check the decorator  Decorative Synchronization Builder Functions
     """
 
     @functools.wraps(func)
@@ -241,7 +241,7 @@ def wrapper_bisheng_model_generator(func):
 
 def wrapper_bisheng_model_generator_async(func):
     """
-    调用次数检查的装饰器  装饰异步生成器函数
+    Number of calls to check the decorator  Decorative Asynchronous Builder Functions
     """
 
     @functools.wraps(func)
