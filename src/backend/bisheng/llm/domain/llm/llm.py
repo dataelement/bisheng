@@ -26,7 +26,7 @@ from ..utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_lim
 
 def _get_user_kwargs(model_config: dict) -> dict:
     user_kwargs = model_config.get('user_kwargs', {})
-    if isinstance(user_kwargs, str):
+    if isinstance(user_kwargs, str) and user_kwargs:
         return json.loads(user_kwargs)
     return user_kwargs
 
