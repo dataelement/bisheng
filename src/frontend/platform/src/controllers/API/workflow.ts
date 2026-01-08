@@ -516,7 +516,7 @@ const workflowTemplate = [
                         "label": "true",
                         "type": "var_textarea",
                         "test": "var",
-                        "value": "",
+                        "value": "true",
                         "placeholder": "true",
                         "required": true
                     },

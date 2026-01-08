@@ -196,6 +196,32 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
         return [];
     }
 
+    // update system prompt
+    const handleAddSysPrompt = (type: 'knowledge' | 'sql') => {
+        node.group_params.forEach(group => {
+            if (group.params && Array.isArray(group.params)) {
+
+                const targetParam = group.params.find(p => p.key === 'system_prompt');
+
+                if (targetParam) {
+                    let currentValue = targetParam.value || "";
+                    const map = {
+                        'knowledge': t('kbQueryToolIntro'),
+                        'sql': t('sqlAgentToolIntro')
+                    }
+                    const searchStr = map[type]
+                    if (!currentValue.includes(searchStr)) {
+                        targetParam.value = currentValue === '\n' ? searchStr : currentValue + searchStr;
+                    }
+                }
+            }
+        });
+
+        setTimeout(() => {
+            setFocusUpdate(!focusUpdate) // render
+        }, 100);
+    }
+
     const [expend, setExpend] = useState(node.expand === undefined ? true : node.expand)
 
     const { isVisible, handleMouseEnter, handleMouseLeave } = useHoverToolbar();
@@ -301,6 +327,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                                 node={node}
                                 cate={group}
                                 onOutPutChange={handleChangeOutPut}
+                                onAddSysPrompt={handleAddSysPrompt}
                                 onFouceUpdate={() => setFocusUpdate(!focusUpdate)}
                                 onStatusChange={((key, obj) => paramValidateEntities.current[key] = obj)}
                                 onVarEvent={((key, obj) => varValidateEntities.current[key] = obj)}

@@ -68,7 +68,7 @@ export default function VarInput({
     onChange,
     onVarEvent = undefined,
 }) {
-    const { textareaRef, handleFocus, handleBlur, removePlaceholder } = usePlaceholder(placeholder);
+    const { textareaRef, handleFocus, handleBlur, placeholderInit, removePlaceholder } = usePlaceholder(placeholder);
     const valueRef = useRef(value || '');
     const [fullVarInputValue, setFullVarInputValue] = useState(value || '');
     const selectVarRef = useRef(null);
@@ -115,10 +115,11 @@ export default function VarInput({
     }
 
     useEffect(() => {
-        // console.log('value :>> ', value);
+        console.log('!!!value :>> ', value);
+        // if (valueRef.current && valueRef.current === value) return
         textareaRef.current.innerHTML = parseToHTML(value || '')[0];
-        handleBlur();
-    }, []);
+        placeholderInit();
+    }, [value]);
 
     // Update Preset Questions 
     const [updateVariable] = useUpdateVariableState()
@@ -481,6 +482,15 @@ function usePlaceholder(placeholder) {
         divRef.current.classList.remove("placeholder");
     }
 
+    const init = () => {
+        if (divRef.current && ['<br>', ''].includes(divRef.current.innerHTML.trim())) {
+            divRef.current.innerHTML = placeholder;
+            divRef.current.classList.add("placeholder");
+        } else {
+            divRef.current.classList.remove("placeholder");
+        }
+    }
+
     useEffect(() => {
         if (!placeholder) return
         if (divRef.current) {
@@ -498,5 +508,5 @@ function usePlaceholder(placeholder) {
         }
     }, [placeholder]);
 
-    return { textareaRef: divRef, handleFocus, handleBlur, removePlaceholder };
+    return { textareaRef: divRef, placeholderInit: init, handleFocus, handleBlur, removePlaceholder };
 }

@@ -238,6 +238,8 @@
   "playbackUnavailable": "Playback is not available. Please contact the administrator.",
   "wordEditorLoadFailed": "Word editor failed to load",
   "checkOfficeServiceConfig": "Please ensure the Office service address is configured correctly and the service is running.",
+  "kbQueryToolIntro": "## Knowledge Base Search Tool Intro\nWhen a knowledge base search is required to solve a user's problem, invoke the knowledge base search tool and rewrite the user's requirement into a suitable query as the input parameter.",
+  "sqlAgentToolIntro": "## SQLAgent Database Tool Intro\n1. Use natural language to accurately describe the user's query needs, and use this description as the value for the 'query' parameter to invoke the sqlagent tool;\n2. If the user has multiple query requirements, invoke sqlagent twice separately.",
   "node": {
     "start": {
       "name": "Start",
@@ -379,7 +381,8 @@
       },
       "system_prompt": {
         "label": "System Prompt",
-        "placeholder": "Agent persona description"
+        "placeholder": "Agent persona description",
+        "value": "You are an intelligent AI assistant, skilled at solving user problems by invoking appropriate tools (if any) based on user needs.\nThe current time is {{#Start/current_time#}}"
       },
       "user_prompt": {
         "label": "User Prompt",

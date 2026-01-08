@@ -136,7 +136,7 @@
     "roleName": "ロール名",
     "skillAuthorization": "スキル権限付与",
     "knowledgeAuthorization": "ナレッジベース権限付与",
-     "boardAuthorization": "ボード権限",
+    "boardAuthorization": "ボード権限",
     "boardName": "ボード名",
     "allowCreateBoard": "ボードの作成を許可",
     "allowCreateBoardDesc": "有効化後、このロールは統計ボードで新しいボードを作成できます",
@@ -933,10 +933,10 @@
     "parameterName": "パラメータ名",
     "parameterPlaceholder": "カスタムAPIパラメータ名を入力してください",
     "apiLocationLabel": "APIキーの場所",
-      "basicBearerDescription": "Basic・Bearer：ヘッダーの Authorization に APIキーを設定します",
-  "customDescription": "Custom：APIキーのパラメータ名と位置をカスタマイズします",
-  "headerDescription": "header：APIキーはリクエストヘッダー内のパラメータとして送信されます",
-  "queryDescription": "query：APIキーはURLのクエリ文字列にパラメータとして含まれます",
+    "basicBearerDescription": "Basic・Bearer：ヘッダーの Authorization に APIキーを設定します",
+    "customDescription": "Custom：APIキーのパラメータ名と位置をカスタマイズします",
+    "headerDescription": "header：APIキーはリクエストヘッダー内のパラメータとして送信されます",
+    "queryDescription": "query：APIキーはURLのクエリ文字列にパラメータとして含まれます",
     "header": "ヘッダー",
     "query": "クエリ",
     "authTypeLabel": "認証タイプ",
@@ -1463,7 +1463,8 @@
     "17012": "対応する指標設定が見つかりません",
     "17013": "対応する集計方法が見つかりません",
     "17014": "対応するディメンション設定が見つかりません",
-    "17015": "対応する演算子設定が見つかりません"
+    "17015": "対応する演算子設定が見つかりません",
+    "90002": "現在のロールにはワークベンチへのアクセス権限がありません。必要な場合は管理者に連絡してください。"
   },
   "all": "すべて",
   "confirmButton": "確認",
@@ -1534,5 +1535,7 @@
   "com_sop_select_file": "ファイルを選択",
   "more": "もっと見る",
   "chatTips": "1. 中国の《インターネットセキュリティ法》、《データセキュリティ法》、《個人情報保護法》および《生成型人工知能サービスセキュリティ基本要求》を遵守してください；\n2. 企業の機密管理規定に該当する機密データのアップロードは禁止されています；\n3. 個人情報を含むデータのアップロードは禁止されています；\n4. 悪意のあるプログラムやウイルスを含むファイルのアップロードは禁止されています；\n5. 攻撃的なコードをAIで生成することは禁止されています；\n6. 爆発物、テロ、ポルノ、国家安全保障や公共安全に害を及ぼす違法情報などをAIに質問することは禁止されています；\n7. AIが生成する内容は企業の機密管理規定に従います。ユーザーは生成内容の合理性を実際の状況に基づいて判断し、AIの幻覚によるリスクを避ける必要があります。",
-  "com_preview_type_unsupported": "このファイルは現在プレビューに対応していません"
+  "com_preview_type_unsupported": "このファイルは現在プレビューに対応していません",
+  "splitSettingsTooltip": "セグメントの目標長と隣接するセグメントの重複長を設定し、コンテキストの繋がりを制御します。原文の画像を保持するかどうかを選択できます。",
+  "splitMethodTooltip": "ルールの優先順位に従って分割位置を決定します（ドラッグで調整可能）。カスタム正規表現をサポートし、一致した内容の前または後で分割するかを選択できます。"
 }

@@ -239,6 +239,8 @@
   "playbackUnavailable": "播放功能不可用，请联系管理员",
   "wordEditorLoadFailed": "word编辑器加载失败",
   "checkOfficeServiceConfig": "请检查Office服务地址配置是否正确并正常启动",
+  "kbQueryToolIntro": "## 知识库查询工具介绍\n当需要查询知识库来解决用户问题时，调用知识库查询工具，将用户需求改写成合适的 query 作为知识库工具的入参。",
+  "sqlAgentToolIntro": "## sqlagent 数据库工具介绍\n1. 使用自然语言精确的描述用户查询需求，将该描述作为参数 query 的值，调用 sqlagent 工具；\n2. 如果用户有多条查询需求，分两次调用sqlagent。",
   "node": {
     "start": {
       "name": "开始",
@@ -380,7 +382,8 @@
       },
       "system_prompt": {
         "label": "系统提示词",
-        "placeholder": "助手画像"
+        "placeholder": "助手画像",
+        "value": "你是一个智能 AI 助手，擅长根据用户需求，调用合适的工具（如有的话）解决用户问题。\n当前时间是 {{#开始/current_time#}}"
       },
       "user_prompt": {
         "label": "用户提示词",

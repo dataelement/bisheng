@@ -8,6 +8,7 @@ import {
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
+import Tip from "@/components/bs-ui/tooltip/tip";
 import { cn } from "@/util/utils";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -207,10 +208,12 @@ export default function RuleTable({
                     <AccordionItem key={file.id} value={file.id} className="border border-gray/80 rounded-xl mb-2 hover:border-primary hover:shadow-lg">
                       {/* 下拉触发按钮 */}
                       <AccordionTrigger hoverable className="p-0 cursor-pointer relative overflow-hidden flex flex-row-reverse justify-between">
-                        <p className="flex gap-2 p-2 items-center relative">
-                          <FileIcon type='xls' className="size-[30px] min-w-8" />
-                          <span className="w-80 truncate text-left">{file.fileName.slice(0, 15)}{file.fileName.length > 15 ? '...' : ''}</span>
-                        </p>
+                        <Tip content={file.fileName} align="start">
+                          <p className="flex gap-2 p-2 items-center relative">
+                            <FileIcon type='xls' className="size-[30px] min-w-8" />
+                            <span className="w-80 truncate text-left">{file.fileName.slice(0, 15)}{file.fileName.length > 15 ? '...' : ''}</span>
+                          </p>
+                        </Tip>
                       </AccordionTrigger>
                       <AccordionContent className="flex flex-col gap-4 p-4">
                         <ItemForm data={file.excelRule} setData={(key, value) => {

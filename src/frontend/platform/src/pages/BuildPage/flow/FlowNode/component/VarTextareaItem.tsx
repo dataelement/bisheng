@@ -17,6 +17,7 @@ export default function VarTextareaItem({ node, nodeId, data, onChange, onValida
         })
         return () => onValidate(() => { })
     }, [data.value, nodeId])
+    
 
     return (
         <div className='node-item mb-4 max-w-2xl nodrag' data-key={data.key}>

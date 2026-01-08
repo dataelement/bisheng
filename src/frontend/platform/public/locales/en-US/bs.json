@@ -135,9 +135,9 @@
     "roleName": "Role Name",
     "skillAuthorization": "Skill Authorization",
     "knowledgeAuthorization": "Knowledge Base Authorization",
-      "boardAuthorization": "Board Permission",
+    "boardAuthorization": "Board Permission",
     "boardName": "Board Name",
-     "allowCreateBoard": "Allow Board Creation",
+    "allowCreateBoard": "Allow Board Creation",
     "allowCreateBoardDesc": "After enabling, this role can create new boards in the statistical dashboard",
     "searchAssistant": "Search Assistant",
     "searchSkill": "Search Skill",
@@ -1470,7 +1470,8 @@
     "17012": "Corresponding metric configuration not found",
     "17013": "Corresponding aggregation method not found",
     "17014": "Corresponding dimension configuration not found",
-    "17015": "Corresponding operator configuration not found"
+    "17015": "Corresponding operator configuration not found",
+    "90002": "Your current role does not have permission to access the workbench. Please contact the administrator if needed."
   },
   "all": "All",
   "confirmButton": "Confirm",

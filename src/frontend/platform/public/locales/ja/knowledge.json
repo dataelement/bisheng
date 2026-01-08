@@ -1,64 +1,64 @@
 {
-  "predefinedRules": {
-    "singleNewlineRule": {
-        "label": "単一行間後分割",
-        "desc": "単一改行で分割（通常換行）"
+    "predefinedRules": {
+        "singleNewlineRule": {
+            "label": "単一行間後分割",
+            "desc": "単一改行で分割（通常換行）"
+        },
+        "doubleNewlineRule": {
+            "label": "二重改行後分割",
+            "desc": "二重改行で分割（段落区切り）"
+        },
+        "chapterRule": {
+            "label": "第.{1,3}章",
+            "desc": "「第X章」の前で分割（章区切り）"
+        },
+        "articleRule": {
+            "label": "第.{1,3}節",
+            "desc": "「第X条」の前で分割（条文区切り）"
+        },
+        "chinesePeriodRule": {
+            "label": "中国語句点後分割",
+            "desc": "中国語の句点後で分割"
+        },
+        "englishPeriodRule": {
+            "label": "英語ピリオド後分割",
+            "desc": "英語のピリオド後で分割"
+        }
     },
-    "doubleNewlineRule": {
-        "label": "二重改行後分割",
-        "desc": "二重改行で分割（段落区切り）"
-    }, 
-    "chapterRule": {
-        "label":"第.{1,3}章",
-        "desc":"「第X章」の前で分割（章区切り）"
-    },
-    "articleRule": {
-        "label":"第.{1,3}節",
-        "desc":"「第X条」の前で分割（条文区切り）"
-    },
-    "chinesePeriodRule": {
-        "label":"中国語句点後分割",
-        "desc":"中国語の句点後で分割"
-    },
-    "englishPeriodRule": {
-        "label":"英語ピリオド後分割",
-        "desc":"英語のピリオド後で分割"
-    }
-  },
-  "confirm1": "確定",
-  "now": "今",
-  "hour": "時",
-  "minute": "分",
-  "second": "秒",
-  "unavailable": "音声再生機能は利用できません。管理者に連絡してください。",
-  "placeholder": "日付を選択",
-   "chunk": "チャンク",
-   "source_unknown": "不明",
+    "confirm1": "確定",
+    "now": "今",
+    "hour": "時",
+    "minute": "分",
+    "second": "秒",
+    "unavailable": "音声再生機能は利用できません。管理者に連絡してください。",
+    "placeholder": "日付を選択",
+    "chunk": "チャンク",
+    "source_unknown": "不明",
     "source_manual": "手動作成",
     "source_annotation_import": "アノテーションインポート",
     "source_api_import": "APIインポート",
     "source_batch_import": "一括インポート",
-  "chunkContentCannotBeEmpty": "チャンクの内容は空にできません",
-  "clickLocateOriginalFile": "クリックして原ファイルに定位してください",
-  "clickShowMarkdownEdit": "クリックしてMarkdown原文を表示し、編集してください",
-  "clickDeleteChunk": "削除区分",
-  "noAnalysisResult": "解析結果はありません",
-  "filePathEmpty": "ファイルパスが空です",
-  "fileLoadFailed": "ファイル読み込み失敗",
-  "fileContentEmpty": "ファイル内容が空です",
-  "excelContentEmpty": "Excel内容が空です",
-  "unsupportedType": "サポートされていないタイプ: {{type}}，CSV/XLSX/XLSのみ対応",
-  "sheetParseError": "シート解析エラー",
-  "unknownError": "不明なエラー",
-  "currentSheetNoData": "現在のシートにデータがありません",
-  "rowNumber": "行番号",
-  "defaultColumnName": "列{{index}}",
-  "loading": "ファイル読み込み中...",
-  "supportedFormats": "CSV、XLSX、XLS形式に対応",
-  "previewFailed": "プレビュー失敗",
-  "downloadOriginal": "元ファイルをダウンロード",
-  "everyRowsAsOneSegment": "毎{{count}}行を1セグメントとして",
-  "confirmDeleteSelectedFiles": "選択したファイル（{{count}}個）を削除しますか",
+    "chunkContentCannotBeEmpty": "チャンクの内容は空にできません",
+    "clickLocateOriginalFile": "クリックして原ファイルに定位してください",
+    "clickShowMarkdownEdit": "クリックしてMarkdown原文を表示し、編集してください",
+    "clickDeleteChunk": "削除区分",
+    "noAnalysisResult": "解析結果はありません",
+    "filePathEmpty": "ファイルパスが空です",
+    "fileLoadFailed": "ファイル読み込み失敗",
+    "fileContentEmpty": "ファイル内容が空です",
+    "excelContentEmpty": "Excel内容が空です",
+    "unsupportedType": "サポートされていないタイプ: {{type}}，CSV/XLSX/XLSのみ対応",
+    "sheetParseError": "シート解析エラー",
+    "unknownError": "不明なエラー",
+    "currentSheetNoData": "現在のシートにデータがありません",
+    "rowNumber": "行番号",
+    "defaultColumnName": "列{{index}}",
+    "loading": "ファイル読み込み中...",
+    "supportedFormats": "CSV、XLSX、XLS形式に対応",
+    "previewFailed": "プレビュー失敗",
+    "downloadOriginal": "元ファイルをダウンロード",
+    "everyRowsAsOneSegment": "毎{{count}}行を1セグメントとして",
+    "confirmDeleteSelectedFiles": "選択したファイル（{{count}}個）を削除しますか",
     "metacommon": {
         "delete": "削除",
         "cancel": "キャンセル",
@@ -193,6 +193,9 @@
     "parsing": "解析中",
     "retry": "再試行",
     "completed": "完了",
+    "queuing": "待機中",
+    "timeout": "タイムアウト",
+    "timeoutTip": "待機時間が24時間を超えました。管理者に連絡してリソースを追加することをお勧めします。",
     "parseFailed": "解析失敗",
     "uploadTime": "アップロード時間",
     "operations": "操作",
