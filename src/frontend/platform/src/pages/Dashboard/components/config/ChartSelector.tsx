@@ -14,6 +14,7 @@ import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashbo
 import { AdvancedDatePicker } from "../AdvancedDatePicker"
 import { ChevronRight, ChevronLeft } from "lucide-react"
 import { toast } from "@/components/bs-ui/toast/use-toast"
+import { useTranslation } from "react-i18next"
 
 /* ================== 类型 ================== */
 export interface ChartLinkConfig {
@@ -37,84 +38,80 @@ export default function ChartSelector({
   onSave,
   onCancel
 }: ChartSelectorProps) {
+  const { t } = useTranslation("dashboard")
   const [selectedCharts, setSelectedCharts] = useState<string[]>([])
-  const [displayType, setDisplayType] = useState("时间范围")
-  const [timeGranularity, setTimeGranularity] = useState("年月日")
+  const [displayType, setDisplayType] = useState(t("chartSelector.displayTypes.timeRange", "时间范围"))
+  const [timeGranularity, setTimeGranularity] = useState(t("chartSelector.granularities.yearMonthDay", "年月日"))
   const [isDefault, setIsDefault] = useState(false)
   const [timeFilter, setTimeFilter] = useState<any>(null)
-  const [collapsed, setCollapsed] = useState(false) // 控制整体收起
+  const [collapsed, setCollapsed] = useState(false)
 
   // 从 store 获取当前 dashboard 和组件
   const { currentDashboard } = useEditorDashboardStore()
   const { editingComponent } = useComponentEditorStore()
   
-useEffect(() => {
-
-  const config = editingComponent?.data_config
-  
-  if (config && 'linkedComponentIds' in config) {
+  useEffect(() => {
+    const config = editingComponent?.data_config
     
-    setSelectedCharts(config.linkedComponentIds || [])
-    
-    // 检查 queryConditions
-    if (config.queryConditions) {
-      const queryCond = config.queryConditions
+    if (config && 'linkedComponentIds' in config) {
+      setSelectedCharts(config.linkedComponentIds || [])
       
-      if (queryCond.displayType) {
-        const displayTypeValue = queryCond.displayType === "single" ? "时间" : "时间范围"
-        setDisplayType(displayTypeValue)
-      }
-      
-      // 映射时间粒度
-      if (queryCond.timeGranularity) {
-        let timeGranularityValue = "年月日"
-        if (queryCond.timeGranularity === "year_month") {
-          timeGranularityValue = "年月"
-        } else if (queryCond.timeGranularity === "year_month_day_hour") {
-          timeGranularityValue = "年月日时"
+      if (config.queryConditions) {
+        const queryCond = config.queryConditions
+        
+        if (queryCond.displayType) {
+          const displayTypeValue = queryCond.displayType === "single" 
+            ? t("chartSelector.displayTypes.time", "时间")
+            : t("chartSelector.displayTypes.timeRange", "时间范围")
+          setDisplayType(displayTypeValue)
         }
-        setTimeGranularity(timeGranularityValue)
-      }
-      
-      // 设置默认值
-      if (queryCond.hasDefaultValue !== undefined) {
-        setIsDefault(queryCond.hasDefaultValue)
-      }
-      
-      // 处理时间范围
-      if (queryCond.hasDefaultValue && queryCond.defaultValue?.type === 'custom') {
-        try {
-          const startTime = queryCond.defaultValue.startDate
-          const endTime = queryCond.defaultValue.endDate
-          
-          if (startTime && endTime) {
-            console.log('设置时间范围:', {
-              startTime: Math.floor(startTime / 1000),
-              endTime: Math.floor(endTime / 1000)
-            })
-            setTimeFilter({
-              startTime: Math.floor(startTime / 1000),
-              endTime: Math.floor(endTime / 1000)
-            })
-          } else {
+        
+        // 映射时间粒度
+        if (queryCond.timeGranularity) {
+          let timeGranularityValue = t("chartSelector.granularities.yearMonthDay", "年月日")
+          if (queryCond.timeGranularity === "year_month") {
+            timeGranularityValue = t("chartSelector.granularities.yearMonth", "年月")
+          } else if (queryCond.timeGranularity === "year_month_day_hour") {
+            timeGranularityValue = t("chartSelector.granularities.yearMonthDayHour", "年月日时")
+          }
+          setTimeGranularity(timeGranularityValue)
+        }
+        
+        // 设置默认值
+        if (queryCond.hasDefaultValue !== undefined) {
+          setIsDefault(queryCond.hasDefaultValue)
+        }
+        
+        // 处理时间范围
+        if (queryCond.hasDefaultValue && queryCond.defaultValue?.type === 'custom') {
+          try {
+            const startTime = queryCond.defaultValue.startDate
+            const endTime = queryCond.defaultValue.endDate
+            
+            if (startTime && endTime) {
+              setTimeFilter({
+                startTime: Math.floor(startTime / 1000),
+                endTime: Math.floor(endTime / 1000)
+              })
+            } else {
+              setTimeFilter(null)
+            }
+          } catch (error) {
             setTimeFilter(null)
           }
-        } catch (error) {
+        } else {
           setTimeFilter(null)
         }
-      } else {
-        setTimeFilter(null)
       }
+    } else {
+      // 重置为默认值
+      setSelectedCharts([])
+      setDisplayType(t("chartSelector.displayTypes.timeRange"))
+      setTimeGranularity(t("chartSelector.granularities.yearMonthDay"))
+      setIsDefault(false)
+      setTimeFilter(null)
     }
-  } else {
-    // 重置为默认值
-    setSelectedCharts([])
-    setDisplayType("时间范围")
-    setTimeGranularity("年月日")
-    setIsDefault(false)
-    setTimeFilter(null)
-  }
-}, [editingComponent])
+  }, [editingComponent, t])
   
   // 获取所有非查询类型的图表组件
   const charts = currentDashboard 
@@ -125,13 +122,13 @@ useEffect(() => {
         )
         .map(component => ({
           id: component.id,
-          name: component.title || '未命名图表',
-          dataset: component.dataset_code || '未设置数据集'
+          name: component.title || t("chartSelector.unnamedChart"),
+          dataset: component.dataset_code || t("chartSelector.noDataset")
         }))
     : []
 
   // 获取当前编辑的组件名称
-  const componentName = editingComponent?.title || '未命名组件'
+  const componentName = editingComponent?.title || t("chartSelector.unnamedChart")
 
   /* 单选 */
   const toggleChart = (id: string) => {
@@ -167,16 +164,16 @@ useEffect(() => {
       const day = String(startDateObj.getDate()).padStart(2, '0')
       const hour = String(startDateObj.getHours()).padStart(2, '0')
       
-      if (timeGranularity === "年月") {
+      if (timeGranularity === t("chartSelector.granularities.yearMonth")) {
         finalStartDate = `${year}-${month}`
         finalEndDate = `${year}-${month}`
-      } else if (timeGranularity === "年月日时") {
+      } else if (timeGranularity === t("chartSelector.granularities.yearMonthDayHour")) {
         const endYear = endDateObj.getFullYear()
         const endMonth = String(endDateObj.getMonth() + 1).padStart(2, '0')
         const endDay = String(endDateObj.getDate()).padStart(2, '0')
         const endHour = String(endDateObj.getHours()).padStart(2, '0')
         
-        if (displayType === "时间") {
+        if (displayType === t("chartSelector.displayTypes.time")) {
           // 时间点模式
           finalStartDate = `${year}-${month}-${day} ${hour}:00`
           finalEndDate = `${year}-${month}-${day} ${hour}:00`
@@ -187,7 +184,7 @@ useEffect(() => {
         }
       } else {
         // 年月日
-        if (displayType === "时间") {
+        if (displayType === t("chartSelector.displayTypes.time")) {
           // 时间点模式
           finalStartDate = `${year}-${month}-${day}`
           finalEndDate = `${year}-${month}-${day}`
@@ -214,29 +211,28 @@ useEffect(() => {
       }
     }
     
-    console.log('保存的配置:', config)
     toast({
       variant: 'success',
-      description: '关联图表配置已保存',
+      description: t("chartSelector.messages.saveSuccess"),
     })
     onSave?.(config)
   }
 
-  // 计算是否全选（用于复选框的 checked 状态）
+  // 计算是否全选
   const isAllSelected = selectedCharts.length === charts.length && charts.length > 0
 
   // 获取粒度对应的 granularity
   const getGranularity = () => {
     switch (timeGranularity) {
-      case "年月": return "month"
-      case "年月日时": return "hour"
+      case t("chartSelector.granularities.yearMonth"): return "month"
+      case t("chartSelector.granularities.yearMonthDayHour"): return "hour"
       default: return "day"
     }
   }
 
   // 获取展示类型对应的 mode
   const getMode = () => {
-    return displayType === "时间范围" ? "range" : "single"
+    return displayType === t("chartSelector.displayTypes.timeRange") ? "range" : "single"
   }
 
   // 收起状态显示
@@ -245,7 +241,9 @@ useEffect(() => {
       <div className="border-r flex flex-col h-full w-12 shrink-0">
         <div className="h-full flex flex-col items-center justify-center cursor-pointer hover:bg-accent/50 transition-colors" 
              onClick={() => setCollapsed(false)}>
-          <div className="writing-mode-vertical text-sm font-medium py-4">关联图表配置</div>
+          <div className="writing-mode-vertical text-sm font-medium py-4">
+            {t("chartSelector.messages.collapse")}
+          </div>
           <div className="mt-2">
             <ChevronRight className="h-4 w-4" />
           </div>
@@ -259,8 +257,9 @@ useEffect(() => {
       {/* 标题区域 */}
       <div className="px-4 py-3 border-b flex items-center justify-between bg-muted/20">
         <div>
-          <h3 className="text-base font-semibold">关联图表配置</h3>
-          {/* <p className="text-sm text-muted-foreground">组件：{componentName}</p> */}
+          <h3 className="text-base font-semibold">
+            {t("chartSelector.title")}
+          </h3>
         </div>
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCollapsed(true)}>
           <ChevronLeft className="h-4 w-4" />
@@ -269,67 +268,92 @@ useEffect(() => {
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* 图表列表 */}
-        <div className=" max-h-64 overflow-y-auto space-y-2">
-          <div>选择关联图表</div>
+        <div className="max-h-64 overflow-y-auto space-y-2">
+          <div>{t("chartSelector.selectCharts")}</div>
+          
           {/* 全选 */}
           <div className="flex items-center gap-2">
             <Checkbox
               checked={isAllSelected}
               onCheckedChange={toggleSelectAll}
             />
-            <span className="font-medium">全选</span>
+            <span className="font-medium">
+              {t("chartSelector.selectAll")}
+            </span>
           </div>
 
           {/* 单个图表 */}
-          {charts.map(chart => (
-            <div
-              key={chart.id}
-              className="flex items-center gap-2 pl-4"
-            >
-              <Checkbox
-                checked={selectedCharts.includes(chart.id)}
-                onCheckedChange={() => toggleChart(chart.id)}
-              />
-              <span className="text-sm">
-                {chart.name}
-                {chart.dataset && (
-                  <span className="text-muted-foreground ml-1">
-                    ({chart.dataset})
-                  </span>
-                )}
-              </span>
+          {charts.length > 0 ? (
+            charts.map(chart => (
+              <div key={chart.id} className="flex items-center gap-2 pl-4">
+                <Checkbox
+                  checked={selectedCharts.includes(chart.id)}
+                  onCheckedChange={() => toggleChart(chart.id)}
+                />
+                <span className="text-sm">
+                  {chart.name}
+                  {chart.dataset && (
+                    <span className="text-muted-foreground ml-1">
+                      ({chart.dataset})
+                    </span>
+                  )}
+                </span>
+              </div>
+            ))
+          ) : (
+            <div className="text-sm text-muted-foreground pl-4">
+              {t("chartSelector.messages.noCharts")}
             </div>
-          ))}
+          )}
         </div>
+        
         <div className="h-px bg-muted"></div>
+        
         {/* 配置区 */}
         <div className="space-y-3">
-          <div className="text-md font-medium">查询条件配置</div>
+          <div className="text-md font-medium">
+            {t("chartSelector.config")}
+          </div>
+          
           {/* 展示类型 */}
           <div className="space-y-1">
-            <label className="text-sm">展示类型</label>
+            <label className="text-sm">
+              {t("chartSelector.displayType")}
+            </label>
             <Select value={displayType} onValueChange={setDisplayType}>
               <SelectTrigger className="h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="时间范围">时间范围</SelectItem>
-                <SelectItem value="时间">时间</SelectItem>
+                <SelectItem value={t("chartSelector.displayTypes.timeRange")}>
+                  {t("chartSelector.displayTypes.timeRange")}
+                </SelectItem>
+                <SelectItem value={t("chartSelector.displayTypes.time")}>
+                  {t("chartSelector.displayTypes.time")}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           {/* 时间粒度 */}
           <div className="space-y-1">
-            <label className="text-sm">时间粒度</label>
+            <label className="text-sm">
+              {t("chartSelector.timeGranularity")}
+            </label>
             <Select value={timeGranularity} onValueChange={setTimeGranularity}>
               <SelectTrigger className="h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="年月">年月</SelectItem>
-                <SelectItem value="年月日">年月日</SelectItem>
-                <SelectItem value="年月日时">年月日时</SelectItem>
+                <SelectItem value={t("chartSelector.granularities.yearMonth")}>
+                  {t("chartSelector.granularities.yearMonth")}
+                </SelectItem>
+                <SelectItem value={t("chartSelector.granularities.yearMonthDay")}>
+                  {t("chartSelector.granularities.yearMonthDay")}
+                </SelectItem>
+                <SelectItem value={t("chartSelector.granularities.yearMonthDayHour")}>
+                  {t("chartSelector.granularities.yearMonthDayHour")}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -340,20 +364,19 @@ useEffect(() => {
               checked={isDefault}
               onCheckedChange={() => setIsDefault(prev => !prev)}
             />
-            <span className="text-sm">设置为默认值</span>
+            <span className="text-sm">
+              {t("chartSelector.setDefault")}
+            </span>
           </div>
 
-          {/* 时间范围 - 始终使用AdvancedDatePicker */}
+          {/* 时间范围 */}
           <div className="space-y-1">
             <AdvancedDatePicker
               granularity={getGranularity()}
               mode={getMode()}
               value={timeFilter}
-              onChange={(val) => {
-                console.log("时间选择变化:", val)
-                setTimeFilter(val)
-              }}
-              placeholder={`选择${displayType}`}
+              onChange={(val) => setTimeFilter(val)}
+              placeholder={t("chartSelector.datePicker.placeholder")}
             />
           </div>
         </div>
@@ -361,10 +384,10 @@ useEffect(() => {
         {/* 底部按钮 */}
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="outline" onClick={onCancel}>
-            取消
+            {t("chartSelector.buttons.cancel")}
           </Button>
           <Button onClick={handleSave}>
-            保存
+            {t("chartSelector.buttons.save")}
           </Button>
         </div>
       </div>

@@ -7,9 +7,11 @@ import { CHART_TYPES } from "./ComponentConfigDrawer"
 import { generateUUID } from "@/components/bs-ui/utils"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
+import { useTranslation } from "react-i18next"
 
 
 export function useChartState(initialComponent: any) {
+  const { t } = useTranslation("dashboard")
   const editingComponentIdRef = useRef<string | null>(null)
 
   const [chartType, setChartType] = useState<ChartType>('bar')
@@ -33,6 +35,7 @@ export function useChartState(initialComponent: any) {
     setStyleConfigState(newConfig);
 
   }, [initialComponent, updateEditingComponent, refreshChart]);
+  
   // 初始化逻辑
   useEffect(() => {
     const componentId = initialComponent?.id
@@ -232,13 +235,17 @@ export function useChartState(initialComponent: any) {
       const data = JSON.parse(dataStr)
       const fieldType = data.fieldType || 'dimension'
 
+      // 转换section和fieldType为国际化文本
+      const sectionText = t(`useChartState.sections.${section}`)
+      const fieldTypeText = t(`useChartState.fieldTypes.${fieldType}`)
+
       if (
         (fieldType === 'metric' && (section === 'category' || section === 'stack')) ||
         (fieldType === 'dimension' && section === 'value')
       ) {
-        console.warn(`字段类型 ${fieldType} 不能拖拽到 ${section} 区域`)
+        console.warn(`字段类型 ${fieldTypeText} 不能拖拽到 ${sectionText} 区域`)
         toast({
-          description: `字段类型 ${fieldType} 不能拖拽到 ${section} 区域`,
+          description: t('useChartState.warn.invalidFieldType', { fieldType: fieldTypeText, section: sectionText }),
           variant: "warning",
         })
         setDragOverSection(null)
@@ -248,6 +255,10 @@ export function useChartState(initialComponent: any) {
       // 堆叠维度只能有一个
       if (section === 'stack' && stackDimensions.length >= 1) {
         console.warn('堆叠维度只能有一个，请先删除现有的堆叠维度')
+        toast({
+          description: t('useChartState.warn.maxStackDimension'),
+          variant: "warning",
+        })
         setDragOverSection(null)
         return
       }
@@ -280,6 +291,10 @@ export function useChartState(initialComponent: any) {
       if (section === 'category') {
         if (categoryDimensions.length >= 2) {
           console.warn('类别维度最多只能有 2 个')
+          toast({
+            description: t('useChartState.warn.maxCategoryDimensions'),
+            variant: "warning",
+          })
           setDragOverSection(null)
           return
         }
@@ -295,7 +310,7 @@ export function useChartState(initialComponent: any) {
     } catch (error) {
       console.error('拖拽数据解析失败:', error)
     }
-  }, [categoryDimensions, stackDimensions, valueDimensions])
+  }, [categoryDimensions, stackDimensions, valueDimensions, toast, t])
 
   const handleDeleteDimension = useCallback((section: 'category' | 'stack' | 'value', dimensionId: string) => {
     if (section === 'category') {
@@ -331,21 +346,22 @@ export function useChartState(initialComponent: any) {
     setSortPriorityOrder(newOrder)
     setDraggingId(null)
   }, [draggingId, sortPriorityOrder])
-const handleAddFilter = useCallback(() => {
-  setFilterGroup({
-    logic: 'and',
-    conditions: [{ 
-      id: generateUUID(6),
-      fieldId: '',
-      fieldCode: '',
-      fieldName: '',
-      fieldType: 'string',
-      operator: 'eq',
-      value: '',
-      filterType: 'conditional'
-    }]
-  })
-}, [])
+  
+  const handleAddFilter = useCallback(() => {
+    setFilterGroup({
+      logic: 'and',
+      conditions: [{ 
+        id: generateUUID(6),
+        fieldId: '',
+        fieldCode: '',
+        fieldName: '',
+        fieldType: 'string',
+        operator: 'eq',
+        value: '',
+        filterType: 'conditional'
+      }]
+    })
+  }, [])
 
   const handleDeleteFilter = useCallback(() => {
     setFilterGroup(null)
@@ -354,7 +370,6 @@ const handleAddFilter = useCallback(() => {
   // 获取数据配置
   const getDataConfig = useCallback((limitType: "all" | "limit", limitValue: string, timeFilter?: any): DataConfig => {
     const dimensions = categoryDimensions.slice(0, 2).map(dim => ({
-
       fieldId: dim.fieldId,
       fieldName: dim.originalName,
       fieldCode: dim.name,
@@ -388,48 +403,50 @@ const handleAddFilter = useCallback(() => {
           thousandSeparator: true 
         }
     }))
-  // 4. 构建字段顺序 - 按照 sortPriorityOrder 排序
-  const allFields = [
-    ...categoryDimensions.map(d => ({ 
-      ...d, 
-      type: 'dimension' as const 
-    })),
-    ...stackDimensions.map(d => ({ 
-      ...d, 
-      type: 'stack_dimension' as const 
-    })),
-    ...valueDimensions.map(m => ({ 
-      ...m, 
-      type: 'metric' as const 
+    
+    // 4. 构建字段顺序 - 按照 sortPriorityOrder 排序
+    const allFields = [
+      ...categoryDimensions.map(d => ({ 
+        ...d, 
+        type: 'dimension' as const 
+      })),
+      ...stackDimensions.map(d => ({ 
+        ...d, 
+        type: 'stack_dimension' as const 
+      })),
+      ...valueDimensions.map(m => ({ 
+        ...m, 
+        type: 'metric' as const 
+      }))
+    ]
+
+    // 按照 sortPriorityOrder 排序
+    const sortedFields = [...allFields].sort((a, b) => {
+      const indexA = sortPriorityOrder.indexOf(a.id)
+      const indexB = sortPriorityOrder.indexOf(b.id)
+      
+      // 如果都在排序列表中，按照列表顺序排序
+      if (indexA !== -1 && indexB !== -1) {
+        return indexA - indexB
+      }
+      
+      // 如果有一个不在列表中，不在列表的排在后面
+      if (indexA === -1 && indexB !== -1) return 1
+      if (indexA !== -1 && indexB === -1) return -1
+      
+      // 都不在列表中，保持原有顺序
+      return 0
+    })
+
+    // 构建 fieldOrder
+    const fieldOrder = sortedFields.map(field => ({
+      fieldId: field.fieldId,
+      fieldType: field.type
     }))
-  ]
-
-  // 按照 sortPriorityOrder 排序
-  const sortedFields = [...allFields].sort((a, b) => {
-    const indexA = sortPriorityOrder.indexOf(a.id)
-    const indexB = sortPriorityOrder.indexOf(b.id)
     
-    // 如果都在排序列表中，按照列表顺序排序
-    if (indexA !== -1 && indexB !== -1) {
-      return indexA - indexB
-    }
-    
-    // 如果有一个不在列表中，不在列表的排在后面
-    if (indexA === -1 && indexB !== -1) return 1
-    if (indexA !== -1 && indexB === -1) return -1
-    
-    // 都不在列表中，保持原有顺序
-    return 0
-  })
-
-  // 构建 fieldOrder
-  const fieldOrder = sortedFields.map(field => ({
-    fieldId: field.fieldId,
-    fieldType: field.type
-  }))
     // 5. 构建筛选条件
     const filters = filterGroup ? filterGroup.conditions.map((condition, index) => {
-      {console.log(condition,8989999)}
+      console.log(condition,8989999)
       return {
         id: condition.id || `filter_${Date.now()}_${index}`, // 确保有 fieldId
         fieldId: condition.fieldCode || '',

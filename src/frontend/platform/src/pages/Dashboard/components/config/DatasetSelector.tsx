@@ -7,6 +7,8 @@ import { getDatasets, MetricConfig } from "@/controllers/API/dashboard"
 import { Calendar, ChevronDown, ChevronRight, Clock3, Hash, Search, Type } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "react-query"
+import { useTranslation } from "react-i18next"
+
 export interface DatasetField {
     fieldCode: string          // 真正用来过滤 / SQL
     displayName: string        // UI 显示
@@ -24,32 +26,32 @@ interface DatasetSelectorProps {
 }
 
 const TIME_ICONS: Record<string, JSX.Element> = {
-    year: <Clock3 color="#1d78ff" size={14}/>,
-    quarter: <Clock3 color="#1d78ff" size={14}/>,
-    month: <Clock3 color="#1d78ff" size={14}/>,
-    week: <Clock3 color="#1d78ff" size={14}/>,
-    day: <Clock3 color="#1d78ff" size={14}/>,
-    hour: <Clock3 color="#1d78ff" size={14}/>,
+    year: <Clock3 color="#1d78ff" size={14} />,
+    quarter: <Clock3 color="#1d78ff" size={14} />,
+    month: <Clock3 color="#1d78ff" size={14} />,
+    week: <Clock3 color="#1d78ff" size={14} />,
+    day: <Clock3 color="#1d78ff" size={14} />,
+    hour: <Clock3 color="#1d78ff" size={14} />,
 }
-// 根据字段类型返回对应的图标
-const getFieldTypeIcon = (type: 'integer' | 'keyword' | 'date') => {
-    switch (type) {
-        case 'date':
-            return <Calendar className="h-4 w-4" />
-        case 'integer':
-            return <Hash className="h-4 w-4" />
-        case 'keyword':
-            return <Type className="h-4 w-4" />
-    }
+
+const getFieldTypeIcon = (type: 'string' | 'number' | 'date') => {
+  switch (type) {
+    case 'date':
+      return <Calendar className="h-4 w-4 text-blue-500" />
+    case 'number':
+      return <Hash className="h-4 w-4 text-blue-500" />
+    case 'string':
+      return <Type className="h-4 w-4 text-blue-500" />
+  }
 }
 
 // 判断是否为虚拟指标
 const isVirtualMetric = (metric: MetricConfig): boolean => {
-    // 虚拟指标的判断逻辑，这里简单判断是否有 bucket_path
     return metric.bucket_path !== undefined && metric.bucket_path !== metric.aggregation_name
 }
 
 export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragStart, onFieldsLoaded, onFieldClick }: DatasetSelectorProps) {
+    const { t } = useTranslation("dashboard")
     const [searchTerm, setSearchTerm] = useState("")
     const [dimensionsExpanded, setDimensionsExpanded] = useState(true)
     const [metricsExpanded, setMetricsExpanded] = useState(true)
@@ -68,7 +70,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
         return allDatasets.filter(d =>
             d.dataset_name.toLowerCase().includes(searchLower) ||
             d.dataset_code.toLowerCase().includes(searchLower) ||
-            d.description.toLowerCase().includes(searchLower)
+            (d.description && d.description.toLowerCase().includes(searchLower))
         )
     }, [allDatasets, searchTerm])
 
@@ -88,13 +90,12 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
             fieldCode: data.field,
             fieldType
         }
-        // 设置数据到 dataTransfer
         e.dataTransfer.setData('application/json', JSON.stringify(dragData))
-        // 如果有父组件传递的 onDragStart 回调，也调用它
         if (onDragStart) {
             onDragStart(e, dragData)
         }
     }
+    
     const toggleTimeExpanded = (field: string) => {
         setTimeExpandedMap(prev => ({ ...prev, [field]: !prev[field] }))
     }
@@ -106,12 +107,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
             fieldCode: d.field,
             fieldId: d.field,
             displayName: d.name,
-            fieldType:
-                d.type === "date"
-                    ? "date"
-                    : d.type === "integer"
-                        ? "number"
-                        : "string",
+            fieldType: d.type === "date" ? "date" : d.type === "integer" ? "number" : "string",
             role: "dimension" as const
         }))
 
@@ -125,20 +121,27 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
 
         return [...dimensions, ...metrics]
     }, [selectedDataset])
+    
     useEffect(() => {
         if (selectedDataset && onFieldsLoaded) {
             onFieldsLoaded(datasetFields)
         }
-    }, [datasetFields])
+    }, [datasetFields, onFieldsLoaded, selectedDataset])
+
+    const getTimeGranularityLabel = (granularity: string): string => {
+        return t(`datasetSelector.timeGranularity.${granularity}`)
+    }
 
     return (
         <div className="flex flex-col h-full">
             {/* 数据集选择 */}
             <div className="p-4 border-b">
-                <Label className="text-sm font-medium mb-2 block">数据集</Label>
+                <Label className="text-sm font-medium mb-2 block">
+                    {t("datasetSelector.dataset")}
+                </Label>
                 <Select value={selectedDatasetCode} onValueChange={onDatasetChange}>
                     <SelectTrigger className="w-full">
-                        <SelectValue placeholder="选择数据集" />
+                        <SelectValue placeholder={t("datasetSelector.selectDataset")} />
                     </SelectTrigger>
                     <SelectContent>
                         {/* 搜索框 */}
@@ -146,7 +149,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                             <div className="relative">
                                 <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <Input
-                                    placeholder="搜索数据集..."
+                                    placeholder={t("datasetSelector.searchDataset")}
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     className="pl-8 h-8"
@@ -157,11 +160,11 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                         {/* 数据集列表 */}
                         {datasetsLoading ? (
                             <div className="px-2 py-4 text-sm text-muted-foreground text-center">
-                                加载中...
+                                {t("datasetSelector.loading")}
                             </div>
                         ) : filteredDatasets.length === 0 ? (
                             <div className="px-2 py-4 text-sm text-muted-foreground text-center">
-                                未找到数据集
+                                {t("datasetSelector.noDatasetsFound")}
                             </div>
                         ) : (
                             filteredDatasets.map((dataset) => (
@@ -183,7 +186,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                             className="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/50 transition-colors"
                             onClick={() => setDimensionsExpanded(!dimensionsExpanded)}
                         >
-                            <span className="text-sm font-medium">维度</span>
+                            <span className="text-sm font-medium">{t("datasetSelector.dimensions")}</span>
                             {dimensionsExpanded ? (
                                 <ChevronDown className="h-4 w-4" />
                             ) : (
@@ -194,7 +197,6 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                         {dimensionsExpanded && (
                             <div className="px-4 pb-3 space-y-2">
                                 {selectedDataset.schema_config.dimensions.map((dimension) => {
-                                    // 时间字段直接展开所有派生维度
                                     if (dimension.time_granularitys && dimension.time_granularitys.length > 0) {
                                         return dimension.time_granularitys.map((g) => {
                                             const field: DatasetField = {
@@ -203,7 +205,6 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                                 fieldType: "date",
                                                 role: "dimension",
                                             }
-
                                             return (
                                                 <div
                                                     key={dimension.field + g}
@@ -213,8 +214,10 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                                     onClick={(e) => { e.stopPropagation(); onFieldClick?.(field) }}
                                                 >
                                                     {TIME_ICONS[g]}
-                                                    <span className="text-sm flex-1">{dimension.name}{g ? ` (${g})` : ""}</span>
-                                                    
+                                                    <span className="text-sm flex-1">
+                                                        {dimension.name}
+                                                        {g ? ` (${getTimeGranularityLabel(g)})` : ""}
+                                                    </span>
                                                 </div>
                                             )
                                         })
@@ -236,9 +239,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                             onDragStart={(e) => handleDragStart(e, dimension, 'dimension')}
                                             onClick={(e) => { e.stopPropagation(); onFieldClick?.(field) }}
                                         >
-                                            <div className="text-blue-500">
-                                                <Type className="h-4 w-4" />
-                                            </div>
+                                            {getFieldTypeIcon(field.fieldType)}
                                             <span className="text-sm flex-1">{dimension.name}</span>
                                         </div>
                                     )
@@ -253,7 +254,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                             className="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/50 transition-colors"
                             onClick={() => setMetricsExpanded(!metricsExpanded)}
                         >
-                            <span className="text-sm font-medium">指标</span>
+                            <span className="text-sm font-medium">{t("datasetSelector.metrics")}</span>
                             {metricsExpanded ? (
                                 <ChevronDown className="h-4 w-4" />
                             ) : (
@@ -284,9 +285,9 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                             <div className="text-[#37D6E7]">
                                                 <Hash className="h-4 w-4" />
                                             </div>
-                                            <span className="text-sm flex-1">
+                                            <span className="text-sm flex-1 flex items-center gap-1">
                                                 {metric.name}
-                                                {isVirtual && <span className="text-muted-foreground">*</span>}
+                                                {isVirtual && <span className="text-muted-foreground text-xs">{t("datasetSelector.virtualMetric")}</span>}
                                             </span>
                                         </div>
                                     )
@@ -301,7 +302,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
             {!selectedDataset && (
                 <div className="flex-1 flex items-center justify-center p-4">
                     <p className="text-sm text-muted-foreground text-center">
-                        请先选择一个数据集
+                        {t("datasetSelector.selectDatasetPrompt")}
                     </p>
                 </div>
             )}

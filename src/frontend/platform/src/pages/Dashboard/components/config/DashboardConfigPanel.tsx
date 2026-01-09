@@ -5,6 +5,7 @@ import { Button } from "@/components/bs-ui/button"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useEditorDashboardStore } from "@/store/dashboardStore"
+import { useTranslation } from "react-i18next"
 
 interface DashboardConfigPanelProps {
   collapsed?: boolean
@@ -17,6 +18,7 @@ export function DashboardConfigPanel({ collapsed = false, onCollapse }: Dashboar
     // 从当前仪表盘获取主题
     return currentDashboard?.style_config?.theme as 'light' | 'dark' || 'light'
   })
+  const { t } = useTranslation("dashboard")
 
   // 当仪表盘变化时更新主题状态
   useEffect(() => {
@@ -62,14 +64,14 @@ export function DashboardConfigPanel({ collapsed = false, onCollapse }: Dashboar
       <div className={`border-r flex flex-col h-full transition-all duration-300 ${collapsed ? "w-12" : "w-[400px]"} shrink-0`}>
         {collapsed ? (
           <CollapseLabel
-            label="仪表盘配置"
+            label={t("configPanel.title")}
             onClick={onCollapse}
             icon={<ChevronRight />}
           />
         ) : (
           <div className="flex-1 flex flex-col overflow-hidden">
             <PanelHeader
-              title="仪表盘配置"
+              title={t("configPanel.title")}
               onCollapse={onCollapse}
               icon={<ChevronLeft />}
             />
@@ -77,7 +79,9 @@ export function DashboardConfigPanel({ collapsed = false, onCollapse }: Dashboar
             <div className="flex-1 overflow-y-auto px-4 pb-6 pt-4 space-y-6">
               {/* 仪表盘风格选择 */}
               <div className="space-y-3">
-                <label className="text-sm font-medium">仪表盘风格</label>
+                <label className="text-sm font-medium">
+                  {t("configPanel.dashboardStyle")}
+                </label>
                 <div className="grid grid-cols-2 gap-3">
                   {/* 浅色主题 */}
                   <div
@@ -88,7 +92,7 @@ export function DashboardConfigPanel({ collapsed = false, onCollapse }: Dashboar
                       <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/light.png`} alt="" />
                     </div>
                     <div className="flex items-center justify-center">
-                      <span className="text-sm">浅色主题</span>
+                      <span className="text-sm">{t("configPanel.lightTheme")}</span>
                       {dashboardTheme === 'light' && (
                         <div className="ml-2 w-2 h-2 bg-primary rounded-full"></div>
                       )}
@@ -104,7 +108,7 @@ export function DashboardConfigPanel({ collapsed = false, onCollapse }: Dashboar
                       <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/dark.png`} alt="" />
                     </div>
                     <div className="flex items-center justify-center">
-                      <span className="text-sm">深色主题</span>
+                      <span className="text-sm">{t("configPanel.darkTheme")}</span>
                       {dashboardTheme === 'dark' && (
                         <div className="ml-2 w-2 h-2 bg-primary rounded-full"></div>
                       )}

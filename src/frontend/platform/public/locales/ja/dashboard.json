@@ -1,0 +1,289 @@
+{
+     "chartSelector": {
+    "title": "関連グラフ設定",
+    "componentName": "コンポーネント: {{componentName}}",
+    
+    "selectCharts": "関連グラフを選択",
+    "selectAll": "すべて選択",
+    "unnamedChart": "無名グラフ",
+    "noDataset": "データセット未設定",
+    
+    "config": "クエリ条件設定",
+    "displayType": "表示タイプ",
+    "displayTypes": {
+      "timeRange": "時間範囲",
+      "time": "時間"
+    },
+      "dashboard": {
+ 
+  },
+    "timeGranularity": "時間粒度",
+    "granularities": {
+      "yearMonth": "年月",
+      "yearMonthDay": "年月日",
+      "yearMonthDayHour": "年月日時"
+    },
+    "setDefault": "デフォルト値として設定",
+    "datePicker": {
+      "placeholder": "{{displayType}}を選択",
+      "single": "時間",
+      "range": "時間範囲"
+    },
+    
+    "buttons": {
+      "cancel": "キャンセル",
+      "save": "保存"
+    },
+    
+    "messages": {
+      "saveSuccess": "関連グラフ設定を保存しました",
+      "noCharts": "関連可能なグラフがありません",
+      "collapse": "関連グラフ設定"
+    }
+  },
+  "componentConfigDrawer": {
+    "basicConfig": "基本設定",
+    "customStyle": "カスタムスタイル",
+    "basicConfigTab": "基本設定",
+    "styleConfigTab": "カスタムスタイル",
+    
+    "chartType": "グラフタイプ",
+    "selectChartType": "グラフタイプを選択",
+    
+    "categoryAxis": "カテゴリ軸 / ディメンション",
+    "stackItem": "積み上げ項目 / ディメンション",
+    "valueAxis": "値軸 / メトリック",
+    
+    "sortPriority": "ソート優先順位",
+    "sortHint": "ディメンションまたはメトリックを追加してソート優先順位を調整",
+    
+    "filter": "フィルター",
+    "addFilterCondition": "フィルター条件を追加",
+    "filterConditionsAdded": "フィルター条件 {{count}} 個を追加",
+    "filterLogicHint": " ({{logic}})",
+    
+    "timeRange": "時間範囲",
+    "selectTimeRange": "時間範囲を選択",
+    
+    "resultsDisplay": "結果表示",
+    "allResults": "すべて",
+    "limitResults": "件",
+    
+    "updateChartData": "グラフデータを更新",
+    
+    "dataSelection": "データ選択",
+    
+    "dialog": {
+      "editDisplayName": "表示名を編集",
+      "originalName": "元の名前",
+      "displayName": "表示名",
+      "displayNameRequired": "表示名 *",
+      "enterDisplayName": "表示名を入力してください",
+      "cancel": "キャンセル",
+      "confirm": "確認"
+    },
+    
+    "toast": {
+      "fieldAlreadyExists": "フィールドは既に{{section}}に存在します",
+      "dimensionLimitReached": "ディメンションの上限に達しました"
+    },
+    
+    "sections": {
+      "category": "カテゴリ軸",
+      "stack": "積み上げ項目",
+      "value": "メトリックエリア"
+    }
+  },
+"configPanel": {
+      "title": "ダッシュボード設定",
+      "dashboardStyle": "ダッシュボードスタイル",
+      "lightTheme": "ライトテーマ",
+      "darkTheme": "ダークテーマ"
+    },
+  "datasetSelector": {
+    "dataset": "データセット",
+    "selectDataset": "データセットを選択",
+    "searchDataset": "データセットを検索...",
+    "loading": "読み込み中...",
+    "noDatasetsFound": "データセットが見つかりません",
+    "dimensions": "ディメンション",
+    "metrics": "メトリック",
+    "virtualMetric": "*",
+    "selectDatasetPrompt": "まずデータセットを選択してください",
+    
+    "fieldTypes": {
+      "date": "日付",
+      "integer": "整数",
+      "keyword": "テキスト"
+    },
+    
+    "timeGranularity": {
+      "year": "年",
+      "quarter": "四半期",
+      "month": "月",
+      "week": "週",
+      "day": "日",
+      "hour": "時"
+    }
+},
+"dimensionBlock": {
+    "menu": {
+      "sort": "ソート",
+      "aggregation": "集計方法",
+      "format": "数値フォーマット"
+    },
+    "aggregation": {
+      "sum": "合計",
+      "avg": "平均",
+      "count": "カウント",
+      "max": "最大値",
+      "min": "最小値"
+    },
+    "sort": {
+      "none": "なし",
+      "asc": "昇順",
+      "desc": "降順"
+    },
+    "button": {
+      "deleteField": "フィールドを削除"
+    },
+    "prompt": {
+      "dragDimensionHere": "ディメンションフィールドをここにドラッグ",
+      "dragMetricHere": "メトリックフィールドをここにドラッグ"
+    },
+    "dialog": {
+      "formatTitle": "数値フォーマット",
+      "formatType": "フォーマットタイプ",
+      "decimalPlaces": "小数位数",
+      "unit": "単位",
+      "suffix": "単位サフィックス",
+      "thousandSeparator": "桁区切り記号",
+      "example": "例",
+      "none": "なし",
+      "selectUnit": "単位を選択",
+      "enterSuffix": "サフィックスを入力",
+      "formatTypes": {
+        "number": "数値",
+        "percent": "パーセント",
+        "duration": "期間",
+        "storage": "ストレージサイズ"
+      }
+    }
+  },
+  "filterConditionDialog": {
+    "title": "フィルター条件設定",
+    "keywords": {
+      "time": "時間",
+      "date": "日付"
+    },
+    "placeholders": {
+      "selectField": "フィールドを選択",
+      "filterType": "フィルタータイプ",
+      "operator": "演算子",
+      "enterNumber": "数値を入力してください",
+      "enterValue": "値を入力してください",
+      "selectEnumValue": "列挙値を選択してください"
+    },
+    "filterTypes": {
+      "conditional": "条件フィルター",
+      "enum": "列挙フィルター"
+    },
+    "operators": {
+      "equals": "等しい",
+      "notEquals": "等しくない",
+      "contains": "含む",
+      "notContains": "含まない",
+      "greaterThan": "より大きい",
+      "greaterThanOrEqual": "以上",
+      "lessThan": "より小さい",
+      "lessThanOrEqual": "以下",
+      "isEmpty": "空である",
+      "isNotEmpty": "空でない"
+    },
+    "buttons": {
+      "addCondition": "条件を追加",
+      "cancel": "キャンセル",
+      "save": "保存"
+    },
+    "errors": {
+      "selectField": "フィールドを選択してください",
+      "selectOperator": "演算子を選択してください",
+      "selectEnumValue": "列挙値を選択してください",
+      "enterFilterValue": "フィルター値を入力してください",
+      "atLeastOneCondition": "有効なフィルター条件を少なくとも1つ設定してください"
+    },
+    "toast": {
+      "fetchEnumFailed": "列挙値の取得に失敗しました。後で再試行してください"
+    },
+    "enumSelect": {
+      "placeholder": "選択してください",
+      "searchPlaceholder": "検索...",
+      "loading": "読み込み中...",
+      "selectAll": "すべて選択",
+      "loadingMore": "さらに読み込み...",
+      "noMatch": "一致するオプションが見つかりません",
+      "noData": "データがありません"
+    }
+  },
+  "styleConfigPanel": {
+    "sections": {
+      "color": "色",
+      "title": "タイトル",
+      "axisTitle": "軸タイトル",
+      "legend": "凡例",
+      "metricValue": "指標値",
+      "subtitle": "サブタイトル",
+      "chartOptions": "チャートオプション"
+    },
+    "labels": {
+      "themeColor": "テーマカラー",
+      "bgColor": "背景色",
+      "titleContent": "タイトル内容",
+      "textFormat": "テキストフォーマット",
+      "textContent": "テキスト内容",
+      "xAxisTitleContent": "X軸タイトル内容",
+      "xAxisTextFormat": "X軸テキストフォーマット",
+      "yAxisTitleContent": "Y軸タイトル内容",
+      "yAxisTextFormat": "Y軸テキストフォーマット",
+      "legendPosition": "凡例の位置",
+      "legendTextFormat": "凡例テキストフォーマット"
+    },
+    "placeholders": {
+      "enterTitle": "タイトルを入力してください",
+      "enterSubtitle": "サブタイトルを入力してください",
+      "enterXAxisTitle": "X軸タイトルを入力してください",
+      "enterYAxisTitle": "Y軸タイトルを入力してください"
+    },
+    "positions": {
+      "top": "上部",
+      "bottom": "下部",
+      "left": "左側",
+      "right": "右側"
+    },
+    "buttons": {
+      "show": "表示"
+    },
+    "options": {
+      "legend": "凡例",
+      "axis": "軸",
+      "dataLabel": "データラベル",
+      "gridLine": "グリッド線"
+    }
+  },
+  "useChartState": {
+    "sections": {
+      "category": "カテゴリーディメンション",
+      "stack": "スタックディメンション",
+      "value": "メトリックディメンション"
+    },
+    "fieldTypes": {
+      "dimension": "ディメンション",
+      "metric": "メトリック"
+    },
+    "warn": {
+      "invalidFieldType": "フィールドタイプ {{fieldType}} を {{section}} エリアにドラッグすることはできません",
+      "maxStackDimension": "スタックディメンションは1つだけ許可されます。既存のスタックディメンションを先に削除してください",
+      "maxCategoryDimensions": "カテゴリーディメンションは最大2つまで許可されます"
+    }
+  }
+}

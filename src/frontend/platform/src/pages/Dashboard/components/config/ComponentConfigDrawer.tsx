@@ -18,9 +18,10 @@ import { DashboardConfigPanel } from "./DashboardConfigPanel"
 import { AdvancedDatePicker } from "../AdvancedDatePicker"
 import { useChartState } from "./useChartState"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
-import ComponentPicker, { ChartGroupItems, ChartItems } from "./ComponentPicker"
+import ComponentPicker, { ChartGroupItems, ChartItems } from "../editor/ComponentPicker"
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio"
 import { Label } from "@/components/bs-ui/label"
+import { useTranslation } from "react-i18next"
 
 // 图表类型选项
 export const CHART_TYPES: {
@@ -31,24 +32,21 @@ export const CHART_TYPES: {
     { label: "基础柱状图", value: ChartType.Bar, hasStack: false },
     { label: "堆叠柱状图", value: ChartType.StackedBar, hasStack: true },
     { label: "组合柱状图", value: ChartType.GroupedBar, hasStack: false },
-
     { label: "基础条形图", value: ChartType.HorizontalBar, hasStack: false },
     { label: "堆叠条形图", value: ChartType.StackedHorizontalBar, hasStack: true },
     { label: "组合条形图", value: ChartType.GroupedHorizontalBar, hasStack: false },
-
     { label: "分组条形图", value: ChartType.GroupedHorizontalBar, hasStack: false },
-
     { label: "基础折线图", value: ChartType.Line, hasStack: false },
     { label: "堆叠折线图", value: ChartType.StackedLine, hasStack: true },
     { label: "基础面积图", value: ChartType.Area, hasStack: false },
     { label: "堆叠面积图", value: ChartType.StackedArea, hasStack: true },
-
     { label: "饼状图", value: ChartType.Pie, hasStack: false },
     { label: "环状图", value: ChartType.Donut, hasStack: false },
-
     { label: "指标卡", value: ChartType.Metric, hasStack: false },
   ];
+
 export function ComponentConfigDrawer() {
+  const { t } = useTranslation("dashboard")
   const { editingComponent, updateEditingComponent } = useComponentEditorStore();
   const { refreshChart } = useEditorDashboardStore();
 
@@ -107,6 +105,7 @@ export function ComponentConfigDrawer() {
     setFilterGroup,
     getDataConfig
   } = chartState
+
   const handleFieldClick = useCallback((field: DatasetField) => {
     if (!editingComponent) return
 
@@ -128,7 +127,12 @@ export function ComponentConfigDrawer() {
     if (field.role === 'dimension') {
       if (categoryDimensions.length < 2) {
         if (isFieldAlreadyAdded(safeFieldId, 'category')) {
-          toast({ description: "字段已存在于类别轴中", variant: "warning" })
+          toast({
+            description: t("componentConfigDrawer.toast.fieldAlreadyExists", {
+              section: t("componentConfigDrawer.sections.category")
+            }),
+            variant: "warning"
+          })
           return
         }
         const newDimension = {
@@ -142,7 +146,12 @@ export function ComponentConfigDrawer() {
         chartState.setCategoryDimensions(prev => [...prev, newDimension])
       } else if (currentChartHasStack && stackDimensions.length === 0) {
         if (isFieldAlreadyAdded(safeFieldId, 'stack')) {
-          toast({ description: "字段已存在于堆叠项中", variant: "warning" })
+          toast({
+            description: t("componentConfigDrawer.toast.fieldAlreadyExists", {
+              section: t("componentConfigDrawer.sections.stack")
+            }),
+            variant: "warning"
+          })
           return
         }
         const newDimension = {
@@ -155,11 +164,19 @@ export function ComponentConfigDrawer() {
         }
         chartState.setStackDimensions(prev => [...prev, newDimension])
       } else {
-        toast({ description: "当前维度数量已达到上限", variant: "warning" })
+        toast({
+          description: t("componentConfigDrawer.toast.dimensionLimitReached"),
+          variant: "warning"
+        })
       }
     } else if (field.role === 'metric') {
       if (isFieldAlreadyAdded(safeFieldId, 'value')) {
-        toast({ description: "字段已存在于指标区域中", variant: "warning" })
+        toast({
+          description: t("componentConfigDrawer.toast.fieldAlreadyExists", {
+            section: t("componentConfigDrawer.sections.value")
+          }),
+          variant: "warning"
+        })
         return
       }
       const newMetric = {
@@ -173,7 +190,8 @@ export function ComponentConfigDrawer() {
       }
       chartState.setValueDimensions(prev => [...prev, newMetric])
     }
-  }, [editingComponent, categoryDimensions, stackDimensions, valueDimensions, currentChartHasStack, chartState, toast])
+  }, [editingComponent, categoryDimensions, stackDimensions, valueDimensions, currentChartHasStack, chartState, toast, t])
+
   const invalidFieldIds = useMemo(() => {
     const validSet = new Set(
       datasetFields.map(f => f.fieldId || f.fieldCode || f.fieldName).filter(Boolean)
@@ -185,8 +203,6 @@ export function ComponentConfigDrawer() {
         .map(d => d.id)
     )
   }, [datasetFields, categoryDimensions, stackDimensions, valueDimensions])
-
-
 
   // 数据集改变
   const handleDatasetChange = useCallback((datasetCode: string) => {
@@ -205,18 +221,20 @@ export function ComponentConfigDrawer() {
     setEditingDimension({ id: dimensionId, section, originalName, displayName })
     setEditDialogOpen(true)
   }, [])
-const handleMetricFormatChange = useCallback(
-  (dimensionId: string, format: any) => {
-    chartState.setValueDimensions(prev =>
-      prev.map(d =>
-        d.id === dimensionId
-          ? { ...d, numberFormat: format }
-          : d
+
+  const handleMetricFormatChange = useCallback(
+    (dimensionId: string, format: any) => {
+      chartState.setValueDimensions(prev =>
+        prev.map(d =>
+          d.id === dimensionId
+            ? { ...d, numberFormat: format }
+            : d
+        )
       )
-    )
-  },
-  [chartState]
-)
+    },
+    [chartState]
+  )
+
   const saveDisplayName = useCallback(() => {
     if (editingDimension) {
       // 更新对应的维度显示名称
@@ -348,64 +366,63 @@ const handleMetricFormatChange = useCallback(
     )
   }
 
-
   return (
     <div className="h-full flex bg-background border-l border-border">
       {editingComponent.type === 'query' ? (
-<ChartSelector
-  onSave={(chartLinkConfig) => {
-    console.log('保存查询配置:', chartLinkConfig)
-    
-    // 构建 QueryConfig
-    const queryConfig: QueryConfig = {
-      linkedComponentIds: chartLinkConfig.chartIds || [],
-      queryConditions: {
-        id: editingComponent?.data_config?.queryConditions?.id || generateUUID(4),
-        displayType: chartLinkConfig.displayType === "时间" ? "single" : "range",
-        timeGranularity: chartLinkConfig.timeGranularity === "年月" ? "year_month" : 
-                        chartLinkConfig.timeGranularity === "年月日时" ? "year_month_day_hour" : "year_month_day",
-        hasDefaultValue: chartLinkConfig.isDefault,
-        defaultValue: chartLinkConfig.isDefault ? {
-          type: 'custom' as const,  // TimeRangeType.CUSTOM 的值是 'custom'
-          startDate: new Date(chartLinkConfig.dateRange.start).getTime(), // 毫秒时间戳
-          endDate: new Date(chartLinkConfig.dateRange.end).getTime()      // 毫秒时间戳
-        } : {
-          type: 'all' as const      // TimeRangeType.ALL 的值是 'all'
-        }
-      }
-    }
-    
-    console.log('生成的 QueryConfig:', queryConfig)
-    
-    // 更新组件配置
-    updateEditingComponent({
-      // 保持其他字段不变，只更新 data_config
-      data_config: queryConfig
-    })
-    
-   const dashboardStore = useEditorDashboardStore.getState();
-    dashboardStore.updateComponent(editingComponent.id, {
-      data_config: queryConfig
-    })
-    
-    // 刷新查询组件
-    refreshChart(editingComponent.id)
-  }}
-  onCancel={() => console.log('取消')}
-/>
+        <ChartSelector
+          onSave={(chartLinkConfig) => {
+            console.log('保存查询配置:', chartLinkConfig)
+            
+            // 构建 QueryConfig
+            const queryConfig: QueryConfig = {
+              linkedComponentIds: chartLinkConfig.chartIds || [],
+              queryConditions: {
+                id: editingComponent?.data_config?.queryConditions?.id || generateUUID(4),
+                displayType: chartLinkConfig.displayType === "时间" ? "single" : "range",
+                timeGranularity: chartLinkConfig.timeGranularity === "年月" ? "year_month" : 
+                                chartLinkConfig.timeGranularity === "年月日时" ? "year_month_day_hour" : "year_month_day",
+                hasDefaultValue: chartLinkConfig.isDefault,
+                defaultValue: chartLinkConfig.isDefault ? {
+                  type: 'custom' as const,  // TimeRangeType.CUSTOM 的值是 'custom'
+                  startDate: new Date(chartLinkConfig.dateRange.start).getTime(), // 毫秒时间戳
+                  endDate: new Date(chartLinkConfig.dateRange.end).getTime()      // 毫秒时间戳
+                } : {
+                  type: 'all' as const      // TimeRangeType.ALL 的值是 'all'
+                }
+              }
+            }
+            
+            console.log('生成的 QueryConfig:', queryConfig)
+            
+            // 更新组件配置
+            updateEditingComponent({
+              // 保持其他字段不变，只更新 data_config
+              data_config: queryConfig
+            })
+            
+           const dashboardStore = useEditorDashboardStore.getState();
+            dashboardStore.updateComponent(editingComponent.id, {
+              data_config: queryConfig
+            })
+            
+            // 刷新查询组件
+            refreshChart(editingComponent.id)
+          }}
+          onCancel={() => console.log('取消')}
+        />
       ) : (
         <>
           <div className={`border-r flex flex-col h-full transition-all duration-300 ${configCollapsed.basic ? "w-12" : "w-[300px]"} shrink-0`}>
             {configCollapsed.basic ? (
               <CollapseLabel
-                label="基础配置"
+                label={t("componentConfigDrawer.basicConfig")}
                 onClick={() => toggleCollapse('basic')}
                 icon={<ChevronRight />}
               />
             ) : (
               <div className="flex-1 flex flex-col overflow-hidden">
                 <PanelHeader
-                  title="基础配置"
+                  title={t("componentConfigDrawer.basicConfig")}
                   onCollapse={() => toggleCollapse('basic')}
                   icon={<ChevronLeft />}
                 />
@@ -414,10 +431,10 @@ const handleMetricFormatChange = useCallback(
                   {/* Tabs */}
                   <div className="flex gap-6 border-b text-sm">
                     <Tab active={configTab === "basic"} onClick={() => setConfigTab("basic")}>
-                      基础配置
+                      {t("componentConfigDrawer.basicConfigTab")}
                     </Tab>
                     <Tab active={configTab === "style"} onClick={() => setConfigTab("style")}>
-                      自定义样式
+                      {t("componentConfigDrawer.styleConfigTab")}
                     </Tab>
                   </div>
 
@@ -427,7 +444,7 @@ const handleMetricFormatChange = useCallback(
                         editingComponent.type !== 'metric' && (
                           <>
                             {/* 图表类型 */}
-                            <FormBlock label="图表类型" required>
+                            <FormBlock label={t("componentConfigDrawer.chartType")} required>
                               <ComponentPicker onSelect={(data) => handleChartTypeChange(data.type)} maxHeight={500}>
                                 <div className="relative w-full group">
                                   <div className="flex h-[28px] w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm transition-colors hover:border-gray-400 cursor-pointer">
@@ -436,7 +453,7 @@ const handleMetricFormatChange = useCallback(
                                       <span className="truncate text-gray-700">
                                         {ChartGroupItems
                                           .flatMap(item => item.data)
-                                          .find(item => item.type === chartType)?.label || '选择图表类型'}
+                                          .find(item => item.type === chartType)?.label || t("componentConfigDrawer.selectChartType")}
                                       </span>
                                     </div>
                                     {/* ChevronDown 图标 */}
@@ -447,7 +464,7 @@ const handleMetricFormatChange = useCallback(
                             </FormBlock>
                             {/* 类别轴 / 维度 */}
                             <CollapsibleBlock
-                              title="类别轴 / 维度"
+                              title={t("componentConfigDrawer.categoryAxis")}
                               required
                               collapsed={configCollapsed.category}
                               onCollapse={() => toggleCollapse('category')}
@@ -472,7 +489,7 @@ const handleMetricFormatChange = useCallback(
                             {/* 堆叠项 / 维度 */}
                             {currentChartHasStack && (
                               <CollapsibleBlock
-                                title="堆叠项 / 维度"
+                                title={t("componentConfigDrawer.stackItem")}
                                 collapsed={configCollapsed.stack}
                                 onCollapse={() => toggleCollapse('stack')}
                               >
@@ -496,10 +513,9 @@ const handleMetricFormatChange = useCallback(
                         )
                       }
 
-
                       {/* 值轴 / 指标 */}
                       <CollapsibleBlock
-                        title="值轴 / 指标"
+                        title={t("componentConfigDrawer.valueAxis")}
                         required
                         collapsed={configCollapsed.value}
                         onCollapse={() => toggleCollapse('value')}
@@ -522,11 +538,11 @@ const handleMetricFormatChange = useCallback(
                       </CollapsibleBlock>
 
                       {/* 排序优先级 */}
-                      {editingComponent.type !== 'metric' && <CollapsibleBlock title="排序优先级">
+                      {editingComponent.type !== 'metric' && <CollapsibleBlock title={t("componentConfigDrawer.sortPriority")}>
                         <div className="space-y-1 border rounded-md p-[2px]">
                           {sortPriorityFields.length === 0 ? (
                             <div className="text-xs text-muted-foreground text-center py-2">
-                              添加维度或指标后可调整排序优先级
+                              {t("componentConfigDrawer.sortHint")}
                             </div>
                           ) : (
                             sortPriorityFields.map((field) => (
@@ -545,7 +561,7 @@ const handleMetricFormatChange = useCallback(
                                   e.preventDefault()
                                   const sourceId = e.dataTransfer.getData('text/plain')
                                   if (!sourceId) return
-                                 chartState.handleDropSortPriority(field)
+                                  chartState.handleDropSortPriority(field)
                                 }}
                                 className={`flex items-center gap-2 px-3 py-2 h-[28px] border rounded-md bg-muted/20 ${draggingId === field.id ? 'opacity-50' : ''}`}
                               >
@@ -555,13 +571,12 @@ const handleMetricFormatChange = useCallback(
                             ))
                           )}
                         </div>
-
                       </CollapsibleBlock>}
 
                       {/* 筛选 */}
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <label className="text-sm font-medium">筛选</label>
+                          <label className="text-sm font-medium">{t("componentConfigDrawer.filter")}</label>
                         </div>
 
                       {!filterGroup || filterGroup.conditions.length === 0 ? (
@@ -570,7 +585,7 @@ const handleMetricFormatChange = useCallback(
                             onClick={handleEditFilter}
                           >
                             <div className="inline-flex items-center h-[20px] px-2 text-xs">
-                              添加筛选条件
+                              {t("componentConfigDrawer.addFilterCondition")}
                             </div>
                           </div>
                         ) : (
@@ -578,8 +593,10 @@ const handleMetricFormatChange = useCallback(
                             <div className="flex items-center justify-between p-2 border rounded-md bg-muted/20 hover:bg-muted/40">
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium text-blue-700">
-                                  已添加 {filterGroup.conditions.length} 个筛选条件
-                                  {filterGroup.conditions.length > 1 && ` (${filterGroup.logic?.toUpperCase() || 'AND'})`}
+                                  {t("componentConfigDrawer.filterConditionsAdded", { count: filterGroup.conditions.length })}
+                                  {filterGroup.conditions.length > 1 && t("componentConfigDrawer.filterLogicHint", {
+                                    logic: (filterGroup.logic?.toUpperCase() || 'AND')
+                                  })}
                                 </span>
                               </div>
                               <div className="flex items-center gap-1">
@@ -591,25 +608,25 @@ const handleMetricFormatChange = useCallback(
                                 </Button>
                               </div>
                             </div>
-
                           </div>
                         )}
                       </div>
 
-                    <FormBlock label="时间范围">
+                    <FormBlock label={t("componentConfigDrawer.timeRange")}>
                       <AdvancedDatePicker
                         granularity={'day'}
                         mode={'range'}
                         value={filter}
-                         onChange={(val) => {
+                        onChange={(val) => {
                           handleTimeFilterChange
                           setFilter(val);
-                    }}
-                        placeholder="选择时间范围"
+                        }}
+                        placeholder={t("componentConfigDrawer.selectTimeRange")}
                       />
                     </FormBlock>
+
                       {/* 结果显示 */}
-                      {editingComponent.type !== 'metric' && <FormBlock label="结果显示">
+                      {editingComponent.type !== 'metric' && <FormBlock label={t("componentConfigDrawer.resultsDisplay")}>
                         <RadioGroup
                           value={limitType}
                           onValueChange={(value: "all" | "limit") => setLimitType(value)}
@@ -617,7 +634,9 @@ const handleMetricFormatChange = useCallback(
                         >
                           <div className="flex items-center space-x-2">
                             <RadioGroupItem value="all" id="limit-all" />
-                            <Label htmlFor="limit-all" className="text-sm cursor-pointer">全部</Label>
+                            <Label htmlFor="limit-all" className="text-sm cursor-pointer">
+                              {t("componentConfigDrawer.allResults")}
+                            </Label>
                           </div>
                           <div className="flex items-center space-x-2">
                             <RadioGroupItem value="limit" id="limit-limit" />
@@ -628,12 +647,17 @@ const handleMetricFormatChange = useCallback(
                                 disabled={limitType !== "limit"} 
                                 onChange={(e) => setLimitValue(e.target.value)} 
                               />
-                              <Label htmlFor="limit-limit" className="text-sm text-muted-foreground cursor-pointer">条</Label>
+                              <Label htmlFor="limit-limit" className="text-sm text-muted-foreground cursor-pointer">
+                                {t("componentConfigDrawer.limitResults")}
+                              </Label>
                             </div>
                           </div>
                         </RadioGroup>
                       </FormBlock>}
-                      <Button className="w-full h-10 mt-4" onClick={handleUpdateChart}>更新图表数据</Button>
+
+                      <Button className="w-full h-10 mt-4" onClick={handleUpdateChart}>
+                        {t("componentConfigDrawer.updateChartData")}
+                      </Button>
                     </>
                   ) : (
                     <StyleConfigPanel config={styleConfig} type={editingComponent.type} onChange={chartState.setStyleConfig} />
@@ -644,10 +668,18 @@ const handleMetricFormatChange = useCallback(
           </div>
           <div className={`flex flex-col h-full transition-all duration-300 ${configCollapsed.data ? "w-12 shrink-0" : "w-[300px]"}`}>
             {configCollapsed.data ? (
-              <CollapseLabel label="数据选择" onClick={() => toggleCollapse('data')} icon={<ChevronLeft />} />
+              <CollapseLabel 
+                label={t("componentConfigDrawer.dataSelection")} 
+                onClick={() => toggleCollapse('data')} 
+                icon={<ChevronLeft />} 
+              />
             ) : (
               <div className="flex-1 flex flex-col overflow-hidden">
-                <PanelHeader title="数据选择" onCollapse={() => toggleCollapse('data')} icon={<ChevronRight />} />
+                <PanelHeader 
+                  title={t("componentConfigDrawer.dataSelection")} 
+                  onCollapse={() => toggleCollapse('data')} 
+                  icon={<ChevronRight />} 
+                />
                 <div className="flex-1 overflow-auto">
                   <DatasetSelector
                     selectedDatasetCode={editingComponent.dataset_code}
@@ -666,24 +698,34 @@ const handleMetricFormatChange = useCallback(
       {/* 编辑显示名称弹窗 */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader><DialogTitle>编辑显示名称</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{t("componentConfigDrawer.dialog.editDisplayName")}</DialogTitle>
+          </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <div className="text-sm text-muted-foreground mb-1">原始名称</div>
+              <div className="text-sm text-muted-foreground mb-1">
+                {t("componentConfigDrawer.dialog.originalName")}
+              </div>
               <div className="text-sm font-medium px-2 py-1 bg-muted rounded">{editingDimension?.originalName}</div>
             </div>
             <div>
-              <div className="text-sm font-medium mb-1">显示名称 *</div>
+              <div className="text-sm font-medium mb-1">
+                {t("componentConfigDrawer.dialog.displayNameRequired")}
+              </div>
               <Input
                 value={editingDimension?.displayName || ''}
                 onChange={(e) => setEditingDimension(prev => prev ? { ...prev, displayName: e.target.value } : null)}
-                placeholder="请输入显示名称"
+                placeholder={t("componentConfigDrawer.dialog.enterDisplayName")}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>取消</Button>
-            <Button onClick={saveDisplayName}>确认</Button>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              {t("componentConfigDrawer.dialog.cancel")}
+            </Button>
+            <Button onClick={saveDisplayName}>
+              {t("componentConfigDrawer.dialog.confirm")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

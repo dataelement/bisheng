@@ -13,6 +13,7 @@ import {
 } from "@/components/bs-ui/select"
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import { ComponentStyleConfig } from "../../types/dataConfig"
+import { useTranslation } from "react-i18next"
 
 const themeColors = ["#4ac5ff", "#3dd598", "#f7ba0b", "#ff7d4d", "#5c6bc0"]
 
@@ -52,6 +53,8 @@ function TextFormat({
   color = "#000000",
   setColor
 }: TextFormatProps) {
+  const { t } = useTranslation("dashboard")
+  
   const alignIcon =
   align === "left" ? (
     <AlignLeft className="w-3.5 h-3.5" />
@@ -244,6 +247,8 @@ function CollapsibleBlock({
   onCollapse: () => void
   rightContent?: React.ReactNode
 }) {
+  const { t } = useTranslation("dashboard")
+  
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between bg-gray-50 rounded-md h-[28px] w-[244px]">
@@ -285,6 +290,8 @@ function FormBlock({ label, children }: {
 }
 
 export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelProps) {
+  const { t } = useTranslation("dashboard")
+  
   const [collapsedSections, setCollapsedSections] = useState({
     color: false,
     title: false,
@@ -321,19 +328,20 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
       [key]: value
     };
     setLocalConfig(newConfig);
- onChange(newConfig) 
+    onChange(newConfig) 
   };
+  
   return (
     <div className="space-y-6">
       {/* 颜色 */}
       <CollapsibleBlock
-        title="颜色"
+        title={t('styleConfigPanel.sections.color')}
         isOpen={type === 'metric'}
         collapsed={collapsedSections.color}
         onCollapse={() => toggleSection('color')}
       >
         {type !== 'metric' &&
-          <FormBlock label="主题颜色">
+          <FormBlock label={t('styleConfigPanel.labels.themeColor')}>
             <div className="flex items-center gap-2">
               {themeColors.map((color) => (
                 <button
@@ -347,7 +355,7 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
             </div>
           </FormBlock>}
 
-        <FormBlock label="背景颜色">
+        <FormBlock label={t('styleConfigPanel.labels.bgColor')}>
           <Input
             type="color"
             className="h-9 p-1"
@@ -359,19 +367,19 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
 
       {/* 标题 */}
       <CollapsibleBlock
-        title="标题"
+        title={t('styleConfigPanel.sections.title')}
         collapsed={collapsedSections.title}
         onCollapse={() => toggleSection('title')}
         isOpen={type === 'metric'}
       >
-        <FormBlock label="标题内容">
+        <FormBlock label={t('styleConfigPanel.labels.titleContent')}>
           <Input
-            placeholder="请输入标题"
+            placeholder={t('styleConfigPanel.placeholders.enterTitle')}
             value={localConfig.title || ""}
             onChange={(e) => handleChange("title", e.target.value)}
           />
         </FormBlock>
-        <FormBlock label="文本格式">
+        <FormBlock label={t('styleConfigPanel.labels.textFormat')}>
           <TextFormat
             fontSize={localConfig.titleFontSize}
             setFontSize={(v) => handleChange("titleFontSize", v)}
@@ -394,11 +402,11 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
           <>
             <CollapsibleBlock
               isOpen
-              title="指标数值"
+              title={t('styleConfigPanel.sections.metricValue')}
               collapsed={false}
               onCollapse={() => { }}
             >
-              <FormBlock label="文本格式">
+              <FormBlock label={t('styleConfigPanel.labels.textFormat')}>
                 <TextFormat
                   fontSize={localConfig.metricFontSize || 14}
                   setFontSize={(v) => handleChange("metricFontSize", v)}
@@ -410,13 +418,13 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                   setStrikethrough={(v) => handleChange("metricUnderline", v)}
                   align={localConfig.metricAlign || "center"}
                   setAlign={(v) => handleChange("metricAlign", v)}
-                   color={localConfig.metricColor || localConfig.themeColor}
-  setColor={(v) => handleChange("metricColor", v)}
+                  color={localConfig.metricColor || localConfig.themeColor}
+                  setColor={(v) => handleChange("metricColor", v)}
                 />
               </FormBlock>
             </CollapsibleBlock>
             <CollapsibleBlock
-              title="副标题"
+              title={t('styleConfigPanel.sections.subtitle')}
               isOpen
               collapsed={false}
               onCollapse={() => { }}
@@ -426,20 +434,20 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                     checked={localConfig.showSubtitle || false}
                     onCheckedChange={(v) => handleChange("showSubtitle", v)}
                   />
-                  <span className="text-xs text-gray-500">显示</span>
+                  <span className="text-xs text-gray-500">{t('styleConfigPanel.buttons.show')}</span>
                 </div>
               }
             >
               {localConfig.showSubtitle && (
                 <>
-                  <FormBlock label="文本内容">
+                  <FormBlock label={t('styleConfigPanel.labels.textContent')}>
                     <Input
-                      placeholder="请输入副标题"
+                      placeholder={t('styleConfigPanel.placeholders.enterSubtitle')}
                       value={localConfig.subtitle || ""}
                       onChange={(e) => handleChange("subtitle", e.target.value)}
                     />
                   </FormBlock>
-                  <FormBlock label="文本格式">
+                  <FormBlock label={t('styleConfigPanel.labels.textFormat')}>
                     <TextFormat
                       fontSize={localConfig.subtitleFontSize || 14}
                       setFontSize={(v) => handleChange("subtitleFontSize", v)}
@@ -461,20 +469,20 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
           </> : <>
             {/* 轴标题 */}
             <CollapsibleBlock
-              title="轴标题"
+              title={t('styleConfigPanel.sections.axisTitle')}
               collapsed={collapsedSections.axis}
               onCollapse={() => toggleSection('axis')}
             >
               <div className="space-y-3">
-                <FormBlock label="X 轴标题内容">
+                <FormBlock label={t('styleConfigPanel.labels.xAxisTitleContent')}>
                   <Input
-                    placeholder="请输入X轴标题"
+                    placeholder={t('styleConfigPanel.placeholders.enterXAxisTitle')}
                     value={localConfig.xAxisTitle || ""}
                     onChange={(e) => handleChange("xAxisTitle", e.target.value)}
                   />
                 </FormBlock>
 
-                <FormBlock label="X 轴文本格式">
+                <FormBlock label={t('styleConfigPanel.labels.xAxisTextFormat')}>
                   <TextFormat
                     fontSize={localConfig.xAxisFontSize || 14}
                     setFontSize={(v) => handleChange("xAxisFontSize", v)}
@@ -486,21 +494,21 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                     setStrikethrough={(v) => handleChange("xAxisUnderline", v)}
                     align={localConfig.xAxisAlign || "center"}
                     setAlign={(v) => handleChange("xAxisAlign", v)}
-                   color={localConfig.xAxisColor || localConfig.themeColor}
+                    color={localConfig.xAxisColor || localConfig.themeColor}
                     setColor={(v) => handleChange("xAxisColor", v)}
                   />
                 </FormBlock>
 
                 <div className="pt-2 border-t">
-                  <FormBlock label="Y 轴标题内容">
+                  <FormBlock label={t('styleConfigPanel.labels.yAxisTitleContent')}>
                     <Input
-                      placeholder="请输入Y轴标题"
+                      placeholder={t('styleConfigPanel.placeholders.enterYAxisTitle')}
                       value={localConfig.yAxisTitle || ""}
                       onChange={(e) => handleChange("yAxisTitle", e.target.value)}
                     />
                   </FormBlock>
 
-                  <FormBlock label="Y 轴文本格式">
+                  <FormBlock label={t('styleConfigPanel.labels.yAxisTextFormat')}>
                     <TextFormat
                       fontSize={localConfig.yAxisFontSize || 14}
                       setFontSize={(v) => handleChange("yAxisFontSize", v)}
@@ -512,8 +520,8 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                       setStrikethrough={(v) => handleChange("yAxisUnderline", v)}
                       align={localConfig.yAxisAlign || "center"}
                       setAlign={(v) => handleChange("yAxisAlign", v)}
-                  color={localConfig.yAxisColor || localConfig.themeColor}
-                    setColor={(v) => handleChange("yAxisColor", v)}
+                      color={localConfig.yAxisColor || localConfig.themeColor}
+                      setColor={(v) => handleChange("yAxisColor", v)}
                     />
                   </FormBlock>
                 </div>
@@ -522,11 +530,11 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
 
             {/* 图例 */}
             <CollapsibleBlock
-              title="图例"
+              title={t('styleConfigPanel.sections.legend')}
               collapsed={collapsedSections.legend}
               onCollapse={() => toggleSection('legend')}
             >
-              <FormBlock label="图例位置">
+              <FormBlock label={t('styleConfigPanel.labels.legendPosition')}>
                 <Select
                   value={localConfig.legendPosition}
                   onValueChange={(v) =>
@@ -537,15 +545,15 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="top">顶部</SelectItem>
-                    <SelectItem value="bottom">底部</SelectItem>
-                    <SelectItem value="left">左侧</SelectItem>
-                    <SelectItem value="right">右侧</SelectItem>
+                    <SelectItem value="top">{t('styleConfigPanel.positions.top')}</SelectItem>
+                    <SelectItem value="bottom">{t('styleConfigPanel.positions.bottom')}</SelectItem>
+                    <SelectItem value="left">{t('styleConfigPanel.positions.left')}</SelectItem>
+                    <SelectItem value="right">{t('styleConfigPanel.positions.right')}</SelectItem>
                   </SelectContent>
                 </Select>
               </FormBlock>
 
-              <FormBlock label="图例文本格式">
+              <FormBlock label={t('styleConfigPanel.labels.legendTextFormat')}>
                 <TextFormat
                   fontSize={localConfig.legendFontSize}
                   setFontSize={(v) => handleChange("legendFontSize", v)}
@@ -557,8 +565,8 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                   setStrikethrough={(v) => handleChange("legendUnderline", v)}
                   align={localConfig.legendAlign}
                   setAlign={(v) => handleChange("legendAlign", v)}
-                 color={localConfig.legendColor || localConfig.themeColor}
-  setColor={(v) => handleChange("legendColor", v)}
+                  color={localConfig.legendColor || localConfig.themeColor}
+                  setColor={(v) => handleChange("legendColor", v)}
                 />
               </FormBlock>
             </CollapsibleBlock>
@@ -566,7 +574,7 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
             {/* 图表选项 */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-black">图表选项</label>
+                <label className="text-sm font-medium text-black">{t('styleConfigPanel.sections.chartOptions')}</label>
               </div>
               <div className="grid grid-cols-2 gap-3 w-[244px]">
                 <label className="flex items-center gap-2 text-sm">
@@ -574,28 +582,28 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                     checked={localConfig.showLegend}
                     onCheckedChange={(v) => handleChange("showLegend", v)}
                   />
-                  图例
+                  {t('styleConfigPanel.options.legend')}
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox
                     checked={localConfig.showAxis}
                     onCheckedChange={(v) => handleChange("showAxis", v)}
                   />
-                  坐标轴
+                  {t('styleConfigPanel.options.axis')}
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox
                     checked={localConfig.showDataLabel}
                     onCheckedChange={(v) => handleChange("showDataLabel", v)}
                   />
-                  数据标签
+                  {t('styleConfigPanel.options.dataLabel')}
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox
                     checked={localConfig.showGrid}
                     onCheckedChange={(v) => handleChange("showGrid", v)}
                   />
-                  网格线
+                  {t('styleConfigPanel.options.gridLine')}
                 </label>
               </div>
             </div>

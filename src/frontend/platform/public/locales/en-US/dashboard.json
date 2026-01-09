@@ -1,0 +1,291 @@
+{
+      "chartSelector": {
+    "title": "Chart Link Configuration",
+    "componentName": "Component: {{componentName}}",
+    
+    "selectCharts": "Select Linked Charts",
+    "selectAll": "Select All",
+    "unnamedChart": "Unnamed Chart",
+    "noDataset": "No dataset",
+    
+    "config": "Query Condition Configuration",
+    "displayType": "Display Type",
+    "displayTypes": {
+      "timeRange": "Time Range",
+      "time": "Time"
+    },
+    
+    "timeGranularity": "Time Granularity",
+    "granularities": {
+      "yearMonth": "Year-Month",
+      "yearMonthDay": "Year-Month-Day",
+      "yearMonthDayHour": "Year-Month-Day-Hour"
+    },
+    
+    "setDefault": "Set as Default Value",
+    
+    "datePicker": {
+      "placeholder": "Select {{displayType}}",
+      "single": "Time",
+      "range": "Time Range"
+    },
+    
+    "buttons": {
+      "cancel": "Cancel",
+      "save": "Save"
+    },
+    
+    "messages": {
+      "saveSuccess": "Chart link configuration saved",
+      "noCharts": "No charts available for linking",
+      "collapse": "Chart Link Config"
+    }
+  },
+  "componentConfigDrawer": {
+    "basicConfig": "Basic Configuration",
+    "customStyle": "Custom Style",
+    "basicConfigTab": "Basic Configuration",
+    "styleConfigTab": "Custom Style",
+    
+    "chartType": "Chart Type",
+    "selectChartType": "Select Chart Type",
+    
+    "categoryAxis": "Category Axis / Dimension",
+    "stackItem": "Stack Item / Dimension",
+    "valueAxis": "Value Axis / Metric",
+    
+    "sortPriority": "Sort Priority",
+    "sortHint": "Add dimensions or metrics to adjust sort priority",
+    
+    "filter": "Filter",
+    "addFilterCondition": "Add Filter Condition",
+    "filterConditionsAdded": "{{count}} filter conditions added",
+    "filterLogicHint": " ({{logic}})",
+    
+    "timeRange": "Time Range",
+    "selectTimeRange": "Select time range",
+    
+    "resultsDisplay": "Results Display",
+    "allResults": "All",
+    "limitResults": "records",
+    
+    "updateChartData": "Update Chart Data",
+    
+    "dataSelection": "Data Selection",
+    
+    "dialog": {
+      "editDisplayName": "Edit Name",
+      "originalName": "Original Name",
+      "displayName": "Display Name",
+      "displayNameRequired": "Display Name *",
+      "enterDisplayName": "Enter display name",
+      "cancel": "Cancel",
+      "confirm": "Confirm"
+    },
+      "dashboard": {
+
+  },
+    "toast": {
+      "fieldAlreadyExists": "Field already exists in {{section}}",
+      "dimensionLimitReached": "Dimension limit reached"
+    },
+    
+    "sections": {
+      "category": "category axis",
+      "stack": "stack item",
+      "value": "metric area"
+    }
+  },
+    "configPanel": {
+      "title": "Dashboard Configuration",
+      "dashboardStyle": "Dashboard Style",
+      "lightTheme": "Light Theme",
+      "darkTheme": "Dark Theme"
+    },
+  "datasetSelector": {
+    "dataset": "Dataset",
+    "selectDataset": "Select dataset",
+    "searchDataset": "Search datasets...",
+    "loading": "Loading...",
+    "noDatasetsFound": "No datasets found",
+    "dimensions": "Dimensions",
+    "metrics": "Metrics",
+    "virtualMetric": "*",
+    "selectDatasetPrompt": "Please select a dataset first",
+    
+    "fieldTypes": {
+      "date": "Date",
+      "integer": "Integer",
+      "keyword": "Text"
+    },
+    
+    "timeGranularity": {
+      "year": "Year",
+      "quarter": "Quarter",
+      "month": "Month",
+      "week": "Week",
+      "day": "Day",
+      "hour": "Hour"
+    }
+},
+"dimensionBlock": {
+    "menu": {
+      "sort": "Sort",
+      "aggregation": "Aggregation",
+      "format": "NumberFormat"
+    },
+    "aggregation": {
+      "sum": "Sum",
+      "avg": "Average",
+      "count": "Count",
+      "max": "Max",
+      "min": "Min"
+    },
+    "sort": {
+      "none": "None",
+      "asc": "Ascending",
+      "desc": "Descending"
+    },
+    "button": {
+      "deleteField": "Delete Field"
+    },
+    "prompt": {
+      "dragDimensionHere": "Drag dimension fields here",
+      "dragMetricHere": "Drag metric fields here"
+    },
+    "dialog": {
+      "formatTitle": "NumberFormat",
+      "formatType": "Format Type",
+      "decimalPlaces": "Decimal Places",
+      "unit": "Unit",
+      "suffix": "Unit Suffix",
+      "thousandSeparator": "Thousand Separator",
+      "example": "Example",
+      "none": "None",
+      "selectUnit": "Select Unit",
+      "enterSuffix": "Enter suffix",
+      "formatTypes": {
+        "number": "Number",
+        "percent": "Percentage",
+        "duration": "Duration",
+        "storage": "Storage Size"
+      }
+    }
+  },
+   "filterConditionDialog": {
+    "title": "Filter Condition Configuration",
+    "keywords": {
+      "time": "time",
+      "date": "date"
+    },
+    "placeholders": {
+      "selectField": "Select Field",
+      "filterType": "Filter Type",
+      "operator": "Operator",
+      "enterNumber": "Enter number",
+      "enterValue": "Enter value",
+      "selectEnumValue": "Select enum values"
+    },
+    "filterTypes": {
+      "conditional": "Conditional Filter",
+      "enum": "Enum Filter"
+    },
+    "operators": {
+      "equals": "Equals",
+      "notEquals": "Not Equals",
+      "contains": "Contains",
+      "notContains": "Not Contains",
+      "greaterThan": "Greater Than",
+      "greaterThanOrEqual": "Greater Than Or Equal",
+      "lessThan": "Less Than",
+      "lessThanOrEqual": "Less Than Or Equal",
+      "isEmpty": "Is Empty",
+      "isNotEmpty": "Is Not Empty"
+    },
+    "buttons": {
+      "addCondition": "Add Condition",
+      "cancel": "Cancel",
+      "save": "Save"
+    },
+    "errors": {
+      "selectField": "Please select a field",
+      "selectOperator": "Please select an operator",
+      "selectEnumValue": "Please select enum values",
+      "enterFilterValue": "Please enter filter value",
+      "atLeastOneCondition": "Please configure at least one valid filter condition"
+    },
+    "toast": {
+      "fetchEnumFailed": "Failed to fetch enum values, please try again later"
+    },
+    "enumSelect": {
+      "placeholder": "Please select",
+      "searchPlaceholder": "Search...",
+      "loading": "Loading...",
+      "selectAll": "Select All",
+      "loadingMore": "Loading more...",
+      "noMatch": "No matching options found",
+      "noData": "No data available"
+    }
+  },
+  "styleConfigPanel": {
+    "sections": {
+      "color": "Color",
+      "title": "Title",
+      "axisTitle": "Axis Title",
+      "legend": "Legend",
+      "metricValue": "Metric Value",
+      "subtitle": "Subtitle",
+      "chartOptions": "Chart Options"
+    },
+    "labels": {
+      "themeColor": "Theme Color",
+      "bgColor": "Background Color",
+      "titleContent": "Title Content",
+      "textFormat": "Text Format",
+      "textContent": "Text Content",
+      "xAxisTitleContent": "X Axis Title Content",
+      "xAxisTextFormat": "X Axis Text Format",
+      "yAxisTitleContent": "Y Axis Title Content",
+      "yAxisTextFormat": "Y Axis Text Format",
+      "legendPosition": "Legend Position",
+      "legendTextFormat": "Legend Text Format"
+    },
+    "placeholders": {
+      "enterTitle": "Enter title",
+      "enterSubtitle": "Enter subtitle",
+      "enterXAxisTitle": "Enter X axis title",
+      "enterYAxisTitle": "Enter Y axis title"
+    },
+    "positions": {
+      "top": "Top",
+      "bottom": "Bottom",
+      "left": "Left",
+      "right": "Right"
+    },
+    "buttons": {
+      "show": "Show"
+    },
+    "options": {
+      "legend": "Legend",
+      "axis": "Axis",
+      "dataLabel": "Data Label",
+      "gridLine": "Grid Line"
+    }
+  },
+  "useChartState": {
+    "sections": {
+      "category": "Category Dimension",
+      "stack": "Stack Dimension",
+      "value": "Metric Dimension"
+    },
+    "fieldTypes": {
+      "dimension": "Dimension",
+      "metric": "Metric"
+    },
+    "warn": {
+      "invalidFieldType": "Field type {{fieldType}} cannot be dragged to {{section}} area",
+      "maxStackDimension": "Only one stack dimension is allowed, please delete the existing stack dimension first",
+      "maxCategoryDimensions": "Maximum 2 category dimensions are allowed"
+    }
+  }
+}
