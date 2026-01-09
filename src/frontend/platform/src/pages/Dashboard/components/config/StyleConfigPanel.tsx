@@ -165,8 +165,7 @@ function IconBtn({
       variant="ghost"
       size="sm"
       onClick={onClick}
-      className={`w-7 h-7 px-0 rounded-none ${active ? "bg-gray-200" : ""
-        }`}
+      className={`w-7 h-7 px-0 rounded-none ${active ? "bg-blue-100 text-blue-600" : ""}`}
     >
       {children}
     </Button>
