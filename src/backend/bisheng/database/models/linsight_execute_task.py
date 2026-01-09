@@ -12,71 +12,71 @@ from bisheng.common.models.base import SQLModelSerializable
 
 class ExecuteTaskTypeEnum(str, Enum):
     """
-    灵思执行任务类型枚举
+    Idea execution task type enumeration
     """
-    # 单体任务
+    # Single Task
     SINGLE = "single"
-    # 拥有子任务
+    # Has subtasks
     COMPOSITE = "composite"
 
 
 class ExecuteTaskStatusEnum(str, Enum):
     """
-    灵思执行任务状态枚举
+    Idea Execution Task Status Enumeration
     """
-    # 未开始
+    # Not Started
     NOT_STARTED = "not_started"
-    # 进行中
+    # Sedang berlangsung
     IN_PROGRESS = "in_progress"
-    # 成功
+    # Berhasil
     SUCCESS = "success"
-    # 等待用户输入
+    # Waiting for user input
     WAITING_FOR_USER_INPUT = "waiting_for_user_input"
-    # 用户输入完成
+    # User input complete
     USER_INPUT_COMPLETED = "user_input_completed"
-    # 失败
+    # Kalah
     FAILED = "failed"
-    # 终止
+    # TERMINATION
     TERMINATED = "terminated"
 
 
 class LinsightExecuteTaskBase(SQLModelSerializable):
     """
-    灵思执行任务模型基类
+    Idea Execution Task Model Base Class
     """
-    session_version_id: str = Field(..., description='会话版本ID',
+    session_version_id: str = Field(..., description='Session VersionID',
                                     sa_column=Column(CHAR(36), ForeignKey("linsight_session_version.id"),
                                                      nullable=False))
 
-    parent_task_id: Optional[str] = Field(None, description='父任务ID',
+    parent_task_id: Optional[str] = Field(None, description='Parent Task:ID',
                                           sa_column=Column(CHAR(36), ForeignKey("linsight_execute_task.id"),
                                                            nullable=True))
-    previous_task_id: Optional[str] = Field(None, description='上一个任务ID',
+    previous_task_id: Optional[str] = Field(None, description='Previous TaskID',
                                             sa_column=Column(CHAR(36),
                                                              nullable=True))
-    next_task_id: Optional[str] = Field(None, description='下一个任务ID',
+    next_task_id: Optional[str] = Field(None, description='[patterns/patterns_ParallelJoin.xml?ROU_NEXT_TASK] Next TaskID',
                                         sa_column=Column(CHAR(36),
                                                          nullable=True))
-    task_type: ExecuteTaskTypeEnum = Field(..., description='任务类型',
+    task_type: ExecuteTaskTypeEnum = Field(..., description='Task type',
                                            sa_column=Column(SQLEnum(ExecuteTaskTypeEnum), nullable=False))
-    task_data: Optional[dict] = Field(None, description='任务数据', sa_type=JSON, nullable=True)
+    task_data: Optional[dict] = Field(None, description='Task Data', sa_type=JSON, nullable=True)
 
-    # input_prompt: Optional[str] = Field(None, description='输入提示', sa_type=Text, nullable=True)
-    # user_input: Optional[str] = Field(None, description='用户输入', sa_type=Text, nullable=True)
-    history: Optional[List[Dict]] = Field(None, description='执行步骤记录', sa_type=JSON, nullable=True)
-    status: ExecuteTaskStatusEnum = Field(ExecuteTaskStatusEnum.NOT_STARTED, description="任务状态",
+    # input_prompt: Optional[str] = Field(None, description='Enter a prompt', sa_type=Text, nullable=True)
+    # user_input: Optional[str] = Field(None, description='User input', sa_type=Text, nullable=True)
+    history: Optional[List[Dict]] = Field(None, description='Execute Step Record', sa_type=JSON, nullable=True)
+    status: ExecuteTaskStatusEnum = Field(ExecuteTaskStatusEnum.NOT_STARTED, description="Status Misi",
                                           sa_column=Column(SQLEnum(ExecuteTaskStatusEnum), nullable=False))
-    result: Optional[Dict] = Field(None, description='任务结果', sa_type=JSON, nullable=True)
+    result: Optional[Dict] = Field(None, description='Result of Task', sa_type=JSON, nullable=True)
 
 
 class LinsightExecuteTask(LinsightExecuteTaskBase, table=True):
     """
-    灵思执行任务模型, sop库也会引用这里的数据
+    Ideas Execution Task Model, sopThe library will also reference the data here
     """
-    id: str = Field(default_factory=uuid_hex, description='任务ID',
+    id: str = Field(default_factory=uuid_hex, description='TaskID',
                     sa_column=Column(CHAR(36), unique=True, nullable=False, primary_key=True))
 
-    create_time: datetime = Field(default_factory=datetime.now, description='创建时间',
+    create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
@@ -86,15 +86,15 @@ class LinsightExecuteTask(LinsightExecuteTaskBase, table=True):
 
 class LinsightExecuteTaskDao(object):
     """
-    灵思执行任务数据访问对象
+    Ideas Execution Task Data Access Objects
     """
 
     @classmethod
     async def get_by_id(cls, task_id: str) -> Optional[LinsightExecuteTask]:
         """
-        根据任务ID获取任务
-        :param task_id: 任务ID
-        :return: 任务对象
+        By TaskIDGet Tasks
+        :param task_id: TaskID
+        :return: Task Objects
         """
         async with get_async_db_session() as session:
             statement = select(LinsightExecuteTask).where(LinsightExecuteTask.id == str(task_id))
@@ -105,10 +105,10 @@ class LinsightExecuteTaskDao(object):
     async def get_by_session_version_id(cls, session_version_id: str, is_parent_task: bool = False) -> List[
         LinsightExecuteTask]:
         """
-        根据会话版本ID获取所有任务
+        Based on session versionIDGet all tasks
         :param is_parent_task:
-        :param session_version_id: 会话版本ID
-        :return: 任务列表
+        :param session_version_id: Session VersionID
+        :return: Task list
         """
         async with get_async_db_session() as session:
             statement = select(LinsightExecuteTask).where(
@@ -123,9 +123,9 @@ class LinsightExecuteTaskDao(object):
     @classmethod
     async def batch_create_tasks(cls, tasks: List[LinsightExecuteTask]) -> List[LinsightExecuteTask]:
         """
-        批量创建任务
-        :param tasks: 任务列表
-        :return: 创建后的任务列表
+        Batch Create Tasks
+        :param tasks: Task list
+        :return: Post-Created Task List
         """
         async with get_async_db_session() as session:
             session.add_all(tasks)
@@ -135,10 +135,10 @@ class LinsightExecuteTaskDao(object):
     @classmethod
     async def update_by_id(cls, task_id: str, **kwargs) -> Optional[LinsightExecuteTask]:
         """
-        根据任务ID更新任务
-        :param task_id: 任务ID
-        :param kwargs: 更新字段
-        :return: 更新后的任务对象
+        By TaskIDUpdate Details
+        :param task_id: TaskID
+        :param kwargs: Update fields
+        :return: Updated task object
         """
         async with get_async_db_session() as session:
             statement = select(LinsightExecuteTask).where(LinsightExecuteTask.id == task_id)
@@ -156,13 +156,13 @@ class LinsightExecuteTaskDao(object):
             await session.refresh(task)
             return task
 
-    # 根据session_version_id批量更新任务状态
+    # accordingsession_version_idBulk update task status
     @classmethod
     async def batch_update_status_by_session_version_id(cls, session_version_ids: List[str],
                                                         status: ExecuteTaskStatusEnum,
                                                         where) -> None:
         """
-        根据会话版本ID批量更新任务状态
+        Based on session versionIDBulk update task status
         :param session_version_ids:
         :param status:
         :param where:
@@ -172,7 +172,7 @@ class LinsightExecuteTaskDao(object):
         async with get_async_db_session() as session:
             statement = (
                 update(LinsightExecuteTask)
-                .where(col(LinsightExecuteTask.session_version_id).in_(session_version_ids))  # 显式转 str
+                .where(col(LinsightExecuteTask.session_version_id).in_(session_version_ids))  # Explicit Transfer str
             )
 
             if where:

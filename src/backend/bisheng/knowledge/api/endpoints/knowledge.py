@@ -49,7 +49,7 @@ router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
 @router.post('/upload')
 async def upload_file(*, file: UploadFile = File(...)):
     file_name = file.filename
-    # 缓存本地
+    # Cache Local
     uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
     file_path = await save_uploaded_file(file, 'bisheng', uuid_file_name)
     if not isinstance(file_path, str):
@@ -61,10 +61,10 @@ async def upload_file(*, file: UploadFile = File(...)):
 async def upload_knowledge_file(*, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
                                 knowledge_id: int,
                                 file: UploadFile = File(...)):
-    """ 知识库上传文件，需要判断文件是否在知识库内重复 """
+    """ Knowledge base upload file, need to determine if the file is duplicated in the knowledge base """
 
     file_name = file.filename
-    # 缓存本地
+    # Cache Local
     uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
     file_path = await save_uploaded_file(file, 'bisheng', uuid_file_name)
     if not isinstance(file_path, str):
@@ -90,7 +90,7 @@ async def preview_file_chunk(*,
                              login_user: UserPayload = Depends(UserPayload.get_login_user),
                              background_tasks: BackgroundTasks,
                              req_data: KnowledgeFileProcess):
-    """ 获取某个文件的分块预览内容 """
+    """ Get a chunked preview of a file """
 
     preview_file_id = generate_uuid()
     redis_key = f'preview_file:{preview_file_id}'
@@ -125,7 +125,7 @@ async def preview_file_chunk(*,
 async def get_preview_file_status(
         request: Request,
         login_user: UserPayload = Depends(UserPayload.get_login_user),
-        preview_file_id: str = Query(..., description='预览接口返回的文件ID')):
+        preview_file_id: str = Query(..., description='Preview the file returned by the interfaceID')):
     redis_key = f'preview_file:{preview_file_id}'
     redis_client = await get_redis_client()
     file_status = await redis_client.aget(redis_key)
@@ -143,7 +143,7 @@ async def update_preview_file_chunk(*,
                                     request: Request,
                                     login_user: UserPayload = Depends(UserPayload.get_login_user),
                                     req_data: UpdatePreviewFileChunk):
-    """ 更新某个文件的分块预览内容 """
+    """ Updating a chunked preview of a file """
 
     res = await KnowledgeService.update_preview_file_chunk(request, login_user, req_data)
     return resp_200(res)
@@ -154,7 +154,7 @@ async def delete_preview_file_chunk(*,
                                     request: Request,
                                     login_user: UserPayload = Depends(UserPayload.get_login_user),
                                     req_data: UpdatePreviewFileChunk):
-    """ 删除某个文件的分块预览内容 """
+    """ Delete a chunked preview of a file """
 
     res = KnowledgeService.delete_preview_file_chunk(request, login_user, req_data)
     return resp_200(res)
@@ -166,19 +166,19 @@ def process_knowledge_file(*,
                            login_user: UserPayload = Depends(UserPayload.get_login_user),
                            background_tasks: BackgroundTasks,
                            req_data: KnowledgeFileProcess):
-    """ 上传文件到知识库内 """
+    """ Uploading Files to the Knowledge Base """
 
     res = KnowledgeService.process_knowledge_file(request, login_user, background_tasks, req_data)
     return resp_200(res)
 
 
-# 修改分段重新处理
+# Modify Segment Reprocessing
 @router.post("/process/rebuild")
 async def rebuild_knowledge_file(*,
                                  request: Request,
                                  login_user: UserPayload = Depends(UserPayload.get_login_user),
                                  req_data: KnowledgeFileReProcess):
-    """ 重新处理知识库文件 """
+    """ Reprocessing Knowledge Base Files """
 
     res = await KnowledgeService.rebuild_knowledge_file(request, login_user, req_data)
     return resp_200(res)
@@ -189,7 +189,7 @@ def create_knowledge(*,
                      request: Request,
                      login_user: UserPayload = Depends(UserPayload.get_login_user),
                      knowledge: KnowledgeCreate):
-    """ 创建知识库. """
+    """ Create Knowledge Base. """
     db_knowledge = KnowledgeService.create_knowledge(request, login_user, knowledge)
     return resp_200(db_knowledge)
 
@@ -201,7 +201,7 @@ async def copy_knowledge(*,
                          login_user: UserPayload = Depends(UserPayload.get_login_user),
                          knowledge_id: int = Body(..., embed=True),
                          knowledge_name: str = Body(default=None, embed=True)):
-    """ 复制知识库. """
+    """ Copy Knowledge Base. """
     knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
 
     if not login_user.is_admin and knowledge.user_id != login_user.user_id:
@@ -209,7 +209,7 @@ async def copy_knowledge(*,
 
     knowledge_count = await KnowledgeFileDao.async_count_file_by_filters(
         knowledge_id,
-        status=[KnowledgeFileStatus.PROCESSING.value],
+        status=[KnowledgeFileStatus.PROCESSING.value, KnowledgeFileStatus.WAITING.value],
     )
     if knowledge.state != KnowledgeState.PUBLISHED.value or knowledge_count > 0:
         return KnowledgeCPError.return_resp()
@@ -224,7 +224,7 @@ async def copy_qa_knowledge(*,
                             knowledge_id: int = Body(..., embed=True),
                             knowledge_name: str = Body(default=None, embed=True)):
     """
-    复制QA知识库.
+    SalinQAThe knowledge base upon.
     :param request:
     :param login_user:
     :param knowledge_id:
@@ -261,7 +261,7 @@ async def get_knowledge(*,
                         sort_by: Literal['create_time', 'update_time', 'name'] = Query(default='update_time'),
                         page_size: Optional[int] = 10,
                         page_num: Optional[int] = 1):
-    """ 读取所有知识库信息. """
+    """ Read all knowledge base information. """
     knowledge_type = KnowledgeTypeEnum(knowledge_type)
     res, total = await KnowledgeService.get_knowledge(request, login_user, knowledge_type, name,
                                                       sort_by,
@@ -274,7 +274,7 @@ def get_knowledge_info(*,
                        request: Request,
                        login_user: UserPayload = Depends(UserPayload.get_login_user),
                        knowledge_id: List[int] = Query(...)):
-    """ 根据知识库ID读取知识库信息. """
+    """ Based on Knowledge BaseIDRead Knowledge Base Information. """
     res = KnowledgeService.get_knowledge_info(request, login_user, knowledge_id)
     return resp_200(data=res)
 
@@ -293,17 +293,17 @@ def delete_knowledge(*,
                      request: Request,
                      login_user: UserPayload = Depends(UserPayload.get_login_user),
                      knowledge_id: int = Body(..., embed=True)):
-    """ 删除知识库信息. """
+    """ Delete Knowledge Base Information. """
 
     KnowledgeService.delete_knowledge(request, login_user, knowledge_id)
-    return resp_200(message='删除成功')
+    return resp_200(message='Delete successful')
 
 
-# 个人知识库信息获取
+# Personal Knowledge Base Information Acquisition
 @router.get('/personal_knowledge_info', status_code=200)
 def get_personal_knowledge_info(
         login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ 获取个人知识库信息. """
+    """ Get personal knowledge base information. """
     knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None,
                                                 KnowledgeTypeEnum.PRIVATE)
 
@@ -320,7 +320,7 @@ def get_filelist(*,
                  page_size: int = 10,
                  page_num: int = 1,
                  status: List[int] = Query(default=None)):
-    """ 获取知识库文件信息. """
+    """ Get knowledge base file information. """
     data, total, flag = KnowledgeService.get_knowledge_files(request, login_user, knowledge_id,
                                                              file_name, status, page_num,
                                                              page_size, file_ids)
@@ -342,7 +342,7 @@ async def get_QA_list(*,
                       keyword: Optional[str] = None,
                       status: Optional[int] = None,
                       login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ 获取知识库文件信息. """
+    """ Get knowledge base file information. """
     db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_knowledge_id)
 
     qa_list, total_count = await knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
@@ -373,7 +373,7 @@ def retry(*,
           login_user: UserPayload = Depends(UserPayload.get_login_user),
           background_tasks: BackgroundTasks,
           req_data: dict):
-    """失败重试"""
+    """Failed Retry"""
     KnowledgeService.retry_files(request, login_user, background_tasks, req_data)
     return resp_200()
 
@@ -383,21 +383,21 @@ def delete_knowledge_file(*,
                           request: Request,
                           file_id: int,
                           login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ 删除知识文件信息 """
+    """ Delete Knowledge File Information """
     KnowledgeService.delete_knowledge_file(request, login_user, [file_id])
-    return resp_200(message='删除成功')
+    return resp_200(message='Delete successful')
 
 
 @router.get('/chunk', status_code=200)
 async def get_knowledge_chunk(request: Request,
                               login_user: UserPayload = Depends(UserPayload.get_login_user),
-                              knowledge_id: int = Query(..., description='知识库ID'),
-                              file_ids: List[int] = Query(default=[], description='文件ID'),
-                              keyword: str = Query(default='', description='关键字'),
-                              page: int = Query(default=1, description='页数'),
-                              limit: int = Query(default=10, description='每页条数条数')):
-    """ 获取知识库分块内容 """
-    # 为了解决keyword参数有时候没有进行urldecode的bug
+                              knowledge_id: int = Query(..., description='The knowledge base uponID'),
+                              file_ids: List[int] = Query(default=[], description='Doc.ID'),
+                              keyword: str = Query(default='', description='Keywords'),
+                              page: int = Query(default=1, description='Page'),
+                              limit: int = Query(default=10, description='Number of bars per page Number of bars per page')):
+    """ Get Knowledge Base Block Content """
+    # In order to resolvekeywordParameters are sometimes not carried outurldecoderight of privacybug
     if keyword.startswith('%'):
         keyword = urllib.parse.unquote(keyword)
     res, total = KnowledgeService.get_knowledge_chunks(request, login_user, knowledge_id, file_ids,
@@ -408,12 +408,12 @@ async def get_knowledge_chunk(request: Request,
 @router.put('/chunk', status_code=200)
 async def update_knowledge_chunk(request: Request,
                                  login_user: UserPayload = Depends(UserPayload.get_login_user),
-                                 knowledge_id: int = Body(..., embed=True, description='知识库ID'),
-                                 file_id: int = Body(..., embed=True, description='文件ID'),
-                                 chunk_index: int = Body(..., embed=True, description='分块索引号'),
-                                 text: str = Body(..., embed=True, description='分块内容'),
-                                 bbox: str = Body(default='', embed=True, description='分块框选位置')):
-    """ 更新知识库分块内容 """
+                                 knowledge_id: int = Body(..., embed=True, description='The knowledge base uponID'),
+                                 file_id: int = Body(..., embed=True, description='Doc.ID'),
+                                 chunk_index: int = Body(..., embed=True, description='Chunked index number'),
+                                 text: str = Body(..., embed=True, description='Chunked content'),
+                                 bbox: str = Body(default='', embed=True, description='Block box selection position')):
+    """ Update Knowledge Base Chunk Content """
     KnowledgeService.update_knowledge_chunk(request, login_user, knowledge_id, file_id,
                                             chunk_index, text, bbox)
     return resp_200()
@@ -422,10 +422,10 @@ async def update_knowledge_chunk(request: Request,
 @router.delete('/chunk', status_code=200)
 async def delete_knowledge_chunk(request: Request,
                                  login_user: UserPayload = Depends(UserPayload.get_login_user),
-                                 knowledge_id: int = Body(..., embed=True, description='知识库ID'),
-                                 file_id: int = Body(..., embed=True, description='文件ID'),
-                                 chunk_index: int = Body(..., embed=True, description='分块索引号')):
-    """ 删除知识库分块内容 """
+                                 knowledge_id: int = Body(..., embed=True, description='The knowledge base uponID'),
+                                 file_id: int = Body(..., embed=True, description='Doc.ID'),
+                                 chunk_index: int = Body(..., embed=True, description='Chunked index number')):
+    """ Delete Knowledge Base Chunk Content """
     KnowledgeService.delete_knowledge_chunk(request, login_user, knowledge_id, file_id,
                                             chunk_index)
     return resp_200()
@@ -434,7 +434,7 @@ async def delete_knowledge_chunk(request: Request,
 @router.get('/file_share')
 async def get_file_share_url(request: Request,
                              login_user: UserPayload = Depends(UserPayload.get_login_user),
-                             file_id: int = Query(description='文件唯一ID')):
+                             file_id: int = Query(description='File UniqueID')):
     original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
     return resp_200(data={
         'original_url': original_url,
@@ -445,7 +445,7 @@ async def get_file_share_url(request: Request,
 @router.get('/file_bbox')
 async def get_file_bbox(request: Request,
                         login_user: UserPayload = Depends(UserPayload.get_login_user),
-                        file_id: int = Query(description='文件唯一ID')):
+                        file_id: int = Query(description='File UniqueID')):
     res = KnowledgeService.get_file_bbox(request, login_user, file_id)
     return resp_200(data=res)
 
@@ -453,7 +453,7 @@ async def get_file_bbox(request: Request,
 @router.post('/qa/add', status_code=200)
 async def qa_add(*, QACreate: QAKnowledgeUpsert,
                  login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ 增加知识库信息. """
+    """ Add knowledge base information. """
     QACreate.user_id = login_user.user_id
     db_knowledge = KnowledgeDao.query_by_id(QACreate.knowledge_id)
     if db_knowledge.type != KnowledgeTypeEnum.QA.value:
@@ -477,7 +477,7 @@ def qa_status_switch(*,
                      status: int = Body(embed=True),
                      id: int = Body(embed=True),
                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ 修改知识库信息. """
+    """ Modify Knowledge Base Information. """
     qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
     if qa_db.status == status:
         return resp_200()
@@ -491,14 +491,14 @@ def qa_status_switch(*,
     if not new_qa_db:
         return resp_200()
     if new_qa_db.status != status:
-        # 说明状态切换失败
+        # Description state switch failed
         return resp_500(message=new_qa_db.remark)
     return resp_200()
 
 
 @router.get('/qa/detail', status_code=200)
 def qa_detail(*, id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ 增加知识库信息. """
+    """ Add knowledge base information. """
     qa_knowledge = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
     qa_knowledge.answers = json.loads(qa_knowledge.answers)[0]
     return resp_200(data=qa_knowledge)
@@ -511,7 +511,7 @@ def qa_append(
         question: str = Body(..., embed=True),
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    """ 增加知识库信息. """
+    """ Add knowledge base information. """
     qa_list = QAKnoweldgeDao.select_list(ids)
     knowledge = KnowledgeDao.query_by_id(qa_list[0].knowledge_id)
     # check knowledge access
@@ -533,7 +533,7 @@ def qa_append(
 def qa_delete(*,
               ids: list[int] = Body(embed=True),
               login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ 删除知识文件信息 """
+    """ Delete Knowledge File Information """
     qa_list = QAKnoweldgeDao.select_list(ids)
 
     knowledge = KnowledgeDao.query_by_id(qa_list[0].knowledge_id)
@@ -559,7 +559,7 @@ def qa_auto_question(
         answer: str = Body(default='', embed=True),
         login_user: UserPayload = Depends(UserPayload.get_login_user)
 ):
-    """通过大模型自动生成问题"""
+    """Automatically generate questions from large models"""
     questions = knowledge_imp.recommend_question(login_user.user_id, ori_question, number=number, answer=answer)
     return resp_200(data={'questions': questions})
 
@@ -587,7 +587,7 @@ async def get_export_url(*,
                          status: Optional[int] = None,
                          max_lines: Optional[int] = 10000,
                          login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    # 查询当前知识库，是否有写入权限
+    # Query the current knowledge base, whether there are write permissions
     db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_knowledge_id)
 
     if keyword:
@@ -691,7 +691,7 @@ def post_import_file(*,
                      file_list: list[str] = Body(..., embed=True),
                      background_tasks: BackgroundTasks,
                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    # 查询当前知识库，是否有写入权限
+    # Query the current knowledge base, whether there are write permissions
     db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_knowledge_id)
 
     insert_result = []
@@ -752,39 +752,39 @@ def post_import_file(*,
 @router.get('/status', status_code=200)
 def get_knowledge_status(*, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    查看知识库状态接口
-    流程：
-    1. 根据用户id先判断用户有没有个人知识库，没有直接返回200
-    2. 如果拥有知识库，根据用户id查看所在知识库状态，如果个人知识库的状态处于REBUILDING 3 或者 FAILED 4 时，
-       返回 "个人知识库embedding模型已更换，正在重建知识库，请稍后再试" 状态码 502
+    View Knowledge Base Status Interface
+    Receive:
+    1. According UsersidFirst determine if the user has a personal knowledge base and does not return directly200
+    2. If you have a knowledge base, depending on the useridView the state of your knowledge base, if the state of your personal knowledge base isREBUILDING 3 or FAILED 4 Jam
+       Return "Personal Knowledge BaseembeddingThe model has been replaced, rebuilding the knowledge base, please try again later" State Code 502
     """
-    # 查询用户的个人知识库
+    # Query a user's personal knowledge base
     user_private_knowledge = KnowledgeDao.get_user_knowledge(
         login_user.user_id,
         None,
         KnowledgeTypeEnum.PRIVATE
     )
 
-    # 如果用户没有个人知识库，直接返回200
+    # If the user does not have a personal knowledge base, go directly back to200
     if not user_private_knowledge:
         return resp_200({"status": "success"})
 
-    # 获取第一个个人知识库（通常用户只有一个个人知识库）
+    # Get the first personal knowledge base (usually users have only one personal knowledge base)
     private_knowledge = user_private_knowledge[0]
 
-    # 检查知识库状态
+    # Check Knowledge Base Status
 
     if private_knowledge.state == KnowledgeState.REBUILDING.value:
-        # 返回502状态码和相应提示信息
+        # Return502Status codes and corresponding prompts
         raise KnowledgeRebuildingError()
     if private_knowledge.state == KnowledgeState.FAILED.value:
-        # 延迟导入以避免循环导入
+        # Delay imports to avoid looping imports
         from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
         rebuild_knowledge_celery.delay(private_knowledge.id, int(private_knowledge.model), login_user.user_id)
-        # 返回502状态码和相应提示信息
+        # Return502Status codes and corresponding prompts
         raise KnowledgeRebuildingError()
 
-    # 知识库状态正常，返回200
+    # Knowledge base status is OK, go back200
     return resp_200({"status": "success"})
 
 
@@ -793,25 +793,25 @@ def update_knowledge_model(*,
                            login_user: UserPayload = Depends(UserPayload.get_login_user),
                            req_data: UpdateKnowledgeReq):
     """
-    更新知识库接口
-    更新embedding模型时重建知识库
-    流程：
-    1. 根据前端传进来的model_id, model_type，先判断是不是embedding模型
-    2. 如果不是则返回resp501("不是embedding模型") 如果是则把knowledge表中所有type为2的数据status改成3，model改成传入的model_id
-    3. 每一个knowledge_id都发起异步任务进行知识库重建
+    Update Knowledge Base Interface
+    Update embedding Rebuild Knowledge Base on Model
+    Receive:
+    1. According to the incoming from the front-endmodel_id, model_type, let's first determine ifembeddingModels
+    2. If not, go backresp501("Is notembeddingModels") If so, place theknowledgeAll in the tabletypeare2DatastatusChange to...3，modelChange to Incomingmodel_id
+    3. everyknowledge_idBoth initiate asynchronous tasks to rebuild the knowledge base
     """
-    # 1. 验证是否为embedding模型
+    # 1. Verify that isembeddingModels
     model_info = LLMDao.get_model_by_id(req_data.model_id)
     if not model_info:
         return NoLlmModelConfigError.return_resp()
 
-    # 如果前端没有传model_type，使用数据库中的model_type
+    # If the front-end does not passmodel_type, using themodel_type
     model_type = req_data.model_type if req_data.model_type else model_info.model_type
 
     if model_type != LLMModelType.EMBEDDING.value:
         return KnowledgeNoEmbeddingError.return_resp()
 
-    # 处理指定的知识库
+    # Process the specified knowledge base
     knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
     if not knowledge:
         return KnowledgeNotExistError.return_resp()
@@ -823,13 +823,13 @@ def update_knowledge_model(*,
 
     old_model_id = knowledge.model
 
-    # 更新知识库状态和模型
+    # Update Knowledge Base Status and Models
     knowledge.model = str(req_data.model_id)
     knowledge.name = req_data.knowledge_name
     knowledge.description = req_data.description
 
     if int(old_model_id) == int(req_data.model_id):
-        # 如果模型没有变化，不需要重建
+        # If the model does not change, there is no need to rebuild
         KnowledgeDao.update_one(knowledge)
         return resp_200()
     if knowledge.state == KnowledgeState.REBUILDING.value:
@@ -838,17 +838,17 @@ def update_knowledge_model(*,
     knowledge.state = KnowledgeState.REBUILDING.value
     KnowledgeDao.update_one(knowledge)
 
-    # 发起异步任务
+    # Start asynchronous task
 
     if knowledge.type == KnowledgeTypeEnum.NORMAL.value:
 
-        # 延迟导入以避免循环导入
+        # Delay imports to avoid looping imports
         from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
         rebuild_knowledge_celery.delay(knowledge.id, req_data.model_id, login_user.user_id)
 
     elif knowledge.type == KnowledgeTypeEnum.QA.value:
 
-        # 延迟导入以避免循环导入
+        # Delay imports to avoid looping imports
         from bisheng.worker.knowledge.qa import rebuild_qa_knowledge_celery
         rebuild_qa_knowledge_celery.delay(knowledge.id, req_data.model_id, login_user.user_id)
 
@@ -857,13 +857,13 @@ def update_knowledge_model(*,
     return resp_200()
 
 
-@router.get("/file/info/{file_id}", description="获取知识库文件信息", response_model=UnifiedResponseModel)
+@router.get("/file/info/{file_id}", description="Get knowledge base file information", response_model=UnifiedResponseModel)
 async def get_knowledge_file_info(*,
                                   login_user: UserPayload = Depends(UserPayload.get_login_user),
                                   file_id: int,
                                   knowledge_file_service=Depends(get_knowledge_file_service)):
     """
-    获取知识库文件信息
+    Get knowledge base file information
     Args:
         login_user:
         file_id:
@@ -877,14 +877,14 @@ async def get_knowledge_file_info(*,
     return resp_200(data=knowledge_file_info_res)
 
 
-# 为知识库添加元数据字段
-@router.post('/add_metadata_fields', description="为知识库添加元数据字段", response_model=UnifiedResponseModel)
+# Adding Metadata Fields to the Knowledge Base
+@router.post('/add_metadata_fields', description="Adding Metadata Fields to the Knowledge Base", response_model=UnifiedResponseModel)
 async def add_metadata_fields(*,
                               login_user: UserPayload = Depends(UserPayload.get_login_user),
                               req_data: AddKnowledgeMetadataFieldsReq,
                               knowledge_service=Depends(get_knowledge_service)):
     """
-    为知识库添加元数据字段
+    Adding Metadata Fields to the Knowledge Base
     """
 
     knowledge_model = await knowledge_service.add_metadata_fields(login_user, req_data)
@@ -892,8 +892,8 @@ async def add_metadata_fields(*,
     return resp_200(data=knowledge_model)
 
 
-# 修改知识库元数据字段
-@router.put('/update_metadata_fields', description="修改知识库元数据字段", response_model=UnifiedResponseModel)
+# Modify Knowledge Base Metadata Fields
+@router.put('/update_metadata_fields', description="Modify Knowledge Base Metadata Fields", response_model=UnifiedResponseModel)
 async def update_metadata_fields(*,
                                  login_user: UserPayload = Depends(UserPayload.get_login_user),
                                  req_data: UpdateKnowledgeMetadataFieldsReq,
@@ -901,7 +901,7 @@ async def update_metadata_fields(*,
                                  background_tasks: BackgroundTasks
                                  ):
     """
-    修改知识库元数据字段
+    Modify Knowledge Base Metadata Fields
     Args:
         login_user:
         req_data:
@@ -917,16 +917,16 @@ async def update_metadata_fields(*,
     return resp_200(data=knowledge_model)
 
 
-# 删除知识库元数据字段
-@router.delete('/delete_metadata_fields', description="删除知识库元数据字段", response_model=UnifiedResponseModel)
+# Delete Knowledge Base Metadata Field
+@router.delete('/delete_metadata_fields', description="Delete Knowledge Base Metadata Field", response_model=UnifiedResponseModel)
 async def delete_metadata_fields(*,
                                  login_user: UserPayload = Depends(UserPayload.get_login_user),
-                                 knowledge_id: int = Body(..., embed=True, description="知识库ID"),
-                                 field_names: List[str] = Body(..., embed=True, description="要删除的字段名称列表"),
+                                 knowledge_id: int = Body(..., embed=True, description="The knowledge base uponID"),
+                                 field_names: List[str] = Body(..., embed=True, description="List of field names to delete"),
                                  knowledge_service=Depends(get_knowledge_service),
                                  background_tasks: BackgroundTasks):
     """
-    删除知识库元数据字段
+    Delete Knowledge Base Metadata Field
     Args:
         login_user:
         knowledge_id:
@@ -944,14 +944,14 @@ async def delete_metadata_fields(*,
     return resp_200(data=knowledge_model)
 
 
-# 修改知识库文件用户自定义元数据
-@router.put('/file/user_metadata', description="修改知识库文件用户自定义元数据", response_model=UnifiedResponseModel)
+# Modify Knowledge Base File User Custom Metadata
+@router.put('/file/user_metadata', description="Modify Knowledge Base File User Custom Metadata", response_model=UnifiedResponseModel)
 async def modify_file_user_metadata(*,
                                     login_user: UserPayload = Depends(UserPayload.get_login_user),
                                     req_data: ModifyKnowledgeFileMetaDataReq,
                                     knowledge_file_service=Depends(get_knowledge_file_service)):
     """
-    修改知识库文件用户自定义元数据
+    Modify Knowledge Base File User Custom Metadata
     Args:
         login_user:
         req_data:

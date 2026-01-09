@@ -29,13 +29,13 @@ router = APIRouter(prefix='/flows', tags=['Flows'], dependencies=[Depends(UserPa
 @router.post('/', status_code=201)
 def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Create a new flow."""
-    # 判断用户是否重复技能名
+    # Determine if the user repeats the skill name
     exist_flow = FlowDao.get_flow_by_name(login_user.user_id, flow.name)
     if exist_flow:
         raise FlowNameExistsError()
     flow.user_id = login_user.user_id
     db_flow = Flow.model_validate(flow)
-    # 创建新的技能
+    # Create New Skill
     db_flow = FlowDao.create_flow(db_flow, FlowType.FLOW.value)
 
     current_version = FlowVersionDao.get_version_by_flow(db_flow.id)
@@ -48,7 +48,7 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
 @router.get('/versions', status_code=200)
 def get_versions(*, flow_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    获取技能对应的版本列表
+    Get a list of versions for your skill
     """
     return FlowService.get_version_list_by_flow(login_user, flow_id)
 
@@ -59,7 +59,7 @@ async def create_versions(*,
                           flow_version: FlowVersionCreate,
                           login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    创建新的技能版本
+    Create New Skill Version
     """
     return await FlowService.create_new_version(login_user, flow_id, flow_version)
 
@@ -71,7 +71,7 @@ async def update_versions(*,
                           flow_version: FlowVersionCreate,
                           login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    更新版本
+    Update to version
     """
     return await FlowService.update_version_info(request, login_user, version_id, flow_version)
 
@@ -79,7 +79,7 @@ async def update_versions(*,
 @router.delete('/versions/{version_id}', status_code=200)
 def delete_versions(*, version_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    删除版本
+    Remove Version
     """
     return FlowService.delete_version(login_user, version_id)
 
@@ -87,7 +87,7 @@ def delete_versions(*, version_id: int, login_user: UserPayload = Depends(UserPa
 @router.get('/versions/{version_id}', status_code=200)
 def get_version_info(*, version_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    获取版本信息
+    Get Version Info
     """
     return FlowService.get_version_info(login_user, version_id)
 
@@ -95,21 +95,21 @@ def get_version_info(*, version_id: int, login_user: UserPayload = Depends(UserP
 @router.post('/change_version', status_code=200)
 async def change_version(*,
                          request: Request,
-                         flow_id: str = Query(default=None, description='技能唯一ID'),
-                         version_id: int = Query(default=None, description='需要设置的当前版本ID'),
+                         flow_id: str = Query(default=None, description='Skill UniqueID'),
+                         version_id: int = Query(default=None, description='Current version that needs to be setID'),
                          login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    修改当前版本
+    Modify Current Version
     """
     return await FlowService.change_current_version(request, login_user, flow_id, version_id)
 
 
 @router.get('/', status_code=200)
 def read_flows(*,
-               name: str = Query(default=None, description='根据name查找数据库，包含描述的模糊搜索'),
-               tag_id: int = Query(default=None, description='标签ID'),
-               page_size: int = Query(default=10, description='每页数量'),
-               page_num: int = Query(default=1, description='页数'),
+               name: str = Query(default=None, description='accordingnameFind databases with fuzzy searches for descriptions'),
+               tag_id: int = Query(default=None, description='labelID'),
+               page_size: int = Query(default=10, description='Items per page'),
+               page_num: int = Query(default=1, description='Page'),
                status: int = None,
                login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Read all flows."""
@@ -140,7 +140,7 @@ async def update_flow(*,
     flow_data = flow.model_dump(exclude_unset=True)
 
     if 'status' in flow_data and flow_data['status'] == 2 and db_flow.status == 1:
-        # 上线校验
+        # On-line verification
         try:
             art = {}
             await build_flow_no_yield(graph_data=db_flow.data,
@@ -197,15 +197,15 @@ def delete_flow(*,
 
 @router.post('/compare')
 async def compare_flow_node(*, item: FlowCompareReq, login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ 技能多版本对比 """
+    """ Skills Multiple Versions Comparison """
     return await FlowService.compare_flow_node(login_user, item)
 
 
 @router.get('/compare/stream', status_code=200, response_class=StreamingResponse)
 async def compare_flow_node_stream(*,
-                                   data: Any = Query(description='对比所需数据的json序列化后的字符串'),
+                                   data: Any = Query(description='Comparing the required datajsonSerialized string'),
                                    login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ 技能多版本对比 """
+    """ Skills Multiple Versions Comparison """
     item = FlowCompareReq(**json.loads(data))
 
     async def event_stream(req: FlowCompareReq):

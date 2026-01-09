@@ -1,41 +1,41 @@
-# Chat 相关的返回错误码 130开头
+# Chat Related return error codes 130What/the beginning?
 from .base import BaseErrorCode
 
 
-# 该技能已被删除
+# This skill has been deleted
 class SkillDeletedError(BaseErrorCode):
     Code = 13001
-    Msg = "该技能已被删除"
+    Msg = "This skill has been deleted"
 
 
-# 当前技能未上线，无法直接对话
+# The current skill is not online and cannot be spoken to directly
 class SkillNotOnlineError(BaseErrorCode):
     Code = 13002
-    Msg = "当前技能未上线，无法直接对话"
+    Msg = "The current skill is not online and cannot be spoken to directly"
 
 
-# 当前编译没通过
+# Current compilation failed
 class SkillNotBuildError(BaseErrorCode):
     Code = 13003
-    Msg = "当前技能未编译通过，无法直接对话"
+    Msg = "The current skill has not been compiled and passed, it is not possible to talk directly"
 
 
-# 后端服务异常
+# Backend Service Exception
 class ChatServiceError(BaseErrorCode):
     Code = 13004
-    Msg = "后端服务异常"
+    Msg = "Backend Service Exception"
 
 
-# LLM 技能执行错误. error={str(e)}
+# LLM Skill execution error. error={str(e)}
 class LLMExecutionError(BaseErrorCode):
     Code = 13005
-    Msg = "LLM 技能执行错误. error={error}"
+    Msg = "LLM Skill execution error. error={error}"
 
 
-# 文档解析失败，点击输入框上传按钮重新上传\n\n{str(e)}
+# Document parsing failed, click the input upload button to upload again\n\n{str(e)}
 class DocumentParseError(BaseErrorCode):
     Code = 13006
-    Msg = "文档解析失败，点击输入框上传按钮重新上传\n\n{error}"
+    Msg = "Document parsing failed, click the input upload button to upload again\n\n{error}"
 
 
 # Input data is parsed fail. error={str(e)}
@@ -46,4 +46,4 @@ class InputDataParseError(BaseErrorCode):
 
 class WorkflowOfflineError(BaseErrorCode):
     Code = 13010
-    Msg = "当前工作流未上线，无法直接对话"
+    Msg = "The current workflow is not online and cannot be chatted directly"

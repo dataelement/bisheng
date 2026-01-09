@@ -167,7 +167,7 @@
   "storeFilesSentInCurrentSession": "現在のセッションで送信されたファイルを保存",
   "displayNameTooltip": "ユーザーセッションページにこの名前が表示されます",
   "variableNameTooltipFile": "ユーザーセッションページに入力した内容を保存するために使用されます。これを一時セッションファイルリストで選択できます",
-  "variableNameTooltipOther": "ユーザーセッションページに入力した内容を保存するために使用され、他のノードでも参照できます",
+  "variableNameTooltip": "ユーザーセッションページに入力した内容を保存するために使用され、他のノードでも参照できます",
   "allowMultipleSelect": "複数選択を許可",
   "allowUploadMultipleFiles": "複数ファイルのアップロードを許可",
   "uploadFileTypes": "アップロード可能なファイルタイプ",
@@ -251,6 +251,8 @@
   "variableNameRuleTip": "英字、数字、アンダースコアが使用可能。数字で始めることはできません。最大50文字",
   "variableValueRuleTip": "変数値は空にできません。最大1000文字",
   "enterVariableValue": "変数値を入力",
+  "kbQueryToolIntro": "## 知識クエリツール紹介\nユーザーの問題を解決するためにナレッジベースを照会する必要がある場合、知識クエリツールを呼び出し、ユーザーの要求を適切なクエリ（query）に書き換えてツールの入力パラメータとして渡してください。",
+  "sqlAgentToolIntro": "## sqlagent データベースツール紹介\n1. 自然言語でユーザーのクエリ要件を正確に記述し、その記述をパラメータ query の値として使用して sqlagent ツールを呼び出してください。\n2. ユーザーのクエリ要件が複数ある場合は、sqlagent を2回に分けて呼び出してください。",
   "node": {
     "start": {
       "name": "開始",
@@ -396,7 +398,8 @@
       },
       "system_prompt": {
         "label": "システムプロンプト",
-        "placeholder": "アシスタントの描写"
+        "placeholder": "アシスタントの描写",
+        "value": "あなたはインテリジェントなAIアシスタントです。ユーザーのニーズに応じて、適切なツール（もしあれば）を呼び出し、ユーザーの課題を解決することを得意としています。\n現在の時刻は {{#開始/current_time#}} です。"
       },
       "user_prompt": {
         "label": "ユーザープロンプト",

@@ -16,7 +16,7 @@ def set_flow_knowledge_id(graph_data: dict, knowledge_id: int):
 
 
 def replace_flow_llm(graph_data: dict, llm: BaseLanguageModel, llm_param: dict):
-    # 替换class, 替换template， 其他不动，
+    # Ganticlass, Gantitemplate， Others do not move.
     for node in graph_data['nodes']:
         if 'BaseLanguageModel' in node['data']['node']['base_classes']:
             node['data']['type'] = type(llm).__name__
@@ -26,7 +26,7 @@ def replace_flow_llm(graph_data: dict, llm: BaseLanguageModel, llm_param: dict):
 
 
 def trans_obj_to_json(obj: BaseModel, llm_param: dict):
-    # template 构建
+    # template Build.
     template = []
     field_json = obj.__dict__
     for k, v in field_json.items():

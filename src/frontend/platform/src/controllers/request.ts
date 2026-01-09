@@ -32,7 +32,7 @@ customAxios.interceptors.response.use(function (response) {
     const errorMessage = i18Msg === `errors.${response.data.status_code}` ? response.data.status_message : i18Msg
 
     // 无权访问
-    if ([403, 404].includes(response.data.status_code)) {
+    if ([403, 404].includes(response.data.status_code) && response.config.url !== '/api/v1/user/info') {
         // 修改不跳转
         localStorage.setItem('noAccessUrl', response.request.responseURL)
         if (response.config.method === 'get') {
@@ -40,9 +40,9 @@ customAxios.interceptors.response.use(function (response) {
         }
         return Promise.reject(errorMessage);
     }
-    // 应用无编辑权限
-    if (response.data.status_code === 10599) {
-        location.href = __APP_ENV__.BASE_URL + '/build/apps?error=10599'
+    // 应用无编辑权限 (TODO业务状态码放行到具体业务中)
+    if ([10599, 17005].includes(response.data.status_code)) {
+        location.href = `${__APP_ENV__.BASE_URL}/build/apps?error=${response.data.status_code}`
         return Promise.reject(errorMessage);
     }
     // 异地登录

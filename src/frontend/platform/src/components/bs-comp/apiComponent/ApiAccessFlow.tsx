@@ -52,8 +52,7 @@ url = "${location.origin}/api/v2/workflow/invoke"
 
 payload = json.dumps({
    "workflow_id": "${id}",
-   "stream": False, # 是否请求流式返回工作流事件，默认为 True。本示例为了直观展示返回结果，所以改为
-    False 使用非流式请求，真实业务场景中为了用户体验建议请求流式返回。
+   "stream": False, # 是否请求流式返回工作流事件，默认为 True。本示例为了直观展示返回结果，所以改为False 使用非流式请求，真实业务场景中为了用户体验建议请求流式返回。
 })
 
 headers = {
@@ -177,7 +176,7 @@ print(response.text)# 输出工作流的响应`
     "workflow_id": "7481368b-dd1c-43ef-a254-dce219ee53e8",
     "stream": False,  # 启用流式传输
     "input": {"input_2775b": {  # 事件里的节点ID
-        "user_input": "贵州茅台股价情况"  # 使用从文件中读取的文本
+        "user_input": "贵州茅台股价情况"  # 用户输入内容
     }},
     "message_id": "387216",
     "session_id": "1fc60fe0edb44219bbef5f8870dd4639_async_task_id"

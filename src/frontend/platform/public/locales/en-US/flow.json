@@ -166,7 +166,7 @@
   "storeFilesSentInCurrentSession": "Store files sent in the current session",
   "displayNameTooltip": "Displayed on the user conversation page",
   "variableNameTooltipFile": "Used to store content entered on the user conversation page; can be selected from the temporary session file list",
-  "variableNameTooltipOther": "Used to store content entered on the user conversation page; can be referenced in other nodes",
+  "variableNameTooltip": "Used to store content entered on the user conversation page; can be referenced in other nodes",
   "allowMultipleSelect": "Allow multiple selection",
   "allowUploadMultipleFiles": "Allow uploading multiple files",
   "uploadFileTypes": "Upload file types",
@@ -250,6 +250,8 @@
   "variableNameRuleTip": "Supports letters, numbers, underscores; cannot start with a number; maximum 50 characters",
   "variableValueRuleTip": "Variable value cannot be empty; maximum 1000 characters",
   "enterVariableValue": "Enter variable value",
+  "kbQueryToolIntro": "## Knowledge Base Search Tool Intro\nWhen a knowledge base search is required to solve a user's problem, invoke the knowledge base search tool and rewrite the user's requirement into a suitable query as the input parameter.",
+  "sqlAgentToolIntro": "## SQLAgent Database Tool Intro\n1. Use natural language to accurately describe the user's query needs, and use this description as the value for the 'query' parameter to invoke the sqlagent tool;\n2. If the user has multiple query requirements, invoke sqlagent twice separately.",
   "node": {
     "start": {
       "name": "Start",

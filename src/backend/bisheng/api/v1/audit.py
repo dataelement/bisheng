@@ -12,14 +12,14 @@ router = APIRouter(prefix='/audit', tags=['AuditLog'])
 
 @router.get('')
 def get_audit_logs(*,
-                   group_ids: Optional[List[str]] = Query(default=[], description='分组id列表'),
-                   operator_ids: Optional[List[int]] = Query(default=[], description='操作人id列表'),
-                   start_time: Optional[datetime] = Query(default=None, description='开始时间'),
-                   end_time: Optional[datetime] = Query(default=None, description='结束时间'),
-                   system_id: Optional[str] = Query(default=None, description='系统模块'),
-                   event_type: Optional[str] = Query(default=None, description='操作行为'),
-                   page: Optional[int] = Query(default=0, description='页码'),
-                   limit: Optional[int] = Query(default=0, description='每页条数'),
+                   group_ids: Optional[List[str]] = Query(default=[], description='GroupingidVertical'),
+                   operator_ids: Optional[List[int]] = Query(default=[], description='WhoidVertical'),
+                   start_time: Optional[datetime] = Query(default=None, description='Start when'),
+                   end_time: Optional[datetime] = Query(default=None, description='End time'),
+                   system_id: Optional[str] = Query(default=None, description='Module Item'),
+                   event_type: Optional[str] = Query(default=None, description='Operation behaviors'),
+                   page: Optional[int] = Query(default=0, description='Page'),
+                   limit: Optional[int] = Query(default=0, description='Listings Per Page'),
                    login_user: UserPayload = Depends(UserPayload.get_login_user)):
     group_ids = [one for one in group_ids if one]
     operator_ids = [one for one in operator_ids if one]
@@ -30,23 +30,23 @@ def get_audit_logs(*,
 @router.get('/operators')
 def get_all_operators(*, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    获取操作过组下资源的所有用户
+    Get all users who have acted on a resource under a group
     """
     return resp_200(data=AuditLogService.get_all_operators(login_user))
 
 
 @router.get('/session')
 def get_session_list(login_user: UserPayload = Depends(UserPayload.get_login_user),
-                     flow_ids: Optional[List[str]] = Query(default=[], description='应用id列表'),
-                     user_ids: Optional[List[int]] = Query(default=[], description='用户id列表'),
-                     group_ids: Optional[List[int]] = Query(default=[], description='用户组id列表'),
-                     start_date: Optional[datetime] = Query(default=None, description='开始时间'),
-                     end_date: Optional[datetime] = Query(default=None, description='结束时间'),
-                     feedback: Optional[str] = Query(default=None, description='like：点赞；dislike：点踩；copied：复制'),
-                     sensitive_status: Optional[int] = Query(default=None, description='敏感词审查状态'),
-                     page: Optional[int] = Query(default=1, description='页码'),
-                     page_size: Optional[int] = Query(default=10, description='每页条数')):
-    """ 筛选所有会话列表 """
+                     flow_ids: Optional[List[str]] = Query(default=[], description='ApplicationsidVertical'),
+                     user_ids: Optional[List[int]] = Query(default=[], description='UsersidVertical'),
+                     group_ids: Optional[List[int]] = Query(default=[], description='User GroupsidVertical'),
+                     start_date: Optional[datetime] = Query(default=None, description='Start when'),
+                     end_date: Optional[datetime] = Query(default=None, description='End time'),
+                     feedback: Optional[str] = Query(default=None, description='like LikedislikeUnlikecopiedCopy:'),
+                     sensitive_status: Optional[int] = Query(default=None, description='Sensitive word review status'),
+                     page: Optional[int] = Query(default=1, description='Page'),
+                     page_size: Optional[int] = Query(default=10, description='Listings Per Page')):
+    """ Filter all session lists """
     data, total = AuditLogService.get_session_list(login_user, flow_ids, user_ids, group_ids, start_date, end_date,
                                                    feedback, sensitive_status, page, page_size)
     return resp_200(data={
@@ -57,15 +57,15 @@ def get_session_list(login_user: UserPayload = Depends(UserPayload.get_login_use
 
 @router.get('/session/export')
 def export_session_messages(login_user: UserPayload = Depends(UserPayload.get_login_user),
-                            flow_ids: Optional[List[str]] = Query(default=[], description='应用id列表'),
-                            user_ids: Optional[List[int]] = Query(default=[], description='用户id列表'),
-                            group_ids: Optional[List[int]] = Query(default=[], description='用户组id列表'),
-                            start_date: Optional[datetime] = Query(default=None, description='开始时间'),
-                            end_date: Optional[datetime] = Query(default=None, description='结束时间'),
+                            flow_ids: Optional[List[str]] = Query(default=[], description='ApplicationsidVertical'),
+                            user_ids: Optional[List[int]] = Query(default=[], description='UsersidVertical'),
+                            group_ids: Optional[List[int]] = Query(default=[], description='User GroupsidVertical'),
+                            start_date: Optional[datetime] = Query(default=None, description='Start when'),
+                            end_date: Optional[datetime] = Query(default=None, description='End time'),
                             feedback: Optional[str] = Query(default=None,
-                                                            description='like：点赞；dislike：点踩；copied：复制'),
-                            sensitive_status: Optional[int] = Query(default=None, description='敏感词审查状态')):
-    """ 导出会话详情列表的csv文件 """
+                                                            description='like LikedislikeUnlikecopiedCopy:'),
+                            sensitive_status: Optional[int] = Query(default=None, description='Sensitive word review status')):
+    """ Exporting a list of session detailscsvDoc. """
     url = AuditLogService.export_session_messages(login_user, flow_ids, user_ids, group_ids, start_date, end_date,
                                                   feedback, sensitive_status)
     return resp_200(data={
@@ -75,15 +75,15 @@ def export_session_messages(login_user: UserPayload = Depends(UserPayload.get_lo
 
 @router.get('/session/export/data')
 def get_session_messages(login_user: UserPayload = Depends(UserPayload.get_login_user),
-                         flow_ids: Optional[List[str]] = Query(default=[], description='应用id列表'),
-                         user_ids: Optional[List[int]] = Query(default=[], description='用户id列表'),
-                         group_ids: Optional[List[int]] = Query(default=[], description='用户组id列表'),
-                         start_date: Optional[datetime] = Query(default=None, description='开始时间'),
-                         end_date: Optional[datetime] = Query(default=None, description='结束时间'),
+                         flow_ids: Optional[List[str]] = Query(default=[], description='ApplicationsidVertical'),
+                         user_ids: Optional[List[int]] = Query(default=[], description='UsersidVertical'),
+                         group_ids: Optional[List[int]] = Query(default=[], description='User GroupsidVertical'),
+                         start_date: Optional[datetime] = Query(default=None, description='Start when'),
+                         end_date: Optional[datetime] = Query(default=None, description='End time'),
                          feedback: Optional[str] = Query(default=None,
-                                                         description='like：点赞；dislike：点踩；copied：复制'),
-                         sensitive_status: Optional[int] = Query(default=None, description='敏感词审查状态')):
-    """ 导出会话详情列表的数据 """
+                                                         description='like LikedislikeUnlikecopiedCopy:'),
+                         sensitive_status: Optional[int] = Query(default=None, description='Sensitive word review status')):
+    """ Export data for a list of session details """
     result = AuditLogService.get_session_messages(login_user, flow_ids, user_ids, group_ids, start_date, end_date,
                                                   feedback, sensitive_status)
     return resp_200(data={

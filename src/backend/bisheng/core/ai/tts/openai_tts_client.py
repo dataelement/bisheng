@@ -6,11 +6,11 @@ from ..base import BaseTTSClient
 
 
 class OpenAITTSClient(BaseTTSClient):
-    """OpenAI TTS客户端"""
+    """OpenAI TTSClient"""
 
     def __init__(self, api_key: str, **kwargs):
         """
-        初始化OpenAI TTS客户端
+        InisialisasiOpenAI TTSClient
         :param api_key:
         :param kwargs:
         """
@@ -26,7 +26,7 @@ class OpenAITTSClient(BaseTTSClient):
             format: Literal["mp3", "opus", "aac", "flac", "wav", "pcm"] = "mp3"
     ) -> bytes:
         """
-        使用OpenAI TTS API进行文本到语音的合成
+        UseOpenAI TTS APIText-to-speech synthesis
         :param text:
         :param voice:
         :param language:

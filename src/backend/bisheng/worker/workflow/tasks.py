@@ -15,12 +15,12 @@ from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.workflow.common.workflow import WorkflowStatus
 from bisheng.workflow.graph.workflow import Workflow
 
-# 存储全局的工作流对象
+# Stores global workflow objects
 _global_workflow: dict[str, Workflow] = {}
 
 
 def _clear_workflow_obj(unique_id: str):
-    """ 清除全局工作流对象 """
+    """ Clear Global Workflow Objects """
     if unique_id in _global_workflow:
         del _global_workflow[unique_id]
         logger.debug(f'clear workflow object for unique_id: {unique_id}')
@@ -36,7 +36,7 @@ def _judge_workflow_status(redis_callback: RedisCallback, workflow: Workflow):
         _clear_workflow_obj(redis_callback.unique_id)
         return
     if workflow.status() == WorkflowStatus.INPUT.value:
-        # 如果是输入状态，将对象放到内存中
+        # If it is an input state, place the object in memory
         _global_workflow[redis_callback.unique_id] = workflow
         # redis_callback.save_workflow_object(workflow)
         redis_callback.set_workflow_status(status, reason)
@@ -81,7 +81,7 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: i
 
 @bisheng_celery.task
 def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int):
-    """ 执行workflow """
+    """ Implementationworkflow """
     trace_id_var.set(unique_id)
     start_time = time.time()
     try:
@@ -105,7 +105,7 @@ def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: in
 
 
 def _continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: str):
-    """ 继续执行workflow """
+    """ Resumeworkflow """
     redis_callback = RedisCallback(unique_id, workflow_id, chat_id, user_id)
     try:
         workflow = _global_workflow.get(redis_callback.unique_id, None)
@@ -131,7 +131,7 @@ def _continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: 
 
 @bisheng_celery.task
 def continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: str):
-    """ 继续执行workflow """
+    """ Resumeworkflow """
     trace_id_var.set(unique_id)
     start_time = time.time()
     try:
@@ -156,7 +156,7 @@ def continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: s
 
 @bisheng_celery.task
 def stop_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int):
-    """ 停止workflow """
+    """ Stopworkflow """
     trace_id_var.set(unique_id)
 
     redis_callback = RedisCallback(unique_id, workflow_id, chat_id, user_id)

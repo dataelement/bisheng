@@ -1208,6 +1208,7 @@
     "15023": "Server URLs must start with http or https: {{url}}",
     "15024": "MCP config parse error: {{exception}}",
     "16000": "Dataset name already exists",
-    "11111": "The application has been deleted"
+    "11111": "The application has been deleted",
+    "90001": "You do not have permission to access the admin backend. Please contact the administrator to request access if needed."
   }
 }

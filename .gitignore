@@ -123,9 +123,6 @@ __pycache__/
 *$py.class
 notebooks
 
-# C extensions
-*.so
-
 # Distribution / packaging
 .Python
 build/
@@ -267,3 +264,4 @@ docker/mysql/data/*
 docker/office/bisheng/*.gz
 
 CLAUDE.md
+!src/backend/bisheng/telemetry_search/**/*.pyc

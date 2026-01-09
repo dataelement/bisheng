@@ -36,10 +36,10 @@ router = APIRouter(prefix='/workflow', tags=['Workflow'])
 async def check_app_write_auth(
         request: Request,
         login_user: UserPayload = Depends(UserPayload.get_login_user),
-        flow_id: str = Query(..., description="应用ID"),
-        flow_type: int = Query(..., description="应用类型")
+        flow_id: str = Query(..., description="ApplicationsID"),
+        flow_type: int = Query(..., description="Apply type")
 ):
-    """ 检查用户对应用是否有管理权限 """
+    """ Check if the user has administrative rights to the app """
     check_auth_type = AccessType.FLOW_WRITE
     if flow_type == FlowType.ASSISTANT.value:
         check_auth_type = AccessType.ASSISTANT_WRITE
@@ -60,12 +60,12 @@ async def check_app_write_auth(
 async def get_report_file(
         request: Request,
         login_user: UserPayload = Depends(UserPayload.get_login_user),
-        version_key: str = Query("", description="minio的object_name"),
-        workflow_id: str = Query(..., description="工作流ID")
+        version_key: str = Query("", description="minioright of privacyobject_name"),
+        workflow_id: str = Query(..., description="The WorkflowID")
 ):
-    """ 获取report节点的模板文件 """
+    """ DapatkanreportTemplate file for the node """
 
-    # 检查用户对应用是否有读取权限
+    # Check if the user has read access to the app
     flow_info = await FlowDao.aget_flow_by_id(workflow_id)
     if not flow_info:
         raise NotFoundError.http_exception()
@@ -73,7 +73,7 @@ async def get_report_file(
         return UnAuthorizedError.return_resp()
 
     if not version_key:
-        #  重新生成一个version_key
+        #  Regenerate aversion_key
         version_key = generate_uuid()
     else:
         version_key = version_key.split('_', 1)[0]
@@ -93,8 +93,8 @@ async def get_report_file(
 async def copy_report_file(
         request: Request,
         login_user: UserPayload = Depends(UserPayload.get_login_user),
-        version_key: str = Body(..., embed=True, description="minio的object_name")):
-    """ 复制report节点的模板文件 """
+        version_key: str = Body(..., embed=True, description="minioright of privacyobject_name")):
+    """ SalinreportTemplate file for the node """
     version_key = version_key.split('_', 1)[0]
     new_version_key = generate_uuid()
     object_name = f"workflow/report/{version_key}.docx"
@@ -112,13 +112,13 @@ async def copy_report_file(
 async def upload_report_file(
         request: Request,
         data: dict = Body(...)):
-    """ office 回调接口保存 report节点的模板文件 """
+    """ office Callback interface save reportTemplate file for the node """
     status = data.get('status')
     file_url = data.get('url')
     key = data.get('key')
     logger.debug(f'callback={data}')
     if status not in {2, 6}:
-        # 非保存回调不处理
+        # Non-saved callbacks are not processed
         return {'error': 0}
     logger.info(f'office_callback url={file_url}')
     file = Requests().get(url=file_url)
@@ -134,10 +134,10 @@ async def upload_report_file(
 
 @router.post('/run_once', status_code=200)
 def run_once(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
-             node_input: Optional[dict] = None,  # 节点的入参
+             node_input: Optional[dict] = None,  # Input parameters of the node
              node_data: dict = None,
-             workflow_id: str = Body(..., description='工作流ID')):
-    """ 单节点运行 """
+             workflow_id: str = Body(..., description='The WorkflowID')):
+    """ Single node operation """
     result = WorkFlowService.run_once(login_user, node_input, node_data, workflow_id)
 
     return resp_200(data=result)
@@ -159,7 +159,7 @@ async def workflow_ws(*,
 @router.post('/create', status_code=201)
 def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Create a new flow."""
-    # 判断用户是否重复技能名
+    # Determine if the user repeats the skill name
     with get_sync_db_session() as session:
         if session.exec(
                 select(Flow).where(Flow.name == flow.name, Flow.flow_type == FlowType.WORKFLOW.value,
@@ -170,7 +170,7 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
     db_flow.create_time = None
     db_flow.update_time = None
     db_flow.flow_type = FlowType.WORKFLOW.value
-    # 创建新的技能
+    # Create New Skill
     db_flow = FlowDao.create_flow(db_flow, FlowType.WORKFLOW.value)
 
     current_version = FlowVersionDao.get_version_by_flow(db_flow.id)
@@ -183,7 +183,7 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
 @router.get('/versions', status_code=200)
 def get_versions(*, flow_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    获取技能对应的版本列表
+    Get a list of versions for your skill
     """
     return FlowService.get_version_list_by_flow(login_user, flow_id)
 
@@ -194,7 +194,7 @@ async def create_versions(*,
                           flow_version: FlowVersionCreate,
                           login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    创建新的技能版本
+    Create New Skill Version
     """
     flow_version.flow_type = FlowType.WORKFLOW.value
     return await FlowService.create_new_version(login_user, flow_id, flow_version)
@@ -207,7 +207,7 @@ async def update_versions(*,
                           flow_version: FlowVersionCreate,
                           login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    更新版本
+    Update to version
     """
     return await FlowService.update_version_info(request, login_user, version_id, flow_version)
 
@@ -215,7 +215,7 @@ async def update_versions(*,
 @router.delete('/versions/{version_id}', status_code=200)
 def delete_versions(*, version_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    删除版本
+    Remove Version
     """
     return FlowService.delete_version(login_user, version_id)
 
@@ -223,7 +223,7 @@ def delete_versions(*, version_id: int, login_user: UserPayload = Depends(UserPa
 @router.get('/versions/{version_id}', status_code=200)
 def get_version_info(*, version_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    获取版本信息
+    Get Version Info
     """
     return FlowService.get_version_info(login_user, version_id)
 
@@ -231,11 +231,11 @@ def get_version_info(*, version_id: int, login_user: UserPayload = Depends(UserP
 @router.post('/change_version', status_code=200)
 def change_version(*,
                    request: Request,
-                   flow_id: str = Query(default=None, description='技能唯一ID'),
-                   version_id: int = Query(default=None, description='需要设置的当前版本ID'),
+                   flow_id: str = Query(default=None, description='Skill UniqueID'),
+                   version_id: int = Query(default=None, description='Current version that needs to be setID'),
                    login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    修改当前版本
+    Modify Current Version
     """
     return FlowService.change_current_version(request, login_user, flow_id, version_id)
 
@@ -285,9 +285,9 @@ async def update_flow(*,
 
 @router.patch('/status')
 async def update_flow_status(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
-                             flow_id: str = Body(..., description='技能ID'),
-                             version_id: int = Body(..., description='版本ID'),
-                             status: int = Body(..., description='状态')):
+                             flow_id: str = Body(..., description='SkillID'),
+                             version_id: int = Body(..., description='VersionID'),
+                             status: int = Body(..., description='Status')):
     await WorkFlowService.update_flow_status(login_user, flow_id, version_id, status)
     return resp_200()
 
@@ -295,13 +295,13 @@ async def update_flow_status(request: Request, login_user: UserPayload = Depends
 @router.get('/list', status_code=200)
 def read_flows(*,
                login_user: UserPayload = Depends(UserPayload.get_login_user),
-               name: str = Query(default=None, description='根据name查找数据库，包含描述的模糊搜索'),
-               tag_id: int = Query(default=None, description='标签ID'),
-               flow_type: int = Query(default=None, description='类型 1 flow 5 assitant 10 workflow '),
-               page_size: int = Query(default=10, description='每页数量'),
-               page_num: int = Query(default=1, description='页数'),
+               name: str = Query(default=None, description='accordingnameFind databases with fuzzy searches for descriptions'),
+               tag_id: int = Query(default=None, description='labelID'),
+               flow_type: int = Query(default=None, description='Type 1 flow 5 assitant 10 workflow '),
+               page_size: int = Query(default=10, description='Items per page'),
+               page_num: int = Query(default=1, description='Page'),
                status: int = None,
-               managed: bool = Query(default=False, description='是否查询有管理权限的应用列表')):
+               managed: bool = Query(default=False, description='Whether to query the list of apps with administrative permissions')):
     """Read all flows."""
     data, total = WorkFlowService.get_all_flows(login_user, name, status, tag_id, flow_type, page_num, page_size,
                                                 managed)

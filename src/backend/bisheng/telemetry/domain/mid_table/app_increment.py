@@ -11,7 +11,7 @@ class AppIncrementRecord(BaseRecord):
 class AppIncrement(BaseMidTable):
     _index_name = 'mid_app_increment'
     _mappings = {
-        "app_id": {"type": "keyword"},
-        "app_name": {"type": "keyword"},
-        "app_type": {"type": "keyword"},
+        "app_id": {"type": "keyword", "fields": {"text": {"type": "text"}}},
+        "app_name": {"type": "keyword", "fields": {"text": {"type": "text"}}},
+        "app_type": {"type": "keyword", "fields": {"text": {"type": "text"}}},
     }

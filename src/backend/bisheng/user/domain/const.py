@@ -1,4 +1,4 @@
-# 存储用户的密码错误次数，key为username
+# Stores the number of times a user's password is incorrect.keyareusername
 USER_PASSWORD_ERROR = 'user_password_error:{}'
-# 存储当前用户登录的cookie, key为用户id
+# Store current user logged incookie, keyIs Userid
 USER_CURRENT_SESSION = 'user_current_session:{}'

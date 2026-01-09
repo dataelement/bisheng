@@ -36,20 +36,20 @@ class WorkFlowService(BaseService):
 
     @classmethod
     def add_extra_field(cls, user: UserPayload, data: list[dict], managed: bool = False) -> list[dict]:
-        """ 针对应用列表增加一些额外的字段 """
-        # 应用ID列表
+        """ Add some extra fields for app list """
+        # ApplicationsIDVertical
         resource_ids = []
-        # 技能创建用户的ID列表
+        # Skill Creation User'sIDVertical
         user_ids = []
         for one in data:
             one['id'] = one['id']
             resource_ids.append(one['id'])
             user_ids.append(one['user_id'])
-        # 获取列表内的用户信息
+        # Get user information in the list
         user_infos = UserDao.get_user_by_ids(user_ids)
         user_dict = {one.user_id: one.user_name for one in user_infos}
 
-        # 获取列表内的版本信息
+        # Get version information in the list
         version_infos = FlowVersionDao.get_list_by_flow_ids(resource_ids)
         flow_versions = {}
         for one in version_infos:
@@ -66,7 +66,7 @@ class WorkFlowService(BaseService):
 
         resource_tag_dict = TagDao.get_tags_by_resource(None, resource_ids)
 
-        # 增加额外的信息
+        # Add additional information
         for one in data:
             access_type = AccessType.FLOW_WRITE
             if one['flow_type'] == FlowType.WORKFLOW.value:
@@ -86,9 +86,9 @@ class WorkFlowService(BaseService):
     def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: Optional[int], flow_type: Optional[int],
                       page: int = 1, page_size: int = 10, managed: bool = False) -> (list[dict], int):
         """
-        获取所有技能
+        Get all the skills
         """
-        # 通过tag获取id列表
+        # SetujutagDapatkanidVertical
         flow_ids = []
         if tag_id:
             ret = TagDao.get_resources_by_tags_batch([tag_id], [ResourceTypeEnum.FLOW, ResourceTypeEnum.WORK_FLOW,
@@ -97,7 +97,7 @@ class WorkFlowService(BaseService):
                 return [], 0
             flow_ids = [one.resource_id for one in ret]
 
-        # 获取用户可见的技能列表
+        # Get a list of skills visible to the user
         if user.is_admin():
             data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, None, None, None, page, page_size)
         else:
@@ -180,7 +180,7 @@ class WorkFlowService(BaseService):
     @classmethod
     async def update_flow_status(cls, login_user: UserPayload, flow_id: str, version_id: int, status: int):
         """
-        修改工作流状态, 同时修改工作流的当前版本
+        Modify workflow status, Also modify the current version of the workflow
         """
         db_flow = await FlowDao.aget_flow_by_id(flow_id)
         if not db_flow:
@@ -192,7 +192,7 @@ class WorkFlowService(BaseService):
         if not version_info or version_info.flow_id != flow_id:
             raise NotFoundError()
         if status == FlowStatus.ONLINE.value:
-            # workflow的初始化校验
+            # workflowInitialization check for
             try:
                 _ = Workflow(flow_id, db_flow.name, login_user.user_id, version_info.data, False,
                              10,
@@ -268,13 +268,13 @@ class WorkFlowService(BaseService):
             input_type=event_input_schema.get('tab'),
         )
         if input_schema.input_type == 'form_input':
-            # 前端的表单定义转为后端的表单定义
+            # Front-end form definitions go to back-end form definitions
             input_schema.value = [WorkflowInputItem(**one) for one in event_input_schema.get('value', [])]
             for one in input_schema.value:
                 one.label = one.value
                 one.value = ''
         else:
-            # 说明是输入框输入
+            # Description is input box input
             input_schema.value = [
                 WorkflowInputItem(
                     key=event_input_schema.get('key'),
@@ -338,22 +338,22 @@ class WorkFlowService(BaseService):
                                   page: int = 1,
                                   page_size: int = 8) -> (list[dict], int):
         """
-        获取常用技能
+        Get common skills
         """
-        # 通过user_id和tag获取id列表，并保持按create_time升序的顺序
+        # Setujuuser_idAndtagDapatkanidlist and keep pressingcreate_timeAscending order
         flow_ids = []
-        user_link_order = {}  # 记录每个应用在用户常用列表中的顺序
+        user_link_order = {}  # Record the order of each app in the common list of users
 
         ret = UserLinkDao.get_user_link(user.user_id, [app_type.value for app_type in UserLinkType.app.value])
         if not ret:
             return [], 0
 
-        # 保存原始顺序和flow_ids
+        # Save original order andflow_ids
         for index, user_link in enumerate(ret):
             flow_ids.append(user_link.type_detail)
             user_link_order[user_link.type_detail] = index
 
-        # 获取用户可见的技能列表（不进行分页，因为我们需要手动排序）
+        # Get a list of skills visible to the user (no pagination as we need to sort manually)
         if user.is_admin():
             data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, page=0, limit=0)
         else:
@@ -362,10 +362,10 @@ class WorkFlowService(BaseService):
             data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, user_id=user.user_id,
                                            id_extra=flow_id_extra, page=0, limit=0)
 
-        # 按照用户添加到常用的顺序重新排序
+        # Reorder users in the order they are added to the stock
         data.sort(key=lambda x: user_link_order.get(x['id'], float('inf')))
 
-        # 手动实现分页
+        # Manual pagination
         total = len(data)
         start_index = (page - 1) * page_size
         end_index = start_index + page_size
@@ -388,9 +388,9 @@ class WorkFlowService(BaseService):
     @classmethod
     def get_uncategorized_flows(cls, user: UserPayload, page: int = 1, page_size: int = 8) -> tuple[list, int]:
         """
-        获取未分类的技能列表
+        Get a list of unsorted skills
         """
-        # 通过tag获取id列表
+        # SetujutagDapatkanidVertical
         all_tags = TagDao.search_tags(None, None, None)
         tag_id = [tag.id for tag in all_tags]
         flow_ids_not_in = []
@@ -401,7 +401,7 @@ class WorkFlowService(BaseService):
                 return [], 0
             flow_ids_not_in = [one.resource_id for one in ret]
 
-        # 获取用户可见的技能列表
+        # Get a list of skills visible to the user
         if user.is_admin():
             data, total = FlowDao.get_all_apps(None, FlowStatus.ONLINE.value, None, None, None, None, flow_ids_not_in,
                                                page, page_size)
@@ -417,7 +417,7 @@ class WorkFlowService(BaseService):
                                                flow_ids_not_in, page,
                                                page_size)
 
-        # 处理logo URL，转换相对路径为可访问的完整链接
+        # <g id="Bold">Medical Treatment:</g>logo URL, convert relative paths to full accessible links
         for one in data:
             one['logo'] = cls.get_logo_share_link(one['logo'])
 
@@ -426,14 +426,14 @@ class WorkFlowService(BaseService):
     @classmethod
     async def get_one_workflow_simple_info(cls, workflow_id: str) -> Flow | None:
         """
-        获取单个工作流详情
+        Get individual workflow details
         """
         return await FlowDao.get_one_flow_simple(workflow_id)
 
     @classmethod
     def get_one_workflow_simple_info_sync(cls, workflow_id: str) -> Optional[Flow]:
         """
-        获取单个工作流详情（同步版）
+        Get individual workflow details (Sync)
         """
         return FlowDao.get_one_flow_simple_sync(workflow_id)
 
@@ -441,7 +441,7 @@ class WorkFlowService(BaseService):
     def get_all_apps_by_time_range_sync(cls, start_time: datetime, end_time: datetime, page: int = 1,
                                         page_size: int = 100) -> list[dict]:
         """
-        根据时间范围获取所有应用
+        Get all apps based on timeframe
         """
         return FlowDao.get_all_app_by_time_range_sync(start_time, end_time, page, page_size)
 

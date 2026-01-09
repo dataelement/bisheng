@@ -1,18 +1,18 @@
 """
-上下文管理器使用示例
+Context Manager Usage Example
 
-展示了优化后的上下文管理器的各种使用场景和功能
+Demonstrates the various usage scenarios and features of the optimized Context Manager
 """
 import asyncio
 from typing import Any, Dict
 
 from bisheng.core.context import (
-    # 基础类
+    # Primary
     BaseContextManager,
     FunctionContextManager,
     ContextState,
 
-    # 应用管理
+    # Application Management
     initialize_app_context,
     get_context,
     async_get_instance,
@@ -21,18 +21,18 @@ from bisheng.core.context import (
     health_check,
     close_app_context,
 
-    # 异常类
+    # Exception Class
     ContextError,
     ContextInitializationError,
 )
 
 
-# 1. 基础使用示例
+# 1. Examples of basic use
 async def basic_usage_example():
-    """基础使用示例"""
-    print("=== 基础使用示例 ===")
+    """Examples of basic use"""
+    print("=== Examples of basic use ===")
 
-    # 初始化应用上下文
+    # Initialize app context
     config = {
         'database': {
             'url': 'sqlite:///example.db',
@@ -41,35 +41,35 @@ async def basic_usage_example():
     }
     await initialize_app_context(config)
 
-    # 获取数据库实例
+    # Get Database Instance
     database_context = get_context('database')
     db_instance = await database_context.async_get_instance()
     print(f"Database instance: {db_instance}")
 
-    # 检查上下文状态
+    # Check context status
     print(f"Database state: {database_context.get_state()}")
     print(f"Database info: {database_context.get_info()}")
 
 
-# 2. 上下文管理器使用示例
+# 2. Context Manager Usage Example
 async def context_manager_example():
-    """上下文管理器使用示例"""
-    print("\n=== 上下文管理器示例 ===")
+    """Context Manager Usage Example"""
+    print("\n=== Context manager example ===")
 
-    # 使用异步上下文管理器
+    # Using the Asynchronous Context Manager
     database_context = get_context('database')
     async with database_context.async_context() as db:
         print(f"Using database: {type(db)}")
-        # 这里可以安全使用数据库实例
+        # Database instances are safe to use here
 
-    # 使用同步上下文管理器
+    # Using the Synchronization Context Manager
     with database_context.sync_context() as db:
         print(f"Using database (sync): {type(db)}")
 
 
-# 3. 自定义上下文管理器示例
+# 3. Example of a custom context manager
 class CacheManager(BaseContextManager[Dict[str, Any]]):
-    """示例：缓存管理器"""
+    """Example: Cache Manager"""
 
     name = "cache"
 
@@ -78,31 +78,31 @@ class CacheManager(BaseContextManager[Dict[str, Any]]):
         self.max_size = max_size
 
     async def _async_initialize(self) -> Dict[str, Any]:
-        """初始化缓存"""
+        """Initialize Cache"""
         cache = {}
         print(f"Cache initialized with max_size: {self.max_size}")
         return cache
 
     def _sync_initialize(self) -> Dict[str, Any]:
-        """同步初始化缓存"""
+        """Synchronous Initialization Cache"""
         cache = {}
         print(f"Cache initialized (sync) with max_size: {self.max_size}")
         return cache
 
     async def _async_cleanup(self) -> None:
-        """清理缓存"""
+        """Clear cache"""
         if self._instance:
             self._instance.clear()
             print("Cache cleared")
 
     def _sync_cleanup(self) -> None:
-        """同步清理缓存"""
+        """Synchronous Cleanup Cache"""
         if self._instance:
             self._instance.clear()
             print("Cache cleared (sync)")
 
     async def health_check(self) -> bool:
-        """缓存健康检查"""
+        """Cache Health Check"""
         try:
             instance = await self.async_get_instance()
             return isinstance(instance, dict)
@@ -110,35 +110,35 @@ class CacheManager(BaseContextManager[Dict[str, Any]]):
             return False
 
 
-# 4. 函数式上下文管理器示例
+# 4. Functional context manager example
 async def init_redis_connection():
-    """模拟 Redis 连接初始化"""
+    """impersonation Redis Connection Initialization"""
     print("Connecting to Redis...")
-    await asyncio.sleep(0.1)  # 模拟网络延迟
+    await asyncio.sleep(0.1)  # Analog network latency
     return {"connection": "redis://localhost:6379", "status": "connected"}
 
 
 async def cleanup_redis_connection(connection):
-    """模拟 Redis 连接清理"""
+    """impersonation Redis Connection cleanup"""
     print("Closing Redis connection...")
     connection["status"] = "closed"
 
 
-# 5. 完整的使用示例
+# 5. Complete usage examples
 async def complete_example():
-    """完整的使用示例"""
-    print("\n=== 完整使用示例 ===")
+    """Complete usage examples"""
+    print("\n=== Full Usage Example ===")
 
     try:
-        # 1. 注册自定义上下文管理器
+        # 1. Register Custom Context Manager
         cache_manager = CacheManager(max_size=500, timeout=10.0, retry_count=2)
         register_context(
             cache_manager,
-            dependencies=['database'],  # 依赖数据库
-            initialize_order=20  # 在数据库之后初始化
+            dependencies=['database'],  # Dependent database
+            initialize_order=20  # Initialize after database
         )
 
-        # 2. 注册函数式上下文管理器
+        # 2. Register Functional Context Manager
         redis_manager = FunctionContextManager(
             name="redis",
             init_func=init_redis_connection,
@@ -147,10 +147,10 @@ async def complete_example():
         )
         register_context(redis_manager, initialize_order=30)
 
-        # 3. 重新初始化以确保新注册的上下文被初始化
+        # 3. Reinitialize to ensure that the context of the new registration is initialized
         await initialize_app_context()
 
-        # 4. 获取所有上下文实例
+        # 4. Get all contextual instances
         contexts = {
             'database': await async_get_instance('database'),
             'cache': await async_get_instance('cache'),
@@ -161,7 +161,7 @@ async def complete_example():
         for name, instance in contexts.items():
             print(f"  {name}: {type(instance)}")
 
-        # 5. 执行健康检查
+        # 5. Perform a health check
         health_results = await health_check(include_details=True)
         print("\nHealth check results:")
         for name, result in health_results.items():
@@ -170,21 +170,21 @@ async def complete_example():
             else:
                 print(f"  {name}: {result}")
 
-        # 6. 演示错误处理
+        # 6. Demonstrate error handling
         try:
-            # 尝试获取不存在的上下文
+            # Attempt to get non-existent context
             await async_get_instance('nonexistent')
         except KeyError as e:
             print(f"\nExpected error: {e}")
 
-        # 7. 演示重置功能
+        # 7. Demo Reset Function
         cache_context = get_context('cache')
         print(f"\nCache state before reset: {cache_context.get_state()}")
 
         await cache_context.async_reset()
         print(f"Cache state after reset: {cache_context.get_state()}")
 
-        # 重新获取会触发重新初始化
+        # Re-fetching will trigger a reinitialization
         cache_instance = await cache_context.async_get_instance()
         print(f"Cache state after re-init: {cache_context.get_state()}")
 
@@ -194,33 +194,33 @@ async def complete_example():
         print(f"Unexpected error: {e}")
 
     finally:
-        # 清理资源
+        # Clean up resources
         await close_app_context()
         print("\nApplication context closed")
 
 
-# 6. 性能和并发测试示例
+# 6. Examples of performance and concurrent testing
 async def concurrency_example():
-    """并发访问示例"""
-    print("\n=== 并发访问示例 ===")
+    """Example of concurrent access"""
+    print("\n=== Example of concurrent access ===")
 
     await initialize_app_context()
 
     async def worker(worker_id: int):
-        """工作协程"""
+        """Work corridor"""
         try:
-            # 并发获取同一个上下文实例
+            # Get the same context instance concurrently
             db = await async_get_instance('database')
             print(f"Worker {worker_id} got database: {id(db)}")
 
-            # 模拟一些工作
+            # Simulate some work
             await asyncio.sleep(0.1)
             return f"Worker {worker_id} completed"
 
         except Exception as e:
             return f"Worker {worker_id} failed: {e}"
 
-    # 创建多个并发工作协程
+    # Create multiple concurrent workflows
     workers = [worker(i) for i in range(10)]
     results = await asyncio.gather(*workers)
 
@@ -231,18 +231,18 @@ async def concurrency_example():
     await close_app_context()
 
 
-# 7. 监控和诊断示例
+# 7. Examples of monitoring and diagnostics
 async def monitoring_example():
-    """监控和诊断示例"""
-    print("\n=== 监控和诊断示例 ===")
+    """Examples of monitoring and diagnostics"""
+    print("\n=== Examples of monitoring and diagnostics ===")
 
     await initialize_app_context()
 
-    # 注册一些测试上下文
+    # Register some test contexts
     register_context(CacheManager(name="cache1"))
     register_context(CacheManager(name="cache2"))
 
-    # 获取应用上下文信息
+    # Get app context
     from bisheng.core.context.manager import app_context
     context_info = app_context.get_context_info()
 
@@ -252,13 +252,13 @@ async def monitoring_example():
     print(f"  Initialization order: {context_info['initialization_order']}")
     print(f"  Dependencies: {context_info['dependencies']}")
 
-    # 获取各个上下文的状态
+    # Get the status of each context
     states = context_info['context_states']
     print("\nContext states:")
     for name, state in states.items():
         print(f"  {name}: {state.value if hasattr(state, 'value') else state}")
 
-    # 执行详细的健康检查
+    # Perform detailed health checks
     detailed_health = await health_check(include_details=True)
     print("\nDetailed health check:")
     for name, details in detailed_health.items():
@@ -273,10 +273,10 @@ async def monitoring_example():
     await close_app_context()
 
 
-# 主函数
+# The main function.
 async def main():
-    """运行所有示例"""
-    print("上下文管理器优化后功能演示\n")
+    """Run all examples"""
+    print("Post Context Manager Optimization Demo\n")
 
     await basic_usage_example()
     await context_manager_example()
@@ -284,7 +284,7 @@ async def main():
     await concurrency_example()
     await monitoring_example()
 
-    print("\n=== 所有示例运行完成 ===")
+    print("\n=== All sample runs completed ===")
 
 
 if __name__ == "__main__":

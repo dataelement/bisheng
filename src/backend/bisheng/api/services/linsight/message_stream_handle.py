@@ -6,7 +6,7 @@ from bisheng.linsight.state_message_manager import LinsightStateMessageManager, 
 class MessageStreamHandle(object):
     def __init__(self, websocket: 'WebSocket', session_version_id: str):
         """
-        初始化 MessageStreamHandle
+        Inisialisasi MessageStreamHandle
         :param websocket:
         """
         self._websocket = websocket
@@ -16,36 +16,36 @@ class MessageStreamHandle(object):
 
     async def send_message(self, message_data: str) -> None:
         """
-        发送消息到 WebSocket
-        :param message_data: 要发送的消息内容
+        Send Message To WebSocket
+        :param message_data: Message to send
         """
         await self._websocket.send_text(message_data)
 
     async def receive_message(self) -> str:
         """
-        接收来自 WebSocket 的消息
+        Received from WebSocket Message
         :return:
         """
         return await self._websocket.receive_text()
 
     async def send_json(self, json_data: dict) -> None:
         """
-        发送 JSON 数据到 WebSocket
-        :param json_data: 要发送的 JSON 数据
+        Send JSON Data to WebSocket
+        :param json_data: To be sent JSON DATA
         """
         await self._websocket.send_json(json_data)
 
     async def receive_json(self) -> dict:
         """
-        接收来自 WebSocket 的 JSON 数据
+        Received from WebSocket right of privacy JSON DATA
         :return:
         """
         return await self._websocket.receive_json()
 
-    # 处理 WebSocket 连接的生命周期事件
+    # <g id="Bold">Medical Treatment:</g> WebSocket Connected Lifecycle Events
     async def connect(self) -> None:
         """
-        连接到 WebSocket
+        Connecting to devices WebSocket
         """
         await self._websocket.accept()
 
@@ -68,6 +68,6 @@ class MessageStreamHandle(object):
 
     async def disconnect(self) -> None:
         """
-        断开 WebSocket 连接
+        detach WebSocket CONNECT
         """
         await self._websocket.close(code=1000, reason="Client disconnected")

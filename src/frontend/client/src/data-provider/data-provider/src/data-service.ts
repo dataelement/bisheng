@@ -125,7 +125,10 @@ export function getSearchEnabled(): Promise<boolean> {
 
 export function getUser(): Promise<t.TUser> {
   return request.get(endpoints.user()).then(res => {
-    const { user_id, user_name, create_time, update_time, role } = res.data;
+    const { user_id, user_name, create_time, update_time, role, web_menu } = res.data;
+    if (role !== 'admin' && !web_menu.includes('frontend')) {
+      location.href = `${location.origin}/${__APP_ENV__.BISHENG_HOST}?error=90002`  // workspace useErrorPrompt
+    }
     return {
       "_id": user_id,
       "name": user_name,
@@ -135,7 +138,7 @@ export function getUser(): Promise<t.TUser> {
       "avatar": null,
       "provider": "local",
       "role": role,
-      "plugins": [],
+      "plugins": web_menu,
       "termsAccepted": false,
       "backupCodes": [],
       "refreshToken": [],

@@ -29,44 +29,44 @@ class TraceIdFilter:
 
 
 class InterceptHandler(logging.Handler):
-    """拦截标准 logging 日志，转交给 Loguru 处理"""
+    """Interception Criteria logging logs, transferring to Loguru <g id="Bold">Medical Treatment:</g>"""
 
     def emit(self, record):
-        # 获取 loguru 对应的 level
+        # Dapatkan loguru counterpart&apos;s level
         try:
             level = logger.level(record.levelname).name
         except ValueError:
             level = record.levelno
 
-        # 获取调用堆栈深度
+        # Get call stack depth
         frame, depth = logging.currentframe(), 2
         while frame and frame.f_code.co_filename == logging.__file__:
             frame = frame.f_back
             depth += 1
 
-        # 转发到 loguru
+        # Forward to loguru
         logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
 
 
 def set_logger_config(logger_config: LoggerConf):
     """
-    配置日志
+    Configuration Logs
     :param logger_config:
     :return:
     """
     logger.remove()
 
-    # 配置根日志记录器
+    # Configure Root Logger
     logging.root.handlers = [InterceptHandler()]
     logging.root.setLevel(logger_config.level)
 
-    # 拦截所有已存在的日志记录器
+    # Block all existing loggers
     for name in logging.root.manager.loggerDict.keys():
         logging_logger = logging.getLogger(name)
         logging_logger.handlers = [InterceptHandler()]
         logging_logger.propagate = False
 
-    # 添加默认控制台日志处理器
+    # Add Default Console Log Processor
     logger.add(
         sys.stdout,
         format=logger_config.format,
@@ -77,7 +77,7 @@ def set_logger_config(logger_config: LoggerConf):
         diagnose=False
     )
 
-    # 添加额外的日志处理器
+    # Add additional log processors
     for handler in logger_config.handlers:
         log_file = Path(handler['sink'])
         log_file.parent.mkdir(parents=True, exist_ok=True)

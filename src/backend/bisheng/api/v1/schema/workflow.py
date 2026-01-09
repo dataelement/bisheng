@@ -6,19 +6,19 @@ from pydantic import BaseModel, Field, field_validator
 
 class WorkflowEventType(Enum):
     NodeRun = 'node_run'
-    # 开场白
+    # Ice Breaker 
     GuideWord = 'guide_word'
-    # 引导问题
+    # Facilitation Questions
     GuideQuestion = 'guide_question'
-    # 告知用户，现在需要用户输入内容
+    # Inform the user that user input is now required
     UserInput = 'input'
-    # 输出事件，返回预先定义的内容给用户
+    # Output events that return predefined content to the user
     OutputMsg = 'output_msg'
-    # 输出的同时需要用户输入内容
+    # Output requires user input at the same time
     OutputWithInput = 'output_with_input_msg'
-    # 输出的同时需要用户选择内容
+    # Output requires user selection at the same time
     OutputWithChoose = 'output_with_choose_msg'
-    # 流式输出事件，包含流式过程中、流式结束两个状态
+    # Streaming output events, including streaming process, streaming end two states
     StreamMsg = 'stream_msg'
     Close = 'close'
     Error = 'error'

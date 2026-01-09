@@ -6,8 +6,8 @@ from bisheng.interface.custom.custom_component import CustomComponent
 # from bisheng.processing.process import load_flow_from_json  # noqa: E402
 
 try:
-    # 通过ci去自动修改
-    __version__ = '2.3.0-beta3'
+    # SetujuciGo to automatic modification
+    __version__ = '2.3.0'
 except metadata.PackageNotFoundError:
     # Case where package metadata is not available.
     __version__ = ''

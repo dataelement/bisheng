@@ -27,7 +27,7 @@ def combine_multiple_md_files_to_raw_texts(
     files = sorted([f for f in os.listdir(path)])
     raw_texts = []
 
-    # 一个文件只对应一个完整的 Document 对象, texts 才是切分后的chunk内容
+    # A file corresponds to only one complete Document Objects, texts It is only after cuttingchunkContents
     documents = [Document(page_content="", metadata={})]
 
     for file_name in files:
@@ -49,7 +49,7 @@ def convert_file_to_md(
         retain_images=True,
 ):
     """
-    处理文件转换的主函数。
+    The main function that handles file conversions.
     Args:
         file_name:
         input_file_name:

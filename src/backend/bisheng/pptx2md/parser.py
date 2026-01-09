@@ -25,7 +25,7 @@ from PIL import Image
 from pptx import Presentation
 from pptx.enum.dml import MSO_COLOR_TYPE, MSO_THEME_COLOR
 from pptx.enum.shapes import MSO_SHAPE_TYPE, PP_PLACEHOLDER
-from pptx.parts.image import Image as PPTXImage
+from pptx.parts.image import Image as PPTXImage, Image
 from pptx.util import lazyproperty
 from rapidfuzz import process as fuze_process
 from tqdm import tqdm
@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 picture_count = 0
 
 
-# 自定义Image，解决pptx中部分图片格式不支持的问题
+# CustomizableImageResolvepptxIssue with some image formats not supported in
 class CustomImage(PPTXImage):
     def __init__(self, blob: bytes, filename: str = None):
         super(CustomImage, self).__init__(blob=blob, filename=filename)
@@ -202,6 +202,7 @@ def process_picture(config: ConversionConfig, shape, slide_idx) -> Union[ImageEl
     # wmf images, try to convert, if failed, output as original
     try:
         try:
+            from PIL import Image
             Image.open(output_path).save(os.path.splitext(output_path)[0] + '.png')
             return ImageElement(path=os.path.splitext(img_outputter_path)[0] + '.png', width=config.image_width)
         except Exception:  # Image failed, try another

@@ -6,7 +6,7 @@ from bisheng.core.logger import set_logger_config
 
 def create_celery_app():
     """
-    Celery 异步任务
+    Celery Asynchronous Tasks
     :return:
     """
     set_logger_config(settings.logger_conf)

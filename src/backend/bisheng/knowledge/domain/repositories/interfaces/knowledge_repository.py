@@ -5,5 +5,5 @@ from bisheng.knowledge.domain.models.knowledge import Knowledge
 
 
 class KnowledgeRepository(BaseRepository[Knowledge, int], ABC):
-    """知识库仓库接口"""
+    """Knowledge Base Repository Interface"""
     pass

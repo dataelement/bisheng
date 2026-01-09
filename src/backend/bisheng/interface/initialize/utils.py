@@ -10,7 +10,7 @@ from bisheng.common.utils.util import orjson_dumps
 
 
 def langchain_bug_openv1(params):
-    '''兼容openai v1'''
+    '''Compatible openai v1'''
     client_params = {
         'api_key': params.get('openai_api_key') or params.get('api_key'),
         'organization': params.get('openai_organization'),
@@ -79,7 +79,7 @@ def handle_variable(params: Dict, input_variable: str, format_kwargs: Dict):
     if isinstance(variable, str):
         format_kwargs[input_variable] = variable
     elif isinstance(variable, dict):
-        # variable node 特殊处理
+        # variable node Special treated
         if len(variable) == 0:
             format_kwargs[input_variable] = ''
         elif len(variable) != 1:

@@ -1,0 +1,283 @@
+{
+    "chartSelector": {
+        "title": "关联图表配置",
+        "componentName": "组件：{{componentName}}",
+        "selectCharts": "选择关联图表",
+        "selectAll": "全选",
+        "unnamedChart": "未命名图表",
+        "noDataset": "未设置数据集",
+        "config": "查询条件配置",
+        "displayType": "展示类型",
+        "displayTypes": {
+            "timeRange": "时间范围",
+            "time": "时间"
+        },
+        "timeGranularity": "时间粒度",
+        "granularities": {
+            "yearMonth": "年月",
+            "yearMonthDay": "年月日",
+            "yearMonthDayHour": "年月日时"
+        },
+        "setDefault": "设置为默认值",
+        "datePicker": {
+            "placeholder": "选择{{displayType}}",
+            "single": "时间",
+            "range": "时间范围"
+        },
+        "buttons": {
+            "cancel": "取消",
+            "save": "保存"
+        },
+        "messages": {
+            "saveSuccess": "关联图表配置已保存",
+            "noCharts": "没有可关联的图表",
+            "collapse": "关联图表配置"
+        }
+    },
+    "componentConfigDrawer": {
+        "basicConfig": "基础配置",
+        "customStyle": "自定义样式",
+        "basicConfigTab": "基础配置",
+        "styleConfigTab": "自定义样式",
+        "chartType": "图表类型",
+        "selectChartType": "选择图表类型",
+        "categoryAxis": "类别轴 / 维度",
+        "stackItem": "堆叠项 / 维度",
+        "valueAxis": "值轴 / 指标",
+        "sortPriority": "排序优先级",
+        "sortHint": "添加维度或指标后可调整排序优先级",
+        "filter": "筛选",
+        "addFilterCondition": "添加筛选条件",
+        "filterConditionsAdded": "已添加 {{count}} 个筛选条件",
+        "filterLogicHint": " ({{logic}})",
+        "timeRange": "时间范围",
+        "selectTimeRange": "选择时间范围",
+        "resultsDisplay": "结果显示",
+        "allResults": "全部",
+        "limitResults": "条",
+        "updateChartData": "更新图表数据",
+        "dataSelection": "数据选择",
+          "validation": {
+      "validationFailed": "校验失败",
+      "chartTypeRequired": "请选择图表类型",
+      "categoryRequired": "请至少添加一个类别维度",
+      "metricRequired": "请至少添加一个指标",
+      "datasetRequired": "请选择数据集",
+      "stackRequired": "请为堆叠图表添加堆叠维度",
+      "invalidCategoryFields": "类别维度包含无效字段，请重新选择",
+      "invalidMetricFields": "指标包含无效字段，请重新选择"
+    },
+    "dialog": {
+             "chartUpdated": "图表已更新",
+            "editDisplayName": "编辑显示名称",
+            "originalName": "原始名称",
+            "displayName": "显示名称",
+            "displayNameRequired": "显示名称 *",
+            "enterDisplayName": "请输入显示名称",
+            "cancel": "取消",
+            "confirm": "确认"
+        },
+        "toast": {
+            "fieldAlreadyExists": "字段已存在于{{section}}中",
+            "dimensionLimitReached": "当前维度数量已达到上限",
+            "metricLimitReached": "当前图表最多只能选择 {{count}} 个指标",
+            "virtualMetricConflict": "无法同时添加虚拟指标和非虚拟指标",
+            "multipleVirtualMetric": "无法同时添加多个虚拟指标"
+        },
+        "sections": {
+            "category": "类别轴",
+            "stack": "堆叠项",
+            "value": "指标区域"
+        }
+    },
+    "configPanel": {
+        "title": "仪表盘配置",
+        "dashboardStyle": "仪表盘风格",
+        "lightTheme": "浅色主题",
+        "darkTheme": "深色主题"
+    },
+    "datasetSelector": {
+        "dataset": "数据集",
+        "selectDataset": "选择数据集",
+        "searchDataset": "搜索数据集...",
+        "loading": "加载中...",
+        "noDatasetsFound": "未找到数据集",
+        "dimensions": "维度",
+        "metrics": "指标",
+        "virtualMetric": "*",
+        "selectDatasetPrompt": "请先选择一个数据集",
+        "fieldTypes": {
+            "date": "日期",
+            "integer": "整数",
+            "keyword": "文本"
+        },
+        "timeGranularity": {
+            "year": "年",
+            "quarter": "季度",
+            "month": "月",
+            "week": "周",
+            "day": "日",
+            "hour": "时"
+        }
+    },
+    "dimensionBlock": {
+        "menu": {
+            "sort": "排序",
+            "aggregation": "汇总方式",
+            "format": "数值格式"
+        },
+        "aggregation": {
+            "sum": "求和",
+            "avg": "平均",
+            "count": "计数",
+            "max": "最大值",
+            "min": "最小值"
+        },
+        "sort": {
+            "none": "无",
+            "asc": "升序",
+            "desc": "降序"
+        },
+        "button": {
+            "deleteField": "删除字段"
+        },
+        "prompt": {
+            "dragDimensionHere": "拖拽维度字段至此",
+            "dragMetricHere": "拖拽指标字段至此"
+        },
+        "dialog": {
+            "formatTitle": "数值格式",
+            "formatType": "格式类型",
+            "decimalPlaces": "小数位数",
+            "unit": "数量单位",
+            "suffix": "单位后缀",
+            "thousandSeparator": "千分符",
+            "example": "示例",
+            "none": "无",
+            "selectUnit": "请选择",
+            "enterSuffix": "请输入内容",
+            "formatTypes": {
+                "number": "数值",
+                "percent": "百分比",
+                "duration": "时长",
+                "storage": "存储大小"
+            }
+        }
+    },
+    "filterConditionDialog": {
+        "title": "筛选条件配置",
+        "keywords": {
+            "time": "时间",
+            "date": "日期"
+        },
+        "placeholders": {
+            "selectField": "选择字段",
+            "filterType": "筛选类型",
+            "operator": "操作符",
+            "enterNumber": "请输入数值",
+            "enterValue": "请输入值",
+            "selectEnumValue": "请选择枚举值"
+        },
+        "filterTypes": {
+            "conditional": "条件筛选",
+            "enum": "枚举筛选"
+        },
+        "operators": {
+            "equals": "等于",
+            "notEquals": "不等于",
+            "contains": "包含",
+            "notContains": "不包含",
+            "greaterThan": "大于",
+            "greaterThanOrEqual": "大于等于",
+            "lessThan": "小于",
+            "lessThanOrEqual": "小于等于",
+            "isEmpty": "为空",
+            "isNotEmpty": "不为空"
+        },
+        "buttons": {
+            "addCondition": "添加条件",
+            "cancel": "取消",
+            "save": "保存"
+        },
+        "errors": {
+            "selectField": "请选择字段",
+            "selectOperator": "请选择操作符",
+            "selectEnumValue": "请选择枚举值",
+            "enterFilterValue": "请填写筛选值",
+            "atLeastOneCondition": "请至少配置一个有效的筛选条件"
+        },
+        "toast": {
+            "fetchEnumFailed": "获取枚举值失败，请稍后重试"
+        },
+        "enumSelect": {
+            "placeholder": "请选择",
+            "searchPlaceholder": "搜索...",
+            "loading": "加载中...",
+            "selectAll": "全选",
+            "loadingMore": "加载更多...",
+            "noMatch": "未找到匹配的选项",
+            "noData": "暂无数据"
+        }
+    },
+    "styleConfigPanel": {
+        "sections": {
+            "color": "颜色",
+            "title": "标题",
+            "axisTitle": "轴标题",
+            "legend": "图例",
+            "metricValue": "指标数值",
+            "subtitle": "副标题",
+            "chartOptions": "图表选项"
+        },
+        "labels": {
+            "themeColor": "主题颜色",
+            "bgColor": "背景颜色",
+            "titleContent": "标题内容",
+            "textFormat": "文本格式",
+            "textContent": "文本内容",
+            "xAxisTitleContent": "X 轴标题内容",
+            "xAxisTextFormat": "X 轴文本格式",
+            "yAxisTitleContent": "Y 轴标题内容",
+            "yAxisTextFormat": "Y 轴文本格式",
+            "legendPosition": "图例位置",
+            "legendTextFormat": "图例文本格式"
+        },
+        "placeholders": {
+            "enterTitle": "请输入标题",
+            "enterSubtitle": "请输入副标题",
+            "enterXAxisTitle": "请输入X轴标题",
+            "enterYAxisTitle": "请输入Y轴标题"
+        },
+        "positions": {
+            "top": "顶部",
+            "bottom": "底部",
+            "left": "左侧",
+            "right": "右侧"
+        },
+        "buttons": {
+            "show": "显示"
+        },
+        "options": {
+            "legend": "图例",
+            "axis": "坐标轴",
+            "dataLabel": "数据标签",
+            "gridLine": "网格线"
+        }
+    },
+    "useChartState": {
+        "sections": {
+            "category": "类别维度",
+            "stack": "堆叠维度",
+            "value": "指标维度"
+        },
+        "fieldTypes": {
+            "dimension": "维度",
+            "metric": "指标"
+        },
+        "warn": {
+            "invalidFieldType": "字段类型 {{fieldType}} 不能拖拽到 {{section}} 区域",
+            "maxStackDimension": "堆叠维度只能有一个，请先删除现有的堆叠维度",
+            "maxCategoryDimensions": "类别维度最多只能有 2 个"
+        }
+    }
+}

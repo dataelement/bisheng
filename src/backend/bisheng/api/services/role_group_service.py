@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime
 from typing import List, Any, Dict, Optional
@@ -21,6 +22,7 @@ from bisheng.database.models.group_resource import GroupResourceDao, ResourceTyp
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.telemetry_search.domain.services.dashboard import DashboardService
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
@@ -30,14 +32,14 @@ from bisheng.utils import get_request_ip
 class RoleGroupService():
 
     def get_group_list(self, group_ids: List[int]) -> List[GroupRead]:
-        """获取全量的group列表"""
+        """Get the full amountgroupVertical"""
 
-        # 查询group
+        # Inquirygroup
         if group_ids:
             groups = GroupDao.get_group_by_ids(group_ids)
         else:
             groups = GroupDao.get_all_group()
-        # 查询user
+        # Inquiryuser
         user_admin = UserGroupDao.get_groups_admins([group.id for group in groups])
         users_dict = {}
         if user_admin:
@@ -54,7 +56,7 @@ class RoleGroupService():
         return groupReads
 
     def create_group(self, request: Request, login_user: UserPayload, group: GroupCreate) -> Group:
-        """新建用户组"""
+        """Add Usergroup"""
         group_admin = group.group_admins
         group.create_user = login_user.user_id
         group.update_user = login_user.user_id
@@ -66,17 +68,17 @@ class RoleGroupService():
         return group
 
     def create_group_hook(self, request: Request, login_user: UserPayload, group: Group) -> bool:
-        """ 新建用户组后置操作 """
+        """ New User Group Post Action """
         logger.info(f'act=create_group_hook user={login_user.user_name} group_id={group.id}')
-        # 记录审计日志
+        # Log Audit Logs
         AuditLogService.create_user_group(login_user, get_request_ip(request), group)
         return True
 
     def update_group(self, request: Request, login_user: UserPayload, group: Group) -> Group:
-        """更新用户组"""
+        """Update User"""
         exist_group = GroupDao.get_user_group(group.id)
         if not exist_group:
-            raise ValueError('用户组不存在')
+            raise ValueError('User group does not exist')
         exist_group.group_name = group.group_name
         exist_group.remark = group.group_name
         exist_group.update_user = login_user.user_id
@@ -88,18 +90,18 @@ class RoleGroupService():
 
     def update_group_hook(self, request: Request, login_user: UserPayload, group: Group):
         logger.info(f'act=update_group_hook user={login_user.user_name} group_id={group.id}')
-        # 记录审计日志
+        # Log Audit Logs
         AuditLogService.update_user_group(login_user, get_request_ip(request), group)
 
     def delete_group(self, request: Request, login_user: UserPayload, group_id: int):
-        """删除用户组"""
+        """Can delete existing usergroups"""
         if group_id == DefaultGroup:
-            raise HTTPException(status_code=500, detail='默认组不能删除')
+            raise HTTPException(status_code=500, detail='Default group cannot be deleted')
         group_info = GroupDao.get_user_group(group_id)
         if not group_info:
             return resp_200()
 
-        # 判断组下是否还有用户
+        # Determine if there are still users in the group
         user_group_list = UserGroupDao.get_group_user(group_id)
         if user_group_list:
             return UserGroupNotDeleteError.return_resp()
@@ -109,14 +111,14 @@ class RoleGroupService():
 
     def delete_group_hook(self, request: Request, login_user: UserPayload, group_info: Group):
         logger.info(f'act=delete_group_hook user={login_user.user_name} group_id={group_info.id}')
-        # 记录审计日志
+        # Log Audit Logs
         AuditLogService.delete_user_group(login_user, get_request_ip(request), group_info)
-        # 将组下资源移到默认用户组
-        # 获取组下所有的资源
+        # Move resources under a group to the default user group
+        # Get all resources under a group
         all_resource = GroupResourceDao.get_group_all_resource(group_info.id)
         need_move_resource = []
         for one in all_resource:
-            # 获取资源属于几个组,属于多个组则不用处理, 否则将资源转移到默认用户组
+            # Getting resources belongs to several groups,If you belong to more than one group, you don't have, Otherwise, transfer the resource to the default user group
             resource_groups = GroupResourceDao.get_resource_group(ResourceTypeEnum(one.type), one.third_id)
             if len(resource_groups) > 1:
                 continue
@@ -126,20 +128,20 @@ class RoleGroupService():
         if need_move_resource:
             GroupResourceDao.update_group_resource(need_move_resource)
         GroupResourceDao.delete_group_resource_by_group_id(group_info.id)
-        # 删除用户组下的角色列表
+        # Delete role list under user group
         RoleDao.delete_role_by_group_id(group_info.id)
-        # 删除用户组的管理员
+        # Delete administrators of user groups
         UserGroupDao.delete_group_all_admin(group_info.id)
-        # 将删除事件发到redis队列中
+        # Send delete event toredisQueued
         delete_message = json.dumps({"id": group_info.id})
         redis_client = get_redis_client_sync()
         redis_client.rpush('delete_group', delete_message, expiration=86400)
         redis_client.publish('delete_group', delete_message)
 
     def get_group_user_list(self, group_id: int, page_size: int, page_num: int) -> List[User]:
-        """获取全量的group列表"""
+        """Get the full amountgroupVertical"""
 
-        # 查询user
+        # Inquiryuser
         user_group_list = UserGroupDao.get_group_user(group_id, page_size, page_num)
         if user_group_list:
             user_ids = [user.user_id for user in user_group_list]
@@ -148,57 +150,57 @@ class RoleGroupService():
         return None
 
     def insert_user_group(self, user_group: UserGroupCreate) -> UserGroupRead:
-        """插入用户组"""
+        """Insert User Group"""
 
         user_groups = UserGroupDao.get_user_group(user_group.user_id)
         if user_groups and user_group.group_id in [ug.group_id for ug in user_groups]:
-            raise ValueError('重复设置用户组')
+            raise ValueError('Duplicate setup user group')
 
         return UserGroupDao.insert_user_group(user_group)
 
     def replace_user_groups(self, request: Request, login_user: UserPayload, user_id: int, group_ids: List[int]):
-        """ 覆盖用户的所在的用户组 """
-        # 判断下被操作用户是否是超级管理员
+        """ Overwrite the user group the user belongs to """
+        # Determine if the Operated User is a Super Admin
         user_role_list = UserRoleDao.get_user_roles(user_id)
         if any(one.role_id == AdminRole for one in user_role_list):
             raise AdminUserUpdateForbiddenError()
 
-        # 获取用户之前的所有分组
+        # Get all previous groupings of users
         old_group = UserGroupDao.get_user_group(user_id)
         old_group = [one.group_id for one in old_group]
         if not login_user.is_admin():
-            # 获取操作人所管理的组
+            # Get Operator Managed Groups
             admin_group = UserGroupDao.get_user_admin_group(login_user.user_id)
             admin_group = [one.group_id for one in admin_group]
-            # 过滤被操作人所在的组，只处理有权限管理的组
+            # Filter the group where the operator is located, only groups with permission management are processed
             old_group = [one for one in old_group if one in admin_group]
-            # 说明此用户 不在此用户组管理员所管辖的用户组内
+            # Describe this user Not in a user group administered by this user group administrator
             if not old_group:
                 raise UnAuthorizedError()
         need_delete_group = old_group.copy()
         need_add_group = []
         for one in group_ids:
             if one not in old_group:
-                # 需要加入的用户组
+                # User groups to join
                 need_add_group.append(one)
             else:
-                # 旧的用户组里剩余的就是要移出的用户组
+                # Remaining in the old user group is the user group to be moved out
                 need_delete_group.remove(one)
         if need_delete_group:
             UserGroupDao.delete_user_groups(user_id, need_delete_group)
         if need_add_group:
             UserGroupDao.add_user_groups(user_id, need_add_group)
 
-        # 记录审计日志
+        # Log Audit Logs
         group_infos = GroupDao.get_group_by_ids(old_group + group_ids)
         group_dict: Dict[int, str] = {}
         for one in group_infos:
             group_dict[one.id] = one.group_name
-        note = "编辑前用户组："
+        note = "Pre-edit user groups:"
         for one in old_group:
             note += f'{group_dict.get(one, one)}、'
         note = note.rstrip('、')
-        note += "编辑后用户组："
+        note += "Post-edit user groups:"
         for one in group_ids:
             note += f'{group_dict.get(one, one)}、'
         note = note.rstrip('、')
@@ -206,7 +208,7 @@ class RoleGroupService():
         return None
 
     def get_user_groups_list(self, user_id: int) -> List[GroupRead]:
-        """获取用户组列表"""
+        """Get a list of user groups"""
         user_groups = UserGroupDao.get_user_group(user_id)
         if not user_groups:
             return []
@@ -214,8 +216,8 @@ class RoleGroupService():
         return GroupDao.get_group_by_ids(group_ids)
 
     def set_group_admin(self, request: Request, login_user: UserPayload, user_ids: List[int], group_id: int):
-        """设置用户组管理员"""
-        # 获取目前用户组的管理员列表
+        """Set up user group administrators"""
+        # Get the list of administrators of the current user group
         user_group_admins = UserGroupDao.get_groups_admins([group_id])
         res = []
         need_delete_admin = []
@@ -228,12 +230,12 @@ class RoleGroupService():
                 else:
                     need_delete_admin.append(user.user_id)
         if need_add_admin:
-            # 可以分配非组内用户为管理员。进行用户创建
+            # Users who are not in the group can be assigned as administrators. Do user creation
             for user_id in need_add_admin:
                 res.append(UserGroupDao.insert_user_group_admin(user_id, group_id))
         if need_delete_admin:
             UserGroupDao.delete_group_admins(group_id, need_delete_admin)
-        # 修改用户组的最近修改人
+        # Modified by the most recent modifier for the user group
         GroupDao.update_group_update_user(group_id, login_user.user_id)
 
         group_info = GroupDao.get_user_group(group_id)
@@ -241,22 +243,24 @@ class RoleGroupService():
         return res
 
     def set_group_update_user(self, login_user: UserPayload, group_id: int):
-        """设置用户组管理员"""
+        """Set up user group administrators"""
         GroupDao.update_group_update_user(group_id, login_user.user_id)
 
-    def get_group_resources(self, group_id: int, resource_type: ResourceTypeEnum, name: str,
-                            page_size: int, page_num: int) -> (List[Any], int):
-        """ 获取用户下的资源 """
+    async def get_group_resources(self, group_id: int, resource_type: ResourceTypeEnum, name: str,
+                                  page_size: int, page_num: int) -> (List[Any], int):
+        """ Get resources under user """
         if resource_type.value == ResourceTypeEnum.FLOW.value:
-            return self.get_group_flow(group_id, name, page_size, page_num)
+            return await asyncio.to_thread(self.get_group_flow, group_id, name, page_size, page_num)
         elif resource_type.value == ResourceTypeEnum.KNOWLEDGE.value:
-            return self.get_group_knowledge(group_id, name, page_size, page_num)
+            return await asyncio.to_thread(self.get_group_knowledge, group_id, name, page_size, page_num)
         elif resource_type.value == ResourceTypeEnum.WORK_FLOW.value:
-            return self.get_group_flow(group_id, name, page_size, page_num, FlowType.WORKFLOW)
+            return await asyncio.to_thread(self.get_group_flow, group_id, name, page_size, page_num, FlowType.WORKFLOW)
         elif resource_type.value == ResourceTypeEnum.ASSISTANT.value:
-            return self.get_group_assistant(group_id, name, page_size, page_num)
+            return await asyncio.to_thread(self.get_group_assistant, group_id, name, page_size, page_num)
         elif resource_type.value == ResourceTypeEnum.GPTS_TOOL.value:
-            return self.get_group_tool(group_id, name, page_size, page_num)
+            return await asyncio.to_thread(self.get_group_tool, group_id, name, page_size, page_num)
+        elif resource_type.value == ResourceTypeEnum.DASHBOARD.value:
+            return await self.get_group_dashboards(group_id, name, page_size, page_num)
         logger.warning('not support resource type: %s', resource_type)
         return [], 0
 
@@ -265,10 +269,15 @@ class RoleGroupService():
         user_map = {user.user_id: user.user_name for user in user_list}
         return user_map
 
+    async def aget_user_map(self, user_ids: set[int]):
+        user_list = await UserDao.aget_user_by_ids(list(user_ids))
+        user_map = {user.user_id: user.user_name for user in user_list}
+        return user_map
+
     def get_group_flow(self, group_id: int, keyword: str, page_size: int, page_num: int,
                        flow_type: Optional[FlowType] = None) -> (List[Any], int):
-        """ 获取用户组下的知识库列表 """
-        # 查询用户组下的技能ID列表
+        """ Get a list of knowledge bases under user groups """
+        # Query skills under user groupsIDVertical
         rs_type = ResourceTypeEnum.FLOW
         if flow_type == FlowType.WORKFLOW:
             rs_type = ResourceTypeEnum.WORK_FLOW
@@ -289,14 +298,14 @@ class RoleGroupService():
         return res, total
 
     def get_group_knowledge(self, group_id: int, keyword: str, page_size: int, page_num: int) -> (List[Any], int):
-        """ 获取用户组下的知识库列表 """
-        # 查询用户组下的知识库ID列表
+        """ Get a list of knowledge bases under user groups """
+        # Query Knowledge Base under User GroupsIDVertical
         resource_list = GroupResourceDao.get_group_resource(group_id, ResourceTypeEnum.KNOWLEDGE)
         if not resource_list:
             return [], 0
         res = []
         knowledge_ids = [int(resource.third_id) for resource in resource_list]
-        # 查询知识库
+        # Query Knowledge Base
         data, total = KnowledgeDao.filter_knowledge_by_ids(knowledge_ids, keyword, page_num, page_size)
         db_user_ids = {one.user_id for one in data}
         user_map = self.get_user_map(db_user_ids)
@@ -307,13 +316,13 @@ class RoleGroupService():
         return res, total
 
     def get_group_assistant(self, group_id: int, keyword: str, page_size: int, page_num: int) -> (List[Any], int):
-        """ 获取用户组下的助手列表 """
-        # 查询用户组下的助手ID列表
+        """ Get a list of helpers under a user group """
+        # Query Assistant under User GroupsIDVertical
         resource_list = GroupResourceDao.get_group_resource(group_id, ResourceTypeEnum.ASSISTANT)
         if not resource_list:
             return [], 0
         res = []
-        assistant_ids = [resource.third_id for resource in resource_list]  # 查询助手
+        assistant_ids = [resource.third_id for resource in resource_list]  # Query Assistant
         data, total = AssistantDao.filter_assistant_by_id(assistant_ids, keyword, page_num, page_size)
         for one in data:
             simple_one = AssistantService.return_simple_assistant_info(one)
@@ -321,14 +330,14 @@ class RoleGroupService():
         return res, total
 
     def get_group_tool(self, group_id: int, keyword: str, page_size: int, page_num: int) -> (List[Any], int):
-        """ 获取用户组下的工具列表 """
-        # 查询用户组下的工具ID列表
+        """ Get a list of tools under user groups """
+        # Query Tools under User GroupsIDVertical
         resource_list = GroupResourceDao.get_group_resource(group_id, ResourceTypeEnum.GPTS_TOOL)
         if not resource_list:
             return [], 0
         res = []
         tool_ids = [int(resource.third_id) for resource in resource_list]
-        # 查询工具
+        # Query Tools
         data, total = GptsToolsDao.filter_tool_types_by_ids(tool_ids, keyword, page_num, page_size)
         db_user_ids = {one.user_id for one in data}
         user_map = self.get_user_map(db_user_ids)
@@ -338,8 +347,29 @@ class RoleGroupService():
             res.append(one_dict)
         return res, total
 
+    async def get_group_dashboards(self, group_id: int, keyword: str, page_size: int, page_num: int) -> (List[Any],
+                                                                                                         int):
+
+        """ Get a list of dashboards under a user group """
+        # Query the dashboard under the user groupIDVertical
+        resource_list = await GroupResourceDao.aget_group_resources(group_id=group_id,
+                                                                    resource_type=ResourceTypeEnum.DASHBOARD)
+        if not resource_list:
+            return [], 0
+        res = []
+        dashboard_ids = [int(resource.third_id) for resource in resource_list]
+        # Query Dashboard
+        data = await DashboardService.get_simple_dashboards(keyword=keyword, filter_ids=dashboard_ids)
+
+        user_map = await self.aget_user_map(set([one.user_id for one in data]))
+        for one in data:
+            one_dict = one.model_dump()
+            one_dict["user_name"] = user_map.get(one.user_id, one.user_id)
+            res.append(one_dict)
+        return res, len(res)
+
     def get_manage_resources(self, login_user: UserPayload, keyword: str, page: int, page_size: int) -> (list, int):
-        """ 获取用户所管理的用户组下的应用列表 包含技能、助手、工作流"""
+        """ Get a list of apps under a user group managed by a user Contains skills, assistants, workflows"""
         groups = []
         if not login_user.is_admin():
             groups = [str(one.group_id) for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
@@ -347,7 +377,7 @@ class RoleGroupService():
                 return [], 0
 
         resource_ids = []
-        # 说明是用户组管理员，需要过滤获取到对应组下的资源
+        # Description is a user group administrator, need to filter to get the resources under the corresponding group
         if groups:
             group_resources = GroupResourceDao.get_groups_resource(groups, resource_types=[ResourceTypeEnum.FLOW,
                                                                                            ResourceTypeEnum.ASSISTANT,

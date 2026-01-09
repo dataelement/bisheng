@@ -1,136 +1,141 @@
 from .base import BaseErrorCode
 
 
-#  知识库模块相关的返回错误码，功能模块代码：109
+#  Return error code related to the knowledge base module, function module code:109
 class KnowledgeExistError(BaseErrorCode):
     Code: int = 10900
-    Msg: str = '知识库名称重复'
+    Msg: str = 'Duplicate Knowledge Base Name'
 
 
 class KnowledgeNoEmbeddingError(BaseErrorCode):
     Code: int = 10901
-    Msg: str = '知识库必须选择一个embedding模型'
+    Msg: str = 'Knowledge Base must select oneembeddingModels'
 
 
 class KnowledgeLLMError(BaseErrorCode):
     Code: int = 10902
-    Msg: str = '文档知识库总结模型已失效，请前往模型管理-系统模型设置中进行配置。{exception}'
+    Msg: str = 'Documentation Knowledge Base Summary Model is no longer valid, please go to Model Management-Configure in System Model Settings.{exception}'
 
 
 class KnowledgeChunkError(BaseErrorCode):
     Code: int = 10910
-    Msg: str = '当前知识库版本不支持修改分段，请创建新知识库后进行分段修改'
+    Msg: str = 'The current Knowledge Base version does not support modifying segments, please create a new Knowledge Base and modify segments'
 
 
 class KnowledgeFileEmptyError(BaseErrorCode):
     Code: int = 10911
-    Msg: str = '文件解析为空'
+    Msg: str = 'File resolution is empty'
 
 
 class KnowledgeFileChunkMaxError(BaseErrorCode):
     Code: int = 10912
-    Msg: str = '分段结果超长，请尝试在自定义策略中使用更多切分符（例如 \\n、。、\\.）进行切分'
+    Msg: str = 'Segmentation results are too long, try using more splitters in your custom strategy (ex. \\n、。、\\.) for segmentation'
 
 
 class KnowledgeFileDamagedError(BaseErrorCode):
     Code: int = 10913
-    Msg: str = '文件可能已损坏，无法解析，请检查后重新上传'
+    Msg: str = 'The file may be corrupted and cannot be parsed, please check and upload again'
 
 
 class KnowledgeFileNotSupportedError(BaseErrorCode):
     Code: int = 10914
-    Msg: str = '不支持该类型文件的解析，请检查后重新上传'
+    Msg: str = 'Parsing of this type of file is not supported, please check and upload again'
 
 
 class KnowledgeEtl4lmTimeoutError(BaseErrorCode):
     Code: int = 10915
-    Msg: str = 'etl4lm服务繁忙，请升级etl4lm服务的算力'
+    Msg: str = 'etl4lmService busy, please upgradeetl4lmComputing power of the service'
+
+
+class KnowledgeExcelChunkMaxError(BaseErrorCode):
+    Code: int = 10916
+    Msg: str = 'Segmentation results are too long, try reducing the number of table segmentation rows in your custom strategy'
 
 
 class KnowledgeSimilarError(BaseErrorCode):
     Code: int = 10920
-    Msg: str = '未配置QA知识库相似问模型'
+    Msg: str = 'Not configuredQAKnowledge Base Similarity Question Model'
 
 
 class KnowledgeQAError(BaseErrorCode):
     Code: int = 10930
-    Msg: str = '该问题已存在'
+    Msg: str = 'This issue already exists'
 
 
 class KnowledgeCPError(BaseErrorCode):
     Code: int = 10940
-    Msg: str = '当前有文件正在解析，不可复制'
+    Msg: str = 'A file is currently being parsed and cannot be copied'
 
 
 class KnowledgeCPEmptyError(BaseErrorCode):
     Code: int = 10941
-    Msg: str = '知识库内容为空，无法复制'
+    Msg: str = 'Knowledge Base content is empty and cannot be copied'
 
 
-# 不支持多个知识库的文件同时删除
+# Multiple knowledge base files are not supported for simultaneous deletion
 class KnowledgeFileDeleteError(BaseErrorCode):
     Code: int = 10950
-    Msg: str = '不支持多个知识库的文件同时删除'
+    Msg: str = 'Multiple knowledge base files are not supported for simultaneous deletion'
 
 
 class KnowledgeRebuildingError(BaseErrorCode):
     Code: int = 10951
-    Msg: str = '知识库重新构建中，不允许修改embedding模型'
+    Msg: str = 'Knowledge base is being rebuilt, modifications are not allowedembeddingModels'
 
 
 class KnowledgePreviewError(BaseErrorCode):
     Code: int = 10952
-    Msg: str = '文档解析失败'  # 预览文件解析失败
+    Msg: str = 'Document parsing failed'  # Failed to parse preview file
 
 
 class KnowledgeFileFailedError(BaseErrorCode):
     Code: int = 10953
-    Msg: str = '文件解析失败: {exception}'
+    Msg: str = 'File parsing failed: {exception}'
 
 
-# 不是QA知识库
+# Is notQAThe knowledge base upon
 class KnowledgeNotQAError(BaseErrorCode):
     Code: int = 10960
-    Msg: str = '不是QA知识库'
+    Msg: str = 'Is notQAThe knowledge base upon'
 
 
-# 知识库不存在
+# Knowledge base does not exist
 class KnowledgeNotExistError(BaseErrorCode):
     Code: int = 10970
-    Msg: str = '知识库不存在'
+    Msg: str = 'Knowledge base does not exist'
 
 
-# 知识库文件不存在
+# Knowledge base file does not exist
 class KnowledgeFileNotExistError(BaseErrorCode):
     Code: int = 10971
-    Msg: str = '知识库文件不存在'
+    Msg: str = 'Knowledge base file does not exist'
 
 
-# 与内置元数据字段名称冲突
+# Conflicts with built-in metadata field name
 class KnowledgeMetadataFieldConflictError(BaseErrorCode):
     Code: int = 10980
-    Msg: str = '{field_name} 与内置元数据字段名称冲突'
+    Msg: str = '{field_name} Conflicts with built-in metadata field name'
 
 
-# 元数据字段已存在
+# Metadata field already exists
 class KnowledgeMetadataFieldExistError(BaseErrorCode):
     Code: int = 10981
-    Msg: str = '元数据字段 {field_name} 已存在'
+    Msg: str = 'Meta data fields {field_name} already exists'
 
 
-# 元数据字段不存在
+# Metadata field does not exist
 class KnowledgeMetadataFieldNotExistError(BaseErrorCode):
     Code: int = 10982
-    Msg: str = '元数据字段 {field_name} 不存在'
+    Msg: str = 'Meta data fields {field_name} Does not exist'
 
 
-# 不能修改内置元数据字段
+# Built-in metadata fields cannot be modified
 class KnowledgeMetadataFieldImmutableError(BaseErrorCode):
     Code: int = 10983
-    Msg: str = '内置元数据字段 {field_name} 不能修改'
+    Msg: str = 'Built-in metadata fields {field_name} Cannot be modified'
 
 
-# 元数据值类型转换错误
+# Metadata value type conversion error
 class KnowledgeMetadataValueTypeConvertError(BaseErrorCode):
     Code: int = 10984
-    Msg: str = '元数据字段 {field_name} 值类型转换错误: {error_msg}'
+    Msg: str = 'Meta data fields {field_name} Value type conversion error: {error_msg}'

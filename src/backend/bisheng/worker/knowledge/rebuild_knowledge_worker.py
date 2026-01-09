@@ -22,50 +22,50 @@ from bisheng.worker.main import bisheng_celery
 @bisheng_celery.task(acks_late=True)
 def rebuild_knowledge_celery(knowledge_id: int, new_model_id: int, invoke_user_id: int) -> str:
     """
-    重建知识库的异步任务
+    Asynchronous task to rebuild knowledge base
     
     Args:
-        knowledge_id: 知识库ID
-        new_model_id: 新的embedding模型ID
-        invoke_user_id: 调用用户ID
+        knowledge_id: The knowledge base uponID
+        new_model_id: New.. embeddingModelsID
+        invoke_user_id: Call UserID
         
     Returns:
-        str: 任务执行结果
+        str: Task Execution Results
     """
     trace_id_var.set(f'rebuild_knowledge_{knowledge_id}')
     logger.info(f"rebuild_knowledge_celery start knowledge_id={knowledge_id} new_model_id={new_model_id}")
     try:
-        # 获取知识库信息
+        # Get Knowledge Base Information
         knowledge = KnowledgeDao.query_by_id(knowledge_id)
         if not knowledge:
             logger.error(f"knowledge_id={knowledge_id} not found")
             return f"knowledge {knowledge_id} not found"
 
-        # 1. 根据knowledge_id找到knowledgefile表中所有status=2和status=4的文件，把status改为4
+        # 1. accordingknowledge_idFound knowledgefileAll in the tablestatus=2Andstatus=4File, put thestatusto4
         files = KnowledgeFileDao.get_files_by_multiple_status(
             knowledge_id,
             [KnowledgeFileStatus.SUCCESS.value, KnowledgeFileStatus.REBUILDING.value]
         )
-        # 2. 根据拿到collection_name去milvus中删除向量存储
+        # 2. According to thecollection_namewentmilvusDelete Vector Store in
         KnowledgeService.delete_knowledge_file_in_vector(knowledge=knowledge, del_es=False)
 
         if not files:
             logger.info(f"knowledge_id={knowledge_id} has no success files")
-            # 直接更新知识库状态为成功
+            # Directly update knowledge base status to success
             knowledge.state = KnowledgeState.PUBLISHED.value
             KnowledgeDao.update_one(knowledge)
             return f"knowledge {knowledge_id} rebuild completed (no files)"
 
-        # 更新文件状态为重建中
+        # Updating file status to rebuild in progress
         file_ids = [f.id for f in files]
         KnowledgeFileDao.update_status_bulk(file_ids, KnowledgeFileStatus.REBUILDING)
 
         logger.info(f"Updated {len(files)} files to rebuilding status")
 
-        # 3. 根据index_name从es中拿到chunk信息，重新embedding插入milvus
+        # 3. accordingindex_nameFROMesGot it inchunkinformation, reembeddingInsertmilvus
         success_files, failed_files = _rebuild_embeddings(knowledge, files, new_model_id, invoke_user_id)
 
-        # 4. 更新文件状态
+        # 4. Update file status
         KnowledgeFileDao.update_status_bulk(success_files, KnowledgeFileStatus.SUCCESS)
 
         for file_id in failed_files:
@@ -75,10 +75,10 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: int, invoke_user_i
                 file.remark = KnowledgeFileFailedError(data={"exception": "rebuild error"}).to_json_str()
                 KnowledgeFileDao.update(file)
 
-        # 5. 更新knowledge状态
+        # 5. Update knowledge base status
         if failed_files:
 
-            # 删除es索引和milvus集合，避免数据不一致
+            # DeleteesIndex andmilvusCollections to avoid data inconsistencies
             _delete_es_files(knowledge, failed_files)
 
             knowledge.state = KnowledgeState.FAILED.value
@@ -93,7 +93,7 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: int, invoke_user_i
 
     except Exception as e:
         logger.exception(f"rebuild_knowledge_celery error: {str(e)}")
-        # 异步任务期间出现意外把knowledge置为4
+        # Unexpected handles during asynchronous tasksknowledgeSet to4
         try:
             knowledge = KnowledgeDao.query_by_id(knowledge_id)
             if knowledge:
@@ -106,7 +106,7 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: int, invoke_user_i
 
 
 def _delete_es_files(knowledge: Knowledge, file_ids: List[int]):
-    """删除ES中的文件数据"""
+    """DeleteESFile data in"""
     try:
         index_name = knowledge.index_name or knowledge.collection_name
         embeddings = FakeEmbedding()
@@ -135,55 +135,55 @@ def _delete_es_files(knowledge: Knowledge, file_ids: List[int]):
 def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_model_id: int, invoke_user_id: int) -> \
         tuple[List[int], List[int]]:
     """
-    重建embeddings
+    Rebuildembeddings
 
     Returns:
-        tuple: (成功的文件ID列表, 失败的文件ID列表)
+        tuple: (Success FilesIDVertical, Failed FilesIDVertical)
     """
     success_files = []
     failed_files = []
     vector_client = None
 
     try:
-        # 获取ES中的chunk信息
+        # DapatkanEShitting the nail on the headchunkMessage
         index_name = knowledge.index_name or knowledge.collection_name
         embeddings = FakeEmbedding()
         es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
 
-        # 获取新的embedding模型并创建Milvus客户端
-        logger.info(f"[DEBUG] 开始初始化新的embedding模型，model_id={new_model_id}")
+        # Get newembeddingModel and createMilvusClient
+        logger.info(f"[DEBUG] Begin initializing newembeddingModelsmodel_id={new_model_id}")
         new_embeddings = LLMService.get_bisheng_knowledge_embedding_sync(model_id=new_model_id,
                                                                          invoke_user_id=invoke_user_id)
         logger.info(
-            f"[DEBUG] 成功创建embedding模型实例: {type(new_embeddings).__name__}, model_id={getattr(new_embeddings, 'model_id', 'unknown')}")
+            f"[DEBUG] Slider Created Successfully.embeddingModel Instance: {type(new_embeddings).__name__}, model_id={getattr(new_embeddings, 'model_id', 'unknown')}")
 
-        # 测试embedding模型是否可用
+        # TestembeddingIs the model available
         try:
-            test_result = new_embeddings.embed_query("测试文本")
-            logger.info(f"[DEBUG] Embedding模型测试成功，返回维度: {len(test_result) if test_result else 'None'}")
+            test_result = new_embeddings.embed_query("Test text")
+            logger.info(f"[DEBUG] EmbeddingModel tested successfully, dimension returned: {len(test_result) if test_result else 'None'}")
         except Exception as e:
-            logger.error(f"[DEBUG] Embedding模型测试失败: {str(e)}")
-            # 模型测试失败应该终止整个流程，而不是继续
-            raise Exception(f"Embedding模型不可用: {str(e)}")
+            logger.error(f"[DEBUG] EmbeddingModel Test Failed: {str(e)}")
+            # Model test failure should terminate the entire process, not continue
+            raise Exception(f"EmbeddingModel not available: {str(e)}")
 
         vector_client = decide_vectorstores(knowledge.collection_name, "Milvus", new_embeddings)
-        logger.info(f"[DEBUG] 成功创建Milvus客户端，collection_name={knowledge.collection_name}")
+        logger.info(f"[DEBUG] Slider Created Successfully.MilvusClientcollection_name={knowledge.collection_name}")
 
-        # 检查ES索引是否存在（提前检查，避免在循环中重复检查）
+        # OthersESWhether the index is present (check in advance, avoid double-checking in the loop)
         if not es_client.client.indices.exists(index=index_name):
             logger.error(f"ES index {index_name} does not exist")
-            # 索引不存在，所有文件都失败
+            # Index does not exist, all files failed
             failed_files = [f.id for f in files]
             return success_files, failed_files
 
-        # 获取ES索引的mapping信息（用于调试）
+        # DapatkanES(Indexed)mappingInformation (for debugging)
         try:
             mapping = es_client.client.indices.get_mapping(index=index_name)
             logger.debug(f"ES index mapping for {index_name}: {mapping}")
         except Exception as e:
             logger.warning(f"Failed to get ES mapping: {str(e)}")
 
-        # 为每个文件重新生成embeddings
+        # Regenerate for each fileembeddings
         for file in files:
             try:
                 success = _process_single_file(file, es_client, index_name, vector_client)
@@ -198,17 +198,17 @@ def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_mo
 
     except Exception as e:
         logger.exception(f"Failed to rebuild embeddings: {str(e)}")
-        # 如果整个过程失败，则所有未成功的文件都标记为失败
+        # If the entire process fails, all unsuccessful files are marked as failed
         failed_files.extend([f.id for f in files if f.id not in success_files])
 
     return success_files, failed_files
 
 
 def _process_single_file(file, es_client, index_name, vector_client):
-    """处理单个文件的embedding重建"""
+    """Processing of individual filesembeddingRebuild"""
     logger.info(f"Rebuilding embeddings for file_id={file.id}")
 
-    # 从ES中获取该文件的所有chunks
+    # FROMESGet all of this file inchunks
     search_query = {
         "query": {
             "match": {
@@ -227,15 +227,15 @@ def _process_single_file(file, es_client, index_name, vector_client):
 
     if not chunks:
         logger.warning(f"No chunks found for file_id={file.id}")
-        return True  # 没有数据需要处理，视为成功
+        return True  # No data to process, considered a success
 
-    # 提取文本和元数据
+    # Extract text and metadata
     texts = []
     metadatas = []
     for chunk in chunks:
         source = chunk["_source"]
         texts.append(source["text"])
-        # 移除pk字段，避免插入Milvus时冲突
+        # Removepkfields, avoid insertingMilvusTime Conflict
         if "pk" in source["metadata"]:
             del source["metadata"]["pk"]
 
@@ -243,14 +243,14 @@ def _process_single_file(file, es_client, index_name, vector_client):
 
     logger.info(f"Found {len(texts)} chunks for file_id={file.id}")
 
-    # 插入数据到Milvus
-    logger.info(f"[DEBUG] 即将调用vector_client.add_texts，texts数量={len(texts)}")
-    logger.info(f"[DEBUG] 第一个文本示例: {texts[0][:100] if texts else 'No texts'}...")
+    # Insert data intoMilvus
+    logger.info(f"[DEBUG] Upcoming Callsvector_client.add_texts，textsQuantity={len(texts)}")
+    logger.info(f"[DEBUG] First text example: {texts[0][:100] if texts else 'No texts'}...")
 
     try:
         vector_client.add_texts(texts=texts, metadatas=metadatas)
-        logger.info(f"[DEBUG] vector_client.add_texts调用成功")
+        logger.info(f"[DEBUG] vector_client.add_textsCall successful")
         return True
     except Exception as add_error:
-        logger.error(f"[DEBUG] vector_client.add_texts调用失败: {str(add_error)}")
+        logger.error(f"[DEBUG] vector_client.add_textsCall failed: {str(add_error)}")
         raise add_error

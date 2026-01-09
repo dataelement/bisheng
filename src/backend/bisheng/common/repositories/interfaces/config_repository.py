@@ -5,5 +5,5 @@ from bisheng.common.repositories.interfaces.base_repository import BaseRepositor
 
 
 class ConfigRepository(BaseRepository[Config, str], ABC):
-    """配置仓库接口"""
+    """Configure warehouse interfaces"""
     pass

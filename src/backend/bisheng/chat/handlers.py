@@ -40,7 +40,7 @@ class Handler:
             'report': self.process_report,
             'stop': self.process_stop
         }
-        # 记录流式输出的内容
+        # Record Streaming Output
         self.stream_queue = stream_queue
 
     async def dispatch_task(self, session: ChatManager, client_id: str, chat_id: str, action: str,
@@ -53,7 +53,7 @@ class Handler:
             if action not in self.handler_dict:
                 raise Exception(f'unknown action {action}')
             if action != 'stop':
-                # 清空流式输出队列，防止上次的回答污染本次回答
+                # Empty the streaming output queue to prevent the previous answer from contaminating this answer
                 while not self.stream_queue.empty():
                     self.stream_queue.get()
             try:
@@ -88,7 +88,7 @@ class Handler:
             else:
                 logger.error(f'act=auto_gen act={action}')
         else:
-            # 将流式输出的内容写到数据库内
+            # Write streaming output to database
             answer = ''
             reasoning_answer = ''
             while not self.stream_queue.empty():
@@ -122,10 +122,10 @@ class Handler:
                     db_message = ChatMessageDao.insert_one(chat_message)
                     await session.send_json(client_id, chat_id,
                                             ChatMessage(**db_message.model_dump(), message_id=db_message.id), add=False)
-            # 普通技能的stop
-            res = thread_pool.cancel_task([key])  # 将进行中的任务进行cancel
+            # General Skills'stop
+            res = thread_pool.cancel_task([key])  # Proceed with the task in progresscancel
             if res[0]:
-                # message = payload.get('inputs') or '手动停止'
+                # message = payload.get('inputs') or 'Hand Stop'
                 res = ChatResponse(type='end', user_id=user_id, message='')
                 close = ChatResponse(type='close')
                 await session.send_json(client_id, chat_id, res, add=False)
@@ -164,7 +164,7 @@ class Handler:
 
         if langchain_object.stop_status():
             start_resp.category = 'divider'
-            response = ChatResponse(message='主动退出',
+            response = ChatResponse(message='Dropout',
                                     type='end',
                                     category='divider',
                                     user_id=user_id)
@@ -195,10 +195,10 @@ class Handler:
         await session.send_json(client_id, chat_id, close_resp)
 
     def recommend_question(self, langchain_obj, chat_history: list):
-        prompt = """给定以下历史聊天消息:
+        prompt = """Given the following historical chat messages:
         {history}
 
-        总结提炼用户可能接下来会提问的3个问题，请直接输出问题，使用换行符分割问题，不要添加任何修饰文字或前后缀。
+        Summarize what the refining user might ask next3Questions, output questions directly, separate questions with line breaks, and do not add any modifier text or prefixes.
         """
         if hasattr(langchain_obj, 'llm'):
             llm_chain = LLMChain(llm=langchain_obj.llm,
@@ -206,7 +206,7 @@ class Handler:
         else:
             keyword_conf = settings.get_default_llm() or {}
             if keyword_conf:
-                node_type = keyword_conf.pop('type', 'HostQwenChat')  # 兼容旧配置
+                node_type = keyword_conf.pop('type', 'HostQwenChat')  # Compatible with legacy configurations
                 class_object = import_by_type(_type='llms', name=node_type)
                 llm = instantiate_llm(node_type, class_object, keyword_conf)
 
@@ -243,7 +243,7 @@ class Handler:
             user_id=user_id,
         )
         if is_begin:
-            # 从file auto trigger process_message， the question already saved
+            # FROMfile auto trigger process_message， the question already saved
             session.chat_history.add_message(client_id, chat_id, chat_inputs)
         start_resp = ChatResponse(type='start', user_id=user_id)
         await session.send_json(client_id, chat_id, start_resp)
@@ -271,12 +271,12 @@ class Handler:
             # Log stack trace
             logger.exception(e)
             end_resp = ChatResponse(type='end',
-                                    intermediate_steps=f'分析出错，{str(e)}',
+                                    intermediate_steps=f'Analysis error.{str(e)}',
                                     user_id=user_id)
             await session.send_json(client_id, chat_id, end_resp)
             close_resp = ChatResponse(type='close', user_id=user_id)
             if not chat_id:
-                # 技能编排页面， 无法展示intermediate
+                # Skills orchestration page, Unable to displayintermediate
                 await session.send_json(client_id, chat_id, start_resp)
                 end_resp.message = end_resp.intermediate_steps
                 end_resp.intermediate_steps = None
@@ -291,18 +291,18 @@ class Handler:
         extra = {}
         source, result = await judge_source(result, source_doucment, chat_id, extra)
 
-        # 最终结果
+        # Final Result
         if isinstance(langchain_object, AutoGenChain):
-            # 群聊，最后一条消息重复，不进行返回
+            # Group chat, the last message is repeated, do not go back
             start_resp.category = 'divider'
             await session.send_json(client_id, chat_id, start_resp)
-            response = ChatResponse(message='本轮结束',
+            response = ChatResponse(message='End of the current round',
                                     type='end',
                                     category='divider',
                                     user_id=user_id)
             await session.send_json(client_id, chat_id, response)
         else:
-            # 正常
+            # Normal
             if is_begin:
                 start_resp.category = 'answer'
                 await session.send_json(client_id, chat_id, start_resp)
@@ -314,13 +314,13 @@ class Handler:
                                         source=int(source))
                 await session.send_json(client_id, chat_id, response)
 
-        # 循环结束
+        # loop end
         if is_begin:
             close_resp = ChatResponse(type='close', user_id=user_id)
             await session.send_json(client_id, chat_id, close_resp)
 
         if source:
-            # 处理召回的chunk
+            # Handling recallschunk
             await process_source_document(
                 source_doucment,
                 chat_id,
@@ -334,7 +334,7 @@ class Handler:
                            user_id: int):
         file_name = payload['inputs']
         batch_question = payload['inputs']['questions']
-        # 如果L3
+        # Automatically close purchase order afterL3
         file = ChatMessage(is_bot=False, message=file_name, type='end', user_id=user_id)
         session.chat_history.add_message(client_id, chat_id, file)
         start_resp = ChatResponse(type='start', category='system', user_id=user_id)
@@ -342,10 +342,10 @@ class Handler:
         key = get_cache_key(client_id, chat_id)
         langchain_object = session.in_memory_cache.get(key)
         if batch_question and len(langchain_object.input_keys) == 0:
-            # prompt 没有可以输入问题的地方
+            # prompt There is no place to enter the question
             await session.send_json(client_id, chat_id, start_resp)
             log_resp = start_resp.copy()
-            log_resp.intermediate_steps = '当前Prompt设置无用户输入，PresetQuestion 不生效'
+            log_resp.intermediate_steps = 'Saat IniPromptSettings have no user input,PresetQuestion Inactive'
             log_resp.type = 'end'
             await session.send_json(client_id, chat_id, log_resp)
             input_key = 'input'
@@ -355,7 +355,7 @@ class Handler:
                                                        {})['input_keys'].keys())[0]
             input_dict = {k: '' for k in langchain_object.input_keys}
 
-        batch_question = ['start'] if not batch_question else batch_question  # 确保点击确定，会执行LLM
+        batch_question = ['start'] if not batch_question else batch_question  # Ensure click OK, will executeLLM
         report = ''
         logger.info(f'process_file batch_question={batch_question} input_key={input_key}')
         for question in batch_question:
@@ -397,10 +397,10 @@ class Handler:
         logger.info(f'reciever_human_interactive langchain={langchain_object}')
         action = payload.get('action')
         if action.lower() == 'continue':
-            # autgen_user 对话的时候，进程 wait() 需要换新
+            # autgen_user At the time of the dialogue, the process wait() Needs a new one
             if hasattr(langchain_object, 'input'):
                 await langchain_object.input(payload.get('inputs'))
-                # 新的对话开始，
+                # A new conversation begins,
                 start_resp = ChatResponse(type='start')
                 await session.send_json(client_id, chat_id, start_resp)
             else:
@@ -412,7 +412,7 @@ class Handler:
         if not intermediate_steps:
             return await session.send_json(client_id, chat_id, end_resp, add=False)
 
-        # 将最终的分析过程存数据库
+        # Store the final analysis process in the database
         steps = []
         if isinstance(intermediate_steps, list):
             # autogen produce multi dialog
@@ -445,7 +445,7 @@ class Handler:
             if chat_id and intermediate_steps.strip():
                 finally_log = ''
                 for s in intermediate_steps.split('\n'):
-                    # 清理召回日志中的一些冗余日志
+                    # Clean up some redundant logs in recall logs
                     if 'source_documents' in s:
                         answer = ast.literal_eval(s.split(':', 1)[1])
                         if 'result' in answer:
@@ -455,7 +455,7 @@ class Handler:
                 msg = ChatResponse(intermediate_steps=finally_log, type='end', user_id=user_id)
                 steps.append(msg)
             else:
-                # 只有L3用户给出详细的log
+                # onlyL3The user gives a detailedlog
                 end_resp.intermediate_steps = intermediate_steps
         await session.send_json(client_id, chat_id, end_resp, add=False)
 

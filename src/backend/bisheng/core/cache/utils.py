@@ -161,7 +161,7 @@ def save_binary_file(content: str, file_name: str, accepted_types: list[str]) ->
 
 
 def detect_encoding_cchardet(file_bytes: bytes, num_bytes=1024):
-    """使用cchardet检测文件的编码"""
+    """UsecchardetEncoding of the test file"""
     result = cchardet.detect(file_bytes)
     encoding = result['encoding']
     confidence = result['confidence']
@@ -169,10 +169,10 @@ def detect_encoding_cchardet(file_bytes: bytes, num_bytes=1024):
 
 
 def convert_encoding_cchardet(file_io: BytesIO, target_encoding='utf-8'):
-    """将文件转换为目标编码"""
+    """Convert file to destination encoding"""
     source_encoding, confidence = detect_encoding_cchardet(file_io.read())
     file_io.seek(0)
-    if confidence is None or confidence < 0.5 or source_encoding.lower() == target_encoding:  # 检测不出来不做任何处理
+    if confidence is None or confidence < 0.5 or source_encoding.lower() == target_encoding:  # Undetectable without any processing
         return file_io
 
     try:
@@ -194,7 +194,7 @@ async def upload_file_to_minio(file: UploadFile, object_name, bucket_name: str) 
 @create_cache_folder_async
 async def save_file_to_folder(file: UploadFile, folder_name: str, file_name: str) -> str:
     """
-    保存上传的文件到folder_name文件夹
+    Save uploaded file tofolder_nameFolders
     :param file:
     :param folder_name:
     :param file_name:
@@ -293,16 +293,16 @@ def save_download_file(file_byte, folder_name, filename):
 def file_download(file_path: str):
     """download file and return path"""
 
-    # 优先尝试作为本地文件处理 (剥离 URL 参数)
-    # 如果系统挂载了存储卷，去除 ? 后面的签名参数直接读取
+    # Try processing as a local file first (extracted URL Parameters)
+    # If the system mounts a storage volume, remove ? The signature parameters behind it are read directly
     local_candidate = file_path.split('?')[0]
     if os.path.isfile(local_candidate):
         file_name = os.path.basename(local_candidate)
-        # 兼容原有逻辑：处理文件名中可能包含的 md5 前缀
+        # Compatible with legacy logic: handles what might be included in the filename md5 Prefix
         file_name = file_name.split('_', 1)[-1] if '_' in file_name else file_name
         return local_candidate, file_name
 
-    # 原有逻辑: 检查是否为标准 URL (带 http/https)
+    # Legacy Logic: Check if it is standard URL (Bawa http/https)
     if _is_valid_url(file_path):
         minio_client = get_minio_storage_sync()
         minio_share_host = minio_client.get_minio_share_host()
@@ -319,7 +319,7 @@ def file_download(file_path: str):
             r = requests.get(file_path, verify=False)
             if r.status_code != 200:
                 raise ValueError('Check the url of your file; returned status code %s' % r.status_code)
-            # 检查Content-Disposition头来找出文件名
+            # OthersContent-Dispositionheader to find the filename
             content_disposition = r.headers.get('Content-Disposition')
             if content_disposition:
                 filename = unquote(content_disposition).split('filename=')[-1].strip("\"'")
@@ -328,22 +328,22 @@ def file_download(file_path: str):
         file_path = save_download_file(file_content, 'bisheng', filename)
         return file_path, filename
 
-    # 处理 MinIO 相对路径 (以 / 开头且包含签名参数)
-    # 针对输入: /bisheng/original/82324.docx?X-Amz-Algorithm=...
-    # 这种情况下没有 host，无法进入 _is_valid_url 分支
+    # <g id="Bold">Medical Treatment:</g> MinIO Relative path (In / Starts with a signature parameter)
+    # For Input: /bisheng/original/82324.docx?X-Amz-Algorithm=...
+    # No in this case host, cannot be accessed _is_valid_url Branch
     elif file_path.startswith('/') and 'X-Amz-Algorithm' in file_path:
         try:
             minio_client = get_minio_storage_sync()
 
-            # 使用 urlparse 解析，它能自动分离 path 和 query
+            # Use urlparse parsing, it automatically separates path And query
             url_obj = urlparse(file_path)
-            # path 类似于 /bisheng/original/82324.docx
-            # 去掉开头的 /，然后分割第一个 / 得到 bucket 和 object
+            # path similar to /bisheng/original/82324.docx
+            # Remove the beginning /, and then split the first / Get bucket And object
             path_parts = url_obj.path.lstrip("/").split('/', 1)
 
             if len(path_parts) == 2:
                 bucket_name, object_name = path_parts
-                # 调用同步的 minio 方法下载
+                # Call Synchronized minio Method download
                 object_name = unquote(object_name)
                 file_content = minio_client.get_object_sync(bucket_name, object_name)
 
@@ -351,13 +351,13 @@ def file_download(file_path: str):
                 file_path = save_download_file(file_content, 'bisheng', filename)
                 return file_path, filename
         except Exception as e:
-            # 解析失败则打印日志，让程序继续向下抛出 ValueError
+            # If the parsing fails, print the log and let the program continue to throw down ValueError
             print(f"Error handling relative MinIO path: {e}")
 
     elif not os.path.isfile(file_path):
         raise ValueError('File path %s is not a valid file or url' % file_path)
 
-    # 这里是处理纯本地文件路径的（不带参数的那种），通常会被最上面的逻辑 1 拦截
+    # This is the one that handles purely local file paths (the one with no parameters) and is usually handled by the topmost logic 1 Interception
     file_name = os.path.basename(file_path)
     file_name = file_name.split('_', 1)[-1] if '_' in file_name else file_name
     return file_path, file_name
@@ -366,16 +366,16 @@ def file_download(file_path: str):
 async def async_file_download(file_path: str):
     """download file and return path"""
 
-    # 优先尝试作为本地文件处理 (剥离 URL 参数)
-    # 如果系统挂载了存储卷，这步就能直接解决问题
+    # Try processing as a local file first (extracted URL Parameters)
+    # If the system mounts the storage volume, this will solve the problem directly
     local_candidate = file_path.split('?')[0]
     if os.path.isfile(local_candidate):
         file_name = os.path.basename(local_candidate)
-        # 处理下是否包含了md5的逻辑 (保留原逻辑)
+        # Is it included under processing?md5Logic of (Keep original logic)
         file_name = file_name.split('_', 1)[-1] if '_' in file_name else file_name
         return local_candidate, file_name
 
-    # 检查是否为标准 URL
+    # Check if it is standard URL
     if _is_valid_url(file_path):
         http_client = await get_http_client()
         minio_client = await get_minio_storage()
@@ -399,27 +399,27 @@ async def async_file_download(file_path: str):
         file_path = save_download_file(file_content, 'bisheng', filename)
         return file_path, filename
 
-    # 处理 MinIO 相对路径 (以 / 开头且包含签名参数)
-    # 针对输入: /bisheng/original/82324.docx?X-Amz-Algorithm=...
+    # <g id="Bold">Medical Treatment:</g> MinIO Relative path (In / Starts with a signature parameter)
+    # For Input: /bisheng/original/82324.docx?X-Amz-Algorithm=...
     elif file_path.startswith("/") and "X-Amz-Algorithm" in file_path:
         try:
             minio_client = await get_minio_storage()
-            # 解析路径 /bucket/object_key
+            # Resolve Path /bucket/object_key
             url_obj = urlparse(file_path)
-            # path 变成 /bisheng/original/82324.docx，去掉开头的 / 并分割第一个 /
+            # path turned into /bisheng/original/82324.docx, remove the opening / and split the first one /
             path_parts = url_obj.path.lstrip("/").split('/', 1)
 
             if len(path_parts) == 2:
                 bucket_name, object_name = path_parts
                 object_name = unquote(object_name)
-                # 直接使用 minio client 下载，无需 http 请求
+                # Directly usable after finished products  leave the factory minio client Download without http Request
                 file_content = await minio_client.get_object(bucket_name, object_name)
 
                 filename = unquote(object_name.split('/')[-1])
                 file_path = save_download_file(file_content, 'bisheng', filename)
                 return file_path, filename
         except Exception as e:
-            # 如果解析或下载失败，记录日志或让其落入下方的 ValueError
+            # If parsing or downloading fails, log or drop it below ValueError
             print(f"Error handling relative MinIO path: {e}")
 
     raise ValueError('File path %s is not a valid file or url' % file_path)

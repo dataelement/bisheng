@@ -17,7 +17,7 @@ from bisheng.utils.util import _is_valid_url
 def find_lcs(str1, str2):
     lstr1 = len(str1)
     lstr2 = len(str2)
-    record = [[0 for i in range(lstr2 + 1)] for j in range(lstr1 + 1)]  # 多一位
+    record = [[0 for i in range(lstr2 + 1)] for j in range(lstr1 + 1)]  # One more person
     maxNum = 0
     p = 0
     for i in range(lstr1):
@@ -40,38 +40,38 @@ class DocxTemplateRender(object):
         else:
             self.doc = Document(self.file_content)
 
-    def _insert_image(self, paragraph, image_path: str, alt_text: str = "图片"):
+    def _insert_image(self, paragraph, image_path: str, alt_text: str = "Images"):
         """
-        在段落中插入图片
+        Insert image in paragraph
 
         Args:
-            paragraph: Word段落对象
-            image_path: 图片文件路径
-            alt_text: 图片替代文本
+            paragraph: WordParagraph object
+            image_path: Image file path
+            alt_text: Set Alt Text(s)
         """
-        logger.debug(f"[简单插图] 开始插入图片: {image_path}")
+        logger.debug(f"[Simple Illustration] Start Inserting Pictures: {image_path}")
         try:
             if os.path.exists(image_path):
-                # 检查文件大小
+                # Check file size
                 file_size = os.path.getsize(image_path)
-                logger.debug(f"[简单插图] 图片文件存在: {image_path}, 大小: {file_size}字节")
+                logger.debug(f"[Simple Illustration] Image file exists: {image_path}, size: {file_size}byte")
 
-                # 插入图片，设置最大宽度为6英寸
+                # Insert an image with a maximum width of6Inch
                 run = paragraph.runs[0] if paragraph.runs else paragraph.add_run()
-                logger.debug(f"[简单插图] 准备在run中插入图片，run数量: {len(paragraph.runs)}")
+                logger.debug(f"[Simple Illustration] Ready atrunInsert a picture in therunQuantity: {len(paragraph.runs)}")
 
                 run.add_picture(image_path, width=Inches(6))
-                logger.info(f"[简单插图] ✅ 成功插入图片: {image_path}, 大小: {file_size}字节")
+                logger.info(f"[Simple Illustration] ✅ Successfully inserted image: {image_path}, size: {file_size}byte")
             else:
-                # 图片文件不存在，使用原路径
-                logger.error(f"[简单插图] ❌ 图片文件不存在: {image_path}")
+                # Image file does not exist, use original path
+                logger.error(f"[Simple Illustration] ❌ Image file does not exist: {image_path}")
                 if paragraph.runs:
                     paragraph.runs[0].text = image_path
                 else:
                     paragraph.add_run(image_path)
         except Exception as e:
-            # 插入图片失败，显示原URL
-            logger.error(f"[简单插图] ❌ 插入图片失败: {image_path}, 错误类型: {type(e).__name__}, 错误: {str(e)}")
+            # Inserting image failed, show originalURL
+            logger.error(f"[Simple Illustration] ❌ Failed to insert image: {image_path}, Error type: {type(e).__name__}, Error-free: {str(e)}")
             if paragraph.runs:
                 paragraph.runs[0].text = image_path
             else:
@@ -79,28 +79,28 @@ class DocxTemplateRender(object):
 
     def _replace_placeholder_with_image(self, paragraph, placeholder, image_path, alt_text):
         """
-        精确替换段落中的占位符为图片，正确处理跨run的占位符
+        Precisely replace the placeholder in the paragraph with the picture, correctly handle the spanrunPlaceholder for
 
         Args:
-            paragraph: Word段落对象
-            placeholder: 要替换的占位符
-            image_path: 图片文件路径
-            alt_text: 图片替代文字
+            paragraph: WordParagraph object
+            placeholder: Placeholder to replace
+            image_path: Image file path
+            alt_text: Image Alt Text
         """
-        logger.debug(f"[图片替换] 开始替换占位符: {placeholder} -> {image_path}")
+        logger.debug(f"[Image Replacement] Start replacing placeholders: {placeholder} -> {image_path}")
 
-        # 获取段落的完整文本
+        # Get the full text of the paragraph
         paragraph_text = paragraph.text
 
-        # 查找占位符的位置
+        # Find the location of the placeholder
         placeholder_start = paragraph_text.find(placeholder)
         if placeholder_start == -1:
-            logger.warning(f"[图片替换] 占位符未找到: {placeholder}")
-            return  # 占位符不存在
+            logger.warning(f"[Image Replacement] Placeholder not found: {placeholder}")
+            return  # Placeholder does not exist
 
         placeholder_end = placeholder_start + len(placeholder)
 
-        # 定位占位符在runs中的位置
+        # Anchor placeholder inrunsPosition in
         current_pos = 0
         start_run_index = -1
         start_run_pos = 0
@@ -110,12 +110,12 @@ class DocxTemplateRender(object):
         for i, run in enumerate(paragraph.runs):
             run_len = len(run.text)
 
-            # 找到占位符开始位置
+            # Find the placeholder start position
             if start_run_index == -1 and current_pos + run_len > placeholder_start:
                 start_run_index = i
                 start_run_pos = placeholder_start - current_pos
 
-            # 找到占位符结束位置
+            # Find the placeholder end position
             if current_pos + run_len >= placeholder_end:
                 end_run_index = i
                 end_run_pos = placeholder_end - current_pos
@@ -123,27 +123,27 @@ class DocxTemplateRender(object):
 
             current_pos += run_len
 
-        # 清除占位符文本
+        # Clear placeholder text
         if start_run_index == end_run_index:
-            # 占位符在同一个run内
+            # Placeholder is the samerunand within
             run = paragraph.runs[start_run_index]
             run.text = run.text[:start_run_pos] + run.text[end_run_pos:]
         else:
-            # 占位符跨越多个runs
-            # 清除开始run中的部分
+            # Placeholders span multipleruns
+            # Clear startrunSections in
             start_run = paragraph.runs[start_run_index]
             start_run.text = start_run.text[:start_run_pos]
 
-            # 清除结束run中的部分
+            # Clear EndrunSections in
             end_run = paragraph.runs[end_run_index]
             end_run.text = end_run.text[end_run_pos:]
 
-            # 清除中间的runs
+            # Clear middleruns
             for i in range(end_run_index - 1, start_run_index, -1):
                 paragraph.runs[i].text = ""
 
-        # 在占位符位置插入图片
-        # 找到合适的插入位置（在清理后的第一个非空run之后）
+        # Insert image at placeholder position
+        # Find a suitable insertion location (first non-empty after cleaningrunafterwards
         insert_run = None
         for i in range(start_run_index, len(paragraph.runs)):
             if paragraph.runs[i].text or i == start_run_index:
@@ -151,95 +151,95 @@ class DocxTemplateRender(object):
                 break
 
         if insert_run is not None:
-            # 在该run之后插入图片
-            logger.debug(f"[图片替换] 在run位置插入图片: {image_path}")
+            # In therunInsert image after
+            logger.debug(f"[Image Replacement] InsiderunPosition Insert Picture: {image_path}")
             self._insert_image_at_run(insert_run, image_path, alt_text)
-            logger.info(f"[图片替换] 占位符替换完成: {placeholder} -> {image_path}")
+            logger.info(f"[Image Replacement] Placeholder replacement complete: {placeholder} -> {image_path}")
         else:
-            # 如果没有找到合适位置，使用原有方法
-            logger.warning(f"[图片替换] 未找到合适run位置，使用备用方法: {image_path}")
+            # If a suitable location is not found, use the original method
+            logger.warning(f"[Image Replacement] No Fit Foundrunlocation, using alternate methods: {image_path}")
             self._insert_image(paragraph, image_path, alt_text)
 
     def _insert_image_at_run(self, run, image_path, alt_text):
         """
-        在指定run位置插入图片
+        In DesignationrunPosition Insert Picture
 
         Args:
-            run: Word run对象
-            image_path: 图片路径
-            alt_text: 图片替代文字
+            run: Word runObjects
+            image_path: Image Path
+            alt_text: Image Alt Text
         """
         try:
             from docx.shared import Inches
 
-            # 检查文件是否存在
+            # Checks to see if file exists.
             if not os.path.exists(image_path):
-                logger.warning(f"[图片渲染] 图片文件不存在，使用原路径: {image_path}")
+                logger.warning(f"[Image Rendering] Image file does not exist, use original path: {image_path}")
                 run.text = image_path
                 return
 
-            # 检查文件大小和格式
+            # Check file size and format
             file_size = os.path.getsize(image_path)
             file_ext = os.path.splitext(image_path)[1].lower()
-            logger.debug(f"[图片渲染] 准备插入图片: path={image_path}, size={file_size}字节, ext={file_ext}")
+            logger.debug(f"[Image Rendering] Ready to insert image: path={image_path}, size={file_size}byte, ext={file_ext}")
 
-            # 直接在当前run中插入图片
-            run.add_picture(image_path, width=Inches(4))  # 默认宽度4英寸
-            # 清空run中的文本，避免显示多余的文本
+            # Directly in the currentrunInsert image in
+            run.add_picture(image_path, width=Inches(4))  # Default Width4Inch
+            # Emptyruntext in to avoid displaying excess text
             run.text = ""
-            logger.info(f"[图片渲染] 在run位置插入图片成功: {image_path}, size={file_size}字节")
+            logger.info(f"[Image Rendering] InsiderunLocation Insert Picture Successful: {image_path}, size={file_size}byte")
         except Exception as e:
-            logger.error(f"[图片渲染] run位置插入图片失败: {image_path}, 错误: {e}")
-            logger.debug(f"[图片渲染] 详细错误信息: {type(e).__name__}: {str(e)}")
+            logger.error(f"[Image Rendering] runLocation Insert Picture Failed: {image_path}, Error-free: {e}")
+            logger.debug(f"[Image Rendering] Error Details of error: {type(e).__name__}: {str(e)}")
             try:
-                # 使用原有的插入方法作为备用
-                logger.info(f"[图片渲染] 尝试备用插入方法: {image_path}")
-                # 获取run的父段落对象
+                # Use original insertion method as backup
+                logger.info(f"[Image Rendering] Try alternate insertion methods: {image_path}")
+                # DapatkanrunParent Paragraph Object of
                 paragraph = run._element.getparent()
-                # 转换为python-docx段落对象
+                # Convert Topython-docxParagraph object
                 from docx.text.paragraph import Paragraph
 
                 para_obj = Paragraph(paragraph, run.part)
                 self._insert_image(para_obj, image_path, alt_text)
-                logger.info(f"[图片渲染] 备用方法插入成功: {image_path}")
+                logger.info(f"[Image Rendering] Alternate method inserted successfully: {image_path}")
             except Exception as backup_e:
-                logger.error(f"[图片渲染] 备用插入方法也失败: {image_path}, 错误: {backup_e}")
-                logger.error(f"[图片渲染] 备用方法详细错误: {type(backup_e).__name__}: {str(backup_e)}")
-                # 如果所有方法都失败，就使用原路径
+                logger.error(f"[Image Rendering] Alternate insertion methods also failed: {image_path}, Error-free: {backup_e}")
+                logger.error(f"[Image Rendering] Alternate Method Detail Error: {type(backup_e).__name__}: {str(backup_e)}")
+                # If all methods fail, use the original path
                 run.text = image_path
-                logger.warning(f"[图片渲染] 所有插入方法失败，使用原路径文本: {image_path}")
+                logger.warning(f"[Image Rendering] All insert methods failed, use original path text: {image_path}")
 
     def _replace_placeholder_in_structured_paragraph(self, paragraph, placeholder: str, table_data: List[List[str]]):
         """
-        简化的表格替换：直接在占位符位置插入表格，不添加任何结构标记
+        Simplified table replacement: insert the table directly at the placeholder without adding any structural tags
         """
-        # 清除占位符文本
+        # Clear placeholder text
         self._clear_placeholder_from_paragraph(paragraph, placeholder)
 
-        # 直接在段落位置插入表格
+        # Insert table directly at paragraph position
         self._insert_table(paragraph, table_data)
 
-        logger.info(f"表格替换完成，共 {len(table_data)} 行数据")
+        logger.info(f"Form Replacement Complete of {len(table_data)} Row")
 
     def _clear_placeholder_from_paragraph(self, paragraph, placeholder):
         """
-        从段落中精确清除占位符，处理跨run的情况
+        Precisely clear placeholders from paragraphs to handle spanningrunCONDITION....&#x0D;
 
         Args:
-            paragraph: Word段落对象
-            placeholder: 要清除的占位符
+            paragraph: WordParagraph object
+            placeholder: Placeholders to be cleared
         """
-        # 获取段落的完整文本
+        # Get the full text of the paragraph
         paragraph_text = paragraph.text
 
-        # 查找占位符的位置
+        # Find the location of the placeholder
         placeholder_start = paragraph_text.find(placeholder)
         if placeholder_start == -1:
-            return  # 占位符不存在
+            return  # Placeholder does not exist
 
         placeholder_end = placeholder_start + len(placeholder)
 
-        # 定位占位符在runs中的位置
+        # Anchor placeholder inrunsPosition in
         current_pos = 0
         start_run_index = -1
         start_run_pos = 0
@@ -249,12 +249,12 @@ class DocxTemplateRender(object):
         for i, run in enumerate(paragraph.runs):
             run_len = len(run.text)
 
-            # 找到占位符开始位置
+            # Find the placeholder start position
             if start_run_index == -1 and current_pos + run_len > placeholder_start:
                 start_run_index = i
                 start_run_pos = placeholder_start - current_pos
 
-            # 找到占位符结束位置
+            # Find the placeholder end position
             if current_pos + run_len >= placeholder_end:
                 end_run_index = i
                 end_run_pos = placeholder_end - current_pos
@@ -262,42 +262,42 @@ class DocxTemplateRender(object):
 
             current_pos += run_len
 
-        # 清除占位符文本
+        # Clear placeholder text
         if start_run_index == end_run_index:
-            # 占位符在同一个run内
+            # Placeholder is the samerunand within
             run = paragraph.runs[start_run_index]
             run.text = run.text[:start_run_pos] + run.text[end_run_pos:]
         else:
-            # 占位符跨越多个runs
-            # 清除开始run中的部分
+            # Placeholders span multipleruns
+            # Clear startrunSections in
             start_run = paragraph.runs[start_run_index]
             start_run.text = start_run.text[:start_run_pos]
 
-            # 清除结束run中的部分
+            # Clear EndrunSections in
             end_run = paragraph.runs[end_run_index]
             end_run.text = end_run.text[end_run_pos:]
 
-            # 清除中间的runs
+            # Clear middleruns
             for i in range(end_run_index - 1, start_run_index, -1):
                 paragraph.runs[i].text = ""
 
     def _process_resource_placeholders(self, doc, placeholder_map):
         """
-        按位置顺序处理段落中混合的占位符
+        Work with hybrid placeholders in paragraphs in positional order
 
         Args:
-            doc: Word文档对象  
-            placeholder_map: 占位符映射字典
+            doc: WordDocument object  
+            placeholder_map: Placeholder Mapping Dictionary
         """
-        # 处理所有段落中的占位符
-        paragraphs_to_process = list(doc.paragraphs)  # 创建副本，因为我们可能会修改段落结构
+        # Work with placeholders in all paragraphs
+        paragraphs_to_process = list(doc.paragraphs)  # Create a copy as we may modify the paragraph structure
 
         for i, p in enumerate(paragraphs_to_process):
             paragraph_text = p.text
             if not paragraph_text:
                 continue
 
-            # 找到该段落中的所有占位符及其位置
+            # Find all placeholders and their positions in the paragraph
             placeholders_with_positions = []
             for placeholder, resource_info in placeholder_map.items():
                 pos = paragraph_text.find(placeholder)
@@ -312,13 +312,13 @@ class DocxTemplateRender(object):
             if not placeholders_with_positions:
                 continue
 
-            # 按位置排序，从前往后处理
+            # Sort by location from to post-processing
             placeholders_with_positions.sort(key=lambda x: x['position'])
 
-            # 分割段落为文本段和占位符段
+            # Split paragraph into text segments and placeholder segments
             self._process_mixed_content_paragraph(doc, p, placeholders_with_positions, paragraph_text)
 
-        # 处理表格单元格中的占位符
+        # Working with Placeholders in Table Cells
         for table in doc.tables:
             for i, row in enumerate(table.rows):
                 for j, cell in enumerate(row.cells):
@@ -327,36 +327,36 @@ class DocxTemplateRender(object):
                         if not cell_text:
                             continue
 
-                        # 检查单元格中的占位符
+                        # Check for placeholders in cells
                         for placeholder, resource_info in placeholder_map.items():
                             if placeholder in cell_text:
                                 if resource_info["type"] == "image":
-                                    # 在表格单元格中插入实际图片
+                                    # Insert Actual Picture in Table Cell
                                     image_path = resource_info.get("local_path") or resource_info.get("path", "")
                                     if image_path and os.path.exists(image_path):
                                         try:
-                                            # 在单元格中插入图片（这会清空单元格并插入图片）
+                                            # Insert a picture in a cell (this will empty the cell and insert the picture)
                                             self._insert_image_in_table_cell(cell, image_path)
-                                            logger.info(f"✅ 表格单元格中成功插入图片: {image_path}")
-                                            # 标记占位符已处理，不需要更新文本
+                                            logger.info(f"✅ Picture successfully inserted in table cell: {image_path}")
+                                            # Marker placeholder processed, no need to update text
                                             cell_text = ""
                                         except Exception as e:
-                                            logger.error(f"❌ 表格单元格插入图片失败: {str(e)}")
-                                            # 失败时显示文件名
+                                            logger.error(f"❌ Table Cell Insert Picture Failed: {str(e)}")
+                                            # Show file name on failure
                                             cell_text = cell_text.replace(placeholder, os.path.basename(image_path))
                                     else:
-                                        # 图片文件不存在，显示路径
+                                        # Image file does not exist, display path
                                         cell_text = cell_text.replace(placeholder,
                                                                       resource_info.get("path", placeholder))
                                 elif resource_info["type"] == "excel":
-                                    cell_text = cell_text.replace(placeholder, "[Excel表格]")
+                                    cell_text = cell_text.replace(placeholder, "[ExcelTable Filter]")
                                 elif resource_info["type"] == "csv":
-                                    cell_text = cell_text.replace(placeholder, "[CSV表格]")
+                                    cell_text = cell_text.replace(placeholder, "[CSVTable Filter]")
                                 elif resource_info["type"] == "markdown_table":
-                                    cell_text = cell_text.replace(placeholder, "[Markdown表格]")
-                                logger.info(f"处理表格单元格占位符: {placeholder}")
+                                    cell_text = cell_text.replace(placeholder, "[MarkdownTable Filter]")
+                                logger.info(f"Process table cell placeholders: {placeholder}")
 
-                        # 更新单元格文本
+                        # Update cell text
                         if cell_text != one.text:
                             if one.runs:
                                 one.runs[0].text = cell_text
@@ -367,32 +367,32 @@ class DocxTemplateRender(object):
 
     def _process_mixed_content_paragraph(self, doc, paragraph, placeholders_with_positions, original_text):
         """
-        处理包含混合内容的段落 - 内联插入图片和表格
+        Working with paragraphs with mixed content - Insert images and tables inline
         
         Args:
-            doc: Word文档对象
-            paragraph: 原始段落
-            placeholders_with_positions: 按位置排序的占位符信息列表
-            original_text: 原始段落文本
+            doc: WordDocument object
+            paragraph: Original paragraph
+            placeholders_with_positions: List of placeholder information by location
+            original_text: Original paragraph text
         """
-        # 提取原始段落的样式信息，用于后续段落创建
+        # Extract style information from the original paragraph for subsequent paragraph creation
         original_style_info = self._extract_paragraph_style_info(paragraph)
 
-        # 分割文本为片段，保持原始顺序
+        # Split the text into fragments, keeping the original order
         segments = []
         last_end = 0
 
         for item in placeholders_with_positions:
-            # 添加占位符前的文本
+            # Add text before placeholder
             if item['position'] > last_end:
                 text_before = original_text[last_end:item['position']]
-                if text_before:  # 保留所有文本，包括空白
+                if text_before:  # Keep all text, including whitespaces
                     segments.append({
                         'type': 'text',
                         'content': text_before
                     })
 
-            # 添加占位符对应的资源
+            # Add the resource corresponding to the placeholder
             segments.append({
                 'type': 'resource',
                 'placeholder': item['placeholder'],
@@ -401,7 +401,7 @@ class DocxTemplateRender(object):
 
             last_end = item['end_position']
 
-        # 添加最后剩余的文本
+        # Add last remaining text
         if last_end < len(original_text):
             text_after = original_text[last_end:]
             if text_after:
@@ -410,10 +410,10 @@ class DocxTemplateRender(object):
                     'content': text_after
                 })
 
-        # 清空原始段落
+        # Clear original paragraph
         paragraph.clear()
 
-        # 重新设计：分段处理，保持文档结构一致性
+        # Redesign: segmentation to keep document structure consistent
         current_paragraph = paragraph
 
         i = 0
@@ -421,37 +421,37 @@ class DocxTemplateRender(object):
             segment = segments[i]
 
             if segment['type'] == 'text':
-                # 直接添加文本内容，不做任何清理
+                # Add text content directly without any cleanup
                 current_paragraph.add_run(segment['content'])
 
             elif segment['type'] == 'resource':
                 resource_info = segment['resource_info']
 
                 if resource_info['type'] == 'image':
-                    # 图片可以真正内联在段落中
+                    # Images can be really inlined in paragraphs
                     self._insert_inline_image(current_paragraph, resource_info['path'],
                                               resource_info.get('alt_text', ''))
 
                 elif resource_info['type'] in ['excel', 'csv', 'markdown_table']:
-                    # 表格内联处理：在当前位置插入表格，然后为后续内容创建新段落
+                    # Table Inline Processing: Insert the table at its current position, then create a new paragraph for subsequent content
                     if resource_info['type'] == 'markdown_table':
                         table_data, alignments = self._markdown_table_to_data(resource_info["content"])
                     else:
-                        table_data = resource_info.get('table_data', [["表格数据解析失败"]])
+                        table_data = resource_info.get('table_data', [["Table data parsing failed"]])
                         alignments = None
 
-                    # 在当前段落后立即插入表格
+                    # Insert table immediately after current paragraph
                     table_element = self._create_table_element(table_data)
 
-                    # 获取当前段落在文档中的位置
+                    # Get the position of the current paragraph in the document
                     paragraph_element = current_paragraph._element
                     paragraph_parent = paragraph_element.getparent()
                     paragraph_index = list(paragraph_parent).index(paragraph_element)
 
-                    # 在当前段落后插入表格
+                    # Insert table after current paragraph
                     paragraph_parent.insert(paragraph_index + 1, table_element)
 
-                    # 为后续文本创建新段落，并更新current_paragraph
+                    # Create a new paragraph for the subsequent text and update itcurrent_paragraph
                     if i + 1 < len(segments):
                         next_paragraph = self._create_new_paragraph_after_table(paragraph_parent, paragraph_index + 1,
                                                                                 original_style_info)
@@ -461,34 +461,34 @@ class DocxTemplateRender(object):
 
     def _insert_table_inline(self, current_paragraph, table_data, segments, current_index):
         """
-        内联插入表格，保持文本连续性
+        Insert tables inline for text continuity
         
         Args:
-            current_paragraph: 当前段落
-            table_data: 表格数据
-            segments: 所有片段
-            current_index: 当前片段索引
+            current_paragraph: Current paragraph
+            table_data: Form Data
+            segments: All phrases
+            current_index: Current Snippet Index
             
         Returns:
-            int: 跳过的后续文本片段数量
+            int: Number of subsequent text fragments skipped
         """
-        # 1. 在当前段落后插入表格段落
+        # 1. Insert table paragraph after current paragraph
         table_paragraph = self._create_new_paragraph_after(current_paragraph)
         self._insert_table(table_paragraph, table_data)
 
-        # 2. 检查是否有后续文本片段，如果有则创建新段落
+        # 2. Check if there is a subsequent text fragment and create a new one if there is one
         remaining_segments = segments[current_index + 1:]
         text_segments = [seg for seg in remaining_segments if seg['type'] == 'text']
 
         if text_segments:
-            # 为后续文本创建新段落
+            # Create a new paragraph for the subsequent text
             next_text_paragraph = self._create_new_paragraph_after(table_paragraph)
 
-            # 将所有后续文本片段添加到新段落
+            # Add all subsequent text fragments to the new paragraph
             for j, seg in enumerate(text_segments):
                 next_text_paragraph.add_run(seg['content'])
 
-            # 返回跳过的文本片段数量（让主循环不再处理这些片段）
+            # Returns the number of text fragments skipped (so that the main loop no longer processes these fragments)
             skipped_count = len(text_segments)
             return skipped_count
         else:
@@ -496,93 +496,93 @@ class DocxTemplateRender(object):
 
     def _create_new_paragraph_after(self, paragraph):
         """
-        在指定段落后创建新段落
+        Create a new paragraph after the specified paragraph
         
         Args:
-            paragraph: 参考段落
+            paragraph: Topic Paragraph reference
             
         Returns:
-            新创建的段落对象
+            Newly created paragraph object
         """
         from docx.oxml import parse_xml
         from docx.text.paragraph import Paragraph
 
-        # 创建新的段落元素
+        # Create a new paragraph element
         new_p_xml = '<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:p>'
         new_p_element = parse_xml(new_p_xml)
 
-        # 在当前段落后插入新段落
+        # Insert a new paragraph after the current paragraph
         paragraph._element.getparent().insert(
             list(paragraph._element.getparent()).index(paragraph._element) + 1,
             new_p_element
         )
 
-        # 返回包装后的段落对象
+        # Returns the wrapped paragraph object
         return Paragraph(new_p_element, paragraph._parent)
 
     def _insert_inline_image(self, paragraph, image_path: str, alt_text: str = ""):
         """
-        在段落中内联插入图片，图片会在文本流的正确位置
+        Insert an image inline in the paragraph, and the image will be in the correct position in the text stream
         """
         try:
-            # 使用现有的图片插入方法，但确保是内联的
+            # Use an existing image insertion method, but make sure it's inline
             run = paragraph.add_run()
             run.add_picture(image_path, width=Inches(4.0))
-            logger.info(f"[内联图片] ✅ 成功内联插入图片: {image_path}")
+            logger.info(f"[Inline Image] ✅ Successfully inserted image inline: {image_path}")
         except Exception as e:
-            logger.error(f"[内联图片] ❌ 插入图片失败: {str(e)}")
-            # 插入原图片路径
+            logger.error(f"[Inline Image] ❌ Failed to insert image: {str(e)}")
+            # Insert original image path
             paragraph.add_run(image_path)
 
     def _insert_image_in_table_cell(self, cell, image_path: str):
         """
-        在表格单元格中插入图片
+        Insert a picture in a table cell
         
         Args:
-            cell: 表格单元格对象
-            image_path: 图片文件路径
+            cell: Table Cell Object
+            image_path: Image file path
         """
         try:
             from docx.shared import Inches
             import os
 
             if not os.path.exists(image_path):
-                logger.warning(f"[表格单元格图片] 图片文件不存在: {image_path}")
+                logger.warning(f"[Table Cell Picture] Image file does not exist: {image_path}")
                 return
 
-            # 清空单元格内容
+            # Empty cell contents
             for paragraph in cell.paragraphs:
                 paragraph.clear()
 
-            # 在第一个段落中插入图片
+            # Insert image in first paragraph
             first_paragraph = cell.paragraphs[0] if cell.paragraphs else cell.add_paragraph()
             run = first_paragraph.add_run()
 
-            # 插入图片，设置合适的大小
-            run.add_picture(image_path, width=Inches(2.0))  # 表格单元格中使用较小尺寸
+            # Insert an image and set the appropriate size
+            run.add_picture(image_path, width=Inches(2.0))  # Use smaller dimensions in table cells
 
-            logger.info(f"[表格单元格图片] ✅ 成功插入图片: {image_path}")
+            logger.info(f"[Table Cell Picture] ✅ Successfully inserted image: {image_path}")
 
         except Exception as e:
-            logger.error(f"[表格单元格图片] ❌ 插入失败: {str(e)}")
+            logger.error(f"[Table Cell Picture] ❌ Failed to insert: {str(e)}")
             raise e
 
     def _csv_to_table(self, csv_path: str) -> List[List[str]]:
         """
-        将CSV文件转换为表格数据
+        will beCSVConvert file to table data
 
         Args:
-            csv_path: CSV文件路径
+            csv_path: CSVFilePath
 
         Returns:
-            List[List[str]]: 表格数据
+            List[List[str]]: Form Data
         """
         try:
-            # 读取CSV文件，自动检测编码和分隔符
+            # read outCSVfiles, automatically detecting encodings and delimiters
             import csv
             import chardet
 
-            # 检测文件编码
+            # Test file code
             with open(csv_path, "rb") as f:
                 raw_data = f.read()
                 encoding_result = chardet.detect(raw_data)
@@ -590,13 +590,13 @@ class DocxTemplateRender(object):
 
             table_data = []
 
-            # 尝试不同的分隔符
+            # Try a different delimiter
             delimiters = [",", ";", "\t", "|"]
 
             for delimiter in delimiters:
                 try:
                     with open(csv_path, "r", encoding=encoding, newline="") as f:
-                        # 先读取一小部分来检测分隔符
+                        # Read a small part first to detect the delimiter
                         sample = f.read(1024)
                         f.seek(0)
 
@@ -609,104 +609,104 @@ class DocxTemplateRender(object):
                         reader = csv.reader(f, delimiter=detected_delimiter)
                         table_data = [row for row in reader]
 
-                        # 如果成功读取了数据且有多列，则认为分隔符正确
+                        # Delimiter is considered correct if data is read successfully and there are multiple columns
                         if table_data and len(table_data[0]) > 1:
                             break
 
                 except Exception as e:
-                    logger.debug(f"尝试分隔符 '{delimiter}' 失败: {str(e)}")
+                    logger.debug(f"Try Delimiter '{delimiter}' Kalah: {str(e)}")
                     continue
 
             if not table_data:
-                # 如果所有分隔符都失败了，尝试简单的逐行读取
+                # If all delimiters fail, try a simple line-by-line read
                 with open(csv_path, "r", encoding=encoding) as f:
                     lines = f.readlines()
                     table_data = [[line.strip()] for line in lines if line.strip()]
 
-            # 清理数据 - 完全保留原始表格结构，包括空行
+            # Cleanup data - Fully preserve the original table structure, including empty rows
             cleaned_data = []
             for row in table_data:
                 cleaned_row = [str(cell).strip() if cell is not None else "" for cell in row]
-                # 移除空行过滤，完全保留原始表格结构
+                # Removes blank row filtering, leaving the original table structure intact
                 cleaned_data.append(cleaned_row)
 
-            logger.info(f"成功解析CSV文件: {csv_path}, 行数: {len(cleaned_data)}")
+            logger.info(f"Successfully parsedCSVDoc.: {csv_path}, # of Lines: {len(cleaned_data)}")
             return cleaned_data
 
         except Exception as e:
-            logger.error(f"解析CSV文件失败: {csv_path}, 错误: {str(e)}")
-            return [["CSV文件解析失败", str(e)]]
+            logger.error(f"analyzingCSVFile failed: {csv_path}, Error-free: {str(e)}")
+            return [["CSVFile parsing failed", str(e)]]
 
     def _excel_to_table(self, excel_path: str) -> List[List[str]]:
         """
-        将Excel文件转换为表格数据，保持数据格式和类型
+        will beExcelConvert files to tabular data, preserving data formats and types
 
         Args:
-            excel_path: Excel文件路径
+            excel_path: ExcelFilePath
 
         Returns:
-            List[List[str]]: 表格数据
+            List[List[str]]: Form Data
         """
 
         try:
-            # 读取Excel文件，保持更多原始格式
+            # read outExcelfiles, keeping more of the original formatting
             df = pd.read_excel(excel_path, sheet_name=0, dtype=str, keep_default_na=False)
 
-            # 限制表格大小，避免过大的表格影响Word文档
-            max_rows = 500  # 最大行数
-            max_cols = 20  # 最大列数
+            # Limit table size to avoid overly large table effectsWordDocumentation
+            max_rows = 500  # Max row count
+            max_cols = 20  # Maximum Columns
 
             if len(df) > max_rows:
-                logger.warning(f"Excel文件行数过多({len(df)})，截取前{max_rows}行")
+                logger.warning(f"ExcelToo many file lines({len(df)}), before interception{max_rows}Parade")
                 df = df.head(max_rows)
 
             if len(df.columns) > max_cols:
-                logger.warning(f"Excel文件列数过多({len(df.columns)})，截取前{max_cols}列")
+                logger.warning(f"ExcelToo many file columns({len(df.columns)}), before interception{max_cols}column")
                 df = df.iloc[:, :max_cols]
 
-            # 转换为列表格式
+            # Convert to list format
             table_data = []
 
-            # 处理表头，清理列名
+            # Process header, clean up column names
             headers = []
             for col in df.columns:
                 col_str = str(col).strip()
-                # 处理Excel自动生成的列名（如Unnamed: 0）
+                # <g id="Bold">Medical Treatment:</g>ExcelAutomatically generated column names (e.g.Unnamed: 0）
                 if col_str.startswith("Unnamed:"):
-                    col_str = ""  # 空列名
+                    col_str = ""  # Empty column name
                 headers.append(col_str)
             table_data.append(headers)
 
-            # 添加数据行，智能格式化
+            # Add data rows, smart formatting
             for _, row in df.iterrows():
                 row_data = []
                 for cell in row:
                     cell_str = str(cell).strip()
 
-                    # 处理空值
+                    # Handle Empty Values
                     if cell_str.lower() in ["nan", "none", "null", ""]:
                         cell_str = ""
 
-                    # 处理长数字，保持可读性
+                    # Handle long numbers for readability
                     elif cell_str.replace(".", "").replace("-", "").isdigit():
                         try:
-                            # 尝试格式化数字
+                            # Try formatting numbers
                             if "." in cell_str:
-                                # 浮点数，保留合理的小数位
+                                # Float, keep reasonable decimal places
                                 num = float(cell_str)
                                 if abs(num) >= 1000:
-                                    cell_str = f"{num:,.2f}"  # 千分位分隔符
+                                    cell_str = f"{num:,.2f}"  # Range Slider Thousand Separator
                                 else:
                                     cell_str = f"{num:.2f}".rstrip("0").rstrip(".")
                             else:
-                                # 整数，添加千分位分隔符
+                                # integer, adding thousands separator
                                 num = int(cell_str)
                                 if abs(num) >= 1000:
                                     cell_str = f"{num:,}"
                         except ValueError:
-                            pass  # 保持原始字符串
+                            pass  # Keep original string
 
-                    # 限制单元格内容长度，避免过长内容影响布局
+                    # Limit cell content length to avoid too long content affecting layout
                     if len(cell_str) > 100:
                         cell_str = cell_str[:97] + "..."
 
@@ -714,52 +714,52 @@ class DocxTemplateRender(object):
 
                 table_data.append(row_data)
 
-            # 确保所有行的列数一致
+            # Make sure all rows have the same number of columns
             if table_data:
                 max_cols = max(len(row) for row in table_data)
                 for row in table_data:
                     while len(row) < max_cols:
                         row.append("")
 
-            logger.info(f"成功解析Excel文件: {excel_path}, 大小: {len(table_data)}行 x {max_cols}列")
+            logger.info(f"Successfully parsedExcelDoc.: {excel_path}, size: {len(table_data)}Parade x {max_cols}column")
             return table_data
 
         except Exception as e:
-            logger.error(f"解析Excel文件失败: {excel_path}, 错误: {str(e)}")
-            return [["Excel文件解析失败", str(e)]]
+            logger.error(f"analyzingExcelFile failed: {excel_path}, Error-free: {str(e)}")
+            return [["ExcelFile parsing failed", str(e)]]
 
     def _markdown_table_to_data(self, markdown_table: str) -> Tuple[List[List[str]], List[str]]:
         """
-        将Markdown表格转换为表格数据，并解析对齐信息
+        will beMarkdownTable to table data and parse alignment information
 
         Args:
-            markdown_table: Markdown表格文本
+            markdown_table: MarkdownTable Text
 
         Returns:
-            tuple: (表格数据, 对齐信息列表)
+            tuple: (Form Data, Alignment Info List)
         """
         try:
             lines = [line.strip() for line in markdown_table.strip().split("\n") if line.strip()]
 
             if len(lines) < 2:
-                logger.warning("Markdown表格格式不完整，至少需要表头和分隔符行")
-                return [["格式错误", "表格不完整"]], ["left"]
+                logger.warning("MarkdownTable format is incomplete, at least table header and delimiter lines are required")
+                return [["Format salah.", "The form is incomplete."]], ["left"]
 
             table_data = []
             alignments = []
             separator_found = False
 
             for i, line in enumerate(lines):
-                # 检查是否是分隔符行
+                # Check if it is a delimiter line
                 if self._is_separator_line(line):
                     alignments = self._parse_alignments(line)
                     separator_found = True
                     continue
 
-                # 解析数据行
+                # Parse Data Rows
                 cells = self._parse_table_row(line)
                 if cells:
-                    # 清理单元格内容
+                    # Clean cell contents
                     cleaned_cells = []
                     for cell in cells:
                         cleaned_cell = self._clean_cell_content(cell)
@@ -767,68 +767,68 @@ class DocxTemplateRender(object):
 
                     table_data.append(cleaned_cells)
 
-            # 验证表格结构
+            # Validate table structure
             if not separator_found:
-                logger.warning("Markdown表格缺少分隔符行，使用默认左对齐")
+                logger.warning("MarkdownTable is missing a delimiter row, use default left alignment")
                 alignments = ["left"] * (len(table_data[0]) if table_data else 1)
 
-            # 确保所有行的列数一致
+            # Make sure all rows have the same number of columns
             if table_data:
                 max_cols = max(len(row) for row in table_data)
                 for row in table_data:
                     while len(row) < max_cols:
                         row.append("")
 
-                # 确保对齐信息数量匹配列数
+                # Make sure the number of aligned messages matches the number of columns
                 while len(alignments) < max_cols:
                     alignments.append("left")
                 alignments = alignments[:max_cols]
 
-            logger.info(f"成功解析Markdown表格，大小: {len(table_data)}行 x {len(alignments)}列")
-            logger.info(f"列对齐方式: {alignments}")
+            logger.info(f"Successfully parsedMarkdownTable, Size: {len(table_data)}Parade x {len(alignments)}column")
+            logger.info(f"Column alignment: {alignments}")
             return table_data, alignments
 
         except Exception as e:
-            logger.error(f"解析Markdown表格失败: {str(e)}")
-            return [["Markdown表格解析失败", str(e)]], ["left"]
+            logger.error(f"analyzingMarkdownTable failed: {str(e)}")
+            return [["MarkdownTable parsing failed", str(e)]], ["left"]
 
     def _is_separator_line(self, line: str) -> bool:
         """
-        判断是否是Markdown表格的分隔符行
+        Determine if yesMarkdownTable Separator Row
 
         Args:
-            line: 表格行内容
+            line: Table Row Content
 
         Returns:
-            bool: 是否为分隔符行
+            bool: Is Separator Row
         """
-        # 移除首尾的|符号
+        # Remove leading and trailing|Symbols
         content = line.strip().strip("|").strip()
         if not content:
             return False
 
-        # 分隔符行应该主要包含-和:字符
+        # The delimiter line should mainly contain-And:characters. 
         cells = [cell.strip() for cell in content.split("|")]
 
         for cell in cells:
             if not cell:
                 continue
-            # 每个单元格应该主要由-和:组成
+            # Each cell should be predominantly composed of-And:Composition
             clean_cell = cell.replace("-", "").replace(":", "").strip()
-            if clean_cell:  # 如果还有其他字符，则不是分隔符行
+            if clean_cell:  # Not a delimiter line if there are other characters
                 return False
 
         return True
 
     def _parse_alignments(self, separator_line: str) -> List[str]:
         """
-        从分隔符行解析列对齐方式
+        Parse column alignment from delimiter rows
 
         Args:
-            separator_line: 分隔符行
+            separator_line: Separator Row
 
         Returns:
-            List[str]: 对齐方式列表 ("left", "center", "right")
+            List[str]: Alignment List ("left", "center", "right")
         """
         alignments = []
         content = separator_line.strip().strip("|").strip()
@@ -839,34 +839,34 @@ class DocxTemplateRender(object):
                 alignments.append("left")
                 continue
 
-            # 判断对齐方式
+            # Determine alignment
             if cell.startswith(":") and cell.endswith(":"):
                 alignments.append("center")  # :---:
             elif cell.endswith(":"):
                 alignments.append("right")  # ---:
             else:
-                alignments.append("left")  # --- 或 :---
+                alignments.append("left")  # --- OR :---
 
         return alignments
 
     def _parse_table_row(self, line: str) -> List[str]:
         """
-        解析表格行，处理转义和特殊字符
+        Parse table rows, handle escapes and special characters
 
         Args:
-            line: 表格行内容
+            line: Table Row Content
 
         Returns:
-            List[str]: 单元格内容列表
+            List[str]: Cell Contents List
         """
-        # 移除首尾的|符号
+        # Remove leading and trailing|Symbols
         content = line.strip()
         if content.startswith("|"):
             content = content[1:]
         if content.endswith("|"):
             content = content[:-1]
 
-        # 分割单元格，但要处理转义的|
+        # Split cells, but handle escapes|
         cells = []
         current_cell = ""
         escaped = False
@@ -884,42 +884,42 @@ class DocxTemplateRender(object):
             else:
                 current_cell += char
 
-        # 添加最后一个单元格
-        if current_cell or cells:  # 处理空行
+        # Add last cell
+        if current_cell or cells:  # Process Empty Rows
             cells.append(current_cell.strip())
 
         return cells
 
     def _clean_cell_content(self, cell: str) -> str:
         """
-        清理单元格内容，处理Markdown格式
+        Clean up cell contents, processMarkdownFormat
 
         Args:
-            cell: 原始单元格内容
+            cell: Raw Cell Contents
 
         Returns:
-            str: 清理后的内容
+            str: Post-Cleanup Content
         """
         if not cell:
             return ""
 
-        # 移除多余空格
+        # Remove extra spaces
         cleaned = cell.strip()
 
-        # 处理Markdown格式标记（简化处理）
-        # 移除粗体标记
+        # <g id="Bold">Medical Treatment:</g>MarkdownFormatting tags (simplified processing)
+        # Remove bold mark
         cleaned = cleaned.replace("**", "")
-        # 移除斜体标记
+        # Remove italic mark
         cleaned = cleaned.replace("*", "")
-        # 移除代码标记
+        # Remove code marker
         cleaned = cleaned.replace("`", "")
 
-        # 处理链接格式 [text](url) -> text
+        # Working with link formats [text](url) -> text
         import re
 
         cleaned = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", cleaned)
 
-        # 限制长度
+        # Limit length
         if len(cleaned) > 100:
             cleaned = cleaned[:97] + "..."
 
@@ -927,69 +927,69 @@ class DocxTemplateRender(object):
 
     def _insert_markdown_table(self, paragraph, table_data: List[List[str]], alignments: List[str]):
         """
-        专门插入Markdown表格，支持对齐信息
+        Insert ExclusivelyMarkdownTable with support for alignment information
 
         Args:
-            paragraph: Word段落对象
-            table_data: 表格数据
-            alignments: 对齐信息列表
+            paragraph: WordParagraph object
+            table_data: Form Data
+            alignments: Alignment Info List
         """
         try:
             if not table_data:
-                paragraph.add_run("表格数据为空")
+                paragraph.add_run("Table data is empty")
                 return
 
             rows = len(table_data)
             cols = len(alignments)
 
-            # 简化处理：直接在段落位置插入表格
+            # Simplify processing: insert a table directly at the paragraph position
             paragraph_element = paragraph._element
             paragraph_parent = paragraph_element.getparent()
 
-            # 创建表格
+            # Create Table
             table = self.doc.add_table(rows=rows, cols=cols)
             table_element = table._tbl
 
-            # 直接在段落后插入表格
+            # Insert table directly after paragraph
             paragraph_index = list(paragraph_parent).index(paragraph_element)
             paragraph_parent.insert(paragraph_index + 1, table_element)
 
-            # 设置Markdown表格专用样式
+            # PengaturanMarkdownTable-specific styles
             try:
-                table.style = "Light List - Accent 1"  # 清爽的列表样式
+                table.style = "Light List - Accent 1"  # Refreshing list style
             except Exception:
                 try:
-                    table.style = "Table Grid"  # 备选样式
+                    table.style = "Table Grid"  # Alternative style
                 except Exception:
                     pass
 
-            # 填充表格数据并设置对齐
+            # Populate table data and set alignment
             for i, row_data in enumerate(table_data):
                 for j, cell_data in enumerate(row_data):
                     if j < cols:
                         cell = table.cell(i, j)
                         cell.text = str(cell_data)
 
-                        # 根据Markdown对齐信息设置单元格对齐
+                        # accordingMarkdownAlignment Info Set Cell Alignment
                         cell_paragraphs = cell.paragraphs
                         if cell_paragraphs and j < len(alignments):
                             alignment = alignments[j]
                             if alignment == "center":
-                                cell_paragraphs[0].alignment = 1  # 居中
+                                cell_paragraphs[0].alignment = 1  # Center
                             elif alignment == "right":
-                                cell_paragraphs[0].alignment = 2  # 右对齐
+                                cell_paragraphs[0].alignment = 2  # Halign Right
                             else:  # left
-                                cell_paragraphs[0].alignment = 0  # 左对齐
+                                cell_paragraphs[0].alignment = 0  # Align left
 
-            # Markdown表格样式：第一行通常是表头
+            # MarkdownTable style: The first row is usually the header
             if rows > 0:
                 for cell in table.rows[0].cells:
-                    # 表头样式
+                    # Header Style
                     for paragraph in cell.paragraphs:
                         for run in paragraph.runs:
                             run.bold = True
 
-                    # 设置表头背景色（浅灰色，更适合Markdown风格）
+                    # Set header background color (light gray, better forMarkdownSTYLE #
                     try:
                         from docx.oxml import parse_xml
 
@@ -1002,7 +1002,7 @@ class DocxTemplateRender(object):
                     except Exception:
                         pass
 
-            # 设置表格布局
+            # Set Table Layout
             try:
                 table.autofit = True
                 from docx.shared import Inches
@@ -1011,12 +1011,12 @@ class DocxTemplateRender(object):
             except Exception:
                 pass
 
-            # 设置更紧凑的行高（Markdown风格）
+            # Set a more compact line height (MarkdownSTYLE #
             try:
                 for row in table.rows:
-                    row.height = Inches(0.25)  # 比Excel表格更紧凑
+                    row.height = Inches(0.25)  # .ExcelForms are more compact
                     for cell in row.cells:
-                        # 更小的边距
+                        # Smaller margin
                         cell.margin_left = Inches(0.03)
                         cell.margin_right = Inches(0.03)
                         cell.margin_top = Inches(0.01)
@@ -1024,140 +1024,140 @@ class DocxTemplateRender(object):
             except Exception:
                 pass
 
-            logger.info(f"成功插入Markdown表格，大小: {rows}x{cols}，对齐: {alignments}")
+            logger.info(f"Succesfully insertedMarkdownTable, Size: {rows}x{cols}Align: {alignments}")
 
         except Exception as e:
-            paragraph.add_run(f"表格插入失败: {str(e)}")
-            logger.error(f"插入Markdown表格失败: {str(e)}")
+            paragraph.add_run(f"Table insertion failed: {str(e)}")
+            logger.error(f"InsertMarkdownTable failed: {str(e)}")
 
     def _insert_table_at_position(self, paragraph, table_data: List[List[str]]):
         """
-        在段落当前位置插入表格，表格会出现在段落的前面
+        Insert a table at the current position of the paragraph, and the table will appear before the paragraph
 
         Args:
-            paragraph: Word段落对象
-            table_data: 表格数据
+            paragraph: WordParagraph object
+            table_data: Form Data
         """
         try:
             if not table_data:
-                paragraph.add_run("[表格数据为空]")
+                paragraph.add_run("[Table data is empty]")
                 return
 
             rows = len(table_data)
             cols = max(len(row) for row in table_data) if table_data else 1
 
-            # 获取段落在文档中的位置
+            # Get the position of the paragraph in the document
             paragraph_element = paragraph._element
             paragraph_parent = paragraph_element.getparent()
             paragraph_index = list(paragraph_parent).index(paragraph_element)
 
-            # 创建表格
+            # Create Table
             table = self.doc.add_table(rows=rows, cols=cols)
             table_element = table._tbl
 
-            # 在段落之前插入表格（这样表格就出现在当前内容位置）
+            # Insert table before paragraph (so the table appears in the current content position)
             paragraph_parent.insert(paragraph_index, table_element)
 
-            # 填充表格数据并设置样式
+            # Fill in the table data and style it
             self._fill_and_style_table(table, table_data)
 
         except Exception as e:
-            paragraph.add_run(f"[表格插入失败: {str(e)}]")
-            logger.error(f"插入表格失败: {str(e)}")
+            paragraph.add_run(f"[Table insertion failed: {str(e)}]")
+            logger.error(f"Failed to insert table: {str(e)}")
 
     def _insert_table(self, paragraph, table_data: List[List[str]]):
         """
-        在段落后插入高质量的表格
+        Insert high quality table after paragraph
 
         Args:
-            paragraph: Word段落对象
-            table_data: 表格数据
+            paragraph: WordParagraph object
+            table_data: Form Data
         """
         try:
             if not table_data:
-                paragraph.add_run("[表格数据为空]")
+                paragraph.add_run("[Table data is empty]")
                 return
 
-            # 在段落后添加表格
+            # Add table after paragraph
             rows = len(table_data)
             cols = max(len(row) for row in table_data) if table_data else 1
 
-            # 简化处理：直接在段落位置插入表格
+            # Simplify processing: insert a table directly at the paragraph position
             paragraph_element = paragraph._element
             paragraph_parent = paragraph_element.getparent()
 
-            # 创建表格
+            # Create Table
             table = self.doc.add_table(rows=rows, cols=cols)
             table_element = table._tbl
 
-            # 直接在段落后插入表格
+            # Insert table directly after paragraph
             paragraph_index = list(paragraph_parent).index(paragraph_element)
             paragraph_parent.insert(paragraph_index + 1, table_element)
 
-            # 填充表格数据并设置样式
+            # Fill in the table data and style it
             self._fill_and_style_table(table, table_data)
 
         except Exception as e:
-            paragraph.add_run(f"[表格插入失败: {str(e)}]")
-            logger.error(f"插入表格失败: {str(e)}")
+            paragraph.add_run(f"[Table insertion failed: {str(e)}]")
+            logger.error(f"Failed to insert table: {str(e)}")
 
     def _fill_and_style_table(self, table, table_data: List[List[str]]):
         """
-        填充表格数据并设置样式
+        Fill in the table data and style it
         
         Args:
-            table: Word表格对象
-            table_data: 表格数据
+            table: WordTable Object
+            table_data: Form Data
         """
         rows = len(table_data)
-        # 计算最大列数，考虑到可能有空行的情况
+        # Calculate the maximum number of columns, taking into account possible empty rows
         cols = max((len(row) for row in table_data if row), default=1)
 
-        # 设置更专业的表格样式
+        # Set a more professional table style
         try:
-            # 尝试使用更好的内置样式
-            table.style = "Light Shading - Accent 1"  # 浅色阴影样式
+            # Try a better built-in style
+            table.style = "Light Shading - Accent 1"  # Light Shadow Style
         except Exception:
             try:
-                table.style = "Table Grid"  # 备选样式
+                table.style = "Table Grid"  # Alternative style
             except Exception:
-                pass  # 如果样式不存在，使用默认样式
+                pass  # If the style does not exist, use the default style
 
-        # 填充表格数据
+        # Populate table data
         for i, row_data in enumerate(table_data):
-            # 确保空行也能被正确处理
+            # Ensure that empty lines can also be handled correctly
             current_row = row_data if row_data else []
 
-            # 填充该行的所有列
+            # Populate all columns of the row
             for j in range(cols):
                 cell = table.cell(i, j)
                 if j < len(current_row):
                     cell_data = current_row[j]
                 else:
-                    cell_data = ""  # 空单元格
+                    cell_data = ""  # Empty Cells
 
                 cell.text = str(cell_data)
 
-                # 设置单元格对齐方式
+                # Set cell alignment
                 cell_paragraphs = cell.paragraphs
                 if cell_paragraphs:
-                    # 数字右对齐，文本左对齐
+                    # Numbers aligned right, text aligned left
                     cell_text = str(cell_data).strip()
                     if self._is_number(cell_text):
-                        cell_paragraphs[0].alignment = 2  # 右对齐
+                        cell_paragraphs[0].alignment = 2  # Halign Right
                     else:
-                        cell_paragraphs[0].alignment = 0  # 左对齐
+                        cell_paragraphs[0].alignment = 0  # Align left
 
-        # 设置表头样式（第一行）
+        # Set header style (first line)
         if rows > 0:
             for cell in table.rows[0].cells:
-                # 表头居中对齐
+                # Align Header Centered
                 for paragraph in cell.paragraphs:
-                    paragraph.alignment = 1  # 居中对齐
+                    paragraph.alignment = 1  # Center Alignment
                     for run in paragraph.runs:
                         run.bold = True
 
-                # 尝试设置表头背景色（如果支持）
+                # Try setting the header background color (if supported)
                 try:
                     from docx.oxml import parse_xml
 
@@ -1168,24 +1168,24 @@ class DocxTemplateRender(object):
                     )
                     cell._tc.get_or_add_tcPr().append(shading_elm)
                 except Exception:
-                    pass  # 如果设置背景色失败，继续执行
+                    pass  # If setting the background color fails, continue
 
-        # 自动调整列宽
+        # Auto Fit Column Width
         try:
             table.autofit = True
-            # 设置表格宽度为页面宽度
+            # Set table width to page width
             from docx.shared import Inches
 
-            table.width = Inches(6.5)  # 约A4页面宽度
+            table.width = Inches(6.5)  # ca.A4Width (%)
         except Exception:
             pass
 
-        # 设置行高和单元格边距
+        # Set row height and cell margin
         try:
             for row in table.rows:
-                row.height = Inches(0.3)  # 设置行高
+                row.height = Inches(0.3)  # Set Row Heights
                 for cell in row.cells:
-                    # 设置单元格边距
+                    # Set cell margin
                     cell.margin_left = Inches(0.05)
                     cell.margin_right = Inches(0.05)
                     cell.margin_top = Inches(0.02)
@@ -1193,95 +1193,95 @@ class DocxTemplateRender(object):
         except Exception:
             pass
 
-        logger.info(f"成功设置表格样式和数据，大小: {rows}x{cols}")
+        logger.info(f"Successfully set table style and data, size: {rows}x{cols}")
 
     def _create_table_element(self, table_data: List[List[str]]):
         """
-        创建表格元素
+        Create a table element
         
         Args:
-            table_data: 表格数据 [[row1_col1, row1_col2], [row2_col1, row2_col2]]
+            table_data: Form Data [[row1_col1, row1_col2], [row2_col1, row2_col2]]
         
         Returns:
-            表格元素
+            Form Elements
         """
         try:
-            # 处理完全无数据的情况：创建最小表格
+            # Handling completely data-free scenarios: creating minimal tables
             if not table_data:
-                logger.info("表格数据为None或空列表，创建最小表格：1x1")
+                logger.info("Table data isNoneor an empty list to create a minimal table:1x1")
                 table = self.doc.add_table(rows=1, cols=1)
-                table.cell(0, 0).text = ""  # 空单元格
+                table.cell(0, 0).text = ""  # Empty Cells
                 return table._tbl
 
-            # 计算表格尺寸：即使所有行都是空的，也要保持原始结构
+            # Calculate table size: keep original structure even if all rows are empty
             rows = len(table_data)
             if rows == 0:
-                logger.info("表格行数为0，创建最小表格：1x1")
+                logger.info("The number of rows in the table is0, create a minimal table:1x1")
                 table = self.doc.add_table(rows=1, cols=1)
                 table.cell(0, 0).text = ""
                 return table._tbl
 
-            # 计算最大列数，如果所有行都为空，默认为1列
+            # Calculate the maximum number of columns, if all rows are empty, the default is1column
             cols = max((len(row) for row in table_data if row), default=1)
 
-            logger.info(f"创建表格：{rows}行 x {cols}列")
+            logger.info(f"Create Table{rows}Parade x {cols}column")
             table = self.doc.add_table(rows=rows, cols=cols)
 
-            # 填充表格数据并设置样式
+            # Fill in the table data and style it
             self._fill_and_style_table(table, table_data)
 
             return table._tbl
 
         except Exception as e:
-            logger.error(f"表格元素创建失败: {str(e)}", exc_info=True)
+            logger.error(f"Form element creation failed: {str(e)}", exc_info=True)
             return None
 
     def _create_new_paragraph_after_table(self, parent, table_index, style_info=None):
         """
-        在表格后创建新段落
+        Create new paragraph after table
         
         Args:
-            parent: 父容器
-            table_index: 表格在父容器中的索引
-            style_info: 样式信息字典，用于应用到新段落
+            parent: Parent Container
+            table_index: Index of the table in the parent container
+            style_info: Style information dictionary for applying to new paragraphs
         
         Returns:
-            新段落对象
+            New Paragraph Object
         """
         try:
-            # 创建新段落
+            # Create a new paragraph
             new_paragraph = self.doc.add_paragraph()
 
-            # 应用样式信息
+            # Apply style information
             if style_info:
                 self._apply_style_info(new_paragraph, style_info)
-                alignment_info = f"继承样式，对齐={style_info.get('alignment', 'None')}"
+                alignment_info = f"inherit styles, aligning={style_info.get('alignment', 'None')}"
             else:
-                # 兜底：设置为左对齐
+                # Back of pocket: set to left alignment
                 from docx.enum.text import WD_ALIGN_PARAGRAPH
                 new_paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                alignment_info = "默认左对齐"
+                alignment_info = "Default left alignment"
 
             paragraph_element = new_paragraph._element
 
-            # 在表格后插入新段落
+            # Insert new paragraph after table
             parent.insert(table_index + 1, paragraph_element)
 
             return new_paragraph
 
         except Exception as e:
-            logger.error(f"创建新段落失败: {str(e)}", exc_info=True)
+            logger.error(f"Failed to create new paragraph: {str(e)}", exc_info=True)
             return None
 
     def _extract_paragraph_style_info(self, paragraph):
         """
-        提取段落的完整样式信息
+        Extract full style information for paragraphs
         
         Args:
-            paragraph: 段落对象
+            paragraph: Paragraph object
             
         Returns:
-            dict: 包含段落样式信息的字典
+            dict: Dictionary containing paragraph style information
         """
         try:
             style_info = {
@@ -1290,7 +1290,7 @@ class DocxTemplateRender(object):
                 'style_name': None
             }
 
-            # 提取段落格式信息
+            # Extract paragraph formatting information
             if hasattr(paragraph, 'paragraph_format'):
                 pf = paragraph.paragraph_format
                 style_info['paragraph_format'] = {
@@ -1302,30 +1302,30 @@ class DocxTemplateRender(object):
                     'first_line_indent': pf.first_line_indent,
                 }
 
-            # 提取样式名称
+            # Extract Style Name
             if hasattr(paragraph, 'style') and paragraph.style:
                 style_info['style_name'] = paragraph.style.name
 
             return style_info
 
         except Exception as e:
-            logger.warning(f"提取段落样式失败: {str(e)}")
+            logger.warning(f"Failed to extract paragraph style: {str(e)}")
             return {'alignment': None, 'paragraph_format': {}, 'style_name': None}
 
     def _apply_style_info(self, paragraph, style_info):
         """
-        将样式信息应用到段落
+        Apply style information to paragraphs
         
         Args:
-            paragraph: 目标段落对象
-            style_info: 样式信息字典
+            paragraph: Target Paragraph Object
+            style_info: Style Information Dictionary
         """
         try:
-            # 应用对齐方式
+            # Apply alignment
             if style_info.get('alignment') is not None:
                 paragraph.alignment = style_info['alignment']
 
-            # 应用段落格式
+            # Apply Paragraph Formatting
             paragraph_format = style_info.get('paragraph_format', {})
             if paragraph_format:
                 pf = paragraph.paragraph_format
@@ -1335,33 +1335,33 @@ class DocxTemplateRender(object):
                         try:
                             setattr(pf, attr_name, value)
                         except Exception:
-                            pass  # 忽略格式应用失败
+                            pass  # Ignore formatting application failed
 
-            # 应用样式名称
+            # Apply style name
             style_name = style_info.get('style_name')
             if style_name:
                 try:
                     paragraph.style = style_name
                 except Exception:
-                    pass  # 忽略样式应用失败
+                    pass  # Ignore style application failed
 
         except Exception as e:
-            logger.warning(f"应用样式信息失败: {str(e)}")
+            logger.warning(f"Failed to apply style information: {str(e)}")
 
     def _is_number(self, text: str) -> bool:
         """
-        判断文本是否为数字
+        Determine if the text is a number
 
         Args:
-            text: 要判断的文本
+            text: Text to judge
 
         Returns:
-            bool: 是否为数字
+            bool: Is numeric
         """
         if not text:
             return False
 
-        # 移除千分位分隔符和空格
+        # Remove thousands separator and spaces
         clean_text = text.replace(",", "").replace(" ", "").replace("%", "")
 
         try:
@@ -1372,22 +1372,22 @@ class DocxTemplateRender(object):
 
     def render(self, template_def, resources: Dict[str, List[Dict[str, Any]]] = None):
         """
-        渲染模板，支持图片和表格插入
+        Render templates for image and table insertion
 
         Args:
-            template_def: 模板定义列表
-            resources: 资源信息字典，包含图片、Excel文件和Markdown表格
+            template_def: Template Definition List
+            resources: A dictionary of resource information, including pictures,Exceldocumentation   andMarkdownTable Filter
         """
         doc = self.doc
 
-        # 如果没有传入resources，使用空字典
+        # If no incomingresources, using an empty dictionary
         if resources is None:
             resources = {"images": [], "excel_files": [], "csv_files": [], "markdown_tables": []}
 
-        # 创建占位符到资源的映射
+        # Create placeholder-to-resource mapping
         placeholder_map = {}
 
-        # 图片占位符映射
+        # Image placeholder mapping
         for img_info in resources.get("images", []):
             placeholder_map[img_info["placeholder"]] = {
                 "type": "image",
@@ -1396,73 +1396,73 @@ class DocxTemplateRender(object):
                 "resource_type": img_info["type"],
             }
 
-        # Excel文件占位符映射
+        # ExcelFile placeholder mapping
         for excel_info in resources.get("excel_files", []):
             placeholder_map[excel_info["placeholder"]] = {
                 "type": "excel",
                 "path": excel_info["local_path"],
                 "resource_type": excel_info["type"],
-                "table_data": excel_info.get("table_data", []),  # 添加table_data字段
-                "alignments": excel_info.get("alignments", None),  # 添加alignments字段
+                "table_data": excel_info.get("table_data", []),  # Tambahtable_dataData field
+                "alignments": excel_info.get("alignments", None),  # TambahalignmentsData field
             }
 
-        # CSV文件占位符映射
+        # CSVFile placeholder mapping
         for csv_info in resources.get("csv_files", []):
             placeholder_map[csv_info["placeholder"]] = {
                 "type": "csv",
-                "file_name": csv_info.get("file_name", "未知CSV文件"),
+                "file_name": csv_info.get("file_name", "UnknownCSVDoc."),
                 "table_data": csv_info.get("table_data", []),
                 "resource_type": csv_info.get("type", "content"),
             }
 
-        # Markdown表格占位符映射
+        # MarkdownTable placeholder mapping
         for table_info in resources.get("markdown_tables", []):
             placeholder_map[table_info["placeholder"]] = {"type": "markdown_table", "content": table_info["content"]}
 
-        # 原有的文本替换逻辑
+        # Original Text Replacement Logic
         for replace_info in template_def:
             k1 = replace_info[0]
             v1 = replace_info[1]
 
-            # 处理表格中的占位符
+            # Work with placeholders in tables
             for table in doc.tables:
                 for i, row in enumerate(table.rows):
                     for j, cell in enumerate(row.cells):
                         if k1 in cell.text:
                             for one in cell.paragraphs:
                                 if k1 in one.text:
-                                    # 检查是否包含需要特殊处理的占位符
+                                    # Checks for placeholders requiring special handling
                                     cell_text = one.text.replace(k1, v1)
 
-                                    # 处理占位符
+                                    # Processing Placeholders
                                     for placeholder, resource_info in placeholder_map.items():
                                         if placeholder in cell_text:
                                             if resource_info["type"] == "image":
-                                                # 在表格单元格中插入实际图片
+                                                # Insert Actual Picture in Table Cell
                                                 image_path = resource_info.get("local_path") or resource_info.get(
                                                     "path", "")
                                                 if image_path and os.path.exists(image_path):
                                                     try:
-                                                        # 清空单元格文本
+                                                        # Clear cell text
                                                         cell_text = cell_text.replace(placeholder, "")
-                                                        # 在单元格中插入图片
+                                                        # Insert Picture in Cell
                                                         self._insert_image_in_table_cell(cell, image_path)
-                                                        logger.info(f"✅ 表格单元格中成功插入图片: {image_path}")
+                                                        logger.info(f"✅ Picture successfully inserted in table cell: {image_path}")
                                                     except Exception as e:
-                                                        logger.error(f"❌ 表格单元格插入图片失败: {str(e)}")
-                                                        # 失败时显示文件名
+                                                        logger.error(f"❌ Table Cell Insert Picture Failed: {str(e)}")
+                                                        # Show file name on failure
                                                         cell_text = cell_text.replace(placeholder,
                                                                                       os.path.basename(image_path))
                                                 else:
-                                                    # 图片文件不存在，显示路径
+                                                    # Image file does not exist, display path
                                                     cell_text = cell_text.replace(placeholder, resource_info.get("path",
                                                                                                                  placeholder))
                                             elif resource_info["type"] == "excel":
-                                                cell_text = cell_text.replace(placeholder, "[Excel表格]")
+                                                cell_text = cell_text.replace(placeholder, "[ExcelTable Filter]")
                                             elif resource_info["type"] == "csv":
-                                                cell_text = cell_text.replace(placeholder, "[CSV表格]")
+                                                cell_text = cell_text.replace(placeholder, "[CSVTable Filter]")
                                             elif resource_info["type"] == "markdown_table":
-                                                cell_text = cell_text.replace(placeholder, "[Markdown表格]")
+                                                cell_text = cell_text.replace(placeholder, "[MarkdownTable Filter]")
 
                                     one.runs[0].text = cell_text
                                     for r_index, r in enumerate(one.runs):
@@ -1470,7 +1470,7 @@ class DocxTemplateRender(object):
                                             continue
                                         r.text = ""
 
-            # 处理段落中的占位符
+            # Processing Placeholders in Paragraphs
             for p in doc.paragraphs:
                 if k1 not in p.text:
                     continue
@@ -1483,7 +1483,7 @@ class DocxTemplateRender(object):
                     for j in range(i + 1, runs_cnt + 1):
                         part_text = "".join([r.text for r in p.runs[i:j]])
                         if k1 in part_text:
-                            # 找到最小的范围内包含k1的runs
+                            # Find the smallest range containingk1right of privacyruns
                             tmp_i, tmp_j = i, j
                             while tmp_i <= tmp_j:
                                 tmp_part_text = "".join([r.text for r in p.runs[tmp_i:tmp_j]])
@@ -1537,24 +1537,24 @@ class DocxTemplateRender(object):
                         _k, _v = replace_mapping[i - s]
                         p.runs[i].text = p.runs[i].text.replace(_k, _v)
 
-        # 所有变量替换完成后，统一处理资源占位符
+        # Unify resource placeholders after all variable replacements are complete
         self._process_resource_placeholders(doc, placeholder_map)
 
-        # 添加最终文档内容检查
+        # Add Final Document Content Check
         self._log_final_document_content(doc)
 
         return doc
 
     def _log_final_document_content(self, doc):
-        """检查最终文档内容"""
+        """Review final document content"""
         try:
-            # 检查是否有未处理的file content标签
+            # Check for unprocessedfile contentlabel
             for i, paragraph in enumerate(doc.paragraphs):
                 paragraph_text = paragraph.text.strip()
                 if paragraph_text and 'file content' in paragraph_text.lower():
-                    logger.warning(f"发现未处理的file content标签，段落{i}: {paragraph_text[:200]}...")
+                    logger.warning(f"Unprocessed foundfile contentLabel, paragraph{i}: {paragraph_text[:200]}...")
         except Exception as e:
-            logger.error(f"检查文档内容失败: {str(e)}")
+            logger.error(f"Failed to check document content: {str(e)}")
 
 
 def test_replace_string(template_file, kv_dict: dict, file_name: str):

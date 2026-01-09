@@ -13,11 +13,12 @@ import {
 } from "@/components/bs-icons";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { DatasetIcon } from "@/components/bs-icons/menu/dataset";
+import { DashboardIcon } from "@/components/bs-icons/menu/system";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
 import { locationContext } from "@/contexts/locationContext";
 import i18next from "i18next";
-import { Check, ChevronDown, Lock, MoonStar, Sun } from "lucide-react";
+import { Check, ChevronDown, GanttChartIcon, Lock, MoonStar, Sun } from "lucide-react";
 import { Suspense, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -122,6 +123,7 @@ export default function MainLayout() {
                                     {user.user_name} <ChevronDown className="inline-block mt-[-2px]" />
                                 </span>
                             }>
+                            {appConfig.benchMenu && isMenu('frontend') && <SelectHoverItem onClick={() => window.open('/workspace/')}><GanttChartIcon className="w-4 h-4 mr-1" /><span>{t('menu.workspace')}</span></SelectHoverItem>}
                             <SelectHoverItem onClick={JumpResetPage}><Lock className="w-4 h-4 mr-1" /><span>{t('menu.changePwd')}</span></SelectHoverItem>
                             <SelectHoverItem onClick={handleLogout}><QuitIcon className="w-4 h-4 mr-1" /><span>{t('menu.logout')}</span></SelectHoverItem>
                         </SelectHover>
@@ -131,21 +133,16 @@ export default function MainLayout() {
             <div className="flex" style={{ height: "calc(100vh - 64px)" }}>
                 <div className="relative z-10 bg-background-main h-full w-[184px] min-w-[184px] px-3  shadow-x1 flex justify-between text-center ">
                     <nav className="">
-                        {appConfig.benchMenu && (
-                            <a
-                                href="/workspace/"  // 直接使用根路径
-                                target="_blank"
-                                className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}
-                            >
-                                <ApplicationIcon className="h-6 w-6 my-[12px]" />
-                                <span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px] whitespace-nowrap">
-                                    {t('menu.workspace')}
-                                </span>
-                            </a>
-                        )}
                         {/* <NavLink to='/' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                             <ApplicationIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.app')}</span>
                         </NavLink> */}
+                        {
+                            isAdmin && <>
+                                <NavLink to='/dashboard ' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                                    <DashboardIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.dashboard')}</span>
+                                </NavLink>
+                            </>
+                        }
                         {
                             isMenu('build') &&
                             <NavLink to='/build' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`} >

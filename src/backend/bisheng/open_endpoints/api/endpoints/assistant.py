@@ -1,4 +1,4 @@
-# 免登录的助手相关接口
+# Login-free assistant related interface
 import json
 import time
 from typing import Optional
@@ -32,25 +32,25 @@ router = APIRouter(prefix='/assistant', tags=['OpenAPI', 'Assistant'])
 @router.post('/chat/completions')
 async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompletionReq):
     """
-    兼容openai接口格式，所有的错误必须返回非http200的状态码
-    和助手进行聊天
+    Compatible openaiInterface format, all errors must return non-http200Status code
+    Chat with your assistant
     
-    实现需求：
-    1. 判断助手调用的模型是否支持流式调用
-    2. 如果不支持则按原逻辑走
-    3. 如果支持并且stream=True，采用真实的流式调用
-    4. stream=False 还是按照原来的逻辑返回JSON
+    Fulfillment needs:
+    1. Determine if the model invoked by the assistant supports streaming calls
+    2. If not, follow the original logic
+    3. If supported andstream=True, with real streaming calls
+    4. stream=False Or return to the original logic?JSON
     """
     assistant_id = UUID(req_data.model).hex
     logger.info(
         f'act=assistant_chat_completions assistant_id={req_data.model}, stream={req_data.stream}, ip={get_request_ip(request)}'
     )
     try:
-        # 获取系统配置里配置的默认用户信息
+        # Get the default user information configured in the system configuration
         login_user = get_default_operator()
     except Exception as e:
         return ORJSONResponse(status_code=500, content=str(e), media_type='application/json')
-    # 查找助手信息
+    # Find Assistant Information
     try:
         assistant_info = await AssistantService.get_assistant_info(assistant_id, login_user)
     except Exception as e:
@@ -60,40 +60,40 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
 
     start_time = time.time()
     try:
-        # 覆盖温度设置
+        # Overlay Temperature Settings
         if req_data.temperature != 0:
             assistant_info.temperature = req_data.temperature
 
         chat_history = []
         question = ''
-        # 解析出对话历史和用户最新的问题
+        # Resolve the conversation history and the user's latest questions
         for one in req_data.messages:
             if one['role'] == 'user':
                 chat_history.append(HumanMessage(content=one['content']))
                 question = one['content']
             elif one['role'] == 'assistant':
                 chat_history.append(AIMessage(content=one['content']))
-        # 在历史记录里去除用户的问题
+        # Remove user issue from history
         if chat_history and chat_history[-1].content == question:
             chat_history = chat_history[:-1]
 
-        # 初始化助手agent
+        # Initialization Assistantagent
         agent = AssistantAgent(assistant_info, '', invoke_user_id=login_user.user_id)
         await agent.init_assistant()
 
-        # 判断模型是否支持流式调用
+        # Determine if the model supports streaming calls
         model_supports_streaming = _check_model_supports_streaming(agent)
 
         logger.debug(
             f'act=assistant_chat_completions model_supports_streaming={model_supports_streaming}, stream={req_data.stream}, llm_type={type(agent.llm)}')
-        # 非流式调用或模型不支持流式
+        # Streaming is not supported for non-streaming calls or models
         if not req_data.stream or not model_supports_streaming:
             answer = await agent.run(question, chat_history)
             answer = answer[-1].content
 
             openai_resp_id = generate_uuid()
 
-            # 将结果包装成openai的数据格式
+            # Package the results asopenaiData Format
             openai_resp = OpenAIChatCompletionResp(
                 id=openai_resp_id,
                 object='chat.completion',
@@ -105,11 +105,11 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
                 })],
             )
 
-            # 非流式直接返回结果
+            # Non-streaming direct return results
             if not req_data.stream:
                 return openai_resp
 
-            # 用户要求流式但模型不支持，使用伪流式返回
+            # The user requests streaming but the model does not support it, use pseudo-streaming to return
             openai_resp.object = 'chat.completion.chunk'
             openai_resp.choices = [OpenAIChoice(index=0, delta={'content': answer})]
 
@@ -119,16 +119,16 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
 
             return StreamingResponse(_pseudo_event_stream(), media_type='text/event-stream')
 
-        # 模型支持流式且用户要求流式，使用真实的流式调用
+        # Model supports streaming and user-requested streaming, using real streaming calls
         openai_resp_id = generate_uuid()
         logger.info(f'act=assistant_chat_completions_streaming openai_resp_id={openai_resp_id}')
 
         async def _streaming_event_generator():
-            """真实的流式事件生成器"""
-            logger.debug(f'[API流式] _streaming_event_generator开始执行')
+            """Real Streaming Event Generator"""
+            logger.debug(f'[APIStreamed] _streaming_event_generatorto process')
             try:
 
-                # 使用真正的流式调用
+                # Use True Streaming Calls
                 chunk_counter = 0
                 try:
                     async for message_chunk in agent.astream(question, chat_history):
@@ -137,7 +137,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
                         if not message_chunk:
                             logger.debug(f'Empty message_chunk received')
                             continue
-                        # 获取最新的消息
+                        # Get the latest news
                         latest_message = message_chunk[-1] if isinstance(message_chunk, list) else message_chunk
                         if not isinstance(latest_message, AIMessageChunk):
                             continue
@@ -155,16 +155,16 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
                                 "finish_reason": None
                             }]
                         }
-                        # 使用更安全的JSON序列化，避免传输截断
+                        # Use saferJSONSerialization to avoid transmission truncation
                         json_str = json.dumps(chunk_data, ensure_ascii=False, separators=(',', ':'))
                         yield f'data: {json_str}\n\n'
                 except Exception as astream_error:
-                    logger.exception('[API流式] agent.astream()调用出错')
+                    logger.exception('[APIStreamed] agent.astream()Error calling')
                     raise astream_error
 
-                logger.info(f'[API流式] astream循环结束，总共处理了{chunk_counter}个chunk')
+                logger.info(f'[APIStreamed] astreamLoop ended, total processed{chunk_counter}Pcschunk')
 
-                # 发送结束信号
+                # Send End Signal
                 end_chunk = {
                     "id": openai_resp_id,
                     "object": "chat.completion.chunk",
@@ -181,7 +181,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
 
             except Exception as exc:
                 logger.error(f'Streaming error: {exc}')
-                # 发送错误信息
+                # Send error message
                 error_chunk = {
                     "id": openai_resp_id,
                     "object": "chat.completion.chunk",
@@ -189,7 +189,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
                     "model": req_data.model,
                     "choices": [{
                         "index": 0,
-                        "delta": {"content": f"错误: {str(exc)}"},
+                        "delta": {"content": f"Error-free: {str(exc)}"},
                         "finish_reason": "stop"
                     }]
                 }
@@ -197,7 +197,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
                 yield 'data: [DONE]\n\n'
 
         try:
-            logger.info(f'[API流式] 创建StreamingResponse，生成器函数: {_streaming_event_generator}')
+            logger.info(f'[APIStreamed] BuatStreamingResponse, generator function: {_streaming_event_generator}')
             return StreamingResponse(_streaming_event_generator(),
                                      media_type='text/event-stream')
         except Exception as exc:
@@ -231,40 +231,40 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
 
 def _check_model_supports_streaming(agent: AssistantAgent) -> bool:
     """
-    检查助手调用的模型是否支持流式调用
+    Check whether the model called by the helper supports streaming calls
     Args:
-        agent: 助手代理实例
+        agent: Assistant Proxy Instance
     Returns:
-        bool: 是否支持流式调用
+        bool: Does it support streaming calls?
     """
     try:
-        # 检查agent的LLM是否支持流式
+        # Othersagentright of privacyLLMDoes it support streaming?
         if hasattr(agent, 'llm') and agent.llm:
-            # 检查BishengLLM的streaming属性
+            # OthersBishengLLMright of privacystreamingProperty
             if hasattr(agent.llm, 'streaming'):
                 return agent.llm.streaming
-            # 检查底层llm的stream属性
+            # Check Bottom Layerllmright of privacystreamProperty
             elif hasattr(agent.llm, 'llm') and hasattr(agent.llm.llm, 'streaming'):
                 return agent.llm.llm.streaming
 
-        # 如果无法判断，默认支持流式（大多数现代LLM都支持）
+        # If it cannot be determined, streaming is supported by default (most modernLLMare supported)
         return True
     except Exception as e:
         logger.warning(f'Failed to check streaming support: {e}')
-        # 出错时默认支持流式
+        # Streaming is supported by default when an error occurs
         return True
 
 
 @router.get('/info/{assistant_id}')
 async def get_assistant_info(request: Request, assistant_id: UUID):
     """
-    获取助手信息, 用系统配置里的default_operator.user的用户信息来做权限校验
+    Getting Helper Information, Use the system configuration indefault_operator.userUser information to verify permissions
     """
     assistant_id = assistant_id.hex
     logger.info(f'act=get_default_operator assistant_id={assistant_id}, ip={get_request_ip(request)}')
-    # 判断下配置是否打开
+    # Determine if the configuration under is turned on
     if not settings.get_from_db("default_operator").get("enable_guest_access"):
-        raise HTTPException(status_code=403, detail="无权限访问")
+        raise HTTPException(status_code=403, detail="No permission to access")
     login_user = get_default_operator()
     res = await AssistantService.get_assistant_info(assistant_id, login_user)
     return resp_200(data=res)
@@ -272,19 +272,19 @@ async def get_assistant_info(request: Request, assistant_id: UUID):
 
 @router.get('/list', status_code=200)
 def get_assistant_list(request: Request,
-                       name: str = Query(default=None, description='助手名称，模糊匹配, 包含描述的模糊匹配'),
-                       tag_id: int = Query(default=None, description='标签ID'),
-                       page: Optional[int] = Query(default=1, gt=0, description='页码'),
-                       limit: Optional[int] = Query(default=10, gt=0, description='每页条数'),
-                       status: Optional[int] = Query(default=None, description='是否上线状态'),
+                       name: str = Query(default=None, description='assistant name, fuzzy matching, Fuzzy matches with description'),
+                       tag_id: int = Query(default=None, description='labelID'),
+                       page: Optional[int] = Query(default=1, gt=0, description='Page'),
+                       limit: Optional[int] = Query(default=10, gt=0, description='Listings Per Page'),
+                       status: Optional[int] = Query(default=None, description='Is online status'),
                        user_id: int = None):
     """
-    公开的获取技能信息的接口
+    Exposed interfaces for obtaining skill information
     """
     logger.info(f'public_get_list ip: {request.client.host} user_id:{user_id}')
 
     if not settings.get_from_db("default_operator").get("enable_guest_access"):
-        raise HTTPException(status_code=403, detail="无权限访问")
+        raise HTTPException(status_code=403, detail="No permission to access")
     login_user = get_default_operator()
     data, total = AssistantService.get_assistant(login_user, name, status, tag_id, page, limit)
     return resp_200(PageData(data=data, total=total))
@@ -293,7 +293,7 @@ def get_assistant_list(request: Request,
 @router.websocket('/chat/{assistant_id}')
 async def chat(*, websocket: WebSocket, assistant_id: str, chat_id: Optional[str] = None):
     """
-    助手的ws免登录接口
+    Assistant'swsLogin-Free Interface
     """
     logger.info(f'act=assistant_chat_ws assistant_id={assistant_id}, ip={get_request_ip(websocket)}')
     login_user = get_default_operator()

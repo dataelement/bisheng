@@ -136,7 +136,7 @@ export default function GlobalVarItem({ data, onChange, i18nPrefix }) {
                     <div className="space-y-2">
                         {/* Table Header */}
                         <div className="grid grid-cols-6 gap-4 text-xs text-muted-foreground">
-                            <div className="col-span-2">{t('variableName')}</div>
+                            <div className="col-span-2">{t('flow.variableName', { ns: 'bs' })}</div>
                             <div className="col-span-3">{t('variableValue')}</div>
                         </div>
 
@@ -164,7 +164,7 @@ export default function GlobalVarItem({ data, onChange, i18nPrefix }) {
                                 <TooltipProvider>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                            <div className="text-sm text-foreground cursor-default truncate col-span-3 overflow-hidden">
+                                            <div className={`text-sm text-foreground cursor-default truncate overflow-hidden ${hoveredRow === variable.key ? 'col-span-3' : 'col-span-4'}`}>
                                                 {variable.value}
                                             </div>
                                         </TooltipTrigger>
@@ -208,7 +208,7 @@ export default function GlobalVarItem({ data, onChange, i18nPrefix }) {
                         <div className="space-y-2">
                             <div className="flex items-center gap-2">
                                 <Label className="flex items-center bisheng-label">
-                                    {t('variableName')}
+                                    {t('flow.variableName', { ns: 'bs' })}
                                     <QuestionTooltip content={t('variableNameRuleTip')} />
                                 </Label>
                             </div>

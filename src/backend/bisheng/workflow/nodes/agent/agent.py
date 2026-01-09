@@ -26,9 +26,9 @@ agent_executor_dict = {
 
 
 class SqlAgentParams(BaseModel):
-    """ SQL Agent 参数模型 """
+    """ SQL Agent Param Model """
     database_engine: typing.Optional[str] = Field("mysql",
-                                                  description="数据库类型，支持mysql, db2, postgres, gaussdb, oracle")
+                                                  description="Database type, supportmysql, db2, postgres, gaussdb, oracle")
     db_username: str
     db_password: str
     db_address: str
@@ -38,7 +38,7 @@ class SqlAgentParams(BaseModel):
     @field_validator("database_engine")
     @classmethod
     def validate_database_engine(cls, v):
-        # 转换为小写
+        # Convert to lowercase
         if v:
             v = v.lower()
             if v not in ['mysql', 'db2', 'postgres', 'gaussdb', 'oracle', 'postgresql']:
@@ -51,10 +51,10 @@ class AgentNode(BaseNode):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # 判断是单次还是批量
+        # Determine if it is a single or batch
         self._tab = self.node_data.tab['value']
 
-        # 解析prompt
+        # analyzingprompt
         self._system_prompt = PromptTemplateParser(template=self.node_params['system_prompt'])
         self._system_variables = self._system_prompt.extract()
         self._user_prompt = PromptTemplateParser(template=self.node_params['user_prompt'])
@@ -68,7 +68,7 @@ class AgentNode(BaseNode):
         self._tool_invoke_list = []
         self._log_reasoning_content = []
 
-        # 聊天消息
+        # Chat Message
         self._chat_history_flag = self.node_params['chat_history_flag']['value'] > 0
         self._chat_history_num = self.node_params['chat_history_flag']['value']
 
@@ -79,7 +79,7 @@ class AgentNode(BaseNode):
                                                     app_type=ApplicationTypeEnum.WORKFLOW,
                                                     user_id=self.user_id)
 
-        # 是否输出结果给用户
+        # Whether to output the results to the user
         self._output_user = self.node_params.get('output_user', False)
 
         # tools
@@ -87,13 +87,13 @@ class AgentNode(BaseNode):
 
         # knowledge
         # self._knowledge_ids = self.node_params['knowledge_id']
-        # 判断是知识库还是临时文件列表
+        # Determine whether it is a knowledge base or a temporary file list
         self._knowledge_type = self.node_params['knowledge_id']['type']
         self._knowledge_ids = [
             one['key'] for one in self.node_params['knowledge_id']['value']
         ]
 
-        # 是否支持nl2sql
+        # Supported or notnl2sql
         self._sql_agent_params = self.node_params.get('sql_agent', None)
         self._sql_agent = SqlAgentParams.model_validate(self.node_params['sql_agent']) if (
                 self._sql_agent_params and self._sql_agent_params.get("open", False)) else None
@@ -106,15 +106,15 @@ class AgentNode(BaseNode):
         self._agent = None
 
     def _init_agent(self, system_prompt: str):
-        # 获取配置的助手模型列表
+        # Get a list of configured helper models
         assistant_llm = LLMService.sync_get_assistant_llm()
         if not assistant_llm.llm_list:
-            raise Exception('助手推理模型列表为空')
+            raise Exception('Assistant reasoning model list is empty')
         default_llm = [
             one for one in assistant_llm.llm_list if one.model_id == self.node_params['model_id']
         ]
         if not default_llm:
-            raise Exception('选择的推理模型不在助手推理模型列表内')
+            raise Exception('The selected inference model is not in the list of assistant inference models')
         default_llm = default_llm[0]
         self._agent_executor_type = default_llm.agent_executor_type
         knowledge_retriever = {
@@ -170,7 +170,7 @@ class AgentNode(BaseNode):
             else:
                 file_metadata_list = self.get_other_node_variable(knowledge_id)
                 if not file_metadata_list:
-                    # 没有上传文件，则不去检索
+                    # Do not retrieve if no file has been uploaded
                     continue
                 description = ''
                 for one in file_metadata_list:
@@ -188,10 +188,10 @@ class AgentNode(BaseNode):
         return tools
 
     def init_file_milvus(self, file_metadata: Dict) -> BaseRetriever:
-        """ 初始化用户选择的临时文件的milvus """
+        """ Initialize the temporary file selected by the usermilvus """
         embeddings = LLMService.get_knowledge_default_embedding(self.user_id)
         if not embeddings:
-            raise Exception('没有配置默认的embedding模型')
+            raise Exception('No default configuredembeddingModels')
         file_ids = [file_metadata['document_id']]
         collection_name = self.get_milvus_collection_name(getattr(embeddings, 'model_id'))
         vector_client = KnowledgeRag.init_milvus_vectorstore(collection_name=collection_name, embeddings=embeddings)
@@ -204,7 +204,7 @@ class AgentNode(BaseNode):
             search_kwargs={"filter": [{"term": {"metadata.document_id": file_metadata['document_id']}}]})
 
     def _init_sql_address(self) -> str:
-        """ 初始化 SQL 数据库地址 """
+        """ Inisialisasi SQL Database Address """
         if not self._sql_agent:
             return ''
         if self._sql_agent.database_engine == 'mysql':
@@ -285,7 +285,7 @@ class AgentNode(BaseNode):
 
         logger.debug('agent_over result={}', ret)
         if self._output_user:
-            # 非stream 模式，处理结果
+            # Nonstream Mode, processing results
             for k, v in ret.items():
                 answer = v
                 self.graph_state.save_context(content=answer, msg_sender='AI')
@@ -304,10 +304,10 @@ class AgentNode(BaseNode):
                 one_ret.insert(0,
                                {"key": "batch_variable", "value": self._batch_variable_list[index], "type": "variable"})
 
-            # 处理工具调用日志
+            # Handler Call Log
             one_ret.extend(self.parse_tool_log(self._tool_invoke_list[index]))
             if self._log_reasoning_content[index]:
-                one_ret.append({"key": "思考内容", "value": self._log_reasoning_content[index], "type": "params"})
+                one_ret.append({"key": "Thinking about content", "value": self._log_reasoning_content[index], "type": "params"})
             one_ret.append({"key": f'{self.id}.{k}', "value": v, "type": "variable"})
             ret.append(one_ret)
             index += 1
@@ -345,15 +345,15 @@ class AgentNode(BaseNode):
                   tool_invoke_list: list = None) -> (str, str):
         """
         params:
-            input_variable: 输入变量，如果是batch，则需要传入一个变量的key，否则为None
-            unique_id: 节点执行唯一id
-            output_key: 输出变量的key
-            tool_invoke_list: 工具调用日志
+            input_variable: Input variables, if yesbatchthen you need to pass in a variablekey, otherwiseNone
+            unique_id: Node Execute Uniqueid
+            output_key: Output Variableskey
+            tool_invoke_list: Tool Call Log
         return:
-            0: 输出给用户的结果
-            1: 模型思考的过程
+            0: Output results to user
+            1: Process of model thinking
         """
-        # 说明是引用了批处理的变量, 需要把变量的值替换为用户选择的变量
+        # Description is a variable that references a batch, The value of the variable needs to be replaced with the variable selected by the user
         special_variable = f'{self.id}.batch_variable'
         variable_map = {}
         for one in self._user_variables:

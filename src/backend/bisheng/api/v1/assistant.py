@@ -26,21 +26,21 @@ chat_manager = ChatManager()
 
 @router.get('')
 def get_assistant(*,
-                  name: str = Query(default=None, description='助手名称，模糊匹配, 包含描述的模糊匹配'),
-                  tag_id: int = Query(default=None, description='标签ID'),
-                  page: Optional[int] = Query(default=1, gt=0, description='页码'),
-                  limit: Optional[int] = Query(default=10, gt=0, description='每页条数'),
-                  status: Optional[int] = Query(default=None, description='是否上线状态'),
+                  name: str = Query(default=None, description='assistant name, fuzzy matching, Fuzzy matches with description'),
+                  tag_id: int = Query(default=None, description='labelID'),
+                  page: Optional[int] = Query(default=1, gt=0, description='Page'),
+                  limit: Optional[int] = Query(default=10, gt=0, description='Listings Per Page'),
+                  status: Optional[int] = Query(default=None, description='Is online status'),
                   login_user: UserPayload = Depends(UserPayload.get_login_user)):
     data, total = AssistantService.get_assistant(login_user, name, status, tag_id, page, limit)
     return resp_200(PageData(data=data, total=total))
 
 
-# 获取某个助手的详细信息
+# Get the details of an assistant
 @router.get('/info/{assistant_id}')
 async def get_assistant_info(*, assistant_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user),
                              share_link: Union['ShareLink', None] = Depends(header_share_token_parser)):
-    """获取助手信息"""
+    """Getting Helper Information"""
     res = await AssistantService.get_assistant_info(assistant_id, login_user, share_link)
     return resp_200(data=res)
 
@@ -50,7 +50,7 @@ def delete_assistant(*,
                      request: Request,
                      assistant_id: str,
                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """删除助手"""
+    """Delete Assistant"""
     AssistantService.delete_assistant(request, login_user, assistant_id)
     return resp_200()
 
@@ -79,8 +79,8 @@ async def update_assistant(*,
 @router.post('/status')
 async def update_status(*,
                         request: Request,
-                        assistant_id: str = Body(description='助手唯一ID', alias='id'),
-                        status: int = Body(description='是否上线，1:上线，0:下线'),
+                        assistant_id: str = Body(description='Assistant UniqueID', alias='id'),
+                        status: int = Body(description='whether to go online: 0 offline, 1 online'),
                         login_user: UserPayload = Depends(UserPayload.get_login_user)):
     await AssistantService.update_status(request, login_user, assistant_id, status)
     return resp_200()
@@ -88,9 +88,9 @@ async def update_status(*,
 
 @router.post('/auto/task')
 async def auto_update_assistant_task(*, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
-                                     assistant_id: str = Body(description='助手唯一ID'),
-                                     prompt: str = Body(description='用户填写的提示词')):
-    # 存入缓存
+                                     assistant_id: str = Body(description='Assistant UniqueID'),
+                                     prompt: str = Body(description='User-filled prompts')):
+    # Deposit Cache
     task_id = generate_uuid()
     redis_client = await get_redis_client()
     await redis_client.aset(f'auto_update_task:{task_id}', {
@@ -102,9 +102,9 @@ async def auto_update_assistant_task(*, request: Request, login_user: UserPayloa
     })
 
 
-# 自动优化prompt和工具选择
+# Nicepromptand tool selection
 @router.get('/auto', response_class=StreamingResponse)
-async def auto_update_assistant(*, task_id: str = Query(description='优化任务唯一ID'),
+async def auto_update_assistant(*, task_id: str = Query(description='Optimization Task UniqueID'),
                                 login_user: UserPayload = Depends(UserPayload.get_login_user)):
     redis_client = await get_redis_client()
     task = await redis_client.aget(f'auto_update_task:{task_id}')
@@ -125,11 +125,11 @@ async def auto_update_assistant(*, task_id: str = Query(description='优化任�
     return StreamingResponse(event_stream(), media_type='text/event-stream')
 
 
-# 更新助手的提示词
+# Update assistant prompts
 @router.post('/prompt')
 async def update_prompt(*,
-                        assistant_id: str = Body(description='助手唯一ID', alias='id'),
-                        prompt: str = Body(description='用户使用的prompt'),
+                        assistant_id: str = Body(description='Assistant UniqueID', alias='id'),
+                        prompt: str = Body(description='Used by Usersprompt'),
                         login_user: UserPayload = Depends(UserPayload.get_login_user)):
     AssistantService.update_prompt(assistant_id, prompt, login_user)
     return resp_200()
@@ -137,8 +137,8 @@ async def update_prompt(*,
 
 @router.post('/flow')
 async def update_flow_list(*,
-                           assistant_id: str = Body(description='助手唯一ID', alias='id'),
-                           flow_list: List[str] = Body(description='用户选择的技能列表'),
+                           assistant_id: str = Body(description='Assistant UniqueID', alias='id'),
+                           flow_list: List[str] = Body(description='List of user-selected skills'),
                            login_user: UserPayload = Depends(UserPayload.get_login_user)):
     AssistantService.update_flow_list(assistant_id, flow_list, login_user)
     return resp_200()
@@ -146,15 +146,15 @@ async def update_flow_list(*,
 
 @router.post('/tool')
 async def update_tool_list(*,
-                           assistant_id: str = Body(description='助手唯一ID', alias='id'),
-                           tool_list: List[int] = Body(description='用户选择的工具列表'),
+                           assistant_id: str = Body(description='Assistant UniqueID', alias='id'),
+                           tool_list: List[int] = Body(description='List of tools selected by the user'),
                            login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ 更新助手选择的工具列表 """
+    """ Update the list of tools selected by the assistant """
     AssistantService.update_tool_list(assistant_id, tool_list, login_user)
     return resp_200()
 
 
-# 助手对话的websocket连接
+# Assistant Dialogue'swebsocketCONNECT
 @router.websocket('/chat/{assistant_id}')
 async def chat(*,
                assistant_id: str,

@@ -391,7 +391,7 @@ def build_pdf_semantic_loader_fields():
                               show=True,
                               name='file_path',
                               value='',
-                              display_name='pdf文件')
+                              display_name='pdfDoc.')
     password = TemplateField(field_type='str',
                              required=True,
                              show=True,

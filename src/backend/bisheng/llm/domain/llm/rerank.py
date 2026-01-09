@@ -35,12 +35,12 @@ def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> d
 
 
 _node_type: Dict = {
-    # 开源推理框架
+    # Open source inference framework
     LLMServerType.XINFERENCE.value: {'client': XinferenceRerank, 'params_handler': _get_xinference_params},
     LLMServerType.LLAMACPP.value: {'client': CommonRerank, 'params_handler': _get_common_params},
     LLMServerType.VLLM.value: {'client': CommonRerank, 'params_handler': _get_common_params},
 
-    # 官方api服务
+    # OfficalapiSERVICES
     LLMServerType.QWEN.value: {'client': DashScopeRerank, 'params_handler': _get_qwen_params},
     LLMServerType.QIAN_FAN.value: {'client': CommonRerank, 'params_handler': _get_common_params},
     LLMServerType.SILICON.value: {'client': CommonRerank, 'params_handler': _get_common_params},
@@ -59,7 +59,7 @@ class BishengRerank(BishengBase, BaseDocumentCompressor):
         super().__init__(**kwargs)
         self.model_id = kwargs.get('model_id')
         if not self.model_id:
-            raise Exception('没有找到rerank模型配置')
+            raise Exception('No bulkpost found in Trashrerankmodel config')
         if "model_info" in kwargs and "server_info" in kwargs:
             self._init_client(model_info=kwargs.pop('model_info'), server_info=kwargs.pop('server_info'), **kwargs)
         else:
@@ -69,18 +69,18 @@ class BishengRerank(BishengBase, BaseDocumentCompressor):
     def _init_client(self, model_info, server_info, **kwargs):
         ignore_online = kwargs.get('ignore_online', False)
         if not model_info:
-            raise Exception('rerank模型配置已被删除，请重新配置模型')
+            raise Exception('rerankModel configuration has been deleted, please reconfigure the model')
         if not server_info:
-            raise Exception('服务提供方配置已被删除，请重新配置rerank模型')
+            raise Exception('Service provider configuration has been deleted, please reconfigurererankModels')
         if model_info.model_type != LLMModelType.RERANK.value:
-            raise Exception(f'只支持Rerank类型的模型，不支持{model_info.model_type}类型的模型')
+            raise Exception(f'Support onlyRerankModel of type, not supported{model_info.model_type}Type of model')
         if not ignore_online and not model_info.online:
-            raise Exception(f'{server_info.name}下的{model_info.model_name}模型已下线，请联系管理员上线对应的模型')
+            raise Exception(f'{server_info.name}under{model_info.model_name}The model is offline, please contact the administrator to launch the corresponding model')
         logger.debug(f'init_bisheng_rerank: server_id: {server_info.id}, model_id: {model_info.id}')
 
         node_conf = _node_type.get(server_info.type)
         if not node_conf:
-            raise Exception(f'不支持rerank的服务提供方：{server_info.type}')
+            raise Exception(f'Not supportedrerankService Provider:{server_info.type}')
         self.model_info = model_info
         self.model_name = model_info.model_name
         self.server_info = server_info

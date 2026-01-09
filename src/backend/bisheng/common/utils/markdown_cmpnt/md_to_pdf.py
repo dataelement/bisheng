@@ -1,22 +1,22 @@
 """
-Typora 风格的 Markdown 转 PDF 转换器
+Typora Style Markdown Transfer PDF Converter
 
-使用 Playwright (Chromium) 将 HTML 渲染为 PDF 的专业 Markdown 转 PDF 导出器，
-支持 Typora 风格样式和数学表达式的 MathJax 渲染。
+Use Playwright (Chromium) will be HTML Render As PDF Professional Markdown Transfer PDF Exporter
+Support Typora of style styles and mathematical expressions MathJax rendered
 
-功能特性:
-- 通过无头 Chromium 将 Markdown 文件或字符串转换为样式化的 PDF
-- 包含默认的 Typora 风格 CSS 样式
-- 支持自定义 CSS 覆盖
-- MathJax 集成用于 LaTeX 数学渲染
-- 可配置的页面格式和边距
-- 健壮的错误处理和资源管理
+Feature:
+- Pass Headless Chromium will be Markdown Convert file or string to stylized PDF
+- Contains the default Typora Style CSS Styles
+- Supports customization CSS Override
+- MathJax Integration for LaTeX Mathematical rendering
+- Configurable page formatting and margins
+- Robust error handling and resource management
 
-依赖项:
+dependent:
     pip install playwright markdown
     playwright install chromium
 
-使用示例:
+Usage Sample:
     from to_pdf import MarkdownToPdfConverter
     converter = MarkdownToPdfConverter()
     converter.convert_file("README.md.md", "output.pdf")
@@ -32,12 +32,12 @@ from bisheng.common.utils.markdown_cmpnt.md_to_docx.parser.ext_md_syntax import 
 
 logger = logging.getLogger(__name__)
 
-# 依赖导入及错误处理
+# Dependent Import and Error Handling
 try:
     import markdown
 except ImportError as e:
-    logger.error("缺少必需的依赖项: %s", e)
-    raise ImportError("请安装 'markdown' 包: pip install markdown") from e
+    logger.error("Required dependency is missing: %s", e)
+    raise ImportError("Please Install 'markdown' Package: pip install markdown") from e
 
 try:
     from playwright.sync_api import sync_playwright
@@ -45,7 +45,7 @@ try:
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
-    logger.warning("Playwright 不可用。请安装: pip install playwright && playwright install chromium")
+    logger.warning("Playwright Not available. Please install: pip install playwright && playwright install chromium")
 
 DEFAULT_CSS = r"""
 top: 6px;
@@ -175,21 +175,21 @@ HTML_TEMPLATE = r"""
 
 
 class MarkdownToPdfError(Exception):
-    """Markdown 转 PDF 转换错误的自定义异常。"""
+    """Markdown Transfer PDF Conversion error custom exception."""
     pass
 
 
 class MarkdownToPdfConverter:
     """
-    具有 Typora 风格渲染的强大 Markdown 转 PDF 转换器。
+    Has Typora The power of style rendering Markdown Transfer PDF Converter
 
-    此类提供将 Markdown 文件或字符串转换为 PDF 的方法，
-    使用 Playwright 进行渲染，并包含全面的错误处理。
+    Such provision will Markdown Convert file or string to PDF short circuit exist. 
+    Use Playwright Render and include comprehensive error handling.
     """
 
     SUPPORTED_PAGE_FORMATS = {'A4', 'A3', 'A5', 'Letter', 'Legal', 'Tabloid'}
     DEFAULT_MARKDOWN_EXTENSIONS = [ExtMdSyntax(), 'extra', 'codehilite', 'toc', 'tables', 'sane_lists', 'fenced_code']
-    DEFAULT_TIMEOUT = 60000  # 毫秒
+    DEFAULT_TIMEOUT = 60000  # ms
 
     def __init__(self,
                  default_css: Optional[str] = None,
@@ -197,131 +197,131 @@ class MarkdownToPdfConverter:
                  page_format: str = 'A4',
                  margin_mm: int = 20):
         """
-        使用默认设置初始化转换器。
+        Initializes the converter with default settings.
 
         Args:
-            default_css: 用于替代内置 Typora 样式的自定义默认 CSS
-            enable_math: 是否启用 MathJax 数学表达式支持
-            page_format: 默认页面格式 (A4, A3, A5, Letter, Legal, Tabloid)
-            margin_mm: 默认边距（毫米）
+            default_css: Used instead of built-in Typora Custom Default for Styles CSS
+            enable_math: enabled MathJax Math expression support
+            page_format: Default page format (A4, A3, A5, Letter, Legal, Tabloid)
+            margin_mm: Default margin (mm)
 
         Raises:
-            MarkdownToPdfError: 如果 Playwright 不可用或参数无效
+            MarkdownToPdfError: Automatically close purchase order after Playwright Unavailable or invalid parameters
         """
         if not PLAYWRIGHT_AVAILABLE:
             raise MarkdownToPdfError(
-                'Playwright 未安装。请安装: pip install playwright && playwright install chromium'
+                'Playwright Not installed. Please install: pip install playwright && playwright install chromium'
             )
 
         if page_format not in self.SUPPORTED_PAGE_FORMATS:
             raise MarkdownToPdfError(
-                f'不支持的页面格式: {page_format}。支持的格式: {self.SUPPORTED_PAGE_FORMATS}'
+                f'Unsupported page format: {page_format}Supported Formats: {self.SUPPORTED_PAGE_FORMATS}'
             )
 
         if not isinstance(margin_mm, (int, float)) or margin_mm < 0:
-            raise MarkdownToPdfError('边距必须是非负数')
+            raise MarkdownToPdfError('Margins must be non-negative')
 
         self.default_css = default_css or DEFAULT_CSS
         self.enable_math = enable_math
         self.page_format = page_format
         self.margin_mm = margin_mm
 
-        logger.info("MarkdownToPdfConverter 已初始化，格式=%s，边距=%dmm",
+        logger.info("MarkdownToPdfConverter Initialized, Format=%s Margin=%dmm",
                     page_format, margin_mm)
 
     def _validate_input_path(self, file_path: Union[str, Path]) -> Path:
-        """验证输入文件路径并返回 Path 对象。"""
+        """Validate input file path and go back Path of research."""
         path = Path(file_path)
 
         if not path.exists():
-            raise MarkdownToPdfError(f'输入文件不存在: {path}')
+            raise MarkdownToPdfError(f'This input file does not exist.: {path}')
 
         if not path.is_file():
-            raise MarkdownToPdfError(f'输入路径不是文件: {path}')
+            raise MarkdownToPdfError(f'Input path is not a file: {path}')
 
         if not path.suffix.lower() in {'.md', '.markdown', '.txt'}:
-            logger.warning("输入文件没有 markdown 扩展名: %s", path.suffix)
+            logger.warning("Input file not available markdown extension: %s", path.suffix)
 
         return path
 
     def _validate_output_path(self, file_path: Union[str, Path]) -> Path:
-        """验证输出文件路径并确保目录存在。"""
+        """Verify the output file path and make sure the directory exists."""
         path = Path(file_path)
 
-        # 确保父目录存在
+        # Make sure the parent directory exists
         path.parent.mkdir(parents=True, exist_ok=True)
 
         if path.suffix.lower() != '.pdf':
-            logger.warning("输出文件没有 .pdf 扩展名: %s", path.suffix)
+            logger.warning("Output file not available .pdf extension: %s", path.suffix)
 
         return path
 
     def _load_css_file(self, css_path: Union[str, Path]) -> str:
-        """从文件加载 CSS 内容，带有错误处理。"""
+        """Load from file CSS Content with error handling."""
         try:
             css_file = Path(css_path)
             if not css_file.exists():
-                raise MarkdownToPdfError(f'CSS 文件不存在: {css_file}')
+                raise MarkdownToPdfError(f'CSS File don\'t exists: {css_file}')
 
             with open(css_file, 'r', encoding='utf-8') as f:
                 css_content = f.read().strip()
 
             if not css_content:
-                logger.warning("CSS 文件为空: %s", css_file)
+                logger.warning("CSS File is empty: %s", css_file)
 
             return css_content
 
         except (OSError, UnicodeDecodeError) as e:
-            raise MarkdownToPdfError(f'读取 CSS 文件 {css_path} 失败: {e}') from e
+            raise MarkdownToPdfError(f'read out CSS Doc. {css_path} Kalah: {e}') from e
 
     def render_markdown_to_html(self,
                                 markdown_text: str,
                                 custom_css: Optional[str] = None,
                                 enable_math: Optional[bool] = None) -> str:
         """
-        将 Markdown 文本转换为带有样式和 MathJax 支持的 HTML。
+        will be Markdown Convert text to with style and MathJax Supportive HTML。
 
         Args:
-            markdown_text: 要转换的 Markdown 内容
-            custom_css: 可选的自定义 CSS，用于覆盖默认样式
-            enable_math: 覆盖实例设置的数学支持
+            markdown_text: To be converted Markdown Contents
+            custom_css: Optional customizations CSSfor overriding default styles
+            enable_math: Mathematical support for overriding instance settings
 
         Returns:
-            适用于 PDF 转换的完整 HTML 文档
+            Available for PDF Conversion Complete HTML Documentation
 
         Raises:
-            MarkdownToPdfError: 如果 Markdown 处理失败
+            MarkdownToPdfError: Automatically close purchase order after Markdown Failed to Process
         """
         if not isinstance(markdown_text, str):
-            raise MarkdownToPdfError('Markdown 文本必须是字符串')
+            raise MarkdownToPdfError('Markdown Text must be a string')
 
         if not markdown_text.strip():
-            logger.warning("提供的 Markdown 内容为空")
+            logger.warning("SERVICES  Markdown Konten kosong")
 
         try:
-            # 使用扩展将 Markdown 转换为 HTML
+            # Using the extension will Markdown Convert To HTML
             html_body = markdown.markdown(
                 markdown_text,
                 extensions=self.DEFAULT_MARKDOWN_EXTENSIONS
             )
 
-            # 确定 CSS 和 MathJax 设置
+            # OK CSS And MathJax Pengaturan
             css_content = custom_css or self.default_css
             use_math = enable_math if enable_math is not None else self.enable_math
             math_snippet = MATHJAX_SNIPPET if use_math else '\n'
 
-            # 生成完整的 HTML 文档
+            # Generate full HTML Documentation
             html_document = HTML_TEMPLATE.format(
                 css=css_content,
                 mathjax=math_snippet,
                 body=html_body
             )
 
-            logger.debug("成功将 %d 个字符的 Markdown 转换为 HTML", len(markdown_text))
+            logger.debug("Success will %d character (s) of Markdown Convert To HTML", len(markdown_text))
             return html_document
 
         except Exception as e:
-            raise MarkdownToPdfError(f'将 Markdown 渲染为 HTML 失败: {e}') from e
+            raise MarkdownToPdfError(f'will be Markdown Render As HTML Kalah: {e}') from e
 
     def convert_html_to_pdf(self,
                             html_content: str,
@@ -329,28 +329,28 @@ class MarkdownToPdfConverter:
                             page_format: Optional[str] = None,
                             margin_mm: Optional[int] = None) -> None:
         """
-        使用 Playwright 将 HTML 内容转换为 PDF。
+        Use Playwright will be HTML Convert content to PDF。
 
         Args:
-            html_content: 要转换的 HTML 内容
-            output_path: PDF 保存路径
-            page_format: 覆盖默认页面格式
-            margin_mm: 覆盖默认边距
+            html_content: To be converted HTML Contents
+            output_path: PDF SAVE PATH
+            page_format: Override default page formatting
+            margin_mm: Override default margin
 
         Raises:
-            MarkdownToPdfError: 如果 PDF 转换失败
+            MarkdownToPdfError: Automatically close purchase order after PDF failed to transform
         """
         if not isinstance(html_content, str) or not html_content.strip():
-            raise MarkdownToPdfError('HTML 内容不能为空')
+            raise MarkdownToPdfError('HTML Content cannot be empty')
 
         output_file = self._validate_output_path(output_path)
         format_to_use = page_format or self.page_format
         margin_to_use = margin_mm if margin_mm is not None else self.margin_mm
 
         if format_to_use not in self.SUPPORTED_PAGE_FORMATS:
-            raise MarkdownToPdfError(f'不支持的页面格式: {format_to_use}')
+            raise MarkdownToPdfError(f'Unsupported page format: {format_to_use}')
 
-        # 创建临时 HTML 文件
+        # Create Temporary HTML Doc.
         temp_html_path = None
         try:
             with tempfile.NamedTemporaryFile(
@@ -362,52 +362,52 @@ class MarkdownToPdfConverter:
                 temp_html_path = temp_file.name
                 temp_file.write(html_content)
 
-            logger.debug("已创建临时 HTML 文件: %s", temp_html_path)
+            logger.debug("Temporary Created HTML Doc.: %s", temp_html_path)
 
-            # 使用 Playwright 转换为 PDF
+            # Use Playwright Convert To PDF
             self._render_pdf_with_playwright(temp_html_path, output_file, format_to_use, margin_to_use)
 
-            logger.info("成功创建 PDF: %s", output_file)
+            logger.info("Slider Created Successfully. PDF: %s", output_file)
 
         except Exception as e:
-            raise MarkdownToPdfError(f'将 HTML 转换为 PDF 失败: {e}') from e
+            raise MarkdownToPdfError(f'will be HTML Convert To PDF Kalah: {e}') from e
         finally:
-            # 清理临时文件
+            # Clean Up Temp Files
             if temp_html_path and os.path.exists(temp_html_path):
                 try:
                     os.unlink(temp_html_path)
-                    logger.debug("已清理临时文件: %s", temp_html_path)
+                    logger.debug("Temporary files cleaned: %s", temp_html_path)
                 except OSError as e:
-                    logger.warning("清理临时文件 %s 失败: %s", temp_html_path, e)
+                    logger.warning("Clean Up Temp Files %s Kalah: %s", temp_html_path, e)
 
     def convert_html_to_pdf_bytes(self,
                                   html_content: str,
                                   page_format: Optional[str] = None,
                                   margin_mm: Optional[int] = None) -> bytes:
         """
-        使用 Playwright 将 HTML 内容转换为 PDF 字节数据。
+        Use Playwright will be HTML Convert content to PDF Bytes of data.
 
         Args:
-            html_content: 要转换的 HTML 内容
-            page_format: 覆盖默认页面格式
-            margin_mm: 覆盖默认边距
+            html_content: To be converted HTML Contents
+            page_format: Override default page formatting
+            margin_mm: Override default margin
 
         Returns:
-            PDF 文件的字节数据
+            PDF Bytes data of the file
 
         Raises:
-            MarkdownToPdfError: 如果 PDF 转换失败
+            MarkdownToPdfError: Automatically close purchase order after PDF failed to transform
         """
         if not isinstance(html_content, str) or not html_content.strip():
-            raise MarkdownToPdfError('HTML 内容不能为空')
+            raise MarkdownToPdfError('HTML Content cannot be empty')
 
         format_to_use = page_format or self.page_format
         margin_to_use = margin_mm if margin_mm is not None else self.margin_mm
 
         if format_to_use not in self.SUPPORTED_PAGE_FORMATS:
-            raise MarkdownToPdfError(f'不支持的页面格式: {format_to_use}')
+            raise MarkdownToPdfError(f'Unsupported page format: {format_to_use}')
 
-        # 创建临时 HTML 文件
+        # Create Temporary HTML Doc.
         temp_html_path = None
         try:
             with tempfile.NamedTemporaryFile(
@@ -419,31 +419,31 @@ class MarkdownToPdfConverter:
                 temp_html_path = temp_file.name
                 temp_file.write(html_content)
 
-            logger.debug("已创建临时 HTML 文件: %s", temp_html_path)
+            logger.debug("Temporary Created HTML Doc.: %s", temp_html_path)
 
-            # 使用 Playwright 转换为 PDF 字节数据
+            # Use Playwright Convert To PDF Bytes of data
             pdf_bytes = self._render_pdf_bytes_with_playwright(temp_html_path, format_to_use, margin_to_use)
 
-            logger.debug("成功生成 PDF 字节数据，大小: %d bytes", len(pdf_bytes))
+            logger.debug("Successfully Generated! PDF bytes data, size: %d bytes", len(pdf_bytes))
             return pdf_bytes
 
         except Exception as e:
-            raise MarkdownToPdfError(f'将 HTML 转换为 PDF 字节数据失败: {e}') from e
+            raise MarkdownToPdfError(f'will be HTML Convert To PDF Byte Data Failure: {e}') from e
         finally:
-            # 清理临时文件
+            # Clean Up Temp Files
             if temp_html_path and os.path.exists(temp_html_path):
                 try:
                     os.unlink(temp_html_path)
-                    logger.debug("已清理临时文件: %s", temp_html_path)
+                    logger.debug("Temporary files cleaned: %s", temp_html_path)
                 except OSError as e:
-                    logger.warning("清理临时文件 %s 失败: %s", temp_html_path, e)
+                    logger.warning("Clean Up Temp Files %s Kalah: %s", temp_html_path, e)
 
     def _render_pdf_with_playwright(self,
                                     html_file_path: str,
                                     output_path: Path,
                                     page_format: str,
                                     margin_mm: int) -> None:
-        """处理 Playwright PDF 生成的内部方法。"""
+        """<g id="Bold">Medical Treatment:</g> Playwright PDF The internal method of the build."""
         try:
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch()
@@ -451,14 +451,14 @@ class MarkdownToPdfConverter:
                     page = browser.new_page()
                     file_url = f'file:///{html_file_path.replace(os.sep, "/")}'
 
-                    logger.debug("在浏览器中加载 HTML: %s", file_url)
+                    logger.debug("Load in browser HTML: %s", file_url)
                     page.goto(file_url, timeout=self.DEFAULT_TIMEOUT)
 
-                    # 如果启用了 MathJax，等待排版完成
+                    # If enabled MathJax, waiting for typesetting to complete
                     if self.enable_math:
                         self._wait_for_mathjax(page)
 
-                    # 使用指定设置生成 PDF
+                    # Build with specified settings PDF
                     margin_config = {
                         'top': f'{margin_mm}mm',
                         'bottom': f'{margin_mm}mm',
@@ -477,13 +477,13 @@ class MarkdownToPdfConverter:
                     browser.close()
 
         except Exception as e:
-            raise MarkdownToPdfError(f'Playwright PDF 生成失败: {e}') from e
+            raise MarkdownToPdfError(f'Playwright PDF Generation Failed: {e}') from e
 
     def _render_pdf_bytes_with_playwright(self,
                                           html_file_path: str,
                                           page_format: str,
                                           margin_mm: int) -> bytes:
-        """处理 Playwright PDF 字节数据生成的内部方法。"""
+        """<g id="Bold">Medical Treatment:</g> Playwright PDF Internal method for byte data generation."""
         try:
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch()
@@ -491,14 +491,14 @@ class MarkdownToPdfConverter:
                     page = browser.new_page()
                     file_url = f'file:///{html_file_path.replace(os.sep, "/")}'
 
-                    logger.debug("在浏览器中加载 HTML: %s", file_url)
+                    logger.debug("Load in browser HTML: %s", file_url)
                     page.goto(file_url, timeout=self.DEFAULT_TIMEOUT)
 
-                    # 如果启用了 MathJax，等待排版完成
+                    # If enabled MathJax, waiting for typesetting to complete
                     if self.enable_math:
                         self._wait_for_mathjax(page)
 
-                    # 使用指定设置生成 PDF 字节数据
+                    # Build with specified settings PDF Bytes of data
                     margin_config = {
                         'top': f'{margin_mm}mm',
                         'bottom': f'{margin_mm}mm',
@@ -518,20 +518,20 @@ class MarkdownToPdfConverter:
                     browser.close()
 
         except Exception as e:
-            raise MarkdownToPdfError(f'Playwright PDF 字节数据生成失败: {e}') from e
+            raise MarkdownToPdfError(f'Playwright PDF Byte data generation failed: {e}') from e
 
     def _wait_for_mathjax(self, page) -> None:
-        """等待 MathJax 完成排版，带有超时处理。"""
+        """Menunggu MathJax Finish typography with timeout."""
         try:
-            logger.debug("等待 MathJax 排版...")
+            logger.debug("Menunggu MathJax Format...")
             page.wait_for_function(
                 "() => window.MathJax && window.MathJax.typesetPromise",
                 timeout=self.DEFAULT_TIMEOUT
             )
             page.evaluate("() => window.MathJax && window.MathJax.typesetPromise()")
-            logger.debug("MathJax 排版完成")
+            logger.debug("MathJax Typography complete")
         except Exception as e:
-            logger.debug("MathJax 超时或不存在（这是正常的）: %s", e)
+            logger.debug("MathJax Timeout or non-existent (this is normal): %s", e)
 
     def convert_file(self,
                      input_path: Union[str, Path],
@@ -539,37 +539,37 @@ class MarkdownToPdfConverter:
                      css_file: Optional[Union[str, Path]] = None,
                      **kwargs) -> None:
         """
-        将 Markdown 文件转换为 PDF。
+        will be Markdown Convert file to PDF。
 
         Args:
-            input_path: 输入 Markdown 文件路径
-            output_path: 输出 PDF 文件路径
-            css_file: 可选的自定义 CSS 文件路径
-            **kwargs: 附加选项 (page_format, margin_mm, enable_math)
+            input_path: Masukkan Markdown FilePath
+            output_path: Output PDF FilePath
+            css_file: Optional customizations CSS FilePath
+            **kwargs: Add Ons (page_format, margin_mm, enable_math)
 
         Raises:
-            MarkdownToPdfError: 如果转换失败
+            MarkdownToPdfError: If the conversion fails
         """
         input_file = self._validate_input_path(input_path)
 
         try:
-            # 读取 Markdown 内容
+            # read out Markdown Contents
             with open(input_file, 'r', encoding='utf-8') as f:
                 markdown_content = f.read()
 
-            logger.info("从 %s 读取了 %d 个字符", input_file, len(markdown_content))
+            logger.info("FROM %s read %d characters", input_file, len(markdown_content))
 
-            # 如果提供了自定义 CSS，则加载
+            # If customization is provided CSS, then load
             custom_css = None
             if css_file:
                 custom_css = self._load_css_file(css_file)
-                logger.info("从 %s 加载了自定义 CSS", css_file)
+                logger.info("FROM %s Customization loaded CSS", css_file)
 
-            # 转换为 PDF
+            # Convert To PDF
             self.convert_string(markdown_content, output_path, custom_css, **kwargs)
 
         except (OSError, UnicodeDecodeError) as e:
-            raise MarkdownToPdfError(f'读取输入文件 {input_file} 失败: {e}') from e
+            raise MarkdownToPdfError(f'Read input file {input_file} Kalah: {e}') from e
 
     def convert_string(self,
                        markdown_text: str,
@@ -577,26 +577,26 @@ class MarkdownToPdfConverter:
                        custom_css: Optional[str] = None,
                        **kwargs) -> None:
         """
-        将 Markdown 字符串转换为 PDF。
+        will be Markdown Convert string to PDF。
 
         Args:
-            markdown_text: Markdown 字符串内容
-            output_path: 输出 PDF 文件路径
-            custom_css: 可选的自定义 CSS 内容
-            **kwargs: 附加选项 (page_format, margin_mm, enable_math)
+            markdown_text: Markdown String content
+            output_path: Output PDF FilePath
+            custom_css: Optional customizations CSS Contents
+            **kwargs: Add Ons (page_format, margin_mm, enable_math)
 
         Raises:
-            MarkdownToPdfError: 如果转换失败
+            MarkdownToPdfError: If the conversion fails
         """
         try:
-            # 将 Markdown 渲染为 HTML
+            # will be Markdown Render As HTML
             html_content = self.render_markdown_to_html(
                 markdown_text,
                 custom_css=custom_css,
                 enable_math=kwargs.get('enable_math')
             )
 
-            # 将 HTML 转换为 PDF
+            # will be HTML Convert To PDF
             self.convert_html_to_pdf(
                 html_content,
                 output_path,
@@ -607,74 +607,74 @@ class MarkdownToPdfConverter:
         except MarkdownToPdfError:
             raise
         except Exception as e:
-            raise MarkdownToPdfError(f'转换失败: {e}') from e
+            raise MarkdownToPdfError(f'failed to transform: {e}') from e
 
     def convert_file_to_bytes(self,
                               input_path: Union[str, Path],
                               css_file: Optional[Union[str, Path]] = None,
                               **kwargs) -> bytes:
         """
-        将 Markdown 文件转换为 PDF 字节数据。
+        will be Markdown Convert file to PDF Bytes of data.
 
         Args:
-            input_path: 输入 Markdown 文件路径
-            css_file: 可选的自定义 CSS 文件路径
-            **kwargs: 附加选项 (page_format, margin_mm, enable_math)
+            input_path: Masukkan Markdown FilePath
+            css_file: Optional customizations CSS FilePath
+            **kwargs: Add Ons (page_format, margin_mm, enable_math)
 
         Returns:
-            PDF 文件的字节数据
+            PDF Bytes data of the file
 
         Raises:
-            MarkdownToPdfError: 如果转换失败
+            MarkdownToPdfError: If the conversion fails
         """
         input_file = self._validate_input_path(input_path)
 
         try:
-            # 读取 Markdown 内容
+            # read out Markdown Contents
             with open(input_file, 'r', encoding='utf-8') as f:
                 markdown_content = f.read()
 
-            logger.info("从 %s 读取了 %d 个字符", input_file, len(markdown_content))
+            logger.info("FROM %s read %d characters", input_file, len(markdown_content))
 
-            # 如果提供了自定义 CSS，则加载
+            # If customization is provided CSS, then load
             custom_css = None
             if css_file:
                 custom_css = self._load_css_file(css_file)
-                logger.info("从 %s 加载了自定义 CSS", css_file)
+                logger.info("FROM %s Customization loaded CSS", css_file)
 
-            # 转换为 PDF 字节数据
+            # Convert To PDF Bytes of data
             return self.convert_string_to_bytes(markdown_content, custom_css, **kwargs)
 
         except (OSError, UnicodeDecodeError) as e:
-            raise MarkdownToPdfError(f'读取输入文件 {input_file} 失败: {e}') from e
+            raise MarkdownToPdfError(f'Read input file {input_file} Kalah: {e}') from e
 
     def convert_string_to_bytes(self,
                                 markdown_text: str,
                                 custom_css: Optional[str] = None,
                                 **kwargs) -> bytes:
         """
-        将 Markdown 字符串转换为 PDF 字节数据。
+        will be Markdown Convert string to PDF Bytes of data.
 
         Args:
-            markdown_text: Markdown 字符串内容
-            custom_css: 可选的自定义 CSS 内容
-            **kwargs: 附加选项 (page_format, margin_mm, enable_math)
+            markdown_text: Markdown String content
+            custom_css: Optional customizations CSS Contents
+            **kwargs: Add Ons (page_format, margin_mm, enable_math)
 
         Returns:
-            PDF 文件的字节数据
+            PDF Bytes data of the file
 
         Raises:
-            MarkdownToPdfError: 如果转换失败
+            MarkdownToPdfError: If the conversion fails
         """
         try:
-            # 将 Markdown 渲染为 HTML
+            # will be Markdown Render As HTML
             html_content = self.render_markdown_to_html(
                 markdown_text,
                 custom_css=custom_css,
                 enable_math=kwargs.get('enable_math')
             )
 
-            # 将 HTML 转换为 PDF 字节数据
+            # will be HTML Convert To PDF Bytes of data
             return self.convert_html_to_pdf_bytes(
                 html_content,
                 page_format=kwargs.get('page_format'),
@@ -684,25 +684,25 @@ class MarkdownToPdfConverter:
         except MarkdownToPdfError:
             raise
         except Exception as e:
-            raise MarkdownToPdfError(f'转换失败: {e}') from e
+            raise MarkdownToPdfError(f'failed to transform: {e}') from e
 
 
-# 向后兼容函数
+# Backward compatibility function
 def render_markdown_to_html(md_text: str, css: str = None, enable_math: bool = False) -> str:
-    """用于向后兼容的遗留函数。"""
+    """Legacy functions for backward compatibility."""
     converter = MarkdownToPdfConverter(enable_math=enable_math)
     return converter.render_markdown_to_html(md_text, custom_css=css, enable_math=enable_math)
 
 
 def html_to_pdf_with_playwright(html: str, output_path: str, format: str = 'A4', margin_mm: int = 20):
-    """用于向后兼容的遗留函数。"""
+    """Legacy functions for backward compatibility."""
     converter = MarkdownToPdfConverter(page_format=format, margin_mm=margin_mm)
     converter.convert_html_to_pdf(html, output_path, page_format=format, margin_mm=margin_mm)
 
 
 def md_to_pdf(input_md: str, output_pdf: str, css_file: str = None, is_path: bool = False,
               enable_math: bool = False, page_format: str = 'A4', margin_mm: int = 20):
-    """用于向后兼容的遗留函数。"""
+    """Legacy functions for backward compatibility."""
     converter = MarkdownToPdfConverter(
         enable_math=enable_math,
         page_format=page_format,
@@ -721,21 +721,21 @@ def md_to_pdf(input_md: str, output_pdf: str, css_file: str = None, is_path: boo
 def md_to_pdf_bytes(input_md: str, css_file: str = None, is_path: bool = False,
                     enable_math: bool = False, page_format: str = 'A4', margin_mm: int = 20) -> bytes:
     """
-    将 Markdown 转换为 PDF 字节数据的便捷函数。
+    will be Markdown Convert To PDF Handy function for byte data.
 
     Args:
-        input_md: Markdown 文件路径（如果 is_path=True）或 Markdown 字符串
-        css_file: 可选的自定义 CSS 文件路径
-        is_path: input_md 是否为文件路径
-        enable_math: 是否启用 MathJax 数学表达式支持
-        page_format: 页面格式 (A4, A3, A5, Letter, Legal, Tabloid)
-        margin_mm: 边距（毫米）
+        input_md: Markdown File path (if is_path=True or:  Markdown String
+        css_file: Optional customizations CSS FilePath
+        is_path: input_md Is file path
+        enable_math: enabled MathJax Math expression support
+        page_format: Post Format (A4, A3, A5, Letter, Legal, Tabloid)
+        margin_mm: Margins (in mm)
 
     Returns:
-        PDF 文件的字节数据
+        PDF Bytes data of the file
 
     Raises:
-        MarkdownToPdfError: 如果转换失败
+        MarkdownToPdfError: If the conversion fails
     """
     converter = MarkdownToPdfConverter(
         enable_math=enable_math,

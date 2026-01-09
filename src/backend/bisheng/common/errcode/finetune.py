@@ -1,72 +1,72 @@
 from .base import BaseErrorCode
 
 
-# finetune训练模块 返回错误码，业务代码101
+# finetuneTraining Module Return error code, business code101
 class CreateFinetuneError(BaseErrorCode):
     Code: int = 10100
-    Msg: str = '创建训练任务失败'
+    Msg: str = 'Failed to create training task'
 
 
 class TrainDataNoneError(BaseErrorCode):
     Code: int = 10101
-    Msg: str = '个人训练集和预置训练集最少选择一个'
+    Msg: str = 'Individual Training Sets and Preset Training Sets Select at least one'
 
 
 class NotFoundJobError(BaseErrorCode):
     Code: int = 10102
-    Msg: str = '任务不存在'
+    Msg: str = 'Quest does not exist'
 
 
 class JobStatusError(BaseErrorCode):
     Code: int = 10103
-    Msg: str = '任务状态错误'
+    Msg: str = 'Task status error'
 
 
 class CancelJobError(BaseErrorCode):
     Code: int = 10104
-    Msg: str = '任务取消失败'
+    Msg: str = 'Task cancellation failed'
 
 
 class DeleteJobError(BaseErrorCode):
     Code: int = 10105
-    Msg: str = '任务删除失败'
+    Msg: str = 'Task deletion failed'
 
 
 class ExportJobError(BaseErrorCode):
     Code: int = 10106
-    Msg: str = '任务发布失败'
+    Msg: str = 'Task publishing failed'
 
 
 class ChangeModelNameError(BaseErrorCode):
     Code: int = 10107
-    Msg: str = '模型名接口修改失败'
+    Msg: str = 'Model name interface modification failed'
 
 
 class UnExportJobError(BaseErrorCode):
     Code: int = 10108
-    Msg: str = '取消发布失败'
+    Msg: str = 'Failed to unpublish'
 
 
 class InvalidExtraParamsError(BaseErrorCode):
     Code: int = 10109
-    Msg: str = '无效的训练参数'
+    Msg: str = 'Invalid training parameters'
 
 
 class ModelNameExistsError(BaseErrorCode):
     Code: int = 10110
-    Msg: str = '模型名已存在'
+    Msg: str = 'Model name already exists'
 
 
 class TrainFileNotExistError(BaseErrorCode):
     Code: int = 10120
-    Msg: str = '训练文件不存在'
+    Msg: str = 'Training file does not exist'
 
 
 class GetGPUInfoError(BaseErrorCode):
     Code: int = 10125
-    Msg: str = '获取GPU信息失败'
+    Msg: str = 'DapatkanGPUMessage failed'
 
 
 class GetModelError(BaseErrorCode):
     Code: int = 10126
-    Msg: str = '获取模型列表失败'
+    Msg: str = 'Access to model list failed'

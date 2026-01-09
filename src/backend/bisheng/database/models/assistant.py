@@ -20,20 +20,20 @@ class AssistantStatus(Enum):
 
 
 class AssistantBase(SQLModelSerializable):
-    id: Optional[str] = Field(default_factory=generate_uuid, nullable=False, primary_key=True, description='唯一ID')
-    name: str = Field(default='', description='助手名称')
-    logo: str = Field(default='', description='logo图片地址')
-    desc: str = Field(default='', sa_column=Column(Text), description='助手描述')
-    system_prompt: str = Field(default='', sa_column=Column(Text), description='系统提示词')
-    prompt: str = Field(default='', sa_column=Column(Text), description='用户可见描述词')
-    guide_word: Optional[str] = Field(default='', sa_column=Column(Text), description='开场白')
-    guide_question: Optional[List] = Field(default_factory=list, sa_column=Column(JSON), description='引导问题')
-    model_name: str = Field(default='', description='对应模型管理里模型的唯一ID')
-    temperature: float = Field(default=0.5, description='模型温度')
-    max_token: int = Field(default=32000, description='最大token数')
-    status: int = Field(default=AssistantStatus.OFFLINE.value, description='助手是否上线')
-    user_id: int = Field(default=0, description='创建用户ID')
-    is_delete: int = Field(default=0, description='删除标志')
+    id: Optional[str] = Field(default_factory=generate_uuid, nullable=False, primary_key=True, description='Uniqueness quantificationID')
+    name: str = Field(default='', description='The assistant name.')
+    logo: str = Field(default='', description='logoimage URL')
+    desc: str = Field(default='', sa_column=Column(Text), description='Assistant description')
+    system_prompt: str = Field(default='', sa_column=Column(Text), description='System Prompt')
+    prompt: str = Field(default='', sa_column=Column(Text), description='User Visible Descriptor')
+    guide_word: Optional[str] = Field(default='', sa_column=Column(Text), description='Ice Breaker ')
+    guide_question: Optional[List] = Field(default_factory=list, sa_column=Column(JSON), description='Facilitation Questions')
+    model_name: str = Field(default='', description='Corresponds to the only model in the model managementID')
+    temperature: float = Field(default=0.5, description='Model Temperature')
+    max_token: int = Field(default=32000, description='MaxtokenQuantity')
+    status: int = Field(default=AssistantStatus.OFFLINE.value, description='Whether the assistant is online')
+    user_id: int = Field(default=0, description='Create UserID')
+    is_delete: int = Field(default=0, description='Remove logo')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -41,11 +41,11 @@ class AssistantBase(SQLModelSerializable):
 
 
 class AssistantLinkBase(SQLModelSerializable):
-    id: Optional[int] = Field(default=None, nullable=False, primary_key=True, description='唯一ID')
-    assistant_id: Optional[str] = Field(default=0, index=True, description='助手ID')
-    tool_id: Optional[int] = Field(default=0, index=True, description='工具ID')
-    flow_id: Optional[str] = Field(default='', index=True, description='技能ID')
-    knowledge_id: Optional[int] = Field(default=0, index=True, description='知识库ID')
+    id: Optional[int] = Field(default=None, nullable=False, primary_key=True, description='Uniqueness quantificationID')
+    assistant_id: Optional[str] = Field(default=0, index=True, description='assistantID')
+    tool_id: Optional[int] = Field(default=0, index=True, description='ToolsID')
+    flow_id: Optional[str] = Field(default='', index=True, description='SkillID')
+    knowledge_id: Optional[int] = Field(default=0, index=True, description='The knowledge base uponID')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -122,7 +122,7 @@ class AssistantDao(AssistantBase):
                 Assistant.id)).where(Assistant.is_delete == 0)
             statement = select(Assistant).where(Assistant.is_delete == 0)
             if assistant_ids_extra:
-                # 需要or 加入的条件
+                # Membutuhkanor Requirements to join
                 statement = statement.where(
                     or_(Assistant.id.in_(assistant_ids_extra), Assistant.user_id == user_id))
                 count_statement = count_statement.where(
@@ -148,7 +148,7 @@ class AssistantDao(AssistantBase):
                 statement = statement.where(Assistant.status == status)
                 count_statement = count_statement.where(Assistant.status == status)
             if limit == 0 and page == 0:
-                # 获取全部，不分页
+                # Get all, no pagination
                 statement = statement.order_by(Assistant.update_time.desc())
             else:
                 statement = statement.offset(
@@ -157,7 +157,7 @@ class AssistantDao(AssistantBase):
 
     @classmethod
     def get_all_online_assistants(cls, flow_ids: List[str]) -> List[Assistant]:
-        """ 获取所有已上线的助手 """
+        """ Get all live assistants """
         statement = select(Assistant).filter(Assistant.status == AssistantStatus.ONLINE.value,
                                              Assistant.is_delete == 0)
         if flow_ids:
@@ -225,7 +225,7 @@ class AssistantDao(AssistantBase):
     def filter_assistant_by_id(cls, assistant_ids: List[str], keywords: str = None, page: int = 0,
                                limit: int = 0) -> (List[Assistant], int):
         """
-        根据关键字和助手id过滤出对应的助手
+        Based on keywords and assistantsidFilter out corresponding assistants
         """
         statement = select(Assistant).where(Assistant.is_delete == 0)
         count_statement = select(func.count(Assistant.id)).where(Assistant.is_delete == 0)
@@ -305,7 +305,7 @@ class AssistantLinkDao(AssistantLink):
     @classmethod
     def update_assistant_knowledge(cls, assistant_id: str, knowledge_list: List[int],
                                    flow_id: str):
-        # 保存知识库关联时必须有技能ID
+        # Must have skills when saving knowledge base associationsID
         with get_sync_db_session() as session:
             session.query(AssistantLink).filter(AssistantLink.assistant_id == assistant_id,
                                                 AssistantLink.knowledge_id != 0).delete()

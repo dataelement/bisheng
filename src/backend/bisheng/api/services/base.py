@@ -13,12 +13,12 @@ class BaseService:
         if not logo_path:
             return ''
         cache_key = f'logo_cache_new:{logo_path}'
-        # 先从内存中获取
+        # Fetch from memory first
         share_url = cls.LogoMemoryCache.get(cache_key)
         if share_url:
             return share_url
 
-        # 再从redis缓存中获取
+        # Then fromredisFetch in cache
         share_url = redis_client.get(cache_key)
         if share_url:
             cls.LogoMemoryCache.set(cache_key, share_url)
@@ -27,7 +27,7 @@ class BaseService:
         minio_client = get_minio_storage_sync()
         share_url = minio_client.get_share_link_sync(logo_path)
 
-        # 缓存5天， 临时链接有效期为7天
+        # Ceacle5Day. Temporary link is valid for7 days
         redis_client.set(cache_key, share_url, 3600 * 120)
         cls.LogoMemoryCache.set(cache_key, share_url)
         return share_url
@@ -39,12 +39,12 @@ class BaseService:
         if not logo_path:
             return ''
         cache_key = f'logo_cache_new:{logo_path}'
-        # 先从内存中获取
+        # Fetch from memory first
         share_url = cls.LogoMemoryCache.get(cache_key)
         if share_url:
             return share_url
 
-        # 再从redis缓存中获取
+        # Then fromredisFetch in cache
         share_url = await redis_client.aget(cache_key)
         if share_url:
             cls.LogoMemoryCache.set(cache_key, share_url)
@@ -53,7 +53,7 @@ class BaseService:
         minio_client = await get_minio_storage()
         share_url = await minio_client.get_share_link(logo_path)
 
-        # 缓存5天， 临时链接有效期为7天
+        # Ceacle5Day. Temporary link is valid for7 days
         await redis_client.aset(cache_key, share_url, 3600 * 120)
         cls.LogoMemoryCache.set(cache_key, share_url)
         return share_url

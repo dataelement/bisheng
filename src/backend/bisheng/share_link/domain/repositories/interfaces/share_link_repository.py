@@ -5,5 +5,5 @@ from bisheng.share_link.domain.models.share_link import ShareLink
 
 
 class ShareLinkRepository(BaseRepository[ShareLink, str], ABC):
-    """共享链接仓库接口"""
+    """Shared Link Warehouse Interface"""
     pass

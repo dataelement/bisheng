@@ -9,12 +9,12 @@ from bisheng.utils import generate_uuid
 
 
 class ComponentBase(SQLModelSerializable):
-    name: str = Field(max_length=50, index=True, description='保存的组件名称')
-    description: Optional[str] = Field(default='', description='组件描述')
-    data: Optional[Any] = Field(default=None, description='组件数据')
-    version: str = Field(default='', index=True, description='组件版本')
-    user_id: int = Field(default=None, index=True, description='创建人ID')
-    user_name: str = Field(default=None, description='创建人姓名')
+    name: str = Field(max_length=50, index=True, description='Saved Component Name')
+    description: Optional[str] = Field(default='', description='DESCRIPTION')
+    data: Optional[Any] = Field(default=None, description='Component Data')
+    version: str = Field(default='', index=True, description='Component Revision')
+    user_id: int = Field(default=None, index=True, description='creatorID')
+    user_name: str = Field(default=None, description='creatorName')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

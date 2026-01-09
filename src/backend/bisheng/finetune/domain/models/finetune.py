@@ -19,45 +19,45 @@ class TrainMethod(Enum):
 
 
 class FinetuneStatus(Enum):
-    # 训练中
+    # Training
     TRAINING = 1
-    # 训练失败
+    # Training failed
     FAILED = 2
-    # 任务中止
+    # Task Aborted
     CANCEL = 3
-    # 训练成功
+    # Training Successful
     SUCCESS = 4
-    # 发布完成
+    # Publication complete
     PUBLISHED = 5
 
 
 class FinetuneBase(SQLModelSerializable):
-    id: str = Field(default=None, nullable=False, primary_key=True, description='唯一ID')
-    server: int = Field(default=0, index=True, description='关联的RT服务ID')
-    server_name: str = Field(default='', index=True, description='RT服务名称')
-    rt_endpoint: str = Field(default='', description='RT服务地址')
-    sft_endpoint: str = Field(default='', description='FT服务地址')
-    base_model: int = Field(default=0, index=True, description='基础模型ID')
-    base_model_name: str = Field(max_length=50, description='基础模型名称')
-    root_model_name: str = Field(default='', description='根基础模型名称，即最初始的模型名称')
-    model_id: int = Field(default=0, index=True, description='已发布的训练模型ID')
-    model_name: str = Field(index=True, max_length=50, description='训练模型的名称')
-    method: str = Field(default=TrainMethod.FULL.value, nullable=False, max_length=20, description='训练方法')
-    extra_params: Dict = Field(sa_column=Column(JSON), description='训练任务所需的额外参数')
-    train_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='个人训练数据集信息')
-    preset_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='预置训练数据集信息')
-    status: int = Field(default=FinetuneStatus.TRAINING.value, index=True, description='训练任务的状态')
-    reason: Optional[str] = Field(default='', sa_column=Column(LONGTEXT), description='任务失败原因')
-    log_path: Optional[str] = Field(default='', max_length=512, description='训练日志在minio上的路径')
-    report: Optional[Dict] = Field(default=None, sa_column=Column(JSON), description='训练任务的评估报告数据')
-    user_id: int = Field(default=None, index=True, description='创建人ID')
-    user_name: str = Field(default=None, description='创建人姓名')
+    id: str = Field(default=None, nullable=False, primary_key=True, description='Uniqueness quantificationID')
+    server: int = Field(default=0, index=True, description='RelatedRTSERVICESID')
+    server_name: str = Field(default='', index=True, description='RTService name')
+    rt_endpoint: str = Field(default='', description='RTService Address')
+    sft_endpoint: str = Field(default='', description='FTService Address')
+    base_model: int = Field(default=0, index=True, description='Foundation ModelID')
+    base_model_name: str = Field(max_length=50, description='Base Model Name')
+    root_model_name: str = Field(default='', description='Root underlying model name, which is the initial model name')
+    model_id: int = Field(default=0, index=True, description='Published Training ModelsID')
+    model_name: str = Field(index=True, max_length=50, description='Name of the training model')
+    method: str = Field(default=TrainMethod.FULL.value, nullable=False, max_length=20, description='Training Methods')
+    extra_params: Dict = Field(sa_column=Column(JSON), description='Additional parameters required for training tasks')
+    train_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='Personal Training Dataset Information')
+    preset_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='Preset training dataset information')
+    status: int = Field(default=FinetuneStatus.TRAINING.value, index=True, description='Status of the training task')
+    reason: Optional[str] = Field(default='', sa_column=Column(LONGTEXT), description='Task Failure Reason')
+    log_path: Optional[str] = Field(default='', max_length=512, description='Training log inminioPath on')
+    report: Optional[Dict] = Field(default=None, sa_column=Column(JSON), description='Assessment report data for training tasks')
+    user_id: int = Field(default=None, index=True, description='creatorID')
+    user_name: str = Field(default=None, description='creatorName')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
-    # 检查训练集数据格式
+    # Check training set data format
     @classmethod
     def validate_train(cls, v: Any):
         if v is None:
@@ -89,13 +89,13 @@ class Finetune(FinetuneBase, table=True):
 
 
 class FinetuneList(BaseModel):
-    server: Optional[int] = Field(None, description='关联的RT服务ID')
-    server_name: Optional[str] = Field(None, description='关联的RT服务名称')
-    status: Optional[List[int]] = Field(None, description='训练任务的状态列表')
-    model_name: Optional[str] = Field(None, description='模型名称, 模糊搜索')
-    page: Optional[int] = Field(default=1, description='页码')
-    limit: Optional[int] = Field(default=10, description='每页条数')
-    user_id: Optional[int] = Field(None, description='用户ID')
+    server: Optional[int] = Field(None, description='RelatedRTSERVICESID')
+    server_name: Optional[str] = Field(None, description='RelatedRTService name')
+    status: Optional[List[int]] = Field(None, description='Status list of training tasks')
+    model_name: Optional[str] = Field(None, description='Model Name, Fuzzy search')
+    page: Optional[int] = Field(default=1, description='Page')
+    limit: Optional[int] = Field(default=10, description='Listings Per Page')
+    user_id: Optional[int] = Field(None, description='UsersID')
 
     def get_select_statement(self) -> (Select, Select):
         """Generate the select and count statements based on the filters."""
@@ -123,18 +123,18 @@ class FinetuneList(BaseModel):
 
 
 class FinetuneChangeModelName(BaseModel):
-    id: str = Field(description='训练任务唯一ID')
+    id: str = Field(description='Training Mission UniqueID')
     model_name: str
 
 
 class FinetuneExtraParams(BaseModel):
-    gpus: str = Field(..., description='需要使用的GPU卡号')
-    val_ratio: float = Field(0.1, ge=0, le=1, description='验证集占比')
-    per_device_train_batch_size: int = Field(1, description='批处理的大小')
-    learning_rate: float = Field(0.00005, ge=0, le=1, description='学习率')
-    num_train_epochs: int = Field(3, gt=0, description='迭代轮数')
-    max_seq_len: int = Field(8192, gt=0, description='最大序列长度')
-    cpu_load: str = Field('false', description='是否cpu载入')
+    gpus: str = Field(..., description='Needs to be usedGPUCard #')
+    val_ratio: float = Field(0.1, ge=0, le=1, description='Proportion of validation sets')
+    per_device_train_batch_size: int = Field(1, description='Batch size')
+    learning_rate: float = Field(0.00005, ge=0, le=1, description='Learning rate <g x=1 id="1364"/>')
+    num_train_epochs: int = Field(3, gt=0, description='Iteration rounds')
+    max_seq_len: int = Field(8192, gt=0, description='Maximum List Length')
+    cpu_load: str = Field('false', description='Y/NcpuLoad')
 
     @field_validator('per_device_train_batch_size', mode='before')
     @classmethod

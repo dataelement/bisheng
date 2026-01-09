@@ -18,41 +18,41 @@ from bisheng_langchain.linsight.event import BaseEvent
 
 class MessageEventType(str, Enum):
     """
-    消息事件类型枚举
+    Message event type enumeration
     """
-    # 任务开始
+    #  tasks starting
     TASK_START = "task_start"
-    # 生成任务
+    # Generate Tasks
     TASK_GENERATE = "task_generate"
-    # 任务状态更新
+    # Task status update
     TASK_STATUS_UPDATE = "task_status_update"
-    # 用户输入
+    # User input
     USER_INPUT = "user_input"
-    # 用户输入完成
+    # User input complete
     USER_INPUT_COMPLETED = "user_input_completed"
-    # 任务执行步骤
+    # Task Execution Steps
     TASK_EXECUTE_STEP = "task_execute_step"
-    # 任务结束
+    # Mission-End
     TASK_END = "task_end"
-    # 错误消息
+    # Error Message
     ERROR_MESSAGE = "error_message"
-    # 最终结果
+    # Final Result
     FINAL_RESULT = "final_result"
-    # 任务终止
+    # Mission terminated
     TASK_TERMINATED = "task_terminated"
 
 
 class MessageData(BaseModel):
-    """消息数据模型"""
+    """Message Data Model"""
     event_type: MessageEventType
     data: Dict[str, Any]
     timestamp: Optional[float] = Field(default_factory=lambda: asyncio.get_event_loop().time())
 
 
 class LinsightStateMessageManager:
-    """灵思状态与消息管理器"""
+    """Idea State and Message Manager"""
 
-    # 类常量
+    # Class Constant
     DEFAULT_EXPIRATION = 3600
     DEFAULT_RETRY_ATTEMPTS = 3
     DEFAULT_RETRY_DELAY = 1
@@ -60,16 +60,16 @@ class LinsightStateMessageManager:
 
     def __init__(self, session_version_id: str):
         """
-        初始化灵思状态与消息管理器
+        Initializing the Inspiration State and Message Manager
 
         Args:
-            session_version_id: 会话版本ID
+            session_version_id: Session VersionID
         """
         self._session_version_id = session_version_id
         self._redis_client = get_redis_client_sync()
         self._logger = logger
 
-        # Redis key管理
+        # Redis keyManaging
         self._key_prefix = f"{self.KEY_PREFIX}{session_version_id}:"
         self._keys = {
             'session_version_info': f"{self._key_prefix}session_version_info",
@@ -79,18 +79,18 @@ class LinsightStateMessageManager:
 
     async def _handle_redis_operation(self, operation, *args, **kwargs):
         """
-        统一的Redis操作错误处理
+        ImpuestoRedisOperation error handling
 
         Args:
-            operation: Redis操作函数
-            *args: 位置参数
-            **kwargs: 关键字参数
+            operation: RedisAction Function
+            *args: Position JSON
+            **kwargs: Keyword Parameters
 
         Returns:
-            操作结果
+            Operating result
 
         Raises:
-            Exception: Redis操作失败时抛出异常
+            Exception: RedisException thrown when operation failed
         """
         try:
             return await operation(*args, **kwargs)
@@ -101,10 +101,10 @@ class LinsightStateMessageManager:
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
     async def push_message(self, message: MessageData) -> None:
         """
-        将消息推送到Redis列表中
+        Push messages toRedisin the list
 
         Args:
-            message: 消息模型
+            message: Message Model
         """
         self._logger.info(f"Pushing message: {message.event_type}")
 
@@ -118,10 +118,10 @@ class LinsightStateMessageManager:
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
     async def pop_message(self) -> Optional[MessageData]:
         """
-        从Redis列表中弹出一条消息
+        FROMRedisA message pops up in the list
 
         Returns:
-            消息模型或None
+            Message Model orNone
         """
         try:
 
@@ -138,18 +138,18 @@ class LinsightStateMessageManager:
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
     async def set_session_version_info(self, session_version_model) -> None:
         """
-        设置会话版本信息
+        Set session version information
 
         Args:
-            session_version_model: 会话版本模型
+            session_version_model: Session Version Model
         """
-        # 使用事务确保数据一致性
+        # Using Transactions to Ensure Data Consistency
         async with self._redis_client.async_pipeline() as pipe:
             try:
-                # 先写入数据库
+                # Write database first
                 await LinsightSessionVersionDao.insert_one(session_version_model)
 
-                # 再写入Redis
+                # Write AgainRedis
                 await pipe.set(
                     self._keys['session_version_info'],
                     pickle.dumps(session_version_model.model_dump()),
@@ -166,10 +166,10 @@ class LinsightStateMessageManager:
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
     async def get_session_version_info(self) -> Optional[LinsightSessionVersion]:
         """
-        获取会话版本信息
+        Get session version information
 
         Returns:
-            会话版本信息模型或None
+            Session Version Information Model orNone
         """
         try:
             info = await self._handle_redis_operation(
@@ -192,17 +192,17 @@ class LinsightStateMessageManager:
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
     async def set_execution_tasks(self, tasks: List[LinsightExecuteTask]) -> None:
         """
-        设置执行任务信息
+        Set Execution Information
 
         Args:
-            tasks: 执行任务列表
+            tasks: Execute Task List
         """
         if not tasks:
             self._logger.warning("No tasks provided to set_execution_tasks")
             return
 
         try:
-            # 批量写入Redis
+            # Batch WriteRedis
             tasks_mapping = {
                 f"{self._keys['execution_tasks']}{task.id}": task.model_dump()
                 for task in tasks
@@ -223,25 +223,25 @@ class LinsightStateMessageManager:
             **kwargs
     ) -> Dict[str, Any]:
         """
-        更新执行任务状态
+        Update Execution Status
 
         Args:
-            task_id: 任务ID
-            status: 新状态
-            **kwargs: 其他更新字段
+            task_id: TaskID
+            status: New status
+            **kwargs: Other update fields
 
         Returns:
-            更新后的任务数据
+            Updated task data
         """
         try:
-            # 先更新数据库
+            # Update database first
             task_model = await LinsightExecuteTaskDao.update_by_id(
                 task_id,
                 status=status,
                 **kwargs
             )
 
-            # 再更新Redis
+            # Update againRedis
             task_key = f"{self._keys['execution_tasks']}{task_id}"
             task_data = task_model.model_dump()
 
@@ -261,12 +261,12 @@ class LinsightStateMessageManager:
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
     async def set_user_input(self, task_id: str, user_input: str, files: List[Dict[str, str]] = None) -> None:
         """
-        设置用户输入
+        Set User Input
 
         Args:
-            task_id: 任务ID
-            user_input: 用户输入内容
-            files: 相关文件列表
+            task_id: TaskID
+            user_input: User input
+            files: Related Documents List
         """
         task_key = f"{self._keys['execution_tasks']}{task_id}"
 
@@ -290,12 +290,12 @@ class LinsightStateMessageManager:
 
             task_model.status = ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
 
-            # 使用事务确保数据一致性
+            # Using Transactions to Ensure Data Consistency
             async with self._redis_client.async_pipeline() as pipe:
                 await pipe.set(task_key, pickle.dumps(task_model.model_dump()), ex=self.DEFAULT_EXPIRATION)
                 await pipe.execute()
 
-            # 更新数据库
+            # Database updating
             await LinsightExecuteTaskDao.update_by_id(
                 task_id,
                 status=ExecuteTaskStatusEnum.USER_INPUT_COMPLETED,
@@ -311,13 +311,13 @@ class LinsightStateMessageManager:
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
     async def get_execution_task(self, task_id: str) -> Optional[LinsightExecuteTask]:
         """
-        获取执行任务信息
+        Get task execution information
 
         Args:
-            task_id: 任务ID
+            task_id: TaskID
 
         Returns:
-            执行任务模型或None
+            Execute Task Model orNone
         """
         task_key = f"{self._keys['execution_tasks']}{task_id}"
 
@@ -327,7 +327,7 @@ class LinsightStateMessageManager:
             if task_data:
                 return LinsightExecuteTask.model_validate(task_data)
 
-            # 如果Redis中没有数据，从数据库获取
+            # Automatically close purchase order afterRedisNo data in, fetching from database
             task_model = await LinsightExecuteTaskDao.get_by_id(task_id)
             await self.set_execution_tasks([task_model])
             return task_model
@@ -339,11 +339,11 @@ class LinsightStateMessageManager:
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
     async def add_execution_task_step(self, task_id: str, step: BaseEvent) -> None:
         """
-        添加执行任务步骤
+        Add Execute Task Step
 
         Args:
-            task_id: 任务ID
-            step: 执行步骤
+            task_id: TaskID
+            step: Execution Steps
         """
         task_key = f"{self._keys['execution_tasks']}{task_id}"
 
@@ -355,14 +355,14 @@ class LinsightStateMessageManager:
 
             task_model = LinsightExecuteTask.model_validate(task_data)
 
-            # 初始化历史记录
+            # Initialization History
             if task_model.history is None:
                 task_model.history = []
 
-            # 添加新步骤
+            # Adding new Steps
             task_model.history.append(step.model_dump())
 
-            # 更新Redis和数据库
+            # Update Redis and database
             await self._redis_client.aset(
                 task_key,
                 task_model.model_dump(),
@@ -382,10 +382,10 @@ class LinsightStateMessageManager:
 
     async def get_execution_tasks(self):
         """
-        获取所有执行任务
+        Get All Execute Tasks
 
         Returns:
-            执行任务列表
+            Execute Task List
         """
         try:
             pattern = f"{self._keys['execution_tasks']}*"
@@ -408,7 +408,7 @@ class LinsightStateMessageManager:
 
     async def cleanup_session_data(self) -> None:
         """
-        清理会话相关的Redis数据
+        Cleanup Session RelatedRedisDATA
         """
         try:
             pattern = f"{self._key_prefix}*"
@@ -424,10 +424,10 @@ class LinsightStateMessageManager:
 
     async def get_session_stats(self) -> Dict[str, Any]:
         """
-        获取会话统计信息
+        Get session statistics
 
         Returns:
-            包含会话统计信息的字典
+            Dictionary containing session statistics
         """
         try:
             stats = {
@@ -437,7 +437,7 @@ class LinsightStateMessageManager:
                 'task_count': 0
             }
 
-            # 计算任务数量
+            # Calculate number of tasks
             pattern = f"{self._keys['execution_tasks']}*"
             task_keys = await self._redis_client.akeys(pattern)
             stats['task_count'] = len(task_keys)
@@ -448,11 +448,11 @@ class LinsightStateMessageManager:
             self._logger.error(f"Failed to get session stats: {e}")
             return {'error': str(e)}
 
-    # 清理所有会话相关的Redis数据
+    # Clean up all session-relatedRedisDATA
     @classmethod
     async def cleanup_all_sessions(cls) -> None:
         """
-        清理所有会话相关的Redis数据
+        Clean up all session-relatedRedisDATA
         """
         try:
             redis_client = await get_redis_client()

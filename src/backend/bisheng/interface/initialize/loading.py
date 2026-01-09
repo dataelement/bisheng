@@ -174,7 +174,7 @@ def instantiate_input_output(node_type, class_object, params, id_dict):
             preset_question = params.pop(PRESET_QUESTION)
         chains = params.get('chains', [])
         chains_idlist = id_dict.get('chains', [])
-        # 需要对chains对象进行丰富处理
+        # Needs to be rightchainsObjects are enriched
         chain_list = []
         for index, id in enumerate(chains_idlist):
             chain_obj = {}
@@ -279,7 +279,7 @@ def instantiate_llm(node_type, class_object, params: Dict, user_llm_request: boo
         params['user_id'] = params.get('user_id', 0)
     llm = class_object(**params)
     llm_config = settings.get_from_db('llm_request')
-    # 支持request_timeout & max_retries
+    # Supportrequest_timeout & max_retries
     if hasattr(llm, 'request_timeout') and 'request_timeout' in llm_config:
         if isinstance(llm_config.get('request_timeout'), str):
             llm.request_timeout = int(llm_config.get('request_timeout'))
@@ -343,16 +343,16 @@ def instantiate_chains(node_type, class_object: Type[Chain], params: Dict, id_di
             params['retriever'] = vectorstore
     # sequence chain
     if node_type == 'SequentialChain':
-        # 改造sequence 支持自定义chain顺序
-        params.pop('input_node', '')  # sequential 不支持增加入参
+        # Modifikasisequence Supports customizationchainSequence
+        params.pop('input_node', '')  # sequential Adding input parameters is not supported
         try:
             chain_order = json.loads(params.pop('chain_order'))
         except Exception:
-            raise Exception('chain_order 不是标准数组')
+            raise Exception('chain_order Not a standard array')
         chains_origin = params.get('chains')
         chains_dict = {id: index for index, id in enumerate(id_dict.get('chains'))}
         params['chains'] = [chains_origin[chains_dict.get(id)] for id in chain_order]
-    # dict 转换
+    # dict Tukar
     if 'headers' in params and isinstance(params['headers'], str):
         params['headers'] = json.loads(params['headers'])
     if node_type == 'ConversationalRetrievalChain':
@@ -365,7 +365,7 @@ def instantiate_chains(node_type, class_object: Type[Chain], params: Dict, id_di
             k: v
             for k, v in params['combine_docs_chain_kwargs'].items() if v is not None
         }
-    # 人工组装MultiPromptChain
+    # Manual assemblyMultiPromptChain
     if node_type in {'MultiPromptChain', 'MultiRuleChain'}:
         destination_chain_name = params['destination_chain_name']
         llm_chains = params['LLMChains']
@@ -440,7 +440,7 @@ def instantiate_tool(node_type, class_object: Type[BaseTool], params: Dict):
     if args_schema and hasattr(tool, 'args_schema'):
         fields = {}
         for name, prop in args_schema.items():
-            # eval函数用于执行一个字符串表达式并返回结果
+            # evalFunction to execute a string expression and return the result
             import typing  # noqa
             if prop.get('type') == 'string':
                 field_type = str
@@ -489,18 +489,17 @@ def instantiate_vectorstore(node_type: str, class_object: Type[VectorStore], par
     if 'documents' not in params:
         params['documents'] = []
 
-    # 过滤掉用户没有权限的知识库
-    # TODO zgq 后续统一技能执行流程后将和业务有关的逻辑都迁移到初始化技能对象之前
+    # Filter knowledge bases for which the user does not have permission
+    # TODO zgq After the subsequent unified skill execution process, all business-related logic is migrated to before the initial skill object.
     if node_type == 'MilvusWithPermissionCheck' or node_type == 'ElasticsearchWithPermissionCheck':
         col_name = 'collection_name'
         if node_type == 'ElasticsearchWithPermissionCheck':
             col_name = 'index_name'
 
-        # 获取执行用户 有权限查看的知识库列表
+        # Get execution users List of knowledge bases with permission to view
         knowledge_ids = [one['key'] for one in params[col_name]]
-        include_private = params.pop('_include_private', False)  # 获取是否包含个人知识库参数
         if params.pop('_is_check_auth', True):
-            knowledge_list = KnowledgeDao.judge_knowledge_permission(user_name, knowledge_ids, include_private)
+            knowledge_list = KnowledgeDao.judge_knowledge_permission(user_name, knowledge_ids)
         else:
             knowledge_list = KnowledgeDao.get_list_by_ids(knowledge_ids)
         logger.debug(f'{node_type} after filter, get knowledge_list: {knowledge_list}')
@@ -508,7 +507,7 @@ def instantiate_vectorstore(node_type: str, class_object: Type[VectorStore], par
         if not knowledge_list:
             logger.warning(f'{node_type}: after filter, get zero knowledge')
 
-        # 没有任何知识库的话，提供假的embedding和空的collection_name
+        # Fake if you don't have any knowledge baseembeddingand emptycollection_name
         if node_type == 'MilvusWithPermissionCheck':
             params[col_name] = []
             params['collection_embeddings'] = []
@@ -538,7 +537,7 @@ def instantiate_vectorstore(node_type: str, class_object: Type[VectorStore], par
     # ! This might not work. Need to test
     if search_kwargs and hasattr(vecstore, 'as_retriever'):
         if settings.get_from_db('file_access'):
-            # need to verify file access / 只针对知识库
+            # need to verify file access / For Knowledge Base Only
             access_url = settings.get_from_db('file_access') + f'?username={user_name}'
             vecstore = VectorStoreFilterRetriever(vectorstore=vecstore,
                                                   search_type=search_type,

@@ -47,7 +47,7 @@ from bisheng.utils.util import get_cache_key
 
 router = APIRouter(tags=['Chat'])
 chat_manager = ChatManager()
-expire = 600  # reids 60s 过期
+expire = 600  # reids 60s Overdue
 
 
 @router.get('/chat/app/list')
@@ -55,12 +55,12 @@ def get_app_chat_list(*,
                       keyword: Optional[str] = None,
                       mark_user: Optional[str] = None,
                       mark_status: Optional[int] = None,
-                      task_id: Optional[int] = Query(default=None, description='标注任务ID'),
+                      task_id: Optional[int] = Query(default=None, description='Callout TaskID'),
                       flow_type: Optional[int] = None,
                       page_num: Optional[int] = 1,
                       page_size: Optional[int] = 20,
                       login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ 通过标注任务ID获取对应的会话列表 """
+    """ By annotating tasksIDGet the corresponding session list """
 
     group_flow_ids = []
     flow_ids, user_ids = [], []
@@ -71,7 +71,7 @@ def get_app_chat_list(*,
             task = MarkTaskDao.get_task_byid(task_id)
             if str(login_user.user_id) not in task.process_users.split(','):
                 raise UnAuthorizedError()
-            # 判断下是否是用户组管理员
+            # Determine if it is a user group administrator
             if user_groups:
                 task = MarkTaskDao.get_task_byid(task_id)
                 group_flow_ids = task.app_id.split(',')
@@ -82,7 +82,7 @@ def get_app_chat_list(*,
                 task = MarkTaskDao.get_task_byid(task_id)
                 if str(login_user.user_id) not in task.process_users.split(','):
                     raise UnAuthorizedError()
-                # 普通用户
+                # Normal
                 # user_ids = [login_user.user_id]
                 group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(',')
 
@@ -99,7 +99,7 @@ def get_app_chat_list(*,
             flow_ids.extend([assistant.id for assistant in assistants])
         if user_ids:
             user_ids = [user.user_id for user in users]
-        # 检索内容为空
+        # Retrieval content is empty
         if not flow_ids and not user_ids:
             return resp_200(PageList(list=[], total=0))
 
@@ -109,11 +109,11 @@ def get_app_chat_list(*,
         else:
             flow_ids = group_flow_ids
 
-    # 获取会话列表
+    # Get session list
     res = MessageSessionDao.filter_session(flow_ids=flow_ids, user_ids=user_ids)
     total = len(res)
 
-    # 查询会话的状态
+    # Query the status of a session
     chat_status_ids = [one.chat_id for one in res]
     chat_status_ids = MarkRecordDao.filter_records(task_id=task_id, chat_ids=chat_status_ids)
     chat_status_ids = {one.session_id: one for one in chat_status_ids}
@@ -170,16 +170,16 @@ async def get_chat_message(*,
 
 
 @router.get('/chat/info')
-async def get_chat_info(chat_id: str = Query(..., description='会话唯一id，chai_id')):
-    """ 通过chat_id获取会话详情 """
+async def get_chat_info(chat_id: str = Query(..., description='Session Uniqueid，chai_id')):
+    """ Setujuchat_idGet session details """
     res = await MessageSessionDao.async_get_one(chat_id)
     res.flow_logo = WorkFlowService.get_logo_share_link(res.flow_logo)
     return resp_200(res)
 
 
 @router.post('/chat/conversation/rename')
-def rename(conversationId: str = Body(..., description='会话id', embed=True),
-           name: str = Body(..., description='会话名称', embed=True),
+def rename(conversationId: str = Body(..., description='Sessionsid', embed=True),
+           name: str = Body(..., description='Session name', embed=True),
            login_user: UserPayload = Depends(UserPayload.get_login_user)):
     conversation = MessageSessionDao.get_one(conversationId)
     conversation.flow_name = name
@@ -188,7 +188,7 @@ def rename(conversationId: str = Body(..., description='会话id', embed=True),
 
 
 @router.post('/chat/conversation/copy')
-def copy(conversationId: str = Body(..., description='会话id', embed=True), ):
+def copy(conversationId: str = Body(..., description='Sessionsid', embed=True), ):
     conversation = MessageSessionDao.get_one(conversationId)
     conversation.chat_id = uuid4().hex
     conversation = MessageSessionDao.insert_one(conversation)
@@ -204,7 +204,7 @@ def copy(conversationId: str = Body(..., description='会话id', embed=True), ):
     else:
         app_type = ApplicationTypeEnum.DAILY_CHAT
 
-    # 记录Telemetry日志
+    # RecordTelemetryJournal
     telemetry_service.log_event_sync(user_id=conversation.user_id,
                                      event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
                                      trace_id=trace_id_var.get(),
@@ -228,32 +228,33 @@ def del_chat_id(*,
                 request: Request,
                 chat_id: str,
                 login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    # 获取一条消息
+    # Get a message
     session_chat = MessageSessionDao.get_one(chat_id)
 
     if not session_chat or session_chat.is_delete:
         return resp_200()
-    # 处理临时数据
-    col_name = f'tmp_{session_chat.flow_id}_{chat_id}'
-    logger.info('tmp_delete_milvus col={}', col_name)
-    delete_vector(col_name, None)
-    delete_es(col_name)
+    if session_chat.flow_type == FlowType.FLOW.value:
+        # Processing Temporary Data
+        col_name = f'tmp_{session_chat.flow_id}_{chat_id}'
+        logger.info('tmp_delete_milvus col={}', col_name)
+        delete_vector(col_name, None)
+        delete_es(col_name)
     if session_chat.flow_type == FlowType.ASSISTANT.value:
         assistant_info = AssistantDao.get_one_assistant(session_chat.flow_id)
         if assistant_info:
             AuditLogService.delete_chat_assistant(login_user, get_request_ip(request), assistant_info)
     else:
-        # 判断下是助手还是技能, 写审计日志
+        # Determine whether it is an assistant or a skill, Write Audit Log
         flow_info = FlowDao.get_flow_by_id(session_chat.flow_id)
         if flow_info and flow_info.flow_type == FlowType.FLOW.value:
             AuditLogService.delete_chat_flow(login_user, get_request_ip(request), flow_info)
         elif flow_info:
             AuditLogService.delete_chat_workflow(login_user, get_request_ip(request), flow_info)
 
-    # 设置会话的删除状态
+    # Set the delete state of the session
     MessageSessionDao.delete_session(chat_id)
 
-    # 记录Telemetry日志
+    # RecordTelemetryJournal
     telemetry_service.log_event_sync(user_id=login_user.user_id,
                                      event_type=BaseTelemetryTypeEnum.DELETE_MESSAGE_SESSION,
                                      trace_id=trace_id_var.get(),
@@ -269,7 +270,7 @@ def add_chat_messages(*,
                       data: AddChatMessages,
                       login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    添加一条完整问答记录， 安全检查写入使用
+    Add a full Q&A record, Security Check Write Usage
     """
     logger.debug(f'gateway add_chat_messages {data}')
     flow_id = data.flow_id
@@ -279,7 +280,7 @@ def add_chat_messages(*,
     save_human_message = data.human_message
     flow_info = FlowDao.get_flow_by_id(flow_id)
     if flow_info and flow_info.flow_type == FlowType.WORKFLOW.value:
-        # 工作流的输入，需要从输入里解析出来实际的输入内容
+        # The input of the workflow, the actual input needs to be parsed from the input
         try:
             tmp_human_message = json.loads(data.human_message)
             for node_id, node_input in tmp_human_message.items():
@@ -304,14 +305,14 @@ def add_chat_messages(*,
                               type='bot',
                               category='answer')
     message_dbs = ChatMessageDao.insert_batch([human_message, bot_message])
-    # 更新会话的状态
+    # Update session status
     MessageSessionDao.update_sensitive_status(chat_id, SensitiveStatus.VIOLATIONS)
 
-    # 写审计日志, 判断是否是新建会话
+    # Write Audit Log, Determine if it is a new session
     session_info = MessageSessionDao.get_one(chat_id=chat_id)
     if not session_info:
-        # 新建会话
-        # 判断下是助手还是技能, 写审计日志
+        # New Session
+        # Determine whether it is an assistant or a skill, Write Audit Log
         if flow_info:
             session_info = MessageSessionDao.insert_one(MessageSession(
                 chat_id=chat_id,
@@ -350,7 +351,7 @@ def add_chat_messages(*,
             else:
                 app_type = ApplicationTypeEnum.DAILY_CHAT
 
-            # 记录Telemetry日志
+            # RecordTelemetryJournal
             telemetry_service.log_event_sync(user_id=login_user.user_id,
                                              event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
                                              trace_id=trace_id_var.get(),
@@ -371,7 +372,7 @@ def update_chat_message(*,
                         message: str = Body(embed=True),
                         category: str = Body(default=None, embed=True),
                         login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ 更新一条消息的内容 安全检查使用"""
+    """ Update the content of a message Security Check Usage"""
     logger.info(
         f'update_chat_message message_id={message_id} message={message} login_user={login_user.user_name}'
     )
@@ -431,7 +432,7 @@ def like_response(*, data: ChatInput):
     ChatMessageDao.update_message_model(message)
     logger.info('k=s act=liked message_id={} liked={}', message_id, data.liked)
 
-    # 更新会话表的点赞点踩数
+    # Number of thumbs up and down steps in the update session table
     MessageSessionDao.add_like_count(message.chat_id, like_count)
     MessageSessionDao.add_dislike_count(message.chat_id, dislike_count)
 
@@ -440,7 +441,7 @@ def like_response(*, data: ChatInput):
 
 @router.post('/chat/copied', status_code=200)
 def copied_message(message_id: int = Body(embed=True)):
-    """ 上传复制message的数据 """
+    """ Upload CopymessageData """
     message = ChatMessageDao.get_message_by_id(message_id)
     if not message:
         raise NotFoundError.http_exception()
@@ -459,7 +460,7 @@ def comment_resp(*, data: ChatInput):
 @router.get('/chat/list')
 def get_session_list(page: Optional[int] = Query(default=1, ge=1, le=1000),
                      limit: Optional[int] = Query(default=10, ge=1, le=100),
-                     flow_type: Optional[List[int]] = Query(default=None, description='技能类型'),
+                     flow_type: Optional[List[int]] = Query(default=None, description='Abilities Category'),
                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
     res = MessageSessionDao.filter_session(user_ids=[login_user.user_id],
                                            flow_type=flow_type,
@@ -491,7 +492,7 @@ def get_session_list(page: Optional[int] = Query(default=1, ge=1, le=1000),
     ])
 
 
-# 获取所有已上线的技能和助手
+# Access to all live skills and assistants
 @router.get('/chat/online')
 def get_online_chat(*,
                     keyword: Optional[str] = None,
@@ -542,7 +543,7 @@ async def chat(
             graph_data = json.loads(await redis_client.ahget(flow_data_key, 'graph_data'))
 
         if not chat_id:
-            # 调试时，每次都初始化对象
+            # When debugging, initialize the object every time
             chat_manager.set_cache(get_cache_key(flow_id, chat_id), None)
 
         trace_id_var.set(chat_id)
@@ -564,7 +565,7 @@ async def chat(
 async def init_build(*,
                      graph_data: dict,
                      flow_id: str,
-                     version_id: Optional[int] = Query(default=None, description='技能版本ID')):
+                     version_id: Optional[int] = Query(default=None, description='Skill VersionID')):
     """Initialize the build by storing graph data and returning a unique session ID."""
     chat_id = graph_data.get('chat_id')
     flow_data_key = 'flow_data_' + flow_id
@@ -601,7 +602,7 @@ async def init_build(*,
 @router.get('/build/{flow_id}/status', response_model=UnifiedResponseModel[BuiltResponse])
 async def build_status(flow_id: str,
                        chat_id: Optional[str] = None,
-                       version_id: Optional[int] = Query(default=None, description='技能版本ID')):
+                       version_id: Optional[int] = Query(default=None, description='Skill VersionID')):
     """Check the flow_id is in the flow_data_store."""
     try:
         flow_data_store = await get_redis_client()
@@ -619,7 +620,7 @@ async def build_status(flow_id: str,
 @router.get('/build/stream/{flow_id}', response_class=StreamingResponse)
 async def stream_build(flow_id: str,
                        chat_id: Optional[str] = None,
-                       version_id: Optional[int] = Query(default=None, description='技能版本ID')):
+                       version_id: Optional[int] = Query(default=None, description='Skill VersionID')):
     """Stream the build process based on stored flow data."""
 
     async def event_stream(flow_id, chat_id: str, version_id: Optional[int] = None):
@@ -650,7 +651,7 @@ async def stream_build(flow_id: str,
             logger.debug('Building langchain object')
             await flow_data_store.ahsetkey(flow_data_key, 'status', BuildStatus.IN_PROGRESS.value, expire)
 
-            # L1 用户，采用build流程
+            # L1 Users, usingbuildProcess
             try:
                 async for message in build_flow(graph_data=graph_data,
                                                 artifacts=artifacts,

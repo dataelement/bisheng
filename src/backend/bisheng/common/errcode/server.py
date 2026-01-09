@@ -1,159 +1,159 @@
 from .base import BaseErrorCode
 
 
-# RT服务相关的返回错误码，功能模块代码：100
+# RTService-related return error code, function module code:100
 class NoSftServerError(BaseErrorCode):
     Code: int = 10001
-    Msg: str = '未找到SFT服务'
+    Msg: str = 'not foundSFTSERVICES'
 
 
-# 无效操作
+# Invalid nonce
 class InvalidOperationError(BaseErrorCode):
     Code: int = 10002
-    Msg: str = '无效操作'
+    Msg: str = 'Invalid nonce'
 
 
-# 资源下载失败
+# Resource download failed
 class ResourceDownloadError(BaseErrorCode):
     Code: int = 10003
-    Msg: str = '资源下载失败'
+    Msg: str = 'Resource download failed'
 
 
-# 未配置知识库embedding模型，请从工作台配置中设置
+# Knowledge Base Not Configuredembeddingmodel, please set from workbench configuration
 class NoEmbeddingModelError(BaseErrorCode):
     Code: int = 10004
-    Msg: str = '未配置知识库embedding模型，请从工作台配置中设置'
+    Msg: str = 'Knowledge Base Not Configuredembeddingmodel, please set from workbench configuration'
 
 
-# 知识库embedding模型不存在，请从工作台配置中设置
+# The knowledge base uponembeddingModel does not exist, please set from workbench configuration
 class EmbeddingModelNotExistError(BaseErrorCode):
     Code: int = 10005
-    Msg: str = '知识库embedding模型不存在，请从工作台配置中设置'
+    Msg: str = 'The knowledge base uponembeddingModel does not exist, please set from workbench configuration'
 
 
-# 知识库embedding模型类型错误，请从工作台配置中设置
+# The knowledge base uponembeddingWrong model type, please set from workbench configuration
 class EmbeddingModelTypeError(BaseErrorCode):
     Code: int = 10006
-    Msg: str = '知识库embedding模型类型错误，请从工作台配置中设置'
+    Msg: str = 'The knowledge base uponembeddingWrong model type, please set from workbench configuration'
 
 
-# 请联系管理员检查工作台向量检索模型状态
+# Please contact the administrator to check the status of the workbench vector retrieval model
 class EmbeddingModelStatusError(BaseErrorCode):
     Code: int = 10007
-    Msg: str = '请联系管理员检查工作台向量检索模型状态'
+    Msg: str = 'Please contact the administrator to check the status of the workbench vector retrieval model'
 
 
-# 没有找到llm模型配置
+# No bulkpost found in Trashllmmodel config
 class NoLlmModelConfigError(BaseErrorCode):
     Code: int = 10008
-    Msg: str = '没有找到llm模型配置'
+    Msg: str = 'No bulkpost found in Trashllmmodel config'
 
 
-# llm模型配置已被删除，请重新配置模型
+# llmModel configuration has been deleted, please reconfigure the model
 class LlmModelConfigDeletedError(BaseErrorCode):
     Code: int = 10009
-    Msg: str = 'llm模型配置已被删除，请重新配置模型'
+    Msg: str = 'llmModel configuration has been deleted, please reconfigure the model'
 
 
-# 服务提供方配置已被删除，请重新配置llm模型
+# Service provider configuration has been deleted, please reconfigurellmModels
 class LlmProviderDeletedError(BaseErrorCode):
     Code: int = 10010
-    Msg: str = '服务提供方配置已被删除，请重新配置llm模型'
+    Msg: str = 'Service provider configuration has been deleted, please reconfigurellmModels'
 
 
-# 只支持LLM类型的模型，不支持{model_info.model_type}类型的模型
+# Support onlyLLMModel of type, not supported{model_info.model_type}Type of model
 class LlmModelTypeError(BaseErrorCode):
     Code: int = 10011
-    Msg: str = '只支持LLM类型的模型，不支持{model_type}类型的模型'
+    Msg: str = 'Support onlyLLMModel of type, not supported{model_type}Type of model'
 
 
-# {server_info.name}下的{model_info.model_name}模型已下线，请联系管理员上线对应的模型
+# {server_info.name}under{model_info.model_name}The model is offline, please contact the administrator to launch the corresponding model
 class LlmModelOfflineError(BaseErrorCode):
     Code: int = 10012
-    Msg: str = '{server_name}下的{model_name}模型已下线，请联系管理员上线对应的模型'
+    Msg: str = '{server_name}under{model_name}The model is offline, please contact the administrator to launch the corresponding model'
 
 
-# 初始化llm失败，请检查配置或联系管理员。错误信息：{e}
+# InisialisasillmFailed, please check the configuration or contact the administrator.Error message:{e}
 class InitLlmError(BaseErrorCode):
     Code: int = 10013
-    Msg: str = '初始化llm失败，请检查配置或联系管理员。错误信息：{exception}'
+    Msg: str = 'InisialisasillmFailed, please check the configuration or contact the administrator.Error message:{exception}'
 
 
 class NoAsrModelConfigError(BaseErrorCode):
     Code: int = 10014
-    Msg: str = '没有找到asr模型配置'
+    Msg: str = 'No bulkpost found in Trashasrmodel config'
 
 
 class AsrModelConfigDeletedError(BaseErrorCode):
     Code: int = 10015
-    Msg: str = 'asr模型配置已被删除，请重新配置模型'
+    Msg: str = 'asrModel configuration has been deleted, please reconfigure the model'
 
 
 class AsrProviderDeletedError(BaseErrorCode):
     Code: int = 10016
-    Msg: str = '服务提供方配置已被删除，请重新配置asr模型'
+    Msg: str = 'Service provider configuration has been deleted, please reconfigureasrModels'
 
 
 class AsrModelTypeError(BaseErrorCode):
     Code: int = 10017
-    Msg: str = '只支持ASR类型的模型，不支持{model_type}类型的模型'
+    Msg: str = 'Support onlyASRModel of type, not supported{model_type}Type of model'
 
 
 class AsrModelOfflineError(BaseErrorCode):
     Code: int = 10018
-    Msg: str = '{server_name}下的{model_name}模型已下线，请联系管理员上线对应的模型'
+    Msg: str = '{server_name}under{model_name}The model is offline, please contact the administrator to launch the corresponding model'
 
 
 class InitAsrError(BaseErrorCode):
     Code: int = 10019
-    Msg: str = '初始化asr失败，请检查配置或联系管理员。错误信息：{exception}'
+    Msg: str = 'InisialisasiasrFailed, please check the configuration or contact the administrator.Error message:{exception}'
 
 
 class NoTtsModelConfigError(BaseErrorCode):
     Code: int = 10020
-    Msg: str = '没有找到tts模型配置'
+    Msg: str = 'No bulkpost found in Trashttsmodel config'
 
 
 class TtsModelConfigDeletedError(BaseErrorCode):
     Code: int = 10021
-    Msg: str = 'tts模型配置已被删除，请重新配置模型'
+    Msg: str = 'ttsModel configuration has been deleted, please reconfigure the model'
 
 
 class TtsProviderDeletedError(BaseErrorCode):
     Code: int = 10022
-    Msg: str = '服务提供方配置已被删除，请重新配置tts模型'
+    Msg: str = 'Service provider configuration has been deleted, please reconfigurettsModels'
 
 
 class TtsModelTypeError(BaseErrorCode):
     Code: int = 10023
-    Msg: str = '只支持TTS类型的模型，不支持{model_type}类型的模型'
+    Msg: str = 'Support onlyTTSModel of type, not supported{model_type}Type of model'
 
 
 class TtsModelOfflineError(BaseErrorCode):
     Code: int = 10024
-    Msg: str = '{server_name}下的{model_name}模型已下线，请联系管理员上线对应的模型'
+    Msg: str = '{server_name}under{model_name}The model is offline, please contact the administrator to launch the corresponding model'
 
 
 class InitTtsError(BaseErrorCode):
     Code: int = 10025
-    Msg: str = '初始化tts失败，请检查配置或联系管理员。错误信息：{exception}'
+    Msg: str = 'InisialisasittsFailed, please check the configuration or contact the administrator.Error message:{exception}'
 
 
 class SystemConfigEmptyError(BaseErrorCode):
     Code: int = 10030
-    Msg: str = '系统配置不能为空'
+    Msg: str = 'System configuration cannot be empty'
 
 
 class SystemConfigInvalidError(BaseErrorCode):
     Code: int = 10031
-    Msg: str = '系统配置格式不正确，请检查配置内容：{exception}'
+    Msg: str = 'The system configuration format is incorrect, please check the configuration content:{exception}'
 
 
 class UploadFileEmptyError(BaseErrorCode):
     Code: int = 10040
-    Msg: str = '上传文件不能为空'
+    Msg: str = 'Uploaded file cannot be empty'
 
 
 class UploadFileExtError(BaseErrorCode):
     Code: int = 10041
-    Msg: str = '上传文件格式不支持，请上传正确格式的文件'
+    Msg: str = 'The upload file format is not supported, please upload a file in the correct format'

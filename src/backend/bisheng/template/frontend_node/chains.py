@@ -100,7 +100,7 @@ class ChainFrontendNode(FrontendNode):
             field.required = False
 
         field.advanced = False
-        if 'key' in field.name and field.name != 'keyword_store':  # 特殊处理下bishengRetrievalQA组件
+        if 'key' in field.name and field.name != 'keyword_store':  # Under special treatmentbishengRetrievalQAComponent
             field.password = False
             field.show = False
         if field.name in ['input_key', 'output_key']:
@@ -324,7 +324,7 @@ class CombineDocsChainNode(FrontendNode):
                 name='token_max',
                 display_name='token_max',
                 advanced=False,
-                info='只对Stuff类型生效',
+                info='Hide Content Only ForStuffType Effective',
                 value=-1,
             ),
             TemplateField(field_type='BasePromptTemplate',
@@ -333,7 +333,7 @@ class CombineDocsChainNode(FrontendNode):
                           name='prompt',
                           display_name='prompt',
                           advanced=False,
-                          info='只对Stuff类型生效'),
+                          info='Hide Content Only ForStuffType Effective'),
             TemplateField(
                 field_type='BasePromptTemplate',
                 required=False,
@@ -383,7 +383,7 @@ class SummarizeDocsChain(FrontendNode):
                 name='token_max',
                 display_name='token_max',
                 advanced=False,
-                info='当前只对stuff 生效',
+                info='Currently only forstuff ENTRY INTO FORCE',
                 value=-1,
             ),
             TemplateField(field_type='BasePromptTemplate',
@@ -392,7 +392,7 @@ class SummarizeDocsChain(FrontendNode):
                           name='prompt',
                           display_name='prompt',
                           advanced=False,
-                          info='只对Stuff类型生效')
+                          info='Hide Content Only ForStuffType Effective')
         ],
     )
     description: str = """Load summarize chain."""

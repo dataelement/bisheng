@@ -45,25 +45,25 @@ from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import util
 
-router = APIRouter(prefix="/linsight", tags=["灵思"])
+router = APIRouter(prefix="/linsight", tags=["Inspiration"])
 
 
-# 灵思上传文件
-@router.post("/workbench/upload-file", summary="灵思上传文件", response_model=UnifiedResponseModel)
+# Inspiration Upload File
+@router.post("/workbench/upload-file", summary="Inspiration Upload File", response_model=UnifiedResponseModel)
 async def upload_file(
         background_tasks: BackgroundTasks,
         file: UploadFile = File(...),
         login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
-    灵思上传文件
+    Inspiration Upload File
     :param background_tasks:
-    :param file: 上传的文件
-    :param login_user: 登录用户信息
-    :return: 上传结果
+    :param file: files uploaded
+    :param login_user: Logged in user information
+    :return: Upload results
     """
 
     try:
-        # 调用实现类处理文件上传
+        # Call the implementation class to process file uploads
         upload_result = await LinsightWorkbenchImpl.upload_file(file)
 
         background_tasks.add_task(LinsightWorkbenchImpl.parse_file, upload_result, login_user.user_id)
@@ -74,39 +74,39 @@ async def upload_file(
             "parsing_status": upload_result.get("parsing_status"),
         }
     except Exception as e:
-        logger.error(f"文件上传失败: {str(e)}")
+        logger.error(f"Upload Failed: {str(e)}")
         return FileUploadError.return_resp()
 
-    # 返回上传结果
-    return resp_200(data=result, message="文件上传成功 并开始解析。请稍后查看解析状态。")
+    # Back to upload results
+    return resp_200(data=result, message="Key file uploaded successfully! and start parsing. Please check the resolution status later.")
 
 
-# 获取文件解析状态
-@router.post("/workbench/file-parsing-status", summary="获取文件解析状态", response_model=UnifiedResponseModel)
+# Get file resolution status
+@router.post("/workbench/file-parsing-status", summary="Get file resolution status", response_model=UnifiedResponseModel)
 async def get_file_parsing_status(
-        file_ids: List[str] = Body(..., description="文件ID列表", embed=True),
+        file_ids: List[str] = Body(..., description="Doc.IDVertical", embed=True),
         login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
-    获取文件解析状态
+    Get file resolution status
     :param file_ids:
     :param login_user:
     :return:
     """
 
-    # 调用实现类获取文件解析状态
+    # Call the implementation class to get the file parsing state
     key_prefix = LinsightWorkbenchImpl.FILE_INFO_REDIS_KEY_PREFIX
 
     file_ids = [f"{key_prefix}{file_id}" for file_id in file_ids]
 
     redis_client = await get_redis_client()
 
-    # 使用 Redis 的 amget 方法批量获取文件解析状态
+    # Use Redis right of privacy amget Method Get file parsing status in batches
     parsing_status = await redis_client.amget(file_ids)
 
-    return resp_200(data=parsing_status, message="文件解析状态获取成功")
+    return resp_200(data=parsing_status, message="File parsing status retrieved successfully")
 
 
-@router.post("/workbench/file_download", summary="灵思文件下载", response_model=UnifiedResponseModel)
+@router.post("/workbench/file_download", summary="Inspiration File Download", response_model=UnifiedResponseModel)
 async def linsight_file_download(
         file_url: str = Body(..., embed=True),
         session_version_id: str = Body(..., embed=True),
@@ -118,7 +118,7 @@ async def linsight_file_download(
 
     # judge permission
     if session_version_model.user_id != login_user.user_id and not login_user.is_admin():
-        # 通过分享链接访问
+        # Access by sharing a link
         if (share_link is None or
                 share_link.meta_data is None or
                 share_link.meta_data.get("versionId") != session_version_id):
@@ -134,29 +134,29 @@ async def linsight_file_download(
     })
 
 
-# 提交灵思用户问题请求
-@router.post("/workbench/submit", summary="提交灵思用户问题请求")
+# Submit an Idea User Issue Request
+@router.post("/workbench/submit", summary="Submit an Idea User Issue Request")
 async def submit_linsight_workbench(
-        submit_obj: LinsightQuestionSubmitSchema = Body(..., description="灵思用户问题提交对象"),
+        submit_obj: LinsightQuestionSubmitSchema = Body(..., description="Idea User Issue Submitter"),
         login_user: UserPayload = Depends(UserPayload.get_login_user)) -> EventSourceResponse:
     """
-    提交灵思用户问题请求
+    Submit an Idea User Issue Request
     :param submit_obj:
     :param login_user:
     :return:
     """
 
-    logger.info(f"用户 {login_user.user_id} 提交灵思问题: {submit_obj.question}")
+    logger.info(f"Users {login_user.user_id} Submit an Idea Question: {submit_obj.question}")
 
     async def event_generator():
         """
-        事件生成器，用于生成SSE事件
+        Event generator for generatingSSE events
         """
         try:
 
             system_config = await settings.aget_all_config()
 
-            # 获取Linsight_invitation_code
+            # DapatkanLinsight_invitation_code
             linsight_invitation_code = system_config.get("linsight_invitation_code", False)
 
             if linsight_invitation_code:
@@ -181,7 +181,7 @@ async def submit_linsight_workbench(
             "data": json.dumps(response_data)
         }
 
-        # 任务标题生成
+        # Task Title Generation
         title_data = await LinsightWorkbenchImpl.task_title_generate(question=submit_obj.question,
                                                                      chat_id=message_session_model.chat_id,
                                                                      login_user=login_user)
@@ -197,19 +197,19 @@ async def submit_linsight_workbench(
     return EventSourceResponse(event_generator())
 
 
-# workbench 生成与重新规划灵思SOP
-@router.post("/workbench/generate-sop", summary="生成与重新规划灵思SOP", response_model=UnifiedResponseModel)
+# workbench Generate and Reimagine IdeasSOP
+@router.post("/workbench/generate-sop", summary="Generate and Reimagine IdeasSOP", response_model=UnifiedResponseModel)
 async def generate_sop(
         request: Request,
-        linsight_session_version_id: str = Body(..., description="灵思会话版本ID"),
-        previous_session_version_id: str = Body(None, description="上一个灵思会话版本ID"),
-        feedback_content: str = Body(None, description="用户反馈内容"),
-        reexecute: bool = Body(False, description="是否重新执行生成SOP"),
-        sop_id: int = Body(None, description="精选案例的ID"),
-        example_session_version_id: str = Body(default=None, description="参考案例的linsight_version_id"),
+        linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID"),
+        previous_session_version_id: str = Body(None, description="Previous Invisible Conversation VersionID"),
+        feedback_content: str = Body(None, description="User feedback content"),
+        reexecute: bool = Body(False, description="Whether to rerun the buildSOP"),
+        sop_id: int = Body(None, description="Featured Cases'ID"),
+        example_session_version_id: str = Body(default=None, description="Reference Cases'linsight_version_id"),
         login_user: UserPayload = Depends(UserPayload.get_login_user)) -> EventSourceResponse:
     """
-    生成与重新规划灵思SOP
+    Generate and Reimagine IdeasSOP
     :param previous_session_version_id:
     :param reexecute:
     :param linsight_session_version_id:
@@ -219,12 +219,12 @@ async def generate_sop(
     :return:
     """
 
-    logger.info(f"开始生成与重新规划灵思SOP，灵思会话版本ID: {linsight_session_version_id} ")
+    logger.info(f"Start Generating and Redesigning IdeasSOP, Inscription Conversation VersionID: {linsight_session_version_id} ")
     start_time = time.time()
 
     session_version = await LinsightSessionVersionDao.get_by_id(linsight_session_version_id)
 
-    # 获取有权限的知识库列表
+    # Get a list of knowledge bases with permissions
     if not session_version:
         raise NotFoundError.http_exception()
 
@@ -248,9 +248,9 @@ async def generate_sop(
 
     async def event_generator():
         """
-        事件生成器，用于生成SSE事件
+        Event generator for generatingSSE events
         """
-        # 生成SOP
+        # BuatSOP
         sop_generate = LinsightWorkbenchImpl.generate_sop(
             linsight_session_version_id=linsight_session_version_id,
             previous_session_version_id=previous_session_version_id,
@@ -264,10 +264,10 @@ async def generate_sop(
         async for event in sop_generate:
             yield event
 
-        # 结束
+        # End
         yield {
             "event": "sop_generate_complete",
-            "data": json.dumps({"message": "SOP生成与重新规划完成"})
+            "data": json.dumps({"message": "SOPGeneration and re-planning complete"})
         }
 
     try:
@@ -301,14 +301,14 @@ async def generate_sop(
                                           ))
 
 
-# workbench 修改sop
-@router.post("/workbench/sop-modify", summary="修改灵思SOP", response_model=UnifiedResponseModel)
+# workbench Changesop
+@router.post("/workbench/sop-modify", summary="Modify InspirationSOP", response_model=UnifiedResponseModel)
 async def modify_sop(
-        sop_content: str = Body(..., description="SOP内容"),
-        linsight_session_version_id: str = Body(..., description="灵思会话版本ID"),
+        sop_content: str = Body(..., description="SOPContents"),
+        linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID"),
         login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
-    修改灵思SOP
+    Modify InspirationSOP
     :param sop_content:
     :param linsight_session_version_id:
     :param login_user:
@@ -331,14 +331,14 @@ async def modify_sop(
     return resp_200(modify_res)
 
 
-# workbench 开始执行
-@router.post("/workbench/start-execute", summary="开始执行灵思", response_model=UnifiedResponseModel)
+# workbench to process
+@router.post("/workbench/start-execute", summary="Start Executing Reims", response_model=UnifiedResponseModel)
 async def start_execute_sop(
         background_tasks: BackgroundTasks,
-        linsight_session_version_id: str = Body(..., description="灵思会话版本ID", embed=True),
+        linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID", embed=True),
         login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
-    开始执行灵思SOP
+    Start Executing ReimsSOP
     :param linsight_session_version_id:
     :param login_user:
     :return:
@@ -354,7 +354,7 @@ async def start_execute_sop(
 
     if session_version_model.status in [SessionVersionStatusEnum.COMPLETED, SessionVersionStatusEnum.TERMINATED,
                                         SessionVersionStatusEnum.IN_PROGRESS]:
-        # 灵思会话版本已完成或正在执行，无法再次执行
+        # The Inspiration session version has been completed or is being executed and cannot be executed again
         return LinsightSessionVersionRunningError.return_resp()
 
     from bisheng.linsight.worker import LinsightQueue
@@ -363,7 +363,7 @@ async def start_execute_sop(
         queue = LinsightQueue('queue', namespace="linsight", redis=redis_client)
 
         await queue.put(data=linsight_session_version_id)
-        # 将sop写入到记录表
+        # will besopWrite to record table
         background_tasks.add_task(SOPManageService.add_sop_record, LinsightSOPRecord(
             name=session_version_model.title,
             description=None,
@@ -374,23 +374,23 @@ async def start_execute_sop(
         ))
 
     except Exception as e:
-        logger.error(f"开始执行灵思任务失败: {str(e)}")
+        logger.error(f"Failed to start the Ideas task: {str(e)}")
         await InviteCodeService.revoke_invite_code(user_id=login_user.user_id)
         return LinsightStartTaskError.return_resp(data=str(e))
 
-    return resp_200(data=True, message="灵思执行任务已开始，执行结果将通过消息流返回")
+    return resp_200(data=True, message="Ideas execution task has started, execution results will be returned via message flow")
 
 
-# workbench 用户输入
-@router.post("/workbench/user-input", summary="用户输入灵思", response_model=UnifiedResponseModel)
+# workbench User input
+@router.post("/workbench/user-input", summary="User input Ideas", response_model=UnifiedResponseModel)
 async def user_input(
-        session_version_id: str = Body(..., description="灵思会话版本ID"),
-        linsight_execute_task_id: str = Body(..., description="灵思执行任务ID"),
-        input_content: str = Body(..., description="用户输入内容"),
-        files: Optional[List[SubmitFileSchema]] = Body(None, description="用户上传的文件"),
+        session_version_id: str = Body(..., description="Inspiration Conversation VersionID"),
+        linsight_execute_task_id: str = Body(..., description="Inspiration Task ExecutionID"),
+        input_content: str = Body(..., description="User input"),
+        files: Optional[List[SubmitFileSchema]] = Body(None, description="User-uploaded files"),
         login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
-    用户输入
+    User input
     :param files:
     :param session_version_id:
     :param input_content:
@@ -409,27 +409,27 @@ async def user_input(
 
     state_message_manager = LinsightStateMessageManager(session_version_id=session_version_id)
 
-    # 如果有文件 先处理文件
+    # If there are documents Process files first
     processed_files = await LinsightWorkbenchImpl.human_participate_add_file(session_version_model, files=files)
 
     await state_message_manager.set_user_input(task_id=linsight_execute_task_id, user_input=input_content,
                                                files=processed_files)
 
-    return resp_200(data=True, message="用户输入已提交")
+    return resp_200(data=True, message="User input submitted")
 
 
-# workbench 提交执行结果反馈
-@router.post("/workbench/submit-feedback", summary="提交执行结果反馈", response_model=UnifiedResponseModel)
+# workbench Submitting Execution Result Feedback
+@router.post("/workbench/submit-feedback", summary="Submitting Execution Result Feedback", response_model=UnifiedResponseModel)
 async def submit_feedback(
         background_tasks: BackgroundTasks,
-        linsight_session_version_id: str = Body(..., description="灵思会话版本ID"),
-        feedback: str = Body(None, description="用户反馈意见"),
-        score: int = Body(0, ge=0, le=5, description="用户评分，1-5分"),
-        is_reexecute: bool = Body(False, description="是否重新执行"),
-        cancel_feedback: bool = Body(False, description="取消反馈"),
+        linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID"),
+        feedback: str = Body(None, description="User feedback"),
+        score: int = Body(0, ge=0, le=5, description="Users rating1-5cent"),
+        is_reexecute: bool = Body(False, description="Whether to re-execute"),
+        cancel_feedback: bool = Body(False, description="Cancel feedback"),
         login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
-    提交执行结果反馈
+    Submitting Execution Result Feedback
     :param background_tasks:
     :param cancel_feedback:
     :param linsight_session_version_id:
@@ -456,28 +456,28 @@ async def submit_feedback(
     if feedback is not None:
         session_version_model.execute_feedback = feedback
     else:
-        session_version_model.execute_feedback = "用户未提供反馈"
+        session_version_model.execute_feedback = "User did not provide feedback"
 
-    # 如果是取消反馈
+    # If the feedback is canceled
     if cancel_feedback:
-        session_version_model.execute_feedback = "用户取消了反馈"
+        session_version_model.execute_feedback = "User canceled feedback"
         await LinsightSessionVersionDao.insert_one(session_version_model)
-        return resp_200(data=True, message="提交成功")
+        return resp_200(data=True, message="Submit successful.")
 
     session_version_model = await LinsightSessionVersionDao.insert_one(session_version_model)
 
     if is_reexecute:
-        # 重新执行灵思的逻辑
+        # Re-implementing the Logic of Ideas
         system_config = await settings.aget_all_config()
 
-        # 获取Linsight_invitation_code
+        # DapatkanLinsight_invitation_code
         linsight_invitation_code = system_config.get("linsight_invitation_code", False)
 
         if linsight_invitation_code:
             if await InviteCodeService.use_invite_code(user_id=login_user.user_id) is False:
                 return LinsightUseUpError.return_resp()
 
-        # 灵思会话版本
+        # Inspiration Conversation Version
         linsight_session_version_model = LinsightSessionVersion(
             session_id=session_version_model.session_id,
             user_id=login_user.user_id,
@@ -491,27 +491,27 @@ async def submit_feedback(
         linsight_session_version_model = await LinsightSessionVersionDao.insert_one(linsight_session_version_model)
 
         return resp_200(data=linsight_session_version_model.model_dump(),
-                        message="提交成功。")
+                        message="The submission successfully succeeded.")
     else:
 
         if feedback is not None and feedback.strip() != "":
             await SOPManageService.update_sop_record_feedback(session_version_model.id, feedback)
 
-        return resp_200(data=True, message="提交成功")
+        return resp_200(data=True, message="Submit successful.")
 
 
-# workbench 终止执行
-@router.post("/workbench/terminate-execute", summary="终止执行灵思", response_model=UnifiedResponseModel)
+# workbench Termination
+@router.post("/workbench/terminate-execute", summary="Termination of execution of Ideas", response_model=UnifiedResponseModel)
 async def terminate_execute(
-        linsight_session_version_id: str = Body(..., description="灵思会话版本ID", embed=True),
+        linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID", embed=True),
         login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
-    终止执行灵思
+    Termination of execution of Ideas
     :param linsight_session_version_id:
     :param login_user:
     :return:
     """
-    # 现终止执行灵思的逻辑
+    # The logic of executing Spirituality is now terminated
     session_version_model = await LinsightSessionVersionDao.get_by_id(
         linsight_session_version_id=linsight_session_version_id)
 
@@ -521,11 +521,11 @@ async def terminate_execute(
         return UnAuthorizedError.return_resp()
 
     if session_version_model.status == SessionVersionStatusEnum.COMPLETED:
-        # return resp_500(code=400, message="灵思会话版本已完成，无法终止执行")
+        # return resp_500(code=400, message="Execution cannot be terminated because the Inspiration session version has been completed")
         return InvalidOperationError.return_resp()
 
     if session_version_model.status == SessionVersionStatusEnum.TERMINATED:
-        # return resp_500(code=400, message="灵思会话版本已终止执行")
+        # return resp_500(code=400, message="Execution terminated for Inspiration session version")
         return InvalidOperationError.return_resp()
 
     from bisheng.linsight.worker import LinsightQueue
@@ -533,12 +533,12 @@ async def terminate_execute(
     queue = LinsightQueue('queue', namespace="linsight", redis=redis_client)
 
     try:
-        # 从队列中移除任务
+        # Remove task from queue
         await queue.remove(linsight_session_version_id)
     except Exception as e:
-        logger.error(f"删除队列任务失败: {str(e)}")
+        logger.error(f"Failed to delete queue task: {str(e)}")
 
-    # 更新状态为终止
+    # Update status is terminated
     session_version_model.status = SessionVersionStatusEnum.TERMINATED
 
     state_message_manager = LinsightStateMessageManager(session_version_id=linsight_session_version_id)
@@ -546,30 +546,30 @@ async def terminate_execute(
     await state_message_manager.set_session_version_info(session_version_model)
 
     state_message_manager = LinsightStateMessageManager(session_version_id=session_version_model.id)
-    # 推送终止消息
+    # Push termination message
     await state_message_manager.push_message(
         MessageData(
             event_type=MessageEventType.TASK_TERMINATED,
             data={
-                "message": "任务已被用户主动停止",
+                "message": "Task has been actively stopped by the user",
                 "session_id": session_version_model.id,
                 "terminated_at": datetime.now().isoformat()
             }
         )
     )
 
-    return resp_200(data=True, message="灵思执行已终止")
+    return resp_200(data=True, message="Idea Execution Terminated")
 
 
-# 获取当前会话所有灵思信息
-@router.get("/workbench/session-version-list", summary="获取当前会话所有灵思信息", response_model=UnifiedResponseModel)
+# Get all the Inspiration information for the current session
+@router.get("/workbench/session-version-list", summary="Get all the Inspiration information for the current session", response_model=UnifiedResponseModel)
 async def get_linsight_session_version_list(
-        session_id: str = Query(..., description="会话ID"),
+        session_id: str = Query(..., description="SessionsID"),
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         share_link: Union['ShareLink', None] = Depends(header_share_token_parser)
 ) -> UnifiedResponseModel:
     """
-    获取当前会话所有灵思信息
+    Get all the Inspiration information for the current session
     :param share_link:
     :param session_id:
     :param login_user:
@@ -579,16 +579,16 @@ async def get_linsight_session_version_list(
     linsight_session_version_models = await LinsightWorkbenchImpl.get_linsight_session_version_list(session_id)
 
     if linsight_session_version_models and login_user.user_id != linsight_session_version_models[0].user_id:
-        # 通过分享链接访问
+        # Access by sharing a link
         session_version_ids = [model.id for model in linsight_session_version_models]
 
-        # 通过分享链接访问
+        # Access by sharing a link
         if (share_link is None or
                 share_link.meta_data is None or
                 share_link.meta_data.get("versionId") not in session_version_ids):
             return UnAuthorizedError.return_resp()
 
-        # 仅返回分享的灵思会话版本
+        # Only return to the shared version of the Inspiration session
         linsight_session_version_models = [
             model for model in linsight_session_version_models if model.id == share_link.meta_data.get("versionId")
         ]
@@ -596,14 +596,14 @@ async def get_linsight_session_version_list(
     return resp_200([model.model_dump() for model in linsight_session_version_models])
 
 
-# 获取执行任务详情
-@router.get("/workbench/execute-task-detail", summary="获取执行任务详情", response_model=UnifiedResponseModel)
+# Get task execution details
+@router.get("/workbench/execute-task-detail", summary="Get task execution details", response_model=UnifiedResponseModel)
 async def get_execute_task_detail(
-        session_version_id: str = Query(..., description="灵思会话版本ID"),
+        session_version_id: str = Query(..., description="Inspiration Conversation VersionID"),
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         share_link: Union['ShareLink', None] = Depends(header_share_token_parser)) -> UnifiedResponseModel:
     """
-    获取执行任务详情
+    Get task execution details
     :param share_link:
     :param session_version_id:
     :param login_user:
@@ -618,7 +618,7 @@ async def get_execute_task_detail(
     linsight_session_version_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
 
     if login_user.user_id != linsight_session_version_model.user_id:
-        # 通过分享链接访问
+        # Access by sharing a link
         if (share_link is None or
                 share_link.meta_data is None or
                 share_link.meta_data.get("versionId") != session_version_id):
@@ -627,14 +627,14 @@ async def get_execute_task_detail(
     return resp_200(execute_task_models)
 
 
-# 建立灵思任务消息流 websocket
+# Creating an Idea Task Message Flow websocket
 @router.websocket("/workbench/task-message-stream", name="task_message_stream")
 async def task_message_stream(
         websocket: WebSocket,
-        session_version_id: str = Query(..., description="灵思会话版本ID"),
+        session_version_id: str = Query(..., description="Inspiration Conversation VersionID"),
         login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws)):
     """
-    建立灵思任务消息流 websocket
+    Creating an Idea Task Message Flow websocket
     :param Authorize:
     :param websocket:
     :param session_version_id:
@@ -679,14 +679,14 @@ async def task_message_stream(
                                           ))
 
 
-# 批量下载任务文件
-@router.post("/workbench/batch-download-files", summary="批量下载任务文件")
+# Batch Download Task Files
+@router.post("/workbench/batch-download-files", summary="Batch Download Task Files")
 async def batch_download_files(
-        zip_name: str = Body(..., description="压缩包名称"),
-        file_info_list: List[DownloadFilesSchema] = Body(..., description="文件信息列表"),
+        zip_name: str = Body(..., description="Package name"),
+        file_info_list: List[DownloadFilesSchema] = Body(..., description="File Information List"),
         login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    批量下载任务文件
+    Batch Download Task Files
     :param zip_name:
     :param file_info_list:
     :param login_user:
@@ -694,11 +694,11 @@ async def batch_download_files(
     """
 
     try:
-        # 调用实现类处理批量下载
+        # Call to implement class processing batch download
         zip_bytes = await LinsightWorkbenchImpl.batch_download_files(file_info_list)
 
         zip_name = zip_name if os.path.splitext(zip_name)[-1] == ".zip" else f"{zip_name}.zip"
-        # 转成 unicode 字符串
+        # Convert to unicode String
         zip_name = parse.quote(zip_name)
         return StreamingResponse(
             iter([zip_bytes]),
@@ -708,17 +708,17 @@ async def batch_download_files(
             }
         )
     except Exception as e:
-        logger.error(f"批量下载文件失败: {str(e)}")
+        logger.error(f"Failed to download file in bulk: {str(e)}")
         return ResourceDownloadError.return_resp(data=str(e))
 
 
-# 获取队列排队状态
-@router.get("/workbench/queue-status", summary="获取灵思队列排队状态", response_model=UnifiedResponseModel)
+# Get Queue Queue Status
+@router.get("/workbench/queue-status", summary="Get Ideas Queue Queue Status", response_model=UnifiedResponseModel)
 async def get_queue_status(
-        session_version_id: str = Query(..., description="灵思会话版本ID"),
+        session_version_id: str = Query(..., description="Inspiration Conversation VersionID"),
         login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
-    获取灵思队列排队状态
+    Get Ideas Queue Queue Status
     :param session_version_id:
     :param login_user:
     :return:
@@ -728,32 +728,32 @@ async def get_queue_status(
     queue = LinsightQueue('queue', namespace="linsight", redis=redis_client)
     try:
         index = await queue.index(session_version_id)
-        return resp_200(data={"index": index}, message="获取灵思队列排队状态成功")
+        return resp_200(data={"index": index}, message="Get Ideas queue queue status successfully")
     except Exception as e:
-        logger.error(f"获取灵思队列排队状态失败: {str(e)}")
+        logger.error(f"Failed to get Ideas queue queue status: {str(e)}")
         return LinsightQueueStatusError.return_resp(data=str(e))
 
 
-# 灵思md转pdf or docx 下载
-@router.post("/workbench/download-md-to-pdf-or-docx", summary="灵思md转pdf or docx 下载")
+# InspirationmdTransferpdf or docx Mengunduh
+@router.post("/workbench/download-md-to-pdf-or-docx", summary="InspirationmdTransferpdf or docx Mengunduh")
 async def download_md_to_pdf_or_docx(
-        file_info: DownloadFilesSchema = Body(..., description="文件信息"),
-        to_type: Literal["pdf", "docx"] = Body(..., description="转换的目标文件类型，pdf或docx"),
+        file_info: DownloadFilesSchema = Body(..., description="File information"),
+        to_type: Literal["pdf", "docx"] = Body(..., description="the target file type of the conversion,pdfORdocx"),
         login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    灵思md转pdf or docx 下载
+    InspirationmdTransferpdf or docx Mengunduh
     :param file_info:
     :param to_type:
     :param login_user:
     :return:
     """
     try:
-        # 调用实现类处理文件下载
+        # Call the implementation class to process the file download
         file_name, file_bytes = await LinsightWorkbenchImpl.download_file(file_info)
 
         md_str = file_bytes.decode('utf-8')
 
-        # 文件名去除扩展名
+        # Filename Removal Extension
         file_name = os.path.splitext(file_name)[0]
 
         if to_type == "pdf":
@@ -767,7 +767,7 @@ async def download_md_to_pdf_or_docx(
             converted_bytes, _ = await util.sync_func_to_async(mark_docx)(md_str)
             file_name = f"{file_name}.docx"
             content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        # 转成 unicode 字符串
+        # Convert to unicode String
         file_name = parse.quote(file_name)
         return StreamingResponse(
             iter([converted_bytes]),
@@ -777,16 +777,16 @@ async def download_md_to_pdf_or_docx(
             }
         )
     except Exception as e:
-        logger.error(f"文件下载失败: {str(e)}")
+        logger.error(f"This content failed to load: {str(e)}")
         return ResourceDownloadError.return_resp(data=str(e))
 
 
-@router.post("/sop/add", summary="添加灵思SOP", response_model=UnifiedResponseModel)
+@router.post("/sop/add", summary="Add InspirationSOP", response_model=UnifiedResponseModel)
 async def add_sop(
-        sop_obj: SOPManagementSchema = Body(..., description="SOP对象"),
+        sop_obj: SOPManagementSchema = Body(..., description="SOPObjects"),
         login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
-    添加灵思SOP
+    Add InspirationSOP
     :return:
     """
 
@@ -796,28 +796,28 @@ async def add_sop(
     return await SOPManageService.add_sop(sop_obj, user_id=login_user.user_id)
 
 
-@router.post("/sop/update", summary="更新灵思SOP", response_model=UnifiedResponseModel)
+@router.post("/sop/update", summary="Update IdeasSOP", response_model=UnifiedResponseModel)
 async def update_sop(
-        sop_obj: SOPManagementUpdateSchema = Body(..., description="SOP对象"),
+        sop_obj: SOPManagementUpdateSchema = Body(..., description="SOPObjects"),
         login_user: UserPayload = Depends(UserPayload.get_admin_user)) -> UnifiedResponseModel:
     """
-    更新灵思SOP
+    Update IdeasSOP
     :return:
     """
     sop_obj.user_id = login_user.user_id
     return await SOPManageService.update_sop(sop_obj, update_version_id=False)
 
 
-@router.get("/sop/list", summary="获取灵思SOP列表", response_model=UnifiedResponseModel)
+@router.get("/sop/list", summary="Get IdeasSOPVertical", response_model=UnifiedResponseModel)
 async def get_sop_list(
-        keywords: str = Query(None, description="搜索关键词"),
-        showcase: bool = Query(None, description="是否只获取精选案例"),
-        page: int = Query(1, ge=1, description="页码"),
-        page_size: int = Query(10, ge=1, le=100, description="每页数量"),
-        sort: Literal["asc", "desc"] = Query("desc", description="排序方式，asc或desc"),
+        keywords: str = Query(None, description="Keywords Search"),
+        showcase: bool = Query(None, description="Get featured cases only?"),
+        page: int = Query(1, ge=1, description="Page"),
+        page_size: int = Query(10, ge=1, le=100, description="Items per page"),
+        sort: Literal["asc", "desc"] = Query("desc", description="Sort ByascORdesc"),
         login_user: UserPayload = Depends(UserPayload.get_admin_user)) -> UnifiedResponseModel:
     """
-    获取灵思SOP列表
+    Get IdeasSOPVertical
     :return:
     """
 
@@ -827,26 +827,26 @@ async def get_sop_list(
     return resp_200(data=sop_pages)
 
 
-@router.get("/sop/record", summary="获取灵思SOP记录", response_model=UnifiedResponseModel)
+@router.get("/sop/record", summary="Get IdeasSOPRecord", response_model=UnifiedResponseModel)
 async def get_sop_record(login_user: UserPayload = Depends(UserPayload.get_admin_user),
-                         keyword: str = Query(None, description="搜索关键字"),
-                         sort: str = Query(default='desc', description="排序方式，asc或desc"),
-                         page: int = Query(1, ge=1, description="页码"),
-                         page_size: int = Query(10, ge=1, le=100, description="每页数量")):
+                         keyword: str = Query(None, description="Search keyword ..."),
+                         sort: str = Query(default='desc', description="Sort ByascORdesc"),
+                         page: int = Query(1, ge=1, description="Page"),
+                         page_size: int = Query(10, ge=1, le=100, description="Items per page")):
     res, count = await SOPManageService.get_sop_record(keyword, sort, page, page_size)
     return resp_200(PageList(total=count, list=res))
 
 
-@router.post("/sop/record/sync", summary="同步sop记录到sop库", response_model=UnifiedResponseModel)
+@router.post("/sop/record/sync", summary="SynchronoussopRecord toSOPGallery", response_model=UnifiedResponseModel)
 async def sync_sop_record(
         login_user: UserPayload = Depends(UserPayload.get_admin_user),
-        record_ids: list[int] = Body(..., description="sop记录表里的唯一id"),
+        record_ids: list[int] = Body(..., description="sopThe only one in the record sheetid"),
         override: Optional[bool] = Body(default=False,
-                                        description="是否强制覆盖"),
+                                        description="Force override or not"),
         save_new: Optional[bool] = Body(default=False,
-                                        description="是否另存为新sop")) -> UnifiedResponseModel:
+                                        description="Do you want to save as newsop")) -> UnifiedResponseModel:
     """
-    同步SOP记录到SOP库
+    SynchronousSOP"Log to"SOPGallery
     """
     repeat_name = await SOPManageService.sync_sop_record(record_ids, override, save_new)
     return resp_200(data={
@@ -854,15 +854,15 @@ async def sync_sop_record(
     }, message="success")
 
 
-@router.post("/sop/upload", summary="批量导入SOP入库", response_model=UnifiedResponseModel)
+@router.post("/sop/upload", summary="Batch importSOPWarehousing", response_model=UnifiedResponseModel)
 async def upload_sop_file(
-        file: UploadFile = File(..., description="上传的SOP文件"),
-        override: Optional[bool] = Body(default=False, description="是否强制覆盖"),
-        save_new: Optional[bool] = Body(default=False, description="是否另存为新sop"),
-        ignore_error: Optional[bool] = Body(default=False, description="是否忽略文件找那个错误的记录"),
+        file: UploadFile = File(..., description="Uploaded bySOPDoc."),
+        override: Optional[bool] = Body(default=False, description="Force override or not"),
+        save_new: Optional[bool] = Body(default=False, description="Do you want to save as newsop"),
+        ignore_error: Optional[bool] = Body(default=False, description="Whether to ignore the file and find the wrong record"),
         login_user: UserPayload = Depends(UserPayload.get_admin_user)) -> UnifiedResponseModel:
     """
-    批量导入SOP入库
+    Batch importSOPWarehousing
     """
 
     success_rows, error_rows, repeat_rows = await SOPManageService.upload_sop_file(login_user, file, ignore_error,
@@ -875,47 +875,47 @@ async def upload_sop_file(
     })
 
 
-@router.delete("/sop/remove", summary="删除灵思SOP", response_model=UnifiedResponseModel)
+@router.delete("/sop/remove", summary="Delete IdeasSOP", response_model=UnifiedResponseModel)
 async def remove_sop(
-        sop_ids: List[int] = Body(..., description="SOP唯一ID列表", embed=True),
+        sop_ids: List[int] = Body(..., description="SOPUniqueness quantificationIDVertical", embed=True),
         login_user: UserPayload = Depends(UserPayload.get_admin_user)) -> UnifiedResponseModel:
     """
-    删除灵思SOP
+    Delete IdeasSOP
     :return:
     """
 
     return await SOPManageService.remove_sop(sop_ids, login_user)
 
 
-@router.get("/sop/showcase", summary="灵思sop库的精选案例", response_model=UnifiedResponseModel)
+@router.get("/sop/showcase", summary="InspirationsopLibrary's Featured Cases", response_model=UnifiedResponseModel)
 async def get_sop_banner(
-        page: int = Query(1, ge=1, description="页码"),
-        page_size: int = Query(10, ge=1, le=100, description="每页数量"),
-        sort: Literal["asc", "desc"] = Query("desc", description="排序方式，asc或desc"),
+        page: int = Query(1, ge=1, description="Page"),
+        page_size: int = Query(10, ge=1, le=100, description="Items per page"),
+        sort: Literal["asc", "desc"] = Query("desc", description="Sort ByascORdesc"),
         login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     """
-    设置或取消灵思SOP库的精选案例
+    Set or cancel IdeasSOPLibrary's Featured Cases
     :return:
     """
     sop_pages = await SOPManageService.get_sop_list(showcase=True, page=page, page_size=page_size, sort=sort)
     return resp_200(data=sop_pages)
 
 
-@router.post("/sop/showcase", summary="设置或取消灵思库的精选案例", response_model=UnifiedResponseModel)
+@router.post("/sop/showcase", summary="Set or unset a featured case for Inspirations", response_model=UnifiedResponseModel)
 async def set_sop_banner(
-        sop_id: int = Body(..., description="SOP唯一ID"),
-        showcase: bool = Body(..., description="是否设置为精选案例"),
+        sop_id: int = Body(..., description="SOPUniqueness quantificationID"),
+        showcase: bool = Body(..., description="Set as featured case or not"),
         login_user: UserPayload = Depends(UserPayload.get_admin_user)) -> UnifiedResponseModel:
     """
-    设置或取消灵思SOP库的精选案例
+    Set or cancel IdeasSOPLibrary's Featured Cases
     :return:
     """
-    # 校验SOP是否存在
+    # CorrectionSOPpresence or does it
     existing_sop = await LinsightSOPDao.get_sops_by_ids([sop_id])
     if not existing_sop:
         raise NotFoundError.http_exception(msg="sop not found")
     if showcase:
-        # 设置为精选案例需要检查是否有运行结果
+        # Setting as featured case requires checking for run results
         existing_sop = existing_sop[0]
         if not existing_sop.linsight_version_id:
             raise SopShowcaseError.http_exception()
@@ -927,13 +927,13 @@ async def set_sop_banner(
     return resp_200()
 
 
-@router.get("/sop/showcase/result", summary="获取灵思精选案例的执行结果", response_model=UnifiedResponseModel)
+@router.get("/sop/showcase/result", summary="Obtain the results of the execution of the selected cases of Lingsi", response_model=UnifiedResponseModel)
 async def get_sop_showcase_result(
-        sop_id: int = Query(None, description="SOP唯一ID"),
-        linsight_version_id: str = Query(None, description="灵思会话版本ID，优先使用该参数"),
+        sop_id: int = Query(None, description="SOPUniqueness quantificationID"),
+        linsight_version_id: str = Query(None, description="Inspiration Conversation VersionID, use this parameter first"),
         login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     if not linsight_version_id:
-        # 校验SOP是否存在
+        # CorrectionSOPpresence or does it
         existing_sop = await LinsightSOPDao.get_sops_by_ids([sop_id])
         if not existing_sop:
             raise NotFoundError.http_exception(msg="sop not found")
@@ -941,7 +941,7 @@ async def get_sop_showcase_result(
     if not linsight_version_id:
         return resp_200(data={"version_info": None, "execute_tasks": []})
     version_info = await LinsightSessionVersionDao.get_by_id(linsight_version_id)
-    # 未完成的会话不返回执行结果
+    # Outstanding sessions do not return execution results
     if not version_info or version_info.status != SessionVersionStatusEnum.COMPLETED:
         return resp_200(data={
             "version_info": None,
@@ -955,110 +955,110 @@ async def get_sop_showcase_result(
 
 
 class IntegratedExecuteRequestBody(BaseModel):
-    query: Optional[str] = Body(None, description="用户提交的问题")
-    sop_content: Optional[str] = Body(None, description="用户提交的SOP内容")
-    tool_ids: List[int] = Body(None, description="选择的工具ID列表")
-    org_knowledge_enabled: bool = Body(False, description="是否启用组织知识库")
-    personal_knowledge_enabled: bool = Body(False, description="是否启用个人知识库")
-    # 只生成灵思SOP，不执行
-    only_generate_sop: bool = Body(False, description="是否只生成SOP，不执行")
+    query: Optional[str] = Body(None, description="User Submitted Questions")
+    sop_content: Optional[str] = Body(None, description="User SubmittedSOPContents")
+    tool_ids: List[int] = Body(None, description="Selected ToolsIDVertical")
+    org_knowledge_enabled: bool = Body(False, description="Whether to enable organization knowledge base")
+    personal_knowledge_enabled: bool = Body(False, description="Whether or not to enable Personal Knowledge Base")
+    # Generate Inspiration OnlySOPNo
+    only_generate_sop: bool = Body(False, description="Whether to generate onlySOPNo")
 
 
-# 灵思一体化执行接口
-@router.post("/integrated-execute", summary="灵思一体化执行接口")
+# Lingsi Integrated Execution Interface
+@router.post("/integrated-execute", summary="Lingsi Integrated Execution Interface")
 async def integrated_execute(
         request: Request,
-        body_param: str = Form(..., description="请求体参数，JSON字符串",
-                               example='{"query": "请帮我写一个Python函数，计算两个数的和。", "tool_ids": [1, 2], "org_knowledge_enabled": true, "personal_knowledge_enabled": false}'),
-        files: List[UploadFile] = File(None, description="上传的文件列表"),
+        body_param: str = Form(..., description="Request Body Parameters,JSONString",
+                               example='{"query": "Please write one for mePythonfunction that calculates the sum of two numbers.", "tool_ids": [1, 2], "org_knowledge_enabled": true, "personal_knowledge_enabled": false}'),
+        files: List[UploadFile] = File(None, description="Uploaded files list:"),
         login_user: UserPayload = Depends(UserPayload.get_login_user)
 ) -> EventSourceResponse:
     """
-    灵思一体化执行接口
-    :param body_param: 请求体参数，JSON字符串
-    :param request: 请求对象
-    :param files: 上传的文件列表
-    :param login_user: 登录用户信息
-    :return: SSE事件流响应
+    Lingsi Integrated Execution Interface
+    :param body_param: Request Body Parameters,JSONString
+    :param request: Request object
+    :param files: Uploaded files list:
+    :param login_user: Logged in user information
+    :return: SSEEvent Flow Response
     """
 
-    # ======================== 参数验证 ========================
+    # ======================== Parameter Validation ========================
     try:
         body_param = IntegratedExecuteRequestBody.model_validate_json(body_param)
 
         if not body_param.query and not body_param.sop_content:
-            logger.error(f"用户 {login_user.user_id} 请求体参数错误: query和sop_content不能同时为空")
+            logger.error(f"Users {login_user.user_id} Bad request body parameters: queryAndsop_contentCannot be empty at the same time")
             return EventSourceResponse(iter([{
                 "event": "error",
                 "data": json.dumps({
-                    "error": "请求体参数错误",
-                    "message": "query和sop_content不能同时为空",
+                    "error": "Bad request body parameters",
+                    "message": "queryAndsop_contentCannot be empty at the same time",
                     "code": "PARAM_ERROR"
                 })
             }]))
 
     except ValidationError as e:
-        logger.error(f"用户 {login_user.user_id} 请求体参数解析失败: {str(e)}")
+        logger.error(f"Users {login_user.user_id} Request body parameter parsing failed: {str(e)}")
         return EventSourceResponse(iter([{
             "event": "error",
             "data": json.dumps({
-                "error": "请求体参数解析失败",
+                "error": "Request body parameter parsing failed",
                 "message": str(e),
                 "code": "PARAM_VALIDATION_ERROR"
             })
         }]))
     except Exception as e:
-        logger.error(f"用户 {login_user.user_id} 参数解析异常: {str(e)}")
+        logger.error(f"Users {login_user.user_id} Parameter parsing exception: {str(e)}")
         return EventSourceResponse(iter([{
             "event": "error",
             "data": json.dumps({
-                "error": "参数解析异常",
+                "error": "Parameter parsing exception",
                 "message": str(e),
                 "code": "PARAM_PARSE_ERROR"
             })
         }]))
 
-    logger.info(f"用户 {login_user.user_id} 提交灵思问题: {body_param.query}")
+    logger.info(f"Users {login_user.user_id} Submit an Idea Question: {body_param.query}")
 
-    # ======================== 上传文件并解析 ========================
+    # ======================== Upload file and parse ========================
     upload_file_results = []
     if files:
-        logger.info(f"用户 {login_user.user_id} 开始上传 {len(files)} 个文件")
+        logger.info(f"Users {login_user.user_id} Start Upload {len(files)} files")
 
         for idx, file in enumerate(files):
             try:
-                # 文件大小和类型验证
-                if file.size and file.size > 100 * 1024 * 1024:  # 100MB限制
-                    raise ValueError(f"文件 {file.filename} 大小超过限制(100MB)")
+                # File size and type validation
+                if file.size and file.size > 100 * 1024 * 1024:  # 100MBLimit
+                    raise ValueError(f"Doc. {file.filename} Size exceeds limit(100MB)")
 
                 if not file.filename:
-                    raise ValueError(f"第{idx + 1}个文件名为空")
+                    raise ValueError(f"Doc. {idx + 1} The uploaded file has no filename")
 
-                logger.debug(f"开始上传文件: {file.filename}")
+                logger.debug(f"Starting file upload: {file.filename}")
                 upload_result = await LinsightWorkbenchImpl.upload_file(file)
 
                 if not upload_result:
-                    raise ValueError(f"文件 {file.filename} 上传失败，返回结果为空")
+                    raise ValueError(f"Doc. {file.filename} Upload failed, return result is empty")
 
-                # 异步解析文件，增加超时控制
+                # Parse files asynchronously to increase timeout control
                 parse_result = await asyncio.wait_for(
                     LinsightWorkbenchImpl.parse_file(upload_result, login_user.user_id),
-                    timeout=300  # 5分钟超时
+                    timeout=300  # 5Minute Timeout
                 )
 
                 if not parse_result:
-                    raise ValueError(f"文件 {file.filename} 解析失败，返回结果为空")
+                    raise ValueError(f"Doc. {file.filename} Parsing failed, returned empty result")
 
                 upload_file_results.append(parse_result)
-                logger.debug(f"文件 {file.filename} 上传解析完成")
+                logger.debug(f"Doc. {file.filename} Upload parsing complete")
 
             except asyncio.TimeoutError:
-                error_msg = f"文件 {file.filename} 解析超时"
-                logger.error(f"用户 {login_user.user_id} {error_msg}")
+                error_msg = f"Doc. {file.filename} Resolve Timeout"
+                logger.error(f"Users {login_user.user_id} {error_msg}")
                 return EventSourceResponse(iter([{
                     "event": "error",
                     "data": json.dumps({
-                        "error": "文件解析超时",
+                        "error": "File parsing timeout",
                         "message": error_msg,
                         "code": "FILE_PARSE_TIMEOUT"
                     })
@@ -1066,32 +1066,32 @@ async def integrated_execute(
 
 
             except Exception as e:
-                error_msg = f"文件 {getattr(file, 'filename', f'第{idx + 1}个文件')} 处理失败: {str(e)}"
-                logger.error(f"用户 {login_user.user_id} {error_msg}")
+                error_msg = f"Doc. {getattr(file, 'filename', f'{idx + 1} No filename')} Upload parsing error: {str(e)}"
+                logger.error(f"Users {login_user.user_id} {error_msg}")
                 return EventSourceResponse(iter([{
                     "event": "error",
                     "data": json.dumps({
-                        "error": "文件上传失败",
+                        "error": "Upload Failed",
                         "message": error_msg,
                         "code": "FILE_UPLOAD_ERROR"
                     })
                 }]))
 
-        # 检查文件解析结果
+        # Check file parsing results
         if upload_file_results:
             failed_files = [
-                f.get("original_filename", "未知文件")
+                f.get("original_filename", "Unknown file")
                 for f in upload_file_results
                 if f.get("parsing_status") == "failed"
             ]
 
             if failed_files:
-                error_msg = f"以下文件解析失败: {', '.join(failed_files)}"
-                logger.error(f"用户 {login_user.user_id} {error_msg}")
+                error_msg = f"The following files failed to be parsed: {', '.join(failed_files)}"
+                logger.error(f"Users {login_user.user_id} {error_msg}")
                 return EventSourceResponse(iter([{
                     "event": "error",
                     "data": json.dumps({
-                        "error": "文件解析失败",
+                        "error": "File parsing failed",
                         "message": error_msg,
                         "code": "FILE_PARSE_FAILED",
                         "failed_files": failed_files
@@ -1100,20 +1100,20 @@ async def integrated_execute(
 
     async def event_generator():
         """
-        事件生成器，用于生成SSE事件
+        Event generator for generatingSSE events
         """
         linsight_session_version_model = None
         state_message_manager = None
 
         try:
 
-            # ======================== 提交灵思问题 ========================
+            # ======================== Submit an Idea Question ========================
             try:
                 submit_files = []
                 if upload_file_results:
                     for f in upload_file_results:
                         if not f.get("file_id"):
-                            logger.warning(f"文件 {f.get('original_filename', '未知')} 缺少file_id")
+                            logger.warning(f"Doc. {f.get('original_filename', 'Unknown')} missing? file_id")
                             continue
                         submit_files.append(SubmitFileSchema(
                             file_id=f.get("file_id"),
@@ -1133,19 +1133,19 @@ async def integrated_execute(
                             ]
                         )]
                     except (ValueError, TypeError) as e:
-                        logger.error(f"用户 {login_user.user_id} 工具ID转换失败: {str(e)}")
+                        logger.error(f"Users {login_user.user_id} ToolsIDfailed to transform: {str(e)}")
                         yield {
                             "event": "error",
                             "data": json.dumps({
-                                "error": "工具ID格式错误",
-                                "message": f"工具ID必须为数字: {str(e)}",
+                                "error": "ToolsIDFormat salah.",
+                                "message": f"ToolsIDMust be numeric: {str(e)}",
                                 "code": "INVALID_TOOL_ID"
                             })
                         }
                         return
 
                 submit_obj = LinsightQuestionSubmitSchema(
-                    question=body_param.query if body_param.query else "用户未提供问题",
+                    question=body_param.query if body_param.query else "User did not provide a question",
                     org_knowledge_enabled=body_param.org_knowledge_enabled,
                     personal_knowledge_enabled=body_param.personal_knowledge_enabled,
                     files=submit_files,
@@ -1157,7 +1157,7 @@ async def integrated_execute(
                 )
 
                 if not linsight_session_version_model:
-                    raise ValueError("提交灵思问题失败，返回结果为空")
+                    raise ValueError("Failed to submit the idea question, the return result is empty")
 
                 yield {
                     "event": "linsight_workbench_submit",
@@ -1165,21 +1165,21 @@ async def integrated_execute(
                 }
 
             except Exception as e:
-                error_msg = f"提交灵思问题失败: {str(e)}"
-                logger.error(f"用户 {login_user.user_id} {error_msg}")
+                error_msg = f"Failed to submit Idea Question: {str(e)}"
+                logger.error(f"Users {login_user.user_id} {error_msg}")
                 yield {
                     "event": "error",
                     "data": json.dumps({
-                        "error": "提交问题失败",
+                        "error": "Failed to submit question",
                         "message": error_msg,
                         "code": "SUBMIT_QUESTION_ERROR"
                     })
                 }
                 return
 
-            # ======================== 生成SOP ========================
+            # ======================== BuatSOP ========================
             if body_param.sop_content:
-                # 用户直接提交SOP内容，跳过生成SOP步骤
+                # User Submitted DirectlySOPcontent, skipping generationSOPStep
                 await LinsightSessionVersionDao.modify_sop_content(
                     linsight_session_version_id=linsight_session_version_model.id,
                     sop_content=body_param.sop_content
@@ -1189,7 +1189,7 @@ async def integrated_execute(
                     knowledge_res = []
                     linsight_conf = settings.get_linsight_conf()
 
-                    # 获取组织知识库
+                    # Get the organization's knowledge base
                     if (linsight_session_version_model.org_knowledge_enabled and
                             linsight_conf and linsight_conf.max_knowledge_num > 0):
                         try:
@@ -1199,12 +1199,12 @@ async def integrated_execute(
                             )
                             if org_knowledge:
                                 knowledge_res.extend(org_knowledge)
-                                logger.debug(f"获取到 {len(org_knowledge)} 个组织知识")
+                                logger.debug(f"Get {len(org_knowledge)} organization knowledge")
                         except Exception as e:
-                            logger.warning(f"用户 {login_user.user_id} 获取组织知识库失败: {str(e)}")
-                            # 继续执行，不中断流程
+                            logger.warning(f"Users {login_user.user_id} Failed to get organization knowledge base: {str(e)}")
+                            # Proceed without interrupting the process
 
-                    # 获取个人知识库
+                    # Get your own knowledge base
                     if linsight_session_version_model.personal_knowledge_enabled:
                         try:
                             personal_knowledge = await KnowledgeDao.aget_user_knowledge(
@@ -1212,12 +1212,12 @@ async def integrated_execute(
                             )
                             if personal_knowledge:
                                 knowledge_res.extend(personal_knowledge)
-                                logger.debug(f"获取到 {len(personal_knowledge)} 个个人知识")
+                                logger.debug(f"Get {len(personal_knowledge)} personal knowledge")
                         except Exception as e:
-                            logger.warning(f"用户 {login_user.user_id} 获取个人知识库失败: {str(e)}")
-                            # 继续执行，不中断流程
+                            logger.warning(f"Users {login_user.user_id} Failed to get personal knowledge base: {str(e)}")
+                            # Proceed without interrupting the process
 
-                    # 生成SOP
+                    # BuatSOP
                     sop_generate = LinsightWorkbenchImpl.generate_sop(
                         linsight_session_version_id=linsight_session_version_model.id,
                         previous_session_version_id=None,
@@ -1235,16 +1235,16 @@ async def integrated_execute(
 
                     yield {
                         "event": "sop_generate_complete",
-                        "data": json.dumps({"message": "SOP生成完成"})
+                        "data": json.dumps({"message": "SOPBuild Complete"})
                     }
 
                 except Exception as e:
-                    error_msg = f"SOP生成失败: {str(e)}"
-                    logger.error(f"用户 {login_user.user_id} {error_msg}")
+                    error_msg = f"SOPGeneration Failed: {str(e)}"
+                    logger.error(f"Users {login_user.user_id} {error_msg}")
                     yield {
                         "event": "error",
                         "data": json.dumps({
-                            "error": "SOP生成失败",
+                            "error": "SOPGeneration Failed",
                             "message": error_msg,
                             "code": "SOP_GENERATE_ERROR"
                         })
@@ -1254,7 +1254,7 @@ async def integrated_execute(
             if body_param.only_generate_sop:
                 return
 
-            # ======================== 开始执行 ========================
+            # ======================== to process ========================
             try:
                 from bisheng.linsight.worker import LinsightQueue
                 redis_client = await get_redis_client()
@@ -1263,41 +1263,41 @@ async def integrated_execute(
 
                 yield {
                     "event": "linsight_execute_submitted",
-                    "data": json.dumps({"message": "灵思执行任务已提交"})
+                    "data": json.dumps({"message": "Idea Execution Task Submitted"})
                 }
 
             except Exception as e:
-                error_msg = f"提交执行任务失败: {str(e)}"
-                logger.error(f"用户 {login_user.user_id} {error_msg}")
+                error_msg = f"Failed to submit execution task: {str(e)}"
+                logger.error(f"Users {login_user.user_id} {error_msg}")
                 yield {
                     "event": "error",
                     "data": json.dumps({
-                        "error": "提交执行任务失败",
+                        "error": "Failed to submit execution task",
                         "message": error_msg,
                         "code": "SUBMIT_TASK_ERROR"
                     })
                 }
                 return
 
-            # ======================== 消费消息流 ========================
+            # ======================== Consumer Message Flow ========================
             try:
                 state_message_manager = LinsightStateMessageManager(
                     session_version_id=linsight_session_version_model.id
                 )
                 final_result_message = None
                 message_count = 0
-                max_messages = 10000  # 防止无限循环
-                max_wait_time = 60 * 60  # 最大等待1小时
+                max_messages = 10000  # Prevents infinite loops
+                max_wait_time = 60 * 60  # Maximum Wait1Jam
                 start_time = time.time()
 
                 while message_count < max_messages:
-                    # 检查超时
+                    # Check timeout
                     if time.time() - start_time > max_wait_time:
-                        logger.warning(f"用户 {login_user.user_id} 消息消费超时")
+                        logger.warning(f"Users {login_user.user_id} Message consumption timed out")
                         yield {
                             "event": "warning",
                             "data": json.dumps({
-                                "message": "执行时间较长，可能需要更多时间完成",
+                                "message": "The execution time is longer and may take more time to complete",
                                 "code": "EXECUTION_TIMEOUT_WARNING"
                             })
                         }
@@ -1306,7 +1306,7 @@ async def integrated_execute(
                     try:
                         message = await asyncio.wait_for(
                             state_message_manager.pop_message(),
-                            timeout=10.0  # 10秒超时
+                            timeout=10.0  # 10seconds timeout
                         )
                     except asyncio.TimeoutError:
 
@@ -1330,13 +1330,13 @@ async def integrated_execute(
                                 "data": message.model_dump_json()
                             }
 
-                            logger.info(f"用户 {login_user.user_id} 灵思执行已结束，停止获取消息")
+                            logger.info(f"Users {login_user.user_id} Idea execution has ended, stop getting messages")
                             break
 
-                        # 超时继续等待
+                        # Timeout to continue waiting
                         continue
                     except Exception as e:
-                        logger.error(f"用户 {login_user.user_id} 获取消息失败: {str(e)}")
+                        logger.error(f"Users {login_user.user_id} Failed to fetch messages: {str(e)}")
                         break
 
                     if message:
@@ -1346,11 +1346,11 @@ async def integrated_execute(
                             "data": message.model_dump_json()
                         }
 
-                        # 保存最终结果消息
+                        # Save final result message
                         if message.event_type == MessageEventType.FINAL_RESULT:
                             final_result_message = message
 
-                        # 检查终止条件
+                        # Check termination conditions
                         if message.event_type in [
                             MessageEventType.ERROR_MESSAGE,
                             MessageEventType.TASK_TERMINATED,
@@ -1360,7 +1360,7 @@ async def integrated_execute(
                     else:
                         await asyncio.sleep(1)
 
-                # 处理最终结果消息
+                # Process final result message
                 final_files = []
                 all_from_session_files = []
 
@@ -1375,14 +1375,14 @@ async def integrated_execute(
 
                             minio_client = await get_minio_storage()
 
-                            # 生成文件分享链接
+                            # Generate file sharing link
                             for final_file in final_files:
                                 if final_file.get("url"):
                                     try:
                                         final_file["url"] = await minio_client.get_share_link(final_file["url"],
                                                                                               clear_host=False)
                                     except Exception as e:
-                                        logger.warning(f"生成最终文件分享链接失败: {str(e)}")
+                                        logger.warning(f"Failed to generate final file share link: {str(e)}")
 
                             for session_file in all_from_session_files:
                                 if session_file.get("url"):
@@ -1390,10 +1390,10 @@ async def integrated_execute(
                                         session_file["url"] = await minio_client.get_share_link(session_file["url"],
                                                                                                 clear_host=False)
                                     except Exception as e:
-                                        logger.warning(f"生成会话文件分享链接失败: {str(e)}")
+                                        logger.warning(f"Failed to generate session file share link: {str(e)}")
 
                     except Exception as e:
-                        logger.error(f"用户 {login_user.user_id} 处理最终结果失败: {str(e)}")
+                        logger.error(f"Users {login_user.user_id} Failed to process final result: {str(e)}")
 
                 yield {
                     "event": "final_result_files",
@@ -1404,12 +1404,12 @@ async def integrated_execute(
                 }
 
             except Exception as e:
-                error_msg = f"消息消费失败: {str(e)}"
-                logger.error(f"用户 {login_user.user_id} {error_msg}")
+                error_msg = f"Message consumption failed: {str(e)}"
+                logger.error(f"Users {login_user.user_id} {error_msg}")
                 yield {
                     "event": "error",
                     "data": json.dumps({
-                        "error": "消息消费失败",
+                        "error": "Message consumption failed",
                         "message": error_msg,
                         "code": "MESSAGE_CONSUME_ERROR"
                     })
@@ -1417,13 +1417,13 @@ async def integrated_execute(
                 return
 
         except Exception as e:
-            # 捕获所有未处理的异常
-            error_msg = f"接口执行异常: {str(e)}"
-            logger.error(f"用户 {login_user.user_id} {error_msg}", exc_info=True)
+            # Catch all unhandled exceptions
+            error_msg = f"Interface Execution Exception: {str(e)}"
+            logger.error(f"Users {login_user.user_id} {error_msg}", exc_info=True)
             yield {
                 "event": "error",
                 "data": json.dumps({
-                    "error": "系统异常",
+                    "error": "System Exception",
                     "message": error_msg,
                     "code": "SYSTEM_ERROR"
                 })

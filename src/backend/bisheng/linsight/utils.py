@@ -15,13 +15,13 @@ from bisheng.linsight.state_message_manager import LinsightStateMessageManager
 from bisheng.utils import util
 from bisheng_langchain.linsight.event import ExecStep
 
-# 灵思文件处理工具对应文件参数名
+# The corresponding file parameter name of the Inscription file processing tool
 local_file_tool_dict = {
     "add_text_to_file": "file_path",
     "replace_file_lines": "file_path"
 }
 
-# 步骤事件额外处理工具对应参数名、
+# Step event extra processing tool corresponding to parameter name,
 step_event_extra_tool_dict = {
     "add_text_to_file": "file_path",
     "replace_file_lines": "file_path",
@@ -29,19 +29,19 @@ step_event_extra_tool_dict = {
 }
 
 
-# 获取任务中的所有操作过的文件
+# Get all manipulated files in a task
 async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask], file_details: List[Dict]) -> \
         list[Any] | list[Exception | BaseException | None]:
     """
-    获取会话中所有操作过的文件
+    Get all manipulated files in a session
     :param file_details:
-    :param execution_tasks: 执行任务列表
-    :return: 包含文件详情的列表
+    :param execution_tasks: Execute Task List
+    :return: List with file details
     """
-    # 过程文件列表
+    # Process File List
     all_from_session_files = file_details
 
-    # 去重
+    # Deduplication
     seen = set()
     all_from_session_files = [
         file for file in all_from_session_files
@@ -50,12 +50,12 @@ async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask],
     ]
 
     if not all_from_session_files:
-        logger.warning("没有找到会话中操作过的文件")
+        logger.warning("No files found that were manipulated in the session")
         return []
 
-    # 上传文件到MinIO
+    # Upload files toMinIO
     async def upload_file_to_minio(file_info: Dict) -> dict | None:
-        """上传文件到MinIO并返回文件信息"""
+        """Upload files toMinIOand returns file information"""
         try:
             minio_client = await get_minio_storage()
             object_name = f"linsight/session_files/{execution_tasks[0].session_version_id}/{file_info['file_name']}"
@@ -68,37 +68,37 @@ async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask],
             file_info["file_url"] = object_name
             return file_info
         except Exception as e:
-            logger.error(f"上传文件到MinIO失败 {file_info['file_name']}: {e}")
+            logger.error(f"Upload files toMinIOKalah {file_info['file_name']}: {e}")
             return None
 
-    # 并行上传文件到MinIO
+    # Upload files in parallel toMinIO
     upload_tasks = [
         upload_file_to_minio(file_info)
         for file_info in all_from_session_files
     ]
     upload_results = await asyncio.gather(*upload_tasks, return_exceptions=True)
-    # 过滤掉失败的上传结果
+    # Filter failed uploads
     all_from_session_files = [
         result for result in upload_results
         if result is not None and not isinstance(result, Exception)
     ]
-    # 记录失败的上传
+    # Record failed uploads
     failed_uploads = [
         result for result in upload_results
         if isinstance(result, Exception)
     ]
 
     if failed_uploads:
-        logger.warning(f"部分文件上传失败: {len(failed_uploads)} 个文件")
+        logger.warning(f"Some files failed to upload: {len(failed_uploads)} files")
 
-    logger.debug(f"会话中操作过的文件数量: {len(all_from_session_files)}，文件详情: {all_from_session_files}")
+    logger.debug(f"Number of files manipulated in the session: {len(all_from_session_files)}Document Description: {all_from_session_files}")
 
     return all_from_session_files
 
 
-# 读取文件目录文件详情
+# Read File Directory File Details
 async def read_file_directory(file_dir: str) -> List[Dict[str, str]]:
-    """读取文件目录中的文件详情"""
+    """Read file details in file directory"""
     if not file_dir or not os.path.exists(file_dir):
         return []
 
@@ -110,29 +110,29 @@ async def read_file_directory(file_dir: str) -> List[Dict[str, str]]:
             "file_name": os.path.basename(file),
             "file_path": file,
             "file_md5": file_md5,
-            "file_id": uuid.uuid4().hex[:8]  # 生成唯一的文件ID
+            "file_id": uuid.uuid4().hex[:8]  # Generate unique filesID
         })
 
     return file_details
 
 
-# 获取最终结果文件
+# Get the final result file
 async def get_final_result_file(session_model: LinsightSessionVersion, file_details, answer) -> List[Dict]:
     """
-    获取最终结果文件
+    Get the final result file
     :param file_details:
-    :param session_model: LinsightSessionVersion 模型实例
-    :param answer: 答案内容
-    :return: 包含最终结果文件信息的列表
+    :param session_model: LinsightSessionVersion Model Instance
+    :param answer: Answer content
+    :return: List containing final result file information
     """
-    # 最终结果文件
+    # Final Result File
     final_result_files = []
 
     for file_info in file_details:
         file_name: str = file_info["file_name"]
-        # 判断文件名是否在answer字符串中
+        # Determine if the filename isanswerIn String
         if file_name in answer:
-            # 如果文件名在答案中，添加到答案中
+            # If the file name is in the answer, add it to the answer
             final_result_files.append({
                 "file_name": file_name,
                 "file_path": file_info["file_path"],
@@ -141,7 +141,7 @@ async def get_final_result_file(session_model: LinsightSessionVersion, file_deta
             })
 
     async def upload_file_to_minio(final_file_info: Dict) -> dict | None:
-        """上传文件到MinIO并返回文件信息"""
+        """Upload files toMinIOand returns file information"""
         try:
             object_name = f"linsight/final_result/{session_model.id}/{final_file_info['file_name']}"
             # Use async upload if available, otherwise wrap sync call
@@ -154,10 +154,10 @@ async def get_final_result_file(session_model: LinsightSessionVersion, file_deta
             final_file_info["file_url"] = object_name
             return final_file_info
         except Exception as e:
-            logger.error(f"上传文件到MinIO失败 {final_file_info['file_name']}: {e}")
+            logger.error(f"Upload files toMinIOKalah {final_file_info['file_name']}: {e}")
             return None
 
-    # 上传文件到MinIO (并行处理)
+    # Upload files toMinIO (Parallel Processing)
     if final_result_files:
         upload_tasks = [
             upload_file_to_minio(final_file_info)
@@ -166,31 +166,31 @@ async def get_final_result_file(session_model: LinsightSessionVersion, file_deta
 
         upload_results = await asyncio.gather(*upload_tasks, return_exceptions=True)
 
-        # 过滤掉失败的上传结果
+        # Filter failed uploads
         final_result_files = [
             result for result in upload_results
             if result is not None and not isinstance(result, Exception)
         ]
 
-        # 记录失败的上传
+        # Record failed uploads
         failed_uploads = [
             result for result in upload_results
             if isinstance(result, Exception)
         ]
         if failed_uploads:
-            logger.warning(f"部分文件上传失败: {len(failed_uploads)} 个文件")
+            logger.warning(f"Some files failed to upload: {len(failed_uploads)} files")
 
     return final_result_files
 
 
-# 步骤事件额外处理
+# Additional Handling of Step Events
 async def handle_step_event_extra(event: ExecStep, task_exec_obj) -> ExecStep:
     """
-    处理步骤事件的额外逻辑
+    Additional logic for handling step events
     :param task_exec_obj:
-    :param event: 事件对象
+    :param event: Event Object
     """
-    logger.debug(f"步骤事件额外处理，call_id: {event.call_id}, name: {event.name}, status: {event.status}")
+    logger.debug(f"extra processing of step events,call_id: {event.call_id}, name: {event.name}, status: {event.status}")
     try:
         if event.status == "end" and event.name in step_event_extra_tool_dict.keys():
             file_path = event.params.get(step_event_extra_tool_dict[event.name], "")
@@ -198,28 +198,28 @@ async def handle_step_event_extra(event: ExecStep, task_exec_obj) -> ExecStep:
                 return event
 
             file_name = os.path.basename(file_path)
-            logger.debug(f"步骤事件额外处理，文件名: {file_name}")
+            logger.debug(f"Step event extra processing, filename: {file_name}")
 
-            # 文件路径处理
+            # File path processing
             if not os.path.isabs(file_path):
-                # 相对路径，转换为绝对路径
+                # relative paths, converting to absolute paths
                 file_path = os.path.join(task_exec_obj.file_dir, file_path)
                 file_path = os.path.normpath(file_path)
 
-            logger.debug(f"步骤事件额外处理，转换后的文件路径: {file_path}")
+            logger.debug(f"Step event extra processing, converted file path: {file_path}")
 
             if not os.path.exists(file_path):
-                logger.error(f"步骤事件额外处理，文件不存在: {file_path}")
+                logger.error(f"Step event extra processing, file does not exist: {file_path}")
                 return event
 
             file_md5 = await util.async_calculate_md5(file_path)
 
-            # 判断文件是否已经上传过
+            # Determine if the document has already been uploaded
             step_event_extra_files = task_exec_obj.step_event_extra_files
             if step_event_extra_files:
                 existing_file = next((f for f in step_event_extra_files if f["file_md5"] == file_md5), None)
                 if existing_file:
-                    logger.debug(f"步骤事件额外处理，文件已存在: {existing_file['file_name']}, file_md5: {file_md5}")
+                    logger.debug(f"Step event extra processing, file already exists: {existing_file['file_name']}, file_md5: {file_md5}")
                     event.extra_info["file_info"] = {
                         "file_name": file_name,
                         "file_md5": existing_file["file_md5"],
@@ -228,10 +228,10 @@ async def handle_step_event_extra(event: ExecStep, task_exec_obj) -> ExecStep:
                     return event
 
             object_name = f"linsight/step_event/{task_exec_obj.session_version_id}/{uuid.uuid4().hex[:8]}.{file_name.split('.')[-1]}"
-            logger.debug(f"步骤事件额外处理，上传文件到MinIO: {object_name}")
+            logger.debug(f"Extra processing of step events, uploading files toMinIO: {object_name}")
 
             minio_client = await get_minio_storage()
-            # 上传文件到MinIO
+            # Upload files toMinIO
             await minio_client.put_object(
                 bucket_name=minio_client.bucket,
                 object_name=object_name,
@@ -244,23 +244,23 @@ async def handle_step_event_extra(event: ExecStep, task_exec_obj) -> ExecStep:
                 "file_url": object_name
             }
 
-            # 添加到步骤事件额外文件列表
+            # Add to Step Event Extra File List
             task_exec_obj.step_event_extra_files.append(event.extra_info["file_info"])
 
     except Exception as e:
-        logger.error(f"步骤事件额外处理异常: {e}")
-        # 发生异常时，返回原始事件，不做任何修改
+        logger.error(f"Step event extra handling exception: {e}")
+        # When an exception occurs, return to the original event without modification
 
     return event
 
 
-# 启动worker时检查是否有未完成的任务并终止
+# Initiateworkerwhen checking for incomplete tasks and terminating
 async def check_and_terminate_incomplete_tasks():
     """
-    检查是否有未完成的任务并终止
+    Check for incomplete tasks and terminate
     """
 
-    # 清理Redis中的任务数据
+    # CleanedRedisTask data in
     await LinsightStateMessageManager.cleanup_all_sessions()
 
     try:
@@ -268,24 +268,24 @@ async def check_and_terminate_incomplete_tasks():
             status=SessionVersionStatusEnum.IN_PROGRESS)
 
         if not incomplete_linsight_session_versions:
-            logger.info("没有未完成的灵思会话版本，跳过终止操作")
+            logger.info("There are no incomplete versions of the Inspiration session, skipping the termination operation")
             return
-        logger.warning(f"发现 {len(incomplete_linsight_session_versions)} 个未完成的灵思会话版本，准备终止它们")
+        logger.warning(f"Findings {len(incomplete_linsight_session_versions)} Incomplete versions of Invisible Sessions, ready to terminate them")
 
         user_ids = [session.user_id for session in incomplete_linsight_session_versions]
 
         session_version_ids = [session.id for session in incomplete_linsight_session_versions]
 
-        # 批量更新会话状态为已终止
+        # Bulk update session status is terminated
         await LinsightSessionVersionDao.batch_update_session_versions_status(
             session_version_ids=session_version_ids,
             status=SessionVersionStatusEnum.FAILED,
             output_result={
-                "error_message": "后端服务重启"
+                "error_message": "Backend service restart"
             }
         )
 
-        # 批量更新执行任务状态为已终止
+        # Batch update execution task status is terminated
         await LinsightExecuteTaskDao.batch_update_status_by_session_version_id(
             session_version_ids=session_version_ids,
             status=ExecuteTaskStatusEnum.FAILED,
@@ -296,25 +296,25 @@ async def check_and_terminate_incomplete_tasks():
 
         )
 
-        logger.warning(f"已终止 {len(incomplete_linsight_session_versions)} 个未完成的灵思会话版本和相关执行任务")
+        logger.warning(f"Terminated {len(incomplete_linsight_session_versions)} Incomplete Invisible Session Versions and Related Execution Tasks")
 
         system_config = await settings.aget_all_config()
-        # 获取Linsight_invitation_code
+        # DapatkanLinsight_invitation_code
         linsight_invitation_code = system_config.get("linsight_invitation_code", False)
 
-        # 回滚邀请码
+        # Rollback invite code
         if linsight_invitation_code:
             for user_id in user_ids:
                 try:
                     await InviteCodeService.revoke_invite_code(user_id=user_id)
-                    logger.info(f"已回滚用户 {user_id} 的邀请码")
+                    logger.info(f"User Rolled Back {user_id} Invitation code for")
                 except Exception as e:
-                    logger.error(f"回滚用户 {user_id} 的邀请码失败: {e}")
+                    logger.error(f"Rollback user {user_id} Invitation code failed for: {e}")
 
         else:
-            logger.warning("系统配置中未启用 Linsight 邀请码功能，跳过回滚操作")
+            logger.warning("Not enabled in system configuration Linsight Invitation code function, skip rollback operation")
 
-        logger.info("检查并终止未完成任务操作已完成")
+        logger.info("Check and terminate incomplete task action completed")
     except Exception as e:
-        logger.error(f"检查并终止未完成任务时发生异常: {e}")
+        logger.error(f"Exception occurred while checking and terminating incomplete tasks: {e}")
         return

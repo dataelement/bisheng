@@ -100,7 +100,7 @@ class KnowledgeRag:
     @classmethod
     async def get_multi_knowledge_vectorstore(cls, invoke_user_id: int, knowledge_ids: list[int], user_name: str = None,
                                               check_auth: bool = True, include_es: bool = True,
-                                              include_milvus: bool = True, include_private=False) \
+                                              include_milvus: bool = True) \
             -> Dict[int, Dict[str, VectorStore | Knowledge]]:
         """ get multiple knowledge vectorstore, including milvus and es
             return: {
@@ -120,7 +120,7 @@ class KnowledgeRag:
         if check_auth:
             if not user_name:
                 raise RuntimeError('knowledge check auth user_name must be provided')
-            knowledge_list = await KnowledgeDao.ajudge_knowledge_permission(user_name, knowledge_ids, include_private=include_private)
+            knowledge_list = await KnowledgeDao.ajudge_knowledge_permission(user_name, knowledge_ids)
         else:
             knowledge_list = await KnowledgeDao.aget_list_by_ids(knowledge_ids)
         ret = {}

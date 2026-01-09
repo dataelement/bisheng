@@ -22,6 +22,7 @@ from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.message import ChatMessageDao, ChatMessage
 from bisheng.database.models.session import MessageSessionDao, MessageSession
+from bisheng.utils.threadpool import thread_pool
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeStartData, NodeEndData, UserInputData, GuideWordData, GuideQuestionData, \
     OutputMsgData, StreamMsgData, StreamMsgOverData, OutputMsgChooseData, OutputMsgInputData
@@ -32,7 +33,7 @@ class RedisCallback(BaseCallback):
 
     def __init__(self, unique_id: str, workflow_id: str, chat_id: str, user_id: int):
         super(RedisCallback, self).__init__()
-        # 异步任务的唯一ID
+        # Unique for asynchronous tasksID
         self.unique_id = unique_id
         self.workflow_id = workflow_id
         self.chat_id = chat_id
@@ -86,7 +87,7 @@ class RedisCallback(BaseCallback):
                               {'status': status, 'reason': reason, 'time': time.time()},
                               expiration=3600 * 24 * 7)
         if status in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
-            # 消息事件和状态key可能还需要消费
+            # Message Events and StatuskeyConsumption may also be required
             self.redis_client.delete(self.workflow_data_key)
             self.redis_client.delete(self.workflow_input_key)
 
@@ -95,7 +96,7 @@ class RedisCallback(BaseCallback):
                                      {'status': status, 'reason': reason, 'time': time.time()},
                                      expiration=3600 * 24 * 7)
         if status in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
-            # 消息事件和状态key可能还需要消费
+            # Message Events and StatuskeyConsumption may also be required
             await self.redis_client.adelete(self.workflow_data_key)
             await self.redis_client.adelete(self.workflow_input_key)
 
@@ -201,7 +202,7 @@ class RedisCallback(BaseCallback):
                 break
             elif status_info['status'] in [WorkflowStatus.WAITING.value,
                                            WorkflowStatus.INPUT_OVER.value] and time.time() - status_info['time'] > 10:
-                # 10秒内没有收到状态更新，说明workflow没有启动，可能是celery worker线程数已满
+                # 10No status update received in seconds, descriptionworkflowNot started, could becelery workerThreads full
                 self.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow task execute busy')
                 yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
                                                message=WorkFlowTaskBusyError().to_dict())
@@ -222,7 +223,7 @@ class RedisCallback(BaseCallback):
                 yield chat_response
 
     async def get_response_until_break(self) -> AsyncIterator[ChatResponse]:
-        """ 不断获取workflow的response，直到遇到运行结束或者待输入 """
+        """ Continuous accessworkflowright of privacyresponseuntil the end of the run is encountered or pending entry """
         while True:
             # get workflow status
             status_info = await self.async_get_workflow_status()
@@ -251,7 +252,7 @@ class RedisCallback(BaseCallback):
                 break
             elif status_info['status'] in [WorkflowStatus.WAITING.value,
                                            WorkflowStatus.INPUT_OVER.value] and time.time() - status_info['time'] > 10:
-                # 10秒内没有收到状态更新，说明workflow没有启动，可能是celery worker线程数已满
+                # 10No status update received in seconds, descriptionworkflowNot started, could becelery workerThreads full
                 await self.async_set_workflow_status(WorkflowStatus.FAILED.value, 'workflow task execute busy')
                 yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
                                                message=WorkFlowTaskBusyError().to_dict())
@@ -276,7 +277,7 @@ class RedisCallback(BaseCallback):
             message_db = ChatMessageDao.get_message_by_id(message_id)
             if message_db:
                 self.update_old_message(data, message_db, message_content)
-        # 通知异步任务用户输入
+        # Notify Asynchronous Task User Input
         self.redis_client.set(self.workflow_input_key, data, expiration=self.workflow_expire_time)
         return
 
@@ -285,7 +286,7 @@ class RedisCallback(BaseCallback):
             message_db = await ChatMessageDao.aget_message_by_id(message_id)
             if message_db:
                 await self.async_update_old_message(data, message_db, message_content)
-        # 通知异步任务用户输入
+        # Notify Asynchronous Task User Input
         await self.redis_client.aset(self.workflow_input_key, data, expiration=self.workflow_expire_time)
         return
 
@@ -296,7 +297,7 @@ class RedisCallback(BaseCallback):
         if ChatMessage is not None: update old message
         return ChatResponse | None, ChatMessage | None
         """
-        # 更新输出待输入消息里用户的输入和选择
+        # Update the input and selection of the user in the output to be entered message
         old_message = json.loads(message_db.message)
         if message_db.category == WorkflowEventType.OutputWithInput.value:
             old_message['hisValue'] = user_input[old_message['node_id']][old_message['key']]
@@ -305,16 +306,16 @@ class RedisCallback(BaseCallback):
         elif message_db.category == WorkflowEventType.UserInput.value:
             user_input = user_input[old_message['node_id']]
 
-            # 前端传了用户输入内容则使用前端的内容
+            # If the front-end passes user input, the front-end content is used.
             if message_content:
                 user_input_message = message_content
-            # 说明是表单输入
+            # Instructions are form inputs
             elif old_message['input_schema']['tab'] == 'form_input':
                 user_input_message = ''
                 for key_info in old_message['input_schema']['value']:
                     user_input_message += f"{key_info['value']}:{user_input.get(key_info['key'], '')}\n"
             else:
-                # 说明对话框输入, 需要加下上传的文件信息, 和输入节点的数据结构有关
+                # Description Dialog Input, Uploaded file information needs to be added, It is related to the data structure of the input node.
                 user_input_message = user_input[old_message['input_schema']['key']]
                 dialog_files_content = user_input.get('dialog_files_content', [])
                 for one in dialog_files_content:
@@ -359,18 +360,18 @@ class RedisCallback(BaseCallback):
         stop_workflow.delay(self.unique_id, self.workflow_id, self.chat_id, self.user_id)
 
     def get_workflow_stop(self) -> bool | None:
-        """ 为了可以及时停止workflow，不做内存的缓存 """
+        """ In order to stop in timeworkflow, Do not cache memory """
         return self.redis_client.get(self.workflow_stop_key) == 1
 
     async def async_get_workflow_stop(self) -> bool | None:
-        """ 为了可以及时停止workflow，不做内存的缓存 """
+        """ In order to stop in timeworkflow, Do not cache memory """
         return await self.redis_client.aget(self.workflow_stop_key) == 1
 
     def send_chat_response(self, chat_response: ChatResponse):
-        """ 发送聊天消息 """
+        """ Send a chat message """
         self.insert_workflow_response(chat_response.dict())
 
-        # 判断下是否需要停止workflow, 流式输出时不判断，查询太频繁，而且也停不掉workflow
+        # Determine if it needs to be stoppedworkflow, Don't judge when streaming, queries are too frequent and can't be stoppedworkflow
         if chat_response.category == WorkflowEventType.StreamMsg.value:
             return
         if self.workflow and self.get_workflow_stop():
@@ -381,10 +382,10 @@ class RedisCallback(BaseCallback):
         return message id
         """
         if not self.chat_id:
-            # 生成一个假的消息id防止前端消息渲染重复
+            # Generate a fake messageidPrevent duplicate front-end message rendering
             return uuid.uuid4().hex
 
-        # 判断溯源
+        # Judgment traceability
         if source_documents:
             result = {}
             extra = {}
@@ -409,13 +410,15 @@ class RedisCallback(BaseCallback):
             files=json.dumps(chat_response.files, ensure_ascii=False)
         ))
 
-        # 如果是文档溯源，处理召回的chunk
+        # If the document is traceable, handle the recallchunk
         if chat_response.source not in [0, 4]:
-            sync_process_source_document(source_documents, self.chat_id, message.id, chat_response.message.get('msg'))
+            thread_pool.submit(f"workflow_source_document_{self.chat_id}",
+                               sync_process_source_document,
+                               source_documents, self.chat_id, message.id, chat_response.message.get('msg'))
 
-        # 判断是否需要新建会话
+        # Determine if a new session is needed
         if not self.create_session and chat_response.category != WorkflowEventType.UserInput.value:
-            # 没有会话数据则新插入一个会话
+            # Insert a new session without session data
             if not MessageSessionDao.get_one(self.chat_id):
                 db_workflow = FlowDao.get_flow_by_id(self.workflow_id)
                 MessageSessionDao.insert_one(MessageSession(
@@ -426,7 +429,7 @@ class RedisCallback(BaseCallback):
                     user_id=self.user_id,
                 ))
 
-                # 记录Telemetry日志
+                # RecordTelemetryJournal
                 telemetry_service.log_event_sync(user_id=self.user_id,
                                                  event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
                                                  trace_id=trace_id_var.get(),
@@ -522,7 +525,7 @@ class RedisCallback(BaseCallback):
 
     def on_stream_over(self, data: StreamMsgOverData):
         logger.debug(f'stream over: {data}')
-        # 替换掉minio的share前缀，通过nginx转发  ugly solve
+        # Replaceminioright of privacysharePrefix bynginxShare  ugly solve
         minio_share = settings.get_minio_conf().sharepoint
         data.msg = data.msg.replace(f"http://{minio_share}", "")
         chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),

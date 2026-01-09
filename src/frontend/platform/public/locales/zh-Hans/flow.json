@@ -167,7 +167,7 @@
   "storeFilesSentInCurrentSession": "存储当前会话中发送的文件",
   "displayNameTooltip": "用户会话页面展示此名称",
   "variableNameTooltipFile": "用于存储用户会话页面填写的内容，可在临时会话文件列表中选择此变量",
-  "variableNameTooltipOther": "用于存储用户会话页面填写的内容，可在其他节点中引用此变量",
+  "variableNameTooltip": "用于存储用户会话页面填写的内容，可在其他节点中引用此变量",
   "allowMultipleSelect": "允许多选",
   "allowUploadMultipleFiles": "允许上传多个文件",
   "uploadFileTypes": "上传文件类型",
@@ -251,6 +251,8 @@
   "variableNameRuleTip": "支持字母、数字、下划线，不能以数字开头，不超过 50 个字符",
   "variableValueRuleTip": "变量值不允许为空，不超过1000个字符",
   "enterVariableValue": "请输入变量值",
+  "kbQueryToolIntro": "## 知识库查询工具介绍\n当需要查询知识库来解决用户问题时，调用知识库查询工具，将用户需求改写成合适的 query 作为知识库工具的入参。",
+  "sqlAgentToolIntro": "## sqlagent 数据库工具介绍\n1. 使用自然语言精确的描述用户查询需求，将该描述作为参数 query 的值，调用 sqlagent 工具；\n2. 如果用户有多条查询需求，分两次调用sqlagent。",
   "node": {
     "start": {
       "name": "开始",

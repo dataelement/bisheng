@@ -7,7 +7,7 @@ from bisheng.common.schemas.api import UnifiedResponseModel
 
 
 class BaseErrorCode(Exception):
-    # 错误码前三位代表具体功能模块，后两位表示模块内部具体的报错。例如10001
+    # The first three digits of the error code represent the specific function module, and the last two digits represent the specific error report inside the module. For example,10001
     Code: int
     Msg: str
 

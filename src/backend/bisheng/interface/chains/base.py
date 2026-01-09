@@ -48,7 +48,7 @@ class ChainCreator(LangChainTypeCreator):
                 chain_name: import_class(f'bisheng_langchain.chains.{chain_name}')
                 for chain_name in bisheng_chains.__all__
             }
-            # 若配置在custom_chains里，则不会从method初始化的方式，导致报错
+            # If configured incustom_chains, it will not start frommethodHow to initialize, resulting in an error
             self.type_dict['BishengRetrievalQA'] = BishengRetrievalQA
             self.type_dict.update(bisheng)
 

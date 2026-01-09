@@ -1,7 +1,7 @@
-"""数据库全局管理器
+"""Database Global Manager
 
-提供数据库上下文的全局管理和便捷访问方法
-支持健康检查、连接池监控和事务管理
+Provides global management and easy access to database context
+Supports health checks, connection pool monitoring, and transaction management
 """
 import logging
 from typing import Dict, Any, Optional, AsyncGenerator
@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseManager(BaseContextManager[DatabaseConnectionManager]):
-    """数据库全局管理器
+    """Database Global Manager
 
-    负责管理数据库连接的全局生命周期，提供统一的访问接口
-    支持连接池监控、健康检查和便捷的会话管理
+    Responsible for managing the global lifecycle of database connections and providing a unified access interface
+    Supports connection pool monitoring, health checks, and easy session management
     """
 
     name: str = "database"
@@ -38,39 +38,39 @@ class DatabaseManager(BaseContextManager[DatabaseConnectionManager]):
         self.engine_config = engine_config or {}
 
     async def _async_initialize(self) -> DatabaseConnectionManager:
-        """初始化数据库连接管理器"""
+        """Initialize Database Connection Manager"""
         return DatabaseConnectionManager(
             self.database_url,
             **self.engine_config
         )
 
     def _sync_initialize(self) -> DatabaseConnectionManager:
-        """同步初始化"""
+        """Synchronization Initialization"""
         return DatabaseConnectionManager(
             self.database_url,
             **self.engine_config
         )
 
     async def _async_cleanup(self) -> None:
-        """清理数据库资源"""
+        """Clean up database resources"""
         if self._instance:
             await self._instance.close()
 
     def _sync_cleanup(self) -> None:
-        """同步清理数据库资源"""
+        """Synchronously clean up database resources"""
         if self._instance:
             self._instance.close_sync()
 
     async def health_check(self) -> bool:
-        """数据库健康检查
+        """Database Health Check
 
         Returns:
-            bool: True 如果数据库连接正常，False 否则
+            bool: True If the database connection is normal,False Otherwise, 
         """
         try:
             database_instance = await self.async_get_instance()
 
-            # 使用异步会话执行简单查询
+            # Perform simple queries using asynchronous sessions
             async with database_instance.async_session() as session:
                 await session.exec(text("SELECT 1"))
 
@@ -82,9 +82,9 @@ class DatabaseManager(BaseContextManager[DatabaseConnectionManager]):
             return False
 
     async def create_tables_if_not_exists(self) -> None:
-        """创建数据库表（如果不存在）
+        """Create a database table (if it does not exist)
 
-        这是一个便捷方法，用于初始化数据库结构
+        This is a convenient method for initializing the database structure
         """
         try:
             database_instance = await self.async_get_instance()
@@ -96,13 +96,13 @@ class DatabaseManager(BaseContextManager[DatabaseConnectionManager]):
 
 
 async def get_database_connection() -> DatabaseConnectionManager:
-    """获取全局数据库连接管理器实例
+    """Get Global Database Connection Manager Instance
 
     Returns:
-        DatabaseConnectionManager: 数据库连接管理器实例
+        DatabaseConnectionManager: Database Connection Manager Instance
 
     Raises:
-        ContextError: 如果数据库上下文未注册或初始化失败
+        ContextError: If the database context is not registered or initialization fails
     """
     from bisheng.core.context.manager import app_context
     try:
@@ -119,13 +119,13 @@ async def get_database_connection() -> DatabaseConnectionManager:
 
 
 def sync_get_database_connection() -> DatabaseConnectionManager:
-    """同步获取全局数据库连接管理器实例
+    """Get global database connection manager instance synchronously
 
     Returns:
-        DatabaseConnectionManager: 数据库连接管理器实例
+        DatabaseConnectionManager: Database Connection Manager Instance
 
     Raises:
-        ContextError: 如果数据库上下文未注册或初始化失败
+        ContextError: If the database context is not registered or initialization fails
     """
     from bisheng.core.context.manager import app_context
     try:
@@ -143,14 +143,14 @@ def sync_get_database_connection() -> DatabaseConnectionManager:
 
 @asynccontextmanager
 async def get_async_db_session() -> AsyncGenerator[AsyncSession, None]:
-    """获取异步数据库会话的便捷方法
+    """A convenient way to get asynchronous database sessions
 
     Example:
         async with get_async_db_session() as session:
             result = await session.execute("SELECT * FROM users")
 
     Yields:
-        AsyncSession: 异步数据库会话
+        AsyncSession: Asynchronous database session
     """
     db_manager = await get_database_connection()
     async with db_manager.async_session() as session:
@@ -159,14 +159,14 @@ async def get_async_db_session() -> AsyncGenerator[AsyncSession, None]:
 
 @contextmanager
 def get_sync_db_session():
-    """获取同步数据库会话的便捷方法
+    """Convenient way to get synchronized database sessions
 
     Example:
         with get_sync_db_session() as session:
             result = session.execute("SELECT * FROM users")
 
     Yields:
-        Session: 同步数据库会话
+        Session: Synchronize database sessions
     """
     db_manager = sync_get_database_connection()
     with db_manager.create_session() as session:

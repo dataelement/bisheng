@@ -5,7 +5,7 @@ from tiktoken.core import Encoding as TikTokenEncoding
 
 
 class AssistantUtils:
-    # 忽略助手配置已从系统配置中移除，暂不需要此类的方法
+    # Ignore assistant configuration has been removed from the system configuration, no such method is required for now
 
     @staticmethod
     def cl100k_base() -> TikTokenEncoding:

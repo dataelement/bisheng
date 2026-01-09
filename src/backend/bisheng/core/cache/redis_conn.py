@@ -19,12 +19,12 @@ from redis.asyncio import Redis as AsyncRedis
 class RedisClient:
 
     def __init__(self, redis_url, max_connections=100):
-        # # 哨兵模式
+        # # Sentry Mode
         if isinstance(redis_url, Dict):
             redis_conf = dict(redis_url)
             mode = redis_conf.pop('mode', 'sentinel')
             if mode == 'cluster':
-                # 集群模式
+                # Cluster Mode
                 cluster_url = ''
                 if 'startup_nodes' in redis_conf:
                     first_node = redis_conf['startup_nodes'][0]
@@ -44,12 +44,12 @@ class RedisClient:
             master = redis_conf.pop('sentinel_master')
             sentinel = Sentinel(sentinels=hosts, socket_timeout=0.1, sentinel_kwargs={'password': password})
             async_sentinel = AsyncSentinel(sentinels=hosts, socket_timeout=0.1, sentinel_kwargs={'password': password})
-            # 获取主节点的连接
+            # Get the connection of the master node
             self.connection = sentinel.master_for(master, socket_timeout=0.1, **redis_conf)
             self.async_connection: AsyncRedis = async_sentinel.master_for(master, socket_timeout=0.1, **redis_conf)
 
         else:
-            # 单机模式
+            # Singleplayer Mode
             self.pool = ConnectionPool.from_url(redis_url, max_connections=max_connections)
             self.async_pool = redis.asyncio.ConnectionPool.from_url(redis_url, max_connections=max_connections)
             self.connection = redis.StrictRedis(connection_pool=self.pool)
@@ -134,7 +134,7 @@ class RedisClient:
             raise TypeError('RedisCache only accepts values that can be pickled. ') from exc
 
     def mset(self, mapping: Dict[str, typing.Any], expiration: int = None) -> bool | None:
-        """批量设置"""
+        """Bulk Settings"""
         try:
             if not mapping:
                 return True
@@ -143,7 +143,7 @@ class RedisClient:
             result = self.connection.mset(serialized_mapping)
 
             if expiration:
-                # 使用pipeline批量设置过期时间
+                # UsepipelineBatch Set Expiration Time
                 pipe = self.connection.pipeline()
                 for key in mapping.keys():
                     pipe.expire(key, expiration)
@@ -154,7 +154,7 @@ class RedisClient:
             raise TypeError('RedisCache only accepts values that can be pickled. ') from exc
 
     async def amset(self, mapping: Dict[str, typing.Any], expiration: int = None) -> bool | None:
-        """异步批量设置"""
+        """Asynchronous Batch Setup"""
         try:
             if not mapping:
                 return True
@@ -163,7 +163,7 @@ class RedisClient:
             result = await self.async_connection.mset(serialized_mapping)
 
             if expiration:
-                # 使用pipeline批量设置过期时间
+                # UsepipelineBatch Set Expiration Time
                 pipe: Pipeline = self.async_connection.pipeline()
                 for key in mapping.keys():
                     await pipe.expire(key, expiration)
@@ -174,7 +174,7 @@ class RedisClient:
             raise TypeError('RedisCache only accepts values that can be pickled. ') from exc
 
     def mget(self, keys: typing.List[str]) -> typing.List[typing.Any] | None:
-        """批量获取"""
+        """Get in bulk"""
         try:
             if not keys:
                 return []
@@ -185,7 +185,7 @@ class RedisClient:
             raise TypeError('RedisCache only accepts values that can be pickled. ') from exc
 
     async def amget(self, keys: typing.List[str]) -> typing.List[typing.Any] | None:
-        """异步批量获取"""
+        """Asynchronous Batch Acquisition"""
         try:
             if not keys:
                 return []
@@ -195,7 +195,7 @@ class RedisClient:
             raise TypeError('RedisCache only accepts values that can be pickled. ') from exc
 
     async def akeys(self, pattern: str) -> typing.List[str]:
-        """异步获取匹配模式的所有键"""
+        """Get all keys matching patterns asynchronously"""
         try:
             await self.acluster_nodes(pattern)
             keys = await self.async_connection.keys(pattern)
@@ -467,14 +467,14 @@ class RedisClient:
         else:
             logger.warning("No async connection to close.")
 
-    # ==================== Pipeline支持 ====================
+    # ==================== PipelineSupport ====================
 
     def pipeline(self, transaction: bool = True) -> redis.client.Pipeline:
-        """获取pipeline对象"""
+        """DapatkanpipelineObjects"""
         return self.connection.pipeline(transaction=transaction)
 
     def async_pipeline(self, transaction: bool = True) -> Pipeline:
-        """获取异步pipeline对象"""
+        """Get AsynchronouspipelineObjects"""
         return self.async_connection.pipeline(transaction=transaction)
 
     async def allen(self, key: str) -> int:

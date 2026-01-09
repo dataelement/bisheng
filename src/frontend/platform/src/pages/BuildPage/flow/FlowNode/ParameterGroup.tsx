@@ -1,8 +1,9 @@
 import { WorkflowNode } from "@/types/flow";
-import Parameter from "./Parameter";
 import { useTranslation } from "react-i18next";
+import Parameter from "./Parameter";
 
-export default function ParameterGroup({ nodeId, node, cate, tab, onOutPutChange, onStatusChange, onVarEvent, onFouceUpdate, selectedKnowledgeIds }
+export default function ParameterGroup({ nodeId, node, cate, tab,
+    onOutPutChange, onAddSysPrompt, onStatusChange, onVarEvent, onFouceUpdate, selectedKnowledgeIds }
     : {
         nodeId: string,
         node: WorkflowNode,
@@ -11,6 +12,7 @@ export default function ParameterGroup({ nodeId, node, cate, tab, onOutPutChange
         onOutPutChange: (key: string, value: any) => void
         onStatusChange: (key: string, obj: any) => void
         onVarEvent: (key: string, obj: any) => void
+        onAddSysPrompt: (type: string) => void
         onFouceUpdate: () => void
     }) {
     const { t } = useTranslation('flow')
@@ -27,6 +29,7 @@ export default function ParameterGroup({ nodeId, node, cate, tab, onOutPutChange
             onStatusChange={onStatusChange}
             onVarEvent={onVarEvent}
             onFouceUpdate={onFouceUpdate}
+            onAddSysPrompt={onAddSysPrompt}
             selectedKnowledgeIds={selectedKnowledgeIds}
         /> : null)}
     </div>

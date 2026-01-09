@@ -1,6 +1,6 @@
 [project]
 name = "backend"
-version = "2.3.0-beta3"
+version = "2.3.0"
 description = "BISHENG backend service"
 readme = "README.md"
 license = "Apache 2.0"

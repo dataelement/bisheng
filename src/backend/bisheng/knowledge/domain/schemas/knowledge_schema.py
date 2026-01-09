@@ -8,24 +8,24 @@ from bisheng.knowledge.domain.models.knowledge import MetadataFieldType
 
 
 class UpdatePreviewFileChunk(BaseModel):
-    knowledge_id: int = Field(..., description='知识库ID')
-    file_path: str = Field(..., description='文件路径')
-    text: str = Field(..., description='文本块内容')
-    chunk_index: int = Field(..., description='文本块索引, 在metadata里')
-    bbox: Optional[str] = Field(default='', description='文本块bbox信息')
+    knowledge_id: int = Field(..., description='The knowledge base uponID')
+    file_path: str = Field(..., description='FilePath')
+    text: str = Field(..., description='Text block Content')
+    chunk_index: int = Field(..., description='Text block index, Insidemetadatamile')
+    bbox: Optional[str] = Field(default='', description='Text blocksbboxMessage')
 
 
 class MetadataField(BaseModel):
-    """元数据字段模型"""
-    field_name: str = Field(..., max_length=255, description='元数据字段名')
-    field_type: MetadataFieldType = Field(..., description='元数据字段类型')
+    """Metadata Field Model"""
+    field_name: str = Field(..., max_length=255, description='Metadata field name')
+    field_type: MetadataFieldType = Field(..., description='Metadata field type')
     updated_at: int = Field(default_factory=lambda: int(datetime.now().timestamp()),
-                            description='元数据字段更新时间戳')
+                            description='Metadata field update timestamp')
 
     @field_validator('field_name')
     @classmethod
     def validate_field_name(cls, v: str) -> str:
-        # 必须由小写字母、数字、下划线组成，且必须以小写字母开头
+        # Must consist of lowercase letters, numbers, underscores, and must begin with a lowercase letter
         pattern = r'^[a-z][a-z0-9_]*$'
         if not re.match(pattern, v):
             raise ValueError(
@@ -34,23 +34,23 @@ class MetadataField(BaseModel):
 
 
 class AddKnowledgeMetadataFieldsReq(BaseModel):
-    """添加知识库元数据字段请求体"""
-    knowledge_id: int = Field(..., description='知识库ID')
-    metadata_fields: List[MetadataField] = Field(..., description='要添加的元数据字段列表')
+    """Add Knowledge Base Metadata Field Request Body"""
+    knowledge_id: int = Field(..., description='The knowledge base uponID')
+    metadata_fields: List[MetadataField] = Field(..., description='List of metadata fields to add')
 
 
 class UpdateKnowledgeMetadataFieldsReq(BaseModel):
-    """更新知识库元数据字段请求体"""
+    """Update Knowledge Base Metadata Field Request Body"""
 
     class UpdateMetadataFieldName(BaseModel):
-        """更新元数据字段名称模型"""
-        old_field_name: str = Field(..., description='旧的元数据字段名')
-        new_field_name: str = Field(..., max_length=255, description='新的元数据字段名')
+        """Update Metadata Field Name Model"""
+        old_field_name: str = Field(..., description='Old Metadata Field Name')
+        new_field_name: str = Field(..., max_length=255, description='New Metadata Field Name')
 
         @field_validator('new_field_name')
         @classmethod
         def validate_new_field_name(cls, v: str) -> str:
-            # 必须由小写字母、数字、下划线组成，且必须以小写字母开头
+            # Must consist of lowercase letters, numbers, underscores, and must begin with a lowercase letter
             pattern = r'^[a-z][a-z0-9_]*$'
             if not re.match(pattern, v):
                 raise ValueError(
@@ -60,23 +60,23 @@ class UpdateKnowledgeMetadataFieldsReq(BaseModel):
         @field_validator('old_field_name')
         @classmethod
         def validate_old_field_name(cls, v: str) -> str:
-            # 不能为空
+            # Tidak boleh kosong.
             if not v:
                 raise ValueError("old_field_name cannot be empty")
             return v
 
-    knowledge_id: int = Field(..., description='知识库ID')
-    metadata_fields: List[UpdateMetadataFieldName] = Field(..., description='要更新的元数据字段列表')
+    knowledge_id: int = Field(..., description='The knowledge base uponID')
+    metadata_fields: List[UpdateMetadataFieldName] = Field(..., description='List of metadata fields to update')
 
 
 class FileUserMetaDataInfo(BaseModel):
-    field_name: str = Field(..., description='元数据字段名')
-    field_value: Optional[Any] = Field(default=None, description='元数据字段值')
+    field_name: str = Field(..., description='Metadata field name')
+    field_value: Optional[Any] = Field(default=None, description='Metadata field value')
     updated_at: int = Field(default_factory=lambda: int(datetime.now().timestamp()),
-                            description='元数据字段更新时间戳')
+                            description='Metadata field update timestamp')
 
 
 class ModifyKnowledgeFileMetaDataReq(BaseModel):
-    """更改知识库文件元数据请求体"""
-    knowledge_file_id: int = Field(..., description='知识库文件ID')
-    user_metadata_list: List[FileUserMetaDataInfo] = Field(..., description='要添加的文件元数据列表')
+    """Change Knowledge Base File Metadata Request Body"""
+    knowledge_file_id: int = Field(..., description='Knowledge Base FilesID')
+    user_metadata_list: List[FileUserMetaDataInfo] = Field(..., description='List of file metadata to add')

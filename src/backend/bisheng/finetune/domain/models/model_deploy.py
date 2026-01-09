@@ -103,4 +103,4 @@ class ModelDeployUpdate(SQLModelSerializable):
 
 
 class ModelDeployInfo(ModelDeploy):
-    sft_support: bool = Field(default=False, description='是否支持微调训练')
+    sft_support: bool = Field(default=False, description='Whether to support fine-tuning training')

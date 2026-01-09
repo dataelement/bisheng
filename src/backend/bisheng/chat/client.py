@@ -43,17 +43,17 @@ class ChatClient:
         self.websocket = websocket
         self.kwargs = kwargs
 
-        # 业务自定义参数
+        # Business Custom Parameters
         self.db_assistant = None
         self.gpts_agent: AssistantAgent | None = None
         self.gpts_async_callback = None
         self.chat_history = []
-        # 和模型对话时传入的 完整的历史对话轮数
+        # Incoming when talking to the model Full Historical Dialogue Round Count
         self.latest_history_num = 10
         self.gpts_conf = settings.get_from_db('gpts')
-        # 异步任务列表
+        # Asynchronous Task List
         self.task_ids = []
-        # 流式输出的队列，用来接受流式输出的内容，每次处理新的question时都清空
+        # A queue of streaming outputs to accept the content of the streaming output, processing newquestionEmpty at all times
         self.stream_queue = Queue()
 
     async def close(self):
@@ -68,7 +68,7 @@ class ChatClient:
     async def handle_message(self, message: Dict[any, any]):
         logger.info(f'client_id={self.client_key} handle_message start, message: {message}')
         trace_id = trace_id_var.get()
-        # 处理客户端发过来的信息, 提交到线程池内执行
+        # Handling messages from clients, Submit to Thread Pool for Execution
         if self.work_type == WorkType.GPTS:
             thread_pool.submit(trace_id,
                                self.wrapper_task,
@@ -79,16 +79,16 @@ class ChatClient:
             # await self.handle_gpts_message(message)
 
     async def wrapper_task(self, task_id: str, fn: Callable, *args, **kwargs):
-        # 包装处理函数为异步任务
+        # The wrapper handler function is an asynchronous task
         self.task_ids.append(task_id)
         start_time = time.time()
         try:
-            # 执行处理函数
+            # Execute Handling Functions
             await fn(*args, **kwargs)
         except Exception as e:
             logger.exception("handle message error")
         finally:
-            # 执行完成后将任务id从列表移除
+            # When the execution is complete, the task will beidRemove from list
             self.task_ids.remove(task_id)
             end_time = time.time()
             await telemetry_service.log_event(user_id=self.user_id,
@@ -112,7 +112,7 @@ class ChatClient:
             'remark': remark
         })
         if not self.chat_id:
-            # debug模式无需保存历史
+            # debugMode does not need to save history
             return
         is_bot = 0 if msg_type == 'human' else 1
         msg = ChatMessageDao.insert_one(ChatMessageModel(
@@ -127,7 +127,7 @@ class ChatClient:
             user_id=self.user_id,
             remark=remark,
         ))
-        # 记录审计日志, 是新建会话
+        # Log Audit Logs, Is New Session
         if len(self.chat_history) <= 1:
             MessageSessionDao.insert_one(MessageSession(
                 chat_id=self.chat_id,
@@ -137,7 +137,7 @@ class ChatClient:
                 user_id=self.user_id,
             ))
 
-            # 记录Telemetry日志
+            # RecordTelemetryJournal
             await telemetry_service.log_event(user_id=self.user_id,
                                               event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
                                               trace_id=trace_id_var.get(),
@@ -172,17 +172,17 @@ class ChatClient:
         await self.init_chat_history()
         await self.init_gpts_callback()
         try:
-            # 处理智能助手业务
+            # Processing Intelligent Assistant Business
             if self.chat_id and self.gpts_agent is None:
-                # 会话业务agent通过数据库数据固定生成,不用每次变化
+                # Conversation businessagentFixed generation from database data,Don't change every time
                 assistant = AssistantDao.get_one_assistant(self.client_id)
                 if not assistant:
                     raise AssistantDeletedError()
-                    # 判断下agent是否上线
+                    # Under JudgmentagentOnline or not
                 if assistant.status != AssistantStatus.ONLINE.value:
                     raise AssistantNotOnlineError()
             elif not self.chat_id:
-                # 调试界面没测都重新生成
+                # The debug interface is regenerated without testing
                 assistant = AssistantDao.get_one_assistant(self.client_id)
                 if not assistant:
                     raise AssistantDeletedError()
@@ -192,12 +192,12 @@ class ChatClient:
 
             if self.chat_id and self.gpts_agent is None:
                 self.db_assistant = assistant
-                # 会话业务agent通过数据库数据固定生成,不用每次变化
+                # Conversation businessagentFixed generation from database data,Don't change every time
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id, invoke_user_id=self.user_id)
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)
             elif not self.chat_id:
                 self.db_assistant = assistant
-                # 调试界面每次都重新生成
+                # The debugging interface is regenerated every time
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id, invoke_user_id=self.user_id)
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)
 
@@ -209,10 +209,10 @@ class ChatClient:
             raise AssistantOtherError(exception=e)
 
     async def init_chat_history(self):
-        # 初始化历史记录，不为空则不用重新初始化
+        # Initialization history, not empty or no reinitialization
         if len(self.chat_history) > 0:
             return
-        # 从数据库加载历史会话
+        # Load Historical Sessions from Database
         if self.chat_id:
             res = ChatMessageDao.get_messages_by_chat_id(self.chat_id,
                                                          ['question', 'answer', 'tool_call', 'tool_result'],
@@ -225,16 +225,16 @@ class ChatClient:
                 })
 
     async def get_latest_history(self) -> List[BaseMessage]:
-        # 需要将无效的历史消息剔除，只包含一问一答的完整会话记录
+        # Invalid historical messages need to be culled and only complete Q&A sessions are included
         tmp = []
         find_i = 0
         is_answer = True
-        # 从聊天历史里获取
+        # Get from Chat History
         for i in range(len(self.chat_history) - 1, -1, -1):
             one_item = self.chat_history[i]
             if find_i >= self.latest_history_num:
                 break
-            # 不包含中断的答案
+            # Answers without interruptions
             if one_item['category'] == 'answer' and one_item.get('remark') != 'break_answer' and is_answer:
                 tmp.insert(0, AIMessage(content=one_item['message']))
                 is_answer = False
@@ -262,13 +262,13 @@ class ChatClient:
         self.gpts_async_callback = async_callbacks
 
     async def stop_handle_message(self, message: Dict[any, any]):
-        # 中止流式输出, 因为最新的任务id是中止任务的id，不能取消自己
+        # Abort Streaming Output, Because the latest taskidis to abort the task.id, you can't cancel yourself
         logger.info(f'need stop agent, client_key: {self.client_key}, message: {message}')
 
-        # 中止之前的处理函数
+        # Processing function before abort
         thread_pool.cancel_task(self.task_ids[:-1])
 
-        # 将流式输出的内容写到数据库内
+        # Write streaming output to database
         answer = ''
         reasoning_answer = ''
         while not self.stream_queue.empty():
@@ -278,7 +278,7 @@ class ChatClient:
             elif msg.get('type') == 'reasoning':
                 reasoning_answer += msg.get('content', '')
 
-        # 有流式输出内容的话，记录流式输出内容到数据库
+        # If there is streaming output, record the streaming output to the database
         if reasoning_answer.split():
             res = await self.add_message('bot', answer, 'reasoning_answer', 'break_answer')
             await self.send_response('reasoning_answer', 'end', '', message_id=res.id if res else None)
@@ -301,12 +301,12 @@ class ChatClient:
 
         try:
             await self.send_response('processing', 'begin', '')
-            # 清空流式队列，防止把上一次的回答，污染本次回答
+            # Empty the streaming queue to prevent contamination of the previous answer
             await self.clear_stream_queue()
             inputs = message.get('inputs', {})
             input_msg = inputs.get('input')
             if not input_msg:
-                # 需要切换会话
+                # Session needs to be switched
                 logger.debug(f'need switch agent, client_key: {self.client_key} inputs: {inputs}')
                 self.client_id = inputs.get('data').get('id')
                 self.chat_id = inputs.get('data').get('chatId')
@@ -316,20 +316,20 @@ class ChatClient:
                 await self.init_gpts_agent()
                 return
 
-            # 初始化agent
+            # Inisialisasiagent
             await self.init_gpts_agent()
 
-            # 将用户问题写入到数据库
+            # Write user issue to database
             await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')
 
-            # 获取回话历史
+            # Get callback history
             chat_history = await self.get_latest_history()
-            # 调用agent获取结果
+            # RecallagentGet Results
             result = await self.gpts_agent.run(input_msg, chat_history, self.gpts_async_callback)
             logger.debug(f'gpts agent {self.client_key} result: {result}')
             answer = result[-1].content
 
-            # 记录包含
+            # Record contains
             new_history = result[len(chat_history):-1]
             for one in new_history:
                 if isinstance(one, AIMessage):
@@ -340,11 +340,11 @@ class ChatClient:
                     logger.warning("unexpected message type")
 
             answer_end_type = 'end'
-            # 如果是流式的llm则用end_cover结束, 覆盖之前流式的输出
+            # If it's streaming,llmthen useend_coverEnd, Overwrite previous streamed output
             if getattr(self.gpts_agent.llm, 'streaming', False):
                 answer_end_type = 'end_cover'
 
-            # 从队列中获取reasoning content
+            # Get from Queuereasoning content
             reasoning_content = ''
             while not self.stream_queue.empty():
                 msg = self.stream_queue.get()

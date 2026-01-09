@@ -15,62 +15,62 @@ logger = logging.getLogger(__name__)
 
 class SessionVersionStatusEnum(str, Enum):
     """
-    灵思会话版本状态枚举
+    Ideas Session Version Status Enumeration
     """
-    # 未执行
+    # not implemented
     NOT_STARTED = "not_started"
-    # 进行中
+    # Sedang berlangsung
     IN_PROGRESS = "in_progress"
-    # 运行完成
+    # Run Completed
     COMPLETED = "completed"
-    # 运行失败
+    #  has failed to run...
     FAILED = "failed"
-    # SOP 生成失败
+    # SOP Generation Failed
     SOP_GENERATION_FAILED = "sop_generation_failed"
-    # 终止
+    # TERMINATION
     TERMINATED = "terminated"
 
 
 class LinsightSessionVersionBase(SQLModelSerializable):
     """
-    灵思会话版本模型基类
+    Inspiration Conversation Version Model Base Class
     """
-    session_id: str = Field(..., description='会话ID', sa_column=Column(CHAR(36),
+    session_id: str = Field(..., description='SessionsID', sa_column=Column(CHAR(36),
                                                                         ForeignKey("message_session.chat_id"),
                                                                         nullable=False,
                                                                         index=True))
-    user_id: int = Field(..., description='用户ID', foreign_key="user.user_id", nullable=False)
-    question: str = Field(..., description='用户问题', sa_type=Text, nullable=False)
-    title: Optional[str] = Field(None, description='会话标题', sa_type=Text, nullable=True)
-    tools: Optional[List[Dict]] = Field(None, description='可用的工具列表', sa_type=JSON, nullable=True)
-    # 个人知识库
-    personal_knowledge_enabled: bool = Field(False, description='是否启用个人知识库', sa_type=Boolean)
-    # 组织知识库
-    org_knowledge_enabled: bool = Field(False, description='是否启用组织知识库', sa_type=Boolean)
-    files: Optional[List[Dict]] = Field(None, description='上传的文件列表', sa_type=JSON, nullable=True)
-    sop: Optional[str] = Field(None, description='SOP内容', sa_type=Text, nullable=True)
-    output_result: Optional[Dict] = Field(None, description='输出结果', sa_type=JSON, nullable=True)
-    status: SessionVersionStatusEnum = Field(default=SessionVersionStatusEnum.NOT_STARTED, description='会话版本状态',
+    user_id: int = Field(..., description='UsersID', foreign_key="user.user_id", nullable=False)
+    question: str = Field(..., description='User Questions', sa_type=Text, nullable=False)
+    title: Optional[str] = Field(None, description='Session title', sa_type=Text, nullable=True)
+    tools: Optional[List[Dict]] = Field(None, description='List of available tools', sa_type=JSON, nullable=True)
+    # Personal Knowledge Base
+    personal_knowledge_enabled: bool = Field(False, description='Whether or not to enable Personal Knowledge Base', sa_type=Boolean)
+    # Organization Knowledge Base
+    org_knowledge_enabled: bool = Field(False, description='Whether to enable organization knowledge base', sa_type=Boolean)
+    files: Optional[List[Dict]] = Field(None, description='Uploaded files list:', sa_type=JSON, nullable=True)
+    sop: Optional[str] = Field(None, description='SOPContents', sa_type=Text, nullable=True)
+    output_result: Optional[Dict] = Field(None, description='Output Results', sa_type=JSON, nullable=True)
+    status: SessionVersionStatusEnum = Field(default=SessionVersionStatusEnum.NOT_STARTED, description='Session Version Status',
                                              sa_column=Column(SQLEnum(SessionVersionStatusEnum), nullable=False))
-    score: Optional[int] = Field(None, description='会话评分', ge=1, le=5, nullable=True)
-    # 执行结果反馈信息
-    execute_feedback: Optional[str] = Field(None, description='执行结果反馈信息', sa_type=Text, nullable=True)
+    score: Optional[int] = Field(None, description='Session Score', ge=1, le=5, nullable=True)
+    # Execution Result Feedback Information
+    execute_feedback: Optional[str] = Field(None, description='Execution Result Feedback Information', sa_type=Text, nullable=True)
 
-    # 是否有重新执行
-    has_reexecute: bool = Field(default=False, description='是否有重新执行', sa_type=Boolean, nullable=False)
+    # Is there a re-execution
+    has_reexecute: bool = Field(default=False, description='Is there a re-execution', sa_type=Boolean, nullable=False)
 
-    # 版本
-    version: datetime = Field(default_factory=datetime.now, description='会话版本创建时间', sa_type=DateTime)
+    # Version
+    version: datetime = Field(default_factory=datetime.now, description='Session Version Created Time', sa_type=DateTime)
 
 
 class LinsightSessionVersion(LinsightSessionVersionBase, table=True):
     """
-    灵思会话版本模型
+    Inspiration Conversation Version Model
     """
-    id: str = Field(default_factory=uuid_hex, description='会话版本ID',
+    id: str = Field(default_factory=uuid_hex, description='Session VersionID',
                     sa_column=Column(CHAR(36), unique=True, nullable=False, primary_key=True))
 
-    create_time: datetime = Field(default_factory=datetime.now, description='创建时间',
+    create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
@@ -80,15 +80,15 @@ class LinsightSessionVersion(LinsightSessionVersionBase, table=True):
 
 class LinsightSessionVersionDao(object):
     """
-    灵思会话版本数据访问对象
+    Inspiration Session Version Data Access Objects
     """
 
     @staticmethod
     async def insert_one(session_version: LinsightSessionVersion) -> LinsightSessionVersion:
         """
-        插入一条灵思会话版本记录
-        :param session_version: 灵思会话版本对象
-        :return: 创建的灵思会话版本对象
+        Insert an Invisible Sessions version record
+        :param session_version: Inspiration Conversation Version Object
+        :return: Invisible Conversation Version Object Created
         """
 
         async with get_async_db_session() as session:
@@ -100,22 +100,22 @@ class LinsightSessionVersionDao(object):
     @staticmethod
     async def get_by_id(linsight_session_version_id: str) -> Optional[LinsightSessionVersion]:
         """
-        根据灵思会话版本ID获取灵思会话版本
-        :param linsight_session_version_id: 灵思会话版本ID
-        :return: 灵思会话版本对象
+        According to the Inspiration Conversation versionIDGet Ideas Conversation Version
+        :param linsight_session_version_id: Inspiration Conversation VersionID
+        :return: Inspiration Conversation Version Object
         """
         async with get_async_db_session() as session:
             statement = select(LinsightSessionVersion).where(
-                LinsightSessionVersion.id == str(linsight_session_version_id))  # 显式转 str
+                LinsightSessionVersion.id == str(linsight_session_version_id))  # Explicit Transfer str
             result = await session.exec(statement)
             return result.first()
 
     @staticmethod
     async def get_session_versions_by_session_id(session_id: str) -> List[LinsightSessionVersion]:
         """
-        根据会话ID获取所有灵思会话版本
-        :param session_id: 会话ID
-        :return: 灵思会话版本列表
+        By ConversationIDGet all Ideas Conversation versions
+        :param session_id: SessionsID
+        :return: Inspiration Session Version List
         """
         async with get_async_db_session() as session:
             statement = select(LinsightSessionVersion).where(
@@ -127,7 +127,7 @@ class LinsightSessionVersionDao(object):
     @staticmethod
     async def modify_sop_content(linsight_session_version_id: str, sop_content: str):
         """
-        修改灵思会话版本的SOP内容
+        Modify Inspiration Conversation Version ofSOPContents
         :param linsight_session_version_id:
         :param sop_content:
         :return:
@@ -136,7 +136,7 @@ class LinsightSessionVersionDao(object):
         async with get_async_db_session() as session:
             stmt = (
                 update(LinsightSessionVersion)
-                .where(col(LinsightSessionVersion.id) == str(linsight_session_version_id))  # 显式转 str
+                .where(col(LinsightSessionVersion.id) == str(linsight_session_version_id))  # Explicit Transfer str
                 .values(sop=sop_content)
             )
 
@@ -149,9 +149,9 @@ class LinsightSessionVersionDao(object):
     @staticmethod
     async def get_session_version_by_file_id(file_id: str) -> Optional[LinsightSessionVersion]:
         """
-        根据文件ID获取灵思会话版本
-        :param file_id: 文件ID
-        :return: 灵思会话版本对象
+        According to DOCUMENTIDGet Ideas Conversation Version
+        :param file_id: Doc.ID
+        :return: Inspiration Conversation Version Object
         """
         async with get_async_db_session() as session:
             statement = select(LinsightSessionVersion).where(
@@ -160,13 +160,13 @@ class LinsightSessionVersionDao(object):
             result = await session.exec(statement)
             return result.first()
 
-    # 根据任务状态获取灵思会话版本列表
+    # Get a list of Ideas session versions based on task status
     @staticmethod
     async def get_session_versions_by_status(status: SessionVersionStatusEnum) -> List[LinsightSessionVersion]:
         """
-        根据任务状态获取灵思会话版本列表
-        :param status: 会话版本状态
-        :return: 灵思会话版本列表
+        Get a list of Ideas session versions based on task status
+        :param status: Session Version Status
+        :return: Inspiration Session Version List
         """
         async with get_async_db_session() as session:
             statement = select(LinsightSessionVersion).where(
@@ -175,20 +175,20 @@ class LinsightSessionVersionDao(object):
             result = await session.exec(statement)
             return result.all()
 
-    # 批量更新灵思会话版本状态
+    # Bulk Update Ideas Session Version Status
     @staticmethod
     async def batch_update_session_versions_status(session_version_ids: List[str], status: SessionVersionStatusEnum,
                                                    **kwargs) -> None:
         """
-        批量更新灵思会话版本状态
-        :param session_version_ids: 会话版本ID列表
-        :param status: 新的会话版本状态
+        Bulk Update Ideas Session Version Status
+        :param session_version_ids: Session VersionIDVertical
+        :param status: New Session Version Status
         """
         async with get_async_db_session() as session:
             stmt = (
                 update(LinsightSessionVersion)
                 .where(col(LinsightSessionVersion.id).in_(session_version_ids))
-                .values(status=status, **kwargs)  # 支持额外的字段更新
+                .values(status=status, **kwargs)  # Support for additional field updates
             )
             await session.exec(stmt)
             await session.commit()

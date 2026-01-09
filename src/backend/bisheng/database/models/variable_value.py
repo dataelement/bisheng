@@ -11,13 +11,13 @@ from bisheng.core.database import get_sync_db_session
 
 
 class VariableBase(SQLModelSerializable):
-    flow_id: str = Field(index=True, description='所属的技能')
-    version_id: int = Field(description='所属的技能版本')
-    node_id: str = Field(index=True, description='所属的node')
-    variable_name: Optional[str] = Field(index=True, default=None, description='变量名')
-    value_type: int = Field(index=False, description='变量类型，1=文本 2=list 3=file')
-    is_option: int = Field(index=False, default=1, description='是否必填 1=必填 0=非必填')
-    value: str = Field(index=False, default=0, description='变量值，当文本的时候，传入文本长度')
+    flow_id: str = Field(index=True, description='Belonging Skills')
+    version_id: int = Field(description='Version of the skill to which it belongs')
+    node_id: str = Field(index=True, description='belong tonode')
+    variable_name: Optional[str] = Field(index=True, default=None, description='Variables')
+    value_type: int = Field(index=False, description='Variable type1=Text 2=list 3=file')
+    is_option: int = Field(index=False, default=1, description='Required? 1=Required 0=Price is not required')
+    value: str = Field(index=False, default=0, description='variable value, the length of the incoming text when the text is')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -40,7 +40,7 @@ class VariableBase(SQLModelSerializable):
         # dict_keys(['description', 'name', 'id', 'data'])
         if not v:
             return v
-        # 去重保持原来的顺序
+        # Deduplication keeps the original order
         v_list = v.split(',')
         res = []
         for one in v_list:
@@ -67,7 +67,7 @@ class VariableDao(Variable):
     @classmethod
     def create_variable(cls, variable: Variable) -> Variable:
         """
-        创建新变量
+        Create New variant
         """
         with get_sync_db_session() as session:
             db_variable = Variable.from_orm(variable)
@@ -91,7 +91,7 @@ class VariableDao(Variable):
     @classmethod
     def copy_variables(cls, flow_id: str, old_version_id: int, version_id: int) -> List[Variable]:
         """
-        复制版本的表单数据到 新版本内
+        Copy the version of the form data to In the new version
         """
         with get_sync_db_session() as session:
             query = select(Variable).where(Variable.flow_id == flow_id, Variable.version_id == old_version_id)

@@ -1,8 +1,8 @@
-# QA模块相关的返回错误码 140 开头
+# QAModule-related return error codes 140 What/the beginning?
 from .base import BaseErrorCode
 
 
-# 后台处理中，稍后再试
+# Processing in the background, try again later
 class BackendProcessingError(BaseErrorCode):
     Code = 14001
-    Msg = "后台处理中，稍后再试"
+    Msg = "Processing in the background, try again later"

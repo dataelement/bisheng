@@ -5,7 +5,7 @@ from bisheng.workflow.nodes.output.output import OutputNode
 
 
 class OutputFakeNode(BaseModel):
-    """ 用来处理output的中断，判断是否需要用户的输入 """
+    """ Used to processoutputInterrupt to determine if user input is required """
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     id: str
@@ -13,7 +13,7 @@ class OutputFakeNode(BaseModel):
     type: str
 
     def run(self, state: dict):
-        """ 什么都不执行，只是用来处理output的中断，判断是否需要用户的输入 """
+        """ Do nothing, just use it to deal withoutputInterrupt to determine if user input is required """
         self.output_node.callback_manager.on_node_end(data=NodeEndData(
             unique_id=self.output_node.exec_unique_id,
             node_id=self.output_node.id,

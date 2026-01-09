@@ -26,12 +26,12 @@ from ..utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_lim
 
 def _get_user_kwargs(model_config: dict) -> dict:
     user_kwargs = model_config.get('user_kwargs', {})
-    if isinstance(user_kwargs, str):
+    if isinstance(user_kwargs, str) and user_kwargs:
         return json.loads(user_kwargs)
-    return user_kwargs
+    return user_kwargs if user_kwargs else {}
 
 
-# 需要注意初始化参数的优先级。实例化传入的最高 -> 前端界面配置的其次 -> 前端界面的高级参数优先级最低
+# Attention needs to be paid to the priority of the initialization parameters. Instantiation Incoming Highest -> The following configurations of the front-end interface -> Advanced parameters of the front-end interface have the lowest priority
 def _get_ollama_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params['base_url'] = server_config.get('base_url', '').rstrip('/')
     # some bugs
@@ -40,7 +40,7 @@ def _get_ollama_params(params: dict, server_config: dict, model_config: dict) ->
     if params.get('max_tokens'):
         params['num_ctx'] = params.pop('max_tokens', None)
 
-    # 用户高级自定义配置
+    # User advanced custom configuration
     user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
     return user_kwargs
@@ -154,13 +154,13 @@ def _get_spark_params(params: dict, server_config: dict, model_config: dict) -> 
 
 
 _llm_node_type: Dict = {
-    # 开源推理框架
+    # Open source inference framework
     LLMServerType.OLLAMA.value: {'client': CustomChatOllamaWithReasoning, 'params_handler': _get_ollama_params},
     LLMServerType.XINFERENCE.value: {'client': ChatOpenAI, 'params_handler': _get_xinference_params},
     LLMServerType.LLAMACPP.value: {'client': ChatOpenAI, 'params_handler': _get_openai_params},
     LLMServerType.VLLM.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
 
-    # 官方api服务
+    # OfficalapiSERVICES
     LLMServerType.OPENAI.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
     LLMServerType.AZURE_OPENAI.value: {'client': AzureChatOpenAI, 'params_handler': _get_azure_openai_params},
     LLMServerType.QWEN.value: {'client': ChatTongyi, 'params_handler': _get_qwen_params},
@@ -183,8 +183,8 @@ class BishengLLM(BishengBase, BaseChatModel):
      Use the llm model that has been launched in model management
     """
 
-    streaming: Optional[bool] = Field(default=None, description="是否使用流式输出", alias="stream")
-    temperature: Optional[float] = Field(default=None, description="模型生成的温度")
+    streaming: Optional[bool] = Field(default=None, description="Whether to use streaming output", alias="stream")
+    temperature: Optional[float] = Field(default=None, description="Model Generated Temperature")
 
     llm: Optional[BaseChatModel] = Field(default=None)
 
@@ -199,7 +199,7 @@ class BishengLLM(BishengBase, BaseChatModel):
             raise NoLlmModelConfigError()
 
         if "model_info" in kwargs and "server_info" in kwargs:
-            # 说明是从class method初始化的 不用再次查询数据库
+            # Description is fromclass methodInitialized No need to query the database again
             self._init_client(model_info=kwargs.pop("model_info"), server_info=kwargs.pop("server_info"), **kwargs)
         else:
             model_info, server_info = self.get_model_server_info_sync(self.model_id)
@@ -249,12 +249,12 @@ class BishengLLM(BishengBase, BaseChatModel):
         return params
 
     def _get_default_params(self, server_config: dict, model_config: dict) -> dict:
-        # 优先级最高的参数，因为这些参数是实例化对象时传入的
+        # Highest priority parameters because they are passed in when the object is instantiated
         default_params: Dict[str, Any] = {
             'model': self.model_info.model_name,
         }
 
-        # 实例化时传参了优先级最高，其次用高级配置里的。否则默认为true
+        # The highest priority is passed in the instantiation, followed by the advanced configuration. Otherwise defaults totrue
         if self.streaming is not None:
             default_params['streaming'] = self.streaming
         else:
@@ -316,7 +316,7 @@ class BishengLLM(BishengBase, BaseChatModel):
                             },
                         })
         elif self.server_info.type == LLMServerType.QWEN.value:
-            # ChatTongYi 对多模态的入参比较特殊，需要转换以支持
+            # ChatTongYi The input parameters for multimodality are special and need to be converted to support
             user_message = messages[-1]
             if isinstance(user_message, HumanMessage):
                 if isinstance(user_message.content, list):

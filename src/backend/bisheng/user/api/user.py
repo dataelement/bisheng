@@ -1,6 +1,5 @@
 import hashlib
 import random
-import string
 from base64 import b64encode
 from datetime import datetime
 from io import BytesIO
@@ -46,53 +45,53 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl='token')
 
 @router.post('/user/regist')
 async def regist(*, user: UserCreate):
-    # 验证码校验
+    # Captcha Verification
     db_user = await UserService.user_register(user)
     return resp_200(db_user)
 
 
 @router.post('/user/sso')
 async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends()):
-    """ 给闭源网关提供的登录接口 """
-    if settings.get_system_login_method().bisheng_pro:  # 判断sso 是否打开
+    """ Login interface for closed source gateways """
+    if settings.get_system_login_method().bisheng_pro:  # Judgingsso Open or not
         account_name = user.user_name
         user_exist = UserDao.get_unique_user_by_name(account_name)
         if not user_exist:
-            # 判断下平台是否存在用户
+            # Determine if there is a user under the platform
             user_all = UserDao.get_all_users(page=1, limit=1)
-            # 自动创建用户
+            # Automatically create users
             user_exist = User.model_validate(user)
             logger.info('act=create_user account={}', account_name)
             default_admin = settings.get_system_login_method().admin_username
-            # 如果平台没有用户或者用户名和配置的管理员用户名一致，则插入为超级管理员
+            # Insert as Super Admin if there is no user on the platform or if the username matches the configured admin username
             if len(user_all) == 0 or (default_admin and default_admin == account_name):
-                # 创建为超级管理员
+                # Create as Super Admin
                 user_exist = await UserDao.add_user_and_admin_role(user_exist)
             else:
-                # 创建为普通用户
+                # Create as Normal User
                 user_exist = await UserDao.add_user_and_default_role(user_exist)
             await UserGroupDao.add_default_user_group(user_exist.user_id)
         if 1 == user_exist.delete:
             raise UserForbiddenError.http_exception()
         access_token = LoginUser.create_access_token(user_exist, auth_jwt=auth_jwt)
 
-        # 设置登录用户当前的cookie, 比jwt有效期多一个小时
+        # Set the logged in user's currentcookie, .jwtValid for an additional hour
         redis_client = await get_redis_client()
         await redis_client.aset(USER_CURRENT_SESSION.format(user_exist.user_id), access_token,
                                 settings.cookie_conf.jwt_token_expire_time + 3600)
 
-        # 记录审计日志
+        # Log Audit Logs
         login_user = await LoginUser.init_login_user(user_id=user_exist.user_id, user_name=user_exist.user_name)
         AuditLogService.user_login(login_user, get_request_ip(request))
 
-        # 记录Telemetry日志
+        # RecordTelemetryJournal
         await telemetry_service.log_event(user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.USER_LOGIN,
                                           trace_id=trace_id_var.get(),
                                           event_data=UserLoginEventData(method="oss"))
 
         return resp_200({'access_token': access_token, 'refresh_token': access_token})
     else:
-        raise ValueError('不支持接口')
+        raise ValueError('Interface not supported')
 
 
 def get_error_password_key(username: str):
@@ -100,7 +99,7 @@ def get_error_password_key(username: str):
 
 
 def clear_error_password_key(username: str):
-    # 清理密码错误次数的计数
+    # Count of cleanup password errors
     error_key = get_error_password_key(username)
     get_redis_client_sync().delete(error_key)
 
@@ -113,20 +112,20 @@ async def login(*, request: Request, user: UserLogin, auth_jwt: AuthJwt = Depend
 @router.get('/user/admin')
 async def get_admins(login_user: LoginUser = Depends(LoginUser.get_login_user)):
     """
-    获取所有的超级管理员账号
+    Get all Super Admin accounts
     """
     # check if user already exist
     if not login_user.is_admin():
-        raise HTTPException(status_code=500, detail='无查看权限')
+        raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
     try:
-        # 获取所有超级管理员账号
+        # Get all Super Admin accounts
         admins = UserRoleDao.get_admins_user()
         admins_ids = [admin.user_id for admin in admins]
         admin_users = UserDao.get_user_by_ids(admins_ids)
         res = [UserRead(**one.__dict__) for one in admin_users]
         return resp_200(res)
     except Exception:
-        raise HTTPException(status_code=500, detail='用户信息失败')
+        raise HTTPException(status_code=500, detail='User information failed')
 
 
 @router.get('/user/info')
@@ -160,26 +159,26 @@ async def list_user(*,
     roles = role_id
     user_admin_groups = []
     if not login_user.is_admin():
-        # 查询下是否是其他用户组的管理员
+        # Query if you are an administrator of another user group under
         user_admin_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
         user_admin_groups = [one.group_id for one in user_admin_groups]
         groups = user_admin_groups
-        # 不是任何用户组的管理员无查看权限
+        # Not an administrator of any user group does not have permission to view
         if not groups:
-            raise HTTPException(status_code=500, detail='无查看权限')
-        # 将筛选条件的group_id和管理员有权限的groups做交集
+            raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
+        # Filter bygroup_idand administrator permissionsgroupsDoing Intersections
         if group_id:
             groups = list(set(groups) & set(group_id))
             if not groups:
-                raise HTTPException(status_code=500, detail='无查看权限')
-        # 查询用户组下的角色, 和角色筛选条件做交集，得到真正去查询的角色ID
+                raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
+        # Query roles under user groups, Intersect with the role filter to get the role that really needs to be queriedID
         group_roles = RoleDao.get_role_by_groups(groups, None, 0, 0)
         if role_id:
             roles = list(set(role_id) & set([one.id for one in group_roles]))
-    # 通过用户组和角色过滤出来的用户id
+    # Users filtered by user groups and rolesid
     user_ids = []
     if groups:
-        # 查询用户组下的用户ID
+        # Query users under user groupsID
         groups_user_ids = UserGroupDao.get_groups_user(groups)
         if not groups_user_ids:
             return resp_200({'data': [], 'total': 0})
@@ -191,7 +190,7 @@ async def list_user(*,
             return resp_200({'data': [], 'total': 0})
         roles_user_ids = [one.user_id for one in roles_user_ids]
 
-        # 如果user_ids不为空，说明是groups一起做交集筛选，否则是只做角色筛选
+        # Automatically close purchase order afteruser_idsis not empty, the description isgroupsDo intersection screening together, otherwise only do role screening
         if user_ids:
             user_ids = list(set(user_ids) & set(roles_user_ids))
             if not user_ids:
@@ -207,7 +206,7 @@ async def list_user(*,
         one_data = one.model_dump()
         user_roles = get_user_roles(one, role_dict)
         user_groups = get_user_groups(one, group_dict)
-        # 如果不是超级管理，则需要将数据过滤, 不能看到非他管理的用户组内的角色和用户组列表
+        # If not hyper-managed, data needs to be filtered, Cannot see the list of roles and user groups within a user group not managed by him
         if user_admin_groups:
             for i in range(len(user_roles) - 1, -1, -1):
                 if user_roles[i]["group_id"] not in user_admin_groups:
@@ -223,7 +222,7 @@ async def list_user(*,
 
 
 def get_user_roles(user: User, role_cache: Dict) -> List[Dict]:
-    # 查询用户的角色列表
+    # Query a list of roles for a user
     user_roles = UserRoleDao.get_user_roles(user.user_id)
     user_role_ids: List[int] = [one_role.role_id for one_role in user_roles]
     res = []
@@ -231,7 +230,7 @@ def get_user_roles(user: User, role_cache: Dict) -> List[Dict]:
         if role_cache.get(user_role_ids[i]):
             res.append(role_cache.get(user_role_ids[i]))
             del user_role_ids[i]
-    # 将没有缓存的角色信息查询数据库
+    # Query database for role information without caching
     if user_role_ids:
         role_list = RoleDao.get_role_by_ids(user_role_ids)
         for role_info in role_list:
@@ -245,7 +244,7 @@ def get_user_roles(user: User, role_cache: Dict) -> List[Dict]:
 
 
 def get_user_groups(user: User, group_cache: Dict) -> List[Dict]:
-    # 查询用户的角色列表
+    # Query a list of roles for a user
     user_groups = UserGroupDao.get_user_group(user.user_id)
     user_group_ids: List[int] = [one_group.group_id for one_group in user_groups]
     res = []
@@ -253,7 +252,7 @@ def get_user_groups(user: User, group_cache: Dict) -> List[Dict]:
         if group_cache.get(user_group_ids[i]):
             res.append(group_cache.get(user_group_ids[i]))
             del user_group_ids[i]
-    # 将没有缓存的角色信息查询数据库
+    # Query database for role information without caching
     if user_group_ids:
         group_list = GroupDao.get_group_by_ids(user_group_ids)
         for group_info in group_list:
@@ -269,29 +268,29 @@ async def update(*,
                  login_user: LoginUser = Depends(LoginUser.get_login_user)):
     db_user = UserDao.get_user(user.user_id)
     if not db_user:
-        raise HTTPException(status_code=500, detail='用户不存在')
+        raise HTTPException(status_code=500, detail='Pengguna tidak ada')
 
     if not login_user.is_admin():
-        # 检查下是否是用户组的管理员
+        # Check if is an administrator of a user group under
         user_group = UserGroupDao.get_user_group(db_user.user_id)
         user_group = [one.group_id for one in user_group]
         if not login_user.check_groups_admin(user_group):
-            raise HTTPException(status_code=500, detail='无查看权限')
+            raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
 
     # check if user already exist
     if db_user and user.delete is not None:
-        # 判断是否是管理员
+        # Determine if it's an admin
         with get_sync_db_session() as session:
             admin = session.exec(
                 select(UserRole).where(UserRole.role_id == 1,
                                        UserRole.user_id == user.user_id)).first()
         if admin:
-            raise HTTPException(status_code=500, detail='不能操作管理员')
+            raise HTTPException(status_code=500, detail='Cannot operate admin')
         if user.delete == db_user.delete:
             return resp_200()
         db_user.delete = user.delete
-    if db_user.delete == 0:  # 启用用户
-        # 清理密码错误次数的计数
+    if db_user.delete == 0:  # Enable User
+        # Count of cleanup password errors
         clear_error_password_key(db_user.user_name)
     with get_sync_db_session() as session:
         session.add(db_user)
@@ -303,9 +302,9 @@ async def update(*,
 
 def update_user_delete_hook(request: Request, login_user: LoginUser, user: User) -> bool:
     logger.info(f'update_user_delete_hook: {request}, user={user}')
-    if user.delete == 0:  # 启用用户
+    if user.delete == 0:  # Enable User
         AuditLogService.recover_user(login_user, get_request_ip(request), user)
-    elif user.delete == 1:  # 禁用用户
+    elif user.delete == 1:  # Disabled User
         AuditLogService.forbid_user(login_user, get_request_ip(request), user)
     return True
 
@@ -316,9 +315,9 @@ async def create_role(*,
                       role: RoleCreate,
                       login_user: LoginUser = Depends(LoginUser.get_login_user)):
     if not role.group_id:
-        raise HTTPException(status_code=500, detail='用户组ID不能为空')
+        raise HTTPException(status_code=500, detail='User GroupsIDTidak boleh kosong.')
     if not role.role_name:
-        raise HTTPException(status_code=500, detail='角色名称不能为空')
+        raise HTTPException(status_code=500, detail='msg.role_name_not_be_empty')
 
     if not login_user.check_group_admin(role.group_id):
         return UnAuthorizedError.return_resp()
@@ -333,7 +332,7 @@ async def create_role(*,
         return resp_200(db_role)
     except Exception:
         logger.exception('add role error')
-        raise HTTPException(status_code=500, detail='添加失败，检查是否重复添加')
+        raise HTTPException(status_code=500, detail='Failed to add, check if it is added repeatedly')
 
 
 def create_role_hook(request: Request, login_user: LoginUser, db_role: Role) -> bool:
@@ -349,7 +348,7 @@ async def update_role(*,
                       login_user: LoginUser = Depends(LoginUser.get_login_user)):
     db_role = RoleDao.get_role_by_id(role_id)
     if not db_role:
-        raise HTTPException(status_code=404, detail='角色不存在')
+        raise HTTPException(status_code=404, detail='This character does not exist')
 
     if not login_user.check_group_admin(db_role.group_id):
         return UnAuthorizedError.return_resp()
@@ -367,7 +366,7 @@ async def update_role(*,
         return resp_200(db_role)
     except Exception:
         logger.exception(f'update_role')
-        raise HTTPException(status_code=500, detail='更新失败，服务端异常')
+        raise HTTPException(status_code=500, detail='Update failed, server side exception')
 
 
 def update_role_hook(request: Request, login_user: LoginUser, db_role: Role) -> bool:
@@ -382,24 +381,24 @@ async def get_role(*,
                    limit: int = 0,
                    login_user: LoginUser = Depends(LoginUser.get_login_user)):
     """
-    获取用户可见的角色列表， 根据用户权限不同返回不同的数据
+    Get a list of roles visible to the user, Return different data according to different user permissions
     """
-    # 参数处理
+    # Parameter Processing
     if role_name:
         role_name = role_name.strip()
 
-    # 判断是否是超级管理员
+    # Determine if it's a Super Admin
     if login_user.is_admin():
-        # 是超级管理员获取全部
+        # Is Super Admin Get All
         group_ids = []
     else:
-        # 查询下是否是其他用户组的管理员
+        # Query if you are an administrator of another user group under
         user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
         group_ids = [one.group_id for one in user_groups if one.is_group_admin]
         if not group_ids:
-            raise HTTPException(status_code=500, detail='无查看权限')
+            raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
 
-    # 查询所有的角色列表
+    # Query a list of all roles
     res = RoleDao.get_role_by_groups(group_ids, role_name, page, limit)
     total = RoleDao.count_role_by_groups(group_ids, role_name)
     return resp_200(data={"data": res, "total": total})
@@ -417,14 +416,14 @@ async def delete_role(*,
         return UnAuthorizedError.return_resp()
 
     if db_role.id == AdminRole or db_role.id == DefaultRole:
-        raise HTTPException(status_code=500, detail='内置角色不能删除')
+        raise HTTPException(status_code=500, detail='Built-in roles cannot be deleted')
 
-    # 删除role相关的数据
+    # DeleteroleRelated data
     try:
         RoleDao.delete_role(role_id)
     except Exception as e:
         logger.exception(e)
-        raise HTTPException(status_code=500, detail='删除角色失败')
+        raise HTTPException(status_code=500, detail='Failed to delete role')
     AuditLogService.delete_role(login_user, get_request_ip(request), db_role)
     return resp_200()
 
@@ -435,49 +434,49 @@ async def user_addrole(*,
                        user_role: UserRoleCreate,
                        login_user: LoginUser = Depends(LoginUser.get_login_user)):
     """
-    重新设置用户的角色。根据权限不同改动的数据范围不同
+    Resets the role of the user. The scope of the data varies depending on the permissions
     """
-    # 获取用户的之前的角色列表
+    # Get a list of the user's previous roles
     old_roles = UserRoleDao.get_user_roles(user_role.user_id)
     old_roles = [one.role_id for one in old_roles]
-    # 判断下被编辑角色是否是超级管理员，超级管理员不允许编辑
+    # Determine if the role being edited is Super Admin, Super Admin does not allow editing
     user_role_list = UserRoleDao.get_user_roles(user_role.user_id)
     if any(one.role_id == AdminRole for one in user_role_list):
-        raise HTTPException(status_code=500, detail='系统管理员不允许编辑')
+        raise HTTPException(status_code=500, detail='Editing is not allowed by the system administrator')
     if any(one == AdminRole for one in user_role.role_id):
-        raise HTTPException(status_code=500, detail='不允许设置为系统管理员')
+        raise HTTPException(status_code=500, detail='Setting as system administrator is not allowed')
 
     if not login_user.is_admin():
-        # 判断拥有哪些用户组的管理权限
+        # Determine which user groups you have administrative access to
         admin_group = UserGroupDao.get_user_admin_group(login_user.user_id)
         admin_group = [one.group_id for one in admin_group]
         if not admin_group:
-            raise HTTPException(status_code=500, detail='无权限')
-        # 获取管理组下的所有角色列表
+            raise HTTPException(status_code=500, detail='No rights')
+        # Get a list of all roles under an admin group
         admin_roles = RoleDao.get_role_by_groups(admin_group, '', 0, 0)
         admin_roles = [one.id for one in admin_roles]
-        # 做交集，获取用户组管理员可见的角色列表
+        # Do the intersection to get the list of roles visible to the user group administrator
         for i in range(len(old_roles) - 1, -1, -1):
             if old_roles[i] not in admin_roles:
                 del old_roles[i]
-        # 判断下重新设置的角色列表是否都在 用户组管理员的名下
+        # Determine if the reset role list is in Under the name of the user group administrator
         for i in range(len(user_role.role_id) - 1, -1, -1):
             if user_role.role_id[i] not in admin_roles:
-                raise HTTPException(status_code=500, detail=f'无权限添加角色{user_role.role_id[i]}')
+                raise HTTPException(status_code=500, detail=f'No permission to add roles{user_role.role_id[i]}')
 
     need_add_role = []
     need_delete_role = old_roles.copy()
     for one in user_role.role_id:
         if one not in old_roles:
-            # 需要新增的角色
+            # Role needs to be added
             need_add_role.append(one)
         else:
-            # 剩余的就是需要删除的角色列表
+            # All that remains is the list of roles that need to be deleted
             need_delete_role.remove(one)
     if need_add_role:
         UserRoleDao.add_user_roles(user_role.user_id, need_add_role)
     if need_delete_role:
-        # 删除对应的角色列表
+        # Delete the corresponding role list
         UserRoleDao.delete_user_roles(user_role.user_id, need_delete_role)
     update_user_role_hook(request, login_user, user_role.user_id, old_roles, user_role.role_id)
     return resp_200()
@@ -486,15 +485,15 @@ async def user_addrole(*,
 def update_user_role_hook(request: Request, login_user: LoginUser, user_id: int,
                           old_roles: List[int], new_roles: List[int]):
     logger.info(f'update_user_role_hook, user_id: {user_id}, old_roles: {old_roles}, new_roles: {new_roles}')
-    # 写入审计日志
+    # Write Audit Log
     role_info = RoleDao.get_role_by_ids(old_roles + new_roles)
     group_ids = list(set([role.group_id for role in role_info]))
     role_dict = {one.id: one.role_name for one in role_info}
-    note = "编辑前角色："
+    note = "Pre-edit role:"
     for one in old_roles:
         note += role_dict[one] + "、"
     note = note.rstrip("、")
-    note += "编辑后角色："
+    note += "Post-edited roles:"
     for one in new_roles:
         note += role_dict[one] + "、"
     note = note.rstrip("、")
@@ -545,21 +544,21 @@ async def access_list(*, role_id: int, access_type: Optional[int] = Query(defaul
 @router.get('/user/get_captcha', status_code=200)
 async def get_captcha():
     # generate captcha
-    chr_all = string.ascii_letters + string.digits
+    chr_all = "abcdefghjkmnpqrstuvwxyABCDEFGHJKMNPQRSTUVWXY3456789"
     chr_4 = ''.join(random.sample(chr_all, 4))
     image = ImageCaptcha().generate_image(chr_4)
-    # 对image 进行base 64 编码
+    # Right.image To be performedbase 64 <g id="Bold">Code</g>
     buffered = BytesIO()
     image.save(buffered, format='PNG')
 
     capthca_b64 = b64encode(buffered.getvalue()).decode()
     logger.info('get_captcha captcha_char={}', chr_4)
-    # generate key, 生成简单的唯一id，
+    # generate key, Generate Simple Uniqueid，
     key = CAPTCHA_PREFIX + generate_uuid()[:8]
     redis_client = await get_redis_client()
     await redis_client.aset(key, chr_4, expiration=300)
 
-    # 增加配置，是否必须使用验证码
+    # Add configuration, whether the verification code must be used
     return resp_200({
         'captcha_key': key,
         'captcha': capthca_b64,
@@ -569,7 +568,7 @@ async def get_captcha():
 
 @router.get('/user/public_key', status_code=200)
 async def get_rsa_publish_key():
-    # redis 存储
+    # redis Storage
     key = RSA_KEY
     redis_client = await get_redis_client()
     # redis lock
@@ -595,28 +594,28 @@ async def reset_password(
         login_user: LoginUser = Depends(LoginUser.get_login_user),
 ):
     """
-    管理员重置用户密码
+    Admin Reset User Password
     """
-    # 获取要修改密码的用户信息
+    # Get user information to change password
     user_info = UserDao.get_user(user_id)
     if not user_info:
-        raise HTTPException(status_code=404, detail='用户不存在')
+        raise HTTPException(status_code=404, detail='Pengguna tidak ada')
     user_payload = LoginUser(**{
         'user_id': user_info.user_id,
         'user_name': user_info.user_name,
         'role': ''
     })
-    # 如果被修改的用户是系统管理员， 需要判断是否是本人
+    # If the user being modified is a system administrator, Need to determine if it's me
     if user_payload.is_admin() and login_user.user_id != user_id:
-        raise HTTPException(status_code=500, detail='系统管理员只能本人重置密码')
+        raise HTTPException(status_code=500, detail='System administrators can only reset passwords themselves')
 
-    # 查询用户所在的用户组
+    # Query the user group the user belongs to
     user_groups = UserGroupDao.get_user_group(user_info.user_id)
     user_group_ids = [one.group_id for one in user_groups]
 
-    # 检查是否有分组的管理权限
+    # Check if there are administrative permissions for the group
     if not login_user.check_groups_admin(user_group_ids):
-        raise HTTPException(status_code=403, detail='没有权限重置密码')
+        raise HTTPException(status_code=403, detail='No permission to reset password')
 
     user_info.password = UserService.decrypt_md5_password(password)
     user_info.password_update_time = datetime.now()
@@ -632,7 +631,7 @@ async def change_password(*,
                           new_password: str = Body(embed=True),
                           login_user: LoginUser = Depends(LoginUser.get_login_user)):
     """
-    登录用户 修改自己的密码
+    Login user Change my password
     """
     user_info = UserDao.get_user(login_user.user_id)
     if not user_info.password:
@@ -640,7 +639,7 @@ async def change_password(*,
 
     password = UserService.decrypt_md5_password(password)
 
-    # 已登录用户告知是密码错误
+    # Logged in user told it was the wrong password
     if user_info.password != password:
         return UserPasswordError.return_resp()
 
@@ -658,7 +657,7 @@ async def change_password_public(*,
                                  password: str = Body(embed=True),
                                  new_password: str = Body(embed=True)):
     """
-    未登录用户 修改自己的密码
+    Not Logged-In Users Change my password
     """
 
     user_info = UserDao.get_user_by_username(username)
@@ -679,13 +678,13 @@ async def change_password_public(*,
 @router.get('/user/mark', status_code=200)
 async def has_mark_access(*, request: Request, login_user: LoginUser = Depends(LoginUser.get_login_user)):
     """
-    获取当前用户是否有标注权限,判断当前用户是否为admin 或者是用户组管理员
+    Get whether the current user has annotation permission,Determine if the current user isadmin Or a user group administrator
     """
     user_groups = UserGroupDao.get_user_group(login_user.user_id)
     user_group_ids = [one.group_id for one in user_groups]
 
     has_mark_access = False
-    # 检查是否有分组的管理权限
+    # Check if there are administrative permissions for the group
     task = MarkTaskDao.get_task(login_user.user_id)
     if task:
         has_mark_access = True
@@ -699,7 +698,7 @@ async def create_user(*,
                       admin_user: LoginUser = Depends(LoginUser.get_admin_user),
                       req: CreateUserReq):
     """
-    超级管理员创建用户
+    Super Admin Create User
     """
     logger.info(f'create_user username={admin_user.user_name}, username={req.user_name}')
     data = UserService.create_user(request, admin_user, req)
