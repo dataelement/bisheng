@@ -105,6 +105,17 @@ export function ComponentConfigDrawer() {
     setFilterGroup,
     getDataConfig
   } = chartState
+  const STACKED_CHART_TYPES = new Set<ChartType>([
+    ChartType.StackedBar,
+    ChartType.StackedHorizontalBar,
+    ChartType.StackedLine
+  ])
+  const getMaxMetricCount = (chartType: ChartType) => {
+    return STACKED_CHART_TYPES.has(chartType) ? 3 : 1
+  }
+  const isVirtualMetric = (field: DatasetField) => {
+    return field.isVirtual === true
+  }
 
   const handleFieldClick = useCallback((field: DatasetField) => {
     if (!editingComponent) return
@@ -170,6 +181,47 @@ export function ComponentConfigDrawer() {
         })
       }
     } else if (field.role === 'metric') {
+      const maxMetricCount = getMaxMetricCount(chartType)
+      const hasVirtualMetric = valueDimensions.some(d => d.isVirtual)
+      const currentIsVirtual = isVirtualMetric(field)
+
+      if (valueDimensions.length >= maxMetricCount) {
+        toast({
+          description: t("componentConfigDrawer.toast.metricLimitReached", {
+            count: maxMetricCount
+          }),
+          variant: "warning"
+        })
+        return
+      }
+
+      if (valueDimensions.length > 0) {
+        if (currentIsVirtual && !hasVirtualMetric) {
+          toast({
+            description: t("componentConfigDrawer.toast.virtualMetricConflict"),
+            variant: "warning"
+          })
+          return
+        }
+
+        if (!currentIsVirtual && hasVirtualMetric) {
+          toast({
+            description: t("componentConfigDrawer.toast.virtualMetricConflict"),
+            variant: "warning"
+          })
+          return
+        }
+
+        // 🚫 多个虚拟指标
+        if (currentIsVirtual && hasVirtualMetric) {
+          toast({
+            description: t("componentConfigDrawer.toast.multipleVirtualMetric"),
+            variant: "warning"
+          })
+          return
+        }
+      }
+
       if (isFieldAlreadyAdded(safeFieldId, 'value')) {
         toast({
           description: t("componentConfigDrawer.toast.fieldAlreadyExists", {
@@ -179,6 +231,7 @@ export function ComponentConfigDrawer() {
         })
         return
       }
+
       const newMetric = {
         id: `${safeFieldId}-${Date.now()}`,
         fieldId: safeFieldId,
@@ -186,10 +239,13 @@ export function ComponentConfigDrawer() {
         originalName: field.displayName || field.fieldName,
         fieldType: field.role,
         sort: null,
-        aggregation: 'sum' as const
+        aggregation: 'sum' as const,
+        isVirtual: currentIsVirtual
       }
+
       chartState.setValueDimensions(prev => [...prev, newMetric])
     }
+
   }, [editingComponent, categoryDimensions, stackDimensions, valueDimensions, currentChartHasStack, chartState, toast, t])
 
   const invalidFieldIds = useMemo(() => {
@@ -295,7 +351,7 @@ export function ComponentConfigDrawer() {
   // 时间范围改变
   const handleTimeFilterChange = useCallback((val: any) => {
     console.log("Day Range Change:", val);
-    
+
     if (editingComponent) {
       // 只更新 timeFilter，避免触发整个组件的重新初始化
       updateEditingComponent({
@@ -372,15 +428,15 @@ export function ComponentConfigDrawer() {
         <ChartSelector
           onSave={(chartLinkConfig) => {
             console.log('保存查询配置:', chartLinkConfig)
-            
+
             // 构建 QueryConfig
             const queryConfig: QueryConfig = {
               linkedComponentIds: chartLinkConfig.chartIds || [],
               queryConditions: {
                 id: editingComponent?.data_config?.queryConditions?.id || generateUUID(4),
                 displayType: chartLinkConfig.displayType === "时间" ? "single" : "range",
-                timeGranularity: chartLinkConfig.timeGranularity === "年月" ? "year_month" : 
-                                chartLinkConfig.timeGranularity === "年月日时" ? "year_month_day_hour" : "year_month_day",
+                timeGranularity: chartLinkConfig.timeGranularity === "年月" ? "year_month" :
+                  chartLinkConfig.timeGranularity === "年月日时" ? "year_month_day_hour" : "year_month_day",
                 hasDefaultValue: chartLinkConfig.isDefault,
                 defaultValue: chartLinkConfig.isDefault ? {
                   type: 'custom' as const,  // TimeRangeType.CUSTOM 的值是 'custom'
@@ -391,20 +447,20 @@ export function ComponentConfigDrawer() {
                 }
               }
             }
-            
+
             console.log('生成的 QueryConfig:', queryConfig)
-            
+
             // 更新组件配置
             updateEditingComponent({
               // 保持其他字段不变，只更新 data_config
               data_config: queryConfig
             })
-            
-           const dashboardStore = useEditorDashboardStore.getState();
+
+            const dashboardStore = useEditorDashboardStore.getState();
             dashboardStore.updateComponent(editingComponent.id, {
               data_config: queryConfig
             })
-            
+
             // 刷新查询组件
             refreshChart(editingComponent.id)
           }}
@@ -412,7 +468,7 @@ export function ComponentConfigDrawer() {
         />
       ) : (
         <>
-          <div className={`border-r flex flex-col h-full transition-all duration-300 ${configCollapsed.basic ? "w-12" : "w-[300px]"} shrink-0`}>
+          <div className={`border-r flex flex-col h-full transition-all duration-300 ${configCollapsed.basic ? "w-12" : "w-[280px]"} shrink-0`}>
             {configCollapsed.basic ? (
               <CollapseLabel
                 label={t("componentConfigDrawer.basicConfig")}
@@ -427,7 +483,7 @@ export function ComponentConfigDrawer() {
                   icon={<ChevronLeft />}
                 />
 
-                <div className="flex-1 overflow-y-auto pl-4 pr-8 pb-6 pt-4 space-y-6">
+                <div className="flex-1 overflow-y-auto pl-4 pr-4 pb-6 pt-4 space-y-6">
                   {/* Tabs */}
                   <div className="flex gap-6 border-b text-sm">
                     <Tab active={configTab === "basic"} onClick={() => setConfigTab("basic")}>
@@ -579,9 +635,9 @@ export function ComponentConfigDrawer() {
                           <label className="text-sm font-medium">{t("componentConfigDrawer.filter")}</label>
                         </div>
 
-                      {!filterGroup || filterGroup.conditions.length === 0 ? (
-                          <div 
-                            className="text-sm text-muted-foreground text-center w-[244px] h-[36px] py-2 border rounded-md bg-muted/20 cursor-pointer hover:bg-muted/30 transition-colors" 
+                        {!filterGroup || filterGroup.conditions.length === 0 ? (
+                          <div
+                            className="text-sm text-muted-foreground text-center w-[244px] h-[36px] py-2 border rounded-md bg-muted/20 cursor-pointer hover:bg-muted/30 transition-colors"
                             onClick={handleEditFilter}
                           >
                             <div className="inline-flex items-center h-[20px] px-2 text-xs">
@@ -612,18 +668,18 @@ export function ComponentConfigDrawer() {
                         )}
                       </div>
 
-                    <FormBlock label={t("componentConfigDrawer.timeRange")}>
-                      <AdvancedDatePicker
-                        granularity={'day'}
-                        mode={'range'}
-                        value={filter}
-                        onChange={(val) => {
-                          handleTimeFilterChange
-                          setFilter(val);
-                        }}
-                        placeholder={t("componentConfigDrawer.selectTimeRange")}
-                      />
-                    </FormBlock>
+                      <FormBlock label={t("componentConfigDrawer.timeRange")}>
+                        <AdvancedDatePicker
+                          granularity={'day'}
+                          mode={'range'}
+                          value={filter}
+                          onChange={(val) => {
+                            handleTimeFilterChange(val);
+                            setFilter(val);
+                          }}
+                          placeholder={t("componentConfigDrawer.selectTimeRange")}
+                        />
+                      </FormBlock>
 
                       {/* 结果显示 */}
                       {editingComponent.type !== 'metric' && <FormBlock label={t("componentConfigDrawer.resultsDisplay")}>
@@ -641,11 +697,11 @@ export function ComponentConfigDrawer() {
                           <div className="flex items-center space-x-2">
                             <RadioGroupItem value="limit" id="limit-limit" />
                             <div className="flex items-center gap-2">
-                              <Input 
-                                className="w-20 h-8" 
-                                value={limitValue} 
-                                disabled={limitType !== "limit"} 
-                                onChange={(e) => setLimitValue(e.target.value)} 
+                              <Input
+                                className="w-20 h-8"
+                                value={limitValue}
+                                disabled={limitType !== "limit"}
+                                onChange={(e) => setLimitValue(e.target.value)}
                               />
                               <Label htmlFor="limit-limit" className="text-sm text-muted-foreground cursor-pointer">
                                 {t("componentConfigDrawer.limitResults")}
@@ -666,19 +722,19 @@ export function ComponentConfigDrawer() {
               </div>
             )}
           </div>
-          <div className={`flex flex-col h-full transition-all duration-300 ${configCollapsed.data ? "w-12 shrink-0" : "w-[300px]"}`}>
+          <div className={`flex flex-col h-full transition-all duration-300 ${configCollapsed.data ? "w-12 shrink-0" : "w-[200px]"}`}>
             {configCollapsed.data ? (
-              <CollapseLabel 
-                label={t("componentConfigDrawer.dataSelection")} 
-                onClick={() => toggleCollapse('data')} 
-                icon={<ChevronLeft />} 
+              <CollapseLabel
+                label={t("componentConfigDrawer.dataSelection")}
+                onClick={() => toggleCollapse('data')}
+                icon={<ChevronLeft />}
               />
             ) : (
               <div className="flex-1 flex flex-col overflow-hidden">
-                <PanelHeader 
-                  title={t("componentConfigDrawer.dataSelection")} 
-                  onCollapse={() => toggleCollapse('data')} 
-                  icon={<ChevronRight />} 
+                <PanelHeader
+                  title={t("componentConfigDrawer.dataSelection")}
+                  onCollapse={() => toggleCollapse('data')}
+                  icon={<ChevronRight />}
                 />
                 <div className="flex-1 overflow-auto">
                   <DatasetSelector

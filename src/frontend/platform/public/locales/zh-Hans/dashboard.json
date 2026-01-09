@@ -68,7 +68,10 @@
         },
         "toast": {
             "fieldAlreadyExists": "字段已存在于{{section}}中",
-            "dimensionLimitReached": "当前维度数量已达到上限"
+            "dimensionLimitReached": "当前维度数量已达到上限",
+            "metricLimitReached": "当前图表最多只能选择 {{count}} 个指标",
+            "virtualMetricConflict": "无法同时添加虚拟指标和非虚拟指标",
+            "multipleVirtualMetric": "无法同时添加多个虚拟指标"
         },
         "sections": {
             "category": "类别轴",

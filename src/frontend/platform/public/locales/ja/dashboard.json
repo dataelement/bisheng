@@ -85,7 +85,10 @@
     
     "toast": {
       "fieldAlreadyExists": "フィールドは既に{{section}}に存在します",
-      "dimensionLimitReached": "ディメンションの上限に達しました"
+      "dimensionLimitReached": "ディメンションの上限に達しました",
+      "metricLimitReached": "このグラフでは最大 {{count}} 個の指標まで選択できます",
+      "virtualMetricConflict": "仮想指標と通常の指標を同時に追加することはできません",
+      "multipleVirtualMetric": "複数の仮想指標を同時に追加することはできません"
     },
     
     "sections": {

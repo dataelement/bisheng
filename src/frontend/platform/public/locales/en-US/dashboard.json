@@ -87,7 +87,10 @@
   },
     "toast": {
       "fieldAlreadyExists": "Field already exists in {{section}}",
-      "dimensionLimitReached": "Dimension limit reached"
+      "dimensionLimitReached": "Dimension limit reached",
+       "metricLimitReached": "This chart can have at most {{count}} metrics",
+      "virtualMetricConflict": "Virtual metrics cannot be used together with non-virtual metrics",
+      "multipleVirtualMetric": "Multiple virtual metrics are not allowed"
     },
     
     "sections": {

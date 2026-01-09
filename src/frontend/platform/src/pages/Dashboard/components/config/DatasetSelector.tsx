@@ -15,6 +15,7 @@ export interface DatasetField {
     fieldType: "string" | "number" | "date"
     role: "dimension" | "metric"
     enumValues?: string[]
+    isVirtual?: boolean
 }
 
 interface DatasetSelectorProps {
@@ -47,7 +48,8 @@ const getFieldTypeIcon = (type: 'string' | 'number' | 'date') => {
 
 // 判断是否为虚拟指标
 const isVirtualMetric = (metric: MetricConfig): boolean => {
-    return metric.bucket_path !== undefined && metric.bucket_path !== metric.aggregation_name
+    
+    return metric.is_virtual
 }
 
 export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragStart, onFieldsLoaded, onFieldClick }: DatasetSelectorProps) {
@@ -269,7 +271,8 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                         fieldCode: metric.field,
                                         displayName: metric.name,
                                         fieldType: "number",
-                                        role: "metric" as const
+                                        role: "metric" as const,
+                                        isVirtual: metric.is_virtual 
                                     }
                                     return (
                                         <div

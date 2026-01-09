@@ -14,6 +14,7 @@ import {
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import { ComponentStyleConfig } from "../../types/dataConfig"
 import { useTranslation } from "react-i18next"
+import { colorSchemes } from "../../colorSchemes"
 
 const themeColors = ["#4ac5ff", "#3dd598", "#f7ba0b", "#ff7d4d", "#5c6bc0"]
 
@@ -54,97 +55,97 @@ function TextFormat({
   setColor
 }: TextFormatProps) {
   const { t } = useTranslation("dashboard")
-  
+
   const alignIcon =
-  align === "left" ? (
-    <AlignLeft className="w-3.5 h-3.5" />
-  ) : align === "center" ? (
-    <AlignCenter className="w-3.5 h-3.5" />
-  ) : (
-    <AlignRight className="w-3.5 h-3.5" />
-  )
-return (
-  <div
-    className="
+    align === "left" ? (
+      <AlignLeft className="w-3.5 h-3.5" />
+    ) : align === "center" ? (
+      <AlignCenter className="w-3.5 h-3.5" />
+    ) : (
+      <AlignRight className="w-3.5 h-3.5" />
+    )
+  return (
+    <div
+      className="
       flex items-center gap-1
       w-[244px] h-8
       px-1
       border rounded-md
       overflow-hidden
     "
-  >
-    {/* 字号 */}
-    <Select
-      value={String(fontSize)}
-      onValueChange={(v) => setFontSize(Number(v))}
     >
-      <SelectTrigger className="w-[56px] h-7 px-2 text-xs border-0 ">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {[10, 12, 14, 16, 18, 20, 24].map((v) => (
-          <SelectItem key={v} value={String(v)} className="text-xs">
-            {v}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-
-    {/* 颜色 */}
-    {setColor && (
-      <div className="relative shrink-0 mr-2">
-        <Input
-          type="color"
-          className="absolute inset-0 opacity-0 cursor-pointer"
-          value={color}
-          onChange={(e) => setColor(e.target.value)}
-        />
-        <div
-          className="w-6 h-6 rounded"
-          style={{ backgroundColor: color }}
-        />
-      </div>
-    )}
-
-    {/* 对齐 */}
-    <Select
-      value={align}
-      onValueChange={(v) => setAlign(v as "left" | "center" | "right")}
-    >
-      <SelectTrigger className="w-10 h-7 px-1 border-0 shadow-none">
-        <SelectValue asChild>{alignIcon}</SelectValue>
-      </SelectTrigger>
-
-      <SelectContent>
-        <SelectItem value="left" className="flex justify-center">
-          <AlignLeft className="w-4 h-4" />
-        </SelectItem>
-        <SelectItem value="center" className="flex justify-center">
-          <AlignCenter className="w-4 h-4" />
-        </SelectItem>
-        <SelectItem value="right" className="flex justify-center">
-          <AlignRight className="w-4 h-4" />
-        </SelectItem>
-      </SelectContent>
-    </Select>
-
-    {/* 样式 */}
-    <div className="flex">
-      <IconBtn active={bold} onClick={() => setBold(!bold)}>
-        <Bold className="w-3.5 h-3.5" />
-      </IconBtn>
-      <IconBtn active={italic} onClick={() => setItalic(!italic)}>
-        <Italic className="w-3.5 h-3.5" />
-      </IconBtn>
-      <IconBtn
-        active={strikethrough}
-        onClick={() => setStrikethrough(!strikethrough)}
+      {/* 字号 */}
+      <Select
+        value={String(fontSize)}
+        onValueChange={(v) => setFontSize(Number(v))}
       >
-        <Strikethrough className="w-3.5 h-3.5" />
-      </IconBtn>
+        <SelectTrigger className="w-[56px] h-7 px-2 text-xs border-0 ">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {[10, 12, 14, 16, 18, 20, 24].map((v) => (
+            <SelectItem key={v} value={String(v)} className="text-xs">
+              {v}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {/* 颜色 */}
+      {setColor && (
+        <div className="relative shrink-0 mr-2">
+          <Input
+            type="color"
+            className="absolute inset-0 opacity-0 cursor-pointer"
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+          />
+          <div
+            className="w-6 h-6 rounded"
+            style={{ backgroundColor: color }}
+          />
+        </div>
+      )}
+
+      {/* 对齐 */}
+      <Select
+        value={align}
+        onValueChange={(v) => setAlign(v as "left" | "center" | "right")}
+      >
+        <SelectTrigger className="w-10 h-7 px-1 border-0 shadow-none">
+          <SelectValue asChild>{alignIcon}</SelectValue>
+        </SelectTrigger>
+
+        <SelectContent>
+          <SelectItem value="left" className="flex justify-center">
+            <AlignLeft className="w-4 h-4" />
+          </SelectItem>
+          <SelectItem value="center" className="flex justify-center">
+            <AlignCenter className="w-4 h-4" />
+          </SelectItem>
+          <SelectItem value="right" className="flex justify-center">
+            <AlignRight className="w-4 h-4" />
+          </SelectItem>
+        </SelectContent>
+      </Select>
+
+      {/* 样式 */}
+      <div className="flex">
+        <IconBtn active={bold} onClick={() => setBold(!bold)}>
+          <Bold className="w-3.5 h-3.5" />
+        </IconBtn>
+        <IconBtn active={italic} onClick={() => setItalic(!italic)}>
+          <Italic className="w-3.5 h-3.5" />
+        </IconBtn>
+        <IconBtn
+          active={strikethrough}
+          onClick={() => setStrikethrough(!strikethrough)}
+        >
+          <Strikethrough className="w-3.5 h-3.5" />
+        </IconBtn>
+      </div>
     </div>
-  </div>
-)
+  )
 
 }
 
@@ -163,9 +164,8 @@ function IconBtn({
       variant="ghost"
       size="sm"
       onClick={onClick}
-      className={`w-7 h-7 px-0 rounded-none ${
-        active ? "bg-gray-200" : ""
-      }`}
+      className={`w-7 h-7 px-0 rounded-none ${active ? "bg-gray-200" : ""
+        }`}
     >
       {children}
     </Button>
@@ -248,7 +248,7 @@ function CollapsibleBlock({
   rightContent?: React.ReactNode
 }) {
   const { t } = useTranslation("dashboard")
-  
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between bg-gray-50 rounded-md h-[28px] w-[244px]">
@@ -291,7 +291,7 @@ function FormBlock({ label, children }: {
 
 export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelProps) {
   const { t } = useTranslation("dashboard")
-  
+
   const [collapsedSections, setCollapsedSections] = useState({
     color: false,
     title: false,
@@ -303,8 +303,6 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
     ...FULL_DEFAULT_STYLE_CONFIG,
     ...config
   }))
-
-  const debounceTimer = useRef<NodeJS.Timeout>()
 
   useEffect(() => {
     if (JSON.stringify(config) !== JSON.stringify(localConfig)) {
@@ -328,9 +326,9 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
       [key]: value
     };
     setLocalConfig(newConfig);
-    onChange(newConfig) 
+    onChange(newConfig)
   };
-  
+
   return (
     <div className="space-y-6">
       {/* 颜色 */}
@@ -342,18 +340,52 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
       >
         {type !== 'metric' &&
           <FormBlock label={t('styleConfigPanel.labels.themeColor')}>
-            <div className="flex items-center gap-2">
-              {themeColors.map((color) => (
-                <button
-                  key={color}
-                  style={{ backgroundColor: color }}
-                  className={`w-6 h-6 rounded border ${localConfig.themeColor === color ? "border-black" : "border-gray-300"
-                    }`}
-                  onClick={() => handleChange("themeColor", color)}
-                />
-              ))}
-            </div>
-          </FormBlock>}
+            <Select
+              value={localConfig.themeColor || ""}
+              onValueChange={(id) => {
+                handleChange("themeColor", id); // 直接存 id
+              }}
+            >
+              <SelectTrigger className="w-full h-8">
+                <SelectValue>
+                  <div className="flex gap-[1px]">
+                    {(colorSchemes.find(s => s.id === localConfig.themeColor)?.colors.light.slice(0, 5) || ["#000000"]).map((color, idx) => (
+                      <div
+                        key={idx}
+                        className={`
+                w-4 h-4
+                ${idx === 0 ? 'rounded-l-sm' : ''}
+                ${idx === 4 ? 'rounded-r-sm' : ''}
+              `}
+                        style={{ backgroundColor: color }}
+                      />
+                    ))}
+                  </div>
+                </SelectValue>
+              </SelectTrigger>
+
+              <SelectContent className="max-h-[300px] overflow-y-auto">
+                {colorSchemes.map((scheme) => (
+                  <SelectItem key={scheme.id} value={scheme.id}>
+                    <div className="flex gap-[1px]">
+                      {scheme.colors.light.slice(0, 5).map((color, idx) => (
+                        <div
+                          key={idx}
+                          className={`
+                  w-4 h-4 border border-gray-200
+                  ${idx === 0 ? 'rounded-l-sm' : ''}
+                  ${idx === 4 ? 'rounded-r-sm' : ''}
+                `}
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FormBlock>
+        }
 
         <FormBlock label={t('styleConfigPanel.labels.bgColor')}>
           <Input
@@ -391,12 +423,12 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
             setStrikethrough={(v) => handleChange("titleUnderline", v)}
             align={localConfig.titleAlign}
             setAlign={(v) => handleChange("titleAlign", v)}
-            color={localConfig.titleColor || localConfig.themeColor} 
+            color={localConfig.titleColor || localConfig.themeColor}
             setColor={(v) => handleChange("titleColor", v)}
           />
         </FormBlock>
       </CollapsibleBlock>
-      
+
       {
         type === 'metric' ?
           <>
