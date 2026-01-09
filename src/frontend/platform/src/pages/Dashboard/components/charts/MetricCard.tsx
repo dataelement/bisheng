@@ -7,14 +7,11 @@ import { ComponentStyleConfig, DataConfig } from '../../types/dataConfig'
 
 interface MetricCardProps {
   data: MetricDataResponse
-  isDark: boolean
   dataConfig?: DataConfig
   styleConfig: ComponentStyleConfig
 }
 
-export const unitConversion = (data, dataConfig) => {
-  if (!data) return ['', '']
-  const { value } = data
+export const unitConversion = (value, dataConfig) => {
   if (!dataConfig.metrics?.length || value === undefined || value === null) {
     return [value, ''];
   }
@@ -73,13 +70,13 @@ export const unitConversion = (data, dataConfig) => {
   return [result, finalUnit];
 }
 
-export function MetricCard({ data, dataConfig, styleConfig, isDark }: MetricCardProps) {
-  console.log('data :>> ', data);
-  const indicatorName = '指标名称'
-  const subTitle = '副标题' // style中获取
+export function MetricCard({ data, dataConfig, styleConfig }: MetricCardProps) {
+
+  const indicatorName = styleConfig.title || '指标名称'
+  const subTitle = styleConfig.subtitle || '副标题'
 
   // format
-  const [formatValue, displayUnit] = useMemo(() => unitConversion(dataConfig, data), [dataConfig, data]);
+  const [formatValue, displayUnit] = useMemo(() => unitConversion(data.value, dataConfig), [dataConfig, data]);
 
   // 获取趋势图标
   const getTrendIcon = () => {
@@ -110,16 +107,64 @@ export function MetricCard({ data, dataConfig, styleConfig, isDark }: MetricCard
     }
   }
 
+  // Build text styles
+  const buildTextStyle = (config: {
+    fontSize?: number
+    bold?: boolean
+    italic?: boolean
+    underline?: boolean
+    color?: string
+    align?: 'left' | 'center' | 'right'
+  }) => {
+    const style: React.CSSProperties = {}
+    if (config.fontSize !== undefined) style.fontSize = `${config.fontSize}px`
+    if (config.bold) style.fontWeight = 'bold'
+    if (config.italic) style.fontStyle = 'italic'
+    if (config.color) style.color = config.color
+    if (config.underline) style.textDecoration = 'underline'
+    if (config.align) style.textAlign = config.align
+    return style
+  }
+
+  const subtitleStyle = buildTextStyle({
+    fontSize: styleConfig.subtitleFontSize,
+    bold: styleConfig.subtitleBold,
+    italic: styleConfig.subtitleItalic,
+    underline: styleConfig.subtitleUnderline,
+    color: styleConfig.subtitleColor,
+    align: styleConfig.subtitleAlign
+  })
+
+  const titleStyle = buildTextStyle({
+    fontSize: styleConfig.titleFontSize,
+    bold: styleConfig.titleBold,
+    italic: styleConfig.titleItalic,
+    underline: styleConfig.titleUnderline,
+    color: styleConfig.titleColor,
+    align: styleConfig.titleAlign
+  })
+
+  const metricStyle = buildTextStyle({
+    fontSize: styleConfig.metricFontSize,
+    bold: styleConfig.metricBold,
+    italic: styleConfig.metricItalic,
+    underline: styleConfig.metricUnderline,
+    color: styleConfig.metricColor,
+    align: styleConfig.metricAlign
+  })
+
   return (
     <div className="flex items-end justify-between h-full">
       <div className='flex flex-col h-full justify-between'>
         {/* subtitle */}
-        <div className="text-sm text-[#666]">{subTitle}</div>
+        {styleConfig.showSubtitle && subTitle && (
+          <div style={subtitleStyle}>{subTitle}</div>
+        )}
         {/* title */}
-        <div className="text-sm text-blod text-[#0F172A]">{indicatorName}</div>
+        <div style={titleStyle}>{indicatorName}</div>
       </div>
       {/* value */}
-      <div className="text-2xl text-[#0EA5E9] font-bold">
+      <div style={metricStyle}>
         {formatValue}
         {displayUnit && <span className="text-xl ml-2 text-muted-foreground">{displayUnit}</span>}
       </div>

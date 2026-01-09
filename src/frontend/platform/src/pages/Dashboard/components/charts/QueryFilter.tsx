@@ -7,13 +7,15 @@ import { Search } from "lucide-react"
 import { useEffect, useState } from "react"
 import { AdvancedDatePicker, DatePickerValue } from "../AdvancedDatePicker"
 import { DashboardComponent, QueryConfig, TimeRangeMode, TimeRangeType } from "../../types/dataConfig"
+import { cn } from "@/utils"
 
 interface QueryFilterProps {
     component: DashboardComponent  // Query the ID of the component, which is used to trigger the refresh of the associated chart
     isPreviewMode?: boolean
+    isDark?: boolean
 }
 
-export function QueryFilter({ component, isPreviewMode = false }: QueryFilterProps) {
+export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryFilterProps) {
     const { refreshChartsByQuery, setQueryComponentParams } = useEditorDashboardStore()
     const [date, setDate] = useState<Date | undefined>(undefined)
 
@@ -56,10 +58,11 @@ export function QueryFilter({ component, isPreviewMode = false }: QueryFilterPro
         <div className="w-full h-full p-4 flex flex-col gap-3 relative">
             {/* 日期选择区域 */}
             <div className="flex flex-col gap-2 pr-24">
-                <label className="text-sm font-medium">选择日期</label>
+                <label className={cn("text-sm font-medium", "dark:text-gray-400")}>选择日期</label>
                 <AdvancedDatePicker
                     granularity={map[queryConditions.timeGranularity]}
                     mode={queryConditions.displayType}
+                    isDark={isDark}
                     value={filter}
                     onChange={(val) => {
                         console.log("Day Range Change:", val);

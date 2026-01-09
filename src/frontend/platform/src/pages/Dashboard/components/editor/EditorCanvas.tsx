@@ -16,6 +16,7 @@ import { ComponentConfigDrawer } from "../config/ComponentConfigDrawer"
 import { ComponentWrapper } from "./ComponentWrapper"
 import Home from "./Home"
 import "./index.css"
+import { cn } from "@/utils"
 
 interface EditorCanvasProps {
     isPreviewMode?: boolean
@@ -168,7 +169,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
         const patternWidth = cellWidth + marginX;
         const patternHeight = rowHeight + marginY;
 
-        const strokeColor = "rgba(0, 0, 0, 0.08)"; // 虚线颜色
+        const strokeColor = currentDashboard.style_config.theme === 'dark' ? "#666" : "rgba(0, 0, 0, 0.08)"; // 虚线颜色
         const dashArray = "4, 3"; // 虚线步长
         const borderRadius = 10; // 圆角
 
@@ -204,7 +205,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
             backgroundPosition: `${0}px ${0}px`,
             height: '100%'
         };
-    }, [width, isPreviewMode, mounted]);
+    }, [width, isPreviewMode, mounted, currentDashboard?.style_config.theme]);
 
 
     // 如果没有dashboard，显示空状态
@@ -228,7 +229,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
                 <div
                     id="edit-charts-panne"
                     ref={containerRef}
-                    className="flex-1 overflow-auto"
+                    className={cn("flex-1 overflow-auto", currentDashboard.style_config.theme)}
                     style={{
                         backgroundColor: currentDashboard.style_config.theme === 'dark' ? '#1a1a1a' : '#f5f5f5',
                     }}

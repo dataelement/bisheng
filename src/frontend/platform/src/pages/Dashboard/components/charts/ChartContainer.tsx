@@ -91,7 +91,6 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
   // Render metric card
   if (component.type === 'metric') {
     return <MetricCard
-      isDark={isDark}
       data={data as MetricDataResponse}
       dataConfig={component.data_config}
       styleConfig={component.style_config} />;

@@ -26,6 +26,7 @@ interface AdvancedDatePickerProps {
   granularity?: DateGranularity; // 粒度：month | day | hour
   mode?: "single" | "range";     // 模式：单点 | 范围
   placeholder?: string;
+  isDark?: boolean;
 }
 
 // --- 辅助组件：月份选择器 ---
@@ -86,6 +87,7 @@ export function AdvancedDatePicker({
   granularity = "day",
   mode = "range",
   placeholder = "选择时间",
+  isDark = false
 }: AdvancedDatePickerProps) {
   const [open, setOpen] = useState(false);
 
@@ -241,7 +243,7 @@ export function AdvancedDatePicker({
           {getDisplayValue() || placeholder}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
+      <PopoverContent className={cn("w-auto p-0", isDark && 'dark bg-gray-950 border-gray-600')} align="start">
         <div className="flex flex-col">
 
           {/* Calendar Area */}
@@ -331,7 +333,7 @@ export function AdvancedDatePicker({
 
           {/* Shortcuts Area (Only for Range Mode) */}
           {mode === "range" && (
-            <div className="bg-slate-50/50  px-3 mb-3">
+            <div className="px-3 mb-3">
               <div className="flex flex-wrap gap-2">
                 {shortcuts.map((sc) => (
                   <Button

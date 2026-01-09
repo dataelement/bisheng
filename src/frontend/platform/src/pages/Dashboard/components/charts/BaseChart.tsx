@@ -2,9 +2,8 @@
 
 import { ChartType, ComponentConfig, ComponentStyleConfig } from '@/pages/Dashboard/types/dataConfig'
 import { useEffect, useRef, useState } from 'react'
-import { ChartDataResponse } from '../../types/chartData'
 import { colorSchemes, convertToEChartsTheme } from '../../colorSchemes'
-import { useEditorDashboardStore } from '@/store/dashboardStore'
+import { ChartDataResponse } from '../../types/chartData'
 import { unitConversion } from './MetricCard'
 
 // Dynamic loading of ECharts.
@@ -72,7 +71,7 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
 
     try {
       // theme
-      const theme = 'professional-blue'
+      const theme = styleConfig.themeColor || 'professional-blue'
       const activeScheme = colorSchemes.find(s => s.id === theme);
       const themeName = `${activeScheme.id}${isDark ? '-dark' : ''}`;
       const themeConfig = convertToEChartsTheme(activeScheme, isDark ? 'dark' : 'light');
@@ -128,171 +127,217 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
   return <div ref={domRef} style={{ width: '100%', height: `100%` }} />
 }
 
+
 /**
  * Generate ECharts configuration based on chart type and data.
  */
-function generateChartOption({ data, chartType, dataConfig, styleConfig }
-  : { data: ChartDataResponse, chartType: ChartType, dataConfig?: ComponentConfig, styleConfig: ComponentStyleConfig }): any {
-  const { dimensions, series } = data
+export function generateChartOption(props: {
+  data: ChartDataResponse;
+  chartType: ChartType;
+  dataConfig?: ComponentConfig;
+  styleConfig: ComponentStyleConfig;
+}): any {
+  const { chartType } = props;
 
-  const computedUnit = (value) => {
-    const [formatValue, displayUnit] = unitConversion(value, dataConfig)
-    return formatValue || value
-  }
-
-  // Determine whether it is a stacked chart (judged by chartType).
-  const isStacked = chartType.includes('stacked')
-
-  // Determine whether it is an area chart.
-  const isArea = chartType === 'area' || chartType === 'stacked-line'
-
-  // Pie chart and donut chart.
+  // 根据图表类型分发到不同的构建器
   if (chartType === 'pie' || chartType === 'donut') {
-    return {
-      tooltip: {
-        trigger: 'item',
-        // formatter: '{a} <br/>{b}: {c} ({d}%)'
-        formatter: function (params) {
-          return `${params.name.replaceAll('\n', '<br/>')}: ${params.value} (${params.percent}%)`;
-        }
-      },
-      legend: {
-        orient: 'vertical',
-        right: 10,
-        top: 'center'
-      },
-      series: series.map(s => ({
-        name: s.name,
-        type: 'pie',
-        radius: chartType === 'donut' ? ['40%', '70%'] : '70%',
-        avoidLabelOverlap: true,
-        itemStyle: {
-          borderRadius: 10,
-          borderColor: '#fff',
-          borderWidth: 2
-        },
-        label: {
-          show: true,
-          formatter: '{b}: {d}%'
-        },
-        emphasis: {
-          label: {
-            show: true,
-            fontSize: 16,
-            fontWeight: 'bold'
-          }
-        },
-        data: s.data
-      }))
-    }
+    return getPieChartOption(props.data, chartType, props.styleConfig);
   }
 
-
-  // base
-  const option: any = {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: {
-        type: 'shadow'
-      },
-      formatter: function (params) {
-        // params 是一个数组，包含当前轴点上的所有系列数据
-        let res = params[0].name.replaceAll('\n', '<br/>') + '<br/>'; // 第一行显示 X 轴的值（如：周一）
-
-        params.forEach(item => {
-          // item.marker 是对应系列颜色的小圆点
-          // item.seriesName 是系列名称
-          // item.value 是当前数值
-          res += `${item.marker} ${item.seriesName}: <b>${computedUnit(item.value)}</b><br/>`;
-        });
-
-        return res;
-      }
-    },
-    legend: {
-      data: series.map(s => s.name), // 多指标 堆叠维度
-      top: 0
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true
-    }
-  }
-
-  // Bar chart (horizontal)
-  const isHorizontal = chartType.includes('horizontal');
-  // Set coordinate axes
-  if (isHorizontal) {
-    // Bar chart: X-axis is value axis, Y-axis is category axis
-    option.xAxis = {
-      type: 'value',
-      axisLabel: {
-        formatter: function (value) {
-          return computedUnit(value)
-        }
-      }
-    };
-    option.yAxis = {
-      type: 'category',
-      data: dimensions  // 多维度拼\n
-    };
-  } else {
-    // Column chart/line chart: X-axis is category axis, Y-axis is value axis
-    option.xAxis = {
-      type: 'category',
-      data: dimensions,
-      axisLabel: {
-        rotate: dimensions.length > 10 ? 45 : 0  // 多维度拼\n
-      }
-    };
-    option.yAxis = {
-      type: 'value',
-      axisLabel: {
-        formatter: function (value) {
-          return computedUnit(value)
-        }
-      }
-    };
-  }
-
-  // Set series
-  option.series = series.map((s, index) => {
-    let seriesType: 'bar' | 'line' = 'bar';
-    const seriesConfig: any = {
-      name: s.name,
-      data: s.data,
-      itemStyle: {
-        borderRadius: isHorizontal ? [0, 2, 2, 0] : [2, 2, 0, 0]
-      }
-    };
-
-    // Set series type based on chart type
-    if (chartType.includes('line') || chartType === 'area') {
-      seriesType = 'line';
-    }
-
-    seriesConfig.type = seriesType;
-
-    // Stacking configuration (all series in stacked chart use the same stack value)
-    if (isStacked) {
-      seriesConfig.stack = 'total';
-    }
-
-    // Area chart configuration
-    if (isArea) {
-      seriesConfig.areaStyle = {};
-    }
-
-    // Smooth curve (line chart)
-    if (seriesType === 'line') {
-      seriesConfig.smooth = true;
-    }
-
-    return seriesConfig;
-  });
-
-  return option
+  return getCartesianChartOption(props.data, chartType, props.styleConfig, props.dataConfig);
 }
 
+
+
+const getPieChartOption = (
+  data: ChartDataResponse,
+  chartType: ChartType,
+  styleConfig: ComponentStyleConfig
+) => {
+  const { series } = data;
+  const isDonut = chartType === 'donut';
+
+  const tooltipFormatter = (params: any) => {
+    return `${params.name.replaceAll('\n', '<br/>')}: ${params.value} (${params.percent}%)`;
+  };
+
+  return {
+    backgroundColor: styleConfig.bgColor,
+    title: buildTitleOption(styleConfig),
+    legend: buildLegendOption(styleConfig),
+    tooltip: buildTooltipOption('item', tooltipFormatter),
+    series: series.map((s) => ({
+      name: s.name,
+      type: 'pie',
+      radius: isDonut ? ['40%', '70%'] : '70%',
+      avoidLabelOverlap: true,
+      itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
+      label: {
+        show: styleConfig.showDataLabel ?? true,
+        formatter: '{b}: {d}%',
+      },
+      emphasis: {
+        label: { show: true, fontSize: 16, fontWeight: 'bold' },
+      },
+      data: s.data
+    })),
+  };
+};
+
+
+const getCartesianChartOption = (
+  data: ChartDataResponse,
+  chartType: ChartType,
+  styleConfig: ComponentStyleConfig,
+  dataConfig?: ComponentConfig
+) => {
+  const { dimensions, series } = data;
+  const isHorizontal = chartType.includes('horizontal');
+  const isStacked = chartType.includes('stacked');
+  const isLineOrArea = chartType.includes('line') || chartType === 'area';
+  const isArea = chartType === 'area' || chartType === 'stacked-line'; // Depending on logic
+
+  // Tooltip
+  const tooltipFormatter = (params: any[]) => {
+    let res = params[0].name.replaceAll('\n', '<br/>') + '<br/>';
+    params.forEach((item) => {
+      res += `${item.marker} ${item.seriesName}: <b>${unitConversion(item.value, dataConfig).join('')}</b><br/>`;
+    });
+    return res;
+  };
+
+  //  Axis
+  const axisLabelStyle = { ...getTextStyle({ fontSize: styleConfig.xAxisFontSize, color: styleConfig.xAxisColor }) };
+
+  // (Category Axis)
+  const categoryAxis = {
+    type: 'category',
+    data: dimensions,
+    show: styleConfig.showAxis ?? true,
+    axisLabel: {
+      rotate: dimensions.length > 10 ? 45 : 0,
+      ...axisLabelStyle,
+    },
+  };
+
+  // (Value Axis)
+  const valueAxis = {
+    type: 'value',
+    show: styleConfig.showAxis ?? true,
+    axisLabel: {
+      formatter: (val: any) => unitConversion(val, dataConfig).join(''),
+      ...axisLabelStyle,
+    },
+    splitLine: { show: styleConfig.showGrid ?? true },
+  };
+
+  // Series
+  const cartesianSeries = series.map((s) => {
+    const item: any = {
+      name: s.name,
+      data: s.data,
+      type: isLineOrArea ? 'line' : 'bar',
+      itemStyle: {
+        borderRadius: !isLineOrArea ? (isHorizontal ? [0, 2, 2, 0] : [2, 2, 0, 0]) : 0
+      }
+    };
+
+    if (styleConfig.showDataLabel) {
+      item.label = { show: true, position: isLineOrArea ? 'top' : 'inside' };
+    }
+    if (isStacked) item.stack = 'total';
+    if (isArea) item.areaStyle = {};
+    if (isLineOrArea) item.smooth = true;
+
+    return item;
+  });
+
+  return {
+    backgroundColor: styleConfig.bgColor,
+    title: buildTitleOption(styleConfig),
+    legend: buildLegendOption(styleConfig, series.map(s => s.name)),
+    tooltip: buildTooltipOption('axis', tooltipFormatter),
+    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    xAxis: isHorizontal ? valueAxis : categoryAxis,
+    yAxis: isHorizontal ? categoryAxis : valueAxis,
+    series: cartesianSeries,
+  };
+};
+
+const getTextStyle = (config: {
+  fontSize?: number; bold?: boolean; italic?: boolean; color?: string;
+}) => {
+  const style: any = {};
+  if (config.fontSize !== undefined) style.fontSize = config.fontSize;
+  if (config.bold) style.fontWeight = 'bold'; // ECharts use fontWeight, not fontStyle for bold
+  if (config.italic) style.fontStyle = 'italic';
+  if (config.color) style.color = config.color;
+  return style;
+};
+
+
+/**
+ * gen (Title)
+ */
+const buildTitleOption = (styleConfig: ComponentStyleConfig) => {
+  if (!styleConfig.title) return undefined;
+
+  const titleOption: any = {
+    text: styleConfig.title,
+    left: styleConfig.titleAlign || 'center',
+    textStyle: getTextStyle({
+      fontSize: styleConfig.titleFontSize,
+      bold: styleConfig.titleBold,
+      italic: styleConfig.titleItalic,
+      color: styleConfig.titleColor,
+    }),
+  };
+
+  if (styleConfig.showSubtitle && styleConfig.subtitle) {
+    titleOption.subtext = styleConfig.subtitle;
+    titleOption.subtextStyle = getTextStyle({
+      fontSize: styleConfig.subtitleFontSize,
+      bold: styleConfig.subtitleBold,
+      italic: styleConfig.subtitleItalic,
+      color: styleConfig.subtitleColor,
+    });
+  }
+  return titleOption;
+};
+
+/**
+ * gen (Legend)
+ */
+const buildLegendOption = (styleConfig: ComponentStyleConfig, seriesNames?: string[]) => {
+  if (styleConfig.showLegend === false) return undefined;
+
+  const pos = styleConfig.legendPosition || 'top';
+  // computed
+  const orient = pos === 'left' || pos === 'right' ? 'vertical' : 'horizontal';
+  const top = pos === 'top' ? 0 : pos === 'bottom' ? 'auto' : 'center';
+  const bottom = pos === 'bottom' ? 10 : 'auto';
+  const left = pos === 'left' ? 10 : pos === 'center' ? 'center' : 'auto';
+  const right = pos === 'right' ? 10 : 'auto';
+
+  return {
+    data: seriesNames, // Pie chart doesn't strictly need this, but Cartesian does
+    orient, top, bottom, left, right,
+    textStyle: getTextStyle({
+      fontSize: styleConfig.legendFontSize,
+      bold: styleConfig.legendBold,
+      italic: styleConfig.legendItalic,
+      color: styleConfig.legendColor,
+    }),
+  };
+};
+
+/**
+ * geb Tooltip
+ */
+const buildTooltipOption = (type: 'axis' | 'item', formatter: (params: any) => string) => {
+  return {
+    trigger: type,
+    axisPointer: type === 'axis' ? { type: 'shadow' } : undefined,
+    formatter,
+  };
+};

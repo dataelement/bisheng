@@ -9,6 +9,7 @@ import { ChartType, Dashboard, DashboardComponent } from "../../types/dataConfig
 import { ChartContainer } from "../charts/ChartContainer"
 import { QueryFilter } from "../charts/QueryFilter"
 import "./index.css"
+import { cn } from "@/utils"
 
 interface ComponentWrapperProps {
     component: DashboardComponent
@@ -92,28 +93,31 @@ export function ComponentWrapper({
 
     return (
         <div
-            className={`group relative w-full h-full bg-background rounded-md overflow-visible transition-all hover:border hover:border-primary hover:shadow-md ${!isPreviewMode && isSelected ? 'border border-primary' : ''
-                }`}
+            className={cn(`group relative w-full h-full rounded-md overflow-visible transition-all hover:border hover:border-primary hover:shadow-md ${!isPreviewMode && isSelected ? 'border border-primary' : ''
+                }`,
+                'dark:bg-gray-900 dark:border border-gray-600 shadow-sm',
+                componentData.style_config.bgColor ? `bg-[${componentData.style_config.bgColor}]` : 'bg-background'
+            )}
             onClick={handleClick}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
             style={{ cursor: isPreviewMode ? 'default' : 'grab' }}
         >
             {/* More button - top right corner */}
-            {!isPreviewMode && (isSelected || isHovered) && componentData.type !== ChartType.Metric && (
+            {!isPreviewMode && (isSelected || isHovered) && (
                 <div className="absolute top-2 right-2 z-10">
                     <DropdownMenu onOpenChange={(b) => b && handleClick()}>
                         <DropdownMenuTrigger asChild>
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-6 w-6 bg-background/80 backdrop-blur-sm border border-border shadow-sm hover:bg-accent"
+                                className="h-6 w-6 bg-background/80 backdrop-blur-sm border border-border shadow-sm hover:bg-accent dark:border-gray-500 dark:text-gray-500"
                             >
                                 <MoreVerticalIcon className="h-4 w-4" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" >
-                            {component.type === 'query' ? (
+                        <DropdownMenuContent align="end" className={isDark && 'dark border-gray-700'}>
+                            {[ChartType.Metric, ChartType.Query].includes(component.type) ? (
                                 // Query component: only duplicate and delete
                                 <>
                                     <DropdownMenuItem onClick={(e) => {
@@ -208,7 +212,9 @@ export function ComponentWrapper({
                                 onClick={(e) => e.stopPropagation()}
                             />
                         ) : (
-                            <h3 className="no-drag text-sm font-medium truncate cursor-pointer inline-block" onDoubleClick={() => setIsEditing(true)}>{title}</h3>
+                            <h3 className={cn("no-drag text-sm font-medium truncate cursor-pointer inline-block",
+                                "dark:text-gray-400"
+                            )} onDoubleClick={() => setIsEditing(true)}>{title}</h3>
                         )}
                     </div>
                 )}
