@@ -216,8 +216,9 @@ const getCartesianChartOption = (
     show: styleConfig.showAxis ?? true,
     axisLabel: {
       rotate: dimensions.length > 10 ? 45 : 0,
-      ...axisLabelStyle,
+      // ...axisLabelStyle,
     },
+    name: styleConfig.xAxisTitle || ''
   };
 
   // (Value Axis)
@@ -229,6 +230,7 @@ const getCartesianChartOption = (
       ...axisLabelStyle,
     },
     splitLine: { show: styleConfig.showGrid ?? true },
+    name: styleConfig.yAxisTitle || ''
   };
 
   // Series

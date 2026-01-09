@@ -95,13 +95,16 @@ export function ComponentWrapper({
         <div
             className={cn(`group relative w-full h-full rounded-md overflow-visible transition-all hover:border hover:border-primary hover:shadow-md ${!isPreviewMode && isSelected ? 'border border-primary' : ''
                 }`,
-                'dark:bg-gray-900 dark:border border-gray-600 shadow-sm',
-                componentData.style_config.bgColor ? `bg-[${componentData.style_config.bgColor}]` : 'bg-background'
+                'dark:bg-gray-900 dark:border dark:border-gray-600 shadow-sm',
+                !componentData.style_config.bgColor && 'bg-background'
             )}
             onClick={handleClick}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
-            style={{ cursor: isPreviewMode ? 'default' : 'grab' }}
+            style={{
+                cursor: isPreviewMode ? 'default' : 'grab',
+                backgroundColor: componentData.style_config.bgColor,
+            }}
         >
             {/* More button - top right corner */}
             {!isPreviewMode && (isSelected || isHovered) && (

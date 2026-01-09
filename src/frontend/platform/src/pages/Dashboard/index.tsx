@@ -5,9 +5,7 @@ import { locationContext } from "@/contexts/locationContext"
 import {
     getDashboard,
     getDashboards,
-    getShareLink,
     setDefaultDashboard,
-    updateDashboard,
     updateDashboardTitle
 } from "@/controllers/API/dashboard"
 import { copyText } from "@/utils"
