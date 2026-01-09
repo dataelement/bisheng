@@ -101,8 +101,8 @@ class GraphState(BaseModel):
         for node_id, node_variables in self.variables_pool.items():
             for key, value in node_variables.items():
                 ret[f'{node_id}.{key}'] = self.get_variable(node_id, key)
-                # Under special treatment preset_question key
-                if key == 'preset_question':
+                # get preset_question and custom_variables all keys
+                if key in ['preset_question', 'custom_variables']:
                     for k, v in value.items():
                         ret[f'{node_id}.{key}#{k}'] = v
         return ret

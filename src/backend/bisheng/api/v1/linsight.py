@@ -125,6 +125,7 @@ async def linsight_file_download(
             raise UnAuthorizedError()
 
     minio_client = await get_minio_storage()
+    file_url = file_url.lstrip("/")
     if file_url.startswith(minio_client.bucket):
         file_url = file_url[len(minio_client.bucket) + 1:]
     file_share_url = await minio_client.get_share_link(file_url)

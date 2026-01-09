@@ -77,7 +77,7 @@
   "variableNameCannotBeEmpty": "变量名称不能为空",
   "variableNameInvalid": "变量名称只能包含英文字符、数字和下划线，且不能以数字开头",
   "variableNameTooLong": "变量名称不能超过 50 个字符",
-  "variableNameDuplicate": "变量名称不能重复",
+  "variableNameDuplicate": "变量名已存在",
   "addNewParameter": "+添加新的参数",
   "dataType": "数据类型",
   "parameterName": "参数名称",
@@ -167,7 +167,7 @@
   "storeFilesSentInCurrentSession": "存储当前会话中发送的文件",
   "displayNameTooltip": "用户会话页面展示此名称",
   "variableNameTooltipFile": "用于存储用户会话页面填写的内容，可在临时会话文件列表中选择此变量",
-  "variableNameTooltipOther": "用于存储用户会话页面填写的内容，可在其他节点中引用此变量",
+  "variableNameTooltip": "用于存储用户会话页面填写的内容，可在其他节点中引用此变量",
   "allowMultipleSelect": "允许多选",
   "allowUploadMultipleFiles": "允许上传多个文件",
   "uploadFileTypes": "上传文件类型",
@@ -239,6 +239,18 @@
   "playbackUnavailable": "播放功能不可用，请联系管理员",
   "wordEditorLoadFailed": "word编辑器加载失败",
   "checkOfficeServiceConfig": "请检查Office服务地址配置是否正确并正常启动",
+  "variableNameEmpty": "变量名称不可为空",
+  "variableNameStartsWithNumber": "变量名不能以数字开头",
+  "variableNameInvalidChars": "变量名称只能包含英文字符、数字和下划线",
+  "variableValueEmpty": "变量值不可为空",
+  "variableValueTooLong": "变量值不能超过1000个字符",
+  "addVariable": "添加变量",
+  "variableValue": "变量值",
+  "editGlobalVariable": "编辑全局变量",
+  "addGlobalVariable": "添加全局变量",
+  "variableNameRuleTip": "支持字母、数字、下划线，不能以数字开头，不超过 50 个字符",
+  "variableValueRuleTip": "变量值不允许为空，不超过1000个字符",
+  "enterVariableValue": "请输入变量值",
   "kbQueryToolIntro": "## 知识库查询工具介绍\n当需要查询知识库来解决用户问题时，调用知识库查询工具，将用户需求改写成合适的 query 作为知识库工具的入参。",
   "sqlAgentToolIntro": "## sqlagent 数据库工具介绍\n1. 使用自然语言精确的描述用户查询需求，将该描述作为参数 query 的值，调用 sqlagent 工具；\n2. 如果用户有多条查询需求，分两次调用sqlagent。",
   "node": {
@@ -266,6 +278,10 @@
         "label": "预置问题列表",
         "placeholder": "输入批量预置问题",
         "help": "适合文档审核、报告生成等场景，利用提前预置的问题批量进行 RAG 问答。"
+      },
+      "custom_variables": {
+        "label": "自定义全局变量",
+        "help": "设置可以在其他节点引用的变量"
       }
     },
     "input": {
@@ -382,8 +398,7 @@
       },
       "system_prompt": {
         "label": "系统提示词",
-        "placeholder": "助手画像",
-        "value": "你是一个智能 AI 助手，擅长根据用户需求，调用合适的工具（如有的话）解决用户问题。\n当前时间是 {{#开始/current_time#}}"
+        "placeholder": "助手画像"
       },
       "user_prompt": {
         "label": "用户提示词",

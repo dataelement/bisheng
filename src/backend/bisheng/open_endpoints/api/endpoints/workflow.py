@@ -31,12 +31,13 @@ router = APIRouter(prefix='/workflow', tags=['OpenAPI', 'Workflow'])
 @router.post('/invoke')
 async def invoke_workflow(request: Request,
                           workflow_id: UUID = Body(..., description='Workflow UniqueID'),
+                          override: Optional[dict] = Body(default=None, description='override node params'),
                           stream: Optional[bool] = Body(default=True, description='Whether to stream calls'),
                           user_input: Optional[dict] = Body(default=None, description='User input', alias='input'),
                           message_id: Optional[int] = Body(default=None,
                                                            description='MessageID,Once,Unique identifier of user input message'),
                           session_id: Optional[str] = Body(default=None,
-                                                           description='SessionsID,Once,workflowUnique identifier of the call')):
+                                                           description='会话ID,一次workflow调用的唯一标识')):
     login_user = get_default_operator()
     workflow_id = workflow_id.hex
     # Query workflow information
@@ -62,7 +63,7 @@ async def invoke_workflow(request: Request,
     status_info = workflow.get_workflow_status()
     if not status_info:
         # Initialize workflow
-        workflow.set_workflow_data(workflow_info.data)
+        workflow.set_workflow_data(workflow_info.data, override=override)
         workflow.set_workflow_status(WorkflowStatus.WAITING.value)
         # Start asynchronous task
         execute_workflow.delay(unique_id, workflow_id, chat_id, str(login_user.user_id))

@@ -1070,6 +1070,7 @@
     "delete_chat": "删除会话",
     "create_build": "新建应用",
     "update_build": "编辑应用",
+    "delete_build": "删除应用",
     "create_knowledge": "新建知识库",
     "delete_knowledge": "删除知识库",
     "upload_file": "知识库上传文件",

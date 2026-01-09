@@ -57,16 +57,21 @@ class StartNode(BaseNode):
         if not self.node_data.v:
             raise IgnoreException(f'{self.name} -- workflow node is update')
 
-        # Pre-processingpreset_questionData isdict
+        # convert preset_question to dict
         new_preset_question = {}
         for one in self.node_params['preset_question']:
             new_preset_question[one['key']] = one['value']
 
+        # convert custom vars to dict
+        custom_vars = {}
+        for one in self.node_params.get('custom_variables', []):
+            custom_vars[one['key']] = one['value']
         return {
             'current_time': self.node_params['current_time'],
             'chat_history': '',
             'preset_question': new_preset_question,
             'user_info': self._user_info,
+            'custom_variables': custom_vars
         }
 
     def parse_log(self, unique_id: str, result: dict) -> Any:

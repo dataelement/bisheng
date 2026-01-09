@@ -113,6 +113,7 @@ export const onlineWorkflow = async (flow, status = ''): Promise<any> => {
     const data = { name, description, logo }
     if (status) {
         data['status'] = status
+        delete data['logo']
     }
     return await axios.patch(`/api/v1/workflow/update/${flow.id}`, data);
 }
@@ -168,7 +169,7 @@ const workflowTemplate = [
         "name": "true",
         "description": "true",
         "type": "start",
-        "v": "2",
+        "v": "3",
         "group_params": [
             {
                 "name": "开场引导",
@@ -220,6 +221,14 @@ const workflowTemplate = [
                         "type": "input_list",
                         "value": [],
                         "placeholder": "true",
+                        "help": "true"
+                    },
+                    {
+                        "key": "custom_variables",
+                        "label": "true",
+                        "global": "item:input_list",
+                        "type": "global_var",
+                        "value": [],
                         "help": "true"
                     }
                 ]

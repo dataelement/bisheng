@@ -1071,6 +1071,7 @@
     "delete_chat": "会話削除",
     "create_build": "アプリ作成",
     "update_build": "アプリ編集",
+    "delete_build": "アプリ削除",
     "create_knowledge": "ナレッジベース作成",
     "delete_knowledge": "ナレッジベース削除",
     "upload_file": "ナレッジベースファイルアップロード",

@@ -25,6 +25,7 @@ import VarItem from "./component/VarItem";
 import VarSelectItem, { VarSelectSingleItem } from "./component/VarSelectItem";
 import VarTextareaItem from "./component/VarTextareaItem";
 import VarTextareaUploadItem from "./component/VarTextareaUploadItem";
+import GlobalVarItem from "./component/GlobalVarItem";
 
 export default function Parameter({
     node,
@@ -80,6 +81,7 @@ export default function Parameter({
             return <VarItem node={node} data={item} i18nPrefix={i18nPrefix} />
         case 'chat_history_num':
             return <HistoryNumItem data={item} onChange={handleOnNewValue} i18nPrefix={i18nPrefix} />
+        case 'global_var': return <GlobalVarItem data={item} onChange={handleOnNewValue} i18nPrefix={i18nPrefix} />;
         case 'form':
             return <InputFormItem
                 nodeId={nodeId}

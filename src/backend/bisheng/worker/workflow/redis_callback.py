@@ -3,7 +3,7 @@ import json
 import os
 import time
 import uuid
-from typing import AsyncIterator, Iterator
+from typing import AsyncIterator, Iterator, Dict, List
 
 from langchain_core.documents import Document
 from loguru import logger
@@ -49,8 +49,32 @@ class RedisCallback(BaseCallback):
         self.workflow_stop_key = f'workflow:{unique_id}:stop'
         self.workflow_expire_time = settings.get_workflow_conf().timeout * 60 + 60
 
-    def set_workflow_data(self, data: dict):
+    def set_workflow_data(self, data: Dict, override: Dict = None):
+        data = self.override_nodes_params(data, override)
         self.redis_client.set(self.workflow_data_key, data, expiration=self.workflow_expire_time)
+
+    @staticmethod
+    def override_nodes_params(data: Dict, override: Dict = None) -> Dict:
+        if not override:
+            return data
+
+        def replace_param(one_params: List[Dict], one_node_id: str):
+            for param in one_params:
+                param_key = param.get('key')
+                if param_key not in override[node_id]:
+                    continue
+                param['value'] = override[one_node_id][param_key]
+
+        nodes = data.get('nodes', [])
+        for node in nodes:
+            node_data = node.get('data', {})
+            node_id = node_data.get('id')
+            if node_id not in override:
+                continue
+            group_params = node_data.get('group_params', [])
+            for group_param in group_params:
+                replace_param(group_param.get('params', []), node_id)
+        return data
 
     async def async_set_workflow_data(self, data: dict):
         await self.redis_client.aset(self.workflow_data_key, data, expiration=self.workflow_expire_time)
