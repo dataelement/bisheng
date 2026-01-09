@@ -61,7 +61,7 @@ export function DashboardConfigPanel({ collapsed = false, onCollapse }: Dashboar
 
   return (
     <div className="h-full flex bg-background border-l border-border">
-      <div className={`border-r flex flex-col h-full transition-all duration-300 ${collapsed ? "w-12" : "w-[400px]"} shrink-0`}>
+      <div className={`border-r flex flex-col h-full transition-all duration-300 ${collapsed ? "w-12" : "w-[460px]"} shrink-0`}>
         {collapsed ? (
           <CollapseLabel
             label={t("configPanel.title")}
@@ -89,13 +89,10 @@ export function DashboardConfigPanel({ collapsed = false, onCollapse }: Dashboar
                     onClick={() => handleThemeChange('light')}
                   >
                     <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 rounded border mb-2">
-                      <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/light.png`} alt="" />
+                      <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/light.png`} alt="" className="h-[180px]" />
                     </div>
                     <div className="flex items-center justify-center">
-                      <span className="text-sm">{t("configPanel.lightTheme")}</span>
-                      {dashboardTheme === 'light' && (
-                        <div className="ml-2 w-2 h-2 bg-primary rounded-full"></div>
-                      )}
+                      <span className={`text-sm ${dashboardTheme === 'light' ? 'text-blue-600 font-medium' : ''}`}>{t("configPanel.lightTheme")}</span>
                     </div>
                   </div>
 
@@ -108,10 +105,7 @@ export function DashboardConfigPanel({ collapsed = false, onCollapse }: Dashboar
                       <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/dark.png`} alt="" />
                     </div>
                     <div className="flex items-center justify-center">
-                      <span className="text-sm">{t("configPanel.darkTheme")}</span>
-                      {dashboardTheme === 'dark' && (
-                        <div className="ml-2 w-2 h-2 bg-primary rounded-full"></div>
-                      )}
+                      <span className={`text-sm ${dashboardTheme === 'dark' ? 'text-blue-600 font-medium' : ''}`}>{t("configPanel.darkTheme")}</span>
                     </div>
                   </div>
                 </div>
