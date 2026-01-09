@@ -91,7 +91,7 @@
         }
     },
     "configPanel": {
-        "title": "仪表盘配置",
+        "title": "看板配置",
         "dashboardStyle": "仪表盘风格",
         "lightTheme": "浅色主题",
         "darkTheme": "深色主题"
