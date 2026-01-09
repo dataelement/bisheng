@@ -716,7 +716,15 @@ export function ComponentConfigDrawer() {
                       </Button>
                     </>
                   ) : (
-                    <StyleConfigPanel config={styleConfig} type={editingComponent.type} onChange={chartState.setStyleConfig} />
+                    <StyleConfigPanel config={styleConfig} type={editingComponent.type} onChange={(newConfig) => {
+                      chartState.setStyleConfig(newConfig)
+                      if (editingComponent) {
+                        updateEditingComponent({
+                          style_config: newConfig
+                        })
+                      }
+                    }}
+                      key={editingComponent.id} />
                   )}
                 </div>
               </div>

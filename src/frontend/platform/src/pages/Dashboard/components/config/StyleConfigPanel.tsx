@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/bs-ui/checkBox"
 import { ComponentStyleConfig } from "../../types/dataConfig"
 import { useTranslation } from "react-i18next"
 import { colorSchemes } from "../../colorSchemes"
+import { useComponentEditorStore } from "@/store/dashboardStore"
 
 const themeColors = ["#4ac5ff", "#3dd598", "#f7ba0b", "#ff7d4d", "#5c6bc0"]
 
@@ -290,6 +291,7 @@ function FormBlock({ label, children }: {
 }
 
 export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelProps) {
+
   const { t } = useTranslation("dashboard")
 
   const [collapsedSections, setCollapsedSections] = useState({
@@ -299,19 +301,27 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
     legend: false
   })
 
-  const [localConfig, setLocalConfig] = useState(() => ({
+  const editingComponent = useComponentEditorStore(state => state.editingComponent)
+  const updateEditingComponent = useComponentEditorStore(state => state.updateEditingComponent)
+  const localConfig = {
     ...FULL_DEFAULT_STYLE_CONFIG,
-    ...config
-  }))
+    ...(editingComponent?.style_config || config),
+    themeColor: (editingComponent?.style_config?.themeColor || config.themeColor || colorSchemes[0]?.id || FULL_DEFAULT_STYLE_CONFIG.themeColor),
+  }
+  const [initialized, setInitialized] = useState(false)
 
   useEffect(() => {
-    if (JSON.stringify(config) !== JSON.stringify(localConfig)) {
-      setLocalConfig(prev => ({
-        ...FULL_DEFAULT_STYLE_CONFIG,
-        ...config
-      }))
+    if (editingComponent && !editingComponent.style_config && !initialized) {
+      updateEditingComponent({
+        style_config: {
+          ...FULL_DEFAULT_STYLE_CONFIG,
+          ...config,
+          themeColor: config.themeColor || colorSchemes[0]?.id || FULL_DEFAULT_STYLE_CONFIG.themeColor,
+        }
+      })
+      setInitialized(true)
     }
-  }, [config])
+  }, [editingComponent, config, updateEditingComponent, initialized])
 
   const toggleSection = (section: keyof typeof collapsedSections) => {
     setCollapsedSections(prev => ({
@@ -321,13 +331,21 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
   }
 
   const handleChange = (key: keyof ComponentStyleConfig, value: any) => {
+    if (!editingComponent) return
+
     const newConfig = {
       ...localConfig,
       [key]: value
-    };
-    setLocalConfig(newConfig);
+    }
+
+    // 只更新全局状态
+    updateEditingComponent({
+      style_config: newConfig
+    })
+
+    // 通知父组件
     onChange(newConfig)
-  };
+  }
 
   return (
     <div className="space-y-6">
