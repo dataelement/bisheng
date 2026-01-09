@@ -57,7 +57,18 @@
         "limitResults": "条",
         "updateChartData": "更新图表数据",
         "dataSelection": "数据选择",
-        "dialog": {
+          "validation": {
+      "validationFailed": "校验失败",
+      "chartTypeRequired": "请选择图表类型",
+      "categoryRequired": "请至少添加一个类别维度",
+      "metricRequired": "请至少添加一个指标",
+      "datasetRequired": "请选择数据集",
+      "stackRequired": "请为堆叠图表添加堆叠维度",
+      "invalidCategoryFields": "类别维度包含无效字段，请重新选择",
+      "invalidMetricFields": "指标包含无效字段，请重新选择"
+    },
+    "dialog": {
+             "chartUpdated": "图表已更新",
             "editDisplayName": "编辑显示名称",
             "originalName": "原始名称",
             "displayName": "显示名称",

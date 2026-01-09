@@ -331,9 +331,65 @@ export function ComponentConfigDrawer() {
   }, [])
 
   // 更新图表
+  // 更新图表 - 添加校验
   const handleUpdateChart = useCallback(() => {
     if (!editingComponent) return
 
+    if (editingComponent.type !== 'query' && editingComponent.type !== 'metric') {
+      if (!chartType) {
+        toast({
+          description: t("componentConfigDrawer.validation.chartTypeRequired"),
+          variant: "error"
+        })
+        return
+      }
+    }
+
+    if (editingComponent.type !== 'metric') {
+      if (categoryDimensions.length === 0) {
+        toast({
+          description: t("componentConfigDrawer.validation.categoryRequired"),
+          variant: "error"
+        })
+        return
+      } else if (categoryDimensions.some(dim => invalidFieldIds.has(dim.id))) {
+        toast({
+          description: t("componentConfigDrawer.validation.invalidCategoryFields"),
+          variant: "error"
+        })
+        return
+      }
+    }
+
+    if (valueDimensions.length === 0) {
+      toast({
+        description: t("componentConfigDrawer.validation.metricRequired"),
+        variant: "error"
+      })
+      return
+    } else if (valueDimensions.some(dim => invalidFieldIds.has(dim.id))) {
+      toast({
+        description: t("componentConfigDrawer.validation.invalidMetricFields"),
+        variant: "error"
+      })
+      return
+    }
+
+    if (!editingComponent.dataset_code) {
+      toast({
+        description: t("componentConfigDrawer.validation.datasetRequired"),
+        variant: "error"
+      })
+      return
+    }
+
+    if (currentChartHasStack && stackDimensions.length === 0) {
+      toast({
+        description: t("componentConfigDrawer.validation.stackRequired"),
+        variant: "error"
+      })
+      return
+    }
     const dataConfig = getDataConfig(limitType, limitValue, editingComponent.data_config?.timeFilter)
 
     updateEditingComponent({
@@ -344,16 +400,36 @@ export function ComponentConfigDrawer() {
       dataset_code: editingComponent.dataset_code
     })
 
-    // 刷新当前图表数据
     refreshChart(editingComponent.id)
-  }, [editingComponent, chartType, title, styleConfig, limitType, limitValue, getDataConfig, updateEditingComponent, refreshChart])
+
+    toast({
+      description: t("componentConfigDrawer.toast.chartUpdated"),
+      variant: "success"
+    })
+  }, [
+    editingComponent,
+    chartType,
+    title,
+    styleConfig,
+    limitType,
+    limitValue,
+    getDataConfig,
+    updateEditingComponent,
+    refreshChart,
+    categoryDimensions,
+    valueDimensions,
+    stackDimensions,
+    currentChartHasStack,
+    invalidFieldIds,
+    toast,
+    t
+  ])
 
   // 时间范围改变
   const handleTimeFilterChange = useCallback((val: any) => {
     console.log("Day Range Change:", val);
 
     if (editingComponent) {
-      // 只更新 timeFilter，避免触发整个组件的重新初始化
       updateEditingComponent({
         ...editingComponent,
         data_config: {
@@ -368,7 +444,6 @@ export function ComponentConfigDrawer() {
     }
   }, [editingComponent, updateEditingComponent])
 
-  // 公共组件函数
   const PanelHeader = useCallback(({ title: panelTitle, onCollapse, icon }: any) => (
     <div className="px-4 py-3 border-b flex items-center justify-between bg-muted/20">
       <h3 className="text-base font-semibold">{panelTitle}</h3>
@@ -439,11 +514,11 @@ export function ComponentConfigDrawer() {
                   chartLinkConfig.timeGranularity === "年月日时" ? "year_month_day_hour" : "year_month_day",
                 hasDefaultValue: chartLinkConfig.isDefault,
                 defaultValue: chartLinkConfig.isDefault ? {
-                  type: 'custom' as const,  // TimeRangeType.CUSTOM 的值是 'custom'
-                  startDate: new Date(chartLinkConfig.dateRange.start).getTime(), // 毫秒时间戳
-                  endDate: new Date(chartLinkConfig.dateRange.end).getTime()      // 毫秒时间戳
+                  type: 'custom' as const,
+                  startDate: new Date(chartLinkConfig.dateRange.start).getTime(),
+                  endDate: new Date(chartLinkConfig.dateRange.end).getTime()
                 } : {
-                  type: 'all' as const      // TimeRangeType.ALL 的值是 'all'
+                  type: 'all' as const
                 }
               }
             }
