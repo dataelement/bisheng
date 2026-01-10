@@ -155,6 +155,7 @@
     "managePermission": "管理権限",
     "roleNamePrompt": "ロール名は 50 文字以内で入力してください",
     "roleNameRequired": "ロール名は必須です",
+    "atLeastOneSpaceRequired": "少なくとも1つのスペースを選択してください",
     "groupNameExists": "ユーザーグループ名は重複できません",
     "groupNamePrompt": "ユーザーグループ名は 30 文字以内で入力してください",
     "groupNameRequired": "ユーザーグループ名は必須です",
